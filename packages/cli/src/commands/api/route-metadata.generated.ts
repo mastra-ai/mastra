@@ -3130,6 +3130,39 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "GET /knowledge/:knowledgeKey/link-counts": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/link-counts",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "pageId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/pages/:pageId/links": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/pages/:pageId/links",
+    "pathParams": [
+      "knowledgeKey",
+      "pageId"
+    ],
+    "queryParams": [
+      "direction"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /knowledge/:knowledgeKey/search": {
     "method": "GET",
     "path": "/knowledge/:knowledgeKey/search",

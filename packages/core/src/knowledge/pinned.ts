@@ -13,7 +13,6 @@ export const PINNED_DELTA_TAG = 'pinned-knowledge-update';
 
 export const DEFAULT_MAX_PINS = 20;
 export const DEFAULT_PINNED_MAX_TOKENS = 500;
-export const MAX_PINNED_MAX_TOKENS = 2_000;
 
 export const PIN_TRUNCATION_MARKER = '[truncated — knowledge_read for the rest]';
 /** Entry id of the line listing stored pins that didn't fit the budget. */

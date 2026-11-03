@@ -11,6 +11,7 @@ import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import {
   KNOWLEDGE_READ_BODY_TOKENS,
   KNOWLEDGE_READ_INLINE_TOKENS,
@@ -548,9 +549,13 @@ function readTool(host: KnowledgePageToolHost) {
         from: {
           ...linePositionSchema,
           description:
-            'Where to start reading: a line (counted from 1) and, inside a very long line, a column (counted from 0). In a section, reads on within it; with `match`, searches from there. `more` gives it when a read stops early.',
+            "Where to start reading: a line (counted from 1) and, inside a very long line, a column (counted from 0). The read runs from there to the page's end or the read's token cap, whichever comes first; there is no line count to set. In a section, reads on within it; with `match`, searches from there. `more` gives it when a read stops early.",
         },
-        limit: { ...limitSchema, description: 'Maximum notes, children and mentioning notes. Defaults to 10.' },
+        limit: {
+          ...limitSchema,
+          description:
+            'Maximum notes, children and mentioning notes. Defaults to 10. Not a line count: how much of the body comes back is set by the token cap.',
+        },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
@@ -844,19 +849,20 @@ function listTool(host: KnowledgePageToolHost) {
       }
       const run = await start(host, context);
 
-      /** Readable scopes directly under a scope page; unreadable ones are left out entirely. */
-      const childScopes = async (parentId: string): Promise<KnowledgePage[]> => {
+      /** Readable scopes directly under a scope page, up to `max`; the store leaves out unreadable ones. */
+      const childScopes = async (parentId: string, max = Infinity): Promise<KnowledgePage[]> => {
         const out: KnowledgePage[] = [];
         let next: string | undefined;
         do {
           const { pages, nextCursor } = await run.storage.listChildScopes({
             parentId,
+            read: run.read,
             cursor: next,
-            limit: LIST_MAX_LIMIT,
+            limit: Math.min(max - out.length, LIST_MAX_LIMIT),
           });
-          out.push(...pages.filter(scope => knowledgeScopeReadable(scope, run.read)));
+          out.push(...pages);
           next = nextCursor;
-        } while (next);
+        } while (next && out.length < max);
         return out;
       };
 
@@ -916,14 +922,16 @@ function listTool(host: KnowledgePageToolHost) {
       let truncated = false;
       let level = top;
       for (let current = 1; current <= depth && level.length; current++) {
-        const pageCounts = await run.storage.countChildPages({
-          parentIds: level.map(node => node.page.id),
-          read: run.read,
-        });
-        const scopeChildren = new Map<string, KnowledgePage[]>();
+        const parentIds = level.map(node => node.page.id);
+        const scopeParents = level.filter(node => node.page.isScope).map(node => node.page.id);
+        const [pageCounts, scopeCounts] = await Promise.all([
+          run.storage.countChildPages({ parentIds, read: run.read }),
+          scopeParents.length
+            ? run.storage.countChildScopes({ parentIds: scopeParents, read: run.read })
+            : Promise.resolve({} as Record<string, number>),
+        ]);
         for (const node of level) {
-          if (node.page.isScope) scopeChildren.set(node.page.id, await childScopes(node.page.id));
-          node.children = (pageCounts[node.page.id] ?? 0) + (scopeChildren.get(node.page.id)?.length ?? 0);
+          node.children = (pageCounts[node.page.id] ?? 0) + (scopeCounts[node.page.id] ?? 0);
         }
         if (current === depth) break;
         const nextLevel: Node[] = [];
@@ -933,7 +941,7 @@ function listTool(host: KnowledgePageToolHost) {
             truncated = true;
             break;
           }
-          const scopes = (scopeChildren.get(node.page.id) ?? []).slice(0, budget);
+          const scopes = scopeCounts[node.page.id] ? await childScopes(node.page.id, budget) : [];
           budget -= scopes.length;
           const pages =
             budget > 0
@@ -1165,6 +1173,11 @@ function pageTool(host: KnowledgePageToolHost) {
             provenance,
           });
           await embed(host, index => index.indexPage(updated));
+          await updateKnowledgeLinks(host.warn, async () => {
+            if (args.body !== undefined) await syncKnowledgePageBodyLinks(storage, updated);
+            // Only the name can change a page's ref keys here; its id, path and address stay.
+            if (updated.name !== page.name) await refreshKnowledgeLinksTo(storage, [updated]);
+          });
           return done(updated);
         }
         if (!args.scope || !args.name) throw new Error('Creating a page needs scope and name.');
@@ -1182,6 +1195,10 @@ function pageTool(host: KnowledgePageToolHost) {
           provenance,
         });
         await embed(host, index => index.indexPage(created));
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, created);
+          await refreshKnowledgeLinksTo(storage, [created]);
+        });
         return done(created);
       }
 
@@ -1213,6 +1230,10 @@ function pageTool(host: KnowledgePageToolHost) {
           throw error;
         }
         await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, deleted);
+          await refreshKnowledgeLinksTo(storage, [deleted]);
+        });
         return done(deleted);
       }
 
@@ -1227,14 +1248,18 @@ function pageTool(host: KnowledgePageToolHost) {
         if (parent.id !== destination.id && parent.scopeId !== destination.id) {
           throw new Error(`Parent "${args.parent}" is not in scope "${args.scope}".`);
         }
-        return done(
-          await storage.movePage({
-            id: page.id,
-            expectedVersion: args.expectedVersion ?? page.version,
-            parentId: parent.id,
-            provenance,
-          }),
-        );
+        const moved = await storage.movePage({
+          id: page.id,
+          expectedVersion: args.expectedVersion ?? page.version,
+          parentId: parent.id,
+          provenance,
+        });
+        // The subtree's `scope#key/key` paths changed: links by old path stop resolving, new ones may.
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, moved);
+          await refreshKnowledgeLinksTo(storage, [moved], { withDescendants: true });
+        });
+        return done(moved);
       }
 
       if (!args.into) throw new Error('Merging needs into: the page that remains.');
@@ -1254,6 +1279,12 @@ function pageTool(host: KnowledgePageToolHost) {
         provenance,
       });
       await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+      // The source is gone and its children now live under the target, at new paths.
+      await updateKnowledgeLinks(host.warn, async () => {
+        const source = { ...page, deletedAt: merged.updatedAt, mergedInto: merged.id };
+        await syncKnowledgePageBodyLinks(storage, source);
+        await refreshKnowledgeLinksTo(storage, [source, merged], { withDescendants: true });
+      });
       return done(merged);
     },
   });

@@ -28,8 +28,9 @@ import type {
 } from './host-writes';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
+import { reindexKnowledgeLinks } from './links';
 import { buildKnowledgePageTools } from './page-tools';
-import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins, MAX_PINNED_MAX_TOKENS } from './pinned';
+import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
@@ -40,11 +41,10 @@ import type { KnowledgeAccessExplanation } from './scope-runtime';
 function resolvePins(pins: KnowledgeConfig['pinnedContext']): false | PinBudget {
   if (!pins) return false;
   const options = pins === true ? {} : pins;
-  const maxTokens = options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS;
-  if (maxTokens > MAX_PINNED_MAX_TOKENS) {
-    throw new Error(`Knowledge pinnedContext.maxTokens is at most ${MAX_PINNED_MAX_TOKENS}.`);
-  }
-  return { maxPins: options.maxPins ?? DEFAULT_MAX_PINS, maxTokens };
+  return {
+    maxPins: options.maxPins ?? DEFAULT_MAX_PINS,
+    maxTokens: options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS,
+  };
 }
 
 /** Below this share of the pin budget each, config pins are too cut down to be useful. */
@@ -291,6 +291,16 @@ export class Knowledge extends MastraBase {
     };
   }
 
+  /**
+   * Rebuilds the page link index from every page body, for pages written before the index existed
+   * or straight to the store. Needs no vector store. Returns how many pages were indexed.
+   *
+   * @experimental
+   */
+  async reindexLinks(): Promise<number> {
+    return reindexKnowledgeLinks(await this.getStorage());
+  }
+
   /** The usage block that goes with `createTools(options)`. */
   getInstructions(options?: KnowledgeToolSelection): string {
     return buildKnowledgeInstructions(this.#groups(options), this.#instructions);
@@ -454,7 +464,11 @@ export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './i
 export {
   DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS,
   listKnowledgeTreeChildren,
+  MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS,
+  MAX_KNOWLEDGE_LINK_COUNT_PAGES,
   readKnowledgePage,
+  readKnowledgePageLinkCounts,
+  readKnowledgePageLinks,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
   readKnowledgeScopeGrants,
@@ -465,8 +479,10 @@ export type {
   KnowledgePageGraph,
   KnowledgePageGraphEdge,
   KnowledgePageGraphLimits,
+  KnowledgePageLinks,
   KnowledgePageView,
   KnowledgeTreeChildren,
+  KnowledgeTreePage,
 } from './explorer-pages';
 export type { KnowledgeConfig } from './config';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';

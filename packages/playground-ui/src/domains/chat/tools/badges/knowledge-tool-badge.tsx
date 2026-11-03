@@ -1,10 +1,15 @@
 import { BookOpen } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import type { Components, ExtraProps } from 'react-markdown';
 import { KnowledgePageLink } from '../../knowledge/knowledge-links';
 import { isRecord } from '../../messages/signal-data';
+import type { BodyExtent } from './knowledge-body-range';
+import { readExtent, writeExtent } from './knowledge-body-range';
 import type { MessageMetadata } from '@/domains/chat';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '@/domains/knowledge/lib/remarkKnowledgeLinks';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
@@ -55,6 +60,24 @@ function asNotes(value: unknown): NoteSummary[] {
     : [];
 }
 
+/** The collapsed row's detail: the page name, then which part of it was read or written. */
+const withExtent = (name: string, extent: BodyExtent | undefined) => (extent?.row ? `${name} · ${extent.row}` : name);
+
+/** The numbered lines of a part read: a window, or each match, under the range it covers. */
+function ReadLines({ page }: { page: unknown }) {
+  if (!isRecord(page)) return null;
+  const parts = Array.isArray(page.matches)
+    ? page.matches.filter(isRecord).map(match => str(match.lines))
+    : [str(page.lines)];
+  const lines = parts.filter((part): part is string => part !== undefined);
+  if (!lines.length) return null;
+  return (
+    <Txt as="p" variant="meta" font="mono" className="whitespace-pre-wrap">
+      {lines.join('\n⋯\n')}
+    </Txt>
+  );
+}
+
 const where = (page: PageSummary) => page.address ?? page.scope;
 
 function PageLink({ page }: { page: PageSummary }) {
@@ -81,10 +104,62 @@ function PageLine({ page, linked = true }: { page: PageSummary; linked?: boolean
   );
 }
 
-function Body({ markdown }: { markdown: string }) {
+const MENTION_LINK_CLASS = 'text-foreground underline decoration-dotted underline-offset-2 hover:decoration-solid';
+
+/** Which page id each `[[ref]]` a card shows answers to, as far as this tool result says. */
+type RefIds = ReadonlyMap<string, string>;
+
+/**
+ * The refs a tool result resolves: the page's own id and ref, and every ref a note in the result
+ * mentions (the server resolved those to page ids). A page body's links usually reappear in a note's
+ * mentions; any that don't stay plain, since a chat has no page store to look them up in.
+ */
+function resultRefIds(page: PageSummary | undefined, notes: NoteSummary[]): RefIds {
+  const ids = new Map<string, string>();
+  if (page) {
+    ids.set(page.id, page.id);
+    if (page.ref) ids.set(page.ref, page.id);
+  }
+  for (const note of notes) {
+    if (!isRecord(note.mentions)) continue;
+    for (const [ref, id] of Object.entries(note.mentions)) {
+      if (typeof id === 'string' && id) ids.set(ref, id);
+    }
+  }
+  return ids;
+}
+
+const BodyRefs = createContext<RefIds>(new Map());
+
+/** A `[[ref]]` in a card body: a link when the result resolves it, the ref as quiet text when not. */
+function BodyRef({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
+  const refIds = useContext(BodyRefs);
+  const raw = node?.properties[KNOWLEDGE_REF_PROPERTY];
+  if (typeof raw !== 'string') return <span {...props} />;
+  const ref = raw.trim();
+  const pageId = refIds.get(ref);
+  return pageId ? (
+    <KnowledgePageLink pageId={pageId} className={MENTION_LINK_CLASS}>
+      {ref}
+    </KnowledgePageLink>
+  ) : (
+    <span className="text-foreground" data-testid="knowledge-unresolved-mention">
+      {ref}
+    </span>
+  );
+}
+
+const BODY_REMARK_PLUGINS = [remarkKnowledgeLinks];
+const BODY_COMPONENTS: Components = { span: BodyRef };
+
+function Body({ markdown, refIds = new Map() }: { markdown: string; refIds?: RefIds }) {
   return (
     <div className="border-border1 max-h-64 overflow-auto rounded-md border p-2" data-testid="knowledge-tool-body">
-      <MarkdownRenderer>{markdown}</MarkdownRenderer>
+      <BodyRefs.Provider value={refIds}>
+        <MarkdownRenderer remarkPlugins={BODY_REMARK_PLUGINS} components={BODY_COMPONENTS}>
+          {markdown}
+        </MarkdownRenderer>
+      </BodyRefs.Provider>
     </div>
   );
 }
@@ -103,11 +178,7 @@ function NoteText({ note }: { note: NoteSummary }) {
     parts.push(note.text.slice(last, match.index));
     parts.push(
       pageId ? (
-        <KnowledgePageLink
-          key={match.index}
-          pageId={pageId}
-          className="text-foreground underline decoration-dotted underline-offset-2 hover:decoration-solid"
-        >
+        <KnowledgePageLink key={match.index} pageId={pageId} className={MENTION_LINK_CLASS}>
           {ref}
         </KnowledgePageLink>
       ) : (
@@ -272,6 +343,7 @@ export function knowledgeCard(
           ),
         };
       }
+      const extent = readExtent(output, args);
       const notes = asNotes(output.notes);
       const children = Array.isArray(output.children)
         ? output.children.map(asPage).filter((child): child is PageSummary => child !== undefined)
@@ -280,12 +352,14 @@ export function knowledgeCard(
       const childScopes = Array.isArray(output.childScopes) ? output.childScopes.filter(isRecord) : [];
       return {
         title: 'Read',
-        detail: page.name,
+        detail: withExtent(page.name, extent),
         body: (
           <div className="flex flex-col gap-2">
             <PageLine page={page} />
+            {extent ? <Meta>{extent.summary}</Meta> : null}
             {page.description ? <Meta>{page.description}</Meta> : null}
-            {page.body ? <Body markdown={page.body} /> : null}
+            {page.body ? <Body markdown={page.body} refIds={resultRefIds(page, [...notes, ...mentionedIn])} /> : null}
+            <ReadLines page={output.page} />
             {notes.length ? <NoteList notes={notes} /> : null}
             {children.length ? <Meta>Child pages: {children.map(child => child.name).join(', ')}</Meta> : null}
             {childScopes.length ? (
@@ -320,16 +394,18 @@ export function knowledgeCard(
         op === 'move' ? 'Moved page' : op === 'merge' ? 'Merged page' : args.page ? 'Updated page' : 'Created page';
       const body = str(args.body);
       const description = str(args.description);
+      const extent = writeExtent(args);
       return {
         title,
-        detail: page.name,
+        detail: withExtent(page.name, extent),
         body: (
           <div className="flex flex-col gap-2">
             <PageLine page={page} />
+            {extent ? <Meta>{extent.summary}</Meta> : null}
             {op === 'merge' && str(args.page) ? <Meta>Merged {str(args.page)} into this page</Meta> : null}
             {typeof page.version === 'number' ? <Meta>Version {page.version}</Meta> : null}
             {description ? <Meta>{description}</Meta> : null}
-            {body ? <Body markdown={body} /> : null}
+            {body ? <Body markdown={body} refIds={resultRefIds(page, [])} /> : null}
           </div>
         ),
       };

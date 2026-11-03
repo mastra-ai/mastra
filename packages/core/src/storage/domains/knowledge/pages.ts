@@ -1,5 +1,5 @@
 /**
- * Knowledge storage contract, schema 4: pages, notes, stamps, mentions and pins.
+ * Knowledge storage contract, schema 4: pages, notes, stamps, mentions, body links and pins.
  *
  * The store holds structure and filters by a read scope that core computes from the run's scopes and
  * the Knowledge declarations; it holds no access policy of its own (no grant rows, no roles). Core
@@ -10,6 +10,11 @@
  * filter columns, how a large read scope is passed to the database) is the adapter's choice. Any
  * denormalized scope column (a note's page scope, its stamp scopes' addresses, its mentions' home
  * scopes) must be updated in the same transaction as the move or merge that changes it.
+ *
+ * The body-link table came after schema 4 shipped and is additive: adapters create it with idempotent
+ * DDL in `init()` (as the pin-audience index was), without a schema version change, so existing
+ * stores keep their data. Links for pages written before it fill in on `knowledge.reindexLinks()` or the
+ * page's next write.
  *
  * @experimental Knowledge APIs are experimental and may change without notice.
  */
@@ -167,6 +172,68 @@ export interface KnowledgePin {
   updatedAt: Date;
 }
 
+/**
+ * One `[[ref]]` target in a page's body, as core resolved it when the body was written. The store
+ * keeps one row per (source page, `ref`); body links are the only links it stores, since note links
+ * are the existing note mentions.
+ *
+ * @experimental
+ */
+export interface KnowledgePageBodyLink {
+  /**
+   * The ref's match key from {@link knowledgeLinkRefKey}. When a page is created, moved or renamed,
+   * core looks up unresolved links by the keys that page now answers to and re-resolves their sources.
+   */
+  ref: string;
+  /** The page the ref resolved to, or `null` while it names no page. */
+  toPageId: string | null;
+  /** How many times the body links this ref (at least 1). */
+  count: number;
+}
+
+/**
+ * `body`: a `[[ref]]` in the source page's body. `note`: a `[[mention]]` in a note on the source page.
+ *
+ * @experimental
+ */
+export type KnowledgePageLinkKind = 'body' | 'note';
+
+/**
+ * One resolved link between two pages. A `note` edge's `count` is how many visible notes on the source
+ * page mention the target.
+ *
+ * @experimental
+ */
+export interface KnowledgePageLinkEdge {
+  fromPageId: string;
+  toPageId: string;
+  kind: KnowledgePageLinkKind;
+  count: number;
+}
+
+/**
+ * Per-page link totals: how many distinct other pages link to it (`in`) and it links to (`out`).
+ *
+ * @experimental
+ */
+export interface KnowledgePageLinkCounts {
+  in: number;
+  out: number;
+}
+
+/**
+ * The key a `[[ref]]` is matched by when core looks for links a new or moved page now resolves:
+ * `scope#key/key` refs as written (trimmed), every other ref (id, address, name) by
+ * {@link canonicalKnowledgeName}. Core computes both sides with this function; a key collision only
+ * makes core re-resolve a source page, never links it wrongly.
+ *
+ * @experimental
+ */
+export function knowledgeLinkRefKey(ref: string): string {
+  const trimmed = ref.trim();
+  return trimmed.includes('#') ? trimmed : canonicalKnowledgeName(trimmed);
+}
+
 /** A pin as listed, with its page's name. */
 export interface KnowledgeListedPin extends KnowledgePin {
   pageName: string;
@@ -191,6 +258,15 @@ export const MAX_KNOWLEDGE_MOVE_PAGES = 500;
 
 /** @experimental */
 export const MAX_KNOWLEDGE_PAGE_LIST_LIMIT = 100;
+
+/** Most edges one {@link KnowledgePageStore.listPageLinks} call returns. @experimental */
+export const MAX_KNOWLEDGE_PAGE_LINKS = 10_000;
+
+/** Distinct `[[refs]]` core indexes per page body; further refs stay plain text. @experimental */
+export const MAX_KNOWLEDGE_PAGE_BODY_LINKS = 1_000;
+
+/** Longest body-link ref key core stores; a longer `[[ref]]` stays plain text. Stores may size the column to it. @experimental */
+export const MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH = 512;
 
 /**
  * Maximum page description in estimated tokens (tokenx), enforced by every adapter on create and
@@ -593,14 +669,22 @@ export interface KnowledgePageStore {
     check: (scopes: KnowledgeScopeDeclarationRename[]) => void;
   }): Promise<number>;
   /**
-   * Scope pages directly under a page (`parentId: null` lists root scopes), unfiltered, by position
-   * then id; core decides which to list and which as restricted.
+   * Scope pages directly under a page (`parentId: null` lists root scopes), by position then id.
+   * Without `read` the list is unfiltered and core decides which to list and which as restricted;
+   * with `read` only the scopes it can read are listed, filtered before the limit and cursor.
    */
   listChildScopes(input: {
     parentId: string | null;
+    read?: KnowledgeReadScope;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput>;
+  /**
+   * How many readable child scopes each parent has, keyed by parent id; one call for all the
+   * parents. Counts the scopes {@link listChildScopes} would list with the same `read`. Parents with
+   * none map to 0; duplicate ids count once.
+   */
+  countChildScopes(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>>;
 
   // Pages
   getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null>;
@@ -632,6 +716,49 @@ export interface KnowledgePageStore {
    * duplicate ids count once.
    */
   countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>>;
+
+  // Links
+  /**
+   * Replaces every body link from `pageId` with `links` in one transaction (an empty list clears
+   * them). Rows are keyed by (`pageId`, `ref`); duplicate refs in `links` are a caller error, and no ref
+   * is longer than {@link MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH} characters. The store
+   * doesn't check the page exists or resolve anything: core resolves refs and calls this on every body
+   * write, move, merge and delete. Rows stay when a page is soft-deleted until core clears them, and
+   * reads hide them either way.
+   */
+  replacePageBodyLinks(input: { pageId: string; links: KnowledgePageBodyLink[] }): Promise<void>;
+  /**
+   * Source page ids (distinct, any order, unfiltered: core-internal) of body links that are
+   * unresolved with a `ref` in `refs`, or resolved to a page in `toPageIds`. Core re-resolves these
+   * sources after a page is created, moved, renamed, merged or deleted.
+   */
+  listPageBodyLinkSources(input: { refs?: string[]; toPageIds?: string[] }): Promise<string[]>;
+  /**
+   * For each page id, how many distinct other pages link to it and it links to, keyed by page id;
+   * one call for all the pages. Counts only resolved links whose both ends are live and readable
+   * under `read`; a `note` link also needs a live note that is visible under `read` (the same rule as
+   * {@link listNotes}). Self-links don't count. `kinds` defaults to both. Ids that are missing,
+   * deleted or unreadable map to `{ in: 0, out: 0 }`, so a count never reveals a hidden page.
+   */
+  countPageLinks(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    kinds?: KnowledgePageLinkKind[];
+  }): Promise<Record<string, KnowledgePageLinkCounts>>;
+  /**
+   * The resolved links touching `pageIds` (`out`: from them, `in`: to them, `both`: either; default
+   * `both`), filtered exactly as {@link countPageLinks}: both ends live and readable, note links only
+   * through visible notes, no self-links. One edge per (from, to, kind), ordered by `fromPageId`,
+   * `toPageId`, then `kind` (`body` first); at most `limit`, a positive integer (default 1,000, capped at
+   * {@link MAX_KNOWLEDGE_PAGE_LINKS}).
+   */
+  listPageLinks(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    direction?: 'in' | 'out' | 'both';
+    kinds?: KnowledgePageLinkKind[];
+    limit?: number;
+  }): Promise<KnowledgePageLinkEdge[]>;
   /** Readable live ordinary pages, optionally in one scope and by name prefix, by name then id. */
   listPages(input: {
     read: KnowledgeReadScope;

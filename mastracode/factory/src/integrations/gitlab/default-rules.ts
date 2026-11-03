@@ -1,6 +1,5 @@
 import { isPullRequestCard, pullRequestReviewPhase, reviewsPullRequest } from '../../boards/index.js';
 import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
-import { factoryRuleStage, isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GitLabRuleOverrides = Partial<
@@ -68,27 +67,6 @@ function issueOpened(context: FactoryGitLabRuleContext) {
       labels: context.issue.labels ?? [],
       labelColors: context.issue.labelColors ?? {},
     },
-  } as const;
-}
-
-function retriageIssue(context: FactoryGitLabRuleContext) {
-  if (!context.item || context.item.source !== 'gitlab-issue' || !context.item.url) return;
-  if (context.actor.type === 'gitlab' && context.actor.factoryAuthored) return;
-  // The stage checks below use Work lane names; other boards opt in with their own rules.
-  if (context.board !== 'work') return;
-  // A card in Intake waits for a person to move it; talk on it starts nothing. Re-triage would
-  // take over a card that is being built or reviewed.
-  const stage = factoryRuleStage(context.item.stages);
-  if (stage === 'intake' || stage === 'execute' || stage === 'review') return;
-  // A finished card has nothing left to triage.
-  if (isTerminalFactoryRuleStage(context.item.stages)) return;
-  const reason = context.event === 'issueCommented' ? 'a comment was added' : 'the issue changed';
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: `Re-triage GitLab issue (${context.item.url}) after ${reason}.`,
   } as const;
 }
 
@@ -219,9 +197,11 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
 
 export const defaultGitLabRules = Object.freeze({
   issueOpened,
-  issueUpdated: retriageIssue,
+  // Triage runs once, when a person moves the card into Triage or starts the run; later edits and
+  // comments on the issue don't run it again.
+  issueUpdated: null,
   issueClosed,
-  issueCommented: retriageIssue,
+  issueCommented: null,
   mergeRequestOpened: materializeMergeRequest,
   mergeRequestUpdated,
   mergeRequestCommented,
