@@ -17,6 +17,9 @@ import { GithubIntegration } from '../integrations/github/integration.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -36,10 +39,22 @@ class TestSandbox extends MastraSandbox {
   }
 }
 
-/** The model, at the wire: every run gets a short text answer, and each request body is kept. */
-function stubModel() {
+type ToolCall = { name: string; args: Record<string, unknown> };
+
+function sse(events: { type: string }[]): Response {
+  return new Response(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), {
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
+
+/**
+ * The model, at the wire: each request body is kept, and every run gets a short text answer
+ * unless `decide` picks a tool call for what the request says.
+ */
+function stubModel(decide: (input: string) => ToolCall | undefined = () => undefined) {
   vi.stubEnv('OPENAI_API_KEY', 'sk-stored-boards-test');
   const requests: string[] = [];
+  let calls = 0;
   onTestFinished(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -47,7 +62,29 @@ function stubModel() {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
     if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
-    requests.push(input instanceof Request ? await input.clone().text() : String(init?.body ?? ''));
+    const body = input instanceof Request ? await input.clone().text() : String(init?.body ?? '');
+    requests.push(body);
+    const call = decide(JSON.stringify(JSON.parse(body).input));
+    if (call) {
+      calls += 1;
+      const tool = {
+        id: `fc_${calls}`,
+        type: 'function_call',
+        call_id: `call_${calls}`,
+        name: call.name,
+        arguments: JSON.stringify(call.args),
+      };
+      return sse([
+        { type: 'response.created', response: { id: `resp_${calls}`, created_at: 1, model: 'stored-test' } },
+        { type: 'response.output_item.added', output_index: 0, item: { ...tool, arguments: '' } },
+        { type: 'response.function_call_arguments.delta', item_id: tool.id, output_index: 0, delta: tool.arguments },
+        { type: 'response.output_item.done', output_index: 0, item: { ...tool, status: 'completed' } },
+        {
+          type: 'response.completed',
+          response: { id: `resp_${calls}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+        },
+      ] as { type: string }[]);
+    }
     const item = { id: 'msg_stored', type: 'message', role: 'assistant', content: [] };
     const events = [
       { type: 'response.created', response: { id: 'resp_stored', created_at: 1, model: 'stored-test' } },
@@ -69,9 +106,7 @@ function stubModel() {
         },
       },
     ];
-    return new Response(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), {
-      headers: { 'content-type': 'text/event-stream' },
-    });
+    return sse(events);
   });
   return requests;
 }
@@ -360,5 +395,325 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       );
       expect(building.json.result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     }, 30_000);
+
+    describe('editing the built-in Work board', () => {
+      const TRIAGE_NOTE = 'Shipyard: check the changelog.';
+      const PLAN_NOTE = 'Shipyard: keep plans short.';
+      const EFFORT_LOW = {
+        operator: 'AND',
+        conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
+      };
+
+      /**
+       * The agent, answering only what was just asked of it (the messages after its last turn):
+       * started on the plan skill with Shipyard's instructions, it submits a plan; once the plan
+       * is approved, it moves the card to Building. Anything else gets a text answer, which ends
+       * the run.
+       */
+      function shipyardAgent(input: string): ToolCall | undefined {
+        const items = JSON.parse(input) as { type?: string; role?: string; output?: string }[];
+        const lastTurn = items.findLastIndex(
+          item => item.type?.startsWith('function_call') || item.role === 'assistant',
+        );
+        const asked = JSON.stringify(items.slice(lastTurn + 1));
+        if (asked.includes('<skill name=\\"factory-plan\\">') && asked.includes(PLAN_NOTE)) {
+          return { name: 'submit_plan', args: { path: '.mastracode/plans/plan.md' } };
+        }
+        if (items[lastTurn]?.type === 'function_call_output' && items[lastTurn].output?.includes('Plan approved.')) {
+          const revision = Number([...input.matchAll(/expectedRevision (\d+)/g)].at(-1)?.[1]);
+          return {
+            name: 'factory_transition_work_item',
+            args: { stage: 'execute', expectedRevision: revision, rationale: 'Plan approved.' },
+          };
+        }
+        return undefined;
+      }
+
+      /**
+       * A board rule moving the card, the way the dispatcher applies one: a system move carries
+       * no person's consent, so only the target phase's start rule decides whether its run starts.
+       * (A person's or an agent's move pre-approves the runs it queues.)
+       */
+      async function ruleMoves(
+        replica: Awaited<ReturnType<typeof boot>>,
+        orgId: string,
+        projectId: string,
+        card: { id: string },
+        stage: string,
+      ) {
+        const current = (await replica.workItems.get({ orgId, id: card.id }))!;
+        const identity = `shipyard-rule:${randomUUID()}`;
+        const commit = await replica.workItems.commitRuleEvaluation({
+          orgId,
+          factoryProjectId: projectId,
+          workItemId: card.id,
+          ingress: { identity, triggerType: 'test' },
+          configVersion: 'factory-config-v1',
+          expectedRevision: current.revision,
+          actor: { type: 'system', id: 'rules' },
+          outcome: { status: 'accepted' },
+          decisions: [{ type: 'transition', idempotencyKey: `${identity}:move`, board: 'work', stage }],
+          causalChain: [],
+          now: new Date(),
+        });
+        expect(commit.status).toBe('committed');
+      }
+
+      /** A project whose runs can start: a model, its credential, and a linked GitHub repository. */
+      async function runnableProject(replica: Awaited<ReturnType<typeof boot>>, orgId: string) {
+        const projectId = await createProject(replica, 'Shipyard');
+        const configured = await replica.send('PATCH', `/web/factory/projects/${projectId}`, {
+          defaultModelId: 'openai/gpt-5.6-sol',
+        });
+        expect(configured.status).toBe(200);
+        await replica.storage
+          .getDomain<ModelCredentialsStorage>('model-credentials')
+          .setCredential({ orgId }, 'openai', { type: 'api_key', key: 'sk-stored-boards-test' });
+        // The stubbed model answers only OpenAI; keep observational memory from calling its observer model.
+        await replica.storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
+          orgId,
+          userId: factoryMemorySettingsUserId(projectId),
+          patch: { observationThreshold: 1_000_000 },
+        });
+        const sourceControl = replica.github.sourceControlStorage;
+        const installation = await sourceControl.installations.upsert({
+          orgId,
+          connectedByUserId: 'admin-user',
+          externalId: randomUUID(),
+        });
+        const repository = await sourceControl.repositories.upsert({
+          orgId,
+          input: {
+            installationId: installation.id,
+            externalId: randomUUID(),
+            slug: 'acme/shipyard',
+            defaultBranch: 'main',
+          },
+        });
+        const connection = await sourceControl.connections.create({
+          orgId,
+          factoryProjectId: projectId,
+          installationId: installation.id,
+          createdByUserId: 'admin-user',
+        });
+        await sourceControl.projectRepositories.link({
+          orgId,
+          connectionId: connection.id,
+          repositoryId: repository.id,
+          createdByUserId: 'admin-user',
+          sandboxProvider: 'local',
+          sandboxWorkdir: '/tmp/shipyard',
+        });
+        return projectId;
+      }
+
+      type StoredPhase = StoredBoardInput['phases'][number];
+
+      /** Reads the project's Work board (copying it in on first read) and saves `edit` of its phases. */
+      async function editWork(
+        replica: Awaited<ReturnType<typeof boot>>,
+        projectId: string,
+        edit: (phase: StoredPhase) => StoredPhase,
+      ) {
+        const read = await replica.send('GET', `/web/factory/projects/${projectId}/boards/work`);
+        expect(read.status).toBe(200);
+        const work = read.json.board as { name: string; phases: StoredPhase[]; revision: number };
+        const saved = await replica.send('PATCH', `/web/factory/projects/${projectId}/boards/work`, {
+          name: work.name,
+          phases: work.phases.map(edit),
+          expectedRevision: work.revision,
+        });
+        expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+        return saved.json.board as { revision: number; customized: boolean };
+      }
+
+      /** Shipyard's configuration: what it sets on Work, then its intake route for trusted issues. */
+      async function configureShipyard(replica: Awaited<ReturnType<typeof boot>>, projectId: string) {
+        const board = await editWork(replica, projectId, phase => {
+          switch (phase.key) {
+            case 'triage':
+              return { ...phase, autoStart: true, runner: { ...phase.runner, instructions: TRIAGE_NOTE } };
+            case 'planning':
+              return {
+                ...phase,
+                runner: { ...phase.runner, instructions: PLAN_NOTE },
+                autoStart: true,
+                autoStartWhen: EFFORT_LOW,
+                exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: EFFORT_LOW },
+              } as StoredPhase;
+            case 'pr-review':
+              return { ...phase, autoStart: true };
+            default:
+              return phase;
+          }
+        });
+        expect(board.customized).toBe(true);
+        const route = await replica.send('POST', `/web/factory/projects/${projectId}/intake-routes`, {
+          name: 'Trusted issues go to Triage',
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'author.trusted', operator: 'equals', value: true },
+              { field: 'source.kind', operator: 'equals', value: 'issue' },
+            ],
+          },
+          target: { boardKey: 'work', phaseKey: 'triage' },
+        });
+        expect(route.status, JSON.stringify(route.json)).toBe(201);
+      }
+
+      async function githubIssue(
+        replica: Awaited<ReturnType<typeof boot>>,
+        projectId: string,
+        title: string,
+        { trusted, labels }: { trusted: boolean; labels: string[] },
+      ) {
+        const created = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
+          title,
+          externalSource: { integrationId: 'github', type: 'issue', externalId: `issue:${randomUUID()}` },
+          metadata: { authorTrusted: trusted, labels },
+        });
+        expect(created.status, JSON.stringify(created.json)).toBe(200);
+        return created.json.workItem as { id: string; title: string; stages: string[]; revision: number };
+      }
+
+      /** The model requests of a run started on `skill` for the card titled `title`. */
+      function runsOf(requests: string[], skill: string, title: string) {
+        return requests.filter(body => body.includes(`<skill name=\\"${skill}\\">`) && body.includes(title));
+      }
+
+      it("runs Shipyard's configuration: edited phases and its intake route change what Factory runs", async () => {
+        const requests = stubModel(shipyardAgent);
+        const orgId = `org-${randomUUID()}`;
+        const replica = await boot(database(), orgId);
+        const projectId = await runnableProject(replica, orgId);
+        await configureShipyard(replica, projectId);
+
+        const decisionsFor = async (card: { id: string }) =>
+          await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id });
+        const stagesOf = async (card: { id: string }) => (await replica.workItems.get({ orgId, id: card.id }))!.stages;
+        const startOf = async (card: { id: string }, skillName: string) =>
+          (await decisionsFor(card)).find(
+            record => record.decision.type === 'invokeSkill' && record.decision.skillName === skillName,
+          );
+
+        // The intake route: trusted issues land in Triage, an outside author's waits in Intake.
+        const quick = await githubIssue(replica, projectId, 'Quick fix', { trusted: true, labels: ['effort:low'] });
+        const large = await githubIssue(replica, projectId, 'Large rewrite', { trusted: true, labels: [] });
+        const outside = await githubIssue(replica, projectId, 'Outside report', { trusted: false, labels: [] });
+        expect([quick.stages, large.stages, outside.stages]).toEqual([['triage'], ['triage'], ['intake']]);
+
+        // Triage starts on its own, and its edited instructions reach the run its code handler starts,
+        // beside the triage skill.
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', 'Quick fix')).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-triage', 'Quick fix')[0]).toContain(TRIAGE_NOTE);
+        await vi.waitFor(async () => expect((await startOf(large, 'factory-triage'))?.status).toBe('succeeded'), {
+          timeout: 20_000,
+        });
+
+        // A board rule moves both cards to Planning. Planning starts on its own for the effort:low
+        // card, and its plan is approved for it: the card moves on to Building.
+        await ruleMoves(replica, orgId, projectId, quick, 'planning');
+        await ruleMoves(replica, orgId, projectId, large, 'planning');
+        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['execute']), { timeout: 30_000 });
+        expect(runsOf(requests, 'factory-plan', 'Quick fix')[0]).toContain(PLAN_NOTE);
+
+        // The unlabelled card's plan run waits for a person.
+        expect(await stagesOf(large)).toEqual(['planning']);
+        const largePlan = (await startOf(large, 'factory-plan'))!;
+        expect(largePlan.status).toBe('proposed');
+        expect(runsOf(requests, 'factory-plan', 'Large rewrite')).toEqual([]);
+
+        // Once a person starts it, its plan is not approved for it: the card stays in Planning.
+        const approved = await replica.send(
+          'POST',
+          `/web/factory/projects/${projectId}/decisions/${largePlan.id}/approve`,
+        );
+        expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-plan', 'Large rewrite')).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        // Long enough for an auto-approval to have moved the card, as it did the labelled one.
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+        expect(await stagesOf(large)).toEqual(['planning']);
+
+        // PR review starts its review on its own when a rule moves a pull request card into it.
+        const { item: pullRequest } = await replica.workItems.upsert({
+          orgId,
+          userId: 'admin-user',
+          factoryProjectId: projectId,
+          input: {
+            board: 'work',
+            title: 'Add rate limiting',
+            externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:42' },
+            metadata: { authorTrusted: true, headBranch: 'rate-limiting' },
+          },
+        });
+        expect(pullRequest.stages).toEqual(['intake']);
+        await ruleMoves(replica, orgId, projectId, pullRequest, 'pr-review');
+        await vi.waitFor(
+          async () => {
+            const review = (await decisionsFor(pullRequest)).find(record => record.decision.type === 'invokeSkill');
+            expect(review).toMatchObject({ decision: { role: 'review' } });
+            expect(review!.status).not.toBe('proposed');
+          },
+          { timeout: 20_000 },
+        );
+      }, 120_000);
+
+      it('applies an edit made on one replica to the runs another replica starts, until the board is reset', async () => {
+        const requests = stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const newStorage = database();
+        const a = await boot(newStorage, orgId);
+        const projectId = await runnableProject(a, orgId);
+        const b = await boot(newStorage, orgId);
+        await configureShipyard(a, projectId);
+
+        // Replica B serves the edit once its recheck window passes, then files a card and runs
+        // Triage as replica A edited it.
+        const workOn = async (replica: Awaited<ReturnType<typeof boot>>) =>
+          (await catalog(replica, projectId)).find(board => board.id === 'work') as { customized?: boolean };
+        await vi.waitFor(async () => expect(await workOn(b)).toMatchObject({ customized: true }), { timeout: 5_000 });
+        const before = await githubIssue(b, projectId, 'Before reset', { trusted: true, labels: [] });
+        expect(before.stages).toEqual(['triage']);
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', before.title)).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-triage', before.title)[0]).toContain(TRIAGE_NOTE);
+
+        // Replica A resets Work to its code default.
+        const work = await a.send('GET', `/web/factory/projects/${projectId}/boards/work`);
+        const reset = await a.send('POST', `/web/factory/projects/${projectId}/boards/work/reset`, {
+          expectedRevision: work.json.board.revision,
+        });
+        expect(reset.status, JSON.stringify(reset.json)).toBe(200);
+        expect(reset.json.board).toMatchObject({ customized: false, defaultChanged: false });
+
+        // After its recheck window, replica B's Triage waits for a person again, and the run a
+        // person starts carries no Shipyard instructions.
+        await vi.waitFor(async () => expect(await workOn(b)).toMatchObject({ customized: false }), { timeout: 5_000 });
+        const after = await githubIssue(b, projectId, 'After reset', { trusted: true, labels: [] });
+        expect(after.stages).toEqual(['triage']);
+        const triage = await vi.waitFor(
+          async () => {
+            const start = (await b.workItems.listDeferredDecisions(orgId, projectId, { workItemId: after.id })).find(
+              record => record.decision.type === 'invokeSkill',
+            );
+            expect(start?.status).toBe('proposed');
+            return start!;
+          },
+          { timeout: 10_000 },
+        );
+        const approved = await b.send('POST', `/web/factory/projects/${projectId}/decisions/${triage.id}/approve`);
+        expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', after.title)).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-triage', after.title)[0]).not.toContain(TRIAGE_NOTE);
+      }, 120_000);
+    });
   },
 );
