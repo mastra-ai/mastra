@@ -30,6 +30,7 @@ import type {
   KnowledgePageStore,
   KnowledgeListedPin,
   KnowledgePin,
+  KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
   KnowledgeScopeDeclarationCount,
@@ -177,10 +178,18 @@ function toListedPin(row: Row): KnowledgeListedPin {
   return { ...toPin(row), pageName: String(row.pageName) };
 }
 
+/** IndexNotFound, or NamespaceNotFound when the collection doesn't exist yet. */
+function isMissingIndex(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 27 || code === 26;
+}
+
 function toPin(row: Row): KnowledgePin {
   return {
     id: String(row.id),
     pageId: String(row.pageId),
+    kind: (row.kind ?? 'page') as KnowledgePinKind,
+    ...(row.depth == null ? {} : { depth: Number(row.depth) }),
     audience: [...((row.audience as string[] | undefined) ?? [])],
     createdBy: String(row.createdBy),
     createdAt: new Date(row.createdAt),
@@ -274,6 +283,12 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       this.#c('activity'),
       this.#c('links'),
     ]);
+    // Pin kinds arrived after schema 4 shipped: pins from before stay page pins, and a page now holds
+    // one pin per kind, so the one-pin-per-page index goes.
+    await pins.updateMany({ kind: { $exists: false } }, { $set: { kind: 'page' } });
+    await pins.dropIndex('pageId_1').catch((error: unknown) => {
+      if (!isMissingIndex(error)) throw error;
+    });
     await Promise.all([
       pages.createIndex({ id: 1 }, { unique: true }),
       pages.createIndex({ address: 1 }, { unique: true, partialFilterExpression: { isScope: true } }),
@@ -291,7 +306,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       notes.createIndex({ pageScopeId: 1 }),
       notes.createIndex({ stampScopeIds: 1 }),
       pins.createIndex({ id: 1 }, { unique: true }),
-      pins.createIndex({ pageId: 1 }, { unique: true }),
+      pins.createIndex({ pageId: 1, kind: 1 }, { unique: true }),
       pins.createIndex({ audience: 1 }),
       activity.createIndex({ id: 1 }, { unique: true }),
       activity.createIndex({ pageScopeId: 1, createdAt: -1, id: -1 }),
@@ -1178,15 +1193,20 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       await this.#refreshMentionScopes([target.id, ...tree.ids], session);
 
       const pins = await this.#c('pins');
-      const sourcePin = await pins.findOne({ pageId: source.id }, { ...noProjection, session });
-      if (sourcePin) {
-        await this.#upsertPinAudience(
-          session,
-          target.id,
-          (sourcePin.audience as string[]) ?? [],
-          String(sourcePin.createdBy),
+      const sourcePins = await pins
+        .find({ pageId: source.id }, { ...noProjection, session })
+        .sort({ kind: 1 })
+        .toArray();
+      for (const sourcePin of sourcePins) {
+        await this.#upsertPinAudience(session, {
+          pageId: target.id,
+          kind: (sourcePin.kind ?? 'page') as KnowledgePinKind,
+          depth: sourcePin.depth == null ? null : Number(sourcePin.depth),
+          audience: (sourcePin.audience as string[]) ?? [],
+          createdBy: String(sourcePin.createdBy),
           now,
-        );
+          keepDepth: true,
+        });
         await pins.deleteOne({ id: sourcePin.id }, { session });
       }
 
@@ -1845,11 +1865,19 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     });
   }
 
-  async addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
+  async addPinAudience(input: Parameters<KnowledgePageStore['addPinAudience']>[0]): Promise<KnowledgePin> {
+    const kind = input.kind ?? 'page';
     return this.#tx(async session => {
       const page = await this.#requireLivePage(input.pageId, session);
       const now = new Date();
-      const { pin, changed } = await this.#upsertPinAudience(session, page.id, input.audience, input.createdBy, now);
+      const { pin, changed } = await this.#upsertPinAudience(session, {
+        pageId: page.id,
+        kind,
+        depth: kind === 'list' ? (input.depth ?? 1) : null,
+        audience: input.audience,
+        createdBy: input.createdBy,
+        now,
+      });
       if (changed) {
         await this.#log(session, {
           action: 'pin-added',
@@ -1863,21 +1891,30 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     });
   }
 
+  /** `keepDepth` (merges) leaves an existing pin's depth as it is instead of setting `depth`. */
   async #upsertPinAudience(
     session: Session,
-    pageId: string,
-    audience: string[],
-    createdBy: string,
-    now: Date,
+    input: {
+      pageId: string;
+      kind: KnowledgePinKind;
+      depth: number | null;
+      audience: string[];
+      createdBy: string;
+      now: Date;
+      keepDepth?: boolean;
+    },
   ): Promise<{ pin: KnowledgePin; changed: boolean }> {
+    const { pageId, kind, audience, now } = input;
     const pins = await this.#c('pins');
-    const existing = await pins.findOne({ pageId }, { ...noProjection, session });
+    const existing = await pins.findOne({ pageId, kind }, { ...noProjection, session });
     if (!existing) {
       const doc = {
         id: createKnowledgeUlid(),
         pageId,
+        kind,
+        ...(input.depth === null ? {} : { depth: input.depth }),
         audience: [...new Set(audience)],
-        createdBy,
+        createdBy: input.createdBy,
         createdAt: now,
         updatedAt: now,
       };
@@ -1891,23 +1928,26 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     }
     const current = (existing.audience as string[]) ?? [];
     const merged = [...new Set([...current, ...audience])];
-    if (merged.length === current.length) return { pin: toPin(existing), changed: false };
+    const currentDepth = existing.depth == null ? null : Number(existing.depth);
+    const depth = input.keepDepth ? currentDepth : input.depth;
+    if (merged.length === current.length && depth === currentDepth) return { pin: toPin(existing), changed: false };
     const updated = await pins.findOneAndUpdate(
       { id: existing.id },
-      { $set: { audience: merged, updatedAt: now } },
+      depth === null
+        ? { $set: { audience: merged, updatedAt: now }, $unset: { depth: '' } }
+        : { $set: { audience: merged, depth, updatedAt: now } },
       { returnDocument: 'after', projection: { _id: 0 }, session },
     );
     return { pin: toPin(updated!), changed: true };
   }
 
-  async removePinAudience(input: {
-    pageId: string;
-    audience: string[];
-    removedBy: string;
-  }): Promise<KnowledgePin | null> {
+  async removePinAudience(input: Parameters<KnowledgePageStore['removePinAudience']>[0]): Promise<KnowledgePin | null> {
     return this.#tx(async session => {
       const pins = await this.#c('pins');
-      const existing = await pins.findOne({ pageId: input.pageId }, { ...noProjection, session });
+      const existing = await pins.findOne(
+        { pageId: input.pageId, kind: input.kind ?? 'page' },
+        { ...noProjection, session },
+      );
       if (!existing) return null;
       const current = (existing.audience as string[]) ?? [];
       const remaining = current.filter(entry => !input.audience.includes(entry));
@@ -1962,6 +2002,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
+    kind?: KnowledgePinKind;
     pageIds?: string[];
     excludePageIds?: string[];
     withBody?: boolean;
@@ -1974,10 +2015,14 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const ids = await this.#readable(input.read);
     const match: Filter<Document> = {};
     if (input.audience !== 'all') match.audience = { $in: input.audience };
-    const pageId: Document = {};
-    if (input.pageIds) pageId.$in = input.pageIds;
-    if (input.excludePageIds?.length) pageId.$nin = input.excludePageIds;
-    if (Object.keys(pageId).length) match.pageId = pageId;
+    if (input.kind) match.kind = input.kind;
+    if (input.pageIds) match.pageId = { $in: input.pageIds };
+    // Page exclusions and the body check concern page pins; a listing pin stands for the tree below.
+    const pageOnly: Document[] = [];
+    if (input.excludePageIds?.length) {
+      pageOnly.push({ $or: [{ kind: { $ne: 'page' } }, { pageId: { $nin: input.excludePageIds } }] });
+    }
+    if (input.withBody) pageOnly.push({ $or: [{ kind: { $ne: 'page' } }, { 'page.body': { $regex: '\\S' } }] });
     const pins = await this.#c('pins');
     // Every condition except the cursor and the limit, so `total` counts the same pins.
     const base: Document[] = [
@@ -1994,7 +2039,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         $match: {
           'page.deletedAt': { $exists: false },
           ...(ids === null ? {} : { 'page.scopeId': { $in: ids } }),
-          ...(input.withBody ? { 'page.body': { $regex: '\\S' } } : {}),
+          ...(pageOnly.length ? { $and: pageOnly } : {}),
         },
       },
     ];

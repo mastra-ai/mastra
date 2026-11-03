@@ -157,14 +157,43 @@ export interface KnowledgeNote {
 }
 
 /**
- * A reference to a page plus the run scopes it's delivered to (OR). One pin per page; pinning again
- * adds audience entries.
+ * `page`: the page itself is delivered. `list`: a listing of the pages under it is delivered, like
+ * `knowledge_list` from that page.
+ *
+ * @experimental
+ */
+export type KnowledgePinKind = 'page' | 'list';
+
+/** Most levels a pinned listing walks below its page. @experimental */
+export const MAX_KNOWLEDGE_PIN_LIST_DEPTH = 3;
+
+/**
+ * The depth a pin of `kind` stores: undefined for `page` pins, `depth` (default 1) for `list` pins.
+ * Throws when a `list` depth isn't a whole number from 1 to {@link MAX_KNOWLEDGE_PIN_LIST_DEPTH}.
+ *
+ * @experimental
+ */
+export function knowledgePinDepth(kind: KnowledgePinKind, depth: number | undefined): number | undefined {
+  if (kind === 'page') return undefined;
+  const value = depth ?? 1;
+  if (!Number.isInteger(value) || value < 1 || value > MAX_KNOWLEDGE_PIN_LIST_DEPTH) {
+    throw new Error(`A Knowledge list pin's depth must be a whole number from 1 to ${MAX_KNOWLEDGE_PIN_LIST_DEPTH}`);
+  }
+  return value;
+}
+
+/**
+ * A reference to a page plus the run scopes it's delivered to (OR). One pin per page and kind; pinning
+ * again adds audience entries.
  *
  * @experimental
  */
 export interface KnowledgePin {
   id: string;
   pageId: string;
+  kind: KnowledgePinKind;
+  /** Levels a `list` pin walks below its page (1 to {@link MAX_KNOWLEDGE_PIN_LIST_DEPTH}). Unset on `page` pins. */
+  depth?: number;
   /** Scope addresses; a run holding any of them receives the pin if it can read the page. */
   audience: string[];
   createdBy: string;
@@ -848,21 +877,41 @@ export interface KnowledgePageStore {
   }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }>;
 
   // Pins
-  /** Adds audience entries to the page's pin, creating it if needed. */
-  addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin>;
-  /** Removes audience entries; the pin is deleted when none remain. Returns null when no pin is left. */
-  removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null>;
   /**
-   * Pins on readable live pages, newest first (`createdAt` desc, then `id` desc): those whose audience
-   * intersects `audience`, or every pin for `'all'`. `'all'` is for host surfaces behind their own auth
-   * (Studio); runs always pass their own scopes. `pageIds` narrows to those pages and `excludePageIds`
-   * leaves those out; `withBody` keeps only pins whose page body has a non-whitespace character. Each
-   * pin carries its page's name. `count` adds `total`, the number of matching pins across all pages of
-   * the listing.
+   * Adds audience entries to the page's pin of `kind` (default `page`), creating it if needed. A `list`
+   * pin takes `depth` (default 1; core checks it is 1 to {@link MAX_KNOWLEDGE_PIN_LIST_DEPTH} before
+   * calling); pinning it again with another depth sets the new depth. `page` pins ignore `depth`.
+   */
+  addPinAudience(input: {
+    pageId: string;
+    kind?: KnowledgePinKind;
+    depth?: number;
+    audience: string[];
+    createdBy: string;
+  }): Promise<KnowledgePin>;
+  /**
+   * Removes audience entries from the page's pin of `kind` (default `page`); the pin is deleted when none
+   * remain. Returns null when no pin is left.
+   */
+  removePinAudience(input: {
+    pageId: string;
+    kind?: KnowledgePinKind;
+    audience: string[];
+    removedBy: string;
+  }): Promise<KnowledgePin | null>;
+  /**
+   * Pins of both kinds on readable live pages, newest first (`createdAt` desc, then `id` desc): those
+   * whose audience intersects `audience`, or every pin for `'all'`. `'all'` is for host surfaces behind
+   * their own auth (Studio); runs always pass their own scopes. `pageIds` narrows to those pages and
+   * `kind` to that kind. `excludePageIds` leaves out `page` pins on those pages; `withBody` keeps only
+   * `page` pins whose page body has a non-whitespace character (neither touches `list` pins). Each pin
+   * carries its page's name. `count` adds `total`, the number of matching pins across all pages of the
+   * listing.
    */
   listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
+    kind?: KnowledgePinKind;
     pageIds?: string[];
     excludePageIds?: string[];
     withBody?: boolean;
