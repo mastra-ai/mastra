@@ -849,19 +849,20 @@ function listTool(host: KnowledgePageToolHost) {
       }
       const run = await start(host, context);
 
-      /** Readable scopes directly under a scope page; unreadable ones are left out entirely. */
-      const childScopes = async (parentId: string): Promise<KnowledgePage[]> => {
+      /** Readable scopes directly under a scope page, up to `max`; the store leaves out unreadable ones. */
+      const childScopes = async (parentId: string, max = Infinity): Promise<KnowledgePage[]> => {
         const out: KnowledgePage[] = [];
         let next: string | undefined;
         do {
           const { pages, nextCursor } = await run.storage.listChildScopes({
             parentId,
+            read: run.read,
             cursor: next,
-            limit: LIST_MAX_LIMIT,
+            limit: Math.min(max - out.length, LIST_MAX_LIMIT),
           });
-          out.push(...pages.filter(scope => knowledgeScopeReadable(scope, run.read)));
+          out.push(...pages);
           next = nextCursor;
-        } while (next);
+        } while (next && out.length < max);
         return out;
       };
 
@@ -921,14 +922,16 @@ function listTool(host: KnowledgePageToolHost) {
       let truncated = false;
       let level = top;
       for (let current = 1; current <= depth && level.length; current++) {
-        const pageCounts = await run.storage.countChildPages({
-          parentIds: level.map(node => node.page.id),
-          read: run.read,
-        });
-        const scopeChildren = new Map<string, KnowledgePage[]>();
+        const parentIds = level.map(node => node.page.id);
+        const scopeParents = level.filter(node => node.page.isScope).map(node => node.page.id);
+        const [pageCounts, scopeCounts] = await Promise.all([
+          run.storage.countChildPages({ parentIds, read: run.read }),
+          scopeParents.length
+            ? run.storage.countChildScopes({ parentIds: scopeParents, read: run.read })
+            : Promise.resolve({} as Record<string, number>),
+        ]);
         for (const node of level) {
-          if (node.page.isScope) scopeChildren.set(node.page.id, await childScopes(node.page.id));
-          node.children = (pageCounts[node.page.id] ?? 0) + (scopeChildren.get(node.page.id)?.length ?? 0);
+          node.children = (pageCounts[node.page.id] ?? 0) + (scopeCounts[node.page.id] ?? 0);
         }
         if (current === depth) break;
         const nextLevel: Node[] = [];
@@ -938,7 +941,7 @@ function listTool(host: KnowledgePageToolHost) {
             truncated = true;
             break;
           }
-          const scopes = (scopeChildren.get(node.page.id) ?? []).slice(0, budget);
+          const scopes = scopeCounts[node.page.id] ? await childScopes(node.page.id, budget) : [];
           budget -= scopes.length;
           const pages =
             budget > 0
