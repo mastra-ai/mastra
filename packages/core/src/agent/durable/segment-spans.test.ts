@@ -158,13 +158,27 @@ describe('currentSegment', () => {
     expect(resumed.clocks({ ...first, completionStartTime: at, clockSpanId: 'model-2' })).toEqual({
       completionStartTime: at,
     });
-    // A step input that cannot say where it measured counts as this segment's.
-    expect(resumed.clocks(undefined, { completionStartTime: at.toISOString(), timeToFirstTokenMs: 7 })).toEqual({
+    // A step input that cannot say where it measured (persisted before `clockSpanId` existed) was
+    // measured under the first segment: a later segment never borrows it.
+    expect(resumed.clocks(undefined, { completionStartTime: at.toISOString(), timeToFirstTokenMs: 7 })).toBeUndefined();
+    expect(
+      resumed.clocks({ ...first, completionStartTime: at, timeToFirstTokenMs: 5 }, { completionStartTime: at }),
+    ).toBeUndefined();
+    const original = currentSegment({ mastra: undefined, requestContext: undefined, runId: RUN_ID, state: first });
+    expect(original.clocks({ ...first, completionStartTime: at, timeToFirstTokenMs: 5 })).toEqual({
+      completionStartTime: at,
+      timeToFirstTokenMs: 5,
+    });
+    expect(original.clocks(undefined, { completionStartTime: at.toISOString(), timeToFirstTokenMs: 7 })).toEqual({
       completionStartTime: at,
       timeToFirstTokenMs: 7,
     });
-    const original = currentSegment({ mastra: undefined, requestContext: undefined, runId: RUN_ID, state: first });
-    expect(original.clocks({ ...first, completionStartTime: at, timeToFirstTokenMs: 5 })).toEqual({
+  });
+
+  it('gives an untraced run its ownerless clocks, since it has no segment to attribute them to', () => {
+    const at = new Date('2026-01-01T00:00:00Z');
+    const untraced = currentSegment({ mastra: undefined, requestContext: undefined, runId: RUN_ID, state: {} });
+    expect(untraced.clocks({ completionStartTime: at, timeToFirstTokenMs: 5 })).toEqual({
       completionStartTime: at,
       timeToFirstTokenMs: 5,
     });
@@ -193,7 +207,7 @@ describe('nextSegmentClocks', () => {
     ).toEqual({ completionStartTime: late, timeToFirstTokenMs: 2, clockSpanId: 'model-2' });
   });
 
-  it('counts an output without clockSpanId as the current segment and stamps the owner', () => {
+  it('counts an output without clockSpanId as the first segment and stamps that owner', () => {
     expect(nextSegmentClocks(first, { completionStartTime: late, timeToFirstTokenMs: 2 })).toEqual({
       completionStartTime: late,
       timeToFirstTokenMs: 2,
@@ -203,6 +217,15 @@ describe('nextSegmentClocks', () => {
       completionStartTime: early,
       timeToFirstTokenMs: undefined,
     });
+  });
+
+  it('ignores an output without clockSpanId once the state carries a later segment clocks', () => {
+    expect(
+      nextSegmentClocks(
+        { ...first, completionStartTime: early, timeToFirstTokenMs: 1, clockSpanId: 'model-2' },
+        { completionStartTime: late, timeToFirstTokenMs: 2 },
+      ),
+    ).toEqual({ completionStartTime: early, timeToFirstTokenMs: 1, clockSpanId: 'model-2' });
   });
 });
 
