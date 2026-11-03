@@ -1,4 +1,4 @@
-import { Area, CartesianGrid, ComposedChart, Line, Tooltip } from 'recharts';
+import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, Tooltip } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
@@ -99,6 +99,11 @@ export type MetricsLineChartProps = {
   showYAxis?: boolean;
   /** Show a ghost of the chart while data loads, in the chart's own footprint. */
   isLoading?: boolean;
+  /**
+   * Vertical lines at buckets, e.g. where a billing period starts. `x` must be one of the data's
+   * `xKey` values: the axis is categorical, so any other value draws nothing.
+   */
+  markers?: { x: string; label?: string }[];
   className?: string;
 };
 
@@ -132,6 +137,7 @@ function LinePlot({
   valueFormatter,
   axisFormatter,
   showYAxis = true,
+  markers = [],
 }: MetricsLineChartProps) {
   const id = useChartDefsId();
   const { size, onResize, ref } = useChartSize();
@@ -197,6 +203,19 @@ function LinePlot({
             series.map(s => s.dataKey),
           ),
         })}
+        {markers.map(m => (
+          <ReferenceLine
+            key={m.x}
+            x={m.x}
+            stroke="var(--border-strong)"
+            strokeDasharray="3 3"
+            label={
+              m.label
+                ? { value: m.label, position: 'insideTopLeft', fill: 'var(--muted-foreground)', fontSize: 11 }
+                : undefined
+            }
+          />
+        ))}
         <Tooltip
           {...CHART_TOOLTIP_PROPS}
           content={

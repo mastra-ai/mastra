@@ -21,6 +21,10 @@ on:
         required: false
         type: string
         default: 'true'
+      durable_streams_changed:
+        required: false
+        type: string
+        default: 'false'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -232,6 +236,21 @@ jobs:
           path: .vitest-reports/
           include-hidden-files: true
           retention-days: 1
+
+  # Durable takeover runs against real Redis and Postgres. It reports as its own check and is
+  # deliberately kept out of merge-reports: it is a multi-process SIGTERM/SIGKILL suite whose
+  # flake rate has not been measured, so a red run must not block a merge.
+  durable-streams:
+    name: Durable Stream Tests
+    if: inputs.has_code == 'true' && inputs.durable_streams_changed == 'true'
+    uses: ./.github/workflows/test-durable-streams.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ inputs.head_sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
   merge-reports:
     name: Merge Test Reports
