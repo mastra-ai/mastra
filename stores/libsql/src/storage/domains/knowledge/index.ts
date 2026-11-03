@@ -20,7 +20,7 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
-import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages } from './pages';
+import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages, upgradeKnowledgePinKinds } from './pages';
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -131,6 +131,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const inspection = await this.#inspectPages(tx);
       if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
       for (const statement of KNOWLEDGE_PAGE_DDL) await tx.execute(statement);
+      await upgradeKnowledgePinKinds(tx);
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,
         args: [KNOWLEDGE_PAGES_SCHEMA_VERSION],

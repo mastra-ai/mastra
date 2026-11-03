@@ -21,6 +21,7 @@ import type {
   KnowledgeScopeDeclarationCount,
   KnowledgeScopeDeclarationRename,
   KnowledgePin,
+  KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
   MaterializeKnowledgeScopeInput,
@@ -57,6 +58,38 @@ export const KNOWLEDGE_PAGE_TABLES = {
 } as const;
 
 const T = KNOWLEDGE_PAGE_TABLES;
+
+function pinsTableDDL(name: string): string {
+  return `CREATE TABLE IF NOT EXISTS "${name}" (
+    id TEXT PRIMARY KEY,
+    pageId TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'page',
+    depth INTEGER,
+    audience TEXT NOT NULL,
+    createdBy TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
+    UNIQUE (pageId, kind)
+  )`;
+}
+
+/**
+ * Pins tables from before pin kinds kept one pin per page (`pageId UNIQUE`). SQLite can't drop that
+ * constraint in place, so the table is rebuilt with every existing pin as a `page` pin. Run after
+ * {@link KNOWLEDGE_PAGE_DDL}, in the same transaction; a no-op once `kind` exists.
+ */
+export async function upgradeKnowledgePinKinds(tx: PageExecutor): Promise<void> {
+  const columns = await tx.execute(`SELECT name FROM pragma_table_info('${T.pins}')`);
+  if (columns.rows.some(row => String(row.name) === 'kind')) return;
+  const next = `${T.pins}_kinds`;
+  await tx.execute(`DROP TABLE IF EXISTS "${next}"`);
+  await tx.execute(pinsTableDDL(next));
+  await tx.execute(
+    `INSERT INTO "${next}" (id, pageId, kind, audience, createdBy, createdAt, updatedAt) SELECT id, pageId, 'page', audience, createdBy, createdAt, updatedAt FROM "${T.pins}"`,
+  );
+  await tx.execute(`DROP TABLE "${T.pins}"`);
+  await tx.execute(`ALTER TABLE "${next}" RENAME TO "${T.pins}"`);
+}
 
 /** DDL for the schema-4 page tables, in creation order. Every statement is idempotent. */
 export const KNOWLEDGE_PAGE_DDL: string[] = [
@@ -121,14 +154,7 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     PRIMARY KEY (noteId, pageId)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kmentions_page ON "${T.mentions}" (pageId)`,
-  `CREATE TABLE IF NOT EXISTS "${T.pins}" (
-    id TEXT PRIMARY KEY,
-    pageId TEXT NOT NULL UNIQUE,
-    audience TEXT NOT NULL,
-    createdBy TEXT NOT NULL,
-    createdAt TEXT NOT NULL,
-    updatedAt TEXT NOT NULL
-  )`,
+  pinsTableDDL(T.pins),
   `CREATE TABLE IF NOT EXISTS "${T.pinAudiences}" (
     pinId TEXT NOT NULL,
     audience TEXT NOT NULL,
@@ -219,6 +245,8 @@ function toPin(row: Row): KnowledgePin {
   return {
     id: String(row.id),
     pageId: String(row.pageId),
+    kind: String(row.kind) as KnowledgePinKind,
+    ...(row.depth !== null && row.depth !== undefined ? { depth: Number(row.depth) } : {}),
     audience: JSON.parse(String(row.audience)) as string[],
     createdBy: String(row.createdBy),
     createdAt: new Date(String(row.createdAt)),
@@ -946,9 +974,8 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         input.sourceId,
         input.targetId,
       ]);
-      const sourcePin = pins.find(pin => String(pin.pageId) === input.sourceId);
-      if (sourcePin) {
-        const targetPin = pins.find(pin => String(pin.pageId) === input.targetId);
+      for (const sourcePin of pins.filter(pin => String(pin.pageId) === input.sourceId)) {
+        const targetPin = pins.find(pin => String(pin.pageId) === input.targetId && pin.kind === sourcePin.kind);
         const audience = JSON.parse(String(sourcePin.audience)) as string[];
         if (targetPin) {
           const merged = [...new Set([...(JSON.parse(String(targetPin.audience)) as string[]), ...audience])];
@@ -1506,16 +1533,29 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
 
   // Pins
 
-  addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
+  addPinAudience(input: Parameters<KnowledgePageStore['addPinAudience']>[0]): Promise<KnowledgePin> {
+    const kind = input.kind ?? 'page';
+    const depth = kind === 'list' ? (input.depth ?? 1) : null;
     return this.#transaction(async tx => {
       const page = await this.#livePage(tx, input.pageId);
       const now = new Date().toISOString();
-      const existing = (await this.#query(tx, `SELECT * FROM "${T.pins}" WHERE pageId = ?`, [input.pageId]))[0];
+      const existing = (
+        await this.#query(tx, `SELECT * FROM "${T.pins}" WHERE pageId = ? AND kind = ?`, [input.pageId, kind])
+      )[0];
       if (!existing) {
         const id = createKnowledgeUlid();
         await tx.execute({
-          sql: `INSERT INTO "${T.pins}" (id, pageId, audience, createdBy, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
-          args: [id, input.pageId, JSON.stringify([...new Set(input.audience)]), input.createdBy, now, now],
+          sql: `INSERT INTO "${T.pins}" (id, pageId, kind, depth, audience, createdBy, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            id,
+            input.pageId,
+            kind,
+            depth,
+            JSON.stringify([...new Set(input.audience)]),
+            input.createdBy,
+            now,
+            now,
+          ],
         });
         await this.#indexAudience(tx, id, [...new Set(input.audience)]);
         await this.#logActivity(
@@ -1528,10 +1568,11 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       }
       const current = JSON.parse(String(existing.audience)) as string[];
       const merged = [...new Set([...current, ...input.audience])];
-      if (merged.length !== current.length) {
+      const depthChanged = (existing.depth === null ? null : Number(existing.depth)) !== depth;
+      if (merged.length !== current.length || depthChanged) {
         await tx.execute({
-          sql: `UPDATE "${T.pins}" SET audience = ?, updatedAt = ? WHERE id = ?`,
-          args: [JSON.stringify(merged), now, String(existing.id)],
+          sql: `UPDATE "${T.pins}" SET audience = ?, depth = ?, updatedAt = ? WHERE id = ?`,
+          args: [JSON.stringify(merged), depth, now, String(existing.id)],
         });
         await this.#indexAudience(tx, String(existing.id), merged);
         await this.#logActivity(
@@ -1545,9 +1586,14 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     });
   }
 
-  removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null> {
+  removePinAudience(input: Parameters<KnowledgePageStore['removePinAudience']>[0]): Promise<KnowledgePin | null> {
     return this.#transaction(async tx => {
-      const existing = (await this.#query(tx, `SELECT * FROM "${T.pins}" WHERE pageId = ?`, [input.pageId]))[0];
+      const existing = (
+        await this.#query(tx, `SELECT * FROM "${T.pins}" WHERE pageId = ? AND kind = ?`, [
+          input.pageId,
+          input.kind ?? 'page',
+        ])
+      )[0];
       if (!existing) return null;
       const current = JSON.parse(String(existing.audience)) as string[];
       const remove = new Set(input.audience);
@@ -1580,6 +1626,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
+    kind?: KnowledgePinKind;
     pageIds?: string[];
     excludePageIds?: string[];
     withBody?: boolean;
@@ -1597,16 +1644,20 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       filters += ` AND pin.id IN (SELECT pa.pinId FROM json_each(?) a JOIN "${T.pinAudiences}" pa ON pa.audience = a.value)`;
       args.push(jsonList(input.audience));
     }
+    if (input.kind) {
+      filters += ` AND pin.kind = ?`;
+      args.push(input.kind);
+    }
     if (input.pageIds) {
       filters += ` AND pin.pageId IN (SELECT value FROM json_each(?))`;
       args.push(jsonList(input.pageIds));
     }
     if (input.excludePageIds?.length) {
-      filters += ` AND pin.pageId NOT IN (SELECT value FROM json_each(?))`;
+      filters += ` AND (pin.kind <> 'page' OR pin.pageId NOT IN (SELECT value FROM json_each(?)))`;
       args.push(jsonList(input.excludePageIds));
     }
     if (input.withBody) {
-      filters += ` AND p.body IS NOT NULL AND trim(p.body, char(32, 9, 10, 11, 12, 13)) <> ''`;
+      filters += ` AND (pin.kind <> 'page' OR (p.body IS NOT NULL AND trim(p.body, char(32, 9, 10, 11, 12, 13)) <> ''))`;
     }
     const from = `FROM "${T.pins}" pin JOIN "${T.pages}" p ON p.id = pin.pageId WHERE p.deletedAt IS NULL AND ${readable.sql}${filters}`;
     let total: number | undefined;
