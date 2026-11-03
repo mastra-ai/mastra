@@ -83,6 +83,8 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
     metadata: { type: 'json', nullable: true },
+    comment_count: { type: 'integer', default: 0 },
+    feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
@@ -198,6 +200,8 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   stage_history: unknown[];
   sessions: Record<string, unknown>;
   metadata: Record<string, unknown> | null;
+  comment_count: number;
+  feed_activity_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;

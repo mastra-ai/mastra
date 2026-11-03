@@ -155,6 +155,9 @@ export function splitLegacyWorkItem(
       accepted_at: row.accepted_at ?? null,
       autonomy_armed_at: row.autonomy_armed_at ?? null,
       plans_preapproved_at: row.plans_preapproved_at ?? null,
+      comment_count: row.comment_count ?? 0,
+      // The first recount must be able to correct a copied legacy count.
+      feed_activity_at: null,
       revision: revision ?? row.revision,
       created_by: row.created_by,
       created_at: row.created_at,
@@ -259,7 +262,13 @@ async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy
       throw new MigrationConflict('Split board item changed after migration');
     }
     baseline = time(current.migrated_from_updated_at);
-    return { ...card.boardItem, revision: Math.max(current.revision, card.boardItem.revision) + 1 };
+    return {
+      ...card.boardItem,
+      ...(current.feed_activity_at
+        ? { comment_count: current.comment_count, feed_activity_at: current.feed_activity_at }
+        : {}),
+      revision: Math.max(current.revision, card.boardItem.revision) + 1,
+    };
   });
   if (unchanged) return false;
   if (!board) throw new MigrationConflict('Split board item disappeared during migration');

@@ -92,8 +92,8 @@ function joinCard(
     autonomy_armed_at: board.autonomy_armed_at ?? null,
     plans_preapproved_at: board.plans_preapproved_at ?? null,
     accepted_at: board.accepted_at ?? null,
-    comment_count: 0,
-    feed_activity_at: null,
+    comment_count: board.comment_count ?? 0,
+    feed_activity_at: board.feed_activity_at ?? null,
     revision: board.revision,
     created_by: board.created_by,
     created_at: board.created_at,
@@ -154,36 +154,9 @@ export class Cards {
         sources.set(source.work_item_id, group);
       }
     }
-    const cards = boards.map(board =>
+    return boards.map(board =>
       joinCard(board, items.get(board.work_item_id) ?? null, sources.get(board.work_item_id) ?? []),
     );
-    // Batch by project and card ids, including tombstones so edits/deletes advance the feed clock.
-    const projects = new Map<string, WorkItemDbRow[]>();
-    for (const card of cards) {
-      const key = `${card.org_id}\0${card.factory_project_id}`;
-      const group = projects.get(key) ?? [];
-      group.push(card);
-      projects.set(key, group);
-    }
-    for (const group of projects.values()) {
-      const byId = new Map(group.map(card => [card.id, card]));
-      for (let index = 0; index < group.length; index += ID_BATCH) {
-        const comments = await this.ops.findMany<
-          { work_item_id: string; deleted_at: Date | null; updated_at: Date } & Record<string, unknown>
-        >('work_item_comments', {
-          org_id: group[0]!.org_id,
-          factory_project_id: group[0]!.factory_project_id,
-          work_item_id: { in: group.slice(index, index + ID_BATCH).map(card => card.id) },
-        });
-        for (const comment of comments) {
-          const card = byId.get(comment.work_item_id)!;
-          if (!comment.deleted_at) card.comment_count += 1;
-          if (!card.feed_activity_at || comment.updated_at > card.feed_activity_at)
-            card.feed_activity_at = comment.updated_at;
-        }
-      }
-    }
-    return cards;
   }
 
   async findOne(where: CollectionWhere): Promise<WorkItemDbRow | null> {

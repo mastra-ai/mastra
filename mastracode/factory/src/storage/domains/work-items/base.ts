@@ -555,10 +555,8 @@ export interface BoardItemRow {
    * agents may advance the item through Planning and Execute on their own.
    */
   acceptedAt: Date | null;
-  /** Denormalized feed counters, maintained by the comments domain via recount. */
+  /** Denormalized visible comment count, maintained by the comments domain via recount. */
   commentCount: number;
-  /** Bumps on every feed mutation (create/edit/delete) — the clients' change hint. */
-  feedActivityAt: Date | null;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -781,7 +779,6 @@ function toWorkItem(row: WorkItemDbRow): Card {
     autonomyArmedAt: row.autonomy_armed_at ?? null,
     acceptedAt: row.accepted_at ?? null,
     commentCount: row.comment_count ?? 0,
-    feedActivityAt: row.feed_activity_at ?? null,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -1694,7 +1691,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * ponytail: org-wide scan per session delete; JSON-path query if it measures.
    */
   async clearSessionReferences({ orgId, sessionId }: { orgId: string; sessionId: string }): Promise<number> {
-    const rows = await new Cards(this.#db, this.#legacyMode).findMany({ org_id: orgId });
+    const rows = await this.#db.findMany<Pick<WorkItemDbRow, 'id' | 'sessions'> & Record<string, unknown>>(
+      this.#legacyMode ? WORK_ITEMS_SCHEMA.name : FACTORY_BOARD_ITEMS_SCHEMA.name,
+      { org_id: orgId },
+    );
     const holding = rows.filter(row => Object.values(row.sessions).some(ref => ref.sessionId === sessionId));
     let cleared = 0;
     for (const row of holding) {

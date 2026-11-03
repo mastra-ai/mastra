@@ -2,6 +2,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { WorkItemsStorage, CreateWorkItemInput } from '../storage/domains/work-items/base.js';
 import { readBoardVersion } from '../storage/domains/work-items/board-version.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
@@ -395,12 +396,62 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         expect(source?.metadata ?? {}, `${fixture.name}: source ${key}`).not.toHaveProperty(key);
       }
       for (const row of [workItem, boardItem, source].filter(Boolean)) {
-        for (const column of ['kind', 'claim_key', 'comment_count', 'feed_activity_at']) {
+        for (const column of [
+          'kind',
+          'claim_key',
+          ...(row === boardItem ? [] : ['comment_count', 'feed_activity_at']),
+        ]) {
           expect(row, `${fixture.name}: retired ${column}`).not.toHaveProperty(column);
         }
       }
     }
     expect(split.boardItems.get(githubIssue)).toMatchObject({ stages: ['planning'], parent_board_item_id: parent });
+  });
+
+  it('copies the stored comment count and lets the first recount correct its migrated baseline', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    const id = cards.get('github issue')!;
+    await storage.ops.updateMany(
+      'work_items',
+      { id },
+      {
+        comment_count: 9,
+        feed_activity_at: new Date('2099-01-01T00:00:00Z'),
+      },
+    );
+    await migrateWorkItemSplit(storage);
+    const before = await workItems.get({ orgId: ORG, id });
+    expect(before).toMatchObject({ commentCount: 9 });
+    const scope = { orgId: ORG, factoryProjectId: PROJECT };
+    expect((await workItems.listShared(scope)).find(card => card.id === id)).toMatchObject({ commentCount: 9 });
+    const comments = storage.getDomain<WorkItemCommentsStorage>('work-item-comments')!;
+    await comments.refreshWorkItemFeedActivity({ ...scope, workItemId: id });
+    expect((await workItems.listShared(scope)).find(card => card.id === id)).toMatchObject({
+      commentCount: 0,
+      revision: before!.revision,
+      updatedAt: before!.updatedAt,
+    });
+    const recounted = (await readSplit(storage)).boardItems.get(id)!;
+    expect(recounted).toMatchObject({ comment_count: 0 });
+    await storage.ops.updateMany(
+      'work_items',
+      { id },
+      {
+        title: 'Refreshed by an old replica',
+        updated_at: new Date('2031-01-01T00:00:00Z'),
+      },
+    );
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({ recopied: 1, skipped: [] });
+    expect((await readSplit(storage)).boardItems.get(id)).toMatchObject({
+      comment_count: 0,
+      feed_activity_at: recounted.feed_activity_at,
+    });
+    expect(await workItems.get({ orgId: ORG, id })).toMatchObject({
+      title: 'Refreshed by an old replica',
+      commentCount: 0,
+    });
   });
 
   it('preserves classification, acceptance, autonomy and plan grants on the board placement', async () => {

@@ -43,7 +43,6 @@ function item(overrides: Partial<Card> & { id: string }): Card {
     autonomyArmedAt: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdBy: 'someone-else',
     createdAt: new Date(clock),

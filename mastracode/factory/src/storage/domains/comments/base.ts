@@ -478,11 +478,6 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     workItemId: string;
     now?: Date;
   }): Promise<void> {
-    if (!this.#legacyMode) {
-      await bumpBoardVersions(this.ops, [{ orgId, factoryProjectId }]);
-      return;
-    }
-    const commentCount = await this.countForWorkItem({ orgId, factoryProjectId, workItemId });
     // Every feed mutation stamps `updated_at`, edits and tombstones included,
     // so the newest one is when this feed last moved.
     const [latest] = await this.ops.findMany<WorkItemCommentDbRow>(
@@ -491,6 +486,9 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
       { orderBy: [['updated_at', 'desc']], limit: 1 },
     );
     const feedActivityAt = latest?.updated_at ?? now;
+    // Capture the clock before counting: a paused old count must not borrow a
+    // later deletion's clock and supersede its newer, smaller recount.
+    const commentCount = await this.countForWorkItem({ orgId, factoryProjectId, workItemId });
     await this.ops.updateAtomic<WorkItemFeedColumns>(
       this.#boardItemsTable,
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
