@@ -99,5 +99,40 @@ export function createCustomRouteFGATestSuite(config: CustomRouteFGATestSuiteCon
       expect(response.status).toBe(403);
       expect(checkedIds(check)).toEqual(['locked']);
     });
+
+    it('authenticates overlapping routes the same way they are dispatched', async () => {
+      // A protected parameterized route registered before a public static one
+      // matches the static path first, so its auth rules must apply there too.
+      const mastra = new Mastra({
+        logger: false,
+        server: {
+          apiRoutes: [
+            registerApiRoute('/admin/:id', { method: 'GET', handler: async (c: any) => c.json({ route: 'admin' }) }),
+            registerApiRoute('/admin/public', {
+              method: 'GET',
+              requiresAuth: false,
+              handler: async (c: any) => c.json({ route: 'public' }),
+            }),
+          ],
+        },
+      });
+      const originalGetServer = mastra.getServer.bind(mastra);
+      mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+            authorize: async () => true,
+          },
+        }) as any;
+
+      const server = await startServer(mastra);
+      close = server.close;
+
+      expect((await server.request('/admin/public')).status).toBe(401);
+      const authed = await server.request('/admin/public', { headers: { authorization: 'Bearer valid-token' } });
+      expect(authed.status).toBe(200);
+      expect(await authed.json()).toEqual({ route: 'admin' });
+    });
   });
 }
