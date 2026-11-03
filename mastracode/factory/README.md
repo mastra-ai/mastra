@@ -112,16 +112,16 @@ There is no dual-write rollback: an older Factory version sees the legacy snapsh
 
 Each project has two kinds of boards:
 
-- **Code boards**: the built-in Work and Review boards and the boards you pass to `new MastraFactory({ boards })`. An admin can edit Work and app boards per project under the board's own key: the first edit stores the project's copy in its database. The legacy Review board is never copied and stays read-only.
-- **Stored boards**: boards an admin created for one project through the boards API. They live in that project's database.
+- **Copies of code boards**: the built-in Work board and the boards you pass to `new MastraFactory({ boards })` (app boards). Factory writes a copy of each into a project's database when the project is created. Projects that existed before get theirs the first time a process loads the project, which includes the preload at startup. The copy is the board: Factory serves the stored row, edited or not, and an admin can edit it under the board's own key. The legacy Review board is never copied and stays read-only.
+- **Stored boards**: boards an admin created for one project through the boards API, or that an app wrote with [`factory.upsertBoard()`](#writing-boards-from-code). They live in that project's database.
 
-A project's boards are its code boards followed by its stored boards. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. Existing apps need no change, and Factory writes nothing to the database at startup.
+A project's boards are its code-board copies followed by its stored boards. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. Existing apps need no change.
 
 **Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases` on any phase. The first phase is the initial phase and must be `resting`. Saved boards pass the same checks `defineBoard()` applies, with the same messages. A stored board has no code behaviors: no handlers, transition policy, `sourceClosed`, or tool and event rules. Its working phases start their `runner` on entry.
 
 `nextPhases` on a stored board: leaving it out (or `null`) on a resting or working phase allows moves to every other phase, `[]` allows none, and a terminal phase allows none unless it lists some.
 
-**Editing the Work board and app boards.** The catalog and `GET …/boards/:boardKey` report each board's `source` (`builtin`, `app` or `stored`), `editable` (`false` only for the legacy Review board), `customized` and `defaultChanged`. A board the project hasn't edited has no stored copy: Factory serves the code board, at `revision` 0. The first `PATCH` (with `expectedRevision: 0`) stores the project's copy, and later ones replace it; a board with a stored copy is `customized`. Factory then serves the edited fields with the code behaviour of the board and of each phase key still attached: entry and exit handlers, outcomes, tool and event rules, `sourceClosed` and the transition policy. A runner's instructions reach the runs the code handlers start.
+**Editing the Work board and app boards.** The catalog and `GET …/boards/:boardKey` report each board's `source` (`builtin`, `app` or `stored`), `editable` (`false` only for the legacy Review board), `customized` and `defaultChanged`. `PATCH` replaces the project's copy and marks it `customized`. Factory serves a copy's stored fields with the code behaviour of the board and of each phase key still attached: entry and exit handlers, outcomes, tool and event rules, `sourceClosed` and the transition policy. A runner's instructions reach the runs the code handlers start.
 
 What code behaviour depends on stays fixed, and an edit that changes it is refused with `422 code_behaviour`, listing every conflict:
 
@@ -132,11 +132,34 @@ What code behaviour depends on stays fixed, and an edit that changes it is refus
 
 Everything else can change: names and descriptions, added `nextPhases`, `autoStart` and `autoStartWhen`, exit-tool approval, runner instructions, the runner of working phases without code handlers, the order of phases after the first, and new phases (which behave like stored-board phases).
 
-Reads never write: an unedited board always follows the code of the Factory version that is running, so a new release's defaults reach it at once. An edited copy keeps your fields. `defaultChanged` is `true` when the code default has changed since; `POST …/boards/:boardKey/reset` with `expectedRevision` rewrites the copy to the current code default at the next revision; revisions never go back, so an editor holding an older one is refused. If an edited copy no longer fits a newer code default (for example the release added a phase), Factory serves the code board and reports `Board "<key>" keeps its built-in definition: <reason>; edit or reset it.` in `problems`.
+**When the code default changes.** Factory never replaces a copy with code while it runs, with one exception: the built-in Work board's default is numbered, and when a Factory release ships a higher number, the first load of each project rewrites an unedited Work copy to it. Copies only move forward, so replicas on two releases during a rolling deploy don't undo each other. An edited Work copy keeps your fields. An app board's copy is written once and never rewritten: when the app's code for it changes, the copy keeps serving what it holds. In both cases `defaultChanged` is `true`; `POST …/boards/:boardKey/reset` with `expectedRevision` replaces the copy with the current default and clears `customized`, and `factory.upsertBoard()` writes a new definition.
 
-Creating a board under a code board's key, or deleting a code board, is refused with `409 code_board`; reset it instead. A stored board created under a code board's key before code boards could be edited is left alone and not served: the catalog reports `Stored board "<key>" was created before <key> could be edited; edit or reset it to use it.`, and the first `PATCH` adopts it as that board's edited copy. A stored `review` board stays hidden by the Review board.
+**Copies that no longer fit the code.** A copy is served even when it has fallen out of step with the code, with the code behaviour that still fits it. A phase the code declares keeps its handlers only while it is on the board with the same `kind`, `runner.context`, `runner.skill` and exit tool; an outcome is dropped when its target phase is gone; the board's tool and event rules and transition policy need every phase the code declares, and `sourceClosed` needs both its phases. Each dropped behaviour is reported in the board's `problems`, for example `Phase "testing" isn't on stored board "release", so its code behaviour doesn't run.` or `Phase "triage" runs without its code behaviour: <conflict>`. This covers edited copies a newer release no longer fits, stored boards created under a code board's key before code boards could be edited (served as that board's edited copy), and copies of a code board the app stopped defining (served as a stored board with no code behaviour, reporting `Stored board "<key>" was copied from a code board this Factory no longer defines; it runs without code behaviour.`).
 
-A replica that has not loaded a project yet serves its code boards until its first load (at startup, or on first use).
+Creating a board under a code board's key, or deleting a code board, is refused with `409 code_board`; reset it instead. A stored `review` board stays hidden by the Review board.
+
+**When Factory serves the code board.** Factory serves a code board itself only where no copy exists, and reports it: the legacy Review board; a project whose copies could not be written (`Board "<key>" isn't stored in this project yet; Factory serves its default until it is.`, retried on its next load); every project when the boards storage could not start; and a replica that has not loaded a project yet, until its first load.
+
+#### Writing boards from code
+
+Apps that keep board config in code write it to a project with `factory.upsertBoard()` after `prepare()`. It creates the board, or replaces it at its current revision, through the same checks, cache invalidation and audit (`factory.board.created` / `updated`, actor `system:factory` unless you pass `actor`) as the boards API. An unchanged board writes nothing. A refused write throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `code_behaviour`, `code_board`, `phase_in_use` and so on).
+
+```ts
+await factory.upsertBoard(
+  { orgId, factoryProjectId },
+  {
+    key: 'bugs',
+    name: 'Bugs',
+    phases: [
+      { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+      { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
+      { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+    ],
+  },
+);
+```
+
+Upserting `work` edits the project's Work copy the way `PATCH` does, under the same `code_behaviour` rules.
 
 **Editing rules for stored boards.**
 
@@ -155,8 +178,8 @@ A replica that has not loaded a project yet serves its code boards until its fir
 | `GET`    | `/web/factory/projects/:id/boards`                              | —                                                       | The catalog, with each board's `source`, `editable`, `customized`, `defaultChanged` and `problems`.                                                                                                                                                                            |
 | `GET`    | `/web/factory/projects/:id/boards/:boardKey`                    | —                                                       | The definition, `revision` (`null` for the Review board), `source`, `editable`, `customized`, `defaultChanged`, `problems`, `codeBehaviour` (per phase: whether code handlers run it, its fixed exit tool and required next phases) and `canEdit` (whether you may change it). |
 | `POST`   | `/web/factory/projects/:id/boards`                              | The board, with `key`.                                  | `201` and the board. `409 code_board` for a code board's key, `409 board_exists` for a stored board's.                                                                                                                                                                         |
-| `PATCH`  | `/web/factory/projects/:id/boards/:boardKey`                    | The whole board without `key`, plus `expectedRevision`. | The board. Replaces every field; `expectedRevision: 0` stores the first edit of a Work or app board. `422 code_behaviour` for an edit code behaviour can't honour, `409 code_board` for the Review board.                                                                      |
-| `POST`   | `/web/factory/projects/:id/boards/:boardKey/reset`              | `{ expectedRevision }`                                  | The board, rewritten to its code default at the next revision. `409 not_code_board` for a stored board, `409 code_board` for the Review board.                                                                                                                                 |
+| `PATCH`  | `/web/factory/projects/:id/boards/:boardKey`                    | The whole board without `key`, plus `expectedRevision`. | The board. Replaces every field. `422 code_behaviour` for an edit code behaviour can't honour, `409 code_board` for the Review board.                                                                                                                                          |
+| `POST`   | `/web/factory/projects/:id/boards/:boardKey/reset`              | `{ expectedRevision }`                                  | The board, back to its code default. `409 not_code_board` for a stored board, `409 code_board` for the Review board.                                                                                                                                                           |
 | `DELETE` | `/web/factory/projects/:id/boards/:boardKey?expectedRevision=n` | —                                                       | `204`. `409 code_board` for a code board.                                                                                                                                                                                                                                      |
 
 A stale `expectedRevision` is refused with `409 revision_mismatch`; reload the board and try again.
@@ -196,11 +219,13 @@ Admins can make the same edits in the Factory UI under **Settings → Work board
 
 ### Migrating from `defineBoard()`
 
-`defineBoard()`, and the `boards` and `includeDefaultBoards` options of `MastraFactory`, are deprecated. Nothing breaks: the boards you pass keep working as code boards, each project can edit them, which stores its own copy, and Factory logs once per process:
+`defineBoard()` and the `boards` option of `MastraFactory` are deprecated; store boards with [`factory.upsertBoard()`](#writing-boards-from-code) instead. Nothing breaks: each project gets a copy of the boards you pass once, Factory serves that copy, and code changes to a board reach a project only through reset or `upsertBoard()`. Factory logs once per process:
 
 ```text
-[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions next to the boards it stores. Manage boards through the boards API; see the README "Stored boards" section.
+[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions once. Store boards with factory.upsertBoard() or the boards API; see the README "Stored boards" section.
 ```
+
+`includeDefaultBoards` decides whether projects get the built-in Work board (and the legacy Review board).
 
 Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no handlers, policies or rules, can move off code: create it in each project with `POST /web/factory/projects/:id/boards` under a new key, move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
 
@@ -208,7 +233,7 @@ Removing `defineBoard()` still needs code behaviour that stored boards can refer
 
 ### Board lifecycle rules
 
-Code boards own phase entry and exit handlers; stored boards have none, and an edited copy of a code board keeps its code's handlers (see [Stored boards](#stored-boards)). Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`, which is deprecated but still works:
+Code boards own phase entry and exit handlers; stored boards have none, and a project's copy of a code board keeps its code's handlers (see [Stored boards](#stored-boards)). Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`, which is deprecated but still works:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
