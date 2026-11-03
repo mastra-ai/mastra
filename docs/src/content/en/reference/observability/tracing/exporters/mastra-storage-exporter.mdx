@@ -187,7 +187,7 @@ Failed flushes are retried with exponential backoff:
 For `batch-with-updates` strategy:
 
 - Tracks which spans have been created
-- Rejects updates/ends for spans not yet created
+- Holds updates/ends for spans whose create isn't written yet, and retries them
 - Logs warnings for out-of-order events
 - Maintains sequence numbers for ordered updates
 
