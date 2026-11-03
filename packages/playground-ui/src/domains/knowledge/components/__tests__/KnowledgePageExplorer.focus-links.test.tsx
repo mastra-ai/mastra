@@ -247,9 +247,10 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     const heavy = page('ward', 'authors', { body: many.map(ref => `[[${ref}]]`).join(' ') });
     const requested: string[][] = [];
     const reachableMany = Object.fromEntries(many.map(ref => [ref, page(`id-${ref}`, 'blog')]));
-    render({ wardPage: heavy, reachable: reachableMany, requested });
+    const { container } = render({ wardPage: heavy, reachable: reachableMany, requested });
     expect((requested[requested.length - 1] ?? []).length).toBe(FOCUS_LINK_CAP + 5);
-    expect(screen.getByText(/\+5 more links of this page not drawn \(0 in, 5 out\)/)).toBeTruthy();
+    expect(screen.queryByTestId('knowledge-graph-more-links')).toBeNull();
+    expect(container.textContent ?? '').not.toMatch(/more links of this page not drawn/);
   });
 
   it('counts a page linked by both a note and the body once, not once per kind', () => {

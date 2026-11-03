@@ -850,10 +850,6 @@ export function KnowledgePageExplorer({
     [knownLinks, pagesById, selectedPageId, allLinks],
   );
   const linkEdges = linkView.edges;
-  const moreLinks = {
-    in: linkView.more.in + focusLinks.unfetched.in,
-    out: linkView.more.out + focusLinks.unfetched.out,
-  };
   // Exact counts for the pages the graph holds, in batches the host's route accepts; a failure (a
   // server with no link index) leaves the counts to what the loaded pages show.
   const countIds = useMemo(
@@ -1001,11 +997,6 @@ export function KnowledgePageExplorer({
       {!lazyMode && graph.truncated && !showPage ? (
         <p className="text-ui-sm text-muted-foreground">
           The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
-        </p>
-      ) : null}
-      {!showPage && (moreLinks.in > 0 || moreLinks.out > 0) ? (
-        <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-links">
-          +{moreLinks.in + moreLinks.out} more links of this page not drawn ({moreLinks.in} in, {moreLinks.out} out).
         </p>
       ) : null}
       {focusedInGraph && children && (children.hidden > 0 || focusedInGraph.childCountCapped) ? (
