@@ -167,9 +167,11 @@ For example, for a run holding `org:acme` and `team:acme:support`:
 
 ```mermaid
 flowchart LR
-  A["Run scopes<br/>org:acme, team:acme:support"] --> B["Rules that match<br/>those scopes"]
-  B --> C["Reach<br/>org:acme: editor<br/>team:acme:support: editor<br/>policy:acme: viewer<br/>audience:acme:public: editor"]
-  C --> D["Pages and notes<br/>in those scopes"]
+  accTitle: How a run's scopes become roles
+  accDescr: The run's scopes match access rules, which give it a role in org:acme, team:acme:support, policy:acme and audience:acme:public. The run can use the pages and notes in those scopes.
+  scopes(["run scopes<br/>org:acme<br/>team:acme:support"]) --> rules(["matching<br/>rules"])
+  rules --> roles(["org:acme: editor<br/>team:acme:support:<br/>editor<br/>policy:acme: viewer<br/>audience:acme:public:<br/>editor"])
+  roles --> pages@{ shape: cyl, label: "pages and notes" }
 ```
 
 Scopes don't inherit access either. A role in `org:acme` gives nothing in the scopes placed under it unless a rule says so.
