@@ -841,6 +841,23 @@ export async function listKnowledgeTree(
     } while (next && out.length < max);
     return out;
   };
+  /** Child pages of `parentId`, up to `max`, a store page at a time, with the cursor where they stopped. */
+  const childPages = async (parentId: string, max: number, cursor?: string) => {
+    const pages: KnowledgePage[] = [];
+    let next = cursor;
+    do {
+      const batch = await run.storage.listChildPages({
+        parentId,
+        read: run.read,
+        cursor: next,
+        limit: Math.min(max - pages.length, LIST_MAX_LIMIT),
+      });
+      pages.push(...batch.pages);
+      next = batch.nextCursor;
+      if (!batch.pages.length) break;
+    } while (next && pages.length < max);
+    return { pages, nextCursor: next };
+  };
 
   // Cursors are ours: `s<n>` continues the scopes at this level from the n-th, `p<store cursor>`
   // continues the child pages (`p` alone starts them).
@@ -867,12 +884,7 @@ export async function listKnowledgeTree(
   } else if (origin) {
     const room = limit - shownScopes.length;
     if (room > 0) {
-      const pages = await run.storage.listChildPages({
-        parentId: origin.id,
-        read: run.read,
-        cursor: pageCursor,
-        limit: room,
-      });
+      const pages = await childPages(origin.id, room, pageCursor);
       roots = [...shownScopes, ...pages.pages];
       if (pages.nextCursor) nextCursor = `p${pages.nextCursor}`;
     } else if ((await run.storage.countChildPages({ parentIds: [origin.id], read: run.read }))[origin.id]) {
@@ -916,16 +928,7 @@ export async function listKnowledgeTree(
       }
       const scopes = scopeCounts[node.page.id] ? await childScopes(node.page.id, budget) : [];
       budget -= scopes.length;
-      const pages =
-        budget > 0
-          ? (
-              await run.storage.listChildPages({
-                parentId: node.page.id,
-                read: run.read,
-                limit: Math.min(budget, LIST_MAX_LIMIT),
-              })
-            ).pages
-          : [];
+      const pages = budget > 0 ? (await childPages(node.page.id, budget)).pages : [];
       budget -= pages.length;
       node.below = [...scopes, ...pages].map(child => nodeOf(child, childRef(node.page, node.ref, child), current + 1));
       if (node.below.length < node.children) truncated = true;
