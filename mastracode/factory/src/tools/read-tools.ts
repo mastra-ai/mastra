@@ -15,7 +15,7 @@ import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.j
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { sessionActivity } from './deliver.js';
@@ -59,12 +59,12 @@ function iso(value: Date | string | null | undefined): string | null {
 }
 
 /** The number a person sees on the card: the issue or PR number the item was filed from. */
-export function workItemNumber(item: Pick<WorkItemRow, 'metadata'>): number | null {
+export function workItemNumber(item: Pick<Card, 'metadata'>): number | null {
   const number = item.metadata?.number ?? item.metadata?.githubIssueNumber ?? item.metadata?.githubPullRequestNumber;
   return typeof number === 'number' ? number : null;
 }
 
-export function workItemStage(item: Pick<WorkItemRow, 'stages'>): string {
+export function workItemStage(item: Pick<Card, 'stages'>): string {
   return item.stages.join('+');
 }
 
@@ -83,7 +83,7 @@ export async function findWorkItem(
   workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>,
   scope: Pick<FactoryToolScope, 'orgId' | 'factoryProjectId'>,
   ref: string,
-): Promise<WorkItemRow | null> {
+): Promise<Card | null> {
   const trimmed = ref.trim();
   const number = /^#?(\d+)$/.exec(trimmed)?.[1];
   if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
@@ -103,7 +103,7 @@ function activeWorker(bindings: FactoryRunBindingRecord[], itemId: string) {
 }
 
 /** The card on its Factory board; null when the server has no public URL configured. */
-function workItemUrl(item: WorkItemRow) {
+function workItemUrl(item: Card) {
   return (
     factoryWorkItemUrl({
       factoryProjectId: item.factoryProjectId,
@@ -113,7 +113,7 @@ function workItemUrl(item: WorkItemRow) {
   );
 }
 
-function summarizeItem(item: WorkItemRow, bindings: FactoryRunBindingRecord[]) {
+function summarizeItem(item: Card, bindings: FactoryRunBindingRecord[]) {
   return {
     id: item.id,
     number: workItemNumber(item),
@@ -153,7 +153,7 @@ const PAST_TRIAGE = new Set(['planning', 'execute', 'review']);
  * moves it on. A card that has been past Triage since (parked by self-review, or dragged back)
  * resumes instead, matching the board's held state.
  */
-function isHeld(item: WorkItemRow): boolean {
+function isHeld(item: Card): boolean {
   if (boardForWorkItem(item) !== 'work' || item.stages[0] !== 'intake') return false;
   if (needsApproval(item)) return true;
   return item.sessions.triage !== undefined && !item.stageHistory.some(entry => PAST_TRIAGE.has(entry.stage));

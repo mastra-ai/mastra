@@ -750,7 +750,7 @@ describe('FactoryTransitionService', () => {
     const item = await createItem(storage, { stages: ['planning'], metadata: { authorTrusted: true } });
     const onAccepted = vi.fn();
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, onAccepted });
-    await seed.storage.ops.updateMany('work_items', { id: item.id }, { accepted_at: new Date() });
+    await seed.storage.ops.updateMany('factory_board_items', { id: item.id }, { accepted_at: new Date() });
 
     const executed = await service.transition({
       ...request(item, { stage: 'execute' }),
@@ -1598,7 +1598,12 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
-    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-2', patch: { title: 'Changed concurrently' } });
+    await storage.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-2',
+      patch: { metadata: { reviewVerdict: 'approved' } },
+    });
 
     const result = await service.transition(request(item));
 

@@ -10,6 +10,7 @@ import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { Cards } from '../storage/domains/work-items/cards.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
@@ -4650,7 +4651,12 @@ describe('FactoryDecisionDispatcher', () => {
     vi.spyOn(storage, 'commitRuleEvaluation').mockImplementation(async input => {
       if (input.ingress.triggerType === 'transition.message' && !raced) {
         raced = true;
-        await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { title: 'Raced' } });
+        await storage.update({
+          orgId: 'org-1',
+          id: item.id,
+          userId: 'user-1',
+          patch: { metadata: { reviewVerdict: 'approved' } },
+        });
       }
       return commit(input);
     });
@@ -5346,7 +5352,10 @@ describe('FactoryDecisionDispatcher', () => {
       },
     });
     // The other project's card was filed while claims were enforced and still holds the record's claim.
-    await seeded.storage.ops.updateMany('work_items', { id: elsewhere.item.id }, { claim_key: 'linear:issue:1' });
+    const legacy = (await new Cards(seeded.storage.ops).findOne({ id: elsewhere.item.id }))!;
+    delete legacy.work_item;
+    delete legacy.work_item_sources;
+    await seeded.storage.ops.insertOne('work_items', { ...legacy, claim_key: 'linear:issue:1' });
     const parent = await createItem(storage);
     const boards = createLifecycleTestRegistry({
       execute: {
@@ -5403,10 +5412,10 @@ describe('FactoryDecisionDispatcher', () => {
       item => item.externalSource?.externalId === 'linear:ENG-1',
     );
     expect(filedHere).toMatchObject([{ parentWorkItemId: parent.id, stages: ['intake'] }]);
-    const filedRow = await seeded.storage.ops.findOne<{ claim_key: string | null }>('work_items', {
+    const filedRow = await seeded.storage.ops.findOne('factory_board_items', {
       id: filedHere[0]!.id,
     });
-    expect(filedRow?.claim_key).toBeNull();
+    expect(filedRow).not.toHaveProperty('claim_key');
     expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
     expect(await storage.get({ orgId: 'org-1', id: elsewhere.item.id })).toEqual(elsewhere.item);
   });
@@ -5492,7 +5501,8 @@ describe('FactoryDecisionDispatcher', () => {
           metadata: { linearIssueId: 'issue-1' },
         },
       });
-      await db.ops.updateMany('work_items', { id: item.id }, { created_at: new Date(createdAt) });
+      await db.ops.updateMany('factory_board_items', { id: item.id }, { created_at: new Date(createdAt) });
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.createdAt).toEqual(new Date(createdAt));
       return item;
     };
     const finished = await fileCard('OLD-1', 'done', finishedAt);

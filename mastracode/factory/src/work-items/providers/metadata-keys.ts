@@ -81,7 +81,8 @@ export function splitCardMetadata(
   }
   return {
     provider: Object.keys(provider).length > 0 ? provider : null,
-    board: Object.keys(board).length > 0 ? board : null,
+    // The board half keeps a card's metadata present, even when empty.
+    board,
   };
 }
 

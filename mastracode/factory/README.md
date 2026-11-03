@@ -61,6 +61,8 @@ Factory separates the work (`factory_work_items`) from external facts (`factory_
 
 The split migration preserves legacy card IDs for comments, subscriptions, runs and URLs. It never rewrites the legacy `work_items` table. Board placements store `triage_type`, `accepted_at`, `autonomy_armed_at` and `plans_preapproved_at`; the existing consent and plan-grant rules apply to them unchanged. The unused `claim_key` column stays only in legacy storage and is never copied into the new tables. A deterministic legacy fingerprint detects changes even when an older replica does not update `updated_at`; conflicting newer split-side changes are reported rather than overwritten.
 
+Board placements store `comment_count`, maintained by the comments domain's recount after creates, edits and soft deletes. Card reads, transitions and session cleanup do not load comment rows. Recounts invalidate the board-list cache without changing the placement revision or `updated_at`. The migration copies the legacy count; its first recount can correct that baseline. `feed_activity_at` remains an internal stale-recount guard and is not returned on `Card`.
+
 There is no dual-write rollback: an older Factory version sees the legacy snapshot, not cards created or changed after cutover. Operators must inspect migration reports for skipped IDs before retiring old replicas.
 
 ### Stored boards
