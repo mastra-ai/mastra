@@ -303,3 +303,69 @@ describe('DateTimeRangePicker (presets restored by a slow parent)', () => {
     expect(checkedPreset()).toBe('Last 3 days');
   });
 });
+
+const PERIOD_START = new Date(2026, 9, 11, 10, 28);
+
+/** A billing page's picker: "This period" offered beside the presets, the range held in state. */
+function PeriodPicker({ initial = 'period' }: { initial?: 'period' | 'last-7d' }) {
+  const [preset, setPreset] = useState<DateRangePreset>(initial === 'period' ? 'custom' : 'last-7d');
+  const [range, setRange] = useState<{ from?: Date; to?: Date }>(initial === 'period' ? { from: PERIOD_START } : {});
+  return (
+    <DateTimeRangePicker
+      preset={preset}
+      onPresetChange={setPreset}
+      dateFrom={range.from}
+      dateTo={range.to}
+      onDateRangeChange={(from, to) => setRange({ from, to })}
+      presets={TRACE_PRESETS}
+      namedRanges={[{ label: 'This period', from: PERIOD_START }]}
+    />
+  );
+}
+
+describe('DateTimeRangePicker (named ranges)', () => {
+  it('names an applied named range on the trigger and checks it in the list, with no reset', () => {
+    render(<PeriodPicker />);
+
+    const trigger = screen.getByRole('button', { name: 'This period' });
+    expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    fireEvent.click(trigger);
+    expect(checkedPreset()).toBe('This period');
+  });
+
+  it('applies a named range from the list', () => {
+    render(<PeriodPicker initial="last-7d" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'This period' }));
+
+    expect(screen.getByRole('button', { name: 'This period' })).toBeDefined();
+  });
+});
+
+describe('DateTimeRangePicker (named ranges and the custom editor)', () => {
+  it('opens the custom editor from an applied named range', () => {
+    render(<PeriodPicker />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'This period' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
+
+    expect(screen.getByRole('button', { name: /presets/i })).toBeDefined();
+  });
+
+  it('disables a named range that starts before minDate', () => {
+    render(
+      <DateTimeRangePicker
+        preset="last-7d"
+        presets={TRACE_PRESETS}
+        minDate={new Date(2026, 9, 20)}
+        namedRanges={[{ label: 'This period', from: PERIOD_START }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+
+    const item = screen.getByRole('menuitemradio', { name: 'This period' });
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+  });
+});

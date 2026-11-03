@@ -1,5 +1,55 @@
 # @mastra/mcp
 
+## 2.8.0-alpha.2
+
+### Minor Changes
+
+- Added a `toolResult` option to `MCPServer` so tools can return images, audio, and files to MCP clients. ([#29247](https://github.com/mastra-ai/mastra/pull/29247))
+
+  Set `toolResult.modelOutput: true` to build each result from the tool's `toModelOutput`, the same output an agent sends to its model. Images become `image` blocks, audio becomes `audio` blocks, and other files become embedded resources. For example, a workspace `read_file` of a PNG now reaches the client as an image instead of base64 inside JSON text.
+
+  ```ts
+  const server = new MCPServer({
+    id: 'media-server',
+    name: 'Media Server',
+    version: '1.0.0',
+    tools: { screenshotTool },
+    toolResult: { modelOutput: true },
+  });
+  ```
+
+  Use `toolResult.transform` to rewrite any completed tool result before it is sent, for example to forward results that are already MCP-shaped from proxied tools.
+
+  Without the new option, results are unchanged. The default of `modelOutput` becomes `true` in the next major version; if your clients parse the raw JSON text of tools that define `toModelOutput`, set `modelOutput: false` to keep the current behavior.
+
+- Added answering MCP task input from the agent chat. When a tool call that continues as an MCP task needs input, and no `inputRequests` handler is configured, the call now suspends with the server's requests instead of failing with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`. The remote task stays open. Resuming the call answers that same task, and the tool is never called a second time. ([#29032](https://github.com/mastra-ai/mastra/pull/29032))
+
+  ```typescript
+  // The tool call suspended with { type: 'mcp-input-request', taskId, requests: { approve: { ... } } }
+  await agent.resumeStream(
+    { inputResponses: { approve: { action: 'accept', content: { ok: true } } } },
+    { runId, toolCallId },
+  );
+  ```
+
+  If the server asks again, the call suspends again with a new `requestedAt`, so a UI can tell the new request from the one it already answered. A configured `inputRequests` handler still answers first, and a direct `tool.execute()` call without an agent or workflow still fails as before. See [#28986](https://github.com/mastra-ai/mastra/issues/28986).
+
+### Patch Changes
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0-alpha.3
+
+## 2.8.0-alpha.1
+
+### Patch Changes
+
+- Fixed `MCPServer` answering a call to an unknown tool with an `isError: true` tool result. The call now fails with a JSON-RPC `-32602` (Invalid params) error, as the MCP specification requires, so clients can tell a missing tool apart from a tool that ran and failed. Fixes #29139. ([#29204](https://github.com/mastra-ai/mastra/pull/29204))
+
+  If your client checked `isError` to detect a missing tool, catch the rejected `callTool()` instead. This includes `MCPClient` with `onToolError: 'return'`, where calling a tool the server no longer serves now throws.
+
+- Updated dependencies [[`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6)]:
+  - @mastra/core@1.82.0-alpha.2
+
 ## 2.8.0-alpha.0
 
 ### Minor Changes

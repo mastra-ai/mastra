@@ -118,7 +118,9 @@ describe('KnowledgePageExplorer scope focus', () => {
     expect(focus.textContent).toContain('team:support');
     await waitFor(() => expect(within(tree()).queryByText('Refunds')).toBeNull());
     expect(within(tree()).getByText('Macros')).toBeTruthy();
-    const graphIds = () => screen.getAllByTestId('knowledge-page-node').map(node => node.getAttribute('data-page-id'));
+    // Labelled circles and dots alike.
+    const graphIds = () =>
+      [...document.querySelectorAll('.react-flow__node [data-page-id]')].map(node => node.getAttribute('data-page-id'));
     await waitFor(() => expect(graphIds().sort()).toEqual(['macros', 'team']));
 
     fireEvent.click(within(focus).getByRole('button', { name: 'All scopes' }));
@@ -133,6 +135,8 @@ describe('KnowledgePageExplorer mention popup', () => {
   it('lists the notes that make a mention when its line is clicked, without leaving the graph', async () => {
     const { container } = renderWithProviders(<Host />);
     await screen.findAllByTestId('knowledge-page-node');
+    // Lines between pages other than the selected one are drawn once all links are on.
+    fireEvent.click(screen.getByRole('button', { name: 'All links' }));
     const line = container.querySelector('[data-id="mention:refunds->roadmap"]');
     if (!line) throw new Error('mention line not drawn');
     fireEvent.click(line);
@@ -149,6 +153,8 @@ describe('KnowledgePageExplorer mention popup', () => {
   it('closes when empty canvas is clicked', async () => {
     const { container } = renderWithProviders(<Host />);
     await screen.findAllByTestId('knowledge-page-node');
+    // Lines between pages other than the selected one are drawn once all links are on.
+    fireEvent.click(screen.getByRole('button', { name: 'All links' }));
     const line = container.querySelector('[data-id="mention:refunds->roadmap"]');
     if (!line) throw new Error('mention line not drawn');
     fireEvent.click(line);
@@ -164,11 +170,72 @@ describe('KnowledgePageExplorer mention popup', () => {
   it('opens the mentioning page from the popup', async () => {
     const { container } = renderWithProviders(<Host />);
     await screen.findAllByTestId('knowledge-page-node');
+    // Lines between pages other than the selected one are drawn once all links are on.
+    fireEvent.click(screen.getByRole('button', { name: 'All links' }));
     const line = container.querySelector('[data-id="mention:refunds->roadmap"]');
     if (!line) throw new Error('mention line not drawn');
     fireEvent.click(line);
     const popup = await screen.findByRole('dialog', { name: /Refunds mentions Roadmap/ });
     fireEvent.click(within(popup).getByRole('button', { name: 'Refunds' }));
     expect(await screen.findByRole('article', { name: 'Refunds' })).toBeTruthy();
+  });
+});
+
+describe('KnowledgePageExplorer search', () => {
+  const searchSource: KnowledgeExplorerSource = {
+    ...source,
+    useSearch: query => ({ data: { results: query.length >= 2 ? [{ page: roadmap }] : [] } }),
+  };
+  function SearchHost({ initialView }: { initialView: KnowledgeExplorerView }) {
+    const [selected, setSelected] = useState<string | null>(null);
+    const [view, setView] = useState<KnowledgeExplorerView>(initialView);
+    return (
+      <KnowledgePageExplorer
+        source={searchSource}
+        graph={graph}
+        selectedPageId={selected}
+        onSelect={setSelected}
+        view={view}
+        onViewChange={setView}
+      />
+    );
+  }
+  const search = (name: string) => {
+    fireEvent.change(screen.getByLabelText('Search knowledge'), { target: { value: 'ro' } });
+    fireEvent.click(screen.getByRole('button', { name }));
+  };
+  const pressed = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
+
+  it('in graph view, focuses the result and stays on the graph; a second pick opens it', async () => {
+    renderWithProviders(<SearchHost initialView="graph" />);
+    await screen.findAllByTestId('knowledge-page-node');
+    search('Roadmap');
+    expect(pressed('Graph')).toBe('true');
+    expect(pressed('Page')).toBe('false');
+    await waitFor(() =>
+      expect(document.querySelector('[data-page-id="roadmap"] .knowledge-circle')?.getAttribute('data-selected')).toBe(
+        'true',
+      ),
+    );
+    search('Roadmap');
+    expect(pressed('Page')).toBe('true');
+  });
+
+  it('leaves a scope focus the result falls outside of, whether it focuses or opens', async () => {
+    for (const initialView of ['graph', 'page'] as const) {
+      const { unmount } = renderWithProviders(<SearchHost initialView={initialView} />);
+      await screen.findAllByTestId('knowledge-page-node');
+      fireEvent.click(within(tree()).getByText('Support team'));
+      expect(screen.getByTestId('knowledge-scope-focus')).toBeTruthy();
+      search('Roadmap');
+      expect(screen.queryByTestId('knowledge-scope-focus')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('in page view, opens the result as a page, as before', () => {
+    renderWithProviders(<SearchHost initialView="page" />);
+    search('Roadmap');
+    expect(pressed('Page')).toBe('true');
   });
 });

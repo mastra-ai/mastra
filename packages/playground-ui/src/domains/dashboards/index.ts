@@ -16,4 +16,4 @@ export type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
 export { buildRequest } from './lib/requests';
 export type { DashboardPageContext, DashboardRequest } from './lib/requests';
 export { defineWidgetKind } from './widget-kind';
-export type { AnyWidgetKind, ResolvedView, WidgetKind, WidgetKindProps } from './widget-kind';
+export type { AnyWidgetKind, DashboardExpand, ResolvedView, WidgetKind, WidgetKindProps } from './widget-kind';

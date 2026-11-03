@@ -186,6 +186,12 @@ You can also pass `requestContext` as a `Record<string, any>`.
     description: 'Provides conversation helpers with `create()`, `retrieve()`, `delete()`, and `items.list()`.',
   },
   {
+    name: 'resumeBackgroundTask(backgroundTaskId, resumeData, options?)',
+    type: 'Promise<BackgroundTaskResponse>',
+    description:
+      "Answers a suspended [background task](/docs/harness/background-tasks#answer-a-suspended-task-from-a-client) with `resumeData` and returns the task. Pass `options.suspendedAt` (a `Date`, ISO string, or epoch milliseconds) from the task you read; the server rejects the answer with `409` if the task has resumed or suspended again since. Also rejects with `409` when the task isn't suspended or no concurrency slot is free, and `404` when the task doesn't exist or belongs to another resource.",
+  },
+  {
     name: 'getVector(vectorName)',
     type: 'MastraVector',
     description: 'Returns a vector store instance by name.',

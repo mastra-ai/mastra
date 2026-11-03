@@ -242,3 +242,14 @@ export const Hero: Story = {
     </div>
   ),
 };
+
+/** `variant="hero"` with `isLoading`: the skeleton keeps the total's trimmed height, so the header doesn't move when it lands. */
+export const HeroLoading: Story = {
+  render: () => (
+    <div className="w-[min(56rem,calc(100vw-3rem))]">
+      <ChartCard variant="hero" title="Spend sum" total="$138.92" change="+71.4%" isLoading>
+        <MetricsLineChart data={data} series={byModel} height={384} showLegend={false} isLoading />
+      </ChartCard>
+    </div>
+  ),
+};

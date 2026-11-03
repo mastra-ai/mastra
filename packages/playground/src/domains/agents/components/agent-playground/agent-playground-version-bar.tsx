@@ -108,6 +108,7 @@ export function AgentPlaygroundVersionBar({
   const currentValue = selectedVersionId ?? latestVersion?.id ?? '';
 
   const saveDisabled = readOnly || !isDirty || isSavingDraft || isPublishing;
+  const codeSaveDisabled = readOnly || (!isDirty && !hasDraft) || isSavingDraft || isPublishing;
   const versionInfoText = isCodeSourceAgent
     ? 'Code mode saves write override JSON to filesystem-backed editor storage. This dropdown shows saved override snapshots for this agent.'
     : "Changes are saved as draft versions. When you're ready, publish a version to make it the active configuration used in production.";
@@ -168,7 +169,12 @@ export function AgentPlaygroundVersionBar({
                 Open PR
               </Button>
             ) : (
-              <Button variant="primary" size="md" onClick={() => void onSaveDraft()} disabled={saveDisabled}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => void (isDirty ? onSaveDraft() : onPublish())}
+                disabled={codeSaveDisabled}
+              >
                 {isSavingDraft ? (
                   <>
                     <Spinner className="size-3.5" />

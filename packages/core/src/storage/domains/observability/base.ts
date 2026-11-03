@@ -126,6 +126,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-context-fields`: `requestId`, `serviceName` and `experimentId` predicates in trace queries (trace scope and `spans.some`/`spans.none`)
  * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
  * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
@@ -168,6 +169,7 @@ export type ObservabilityStorageFeature =
   | 'trace-query-tenant-scope'
   | 'feedback'
   | 'trace-query-context-ids'
+  | 'trace-query-context-fields'
   | 'trace-query-time-to-first-chunk'
   | 'trace-query-root-span-fields'
   | 'trace-query-root-entity-id'

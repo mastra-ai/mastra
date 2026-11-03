@@ -76,3 +76,20 @@ export const RangeEditor: Story = {
     </div>
   ),
 };
+
+const PERIOD_START = new Date(2026, 9, 11, 10, 28);
+
+/**
+ * `namedRanges`: fixed ranges above the presets, here the current billing period. While one is
+ * applied, the trigger shows its name instead of the dates.
+ */
+export const NamedRange: Story = {
+  render: () => (
+    <DateTimeRangePickerControlled
+      preset="custom"
+      dateFrom={PERIOD_START}
+      presets={['last-7d', 'last-30d', 'custom']}
+      namedRanges={[{ label: 'This period', from: PERIOD_START }]}
+    />
+  ),
+};
