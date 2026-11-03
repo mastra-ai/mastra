@@ -11,15 +11,14 @@ export function MastraGatewayCreditsNotice() {
     <Notice
       variant="warning"
       title="No gateway credits left"
+      actionPlacement={credits.canAddCredits ? 'end' : 'below'}
       action={
         credits.canAddCredits && (
           <AddGatewayCreditsDialog credits={credits} trigger={<Notice.Button>Add credits</Notice.Button>} />
         )
       }
     >
-      {credits.canAddCredits
-        ? 'Mastra Gateway models run on your organization’s credits. Add credits before you start a session.'
-        : 'Mastra Gateway models run on your organization’s credits. Only Mastra organization admins can add them, so ask one before you start a session.'}
+      {!credits.canAddCredits && 'Ask an admin of your Mastra organization to add some.'}
     </Notice>
   );
 }

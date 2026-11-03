@@ -327,14 +327,12 @@ describe('chat run errors', () => {
 
     expect(screen.getByText('Out of Mastra Gateway credits')).toBeVisible();
     await user.click(await screen.findByRole('button', { name: 'Add credits' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Add Mastra Gateway credits' });
+    const dialog = await screen.findByRole('dialog', { name: 'Add credits' });
     await user.click(within(dialog).getByRole('button', { name: 'Add $20' }));
 
     expect(await screen.findByText('Added $20 to your organization’s Mastra credits')).toBeVisible();
     expect(purchaseBodies).toEqual([{ amount: 20 }]);
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Add Mastra Gateway credits' })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credits' })).not.toBeInTheDocument());
   });
 
   it('continues a timed-out run from the card', async () => {

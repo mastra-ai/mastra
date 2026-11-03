@@ -156,9 +156,9 @@ describe('Model provider onboarding', () => {
 
       renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
 
-      expect(await screen.findByText('Recommended')).toBeInTheDocument();
+      const useGateway = await screen.findByRole('button', { name: 'Use Mastra Gateway' });
       expect(screen.queryByRole('button', { name: 'Mastra Gateway' })).not.toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Use Mastra Gateway' }));
+      await user.click(useGateway);
 
       await user.click(await screen.findByRole('button', { name: 'Continue' }));
       expect(connectBodies).toEqual([{ scope: 'org' }]);
@@ -176,7 +176,7 @@ describe('Model provider onboarding', () => {
 
       renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
 
-      expect(await screen.findByText('Billed to your organization’s Mastra credits · $12.40 left')).toBeVisible();
+      expect(await screen.findByText('Pay with your organization’s Mastra credits ($12.40 left)')).toBeVisible();
     });
 
     it('adds credits without leaving Factory when the organization has none left', async () => {
@@ -192,7 +192,7 @@ describe('Model provider onboarding', () => {
       );
       await user.click(await screen.findByRole('button', { name: 'Use Mastra Gateway' }));
       await user.click(await screen.findByRole('button', { name: 'Add credits' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Add Mastra Gateway credits' });
+      const dialog = await screen.findByRole('dialog', { name: 'Add credits' });
       const amount = within(dialog).getByRole('textbox', { name: 'Amount in dollars' });
       await user.clear(amount);
       await user.type(amount, '3');
@@ -200,15 +200,14 @@ describe('Model provider onboarding', () => {
       expect(within(dialog).getByText('Minimum amount is $5')).toBeVisible();
       expect(within(dialog).getByRole('button', { name: 'Add credits' })).toBeDisabled();
 
-      await user.click(within(dialog).getByRole('radio', { name: '$50' }));
+      await user.clear(amount);
+      await user.type(amount, '50');
       await user.click(within(dialog).getByRole('button', { name: 'Add $50' }));
 
       expect(await screen.findByText('Added $50 to your organization’s Mastra credits')).toBeVisible();
       expect(purchaseBodies).toEqual([{ amount: 50 }]);
       expect(screen.queryByText('No gateway credits left')).not.toBeInTheDocument();
-      await waitFor(() =>
-        expect(screen.queryByRole('dialog', { name: 'Add Mastra Gateway credits' })).not.toBeInTheDocument(),
-      );
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credits' })).not.toBeInTheDocument());
     });
 
     it('hands the payment to Stripe in a new tab when the organization has no saved card', async () => {
@@ -222,7 +221,7 @@ describe('Model provider onboarding', () => {
       renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
       await user.click(await screen.findByRole('button', { name: 'Use Mastra Gateway' }));
       await user.click(await screen.findByRole('button', { name: 'Add credits' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Add Mastra Gateway credits' });
+      const dialog = await screen.findByRole('dialog', { name: 'Add credits' });
       await user.click(within(dialog).getByRole('button', { name: 'Add $20' }));
 
       const pay = await screen.findByRole('link', { name: 'Continue to payment' });
@@ -238,7 +237,7 @@ describe('Model provider onboarding', () => {
       renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
       await user.click(await screen.findByRole('button', { name: 'Use Mastra Gateway' }));
 
-      expect(await screen.findByText(/Only Mastra organization admins can add them/)).toBeVisible();
+      expect(await screen.findByText('Ask an admin of your Mastra organization to add some.')).toBeVisible();
       expect(screen.queryByRole('button', { name: 'Add credits' })).not.toBeInTheDocument();
     });
 
@@ -273,7 +272,6 @@ describe('Model provider onboarding', () => {
       renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
 
       expect(await screen.findByRole('button', { name: 'Mastra Gateway' })).toBeInTheDocument();
-      expect(screen.queryByText('Recommended')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Use Mastra Gateway' })).not.toBeInTheDocument();
     });
   });

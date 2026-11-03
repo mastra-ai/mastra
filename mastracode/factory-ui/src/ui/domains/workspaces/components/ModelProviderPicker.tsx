@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
@@ -73,16 +72,10 @@ export function ModelProviderPicker({
                 <ProviderBrandIcon provider={gateway.provider} />
               </span>
               <div className="min-w-0 flex-1">
-                <Txt as="h2" variant="caption" tone="ink" className="m-0 flex items-center gap-2">
+                <Txt as="h2" variant="caption" tone="ink" className="m-0">
                   {providerDisplayName(gateway.provider)}
-                  <Badge size="xs" variant="success" emphasis="subtle">
-                    Recommended
-                  </Badge>
                 </Txt>
                 <Txt variant="caption" tone="muted" className="mt-1">
-                  Connects in one click and runs any model, with no provider keys to manage.
-                </Txt>
-                <Txt variant="meta" tone="muted" className="mt-1">
                   {mastraGatewayBilling(gatewayCredits)}
                 </Txt>
               </div>

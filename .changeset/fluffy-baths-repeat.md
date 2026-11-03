@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Added one-click Mastra Gateway setup to Factory. When Factory signs users in with their Mastra account, onboarding, factory creation, and Settings > Models offer **Mastra Gateway · Recommended**. One click creates a gateway key on the user's Mastra organization and stores it with their model credentials, so every model runs on the organization's Mastra credits without provider keys.
+Added one-click Mastra Gateway setup to Factory. When Factory signs users in with their Mastra account, onboarding, factory creation, and Settings > Models offer **Mastra Gateway** first. One click creates a gateway key on the user's Mastra organization and stores it with their model credentials, so every model runs on the organization's Mastra credits without provider keys.
 
 - The Mastra Gateway option says it is billed to the organization's Mastra credits and shows the balance left, before the user connects it.
 - Organization admins add credits from Factory, both from the **No gateway credits left** warning and from a run that failed for lack of credits. A saved card is charged right away; without one, Factory opens the payment page in a new tab, and the balance updates when the user comes back.

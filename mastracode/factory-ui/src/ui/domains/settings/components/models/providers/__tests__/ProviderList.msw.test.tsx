@@ -83,14 +83,14 @@ describe('ProviderList', () => {
     renderWithProviders(<ProviderList credentialScope="user" />);
 
     const drawer = await openAddProvider(user);
-    expect(await within(drawer).findByText('Billed to your organization’s Mastra credits · $0.00 left')).toBeVisible();
+    expect(await within(drawer).findByText('Pay with your organization’s Mastra credits ($0.00 left)')).toBeVisible();
     await user.click(within(drawer).getByRole('button', { name: 'Connect Mastra Gateway' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add provider' })).not.toBeInTheDocument());
     expect(await screen.findByText('No gateway credits left')).toBeInTheDocument();
     expect(within(rowFor('mastra')).getByText('Key saved')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add credits' }));
-    expect(await screen.findByRole('dialog', { name: 'Add Mastra Gateway credits' })).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: 'Add credits' })).toBeVisible();
   });
 
   it('surfaces a provider list error', async () => {

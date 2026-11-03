@@ -11,8 +11,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@mastra/playground-ui/components/InputGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MAX_GATEWAY_CREDIT_PURCHASE, MIN_GATEWAY_CREDIT_PURCHASE } from '@mastra/factory/gateway-credit-purchase';
 import { useState } from 'react';
@@ -20,9 +24,8 @@ import type { ReactElement } from 'react';
 
 import type { MastraGatewayCredits } from '../../../../api/types';
 import { useAddGatewayCredits } from '../../../../hooks/use-providers';
-import { formatWholeDollars, mastraGatewayBilling } from './mastra-gateway-credits';
+import { formatWholeDollars } from './mastra-gateway-credits';
 
-const PRESET_AMOUNTS = ['20', '50', '100', '500'];
 const DEFAULT_AMOUNT = '20';
 
 function amountProblem(draft: string): string | undefined {
@@ -124,38 +127,34 @@ function PurchaseForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Add Mastra Gateway credits</DialogTitle>
+        <DialogTitle>Add credits</DialogTitle>
         <DialogDescription>
-          Credits cost $1 each, and every Mastra Gateway model in your organization draws from them. Your saved card is
-          charged right away; without one, you pay on a Stripe page.
+          Your organization’s saved card is charged right away. Without one, you pay on Stripe.
         </DialogDescription>
       </DialogHeader>
       <DialogBody>
-        <Txt as="p" variant="caption" tone="muted">
-          {mastraGatewayBilling(credits)}
-        </Txt>
-        <SegmentedControl aria-label="Credit amount" value={draft} onValueChange={onDraftChange} disabled={pending}>
-          {PRESET_AMOUNTS.map(amount => (
-            <SegmentedControlItem key={amount} value={amount}>
-              {formatWholeDollars(Number(amount))}
-            </SegmentedControlItem>
-          ))}
-        </SegmentedControl>
-        <Input
-          aria-label="Amount in dollars"
-          inputMode="numeric"
-          value={draft}
-          disabled={pending}
-          onChange={event => onDraftChange(event.target.value.replaceAll(',', '').trim())}
-          onKeyDown={event => {
-            if (event.key === 'Enter') buy();
-          }}
-        />
-        {problem !== undefined && (
-          <Txt as="p" variant="caption" tone="muted" role="note">
-            {problem}
-          </Txt>
-        )}
+        <div className="flex flex-col gap-1.5">
+          <InputGroup>
+            <InputGroupAddon>
+              <InputGroupText>$</InputGroupText>
+            </InputGroupAddon>
+            <InputGroupInput
+              aria-label="Amount in dollars"
+              inputMode="numeric"
+              value={draft}
+              disabled={pending}
+              onChange={event => onDraftChange(event.target.value.replaceAll(',', '').trim())}
+              onKeyDown={event => {
+                if (event.key === 'Enter') buy();
+              }}
+            />
+          </InputGroup>
+          {problem !== undefined && (
+            <Txt as="p" variant="caption" tone="muted" role="note">
+              {problem}
+            </Txt>
+          )}
+        </div>
         {error && (
           <div className="flex flex-col items-start gap-1">
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
