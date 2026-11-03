@@ -105,6 +105,7 @@ import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
+import { peekSessionSandbox } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
@@ -778,6 +779,25 @@ export class MastraFactory {
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
 
+    // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
+    // back to Intake. Move the cards the old rule left there, once.
+    if (storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.workItems.heldTriageCards', () =>
+        workItemsStorage
+          .returnHeldTriageCards()
+          .then(moved => {
+            if (moved.length > 0) {
+              console.info(`[factory] moved ${moved.length} card(s) held for triage acceptance back to Intake`);
+            }
+          })
+          .catch(error =>
+            console.warn(
+              `[factory] moving cards held for triage acceptance back to Intake failed: ${error instanceof Error ? error.message : error}`,
+            ),
+          ),
+      );
+    }
+
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
     // mirroring stored API keys into process.env.
@@ -1043,11 +1063,6 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
-          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-            await factoryProjectsStorage.ensureReady();
-            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.autoApprovePlans ?? false;
-          },
           selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
@@ -1673,6 +1688,12 @@ export class MastraFactory {
                     createFactorySandboxTools(scope, {
                       sessions: sourceControlSessions,
                       resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                      findSandbox: async ({ sourceControl, orgId, sessionId }) => {
+                        const session = await sourceControl.sessions.getBySessionId(sessionId);
+                        if (!session || session.orgId !== orgId) return undefined;
+                        return peekSessionSandbox(session.id)?.sandbox;
+                      },
+                      browser: this.#config.browser,
                     }),
                   );
                 }
@@ -1800,11 +1821,6 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoRunEnabled ?? false;
-                },
-                autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.autoApprovePlans ?? false;
                 },
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

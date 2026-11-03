@@ -30,7 +30,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/discord": "4.40.0"
+    "@chat-adapter/discord": "catalog:"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",

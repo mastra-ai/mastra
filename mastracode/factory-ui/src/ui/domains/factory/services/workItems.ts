@@ -222,8 +222,6 @@ export interface UpdateWorkItemInput {
   title?: string;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
-  /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
-  plansPreapproved?: true;
 }
 
 /**
