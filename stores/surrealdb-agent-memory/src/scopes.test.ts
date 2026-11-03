@@ -23,5 +23,7 @@ describe('memoryScopes', () => {
 
   it('normalises slashes around the prefix', () => {
     expect(memoryLens('/org/acme/', 'u', undefined)).toEqual([['org/acme/resource/u']]);
+    expect(memoryLens('///', 'u', undefined)).toEqual([['/resource/u']]);
+    expect(memoryLens(`${'/'.repeat(100_000)}x`, 'u', undefined)).toEqual([['x/resource/u']]);
   });
 });

@@ -7,8 +7,13 @@ function segment(id: string): string {
   return encodeURIComponent(id).replace(/\*/g, '%2A');
 }
 
+/** The prefix without leading or trailing slashes (a linear scan, not a regex). */
 function base(prefix: string): string {
-  return prefix.replace(/^\/+|\/+$/g, '');
+  let start = 0;
+  let end = prefix.length;
+  while (start < end && prefix[start] === '/') start++;
+  while (end > start && prefix[end - 1] === '/') end--;
+  return prefix.slice(start, end);
 }
 
 /** The scope path of a resource: `<prefix>/resource/<id>`. */
