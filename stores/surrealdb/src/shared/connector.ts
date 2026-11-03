@@ -57,7 +57,10 @@ export class SurrealDBConnector {
 
   /** Opens (once) the connection and selects the configured namespace and database. */
   connect(): Promise<void> {
-    this.#connecting ??= this.#connect().catch(error => {
+    this.#connecting ??= this.#connect().catch(async error => {
+      // close() skips a connection with no pending connect, so close an owned one here
+      // before a retry can start; a cleanup failure must not hide the connect error.
+      if (this.#owned) await this.db.close().catch(() => {});
       this.#connecting = undefined;
       throw error;
     });
