@@ -73,15 +73,15 @@ import { knowledge } from '../knowledge'
 export const docsAgent = new Agent({
   id: 'docs-agent',
   name: 'Docs agent',
-  instructions: `Answer from the company docs.\n\n${knowledge.getInstructions({ write: false })}`,
+  instructions: `Answer from the company docs.\n\n${knowledge.getInstructions({ write: false, pinnedContext: false })}`,
   model: '__GATEWAY_OPENAI_MODEL__',
   tools: {
-    ...knowledge.createTools({ write: false }),
+    ...knowledge.createTools({ write: false, pinnedContext: false }),
   },
 })
 ```
 
-The options override the instance's settings for this agent. Here, `{ write: false }` gives the agent only the read tools. Access checks work the same either way.
+The options override the instance's settings for this agent. Here, `{ write: false, pinnedContext: false }` gives the agent only the read tools. Without `pinnedContext: false`, it would also get `knowledge_pin` when the instance has pinned context on. Access checks work the same either way.
 
 ## Read pages
 
