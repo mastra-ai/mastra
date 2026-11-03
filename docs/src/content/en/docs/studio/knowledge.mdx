@@ -33,19 +33,7 @@ export const mastra = new Mastra({
 })
 ```
 
-They mount under your configured API prefix (`/api/knowledge` by default) and are gated by the `knowledge:read` permission. They need `@mastra/core` 1.81.0 or later. With an older version, they return `501`. The `link-counts` and `links` routes need 1.82.0 or later and return `501` before it. Studio then counts links among the pages it has loaded.
-
-| Route | Returns |
-| - | - |
-| `GET /knowledge` | The Knowledge instances you can read |
-| `GET /knowledge/:knowledgeKey/tree` | The root scopes, or the child scopes and pages under `parentId` |
-| `GET /knowledge/:knowledgeKey/pages/:pageId` | One page with its ancestors, notes, pin and referenced pages |
-| `GET /knowledge/:knowledgeKey/link-counts` | How many links go into and out of each page |
-| `GET /knowledge/:knowledgeKey/pages/:pageId/links` | The links into and out of one page |
-| `GET /knowledge/:knowledgeKey/graph` | A bounded graph of pages with parent and mention edges, and the access grants between scopes |
-| `GET /knowledge/:knowledgeKey/search` | Pages and notes matching a query |
-| `GET /knowledge/:knowledgeKey/activity` | Recent changes, optionally for one scope or page |
-| `GET /knowledge/:knowledgeKey/events` | A Server-Sent Events stream of the writes the caller can read, which Studio follows to show changes as they happen |
+The routes mount under `/api/knowledge` and need `@mastra/core` 1.81.0 or later. With 1.81.0, Studio counts links only among the pages it has loaded. [Server routes](/reference/server/routes#knowledge) lists each route, its parameters and its errors.
 
 ## What you see
 
@@ -76,7 +64,7 @@ In an agent's chat, Knowledge tool calls show the pages they read or wrote, and 
 What the routes return depends on whether your app configures auth (`server.auth` or `studio.auth`):
 
 - **No auth:** the routes read as the instance owner and return every scope, page and note to anyone who can reach the server. Use this only for a local or test project, and add auth before you deploy.
-- **Auth:** the routes return only what the signed-in user can read. In `authorize`, set the request context key `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` to the user's Knowledge scopes. Knowledge applies the same access rules agents use. A user with no scopes set gets `403`. In the alpha, these rules aren't an [isolation boundary](/docs/knowledge/scopes-and-access), so don't store content that must never reach another user.
+- **Auth:** the routes return only what the signed-in user can read. In `authorize`, set the request context key `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` to the user's Knowledge scopes. Knowledge applies the same access rules agents use. In the alpha, these rules aren't an [isolation boundary](/docs/knowledge/scopes-and-access), so don't store content that must never reach another user.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -107,12 +95,12 @@ export const mastra = new Mastra({
 
 An `authorize` function replaces the server's rules and role checks for every route, so keep your app's existing decision for the other paths, as above. Returning `true` for everything would let any signed-in user call any route.
 
-Set the value to an array of scopes, or `'all'` for someone who should see the whole instance. An empty array reads nothing. Any other value, or a scope that matches no declared scope type, is a configuration error and returns `500`. If you configure `studio.auth`, Studio requests use it instead of `server.auth`, so set the key in that `authorize`.
+Set the value to an array of scopes, or `'all'` for someone who should see the whole instance. An empty array reads nothing. See [Knowledge access and errors](/reference/server/routes#knowledge-access-and-errors) for what other values return. If you configure `studio.auth`, Studio requests use it instead of `server.auth`, so set the key in that `authorize`.
 
 ### Deployment notes
 
 - **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user with a principal mapping can read the pages those principals cover, in every instance.
-- **With an FGA provider:** each Knowledge instance is checked as resource type `knowledge`, by its registered key (`main` in `knowledge: { main }`), with `knowledge:read`. `GET /knowledge` lists only the instances the user can read. The other routes return `404` for any other instance, the same as for one that doesn't exist. With `requireForProtectedRoutes`, `GET /knowledge` is refused, because like the other list routes it has no FGA metadata.
+- **With an FGA provider:** each Knowledge instance is checked separately with `knowledge:read`. A user sees only the instances you grant. See [Knowledge access and errors](/reference/server/routes#knowledge-access-and-errors).
 - **NestJS:** the NestJS adapter doesn't serve the Knowledge routes yet.
 
 ## Build your own view
