@@ -9,7 +9,7 @@ import { MastraReactProvider } from '../../../mastra-react-provider';
 
 import { server } from '../../../test/msw-server';
 import { useDatasetMutations } from '../../datasets';
-import { useReviewItems } from '../use-dataset-review-items';
+import { useCompletedItems, useReviewItems } from '../use-dataset-review-items';
 import type { ReviewItemsOptions } from '../use-dataset-review-items';
 import {
   DATASET_ID,
@@ -17,6 +17,7 @@ import {
   RESULT_ID,
   experimentsResponse,
   experiment,
+  manyResults,
   resultsResponse,
   updatedResultResponse,
 } from './fixtures/dataset-review-items';
@@ -197,6 +198,44 @@ describe('useReviewItems', () => {
 
       await waitFor(() => expect(result.current.data).toHaveLength(2));
       expect(resultRequests.sort()).toEqual([EXPERIMENT_ID, OTHER_EXPERIMENT_ID].sort());
+    });
+  });
+
+  describe('when an experiment has more results than one page', () => {
+    const results = manyResults(150, [3, 57, 104, 149]);
+
+    const setupPagedHandler = () => {
+      server.use(
+        http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const page = Number(query.get('page') ?? 0);
+          const perPage = Number(query.get('perPage') ?? 10);
+          return HttpResponse.json({
+            results: results.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: results.length, page, perPage, hasMore: (page + 1) * perPage < results.length },
+          });
+        }),
+      );
+    };
+
+    it('lists every result flagged for review, not only those on the first page', async () => {
+      setupPagedHandler();
+
+      const { result } = renderHook(() => useReviewItems({ experiments: [experiment] }), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.map(item => item.id)).toEqual(['result-3', 'result-57', 'result-104', 'result-149']);
+    });
+
+    it('lists every completed result, not only those on the first page', async () => {
+      setupPagedHandler();
+
+      const { result } = renderHook(() => useCompletedItems({ experiments: [experiment] }), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toHaveLength(146);
     });
   });
 
