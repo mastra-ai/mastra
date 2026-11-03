@@ -109,6 +109,38 @@ describe('nodeModulesExternals', () => {
     expect(chunk.code).not.toContain('bundled-hono');
   });
 
+  it('externalizes bare imports from virtual entries instead of bundling them', async () => {
+    // The generated server entry is virtual, e.g. it imports `@mastra/core/evals/scoreTraces`.
+    const root = await createFixture({
+      'src/entry.mjs': `export {};`,
+      'node_modules/core/package.json': pkg({ name: 'core', exports: { './evals': './evals.js' } }),
+      'node_modules/core/evals.js': `export const evals = 'bundled-core';`,
+    });
+
+    const bundle = await rolldown({
+      input: '\0virtual:entry',
+      cwd: root,
+      platform: 'node',
+      logLevel: 'silent',
+      plugins: [
+        {
+          name: 'virtual-entry',
+          resolveId: { filter: { id: /^\0virtual:entry$/ }, handler: id => id },
+          load: { filter: { id: /^\0virtual:entry$/ }, handler: () => `export { evals } from 'core/evals';` },
+        },
+        nodeModulesExternals({ platform: 'node', workspaceMap: new Map() }),
+      ],
+    });
+
+    try {
+      const { output } = await bundle.generate({ format: 'esm' });
+      expect(output[0].imports).toEqual(['core/evals']);
+      expect(output[0].code).not.toContain('bundled-core');
+    } finally {
+      await bundle.close();
+    }
+  });
+
   it('computes the path from the package root when a nested package.json is closer', async () => {
     const root = await createFixture({
       'src/entry.mjs': `import x from 'nox/esm/x'; export { x };`,
