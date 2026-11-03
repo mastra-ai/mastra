@@ -8,7 +8,7 @@ import type {
   FeedbackEvent,
 } from '@mastra/core/observability';
 import type { CreateSpanRecord } from '@mastra/core/storage';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { EventBuffer } from './event-buffer';
 
 function createTracingEvent(
@@ -516,6 +516,57 @@ describe('EventBuffer', () => {
       snapshot.push({ type: 'metric', metric: {} as any, retryCount: 0 });
 
       expect(buffer.updates).toHaveLength(1);
+    });
+  });
+
+  describe('take', () => {
+    it('holds a re-added update back until its backoff passes', () => {
+      vi.useFakeTimers();
+      try {
+        const buffer = new EventBuffer({ maxRetries: 3 });
+        buffer.init({ strategy: 'batch-with-updates' });
+        buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
+        const { updates } = buffer.take();
+        expect(updates).toHaveLength(1);
+
+        buffer.reAddUpdates(updates, retryCount => 1000 * retryCount);
+
+        expect(buffer.take().updates).toHaveLength(0);
+        expect(buffer.totalSize).toBe(1);
+        expect(buffer.nextRetryAt).toBe(Date.now() + 1000);
+        vi.advanceTimersByTime(1000);
+        expect(buffer.take().updates).toEqual([expect.objectContaining({ retryCount: 1 })]);
+        expect(buffer.totalSize).toBe(0);
+        expect(buffer.nextRetryAt).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('hands out a waiting update when asked for everything', () => {
+      const buffer = new EventBuffer({ maxRetries: 3 });
+      buffer.init({ strategy: 'batch-with-updates' });
+      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
+      buffer.reAddUpdates(buffer.take().updates, () => 60_000);
+
+      expect(buffer.take().updates).toHaveLength(0);
+      expect(buffer.take({ all: true }).updates).toHaveLength(1);
+      expect(buffer.totalSize).toBe(0);
+    });
+
+    it('hands out re-added creates and updates without a backoff at once', () => {
+      const buffer = new EventBuffer({ maxRetries: 3 });
+      buffer.init({ strategy: 'batch-with-updates' });
+      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_STARTED));
+      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
+      const taken = buffer.take();
+      buffer.reAddCreates(taken.creates);
+      buffer.reAddUpdates(taken.updates);
+
+      const again = buffer.take();
+      expect(again.creates).toHaveLength(1);
+      expect(again.updates).toHaveLength(1);
+      expect(buffer.nextRetryAt).toBeUndefined();
     });
   });
 });
