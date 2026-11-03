@@ -39,6 +39,8 @@ import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from '.
 import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
+import { DEFAULT_SLACK_TOOL_SETTINGS, slackToolSettingsSchema } from './tool-settings.js';
+import type { SlackToolSettings } from './tool-settings.js';
 
 /** Slack app credentials, read from env ONCE by the deploy entry. */
 export interface SlackIntegrationConfig {
@@ -79,6 +81,20 @@ export interface SlackIntegrationConfig {
    * ```
    */
   adapterOptions?: SlackAdapterChannelConfig;
+  /**
+   * What sessions started from Slack may do with the Slack tools. By default a
+   * session can read and post only in its own channel, and can't send DMs.
+   *
+   * @example
+   * ```ts
+   * new SlackIntegration({
+   *   signingSecret,
+   *   // Any channel the app is in, and DMs to anyone in the workspace.
+   *   tools: { channels: 'all', directMessages: 'anyone' },
+   * });
+   * ```
+   */
+  tools?: Partial<SlackToolSettings>;
 }
 
 /** Slack renders the status inline next to the app name; keep it to one short line. */
@@ -162,6 +178,7 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  readonly #toolSettings: SlackToolSettings;
   readonly #adapterOptions: SlackAdapterChannelConfig;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
@@ -194,6 +211,7 @@ export class SlackIntegration implements FactoryIntegration {
       throw new Error("SlackIntegration: 'botToken' is required in socket mode — Factory cannot reply without it.");
     }
     this.#config = config;
+    this.#toolSettings = slackToolSettingsSchema.parse({ ...DEFAULT_SLACK_TOOL_SETTINGS, ...config.tools });
     this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
     const textHidden = this.#textHidden;
     this.processors = {
@@ -230,7 +248,7 @@ export class SlackIntegration implements FactoryIntegration {
     return {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
-      ...(chat && sessionThreadId ? createSlackChatTools({ chat, sessionThreadId }) : {}),
+      ...(chat && sessionThreadId ? createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings }) : {}),
     };
   }
 

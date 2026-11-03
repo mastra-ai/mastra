@@ -2,11 +2,21 @@
 '@mastra/factory': minor
 ---
 
-Added Slack tools for Factory sessions started from Slack. Sessions can now work across Slack instead of only replying in their own thread:
+Added Slack tools for Factory sessions started from Slack. A session can read channels and threads, post messages, search recent messages, and find channels and people by name. The tools act as the Slack app, and posting needs no approval, so they also work on runs nobody is watching.
 
-- Read channels and threads, and post messages in channels or other threads
-- Search recent messages by keyword
-- Find channels and people by name
-- Send direct messages
+**Access**
 
-The tools act as the Slack app, so a session can read and post in any channel the app has been added to, and can DM anyone in the workspace. Posting needs no approval, so the tools also work on runs nobody is watching.
+By default a session can read and post only in its own channel, and can't send direct messages. Use the new `tools` option to grant more:
+
+```ts
+new SlackIntegration({
+  signingSecret,
+  tools: {
+    channels: 'all', // or 'selected' with channelIds: ['C0123456']
+    channelAccess: 'post', // or 'read' to post only in the session's own thread
+    directMessages: 'anyone',
+  },
+});
+```
+
+Even with `channels: 'all'`, a session can only read channels the Slack app has been added to.

@@ -14,11 +14,19 @@ import {
 import { z } from 'zod';
 
 import type { IntegrationTools } from '../base.js';
+import type { SlackToolSettings } from './tool-settings.js';
 
 /** Pages read per lookup, so one call can't walk a huge workspace. */
 const MAX_LOOKUP_PAGES = 10;
 /** Most messages searchMessages reads per channel. */
 const MAX_SEARCH_SCAN = 1000;
+
+/** Same resolution the Chat SDK's own scope guard uses. */
+function channelOf(chat: Chat, id: string): string {
+  const prefix = id.split(':')[0];
+  const adapter = prefix ? chat.getAdapter(prefix) : undefined;
+  return adapter?.channelIdFromThreadId?.(id) ?? id.split(':').slice(0, 2).join(':');
+}
 
 const slackClient = (chat: Chat) => (chat.getAdapter('slack') as SlackAdapter).webClient;
 
@@ -44,46 +52,77 @@ async function listAll<T>(
 const normalize = (text: string) => text.toLowerCase().replace(/^[#@]/, '').trim();
 
 /**
- * The Chat SDK's read and post tools, plus channel/person lookup and DMs. They
- * act as the app, so a session reaches exactly the channels the app is in,
- * with no approval prompts.
+ * The Chat SDK's read and post tools, plus channel/person lookup, search and
+ * DMs, confined to the channels `settings` grant. They act as the app, so a
+ * session never reaches a channel the app isn't in, and posting needs no
+ * approval.
  */
 export function createSlackChatTools({
   chat,
   sessionThreadId,
+  settings,
 }: {
   chat: Chat;
   /** The session's own chat thread id, e.g. `slack:C123:1700000000.000100`. */
   sessionThreadId: string;
+  settings: SlackToolSettings;
 }): IntegrationTools {
-  // Without `scope: false` the Chat SDK confines each tool to the Slack
-  // conversation being handled, so a session started by a Slack message
-  // couldn't reach any other channel.
-  const anyChannel = { scope: false } as const;
-  const write = { needsApproval: false, ...anyChannel };
+  const all = settings.channels === 'all';
+  const allowed = new Set([
+    channelOf(chat, sessionThreadId),
+    ...(settings.channels === 'selected' ? settings.channelIds.map(id => `slack:${id}`) : []),
+  ]);
+  const scope = all ? 'any channel the app is a member of' : [...allowed].join(', ');
+  // Passing our own guard (a bare function for reads, `guard` for writes)
+  // replaces the Chat SDK's, which would otherwise confine the tools to the
+  // Slack conversation being handled.
+  const guard = (id: string) => {
+    if (all) return;
+    if (!allowed.has(channelOf(chat, id))) {
+      throw new Error(`"${id}" is outside the channels this session can use: ${scope}.`);
+    }
+  };
+  const postGuard =
+    settings.channelAccess === 'read'
+      ? (id: string) => {
+          if (id !== sessionThreadId) {
+            throw new Error(`"${id}" is read only for this session: it can only post in its own thread, ${sessionThreadId}.`);
+          }
+        }
+      : guard;
   const note = <T extends { description?: unknown }>(tool: T): T => ({
     ...tool,
-    description: `${String(tool.description)} This session's thread is ${sessionThreadId}.`,
+    description: `${String(tool.description)} Channels this session can use: ${scope}${
+      settings.channelAccess === 'read' ? " (read only: post only in this session's own thread)" : ''
+    }. This session's thread is ${sessionThreadId}.`,
   });
 
   return {
-    fetchMessages: note(fetchMessages(chat, anyChannel)),
-    fetchChannelMessages: fetchChannelMessages(chat, anyChannel),
-    fetchThread: fetchThread(chat, anyChannel),
-    listThreads: listThreads(chat, anyChannel),
-    getThreadParticipants: getThreadParticipants(chat, anyChannel),
-    getChannelInfo: getChannelInfo(chat, anyChannel),
-    postMessage: note(postMessage(chat, write)),
-    // Given a thread id, Slack would silently post a new top-level message
-    // instead of replying in that thread.
-    postChannelMessage: postChannelMessage(chat, {
-      needsApproval: false,
-      guard: id => {
-        if (id.split(':').length > 2) {
-          throw new Error(`"${id}" is a thread, not a channel. Use postMessage to reply in a thread.`);
-        }
-      },
-    }),
+    fetchMessages: note(fetchMessages(chat, guard)),
+    fetchChannelMessages: note(fetchChannelMessages(chat, guard)),
+    fetchThread: fetchThread(chat, guard),
+    listThreads: note(listThreads(chat, guard)),
+    getThreadParticipants: getThreadParticipants(chat, guard),
+    getChannelInfo: getChannelInfo(chat, guard),
+    postMessage: note(postMessage(chat, { needsApproval: false, guard: postGuard })),
+    // Read only leaves nowhere for a new top-level post to go. Given a thread
+    // id, Slack would silently post a new top-level message instead of
+    // replying in that thread.
+    ...(settings.channelAccess === 'read'
+      ? {}
+      : {
+          postChannelMessage: note(
+            postChannelMessage(chat, {
+              needsApproval: false,
+              guard: id => {
+                if (id.split(':').length > 2) {
+                  throw new Error(`"${id}" is a thread, not a channel. Use postMessage to reply in a thread.`);
+                }
+                guard(id);
+              },
+            }),
+          ),
+        }),
     findChannel: createTool({
       id: 'findChannel',
       description:
@@ -134,7 +173,7 @@ export function createSlackChatTools({
       }),
       execute: async ({ query, channelIds, scan, limit }) => {
         const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-        const channels = channelIds?.length ? channelIds : [sessionThreadId.split(':').slice(0, 2).join(':')];
+        const channels = channelIds?.length ? channelIds : [channelOf(chat, sessionThreadId)];
         const matches: Array<{ channelId: string; ts: string; userId?: string; text: string }> = [];
         const errors: Array<{ channelId: string; error: string }> = [];
         let scanned = 0;
@@ -143,6 +182,7 @@ export function createSlackChatTools({
           let cursor: string | undefined;
           let read = 0;
           try {
+            guard(channelId);
             while (read < scan) {
               const page = await slackClient(chat).conversations.history({
                 channel,
@@ -203,18 +243,22 @@ export function createSlackChatTools({
       },
     }),
     // The Chat SDK's own sendDirectMessage asks for approval; this one doesn't.
-    sendDirectMessage: createTool({
-      id: 'sendDirectMessage',
-      description: 'Send a direct message to a person in Slack. Use findUser to get their user id (U…) from a name.',
-      inputSchema: z.object({
-        userId: z.string().min(1).describe('Slack user id, e.g. U123456'),
-        text: z.string().min(1).describe('The message, in markdown'),
-      }),
-      execute: async ({ userId, text }) => {
-        const dm = await chat.openDM(userId);
-        const sent = await dm.post({ markdown: text });
-        return { messageId: sent.id, threadId: sent.threadId };
-      },
-    }),
+    ...(settings.directMessages === 'anyone'
+      ? {
+          sendDirectMessage: createTool({
+            id: 'sendDirectMessage',
+            description: 'Send a direct message to a person in Slack. Use findUser to get their user id (U…) from a name.',
+            inputSchema: z.object({
+              userId: z.string().min(1).describe('Slack user id, e.g. U123456'),
+              text: z.string().min(1).describe('The message, in markdown'),
+            }),
+            execute: async ({ userId, text }) => {
+              const dm = await chat.openDM(userId);
+              const sent = await dm.post({ markdown: text });
+              return { messageId: sent.id, threadId: sent.threadId };
+            },
+          }),
+        }
+      : {}),
   };
 }
