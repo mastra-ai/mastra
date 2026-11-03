@@ -87,11 +87,19 @@ export function createAgentStreamPublisher({
   if (callerSignal?.aborted) onCallerAbort();
   else callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
 
+  let ended = false;
+
   // Listen for abort requests until the run ends. Subscribing is async; a
   // request published before the subscription lands is missed, like one sent
   // to a run that already finished.
   let stopListening: (() => Promise<void>) | undefined;
-  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, runId, () => abort())
+  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, runId, () => {
+    // A request that lands while the subscription is being released has
+    // nothing left to stop; leave it unconfirmed.
+    if (ended) return false;
+    abort();
+    return true;
+  })
     .then(unsubscribe => {
       stopListening = unsubscribe;
     })
@@ -118,7 +126,6 @@ export function createAgentStreamPublisher({
   // The record goes first, so a reader that sees any event can authorize.
   let queue: Promise<void> = writeRecord('running')();
   let finished = false;
-  let ended = false;
   let suspended: AgentSuspendedEventData | undefined;
   let lastError: unknown;
 

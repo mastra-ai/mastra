@@ -14,6 +14,9 @@ import { Mastra } from '../../../mastra';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { requestAcknowledgedAbort } from '../abort-transport';
+import { AGENT_CONTROL_TOPIC } from '../constants';
+import { createAgentStreamPublisher } from '../publisher';
 
 describe('Agent streams remote abort', () => {
   const getMock = useLoopScenarioAimock();
@@ -120,6 +123,28 @@ describe('Agent streams remote abort', () => {
     const pubsub = new EventEmitterPubSub();
     const { remote } = setup(pubsub);
     expect(await remote.__abortRunAcknowledged('nobody-runs-this')).toBe(false);
+  });
+
+  it('does not confirm an abort that reaches a run after it ended', async () => {
+    // A transport that releases subscriptions slowly (as Redis Streams does)
+    // still delivers control requests while the ended run unsubscribes.
+    let releaseUnsubscribe!: () => void;
+    const unsubscribing = new Promise<void>(resolve => (releaseUnsubscribe = resolve));
+    class SlowUnsubscribePubSub extends EventEmitterPubSub {
+      override async unsubscribe(topic: string, cb: Parameters<EventEmitterPubSub['unsubscribe']>[1]) {
+        if (topic === AGENT_CONTROL_TOPIC('ended-run')) await unsubscribing;
+        return super.unsubscribe(topic, cb);
+      }
+    }
+    const pubsub = new SlowUnsubscribePubSub();
+    const publisher = createAgentStreamPublisher({ pubsub, runId: 'ended-run', cleanupTimeoutMs: 0 });
+    await pubsub.flush();
+    publisher.publish({ type: 'finish', runId: 'ended-run', from: 'AGENT', payload: {} } as any);
+    await publisher.close();
+
+    expect(await requestAcknowledgedAbort(pubsub, 'ended-run', 300)).toBe(false);
+    expect(publisher.abortSignal.aborted).toBe(false);
+    releaseUnsubscribe();
   });
 
   it('records the owner of a running published run and forgets it once the run ends', async () => {
