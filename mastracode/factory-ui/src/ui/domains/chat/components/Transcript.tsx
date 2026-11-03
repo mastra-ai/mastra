@@ -8,6 +8,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 
+import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { ThreadOwner } from '../services/reply-credential';
@@ -19,6 +20,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { ActivityWorkingDirectory } from '@mastra/playground-ui/components/ai/activity';
+import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annotations';
 import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
 import { ActivityDisclosureProvider } from '@mastra/playground-ui/domains/chat/activity';
 import { MessageBubble } from './MessageBubble';
@@ -31,7 +33,6 @@ import { NotificationCard, NotificationSummaryCard } from './TranscriptNotificat
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
 import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
-import { TranscriptAnnotations } from './TranscriptAnnotations';
 import { TurnRevealScope } from './TurnReveal';
 import { turnGaps } from './turn-gaps';
 
@@ -79,6 +80,7 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
   );
 
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const { composerInputRef } = useChatCommands();
 
   return (
     // `contents`: only bounds what can be annotated, so the turns stay direct items of the chat column.
@@ -96,7 +98,7 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
           tail={tail}
         />
       </ArrivalScope>
-      <TranscriptAnnotations containerRef={transcriptRef} />
+      <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={composerInputRef} />
     </div>
   );
 }

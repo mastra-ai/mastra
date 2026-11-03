@@ -2,11 +2,12 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUp } from 'lucide-react';
 import { useRef, useState } from 'react';
 
-import { ChatQuotesProvider, useChatQuotes } from '../chat-quotes';
-import { ComposerQuotes } from '../composer-quotes';
-import { formatQuotedMessage } from '../format-quoted-message';
-import { QuoteMarkers } from '../quote-markers';
-import { QuoteSelectionToolbar } from '../quote-selection-toolbar';
+import { AnnotationSelectionToolbar } from '../annotation-selection-toolbar';
+import { ChatAnnotationsProvider, useChatAnnotations } from '../chat-annotations';
+import { ComposerAnnotationList } from '../composer-annotation-list';
+import { ComposerAnnotations } from '../composer-annotations';
+import { formatAnnotatedMessage } from '../format-annotated-message';
+import { TranscriptAnnotations } from '../transcript-annotations';
 import { Button } from '@/ds/components/Button';
 import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from '@/ds/components/Composer';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
@@ -24,10 +25,10 @@ const FOLLOW_UP = `Opened the pull request with the approved styling for Factory
 
 128 tests and browser checks passed. Existing dependency issues still block the full typecheck and lint.`;
 
-function QuotingChat() {
+function AnnotatingChat() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
+  const { takeAnnotations } = useChatAnnotations();
   const [draft, setDraft] = useState('');
   const [sent, setSent] = useState<string>();
 
@@ -36,7 +37,7 @@ function QuotingChat() {
       {/* The marks are placed in the scrolled content, so they travel with the text. */}
       <div className="h-96 overflow-y-auto rounded-xl" data-testid="story-transcript">
         <div ref={transcriptRef} className="relative flex flex-col gap-4 py-4">
-          <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
+          <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={inputRef} />
           <Message from="user">Can we make the tables look more like a DataList without its container?</Message>
           <Message from="assistant">
             <MarkdownRenderer>{REPLY}</MarkdownRenderer>
@@ -51,26 +52,18 @@ function QuotingChat() {
           </Message>
         </div>
       </div>
-      <QuoteSelectionToolbar
-        containerRef={transcriptRef}
-        onQuote={quote => {
-          addQuote(quote);
-          inputRef.current?.focus();
-        }}
-      />
       <Composer
         aria-label="Message composer"
         onSubmit={event => {
           event.preventDefault();
           if (!draft.trim()) return;
-          setSent(formatQuotedMessage(draft, quotes));
-          for (const quote of quotes) removeQuote(quote.id);
+          setSent(formatAnnotatedMessage(draft, takeAnnotations()));
           setDraft('');
         }}
       >
         <ComposerRing>
           <ComposerBox>
-            <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
+            <ComposerAnnotations />
             <ComposerInput
               ref={inputRef}
               aria-label="Message"
@@ -98,28 +91,28 @@ function QuotingChat() {
   );
 }
 
-const meta: Meta<typeof QuoteSelectionToolbar> = {
-  title: 'AI/Quote',
-  component: QuoteSelectionToolbar,
+const meta: Meta<typeof TranscriptAnnotations> = {
+  title: 'AI/Annotations',
+  component: TranscriptAnnotations,
   parameters: {
     layout: 'padded',
     docs: {
       description: {
         component:
-          'Annotate parts of the transcript for the next message, the same way in Studio and Factory. `QuoteSelectionToolbar` floats Add to chat over text selected inside one message of the transcript it watches; a drag that runs past the message is trimmed back to it, and a selection that reaches a second message offers nothing. `QuoteMarkers` marks each annotation with a numbered comment bubble where it was selected and tints its text; hovering a bubble deepens the tint, and clicking it opens a card to comment on the passage or remove it. Render it inside the scrolled content, below a positioned ancestor, so the bubbles travel with the text. `ComposerQuotes` shows them as one chip in `ComposerBox` that opens their numbered list, to find or remove each one. `ChatQuotesProvider` and `useChatQuotes` hold them between the transcript and the composer; mount the provider once per conversation, below whatever remounts when the thread changes. `formatQuotedMessage` turns them, their comments and the typed text into the numbered Markdown list the agent receives. Apps own sending, clearing annotations once a message is accepted, and `restoreQuotes` when it is not.',
+          'Annotate parts of the transcript for the next message, the same way in Studio and Factory. Mount `ChatAnnotationsProvider` once per conversation, below whatever remounts when the thread changes. Render `TranscriptAnnotations` inside the scrolled transcript, below a positioned ancestor, and `ComposerAnnotations` at the top of `ComposerBox`; when sending, `takeAnnotations()` hands the waiting annotations to `formatAnnotatedMessage`, and `restoreAnnotations` puts them back if the message fails. In the transcript, Add to chat floats over text selected inside one message: a drag that runs past the message is trimmed back to it, and a selection that reaches a second message offers nothing. Each annotation gets a numbered comment bubble at the end of its passage and tints it; hovering a bubble deepens the tint, and clicking it opens a card to comment on the passage or remove it. The composer chip opens the numbered list, to find or remove each one. The agent receives a numbered Markdown list, each passage quoted with its comment, then the typed text. For another layout, compose `AnnotationSelectionToolbar`, `AnnotationMarkers` and `ComposerAnnotationList` with `useChatAnnotations`.',
       },
     },
   },
 };
 
 export default meta;
-type Story = StoryObj<typeof QuoteSelectionToolbar>;
+type Story = StoryObj<typeof TranscriptAnnotations>;
 
 export const SelectAndAdd: Story = {
   render: () => (
-    <ChatQuotesProvider>
-      <QuotingChat />
-    </ChatQuotesProvider>
+    <ChatAnnotationsProvider>
+      <AnnotatingChat />
+    </ChatAnnotationsProvider>
   ),
 };
 
@@ -128,8 +121,8 @@ export const WaitingAnnotations: Story = {
     <Composer aria-label="Message composer" className="mx-auto w-full max-w-3xl">
       <ComposerRing>
         <ComposerBox>
-          <ComposerQuotes
-            quotes={[
+          <ComposerAnnotationList
+            annotations={[
               {
                 id: 'open',
                 text: 'Open rows: no frame or lines; subtle rounded hover and selection.',

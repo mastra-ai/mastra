@@ -1,12 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import {
-  ChatQuotesProvider,
-  ComposerQuotes,
-  formatQuotedMessage,
-  QuoteMarkers,
-  QuoteSelectionToolbar,
-  useChatQuotes,
-} from '@mastra/playground-ui/components/ai/quote';
+  ChatAnnotationsProvider,
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  TranscriptAnnotations,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
+import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -100,31 +100,6 @@ const hasStreamingPart = (message: MastraDBMessage | undefined) => {
     }
     return false;
   });
-};
-
-interface ThreadAnnotationsProps {
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  composerInputRef: React.RefObject<HTMLTextAreaElement | null>;
-}
-
-/**
- * Add to chat over text selected in a message, and the numbered marks of what was added. Rendered
- * in the message column, so the marks scroll with the text; adding one focuses the composer.
- */
-const ThreadAnnotations = ({ containerRef, composerInputRef }: ThreadAnnotationsProps) => {
-  const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
-  return (
-    <>
-      <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
-      <QuoteSelectionToolbar
-        containerRef={containerRef}
-        onQuote={quote => {
-          addQuote(quote);
-          composerInputRef.current?.focus();
-        }}
-      />
-    </>
-  );
 };
 
 const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
@@ -279,7 +254,7 @@ const ThreadContent = ({
                   className="relative flex-1 gap-4 py-4"
                 >
                   <BracketOverlay containerRef={messagesContainerRef} />
-                  <ThreadAnnotations containerRef={messagesContainerRef} composerInputRef={composerInputRef} />
+                  <TranscriptAnnotations containerRef={messagesContainerRef} composerInputRef={composerInputRef} />
                   {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
                   <ArrivalScope>
                     {turnGroups.map((group, index) => {
@@ -356,9 +331,9 @@ const ThreadContent = ({
 };
 
 export const Thread = (props: ThreadProps) => (
-  <ChatQuotesProvider>
+  <ChatAnnotationsProvider>
     <ThreadContent {...props} />
-  </ChatQuotesProvider>
+  </ChatAnnotationsProvider>
 );
 
 const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
@@ -400,7 +375,7 @@ const AgentComposer = ({
   refreshThreadList,
 }: AgentComposerProps) => {
   const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
-  const { quotes, removeQuote, restoreQuotes } = useChatQuotes();
+  const { takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const preparing = useRef(false);
   const lifetime = useRef(0);
   useEffect(
@@ -439,12 +414,11 @@ const AgentComposer = ({
     const currentLifetime = lifetime.current;
     const submittedAttachments = attachments;
     const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
-    const submittedQuotes = quotes;
     // A message the server can't have stored goes back in the composer, before anything typed since.
     const withSubmittedText = (typed: string) => (typed ? `${text}\n\n${typed}` : text);
-    const restoreSubmission = () => {
+    const restoreSubmission = (sentAnnotations: readonly ChatAnnotation[]) => {
       if (lifetime.current !== currentLifetime) return;
-      restoreQuotes(submittedQuotes);
+      restoreAnnotations(sentAnnotations);
       if (updateDraft)
         updateDraft(previous => ({
           text: withSubmittedText(previous.text),
@@ -470,11 +444,11 @@ const AgentComposer = ({
         setThreadInput('');
         clear();
       }
-      for (const quote of submittedQuotes) removeQuote(quote.id);
+      const sentAnnotations = takeAnnotations();
       setSendPulseKey(k => k + 1);
-      const message = formatQuotedMessage(text, submittedQuotes);
+      const message = formatAnnotatedMessage(text, sentAnnotations);
       void Promise.resolve(send({ message, attachments: coreUserMessages })).then(delivered => {
-        if (delivered === false) restoreSubmission();
+        if (delivered === false) restoreSubmission(sentAnnotations);
       });
     } catch {
       if (lifetime.current === currentLifetime)
@@ -509,7 +483,7 @@ const AgentComposer = ({
         >
           <ComposerRing busy={isRunning}>
             <ComposerBox sendingPulseKey={sendPulseKey}>
-              <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
+              <ComposerAnnotations />
               <ChatComposerAttachments />
               <ComposerInput
                 ref={textareaRef}

@@ -1,31 +1,31 @@
 import { useEffect, useState } from 'react';
 import type { RefObject } from 'react';
 
-import { normalizeQuote } from './format-quoted-message';
-import { clampSelection, findQuotablePart, quoteSelectionAnchor, quoteSource } from './quotable-selection';
-import type { QuoteSelectionAnchor, QuoteSource } from './quotable-selection';
+import { clampSelection, findAnnotatablePart, selectionAnchor, annotationSource } from './annotatable-selection';
+import type { SelectionAnchor, AnnotationSource } from './annotatable-selection';
+import { normalizeAnnotationText } from './format-annotated-message';
 
-export interface QuoteSelection {
+export interface AnnotationSelection {
   text: string;
-  source: QuoteSource;
-  anchor: QuoteSelectionAnchor;
+  source: AnnotationSource;
+  anchor: SelectionAnchor;
 }
 
-interface QuoteSelectionState {
+interface AnnotationSelectionState {
   open: boolean;
   /** Kept after closing so the toolbar stays in place while it animates out. */
-  selection?: QuoteSelection;
+  selection?: AnnotationSelection;
 }
 
-const CLOSED: QuoteSelectionState = { open: false };
+const CLOSED: AnnotationSelectionState = { open: false };
 
 /**
  * Follows the document selection and reports it once it rests on text in one message inside
  * `containerRef`. A drag reports when the pointer is released, not while it moves; a keyboard
  * selection reports as it changes.
  */
-export function useQuoteSelection(containerRef: RefObject<Element | null>) {
-  const [state, setState] = useState<QuoteSelectionState>(CLOSED);
+export function useAnnotationSelection(containerRef: RefObject<Element | null>) {
+  const [state, setState] = useState<AnnotationSelectionState>(CLOSED);
   const dismiss = () => setState(current => (current.open ? { ...current, open: false } : current));
 
   useEffect(() => {
@@ -38,12 +38,12 @@ export function useQuoteSelection(containerRef: RefObject<Element | null>) {
       const container = containerRef.current;
       const selection = document.getSelection();
       if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) return close();
-      const part = findQuotablePart(container, selection.getRangeAt(0));
+      const part = findAnnotatablePart(container, selection.getRangeAt(0));
       if (!part || (part.spills && !settled)) return close();
       if (part.spills) clampSelection(selection, part);
-      const text = normalizeQuote(selection.toString());
+      const text = normalizeAnnotationText(selection.toString());
       if (!text) return close();
-      setState({ open: true, selection: { text, source: quoteSource(part), anchor: quoteSelectionAnchor(part) } });
+      setState({ open: true, selection: { text, source: annotationSource(part), anchor: selectionAnchor(part) } });
     };
 
     const onPointerDown = () => {

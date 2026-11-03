@@ -1,6 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { ComposerQuotes, formatQuotedMessage, useChatQuotes } from '@mastra/playground-ui/components/ai/quote';
-import type { ChatQuote } from '@mastra/playground-ui/components/ai/quote';
+import {
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
+import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
@@ -78,7 +82,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
-  const { quotes, removeQuote, restoreQuotes } = useChatQuotes();
+  const { takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
@@ -186,11 +190,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     // A command is not a message, so annotations wait for the next one.
-    const sentQuotes = text.startsWith('/') ? [] : quotes;
+    const sentAnnotations = text.startsWith('/') ? [] : takeAnnotations();
     updateDraft('');
-    for (const quote of sentQuotes) removeQuote(quote.id);
-    void handleInput(text, sentQuotes).catch(error => {
-      restoreQuotes(sentQuotes);
+    void handleInput(text, sentAnnotations).catch(error => {
+      restoreAnnotations(sentAnnotations);
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
@@ -232,9 +235,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  async function handleInput(text: string, sentQuotes: readonly ChatQuote[]) {
+  async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
     // What the agent reads; the draft keeps only what was typed, since failed annotations come back on their own.
-    const message = formatQuotedMessage(text, sentQuotes);
+    const message = formatAnnotatedMessage(text, sentAnnotations);
     if (planFeedback.pending) {
       await planFeedback.submitFeedback(message);
       setImages([]);
@@ -279,7 +282,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
-          <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
+          <ComposerAnnotations />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             {...commandMenu.inputProps}

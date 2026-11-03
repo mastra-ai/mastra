@@ -2,37 +2,34 @@
 '@mastra/playground-ui': minor
 ---
 
-Added annotation components for chat UIs, so a person can point the agent at parts of the transcript and comment on them:
+Added chat annotations, so a person can point the agent at parts of the transcript and comment on them. Select text in a message and click **Add to chat**: the passage gets a numbered comment bubble that stays with the text as you scroll, clicking the bubble opens a card to comment on the passage or remove it, and the composer counts what is waiting. The agent receives a numbered Markdown list, each passage quoted with its comment, ahead of the typed text.
 
-- `QuoteSelectionToolbar` shows **Add to chat** over text selected in a message.
-- `QuoteMarkers` marks each annotation with a numbered comment bubble where it was selected and tints its text. Hovering a bubble deepens the tint; clicking it opens a card to comment on the passage or remove it. Render it inside the scrolled transcript so the bubbles move with the text.
-- `ComposerQuotes` shows the annotations as one chip in `ComposerBox` that opens their numbered list.
-- `ChatQuotesProvider` and `useChatQuotes` share them, and their comments, between the transcript and the composer.
-- `formatQuotedMessage` turns them into a numbered Markdown list, each passage quoted with its comment, ahead of the typed text.
+Mount `ChatAnnotationsProvider` once per conversation, render `TranscriptAnnotations` inside the scrolled transcript and `ComposerAnnotations` in the composer, and format the outgoing message with `takeAnnotations()`:
 
 ```tsx
 import {
-  ChatQuotesProvider,
-  ComposerQuotes,
-  formatQuotedMessage,
-  QuoteMarkers,
-  QuoteSelectionToolbar,
-  useChatQuotes,
-} from '@mastra/playground-ui/components/ai/quote';
+  ChatAnnotationsProvider,
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  TranscriptAnnotations,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
 
-// Inside <ChatQuotesProvider>:
-const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
+<ChatAnnotationsProvider>
+  <div ref={transcriptRef} className="relative">
+    <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={inputRef} />
+    {messages}
+  </div>
+  <ComposerBox>
+    <ComposerAnnotations />
+    <ComposerInput ref={inputRef} />
+  </ComposerBox>
+</ChatAnnotationsProvider>;
 
-<div ref={transcriptRef} className="relative">
-  <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
-  {messages}
-</div>;
-<QuoteSelectionToolbar containerRef={transcriptRef} onQuote={addQuote} />;
-
-<ComposerBox>
-  <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
-  <ComposerInput />
-</ComposerBox>;
-
-send(formatQuotedMessage(draft, quotes));
+// When sending, inside the provider:
+const { takeAnnotations, restoreAnnotations } = useChatAnnotations();
+const annotations = takeAnnotations();
+send(formatAnnotatedMessage(draft, annotations)).catch(() => restoreAnnotations(annotations));
 ```
+
+`AnnotationSelectionToolbar`, `AnnotationMarkers` and `ComposerAnnotationList` are exported too, for layouts the wired pieces do not fit.

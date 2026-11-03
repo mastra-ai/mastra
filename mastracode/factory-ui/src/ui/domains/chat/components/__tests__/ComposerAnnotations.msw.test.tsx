@@ -65,7 +65,7 @@ async function renderSessionWithReply(options: Parameters<typeof stubPreparingSe
 }
 
 const markers = () =>
-  Array.from(document.querySelectorAll('[data-slot="quote-marker"]')).map(marker => marker.textContent);
+  Array.from(document.querySelectorAll('[data-slot="annotation-marker"]')).map(marker => marker.textContent);
 
 afterEach(() => {
   document.getSelection()?.removeAllRanges();

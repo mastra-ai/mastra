@@ -1351,7 +1351,7 @@ describe('Thread annotations', () => {
   };
 
   const markers = () =>
-    Array.from(screen.getByTestId('thread-message-column').querySelectorAll('[data-slot="quote-marker"]')).map(
+    Array.from(screen.getByTestId('thread-message-column').querySelectorAll('[data-slot="annotation-marker"]')).map(
       marker => marker.textContent,
     );
 

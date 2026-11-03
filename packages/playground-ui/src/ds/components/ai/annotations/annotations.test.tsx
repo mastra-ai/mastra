@@ -3,11 +3,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useRef, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatQuotesProvider, useChatQuotes } from './chat-quotes';
-import { ComposerQuotes } from './composer-quotes';
-import { formatQuotedMessage } from './format-quoted-message';
-import { QuoteMarkers } from './quote-markers';
-import { QuoteSelectionToolbar } from './quote-selection-toolbar';
+import { ChatAnnotationsProvider, useChatAnnotations } from './chat-annotations';
+import { ComposerAnnotations } from './composer-annotations';
+import { formatAnnotatedMessage } from './format-annotated-message';
+import { TranscriptAnnotations } from './transcript-annotations';
 import { Composer, ComposerBox, ComposerInput } from '@/ds/components/Composer';
 import { Message, MessageActions } from '@/ds/components/Message';
 
@@ -26,17 +25,17 @@ const layOutLines = () =>
 const REPLY = 'Open rows drop the frame and keep subtle rounded hover.';
 const SECOND = 'Soft rows add faint backgrounds.';
 
-/** A transcript and composer wired the way Studio and Factory wire them. */
-function QuotingChat({ onSend, showReply = true }: { onSend: (message: string) => void; showReply?: boolean }) {
+/** A transcript and composer built from the same wired pieces Studio and Factory render. */
+function AnnotatingChat({ onSend, showReply = true }: { onSend: (message: string) => void; showReply?: boolean }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
+  const { takeAnnotations } = useChatAnnotations();
   const [draft, setDraft] = useState('');
 
   return (
     <>
       <div ref={transcriptRef} data-testid="transcript" className="relative">
-        <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
+        <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={inputRef} />
         <Message from="user">Which table style should we use?</Message>
         {showReply && (
           <Message
@@ -53,24 +52,16 @@ function QuotingChat({ onSend, showReply = true }: { onSend: (message: string) =
         )}
       </div>
       <Message from="assistant">Outside the transcript</Message>
-      <QuoteSelectionToolbar
-        containerRef={transcriptRef}
-        onQuote={quote => {
-          addQuote(quote);
-          inputRef.current?.focus();
-        }}
-      />
       <Composer
         aria-label="Message composer"
         onSubmit={event => {
           event.preventDefault();
-          onSend(formatQuotedMessage(draft, quotes));
-          for (const quote of quotes) removeQuote(quote.id);
+          onSend(formatAnnotatedMessage(draft, takeAnnotations()));
           setDraft('');
         }}
       >
         <ComposerBox>
-          <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
+          <ComposerAnnotations />
           <ComposerInput
             ref={inputRef}
             aria-label="Message"
@@ -87,9 +78,9 @@ function QuotingChat({ onSend, showReply = true }: { onSend: (message: string) =
 const renderChat = () => {
   const sent: string[] = [];
   const chat = (showReply: boolean) => (
-    <ChatQuotesProvider>
-      <QuotingChat onSend={message => sent.push(message)} showReply={showReply} />
-    </ChatQuotesProvider>
+    <ChatAnnotationsProvider>
+      <AnnotatingChat onSend={message => sent.push(message)} showReply={showReply} />
+    </ChatAnnotationsProvider>
   );
   const view = render(chat(true));
   return { sent, hideReply: () => view.rerender(chat(false)) };
@@ -123,14 +114,14 @@ const annotate = async (paragraph: string, length: number) => {
 };
 
 const markers = () =>
-  Array.from(screen.getByTestId('transcript').querySelectorAll<HTMLElement>('[data-slot="quote-marker"]'));
+  Array.from(screen.getByTestId('transcript').querySelectorAll<HTMLElement>('[data-slot="annotation-marker"]'));
 
 const typeAndSend = (text: string) => {
   fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 };
 
-describe('QuoteSelectionToolbar', () => {
+describe('AnnotationSelectionToolbar', () => {
   describe('when the person selects part of a reply and adds it to the chat', () => {
     it('numbers it in the transcript, counts it in the composer, and sends it as a blockquote first', async () => {
       const { sent } = renderChat();
@@ -259,7 +250,7 @@ describe('QuoteSelectionToolbar', () => {
   });
 
   describe('when a drag runs past the end of the reply into its footer', () => {
-    it('trims the selection back to the reply and quotes only its text', async () => {
+    it('trims the selection back to the reply and annotations only its text', async () => {
       const { sent } = renderChat();
       dragSelect([textNode(SECOND), 'Soft rows add '.length], [textNode('Model reply footer'), 'Model'.length]);
 
@@ -271,7 +262,7 @@ describe('QuoteSelectionToolbar', () => {
   });
 
   describe('when the selection reaches into a second message', () => {
-    it('offers nothing, since it is not a quote of one message', async () => {
+    it('offers nothing, since it is not a annotation of one message', async () => {
       renderChat();
       dragSelect([textNode('Which table style should we use?'), 6], [textNode(REPLY), 9]);
 

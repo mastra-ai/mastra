@@ -1,8 +1,8 @@
 /**
- * Selected text as one quote: unified line endings, no trailing spaces, at most one blank line in a
+ * Selected text as one annotation: unified line endings, no trailing spaces, at most one blank line in a
  * row, and nothing around it. Empty when the selection held only whitespace.
  */
-export function normalizeQuote(text: string): string {
+export function normalizeAnnotationText(text: string): string {
   return text
     .replace(/\r\n?/g, '\n')
     .split('\n')
@@ -13,7 +13,7 @@ export function normalizeQuote(text: string): string {
 }
 
 /** A passage to send, and what the person said about it. */
-export interface QuotedPassage {
+export interface AnnotatedPassage {
   text: string;
   comment?: string;
 }
@@ -21,13 +21,13 @@ export interface QuotedPassage {
 const indent = (lines: string[], pad: string) => lines.map(line => (line ? `${pad}${line}` : '')).join('\n');
 
 /** One numbered list item: the passage as a blockquote, and its comment as a paragraph of the same item. */
-function formatAnnotation({ text, comment }: QuotedPassage, number: number): string {
+function formatAnnotation({ text, comment }: AnnotatedPassage, number: number): string {
   const marker = `${number}. `;
   const pad = ' '.repeat(marker.length);
   const [first = '>', ...rest] = text.split('\n').map(line => (line ? `> ${line}` : '>'));
-  const quote = rest.length > 0 ? `${marker}${first}\n${indent(rest, pad)}` : `${marker}${first}`;
-  const note = comment ? normalizeQuote(comment) : '';
-  return note ? `${quote}\n\n${indent(note.split('\n'), pad)}` : quote;
+  const annotation = rest.length > 0 ? `${marker}${first}\n${indent(rest, pad)}` : `${marker}${first}`;
+  const note = comment ? normalizeAnnotationText(comment) : '';
+  return note ? `${annotation}\n\n${indent(note.split('\n'), pad)}` : annotation;
 }
 
 /**
@@ -35,10 +35,10 @@ function formatAnnotation({ text, comment }: QuotedPassage, number: number): str
  * person sees them, each holding its passage as a blockquote and any comment on it, then what the
  * person typed. The list keeps a comment on the last passage apart from the typed message.
  */
-export function formatQuotedMessage(text: string, quotes: readonly QuotedPassage[]): string {
-  const passages = quotes
-    .map(quote => ({ text: normalizeQuote(quote.text), comment: quote.comment }))
-    .filter(quote => quote.text);
+export function formatAnnotatedMessage(text: string, annotations: readonly AnnotatedPassage[]): string {
+  const passages = annotations
+    .map(annotation => ({ text: normalizeAnnotationText(annotation.text), comment: annotation.comment }))
+    .filter(annotation => annotation.text);
   if (passages.length === 0) return text;
   const list = passages.map((passage, index) => formatAnnotation(passage, index + 1)).join('\n\n');
   return text.trim() ? `${list}\n\n${text}` : list;

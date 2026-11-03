@@ -1,14 +1,14 @@
 import { Trash2 } from 'lucide-react';
 import type { Ref } from 'react';
 
-import type { ChatQuote } from './chat-quotes';
-import { QuoteNumber } from './quote-number';
+import { AnnotationNumber } from './annotation-number';
+import type { ChatAnnotation } from './chat-annotations';
 import { Button } from '@/ds/components/Button';
 import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 
-export interface QuoteCommentCardProps {
-  quote: ChatQuote;
+export interface AnnotationCommentCardProps {
+  annotation: ChatAnnotation;
   number: number;
   commentRef?: Ref<HTMLTextAreaElement>;
   onCommentChange: (comment: string) => void;
@@ -17,18 +17,18 @@ export interface QuoteCommentCardProps {
 }
 
 /** What opens from an annotation's mark: its passage, a comment that goes out with it, and removal. */
-export function QuoteCommentCard({
-  quote,
+export function AnnotationCommentCard({
+  annotation,
   number,
   commentRef,
   onCommentChange,
   onRemove,
   onDone,
-}: QuoteCommentCardProps) {
+}: AnnotationCommentCardProps) {
   return (
-    <div data-slot="quote-comment-card" className="flex flex-col gap-2.5">
+    <div data-slot="annotation-comment-card" className="flex flex-col gap-2.5">
       <div className="flex items-center gap-2">
-        <QuoteNumber>{number}</QuoteNumber>
+        <AnnotationNumber>{number}</AnnotationNumber>
         <Txt as="span" variant="label" className="flex-1">
           Annotation {number}
         </Txt>
@@ -44,7 +44,7 @@ export function QuoteCommentCard({
         </Button>
       </div>
       <blockquote className="line-clamp-3 border-l-2 border-info-indicator ps-2.5 text-body-sm whitespace-pre-line text-muted-foreground">
-        {quote.text}
+        {annotation.text}
       </blockquote>
       <Textarea
         ref={commentRef}
@@ -52,7 +52,7 @@ export function QuoteCommentCard({
         placeholder="Add a comment"
         rows={3}
         className="min-h-18 resize-none"
-        value={quote.comment ?? ''}
+        value={annotation.comment ?? ''}
         onChange={event => onCommentChange(event.target.value)}
         onKeyDown={event => {
           if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {

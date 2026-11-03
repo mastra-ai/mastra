@@ -2,35 +2,35 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import { TextQuote } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import type { NewChatQuote } from './chat-quotes';
-import { useQuoteSelection } from './use-quote-selection';
+import type { NewChatAnnotation } from './chat-annotations';
+import { useAnnotationSelection } from './use-annotation-selection';
 import { Button } from '@/ds/components/Button';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
-export interface QuoteSelectionToolbarProps {
-  /** The transcript. Text selected inside one message's content within it can be quoted. */
+export interface AnnotationSelectionToolbarProps {
+  /** The transcript. Text selected inside one message's content within it can be annotated. */
   containerRef: RefObject<HTMLElement | null>;
   /** Receives the selected text, already trimmed, and where it sits, when the person picks Add to chat. */
-  onQuote: (quote: NewChatQuote) => void;
+  onAnnotate: (annotation: NewChatAnnotation) => void;
 }
 
 /**
  * Floats Add to chat above text selected in a message. It renders nothing until there is such a
  * selection, so mount it once next to the transcript.
  */
-export function QuoteSelectionToolbar({ containerRef, onQuote }: QuoteSelectionToolbarProps) {
-  const { open, selection, dismiss } = useQuoteSelection(containerRef);
+export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: AnnotationSelectionToolbarProps) {
+  const { open, selection, dismiss } = useAnnotationSelection(containerRef);
   const container = usePortalContainer();
 
-  const quote = () => {
+  const addToChat = () => {
     if (!selection) return;
     // Cleared first: the consumer usually focuses its composer next, and that must keep its caret.
     document.getSelection()?.removeAllRanges();
     dismiss();
-    onQuote({ text: selection.text, source: selection.source });
+    onAnnotate({ text: selection.text, source: selection.source });
   };
 
   return (
@@ -58,7 +58,7 @@ export function QuoteSelectionToolbar({ containerRef, onQuote }: QuoteSelectionT
             finalFocus={false}
             // A press here must not collapse the selection it acts on.
             onMouseDown={event => event.preventDefault()}
-            data-slot="quote-selection-toolbar"
+            data-slot="annotation-selection-toolbar"
             className={cn(
               'flex origin-(--transform-origin) items-center rounded-full p-1 focus-visible:outline-hidden',
               overlaySurfaceStyle,
@@ -66,7 +66,7 @@ export function QuoteSelectionToolbar({ containerRef, onQuote }: QuoteSelectionT
               'motion-safe:data-[open]:animate-in motion-safe:data-[open]:fade-in-0 motion-safe:data-[open]:zoom-in-95',
             )}
           >
-            <Button type="button" variant="ghost" size="sm" icon={<TextQuote />} onClick={quote}>
+            <Button type="button" variant="ghost" size="sm" icon={<TextQuote />} onClick={addToChat}>
               Add to chat
             </Button>
           </PopoverPrimitive.Popup>
