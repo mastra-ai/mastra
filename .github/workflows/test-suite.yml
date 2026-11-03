@@ -270,7 +270,7 @@ jobs:
 
       - name: Merge reports
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
-        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
+        run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
 
       # A test job that failed or was cancelled before uploading its blob would otherwise
       # be missing from the merged report, and this required check would pass without it.
