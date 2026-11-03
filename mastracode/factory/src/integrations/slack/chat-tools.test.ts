@@ -240,6 +240,21 @@ describe('Slack tools on a Factory session', () => {
     expect(people.users).toEqual([{ id: 'UALEX', name: 'Alex Rivera', displayName: 'alex' }]);
   });
 
+  it('says when a lookup stopped before reaching everyone, instead of implying nobody matched', async () => {
+    const { run } = await slackSession();
+    // The fake returns one person per page, so a dozen extras push Sam past the page cap.
+    const extras = Array.from({ length: 12 }, (_, i) => ({ id: `UEXTRA${i}`, name: `extra${i}`, profile: {} }));
+    const users = workspace.users;
+    workspace.users = [...extras, ...users];
+    try {
+      expect(await run('findUser', { name: 'Sam' })).toEqual({ users: [], incomplete: true });
+    } finally {
+      workspace.users = users;
+    }
+
+    expect(await run('findUser', { name: 'Sam' })).toEqual({ users: [{ id: 'USAM', name: 'Sam Lee', displayName: 'sam' }] });
+  });
+
   it('searches messages for every word, ignoring case, in the channels asked for', async () => {
     const { run } = await slackSession();
 

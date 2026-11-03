@@ -22,19 +22,23 @@ const MAX_SEARCH_SCAN = 1000;
 
 const slackClient = (chat: Chat) => (chat.getAdapter('slack') as SlackAdapter).webClient;
 
-/** Reads a paginated Slack list until it runs out of pages or hits the cap. */
+/**
+ * Reads a paginated Slack list until it runs out of pages or hits the cap.
+ * `incomplete` is set when the cap stopped it, so a lookup that found nothing
+ * isn't mistaken for "doesn't exist".
+ */
 async function listAll<T>(
   fetchPage: (cursor: string | undefined) => Promise<{ items?: T[]; response_metadata?: { next_cursor?: string } }>,
-): Promise<T[]> {
+): Promise<{ items: T[]; incomplete?: true }> {
   const items: T[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < MAX_LOOKUP_PAGES; page++) {
     const result = await fetchPage(cursor);
     items.push(...(result.items ?? []));
     cursor = result.response_metadata?.next_cursor || undefined;
-    if (!cursor) break;
+    if (!cursor) return { items };
   }
-  return items;
+  return { items, incomplete: true };
 }
 
 const normalize = (text: string) => text.toLowerCase().replace(/^[#@]/, '').trim();
@@ -83,11 +87,11 @@ export function createSlackChatTools({
     findChannel: createTool({
       id: 'findChannel',
       description:
-        'Find Slack channels by name, e.g. "eng" or "#eng-proj-factories". Returns full channel ids (slack:C…) to pass to the other Slack tools, and whether the app is a member.',
+        'Find Slack channels by name, e.g. "eng" or "#eng-proj-factories". Returns full channel ids (slack:C…) to pass to the other Slack tools, and whether the app is a member. `incomplete: true` means the workspace was too large to check every channel.',
       inputSchema: z.object({ name: z.string().min(1).describe('All or part of the channel name') }),
       execute: async ({ name }) => {
         const query = normalize(name);
-        const found = await listAll(async cursor => {
+        const { items: found, incomplete } = await listAll(async cursor => {
           const page = await slackClient(chat).conversations.list({
             types: 'public_channel,private_channel',
             exclude_archived: true,
@@ -104,6 +108,7 @@ export function createSlackChatTools({
             isPrivate: Boolean(c.is_private),
             isMember: Boolean(c.is_member),
           })),
+          ...(incomplete && { incomplete }),
         };
       },
     }),
@@ -172,11 +177,11 @@ export function createSlackChatTools({
     findUser: createTool({
       id: 'findUser',
       description:
-        'Find people in Slack by name, e.g. "Caleb" or "@caleb". Returns their user ids (U…), to mention them as <@U…> in a message or to DM them.',
+        'Find people in Slack by name, e.g. "Caleb" or "@caleb". Returns their user ids (U…), to mention them as <@U…> in a message or to DM them. `incomplete: true` means the workspace was too large to check everyone.',
       inputSchema: z.object({ name: z.string().min(1).describe('All or part of their name or display name') }),
       execute: async ({ name }) => {
         const query = normalize(name);
-        const people = await listAll(async cursor => {
+        const { items: people, incomplete } = await listAll(async cursor => {
           const page = await slackClient(chat).users.list({ limit: 200, cursor });
           return { items: page.members, response_metadata: page.response_metadata };
         });
@@ -193,6 +198,7 @@ export function createSlackChatTools({
             name: p.profile?.real_name || p.name,
             displayName: p.profile?.display_name || undefined,
           })),
+          ...(incomplete && { incomplete }),
         };
       },
     }),
