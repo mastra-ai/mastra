@@ -81,19 +81,30 @@ export function KnowledgePageTree({
       ),
     [roots, expanded, mayHaveChildren],
   );
-  // Bring the selected row into view once per selection, as soon as it exists (its levels may still be
-  // loading). `nearest` leaves a row already on screen where it is; keyboard focus is not moved.
+  // Bring the selected row into view when it is selected, as soon as it exists, and again if rows that load
+  // later push it out of view (a deep page's levels arrive one after another). Once the user scrolls the
+  // tree themselves it is left alone. `nearest` leaves a row already on screen where it is; keyboard focus
+  // is not moved.
+  const scroller = useRef<HTMLDivElement>(null);
   const scrolledTo = useRef<string | null>(null);
+  const userScrolled = useRef(false);
   useEffect(() => {
     if (!selectedPageId) {
       scrolledTo.current = null;
       return;
     }
-    if (scrolledTo.current === selectedPageId) return;
     const element = itemRefs.current.get(selectedPageId);
     if (!element) return;
-    scrolledTo.current = selectedPageId;
-    element.scrollIntoView?.({ block: 'nearest', behavior: prefersMotion() ? 'smooth' : 'auto' });
+    const first = scrolledTo.current !== selectedPageId;
+    if (first) {
+      scrolledTo.current = selectedPageId;
+      userScrolled.current = false;
+    } else {
+      const box = scroller.current?.getBoundingClientRect();
+      const at = element.getBoundingClientRect();
+      if (userScrolled.current || !box || (at.top >= box.top && at.bottom <= box.bottom)) return;
+    }
+    element.scrollIntoView?.({ block: 'nearest', behavior: first && prefersMotion() ? 'smooth' : 'auto' });
   }, [rows, selectedPageId]);
   const activeId =
     focusedId && rows.some(row => row.page.id === focusedId)
@@ -149,7 +160,14 @@ export function KnowledgePageTree({
 
   const ancestorAt: string[] = [];
   return (
-    <div role="tree" aria-label={ariaLabel} className="min-h-0 overflow-y-auto py-1">
+    <div
+      ref={scroller}
+      role="tree"
+      aria-label={ariaLabel}
+      className="min-h-0 overflow-y-auto py-1"
+      onWheel={() => (userScrolled.current = true)}
+      onTouchMove={() => (userScrolled.current = true)}
+    >
       {rows.map((row, index) => {
         const selected = row.page.id === selectedPageId;
         ancestorAt[row.depth] = row.page.id;

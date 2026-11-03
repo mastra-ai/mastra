@@ -186,6 +186,46 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(hit?.options).toMatchObject({ block: 'nearest' });
     });
 
+    // The tree is 100px tall; every row sits below it, as a deep row does while rows above it are still loading.
+    const stubLayout = () => {
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(this: HTMLElement) {
+        const role = this.getAttribute('role');
+        if (role === 'tree') return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 } as DOMRect;
+        if (role === 'treeitem')
+          return { top: 300, bottom: 332, left: 0, right: 100, width: 100, height: 32 } as DOMRect;
+        return original.call(this);
+      };
+      return () => {
+        HTMLElement.prototype.getBoundingClientRect = original;
+      };
+    };
+    const selectedScrolls = () => scrolled.filter(entry => entry.id?.startsWith('Second article')).length;
+
+    it('scrolls again when more rows load and leave the selected row out of view', () => {
+      const restore = stubLayout();
+      renderWithProviders(<Host requested={[]} extraSiblings={3} />);
+      fireEvent.click(row('Articles'));
+      fireEvent.click(row('Second article'));
+      const first = selectedScrolls();
+      expect(first).toBeGreaterThan(0);
+      fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
+      expect(selectedScrolls()).toBeGreaterThan(first);
+      restore();
+    });
+
+    it('leaves the scroll alone once the user has scrolled the tree themselves', () => {
+      const restore = stubLayout();
+      renderWithProviders(<Host requested={[]} extraSiblings={3} />);
+      fireEvent.click(row('Articles'));
+      fireEvent.click(row('Second article'));
+      const first = selectedScrolls();
+      fireEvent.wheel(screen.getByRole('tree'));
+      fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
+      expect(selectedScrolls()).toBe(first);
+      restore();
+    });
+
     it('scrolls once per selection, not on every refresh', () => {
       renderWithProviders(<Host requested={[]} />);
       fireEvent.click(row('Pricing'));
