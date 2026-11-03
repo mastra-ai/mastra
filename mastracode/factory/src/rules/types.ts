@@ -41,10 +41,7 @@ export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
 // The label only holds a card at rest: once a person moves it into a working lane, the
 // label is stale until the source catches up (Factory removes it on that move).
-export function needsApproval(item: {
-  workItem: Pick<WorkItemRow, 'labels'>;
-  stages?: readonly string[];
-}): boolean {
+export function needsApproval(item: { workItem: Pick<WorkItemRow, 'labels'>; stages?: readonly string[] }): boolean {
   const labels = item.workItem.labels;
   if (!Array.isArray(labels)) return false;
   return (
