@@ -52,6 +52,11 @@ const GRANT_EDGE_COLOR = 'var(--chart-purple)';
 const GRANT_EDGE_STYLE = { stroke: GRANT_EDGE_COLOR, strokeWidth: 1.75, strokeDasharray: '8 3 2 3' };
 const GRANT_ARROW = { type: MarkerType.ArrowClosed, color: GRANT_EDGE_COLOR, width: 13, height: 13 };
 // A declared principal with no scope page yet: same size as a scope, dashed outline, nothing to open.
+// Body links: a thin green line with a filled head, so a link written in a page reads apart from a note's
+// mention (blue, weighted by count) and from the dashed parent line.
+const LINK_EDGE_COLOR = 'var(--chart-green)';
+const LINK_EDGE_STYLE = { stroke: LINK_EDGE_COLOR, strokeWidth: 1.25 };
+const LINK_ARROW = { type: MarkerType.ArrowClosed, color: LINK_EDGE_COLOR, width: 12, height: 12 };
 const PLACEHOLDER_STYLE = {
   background: 'var(--card)',
   borderColor: 'var(--chart-purple)',
@@ -232,7 +237,7 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
 const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
 
 /** What the circles, lines and badge mean. */
-function GraphLegend({ grants }: { grants: boolean }) {
+function GraphLegend({ grants, links }: { grants: boolean; links: boolean }) {
   return (
     <ul
       aria-label="Legend"
@@ -258,6 +263,17 @@ function GraphLegend({ grants }: { grants: boolean }) {
           Mentioned in notes
         </Txt>
       </li>
+      {links ? (
+        <li className="flex items-center gap-2">
+          <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-link">
+            <line x1="0" y1="4" x2="12" y2="4" {...LINK_EDGE_STYLE} />
+            <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
+          </svg>
+          <Txt as="span" variant="meta" tone="muted">
+            Linked in page body
+          </Txt>
+        </li>
+      ) : null}
       <li className="flex items-center gap-2">
         <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-parent-arrow">
           <line x1="0" y1="4" x2="14" y2="4" {...PARENT_EDGE_STYLE} strokeDasharray="3 2" />
@@ -305,7 +321,7 @@ const CLICK_SLOP_PX = 4;
 
 export interface KnowledgePageGraphProps {
   pages: KnowledgePagePayload[];
-  /** Mention edges between pages; parent edges are derived from `pages`. */
+  /** Mention and body-link edges between pages; parent edges are derived from `pages`. */
   edges: KnowledgePageEdge[];
   pinnedIds?: readonly string[];
   /** Access grants between scopes, drawn from each principal scope to the scope it reaches. */
@@ -419,6 +435,7 @@ function KnowledgePageGraphInner({
     return laidOut.edges.map((edge): Edge<RimEdgeData> => {
       const mention = edge.data?.kind === 'mention';
       const grant = edge.data?.kind === 'grant';
+      const link = edge.data?.kind === 'link';
       const dimmed = !!neighbours && !(neighbours.has(edge.source) && neighbours.has(edge.target));
       return {
         ...edge,
@@ -436,12 +453,16 @@ function KnowledgePageGraphInner({
           ? { stroke: MENTION_EDGE_COLOR, strokeWidth: Math.min(1.5 + (edge.data?.count ?? 1) * 0.5, 4) }
           : grant
             ? GRANT_EDGE_STYLE
-            : PARENT_EDGE_STYLE,
+            : link
+              ? LINK_EDGE_STYLE
+              : PARENT_EDGE_STYLE,
         markerEnd: mention
           ? { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 }
           : grant
             ? GRANT_ARROW
-            : PARENT_ARROW,
+            : link
+              ? LINK_ARROW
+              : PARENT_ARROW,
       };
     });
   }, [laidOut, onMentionSelect, neighbours]);
@@ -559,7 +580,10 @@ function KnowledgePageGraphInner({
         pressedAt.current = { x: event.clientX, y: event.clientY };
       }}
     >
-      <GraphLegend grants={allEdges.some(edge => edge.kind === 'grant')} />
+      <GraphLegend
+        grants={allEdges.some(edge => edge.kind === 'grant')}
+        links={allEdges.some(edge => edge.kind === 'link')}
+      />
       <ReactFlow
         nodes={nodes}
         edges={flowEdges}

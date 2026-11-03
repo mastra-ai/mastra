@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { bodyLinkEdges } from '../lib/pageRefs';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
 
 import type {
@@ -509,7 +510,11 @@ export function KnowledgePageExplorer({
   const pagesById = useMemo(() => new Map(graph.pages.map(page => [page.id, page])), [graph.pages]);
   // A scope picked in the tree narrows the tree and the graph to that scope and what sits under it.
   const [focusScopeId, setFocusScopeId] = useState<string | null>(null);
-  const mentionEdges = useMemo(() => graph.edges.filter(edge => edge.kind === 'mention'), [graph.edges]);
+  // Lines between pages: mentions the server found in notes, and `[[links]]` in the loaded pages' bodies.
+  const linkEdges = useMemo(
+    () => [...graph.edges.filter(edge => edge.kind === 'mention'), ...bodyLinkEdges(graph.pages)],
+    [graph.edges, graph.pages],
+  );
   // A clicked mention line shows the notes that make the mention; opening the page from there marks them.
   const [mention, setMention] = useState<MentionSelection | null>(null);
   const [marked, setMarked] = useState<{ source: string; target: string } | null>(null);
@@ -657,7 +662,7 @@ export function KnowledgePageExplorer({
             {graphShown ? (
               <KnowledgePageGraph
                 pages={graphPages}
-                edges={mentionEdges}
+                edges={linkEdges}
                 pinnedIds={graph.pinnedIds}
                 grants={graph.grants}
                 selectedPageId={selectedPageId}
