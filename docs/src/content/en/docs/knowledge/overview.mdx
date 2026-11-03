@@ -31,7 +31,7 @@ Use Knowledge for:
 
 ## Quickstart
 
-Declare the scopes your runs hold, turn on the tools, and attach the instance to an agent:
+Declare the scope types, turn on the tools, and attach the instance to an agent:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -52,33 +52,30 @@ export const knowledge = new Knowledge({
 export const agent = new Agent({
   id: 'assistant',
   name: 'Assistant',
-  instructions: 'You help the Acme team and keep its knowledge up to date.',
+  instructions: 'You help your team and keep its knowledge up to date.',
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({ storage }),
   knowledge,
-  scopes: ['org:acme'],
 })
 
 export const mastra = new Mastra({ agents: { agent } })
 ```
 
-`knowledgeMemoryScopes()` declares `org:$orgId`, `resource:$resourceId` and `thread:$threadId`, and lets each run edit the scopes it holds. Every run of this agent holds `org:acme`, plus its Memory `resource:` and `thread:` scopes:
+`knowledgeMemoryScopes()` sets up three kinds of scope: one per org, one per user and one per conversation thread. Your server code says which ones each call holds:
 
 ```typescript
 await agent.generate('Our refund window is 30 days. Save that for the team.', {
-  memory: { resource: 'dana', thread: 'onboarding' },
+  scopes: [`org:${user.orgId}`, `resource:${user.id}`, `thread:${threadId}`],
 })
 ```
 
-The agent can call `knowledge_page` to create a page in `org:acme`, and any later run that holds `org:acme` finds it with `knowledge_search`.
+The agent can save a page to the user's org, and anyone else in that org finds it later. Users in other orgs don't. The `resource:` and `thread:` scopes also tell Memory which user and thread the conversation belongs to. Scopes always come from your server code, never from the model or the request body. To set them for every request, see [Set who a run is](/docs/knowledge/scopes-and-access#set-who-a-run-is).
 
-`tools` is off by default, so an agent with Knowledge attached gets no tools until you turn them on. An agent without Memory works too, as long as the agent or the call passes `scopes`.
+`tools` is off by default, so an agent with Knowledge attached gets no tools until you turn them on. An agent without Memory works too, as long as the call passes `scopes`.
 
 ## Storage
 
 Leave out `storage` to use the storage configured on `Mastra`. Knowledge storage is supported by `LibSQLStore`, `PostgresStore`, `MySQLStore`, `MongoDBStore` and `InMemoryStore` (for tests).
-
-Upgrading from 1.79.0: on startup, the tables of the earlier experimental Knowledge store are dropped, with any rows in them, and the new tables are created. Tables already on the new schema, Memory and other tables are never touched. On MongoDB, Knowledge collections found without a schema version are adopted as the new schema.
 
 ## Next steps
 
