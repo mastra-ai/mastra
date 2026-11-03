@@ -230,6 +230,15 @@ describe('KnowledgePageExplorer tree with child counts', () => {
           <Host requested={[]} extraSiblings={3} />
         </div>,
       );
+      // As in the app, the tree sets overflow-y itself but is as tall as its rows, so it does not scroll.
+      const treeElement = screen.getByRole('tree');
+      treeElement.style.overflowY = 'auto';
+      const heights = (element: HTMLElement, scrollHeight: number, clientHeight: number) => {
+        Object.defineProperty(element, 'scrollHeight', { configurable: true, value: scrollHeight });
+        Object.defineProperty(element, 'clientHeight', { configurable: true, value: clientHeight });
+      };
+      heights(treeElement, 11300, 11300);
+      heights(screen.getByTestId('outer-scroller'), 11300, 100);
       fireEvent.click(row('Articles'));
       fireEvent.click(row('Second article'));
       const first = selectedScrolls();
