@@ -586,6 +586,22 @@ describe('EventBuffer', () => {
       expect(buffer.totalSize).toBe(3);
       expect(buffer.hasDueEvents).toBe(true);
     });
+
+    it('hands out a retried update before one that arrived after it', () => {
+      vi.useFakeTimers();
+      try {
+        const buffer = new EventBuffer({ maxRetries: 3 });
+        buffer.init({ strategy: 'batch-with-updates' });
+        buffer.addEvent(createTracingEvent(TracingEventType.SPAN_UPDATED));
+        buffer.reAddUpdates(buffer.take().updates, () => 1000);
+        buffer.addEvent(createTracingEvent(TracingEventType.SPAN_UPDATED));
+
+        vi.advanceTimersByTime(1000);
+        expect(buffer.take().updates.map(update => update.retryCount)).toEqual([1, 0]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('rememberEndedSpans', () => {

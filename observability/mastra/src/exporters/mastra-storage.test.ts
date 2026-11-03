@@ -2487,6 +2487,67 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
       }
     });
 
+    it.runIf(strategy === 'batch-with-updates')(
+      "keeps the newest update when an older one waited for the span's row",
+      async () => {
+        const storage = new InMemoryStore();
+        const api = openProcess(storage);
+        const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 60_000 });
+        const observabilityStore = (await storage.getStore('observability'))!;
+        const conditionalUpdate = vi.spyOn(observabilityStore, 'batchUpdateUnendedSpans');
+        try {
+          const span = api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run started on the api' });
+          const rebuilt = worker.tracing.rebuildSpan(structuredClone(span.exportSpan()));
+
+          rebuilt.update({ output: 'older' });
+          await worker.tracing.flush();
+          await api.tracing.flush();
+          rebuilt.update({ output: 'newer' });
+          await worker.tracing.flush();
+
+          expect(conditionalUpdate.mock.lastCall?.[0].records.map(record => record.updates.output)).toEqual([
+            'older',
+            'newer',
+          ]);
+          expect((await getStoredSpan(storage, span))?.output).toBe('newer');
+          expect(worker.drops).toEqual([]);
+        } finally {
+          conditionalUpdate.mockRestore();
+          await worker.mastra.shutdown();
+          await api.mastra.shutdown();
+        }
+      },
+    );
+
+    it.runIf(strategy === 'batch-with-updates')(
+      "applies the first end when a second one arrives while it waits for the span's row",
+      async () => {
+        const storage = new InMemoryStore();
+        const api = openProcess(storage);
+        const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 60_000 });
+        try {
+          const span = api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run started on the api' });
+          const snapshot = structuredClone(span.exportSpan());
+
+          worker.tracing.rebuildSpan(snapshot).end({ output: 'first end', outcome: 'success' });
+          await worker.tracing.flush();
+          await api.tracing.flush();
+          worker.tracing.rebuildSpan(snapshot).end({ output: 'second end', outcome: 'error' });
+          await worker.tracing.flush();
+
+          const stored = await getStoredSpan(storage, span);
+          expect(stored?.output).toBe('first end');
+          expect(stored?.outcome).toBe('success');
+          expect(worker.drops).toEqual([
+            expect.objectContaining({ signal: 'tracing', reason: 'span-not-updatable', count: 1 }),
+          ]);
+        } finally {
+          await worker.mastra.shutdown();
+          await api.mastra.shutdown();
+        }
+      },
+    );
+
     it('does not create a span that was never stored', async () => {
       const storage = new InMemoryStore();
       const recovering = openProcess(storage);
