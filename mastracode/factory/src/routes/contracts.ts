@@ -47,6 +47,8 @@ const projectPathSchema = z.object({ id: uuidSchema });
 const projectDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
 const boardPathSchema = z.object({ id: uuidSchema, boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH) });
 const boardRevisionSchema = z.number().int().min(1);
+/** Send the `revision` you read so a concurrent edit is not overwritten. */
+export const boardResetBodySchema = z.object({ expectedRevision: boardRevisionSchema });
 /** A board's definition; send the `revision` you read so a concurrent edit is not overwritten. */
 export const replaceBoardBodySchema = storedBoardDefinitionSchema.extend({ expectedRevision: boardRevisionSchema });
 export const boardDeleteQuerySchema = z.object({ expectedRevision: z.coerce.number().int().min(1) });
@@ -57,11 +59,21 @@ const storedBoardResponseSchema = z.object({
     description: z.string().nullable(),
     /** In order; the first phase is where cards start. */
     phases: z.array(storedPhaseInputSchema),
-    /** Send it back as `expectedRevision` when editing. Null for code boards, which are not stored. */
+    /**
+     * Send it back as `expectedRevision` when editing or resetting. Null for the legacy Review
+     * board, which is read-only and not stored.
+     */
     revision: z.number().int().nullable(),
     source: z.enum(['builtin', 'app', 'stored']),
-    /** False for built-in and app boards: they are defined in code and read-only here. */
+    /**
+     * True for boards the project created, the built-in Work board and app boards; their code
+     * behaviour stays attached. False for the legacy Review board, which is read-only.
+     */
     editable: z.boolean(),
+    /** A built-in or app board the project edited; it no longer follows its code definition. */
+    customized: z.boolean(),
+    /** An edited built-in or app board whose code definition changed since; reset to adopt it. */
+    defaultChanged: z.boolean(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
     problems: z.array(z.string()),
   }),
@@ -732,8 +744,12 @@ export const FACTORY_ROUTE_CONTRACTS = {
           description: z.string().optional(),
           /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
           source: z.enum(['builtin', 'app', 'stored']).optional(),
-          /** False for built-in and app boards, which are defined in code and read-only. */
+          /** False only for the legacy Review board; built-in Work, app and stored boards can be edited. */
           editable: z.boolean().optional(),
+          /** A built-in or app board the project edited. */
+          customized: z.boolean().optional(),
+          /** An edited built-in or app board whose code definition changed since the edit. */
+          defaultChanged: z.boolean().optional(),
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
@@ -768,7 +784,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
           ),
         }),
       ),
-      /** Stored boards that could not be loaded or are hidden by a code board with the same key, and why. */
+      /** Stored boards that could not be loaded or that a code board serves in their place, and why. */
       problems: z.array(z.string()).optional(),
     }),
   },
@@ -793,6 +809,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: "Replace a project board's definition",
     pathSchema: boardPathSchema,
     bodySchema: replaceBoardBodySchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardReset: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/boards/:boardKey/reset',
+    description: 'Reset a built-in or app board to its code definition',
+    pathSchema: boardPathSchema,
+    bodySchema: boardResetBodySchema,
     responseSchema: storedBoardResponseSchema,
   },
   boardDelete: {

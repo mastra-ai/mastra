@@ -384,17 +384,25 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     }
   }
 
-  /** Replaces a board's name, description and phases. The board key never changes. */
+  /**
+   * Replaces a board's name, description and phases and marks it customized. The board key never
+   * changes. `adoptSeedHash` makes a board created under a code board's key before it could be
+   * edited into that code board's edited copy; a row that already has a seed hash keeps it.
+   */
   async replace(
     scope: StoredBoardScope,
     key: string,
     input: Omit<StoredBoardInput, 'key'>,
-    options: { expectedRevision: number; actor: string },
+    options: { expectedRevision: number; actor: string; adoptSeedHash?: string },
   ): Promise<StoredBoardRecord> {
     await this.#write(scope, async ops => {
       const row = await findBoard(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
-      await writeBoard(ops, scope, row, { key, ...input }, options.actor, { customized: true });
+      const adopt = options.adoptSeedHash !== undefined && row.seed_hash == null;
+      await writeBoard(ops, scope, row, { key, ...input }, options.actor, {
+        customized: true,
+        ...(adopt ? { seed_hash: options.adoptSeedHash } : {}),
+      });
       return { result: undefined, changed: true };
     });
     return (await this.get(scope, key))!;
