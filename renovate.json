@@ -479,7 +479,7 @@
       "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": [
         "@blaxel/core",
-        "@daytonaio/sdk",
+        "@daytona/sdk",
         "agentfs-sdk",
         "e2b",
         "files-sdk",

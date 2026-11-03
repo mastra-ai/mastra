@@ -65,8 +65,6 @@ overrides:
   raw-body@<4.0.0: 4.0.0
   nanoid@<5.1.16: 5.1.16
 
-packageExtensionsChecksum: sha256-E1uC6ipRR7MoF7R/5oDB8SEpSulsYWlFaGB0bv3k/Mo=
-
 patchedDependencies:
   body-parser@2.4.0:
     hash: 7d9c103b0e037f8eb979d4cddbfabb13eedde34858ca1168365d426ff8175aa2

@@ -28,13 +28,6 @@
     "typescript": "^5.9.3"
   },
   "pnpm": {
-    "packageExtensions": {
-      "@daytonaio/sdk": {
-        "dependencies": {
-          "tslib": "*"
-        }
-      }
-    },
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/daytona": "link:../../workspaces/daytona",

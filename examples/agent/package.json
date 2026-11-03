@@ -39,13 +39,6 @@
     "zod": "^4.6.7"
   },
   "pnpm": {
-    "packageExtensions": {
-      "@daytonaio/sdk": {
-        "dependencies": {
-          "tslib": "*"
-        }
-      }
-    },
     "overrides": {
       "@mastra/auth-auth0": "link:../../auth/auth0",
       "@mastra/auth-clerk": "link:../../auth/clerk",

@@ -11,7 +11,7 @@
  * - GCS_SERVICE_ACCOUNT_KEY, TEST_GCS_BUCKET: For GCS mount tests
  */
 
-import { Daytona } from '@daytonaio/sdk';
+import { Daytona } from '@daytona/sdk';
 import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 

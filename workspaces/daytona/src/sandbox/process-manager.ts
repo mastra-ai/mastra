@@ -12,7 +12,7 @@
  * - The session command finishes cleanly
  */
 
-import type { Sandbox } from '@daytonaio/sdk';
+import type { Sandbox } from '@daytona/sdk';
 import { ProcessHandle, UnsupportedStdinCloseError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import { shellQuote } from '../utils/shell-quote';
