@@ -18,7 +18,10 @@ vi.mock('../../tools/index.js', () => ({
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
 
+import type { CredentialStore } from '../../auth/types.js';
 import { getAppDataDir } from '../../utils/project.js';
+import { setCredentialStoreProvider } from '../credential-resolver.js';
+import { getDynamicInstructions } from '../instructions.js';
 import { getGlobalAuthStorage, reloadAuthStorage } from '../mastracode-gateway.js';
 import { resolveModel, resolveProviderWebSearchRoute } from '../model.js';
 import { buildFullPrompt } from '../prompts/index.js';
@@ -160,6 +163,56 @@ describe('provider web search follows the model transport', () => {
     const { url, body } = await firstRequest(modelId);
     expect(url).toMatch(urlPattern);
     expect(body.tools).toContainEqual(expect.objectContaining({ type: toolType }));
+  });
+
+  describe('deployed Factory with tenant credentials', () => {
+    beforeEach(() => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk-test');
+    });
+
+    afterEach(() => {
+      setCredentialStoreProvider(undefined);
+    });
+
+    function useTenantCredentials(credentialType: 'oauth' | 'api_key') {
+      const tenantStore: CredentialStore = {
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: providerId =>
+          providerId === 'anthropic'
+            ? credentialType === 'oauth'
+              ? ({ type: 'oauth', access: 'tenant-access', refresh: 'tenant-refresh', expires: Date.now() + 60_000 } as any)
+              : { type: 'api_key', key: 'sk-tenant' }
+            : undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      };
+      setCredentialStoreProvider(
+        () => tenantStore,
+        async () => ({ userId: 'user-1', orgId: 'org-1', credentialScope: 'factory' }),
+      );
+    }
+
+    function tenantRequestContext(modelId: string): RequestContext {
+      const requestContext = requestContextFor(modelId);
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      return requestContext;
+    }
+
+    it.each([
+      ['oauth', 'anthropic.web_search_20250305'],
+      ['api_key', 'openrouter.web_search'],
+    ] as const)('routes search from the tenant %s credential before the model runs', async (credentialType, toolId) => {
+      useTenantCredentials(credentialType);
+      const modelId = 'mastra/anthropic/claude-sonnet-4-5';
+
+      // Tools and instructions are built before model resolution prepares its own context.
+      const tools = await createDynamicTools()({ requestContext: tenantRequestContext(modelId) });
+      expect(tools.web_search?.id).toBe(toolId);
+
+      const instructions = await getDynamicInstructions({ requestContext: tenantRequestContext(modelId) });
+      expect(instructions).toContain('**web_search** — Search the web');
+    });
   });
 
   it('offers no provider search for other providers', () => {

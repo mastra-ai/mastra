@@ -25,7 +25,7 @@ import { getWorkflowTool } from '../tools/workflows/get-workflow.js';
 import { listWorkflowsTool } from '../tools/workflows/list-workflows.js';
 import { runWorkflowTool } from '../tools/workflows/run-workflow.js';
 import { WORKFLOW_MANAGEMENT_TOOL_IDS } from '../tools/workflows/tool-ids.js';
-import { resolveProviderWebSearchRoute } from './model.js';
+import { prepareProviderWebSearchRoute, resolveProviderWebSearchRoute } from './model.js';
 import type { ProviderWebSearchRoute } from './model.js';
 
 /** Minimal shape for tools passed to createDynamicTools. */
@@ -165,6 +165,9 @@ export function createDynamicTools(
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
+    // In deployed Factory, the search route reads tenant credentials; prepare them first if needed.
+    const preparing = prepareProviderWebSearchRoute(ctx?.session?.modelId, { requestContext });
+    if (preparing) return preparing.then(() => getDynamicTools({ requestContext }));
     const webSearchRoute = resolveProviderWebSearchRoute(ctx?.session?.modelId, { requestContext });
 
     // Filesystem, grep, glob, edit, write, execute_command, and process
