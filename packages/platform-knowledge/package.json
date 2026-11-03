@@ -20,8 +20,10 @@
   },
   "peerDependencies": { "@mastra/core": "workspace:*" },
   "devDependencies": {
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/pg": "workspace:*",
     "@types/node": "22.19.15",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
