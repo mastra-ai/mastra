@@ -570,7 +570,7 @@ In this workspace, the copy rules apply only to the `src` trees in Playground, P
 
 Both rules are part of `recommended`. Consumers that need only these rules can use `copyRules`. Put `copyRuleExclusions` after the rule-enabling override to keep authored UI copy separate from test and story content.
 
-Run `pnpm lint:ui-copy` from the repository root to check all three UI source trees with only the copy rules. CI runs the same check. Documentation prose keeps its existing Vale and Remark checks.
+The root `pnpm lint` command includes Playground, Playground UI, and Factory UI in regular CI linting. Run `pnpm --filter @internal/playground lint` to check Playground on its own. Documentation prose keeps its existing Vale and Remark checks.
 
 ## Documentation
 
