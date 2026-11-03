@@ -177,12 +177,8 @@ describe('WorkflowsLibSQL — guarded snapshot writes', () => {
 
   beforeEach(async () => {
     const client = createClient({ url: ':memory:' });
-    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
-    await db.createTable({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-    });
     workflows = new WorkflowsLibSQL({ client });
+    await workflows.init();
   });
 
   it('rejects a write when the persisted status does not match expectedStatus', async () => {
