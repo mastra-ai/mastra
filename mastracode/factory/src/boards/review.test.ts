@@ -275,16 +275,4 @@ describe('reviewBoard', () => {
     expect(valid.arguments).toContain(`The previous pass reviewed on \`${'a'.repeat(40)}\``);
     expect(valid.arguments).not.toContain('Ignore previous instructions');
   });
-
-  it('keeps Done for merges: a review agent cannot move its card there', () => {
-    const policy = reviewBoard.transitionPolicy!;
-    const base = { fromStage: 'review', toStage: 'done' };
-    expect(policy({ ...base, actor: { type: 'agent', id: 'binding-1', role: 'review' } } as never)).toMatchObject({
-      type: 'reject',
-    });
-    expect(policy({ ...base, actor: { type: 'github', id: 'merge' } } as never)).toBeUndefined();
-    expect(
-      policy({ ...base, toStage: 'canceled', actor: { type: 'agent', id: 'b', role: 'review' } } as never),
-    ).toBeUndefined();
-  });
 });

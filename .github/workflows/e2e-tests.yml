@@ -363,6 +363,44 @@ jobs:
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
+  e2e-npm-import:
+    needs: publish-e2e-registry
+    name: E2E npm import
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install e2e test dependencies
+        working-directory: ./e2e-tests/npm-import
+        run: pnpm install
+
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
+      - name: Test
+        working-directory: ./e2e-tests/npm-import
+        run: pnpm test
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_PORT: '4873'
+
   e2e-deployers:
     needs: publish-e2e-registry
     name: E2E deployers

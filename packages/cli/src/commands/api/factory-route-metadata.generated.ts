@@ -455,7 +455,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "board",
       "metadata",
       "parentWorkItemId",
-      "plansPreapproved",
       "sessions",
       "stages",
       "title"
@@ -4837,9 +4836,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "metadata": {
           "$ref": "#/$defs/__schema6"
-        },
-        "plansPreapproved": {
-          "$ref": "#/$defs/__schema9"
         }
       },
       "$defs": {
@@ -4928,10 +4924,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "__schema8": {
           "type": "null"
-        },
-        "__schema9": {
-          "type": "boolean",
-          "const": true
         }
       }
     },
