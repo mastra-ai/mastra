@@ -38,6 +38,7 @@ import {
 } from '../lib/graphShape';
 import type { GraphLevel, GraphNodeForm } from '../lib/graphShape';
 import { runLayout } from '../lib/layout';
+import { linkCountsText } from '../lib/linkCountsText';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
 import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
 import { childCountLabel } from '../lib/pageTree';
@@ -45,6 +46,7 @@ import { chooseTooltipSide } from '../lib/tooltipSide';
 import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
 import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
+import { KnowledgePageCard } from './KnowledgePageCard';
 
 import { Txt } from '@/ds/components/Txt';
 
@@ -141,13 +143,6 @@ type PageNodeData = PageFlowNode['data'] & {
   /** A page the focus links to or from rather than one of its neighbours in the hierarchy: drawn faded. */
   far?: boolean;
 };
-
-/** `4 links in, 14 links out`: what the arrows in a link badge say, for its label and a dot's tooltip. */
-function linkCountsText(links: { in: number; out: number }, notShown = 0): string {
-  const noun = (count: number) => (count === 1 ? 'link' : 'links');
-  const text = `${links.in} ${noun(links.in)} in, ${links.out} ${noun(links.out)} out`;
-  return notShown > 0 ? `${text} (${notShown} not shown)` : text;
-}
 
 /** How long a focus change loads before the graph says so. */
 const LOADING_HINT_DELAY_MS = 150;
@@ -331,34 +326,25 @@ function DotNode({ data }: { data: PageNodeData }) {
             aria-hidden
             className={`absolute size-2 rotate-45 border-border bg-card ${placement.tail}`}
           />
-          <Txt as="span" variant="label" tone="ink">
-            {page.name}
-          </Txt>
           {hint ? (
-            <Txt as="span" variant="meta" tone="muted">
-              {group ? `${path} · ${hint}` : hint}
-            </Txt>
-          ) : (
             <>
-              <Txt as="span" variant="meta" tone="muted">
-                {ref ? `${kind} · ${ref}` : kind}
+              <Txt as="span" variant="label" tone="ink">
+                {page.name}
               </Txt>
-              {path ? (
-                <Txt as="span" variant="meta" tone="muted">
-                  {path}
-                </Txt>
-              ) : null}
-              {children ? (
-                <Txt as="span" variant="meta" tone="muted">
-                  {children}
-                </Txt>
-              ) : null}
-              {linkText ? (
-                <Txt as="span" variant="meta" tone="muted">
-                  {linkText}
-                </Txt>
-              ) : null}
+              <Txt as="span" variant="meta" tone="muted">
+                {group ? `${path} · ${hint}` : hint}
+              </Txt>
             </>
+          ) : (
+            <KnowledgePageCard
+              name={page.name}
+              kind={kind}
+              pageRef={ref}
+              path={path}
+              childCount={page.childCount ? childCountLabel(page) : undefined}
+              links={links}
+              notShown={notShown}
+            />
           )}
         </div>
       ) : null}
