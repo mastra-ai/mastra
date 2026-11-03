@@ -1314,8 +1314,7 @@ function KnowledgePageGraphInner({
     const bounds = graphBounds(targets);
     if (!bounds) return;
     const anchor = current.find(node => node.id === (selected ?? centre));
-    const ring = !!focus && targets.some(node => linked.has(node.id));
-    const viewport = fitViewport({ bounds, width, height, focus: !!focus, ring, anchor });
+    const viewport = fitViewport({ bounds, width, height, focus: !!focus, anchor });
     void flow.setViewport(viewport, duration ? { duration } : undefined);
   }, []);
 
