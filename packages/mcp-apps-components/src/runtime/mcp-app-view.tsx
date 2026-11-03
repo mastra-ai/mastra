@@ -2,6 +2,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
+import { McpAppProvider } from './mcp-app-context';
 import type { McpAppSession } from './session';
 
 export type McpAppViewProps<Input> = {
@@ -13,7 +14,10 @@ export type McpAppViewProps<Input> = {
   children: (input: Input) => ReactNode;
 };
 
-/** Renders the waiting and failed states every MCP App shares, and `children` once the input is ready. */
+/**
+ * Renders the waiting and failed states every MCP App shares, and `children` once the input is
+ * ready, with the host connection available through `useMcpApp`.
+ */
 export function McpAppView<Input>({ session, loadingTitle, errorTitle, children }: McpAppViewProps<Input>) {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
 
@@ -25,5 +29,5 @@ export function McpAppView<Input>({ session, loadingTitle, errorTitle, children 
     return <EmptyState tone="error" titleSlot={errorTitle} descriptionSlot={state.message} />;
   }
 
-  return children(state.input);
+  return <McpAppProvider value={session.app}>{children(state.input)}</McpAppProvider>;
 }

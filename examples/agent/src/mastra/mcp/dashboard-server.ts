@@ -1,20 +1,25 @@
 import { Agent } from '@mastra/core/agent';
 import { MCPClient, MCPServer } from '@mastra/mcp';
-import { dashboardRendererApp } from '@mastra/mcp-apps-components';
-import { DASHBOARD_APP_URI, MASTRA_SERVER_URL, showObservabilityDashboard } from './dashboard-tools';
+import { Memory } from '@mastra/memory';
+import { dashboardRendererApp, MASTRA_API_TOOL, mastraApiTool } from '@mastra/mcp-apps-components';
+import { DASHBOARD_APP_URI, showObservabilityDashboard } from './dashboard-tools';
 
 const DASHBOARD_SERVER_ID = 'dashboard-mcp-server';
+// This Mastra server, which the agent reaches over HTTP like any MCP client.
+const MASTRA_SERVER_URL = process.env.MASTRA_BASE_URL ?? 'http://localhost:4111';
 
-// Serves the prebuilt dashboard renderer as an MCP App. Its iframe reads metrics straight from
-// this Mastra server, so the CSP has to allow connecting to it.
+// Serves the prebuilt dashboard renderer as an MCP App. Its iframe never reaches the network: it
+// reads metrics by calling the app-only `mastraApi` tool, which agents don't see.
 export const dashboardMcpServer = new MCPServer({
   id: DASHBOARD_SERVER_ID,
   name: 'Dashboard MCP Server',
   version: '1.0.0',
+  // Lets 2025-era clients such as Codex connect too.
+  legacy: 'stateless',
   appResources: {
-    [DASHBOARD_APP_URI]: dashboardRendererApp({ connectDomains: [MASTRA_SERVER_URL] }),
+    [DASHBOARD_APP_URI]: dashboardRendererApp(),
   },
-  tools: { showObservabilityDashboard },
+  tools: { showObservabilityDashboard, [MASTRA_API_TOOL]: mastraApiTool },
 });
 
 // Consumes the server above over HTTP, as any MCP client would. The server key matches the
@@ -33,7 +38,9 @@ export const dashboardAgent = new Agent({
   description: 'Answers questions about how this Mastra project is doing by showing a live observability dashboard.',
   instructions: `You help users understand how their Mastra agents are doing: runs, failures, model cost, tokens and latency.
 When asked about any of these, call the dashboard tool with only the sections the user asked for (one chart means one section) and a matching time range.
+Charts are stacked bars or lines only; pass the chart type the user asks for. If they ask for anything else, say it isn't supported.
 The dashboard renders live in the chat, so don't repeat numbers; say in one sentence what it shows and how to read it.`,
   model: 'openai/gpt-5-mini',
+  memory: new Memory(),
   tools: () => dashboardMcpClient.listTools(),
 });

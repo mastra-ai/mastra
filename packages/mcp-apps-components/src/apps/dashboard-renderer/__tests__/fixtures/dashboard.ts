@@ -47,3 +47,43 @@ export const agentRunsAggregate: AggregateResponse = {
   previousValue: 891,
   changePercent: -22.2,
 };
+
+type TimeSeriesResponse = Awaited<ReturnType<MastraClient['getMetricTimeSeries']>>;
+
+/** A chart whose action opens the traces of the `support` agent. */
+export const supportRunsChart: DashboardDefinition = {
+  schemaVersion: 1,
+  rows: [
+    {
+      widgets: [
+        {
+          id: 'support-runs',
+          span: 12,
+          kind: 'timeseries',
+          title: 'Support runs',
+          drilldown: { action: { page: 'traces', filters: [{ fieldId: 'entityName', value: 'support' }] } },
+          views: [
+            {
+              queries: [
+                {
+                  id: 'runs',
+                  source: 'metrics',
+                  request: 'timeSeries',
+                  name: ['mastra_agent_duration_ms'],
+                  aggregation: 'count',
+                },
+              ],
+              options: {
+                chart: 'line',
+                format: 'count',
+                series: [{ dataKey: 'runs', label: 'Runs', color: 'green', value: { query: 'runs' } }],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export const emptyTimeSeries: TimeSeriesResponse = { series: [] };

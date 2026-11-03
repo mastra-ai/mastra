@@ -25,6 +25,7 @@ overrides:
   '@mastra/mcp-apps-components': link:../../packages/mcp-apps-components
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
+  '@mastra/playground-ui': link:../../packages/playground-ui
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
   '@mastra/auth-studio': link:../../auth/studio
@@ -143,6 +144,9 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/playground-ui':
+        specifier: link:../../packages/playground-ui
+        version: link:../../packages/playground-ui
       '@mastra/slack':
         specifier: link:../../channels/slack
         version: link:../../channels/slack

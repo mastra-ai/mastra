@@ -1,22 +1,15 @@
-import type { DashboardDefinition } from '@mastra/client-js';
-import type { DatePreset } from '@mastra/playground-ui/domains/metrics';
+import { DASHBOARD_SCOPES, dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
 import { z } from 'zod';
-import { mastraConnectionSchema } from '../../runtime/connection';
-
-const PRESETS = ['24h', '3d', '7d', '14d', '30d'] as const satisfies readonly DatePreset[];
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
- * What the tool linked to the dashboard app returns as `structuredContent`. The definition
- * is only checked to be an object here: the renderer validates it and reports a bad widget
- * on that widget alone, so one broken widget doesn't blank the whole dashboard.
+ * What the tool linked to the dashboard app returns as `structuredContent`. The definition is
+ * core's dashboard definition; each widget's options are checked by its kind when it renders, so
+ * a widget with bad options shows its error in its own cell. The initial time range and filters
+ * come from the definition's `defaults`.
  */
-export const dashboardRendererInputSchema = mastraConnectionSchema.extend({
-  definition: z.custom<DashboardDefinition>(isRecord, 'Expected a dashboard definition object'),
-  scope: z.enum(['org', 'project']).default('project'),
-  preset: z.enum(PRESETS).default('24h'),
+export const dashboardRendererInputSchema = z.object({
+  definition: dashboardDefinitionSchema,
+  scope: z.enum(DASHBOARD_SCOPES).default('project'),
 });
 
 export type DashboardRendererInput = z.output<typeof dashboardRendererInputSchema>;

@@ -1,17 +1,17 @@
 import { createTool } from '@mastra/core/tools';
-import { dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';
+import { dashboardDefaultsSchema } from '@mastra/core/storage/dashboards';
 import type {
   DashboardDefinition,
   DashboardQuery,
   DashboardRow,
   DashboardWidget,
 } from '@mastra/core/storage/dashboards';
+import { dashboardRendererInputSchema } from '@mastra/mcp-apps-components';
+import { timeseriesOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
+import type { TimeseriesOptions } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
 import { z } from 'zod';
 
 export const DASHBOARD_APP_URI = 'ui://mastra/dashboard';
-
-// The Mastra server the dashboard iframe reads metrics from: this one.
-export const MASTRA_SERVER_URL = process.env.MASTRA_BASE_URL ?? 'http://localhost:4111';
 
 const INPUT = 'mastra_model_total_input_tokens';
 const OUTPUT = 'mastra_model_total_output_tokens';
@@ -78,6 +78,8 @@ const WIDGETS = {
     span: 6,
     kind: 'timeseries',
     title: 'Agent runs',
+    // Opens the agent traces from the chart; in a chat host this asks the agent for them.
+    drilldown: { action: { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: 'agent' }] } },
     views: [
       {
         label: 'Agent runs',
@@ -157,7 +159,12 @@ const WIDGETS = {
 } satisfies Record<string, DashboardWidget>;
 
 const SECTIONS = ['overview', 'agentRuns', 'tokenUsage', 'latency'] as const;
-const PRESETS = ['24h', '3d', '7d', '14d', '30d'] as const;
+// Latency plots percentiles, which can't stack, so it stays a line.
+const CHART_SECTIONS: ReadonlySet<(typeof SECTIONS)[number]> = new Set(['agentRuns', 'tokenUsage']);
+
+function withChart(widget: DashboardWidget, chart: TimeseriesOptions['chart']): DashboardWidget {
+  return { ...widget, views: widget.views.map(view => ({ ...view, options: { ...view.options, chart } })) };
+}
 
 // Half-width widgets pair up on a row; full-width ones get their own.
 function layout(widgets: DashboardWidget[]): DashboardRow[] {
@@ -182,22 +189,22 @@ export const showObservabilityDashboard = createTool({
       .describe(
         'Only the parts the user asked about: overview KPIs, agent runs over time, token usage over time, agent latency.',
       ),
-    preset: z.enum(PRESETS).default('24h').describe('Initial time range.'),
+    datePreset: dashboardDefaultsSchema.shape.datePreset.describe('Initial time range, e.g. 24h, 7d or 30d.'),
+    chart: timeseriesOptionsSchema.shape.chart
+      .optional()
+      .describe(
+        'Chart type for agent runs and token usage. Defaults to stacked bars. Latency is always a line. No other chart types exist.',
+      ),
   }),
-  outputSchema: z.object({
-    definition: dashboardDefinitionSchema,
-    baseUrl: z.string(),
-    scope: z.enum(['org', 'project']),
-    preset: z.enum(PRESETS),
-  }),
+  outputSchema: dashboardRendererInputSchema,
   mcp: {
     _meta: { ui: { resourceUri: DASHBOARD_APP_URI } },
   },
-  execute: async ({ sections, preset }) => {
-    const definition: DashboardDefinition = {
-      schemaVersion: 1,
-      rows: layout(sections.map(section => WIDGETS[section])),
-    };
-    return { definition, baseUrl: MASTRA_SERVER_URL, scope: 'project' as const, preset };
+  execute: async ({ sections, datePreset, chart }) => {
+    const widgets = sections.map(section =>
+      chart && CHART_SECTIONS.has(section) ? withChart(WIDGETS[section], chart) : WIDGETS[section],
+    );
+    const definition: DashboardDefinition = { schemaVersion: 1, defaults: { datePreset }, rows: layout(widgets) };
+    return { definition, scope: 'project' as const };
   },
 });

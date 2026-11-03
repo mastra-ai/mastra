@@ -16,25 +16,6 @@ const outDir = fileURLToPath(new URL('../dist', import.meta.url));
 
 const apps = (await readdir(appsDir, { withFileTypes: true })).filter(entry => entry.isDirectory()).map(e => e.name);
 
-// The MCP SDK's browser validator inlines @cfworker/json-schema, which builds a base URI from
-// `location` at module load. In documents without a hierarchical URL (`blob:` or `about:srcdoc`
-// iframes, as used by Studio) that `new URL` throws and the whole app fails to start.
-const UNSAFE_BASE_URI =
-  'self.location.origin !== "null" ? new URL(self.location.origin + self.location.pathname + location.search) : new URL("https://github.com/cfworker")';
-const SAFE_BASE_URI =
-  'self.location.origin !== "null" && URL.canParse(self.location.origin + self.location.pathname + location.search) ? new URL(self.location.origin + self.location.pathname + location.search) : new URL("https://github.com/cfworker")';
-
-const safeJsonSchemaBaseUri = {
-  name: 'safe-json-schema-base-uri',
-  transform(code: string, id: string) {
-    if (!id.includes('@modelcontextprotocol') || !code.includes('let initialBaseURI =')) return;
-    if (!code.includes(UNSAFE_BASE_URI)) {
-      throw new Error(`${id}: @cfworker/json-schema's initialBaseURI changed; update safeJsonSchemaBaseUri.`);
-    }
-    return code.replace(UNSAFE_BASE_URI, SAFE_BASE_URI);
-  },
-};
-
 for (const app of apps) {
   await build({
     configFile: false,
@@ -45,7 +26,6 @@ for (const app of apps) {
         name: 'mcp-app-entry',
         transformIndexHtml: { order: 'pre', handler: html => html.replaceAll('__APP__', app) },
       },
-      safeJsonSchemaBaseUri,
       react(),
       tailwindcss(),
       viteSingleFile({ removeViteModuleLoader: true }),
@@ -58,7 +38,16 @@ for (const app of apps) {
       outDir,
       // `tsdown` writes the server helpers into `dist/` first.
       emptyOutDir: false,
-      rollupOptions: { input: `${runtimeDir}/app.html` },
+      rollupOptions: {
+        input: `${runtimeDir}/app.html`,
+        treeshake: {
+          // @modelcontextprotocol/client doesn't declare `sideEffects: false`, so its whole browser
+          // build stays in the bundle even though `App` only uses `Protocol`. That includes the
+          // unused @cfworker/json-schema validator, whose module-level `new URL(location…)` throws in
+          // `blob:` documents (Studio's sandbox) and kills the app before it renders.
+          moduleSideEffects: id => !id.includes('/@modelcontextprotocol/client/'),
+        },
+      },
     },
   });
   await rename(`${outDir}/app.html`, `${outDir}/${app}.html`);

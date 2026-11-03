@@ -34,7 +34,7 @@ describe('dashboardRendererApp', () => {
         version: '1.0.0',
         tools: {},
         appResources: {
-          'ui://mastra/dashboard': dashboardRendererApp({ connectDomains: ['https://api.example.com'] }),
+          'ui://mastra/dashboard': dashboardRendererApp(),
         },
       });
       served = await serveHTTP(server);
@@ -62,15 +62,11 @@ describe('dashboardRendererApp', () => {
       ]);
     });
 
-    it('serves the app with a CSP allowing only the given Mastra server', async () => {
+    it('serves the app without opening network access, since it reads data through tools', async () => {
       const { contents } = await client.readResource({ uri: 'ui://mastra/dashboard' });
 
-      expect(contents).toEqual([
-        expect.objectContaining({
-          mimeType: 'text/html;profile=mcp-app',
-          _meta: { ui: { csp: { connectDomains: ['https://api.example.com'] } } },
-        }),
-      ]);
+      expect(contents).toEqual([expect.objectContaining({ mimeType: 'text/html;profile=mcp-app' })]);
+      expect(contents[0]?._meta?.ui).toBeUndefined();
     });
 
     it('serves a single HTML document with every script and style inlined', async () => {
@@ -86,14 +82,15 @@ describe('dashboardRendererApp', () => {
       expect(html).not.toMatch(/\bimport\(["'`]\.{0,2}\//);
     });
 
-    it('does not throw at load in documents without a hierarchical URL', async () => {
+    it("doesn't ship the MCP SDK's unused JSON Schema validator", async () => {
       const { contents } = await client.readResource({ uri: 'ui://mastra/dashboard' });
       const html = contents[0] && 'text' in contents[0] ? contents[0].text : '';
 
-      // Studio loads apps from `blob:` URLs, where `origin + pathname` is not a valid URL.
-      // Building a URL from it unguarded at module load kills the app before it renders.
-      expect(html).toContain('self.location.origin+self.location.pathname');
-      expect(html).not.toMatch(/`null`\?new URL\(self\.location\.origin\+self\.location\.pathname/);
+      // The validator builds a URL from `location` at module load, which throws in the `blob:`
+      // documents Studio loads apps from. The app never validates JSON Schemas, so it must be gone.
+      expect(html).toContain('ui/notifications/initialized');
+      expect(html).not.toContain('github.com/cfworker');
+      expect(html).not.toContain('self.location.pathname');
     });
   });
 
@@ -102,9 +99,7 @@ describe('dashboardRendererApp', () => {
       const require = createRequire(import.meta.url);
       const cjs: typeof import('@mastra/mcp-apps-components') = require('@mastra/mcp-apps-components');
 
-      expect(cjs.dashboardRendererApp({ connectDomains: [] }).htmlPath).toBe(
-        dashboardRendererApp({ connectDomains: [] }).htmlPath,
-      );
+      expect(cjs.dashboardRendererApp().htmlPath).toBe(dashboardRendererApp().htmlPath);
     });
   });
 });

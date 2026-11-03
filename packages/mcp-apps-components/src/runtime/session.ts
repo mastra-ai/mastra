@@ -1,6 +1,7 @@
 import type { Transport } from '@modelcontextprotocol/client';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import type { ParsedToolResult } from './parse';
+import { firstText, structuredOutput } from './tool-result';
 
 export type McpAppState<Input> =
   | { status: 'waiting' }
@@ -8,6 +9,8 @@ export type McpAppState<Input> =
   | { status: 'failed'; message: string };
 
 export type McpAppSession<Input> = {
+  /** The app's connection to its host, for components that talk back to it. */
+  app: App;
   subscribe: (listener: () => void) => () => void;
   getSnapshot: () => McpAppState<Input>;
   connect: (transport?: Transport) => Promise<void>;
@@ -16,27 +19,6 @@ export type McpAppSession<Input> = {
 // playground-ui themes are dark by default and switch on `html.light`.
 function applyTheme(theme: McpUiTheme | undefined) {
   if (theme) document.documentElement.classList.toggle('light', theme === 'light');
-}
-
-function firstText(content: ReadonlyArray<{ type: string; text?: unknown }>) {
-  const text = content.find(block => block.type === 'text' && typeof block.text === 'string')?.text;
-  return typeof text === 'string' ? text : undefined;
-}
-
-// Some hosts forward only `content`; by MCP convention a tool with an output schema also
-// serializes its structured output as JSON in the first text block.
-function structuredOutput(result: {
-  structuredContent?: unknown;
-  content: ReadonlyArray<{ type: string; text?: unknown }>;
-}) {
-  if (result.structuredContent !== undefined) return result.structuredContent;
-  const text = firstText(result.content);
-  if (text === undefined) return undefined;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -69,6 +51,7 @@ export function createMcpAppSession<Input>(
   app.addEventListener('hostcontextchanged', context => applyTheme(context.theme));
 
   return {
+    app,
     subscribe: listener => {
       listeners.add(listener);
       return () => listeners.delete(listener);
