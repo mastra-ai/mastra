@@ -19,7 +19,8 @@ vi.mock('node:fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue(''),
 }));
 vi.mock('./analyze', () => ({
-  analyzeBundle: vi.fn().mockResolvedValue({
+  analyzeBundleDeferringValidation: vi.fn().mockResolvedValue({
+    validation: Promise.resolve(),
     dependencies: new Map([
       ['@mastra/core', 'packages/core/node_modules/.cache/@mastra__core.mjs'],
       ['lodash', 'node_modules/lodash/index.js'],
@@ -67,7 +68,7 @@ describe('watcher', () => {
 
   describe('getInputOptions', () => {
     it('writes analysis output to the provided outputDir', async () => {
-      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundle;
+      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundleDeferringValidation;
 
       await getInputOptions('test-entry.js', 'node', undefined, { outputDir: '/custom/root/.mastra/.build' });
 
@@ -80,7 +81,7 @@ describe('watcher', () => {
     });
 
     it('defaults analysis output to <cwd>/.mastra/.build', async () => {
-      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundle;
+      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundleDeferringValidation;
 
       await getInputOptions('test-entry.js', 'node');
 
@@ -96,7 +97,7 @@ describe('watcher', () => {
       // Arrange
       const env = { 'process.env.NODE_ENV': JSON.stringify('test') };
       const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
-      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundle;
+      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundleDeferringValidation;
 
       // Act
       await getInputOptions('test-entry.js', 'node', env);

@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const devBundlerConstructorSpy = vi.hoisted(() => vi.fn());
@@ -732,6 +733,169 @@ describe('dev command - output directory preparation', () => {
     });
 
     expect(callOrder).toEqual(['prepare', 'getServerOptions']);
+  });
+});
+
+describe('dev command - server process environment', () => {
+  let execaMock: any;
+  const touchedKeys = [
+    'NODE_COMPILE_CACHE',
+    'NODE_DISABLE_COMPILE_CACHE',
+    'ROLLDOWN_WORKER_THREADS',
+    'RAYON_NUM_THREADS',
+    'MIMALLOC_ARENA_PURGE_MULT',
+  ];
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    loadedEnvVars.clear();
+    savedEnv = Object.fromEntries(touchedKeys.map(key => [key, process.env[key]]));
+    for (const key of touchedKeys) delete process.env[key];
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server unavailable')));
+    const { execa } = await import('execa');
+    execaMock = vi.mocked(execa);
+    execaMock.mockReturnValue(new MockChildProcess() as unknown as ChildProcess);
+  });
+
+  afterEach(() => {
+    for (const key of touchedKeys) {
+      if (savedEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = savedEnv[key];
+    }
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    loadedEnvVars.clear();
+  });
+
+  const runDev = async () => {
+    const { dev } = await import('./dev');
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: false,
+    });
+    return execaMock.mock.calls[0][2].env as Record<string, string | undefined>;
+  };
+
+  // Restarts reuse the compiled code of unchanged modules, which made each edit->ready ~120 ms faster.
+  it('gives the server a compile cache under .mastra', async () => {
+    const childEnv = await runDev();
+
+    expect(childEnv.NODE_COMPILE_CACHE).toBe(join(process.cwd(), '.mastra', '.compile-cache'));
+  });
+
+  it("keeps the user's own compile cache settings", async () => {
+    process.env.NODE_COMPILE_CACHE = '/custom/cache';
+    expect((await runDev()).NODE_COMPILE_CACHE).toBe('/custom/cache');
+
+    vi.resetModules();
+    execaMock.mockClear();
+    delete process.env.NODE_COMPILE_CACHE;
+    loadedEnvVars.set('NODE_DISABLE_COMPILE_CACHE', '1');
+    const childEnv = await runDev();
+    expect(childEnv.NODE_DISABLE_COMPILE_CACHE).toBe('1');
+    expect(childEnv.NODE_COMPILE_CACHE).toBeUndefined();
+  });
+
+  // The CLI tunes Rolldown's threads for itself; the user's server code must not inherit that.
+  it('does not pass the CLI rolldown defaults to the server', async () => {
+    const { applyDevRolldownEnvDefaults } = await import('./rolldown-env');
+    process.env.RAYON_NUM_THREADS = '8';
+    applyDevRolldownEnvDefaults(['dev']);
+    expect(process.env.ROLLDOWN_WORKER_THREADS).toBe('4');
+
+    const childEnv = await runDev();
+
+    expect(childEnv.ROLLDOWN_WORKER_THREADS).toBeUndefined();
+    expect(childEnv.MIMALLOC_ARENA_PURGE_MULT).toBeUndefined();
+    expect(childEnv.RAYON_NUM_THREADS).toBe('8');
+    expect(childEnv.PATH).toBe(process.env.PATH);
+    // execa merges process.env into `env` by default, which would put the defaults back.
+    expect(execaMock.mock.calls[0][2].extendEnv).toBe(false);
+  });
+});
+
+describe('dev command - server config read during analysis', () => {
+  let execaMock: any;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server unavailable')));
+    const { execa } = await import('execa');
+    execaMock = vi.mocked(execa);
+    execaMock.mockReturnValue(new MockChildProcess() as unknown as ChildProcess);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    devBundlerConstructorSpy.mockReset();
+  });
+
+  const devArgs = {
+    dir: undefined,
+    root: process.cwd(),
+    tools: undefined,
+    env: undefined,
+    inspect: false,
+    inspectBrk: false,
+    customArgs: undefined,
+    https: false,
+    debug: false,
+  };
+
+  function captureWatch() {
+    const watch = vi.fn().mockResolvedValue(mockWatcher);
+    devBundlerConstructorSpy.mockImplementation(function (this: { watch: typeof watch }) {
+      this.watch = watch;
+    });
+    return watch;
+  }
+
+  it('starts analyzing before the server config is read and starts the server on the configured port', async () => {
+    let resolveOptions!: (options: unknown) => void;
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockImplementationOnce(() => new Promise(resolve => (resolveOptions = resolve)) as any);
+    const watch = captureWatch();
+
+    const { dev } = await import('./dev');
+    const running = dev(devArgs);
+
+    await vi.waitFor(() => expect(watch).toHaveBeenCalled());
+    const { startAfter } = watch.mock.calls[0]![4] as { startAfter: Promise<unknown> };
+    expect(execaMock).not.toHaveBeenCalled();
+
+    resolveOptions({ port: 4999, host: 'localhost' });
+    await running;
+
+    // The first build waits for the config read, which imports from the output directory the build writes.
+    await expect(startAfter).resolves.toBeDefined();
+    expect(execaMock.mock.calls[0][2].env.PORT).toBe('4999');
+  });
+
+  it('reports a server config error as before and does not start the server', async () => {
+    const configError = new Error('Unexpected token in src/mastra/index.ts');
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockRejectedValueOnce(configError);
+    const watch = captureWatch();
+
+    const { dev } = await import('./dev');
+    await expect(dev(devArgs)).rejects.toBe(configError);
+
+    // DevBundler.watch does not create a watcher when this fails.
+    const { startAfter } = watch.mock.calls[0]![4] as { startAfter: Promise<unknown> };
+    await expect(startAfter).rejects.toBe(configError);
+    expect(execaMock).not.toHaveBeenCalled();
   });
 });
 

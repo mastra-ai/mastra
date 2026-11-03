@@ -337,6 +337,7 @@ async function validateOutput(
     workspaceMap,
     depsVersionInfo,
     packageLookupCache,
+    resolveExternalInfo,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
@@ -347,6 +348,7 @@ async function validateOutput(
     workspaceMap: Map<string, WorkspacePackageInfo>;
     depsVersionInfo: Map<string, ExternalDependencyInfo>;
     packageLookupCache: PackageLookupCache;
+    resolveExternalInfo: typeof resolveDependencyInfo;
   },
   logger: IMastraLogger,
 ) {
@@ -373,7 +375,7 @@ async function validateOutput(
       if (pkgName) {
         // Use version info from analysis if available, then resolve from the module that imported the external.
         const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(
+        const dependencyInfo = await resolveExternalInfo(
           dep,
           versionInfo,
           importerParentPaths(importerId, externalMetadataParentPaths),
@@ -424,6 +426,11 @@ type AnalyzeBundleOptions = {
   projectRoot: string;
   platform: BundlerPlatform;
   isDev?: boolean;
+  /**
+   * Look up the installed version of every external dependency (default). Without it, `externalDependencies` only
+   * carries the versions the analysis already found, which is enough when no package.json gets written from it.
+   */
+  resolveExternalVersions?: boolean;
   bundlerOptions?: Pick<
     InternalBundlerOptions,
     'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
@@ -463,11 +470,16 @@ export async function analyzeBundleDeferringValidation(
     projectRoot,
     platform,
     isDev = false,
+    resolveExternalVersions = true,
     bundlerOptions,
     env = { 'process.env.NODE_ENV': JSON.stringify('production') },
   }: AnalyzeBundleOptions,
   logger: IMastraLogger,
 ) {
+  const resolveExternalInfo: typeof resolveDependencyInfo = resolveExternalVersions
+    ? resolveDependencyInfo
+    : async (_dep, existing) => existing ?? {};
+
   const mastraConfigResult = await checkMastraConfigExport(mastraEntry);
 
   if (!mastraConfigResult.hasValidConfig) {
@@ -671,7 +683,7 @@ export async function analyzeBundleDeferringValidation(
       if (pkgName) {
         // Try to get version info from our tracked dependencies, then resolve from the chunk's source module.
         const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(
+        const dependencyInfo = await resolveExternalInfo(
           i,
           versionInfo,
           importerParentPaths(importerId, [
@@ -696,6 +708,7 @@ export async function analyzeBundleDeferringValidation(
       workspaceMap,
       depsVersionInfo,
       packageLookupCache,
+      resolveExternalInfo,
     },
     logger,
   );
@@ -735,7 +748,7 @@ export async function analyzeBundleDeferringValidation(
       if (!info.version && !info.packageSpec) {
         mergedExternalDeps.set(
           dep,
-          await resolveDependencyInfo(dep, info, externalMetadataParentPaths, packageLookupCache),
+          await resolveExternalInfo(dep, info, externalMetadataParentPaths, packageLookupCache),
         );
       }
     }
@@ -745,7 +758,7 @@ export async function analyzeBundleDeferringValidation(
       if (!mergedExternalDeps.has(transport)) {
         mergedExternalDeps.set(
           transport,
-          await resolveDependencyInfo(transport, undefined, externalMetadataParentPaths, packageLookupCache),
+          await resolveExternalInfo(transport, undefined, externalMetadataParentPaths, packageLookupCache),
         );
       }
     }
@@ -753,7 +766,7 @@ export async function analyzeBundleDeferringValidation(
       if (!mergedExternalDeps.has(pkg)) {
         mergedExternalDeps.set(
           pkg,
-          await resolveDependencyInfo(pkg, undefined, externalMetadataParentPaths, packageLookupCache),
+          await resolveExternalInfo(pkg, undefined, externalMetadataParentPaths, packageLookupCache),
         );
       }
     }

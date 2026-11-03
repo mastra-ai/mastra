@@ -274,6 +274,51 @@ describe('DevBundler', () => {
       }
     });
 
+    // `mastra dev` reads the server config alongside the analysis. A failed read must not leave a watcher running
+    // (it would keep the process alive), and the build must not write the output directory the read imports from.
+    it('creates the watcher only after startAfter settles, and not at all when it fails', async () => {
+      const devBundler = new DevBundler();
+      const { createWatcher, getWatcherInputOptions } = await import('@mastra/deployer/build');
+      const configError = new Error('server config failed');
+      let rejectStartAfter!: (error: Error) => void;
+      const startAfter = new Promise<void>((_resolve, reject) => (rejectStartAfter = reject));
+
+      const tmpDir = '.test-tmp-start-after';
+      try {
+        const watching = devBundler.watch('test-entry.js', tmpDir, [], undefined, { startAfter });
+        await vi.waitFor(() => expect(getWatcherInputOptions).toHaveBeenCalled());
+        expect(createWatcher).not.toHaveBeenCalled();
+
+        rejectStartAfter(configError);
+        await expect(watching).rejects.toBe(configError);
+        expect(createWatcher).not.toHaveBeenCalled();
+
+        await devBundler.watch('test-entry.js', tmpDir, [], undefined, { startAfter: Promise.resolve() });
+        expect(createWatcher).toHaveBeenCalledTimes(1);
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
+    it('reports failed workspace package checks without failing the watch', async () => {
+      const devBundler = new DevBundler();
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+      const { devLogger } = await import('../../utils/dev-logger.js');
+      const errorSpy = vi.spyOn(devLogger, 'error').mockImplementation(() => {});
+
+      const tmpDir = '.test-tmp-validation';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+
+        const { onValidationError } = vi.mocked(getWatcherInputOptions).mock.lastCall![3]!;
+        onValidationError!(new Error('We found an error in the @internal/broken workspace package.'));
+        expect(errorSpy).toHaveBeenCalledWith('We found an error in the @internal/broken workspace package.');
+      } finally {
+        errorSpy.mockRestore();
+        await remove(tmpDir);
+      }
+    });
+
     it('analyzes tool files so workspace packages keep exports only tools import', async () => {
       const devBundler = new DevBundler();
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');

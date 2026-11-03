@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { analyzeBundle } from './analyze';
 import { slash } from './utils';
 
@@ -331,6 +331,86 @@ describe('external dependency versions', () => {
       process.chdir(originalCwd);
     }
   }, 15000);
+});
+
+describe('analysis without external version lookups', () => {
+  // `mastra dev` skips the lookups: it installs nothing. Validation stubs externals by name, so the names must stay.
+  it('lists the same externals and optimized dependencies, without versions', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-no-version-lookup-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
+    const externalPackageDir = join(workspacePackageDir, 'node_modules', 'external-only-from-workspace');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(externalPackageDir, { recursive: true });
+    await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(workspacePackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/workspace-package',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: { 'external-only-from-workspace': '4.5.6' },
+      }),
+    );
+    await writeFile(
+      join(externalPackageDir, 'package.json'),
+      JSON.stringify({ name: 'external-only-from-workspace', version: '4.5.6', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(externalPackageDir, 'index.js'), `export const externalValue = 1;`);
+    await writeFile(
+      join(workspacePackageDir, 'src', 'index.js'),
+      `import { externalValue } from 'external-only-from-workspace';\nexport const workspaceValue = externalValue;`,
+    );
+    await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
+    await writeFile(
+      entryFile,
+      `import { workspaceValue } from '@internal/workspace-package';\nexport const value = workspaceValue;`,
+    );
+
+    // The workspace lookup cache is module state; an earlier test that ran outside any workspace would hide this one.
+    vi.resetModules();
+    const { analyzeBundle: freshAnalyzeBundle } = await import('./analyze');
+    const analyze = (resolveExternalVersions: boolean) =>
+      freshAnalyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: appDir,
+          platform: 'node',
+          isDev: true,
+          resolveExternalVersions,
+          bundlerOptions: { externals: [], enableSourcemap: false },
+        },
+        noopLogger,
+      );
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const withLookups = await analyze(true);
+      expect(withLookups.externalDependencies.get('external-only-from-workspace')?.version).toBe('4.5.6');
+
+      const withoutLookups = await analyze(false);
+      expect([...withoutLookups.externalDependencies.keys()]).toEqual([...withLookups.externalDependencies.keys()]);
+      expect(withoutLookups.externalDependencies.get('external-only-from-workspace')?.version).toBeUndefined();
+      expect(withoutLookups.dependencies).toEqual(withLookups.dependencies);
+      expect(withoutLookups.depsToOptimize).toEqual(withLookups.depsToOptimize);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 30000);
 });
 
 describe('repeated analysis in one process', () => {

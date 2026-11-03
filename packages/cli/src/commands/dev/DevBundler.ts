@@ -106,6 +106,12 @@ export class DevBundler extends Bundler {
     outputDirectory: string,
     toolsPaths: (string | string[])[],
     fsRoutingWatchOptions?: FsRoutingWatchOptions,
+    {
+      startAfter,
+    }: {
+      /** Work the first build has to wait for. It runs alongside the analysis, and the watch fails if it fails. */
+      startAfter?: Promise<unknown>;
+    } = {},
   ): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
@@ -133,8 +139,15 @@ export class DevBundler extends Bundler {
         sourcemap: sourcemapEnabled,
         analysisEntries: [entryFile, devServerAnalysisEntry, ...Object.values(toolsInputOptions)],
         outputDir: join(outputDirectory, this.analyzeOutputDir),
+        // The checks only improve the error messages for workspace packages that fail to load, which the server
+        // would hit on start anyway. Not worth delaying the first build for.
+        onValidationError: error => {
+          devLogger.error(error instanceof Error ? error.message : String(error));
+        },
       },
     );
+
+    await startAfter;
 
     const outputDir = join(outputDirectory, this.outputDir);
 

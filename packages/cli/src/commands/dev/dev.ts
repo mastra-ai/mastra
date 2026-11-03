@@ -29,6 +29,7 @@ import { getSourceMapNodeArgs } from '../utils.js';
 import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
 import { createEnvironmentState } from './env-state.js';
+import { withoutDevRolldownEnvDefaults } from './rolldown-env';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
@@ -63,6 +64,19 @@ function waitForProcessExit(child: ChildProcess, timeoutMs = SERVER_SHUTDOWN_TIM
       child.kill('SIGKILL');
     }, timeoutMs);
   });
+}
+
+/**
+ * The server is restarted on every rebuild, and compiling its modules is a large part of each boot. Node's compile
+ * cache lets restarts reuse the code of modules that didn't change (it checks each entry against the source). Kept
+ * under `.mastra`, which `mastra dev` empties on start. A user's own NODE_COMPILE_CACHE / NODE_DISABLE_COMPILE_CACHE
+ * wins.
+ */
+function getCompileCacheEnv(childEnvironment: NodeJS.ProcessEnv, cacheDir: string): Record<string, string> {
+  if (childEnvironment.NODE_COMPILE_CACHE !== undefined || childEnvironment.NODE_DISABLE_COMPILE_CACHE !== undefined) {
+    return {};
+  }
+  return { NODE_COMPILE_CACHE: cacheDir };
 }
 
 interface HTTPSOptions {
@@ -124,7 +138,7 @@ const startServer = async (
 
     // Built up front so the source map check sees the NODE_OPTIONS the child
     // actually gets, including values from .env files that process.env lacks.
-    const childEnvironment = environmentState.getChildEnvironment(env);
+    const childEnvironment = withoutDevRolldownEnvDefaults(environmentState.getChildEnvironment(env), env);
     const commands = getSourceMapNodeArgs(!!startOptions.sourcemap, childEnvironment.NODE_OPTIONS);
 
     const inspect = startOptions.inspect === '' ? true : startOptions.inspect;
@@ -175,6 +189,7 @@ const startServer = async (
         MASTRA_PACKAGES_FILE: packagesFilePath,
         MASTRA_TELEMETRY_COMMAND: startOptions.factory ? 'factory dev' : 'dev',
         MASTRA_PROJECT_ROOT: resolve(dotMastraPath, '..'),
+        ...getCompileCacheEnv(childEnvironment, resolve(dotMastraPath, '..', '.compile-cache')),
         ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
         ...(startOptions?.https
           ? {
@@ -185,6 +200,8 @@ const startServer = async (
         ...(startOptions.factory ? { MASTRA_FACTORY_DEV: 'true' } : {}),
         ...(factoryUiDist ? { MASTRACODE_UI_DIST: factoryUiDist } : {}),
       },
+      // `childEnvironment` already holds process.env minus the CLI-only Rolldown defaults, which merging would re-add.
+      extendEnv: false,
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
     }) as any as ChildProcess;
@@ -512,41 +529,48 @@ export async function dev({
   // would otherwise shadow the project's own dependencies.
   await bundler.prepare(dotMastraPath);
 
-  const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
-  let portToUse = serverOptions?.port ?? process.env.PORT;
-  let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
-  const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
-  const apiPrefixToUse = serverOptions?.apiPrefix ?? '/api';
+  // Only the server start needs these settings, so they are worked out while the watcher analyzes the project.
+  const serverSettingsPromise = (async () => {
+    const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
+    let portToUse = serverOptions?.port ?? process.env.PORT;
+    const hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
+    const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+    const apiPrefixToUse = serverOptions?.apiPrefix ?? '/api';
 
-  if (!portToUse || isNaN(Number(portToUse))) {
-    const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
-    portToUse = String(
-      await getPort({
-        port: portList,
-      }),
-    );
-  }
+    if (!portToUse || isNaN(Number(portToUse))) {
+      const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
+      portToUse = String(
+        await getPort({
+          port: portList,
+        }),
+      );
+    }
 
-  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
+    await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
-  let httpsOptions: HTTPSOptions | undefined = undefined;
+    let httpsOptions: HTTPSOptions | undefined = undefined;
 
-  /**
-   * A user can enable HTTPS in two ways:
-   * 1. By passing the --https flag to the dev command (we then generate a cert for them)
-   * 2. By specifying https options in the mastra server config
-   *
-   * If both are specified, the config options takes precedence.
-   */
-  if (https && serverOptions?.https) {
-    devLogger.warn('--https flag and server.https config are both specified. Using server.https config.');
-  }
-  if (serverOptions?.https) {
-    httpsOptions = serverOptions.https;
-  } else if (https) {
-    const { key, cert } = await devcert.certificateFor(serverOptions?.host ?? 'localhost');
-    httpsOptions = { key, cert };
-  }
+    /**
+     * A user can enable HTTPS in two ways:
+     * 1. By passing the --https flag to the dev command (we then generate a cert for them)
+     * 2. By specifying https options in the mastra server config
+     *
+     * If both are specified, the config options takes precedence.
+     */
+    if (https && serverOptions?.https) {
+      devLogger.warn('--https flag and server.https config are both specified. Using server.https config.');
+    }
+    if (serverOptions?.https) {
+      httpsOptions = serverOptions.https;
+    } else if (https) {
+      const { key, cert } = await devcert.certificateFor(serverOptions?.host ?? 'localhost');
+      httpsOptions = { key, cert };
+    }
+
+    return { portToUse, hostToUse, studioBasePathToUse, apiPrefixToUse, httpsOptions };
+  })();
+  // Awaited below; this keeps a failure from being reported as unhandled in the meantime.
+  serverSettingsPromise.catch(() => {});
 
   // Extract mastra packages from the project's package.json
   const mastraPackages = await getMastraPackages(rootDir);
@@ -567,12 +591,25 @@ export async function dev({
     await mirrorFsAgentWorkspaces(mastraDir, join(dotMastraPath, 'output'));
   }
 
-  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools, {
-    mastraDir,
-    userEntryFile,
-    outputDirectory: dotMastraPath,
-    preparedEntry: fsAgents,
-  });
+  // The first build waits for the settings (`startAfter`): the config read imports from `.mastra/output`, which the
+  // build writes to, and a failed read must not leave a watcher running.
+  const watcherPromise = bundler.watch(
+    entryFile,
+    dotMastraPath,
+    discoveredTools,
+    {
+      mastraDir,
+      userEntryFile,
+      outputDirectory: dotMastraPath,
+      preparedEntry: fsAgents,
+    },
+    { startAfter: serverSettingsPromise },
+  );
+  watcherPromise.catch(() => {});
+
+  // Settings first: their errors were the first ones reported when they were worked out before the watcher started.
+  const { portToUse, hostToUse, studioBasePathToUse, apiPrefixToUse, httpsOptions } = await serverSettingsPromise;
+  const watcher = await watcherPromise;
 
   const startOptions: StartOptions = {
     inspect,

@@ -4,7 +4,7 @@ import * as pkg from 'empathic/package';
 import { watch } from 'rolldown';
 import type { InputOptions, OutputOptions, RolldownWatcher } from 'rolldown';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
-import { analyzeBundle } from './analyze';
+import { analyzeBundleDeferringValidation } from './analyze';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { workspaceDepsWatcher } from './plugins/workspace-deps-watcher';
 import { chunkFileNames } from './rolldown';
@@ -27,7 +27,18 @@ export async function getInputOptions(
     },
     analysisEntries = [entryFile],
     outputDir: outputDirOption,
-  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions; analysisEntries?: string[]; outputDir?: string } = {},
+    onValidationError,
+  }: {
+    sourcemap?: boolean;
+    bundlerOptions?: BundlerOptions;
+    analysisEntries?: string[];
+    outputDir?: string;
+    /**
+     * When set, the options are returned without waiting for the checks that load each optimized workspace package
+     * in a separate process; a failed check is passed here instead of being thrown.
+     */
+    onValidationError?: (error: unknown) => void;
+  } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
@@ -35,7 +46,7 @@ export async function getInputOptions(
 
   const outputDir = outputDirOption ? slash(outputDirOption) : posix.join(process.cwd(), '.mastra', '.build');
 
-  const analyzeEntryResult = await analyzeBundle(
+  const { validation, ...analyzeEntryResult } = await analyzeBundleDeferringValidation(
     analysisEntries,
     entryFile,
     {
@@ -43,11 +54,18 @@ export async function getInputOptions(
       projectRoot: workspaceRoot || process.cwd(),
       platform,
       isDev: true,
+      // Dev keeps node_modules external and installs nothing, so external versions are never used.
+      resolveExternalVersions: false,
       bundlerOptions,
       env,
     },
     noopLogger,
   );
+  if (onValidationError) {
+    validation.catch(onValidationError);
+  } else {
+    await validation;
+  }
 
   const deps = /* @__PURE__ */ new Map();
   for (const [dep, metadata] of analyzeEntryResult.dependencies.entries()) {

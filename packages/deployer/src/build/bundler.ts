@@ -166,7 +166,9 @@ export async function getInputOptions(
     lodashImports(),
     stripViteIgnore(),
     keepNodeModulesExternal ? nodeModulesExternals({ platform, workspaceMap: analyzedBundleInfo.workspaceMap }) : null,
-    localStorageDetector(realpathOrSelf(workspaceRoot || projectRoot)),
+    // Its files are read by the deploy and lint preflight checks, which need build output (dev output has no build
+    // manifest, so deploy rebuilds). Skipped in dev, where it would re-scan every user module on each rebuild.
+    isDev ? null : localStorageDetector(realpathOrSelf(workspaceRoot || projectRoot)),
     removeDeployer(entryFile, { sourcemap }),
     pruneUnreachableChunks(),
     minify ? minifyOutput(sourcemap) : null,
