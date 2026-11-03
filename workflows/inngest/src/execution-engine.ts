@@ -311,6 +311,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * brings a deleted run back, while a run that parked or finished before the deadline keeps its
    * late write. The store applies `expectedStatus` inside the update and reports no rejection, as
    * adapters without guarded snapshot writes do.
+   *
+   * A store without atomic read-modify-write (`supportsConcurrentUpdates()` false) may not
+   * implement the update at all, so it gets a load and then an upsert. A delete landing between
+   * the two brings the run back on those stores; their update, where they have one, reads and
+   * writes in two steps too and leaves the same window.
    */
   override async writeWorkflowSnapshot(
     store: WorkflowsStorage,
@@ -318,7 +323,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   ): Promise<boolean | void> {
     if (!this.executionDeadlinePassed()) return store.persistWorkflowSnapshot(params);
     const { workflowName, runId, snapshot, fence, expectedStatus } = params;
-    await store.updateWorkflowState({ workflowName, runId, fence, opts: { ...snapshot, expectedStatus } });
+    if (store.supportsConcurrentUpdates()) {
+      await store.updateWorkflowState({ workflowName, runId, fence, opts: { ...snapshot, expectedStatus } });
+      return;
+    }
+    if (!(await store.loadWorkflowSnapshot({ workflowName, runId }))) return;
+    return store.persistWorkflowSnapshot(params);
   }
 
   /**
