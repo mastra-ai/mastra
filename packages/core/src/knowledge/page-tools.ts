@@ -98,8 +98,11 @@ function limitOf(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
-async function start(host: KnowledgePageToolHost, context: unknown): Promise<KnowledgeRun> {
-  return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined);
+/** A read run creates no scope pages; a write run materializes (and late-links) the scopes it holds. */
+async function start(host: KnowledgePageToolHost, context: unknown, write = false): Promise<KnowledgeRun> {
+  return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined, {
+    write,
+  });
 }
 
 /** Full refs and scope addresses for pages a response shows. */
@@ -1143,7 +1146,7 @@ function pageTool(host: KnowledgePageToolHost) {
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const args = input as PageInput;
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const { storage, provenance } = run;
       const done = async (page: KnowledgePage) => ({
         page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version },
@@ -1330,7 +1333,7 @@ function noteTool(host: KnowledgePageToolHost) {
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const args = input as NoteInput;
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const { storage, provenance } = run;
       const stamps = async (action: string) => {
         if (!args.scope?.length) throw new Error(`${action} needs scope: the stamp scopes.`);
@@ -1399,7 +1402,7 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const { op, page: ref, audience } = input as { op: 'pin' | 'unpin'; page: string; audience: string[] };
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const page = await run.page(ref, 'editor');
       await run.require(await run.scopeOf(page), 'editor', op === 'pin' ? 'Pinning a page' : 'Unpinning a page');
       await requireAudienceAuthority(run, audience);
