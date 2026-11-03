@@ -76,13 +76,18 @@ export function createSlackChatTools({
   // Passing our own guard (a bare function for reads, `guard` for writes)
   // replaces the Chat SDK's, which would otherwise confine the tools to the
   // Slack conversation being handled.
+  const ownChannel = channelOf(chat, sessionThreadId);
   const guard = (id: string) => {
+    const channel = channelOf(chat, id);
+    // Other people's DMs with the app are theirs, even when every channel is granted.
+    if (channel.startsWith('slack:D') && channel !== ownChannel) {
+      throw new Error(`"${id}" is someone else's direct message with the app. Use sendDirectMessage to message a person.`);
+    }
     if (all) return;
-    if (!allowed.has(channelOf(chat, id))) {
+    if (!allowed.has(channel)) {
       throw new Error(`"${id}" is outside the channels this session can use: ${scope}.`);
     }
   };
-  const ownChannel = channelOf(chat, sessionThreadId);
   const postGuard =
     settings.channelAccess === 'read'
       ? (id: string) => {

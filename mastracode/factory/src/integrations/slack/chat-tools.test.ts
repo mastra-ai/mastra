@@ -299,6 +299,21 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     ]);
   });
 
+  it("won't read or post in someone else's DM with the app", async () => {
+    const { run } = await slackSession(wide);
+
+    await expect(run('fetchChannelMessages', { channelId: 'slack:D-USAM', limit: 5 })).rejects.toThrow(
+      "someone else's direct message",
+    );
+    await expect(run('postChannelMessage', { channelId: 'slack:D-USAM', message: 'hi' })).rejects.toThrow(
+      "someone else's direct message",
+    );
+    const search = await run('searchMessages', { query: 'deploy', channelIds: ['slack:D-USAM'] });
+    expect(search.errors).toEqual([expect.objectContaining({ channelId: 'slack:D-USAM' })]);
+    expect(sent('conversations.history')).toEqual([]);
+    expect(sent('chat.postMessage')).toEqual([]);
+  });
+
   it('reaches other channels while handling a Slack message, not just that conversation', async () => {
     const { run, chat } = await slackSession(wide);
 
