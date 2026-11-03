@@ -450,7 +450,7 @@ The in-memory fallback is identified by `isFromInMemory: true`. It returns run m
 
 ## Knowledge
 
-These routes aren't registered by default. Add them with `KNOWLEDGE_ROUTES` from `@mastra/server/server-adapter` in `server.apiRoutes`, and register the instance on `Mastra` under `knowledge`. They need `@mastra/core` 1.81.0 or later, and the two link routes need 1.82.0 or later. Every route requires the `knowledge:read` permission. See [Studio Knowledge](/docs/studio/knowledge) for setup.
+These routes aren't registered by default. Add them with `KNOWLEDGE_ROUTES` from `@mastra/server/server-adapter` in `server.apiRoutes`, and register the instance on `Mastra` under `knowledge`. They need `@mastra/core` 1.81.0 or later, and the two link routes need 1.82.0 or later. With an RBAC provider, every route requires the `knowledge:read` permission. Without one, that check is skipped. See [Studio Knowledge](/docs/studio/knowledge) for setup.
 
 | Method | Path | Description |
 | - | - | - |
