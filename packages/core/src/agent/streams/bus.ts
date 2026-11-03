@@ -23,12 +23,6 @@ export interface AgentStreamBusHooks {
   warn: (message: string) => void;
 }
 
-/**
- * The resumable stream layer of an agent: the bus its run frames are
- * published on and the replay cache that lets readers reconnect from an
- * offset. Resolution is lazy so a registered agent inherits Mastra's bus and
- * cache.
- */
 /** Runs `cleanup` after `timeoutMs`. A timeout of 0 keeps run state forever, so nothing is scheduled. */
 export function scheduleStreamCleanup(
   timeoutMs: number,
@@ -38,6 +32,12 @@ export function scheduleStreamCleanup(
   return setTimeout(cleanup, timeoutMs);
 }
 
+/**
+ * The resumable stream layer of an agent: the bus its run frames are
+ * published on and the replay cache that lets readers reconnect from an
+ * offset. Resolution is lazy so a registered agent inherits Mastra's bus and
+ * cache.
+ */
 export class AgentStreamBus {
   readonly #hooks: AgentStreamBusHooks;
   /** Whether the user explicitly provided a pubsub (don't override with mastra.pubsub) */

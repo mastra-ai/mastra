@@ -3,9 +3,9 @@ import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import type { ChunkType } from '../../stream/types';
 import type { AgentSuspendedEventData } from '../durable/types';
-import { subscribeToAbortRequests } from './abort-transport';
+import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
-import { AGENT_STREAM_TOPIC } from './constants';
+import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
 import type { AgentRunRecordTarget } from './run-records';
 import { deleteAgentRunRecord, writeAgentRunRecord } from './run-records';
@@ -135,7 +135,11 @@ export function createAgentStreamPublisher({
 
   const scheduleCleanup = () => {
     const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
-      void pubsub.clearTopic(AGENT_STREAM_TOPIC(runId)).catch(() => {});
+      // The run's control and ack topics end with it too; a transport that keeps
+      // streams (Redis Streams) would otherwise hold them until its idle TTL.
+      for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
+        void pubsub.clearTopic(topic).catch(() => {});
+      }
       if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
     });
     timer?.unref?.();

@@ -133,6 +133,26 @@ describe('Agent run records', () => {
     expect(await agent.__getRunRecord(output.runId)).toBeUndefined();
   });
 
+  it('clears the run control and ack topics with the run log', async () => {
+    getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
+    const pubsub = new EventEmitterPubSub();
+    const cleared = vi.spyOn(pubsub, 'clearTopic');
+    const agent = makeAgent({ streams: { cleanupTimeoutMs: 50 } });
+    new Mastra({ agents: { agent }, pubsub, cache: new InMemoryServerCache(), logger: false });
+    const output = await agent.stream('Say hello.', { requestContext: owner() });
+    await output.consumeStream();
+    const runId = output.runId;
+    await vi.waitFor(
+      () => {
+        const topics = cleared.mock.calls.map(([topic]) => topic);
+        expect(topics).toEqual(
+          expect.arrayContaining([`agent.stream.${runId}`, `agent.control.${runId}`, `agent.control.${runId}.ack`]),
+        );
+      },
+      { timeout: 2000 },
+    );
+  });
+
   it('treats an expired or evicted record as an unknown run', async () => {
     getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
     const cache = new InMemoryServerCache();
