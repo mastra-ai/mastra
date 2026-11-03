@@ -1,4 +1,5 @@
 import type { FactoryStorage } from '@mastra/core/storage';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
@@ -279,7 +280,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub provider
     const seeded = await setup(
       'write',
       undefined,
-      backend === 'postgres' ? await createIsolatedFactoryPostgresForTests(postgresUrl!) : undefined,
+      backend === 'postgres'
+        ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+        : new LibSQLFactoryStorage({ id: 'github-provider-ingest', url: ':memory:' }),
     );
     const { github, sourceControl, integrationStorage, workItems, projects, project, storage } = seeded;
     const boards = createBoardRegistry();
