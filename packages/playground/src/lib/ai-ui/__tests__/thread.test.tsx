@@ -1323,6 +1323,120 @@ const taskCook: TaskItem = {
   activeForm: 'Cooking meal',
 };
 
+describe('Thread quotes', () => {
+  const REPLY = 'Open rows drop the frame and keep a subtle rounded hover.';
+  const history = () => [userMessage('Which table style should we use?'), assistantMessage(REPLY)];
+
+  beforeEach(() => {
+    window.MASTRA_AGENT_SIGNALS = 'false';
+    server.resetHandlers();
+  });
+
+  afterEach(() => {
+    document.getSelection()?.removeAllRanges();
+  });
+
+  /** Drags a selection over the start of the reply with the mouse: press, select, release. */
+  const selectFromReply = async (length: number) => {
+    const paragraph = await screen.findByText(REPLY);
+    const text = paragraph.firstChild;
+    if (!(text instanceof Text)) throw new Error('The reply has no text node');
+    fireEvent.pointerDown(paragraph);
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, length);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    fireEvent.pointerUp(paragraph);
+  };
+
+  const composerForm = () => {
+    const form = screen.getByPlaceholderText('Enter your message').closest('form');
+    if (!form) throw new Error('The composer has no form');
+    return form;
+  };
+
+  describe('when part of a reply is added to the chat', () => {
+    it('waits in the composer header and reaches the agent as a blockquote ahead of the typed message', async () => {
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+      );
+      await act(async () => {
+        renderThread(history());
+      });
+
+      await selectFromReply('Open rows'.length);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
+      expect(within(composerForm()).getByText('Open rows')).toBeTruthy();
+      expect(document.activeElement).toBe(textarea);
+
+      fireEvent.change(textarea, { target: { value: 'Why this one?' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(captured).toHaveLength(1));
+      expect(JSON.stringify(captured[0].body.messages)).toContain(
+        JSON.stringify('> Open rows\n\nWhy this one?').slice(1, -1),
+      );
+      expect(within(composerForm()).queryByText('Open rows')).toBeNull();
+    });
+  });
+
+  describe('when the server rejects the message with the quote', () => {
+    it('puts the quote back in the composer header with the typed text', async () => {
+      let requests = 0;
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+          requests++;
+          return HttpResponse.json({ error: 'Request body too large' }, { status: 413 });
+        }),
+      );
+      await act(async () => {
+        renderThread(history());
+      });
+
+      await selectFromReply('Open rows'.length);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
+      fireEvent.change(textarea, { target: { value: 'Why this one?' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(requests).toBeGreaterThan(0));
+
+      expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
+      expect(textarea.value).toBe('Why this one?');
+      expect(within(composerForm()).getByText('Open rows')).toBeTruthy();
+    }, 10_000);
+  });
+
+  describe('when the person opens another thread before sending the quote', () => {
+    // The agent pages remount the chat per thread, as `renderThreadTree` does by keying `ChatProvider`.
+    it('starts the other thread with an empty composer header', async () => {
+      server.use(...baseHandlers());
+      let rendered: ReturnType<typeof render> | undefined;
+      await act(async () => {
+        rendered = render(renderThreadTree(history(), { threadId: 'thread-1' }));
+      });
+
+      await selectFromReply('Open rows'.length);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+      expect(screen.getByRole('button', { name: 'Remove quote' })).toBeTruthy();
+
+      await act(async () => {
+        rendered?.rerender(renderThreadTree(history(), { threadId: 'thread-2' }));
+      });
+
+      expect(screen.queryByRole('button', { name: 'Remove quote' })).toBeNull();
+    });
+  });
+});
+
 describe('TaskPanel', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'true';

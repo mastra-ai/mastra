@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ChatQuotesProvider } from '@mastra/playground-ui/components/ai/quote';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
@@ -221,7 +222,10 @@ export function ChatSessionBoundary({
         <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
           <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
             <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
-              <ComposerImagesProvider initialImages={failedDraft?.files}>{children}</ComposerImagesProvider>
+              <ComposerImagesProvider initialImages={failedDraft?.files}>
+                {/* Below the keyed transcript, so each thread starts with no quotes. */}
+                <ChatQuotesProvider>{children}</ChatQuotesProvider>
+              </ComposerImagesProvider>
             </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>

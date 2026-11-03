@@ -6,7 +6,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { groupTurns, startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
@@ -31,6 +31,7 @@ import { NotificationCard, NotificationSummaryCard } from './TranscriptNotificat
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
 import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
+import { TranscriptQuoteToolbar } from './TranscriptQuoteToolbar';
 import { TurnRevealScope } from './TurnReveal';
 import { turnGaps } from './turn-gaps';
 
@@ -77,20 +78,26 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
     [respond, resolvePrompt],
   );
 
+  const transcriptRef = useRef<HTMLDivElement>(null);
+
   return (
-    <ArrivalScope>
-      <TranscriptEntries
-        entries={entries}
-        restoredHistory
-        isSubmitting={approving || responding}
-        onApprove={onApprove}
-        onRespond={onRespond}
-        running={busy}
-        viewerId={viewerId}
-        owner={owner}
-        tail={tail}
-      />
-    </ArrivalScope>
+    // `contents`: only bounds what can be quoted, so the turns stay direct items of the chat column.
+    <div ref={transcriptRef} className="contents">
+      <ArrivalScope>
+        <TranscriptEntries
+          entries={entries}
+          restoredHistory
+          isSubmitting={approving || responding}
+          onApprove={onApprove}
+          onRespond={onRespond}
+          running={busy}
+          viewerId={viewerId}
+          owner={owner}
+          tail={tail}
+        />
+      </ArrivalScope>
+      <TranscriptQuoteToolbar containerRef={transcriptRef} />
+    </div>
   );
 }
 

@@ -1,4 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import {
+  ChatQuotesProvider,
+  ComposerQuote,
+  formatQuotedMessage,
+  QuoteSelectionToolbar,
+  useChatQuotes,
+} from '@mastra/playground-ui/components/ai/quote';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -7,6 +14,7 @@ import {
   Composer,
   ComposerActions,
   ComposerBox,
+  ComposerHeader,
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
@@ -94,6 +102,25 @@ const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   });
 };
 
+interface ThreadQuoteToolbarProps {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  composerInputRef: React.RefObject<HTMLTextAreaElement | null>;
+}
+
+/** Add to chat over text selected in a message: the quote waits in the composer header, which takes focus. */
+const ThreadQuoteToolbar = ({ containerRef, composerInputRef }: ThreadQuoteToolbarProps) => {
+  const { addQuote } = useChatQuotes();
+  return (
+    <QuoteSelectionToolbar
+      containerRef={containerRef}
+      onQuote={text => {
+        addQuote(text);
+        composerInputRef.current?.focus();
+      }}
+    />
+  );
+};
+
 const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
   if (turns.length === 0) return null;
 
@@ -131,7 +158,8 @@ export interface ThreadProps {
   isLoadingPrevious?: boolean;
 }
 
-export const Thread = ({
+/** The thread body; `Thread` mounts it inside the quotes its transcript and composer share. */
+const ThreadContent = ({
   agentName,
   agentId,
   threadId,
@@ -145,6 +173,7 @@ export const Thread = ({
   isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const { draft, updateDraft } = useThreadInput(threadId);
 
   const messages = useChatMessages();
@@ -244,6 +273,7 @@ export const Thread = ({
                   className="relative flex-1 gap-4 py-4"
                 >
                   <BracketOverlay containerRef={messagesContainerRef} />
+                  <ThreadQuoteToolbar containerRef={messagesContainerRef} composerInputRef={composerInputRef} />
                   {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
                   <ArrivalScope>
                     {turnGroups.map((group, index) => {
@@ -300,6 +330,7 @@ export const Thread = ({
                 )}
                 <div className={landingShown ? 'starter-prompt' : undefined}>
                   <AgentComposer
+                    inputRef={composerInputRef}
                     agentId={agentId}
                     threadId={threadId}
                     hasModelList={hasModelList}
@@ -317,6 +348,12 @@ export const Thread = ({
     </ComposerAttachmentsProvider>
   );
 };
+
+export const Thread = (props: ThreadProps) => (
+  <ChatQuotesProvider>
+    <ThreadContent {...props} />
+  </ChatQuotesProvider>
+);
 
 const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
   return (
@@ -337,6 +374,8 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
 };
 
 interface AgentComposerProps {
+  /** Owned by the thread, so adding a quote from the transcript can focus the composer. */
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
   agentId?: string;
   threadId?: string;
   hasModelList?: boolean;
@@ -346,6 +385,7 @@ interface AgentComposerProps {
 }
 
 const AgentComposer = ({
+  inputRef: textareaRef,
   agentId,
   threadId,
   hasModelList,
@@ -354,7 +394,7 @@ const AgentComposer = ({
   refreshThreadList,
 }: AgentComposerProps) => {
   const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { quotes, removeQuote, restoreQuotes } = useChatQuotes();
   const preparing = useRef(false);
   const lifetime = useRef(0);
   useEffect(
@@ -393,10 +433,12 @@ const AgentComposer = ({
     const currentLifetime = lifetime.current;
     const submittedAttachments = attachments;
     const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
+    const submittedQuotes = quotes;
     // A message the server can't have stored goes back in the composer, before anything typed since.
     const withSubmittedText = (typed: string) => (typed ? `${text}\n\n${typed}` : text);
     const restoreSubmission = () => {
       if (lifetime.current !== currentLifetime) return;
+      restoreQuotes(submittedQuotes);
       if (updateDraft)
         updateDraft(previous => ({
           text: withSubmittedText(previous.text),
@@ -422,8 +464,11 @@ const AgentComposer = ({
         setThreadInput('');
         clear();
       }
+      for (const quote of submittedQuotes) removeQuote(quote.id);
       setSendPulseKey(k => k + 1);
-      void Promise.resolve(send({ message: text, attachments: coreUserMessages })).then(delivered => {
+      const quoted = submittedQuotes.map(quote => quote.text);
+      const message = formatQuotedMessage(text, quoted);
+      void Promise.resolve(send({ message, attachments: coreUserMessages })).then(delivered => {
         if (delivered === false) restoreSubmission();
       });
     } catch {
@@ -457,6 +502,13 @@ const AgentComposer = ({
             void submit();
           }}
         >
+          <ComposerHeader open={quotes.length > 0}>
+            {quotes.map(quote => (
+              <ComposerQuote key={quote.id} onRemove={() => removeQuote(quote.id)}>
+                {quote.text}
+              </ComposerQuote>
+            ))}
+          </ComposerHeader>
           <ComposerRing busy={isRunning}>
             <ComposerBox sendingPulseKey={sendPulseKey}>
               <ChatComposerAttachments />

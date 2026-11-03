@@ -1,4 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { ComposerQuote, formatQuotedMessage, useChatQuotes } from '@mastra/playground-ui/components/ai/quote';
+import type { ChatQuote } from '@mastra/playground-ui/components/ai/quote';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
@@ -76,6 +78,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
+  const { quotes, removeQuote, restoreQuotes } = useChatQuotes();
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
@@ -182,8 +185,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       setHeldDraftText(text);
       return;
     }
+    // A command is not a message, so quotes wait for the next one.
+    const sentQuotes = text.startsWith('/') ? [] : quotes;
     updateDraft('');
-    void handleInput(text).catch(error => {
+    for (const quote of sentQuotes) removeQuote(quote.id);
+    void handleInput(text, sentQuotes).catch(error => {
+      restoreQuotes(sentQuotes);
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
@@ -225,9 +232,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  async function handleInput(text: string) {
+  async function handleInput(text: string, sentQuotes: readonly ChatQuote[]) {
+    // What the agent reads; the draft keeps only what was typed, since failed quotes return to the header.
+    const quoted = sentQuotes.map(quote => quote.text);
+    const message = formatQuotedMessage(text, quoted);
     if (planFeedback.pending) {
-      await planFeedback.submitFeedback(text);
+      await planFeedback.submitFeedback(message);
       setImages([]);
       return;
     }
@@ -242,7 +252,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await withPendingImages(async files => createSessionFromDraft({ prompt: text, files }));
+        await withPendingImages(async files => createSessionFromDraft({ prompt: message, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
@@ -256,16 +266,21 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (await runComposerCommand(text)) return;
     if (liveRun) {
-      await steer(text);
+      await steer(message);
       return;
     }
-    await withPendingImages(files => send(text, files));
+    await withPendingImages(files => send(message, files));
   }
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerHeader open={connectionNotice !== undefined}>
+      <ComposerHeader open={connectionNotice !== undefined || quotes.length > 0}>
         {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
+        {quotes.map(quote => (
+          <ComposerQuote key={quote.id} onRemove={() => removeQuote(quote.id)}>
+            {quote.text}
+          </ComposerQuote>
+        ))}
       </ComposerHeader>
       <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>
