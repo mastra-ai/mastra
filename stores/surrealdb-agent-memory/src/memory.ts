@@ -174,6 +174,19 @@ export class AgentMemory extends MastraMemory {
   }
 
   /**
+   * The read lens for semantic recall: the thread's region for `scope: 'thread'`,
+   * otherwise the resource's and thread's regions (the same region writes are tagged
+   * with). Returns undefined when there is nothing to scope the read to.
+   */
+  private recallLens(resourceId: string | undefined, threadId: string | undefined): string[][] | undefined {
+    if (this.recallScope === 'thread') {
+      return threadId ? [[this.scopePrefix, 'thread', threadId]] : undefined;
+    }
+    if (threadId) return this.scopesFor(resourceId, threadId);
+    return resourceId ? [[this.scopePrefix, 'resource', resourceId]] : undefined;
+  }
+
+  /**
    * Resolve the Agent Memory session for a thread, creating one lazily. The
    * server-generated id is cached in-process and stashed on `thread.metadata`.
    */
@@ -313,6 +326,12 @@ export class AgentMemory extends MastraMemory {
     }
 
     const threadId = Array.isArray(listArgs.threadId) ? listArgs.threadId[0] : listArgs.threadId;
+    const lens = this.recallLens(listArgs.resourceId, threadId);
+    // Without a resource or thread there is no region to read, and an unscoped
+    // recall would search every user's facts in the shared context.
+    if (!lens) {
+      return { ...base, messages };
+    }
     const sessionId = this.recallScope === 'thread' && threadId ? this.sessionCache.get(threadId) : undefined;
 
     const res = await this.guard(
@@ -320,6 +339,7 @@ export class AgentMemory extends MastraMemory {
         this.agentMemory.recall(vectorSearchString, {
           k: this.recallTopK,
           sessionId,
+          lens,
         }),
       undefined,
     );

@@ -9,7 +9,7 @@ import { AgentMemory } from './memory';
 type Calls = {
   sessionsCreate: unknown[];
   rememberMany: Array<{ batch: Array<{ role: string; content: string }> }>;
-  recall: Array<{ query: string }>;
+  recall: Array<{ query: string; options?: unknown }>;
   remember: unknown[];
   forget: unknown[];
 };
@@ -38,8 +38,8 @@ function makeFakeAgentMemory(overrides: Partial<Record<keyof AgentMemoryClient, 
       calls.rememberMany.push({ batch });
       return {};
     },
-    recall: async (query: string) => {
-      calls.recall.push({ query });
+    recall: async (query: string, options?: unknown) => {
+      calls.recall.push({ query, options });
       return {
         hits: [
           {
@@ -140,6 +140,37 @@ describe('AgentMemory', () => {
     expect(ids).toContain('m1');
     // synthesized hit is prepended
     expect(ids[0]).toBe('agentMemory:h1');
+  });
+
+  it('scopes semantic recall to the resource and thread being served', async () => {
+    await memory.recall({ threadId: 'thread-1', resourceId: 'user-1', vectorSearchString: 'hobbies' } as never);
+
+    expect(calls.recall[0]?.options).toEqual({
+      k: 3,
+      sessionId: undefined,
+      lens: [
+        ['mastra', 'resource', 'user-1'],
+        ['mastra', 'thread', 'thread-1'],
+      ],
+    });
+  });
+
+  it('scopes thread-level semantic recall to the thread only', async () => {
+    const fake = makeFakeAgentMemory();
+    const mem = new AgentMemory({
+      agentMemory: fake.agentMemory,
+      storage: new InMemoryStore(),
+      agentMemoryRecall: { topK: 3, scope: 'thread' },
+    });
+    await mem.saveThread({ thread });
+
+    await mem.recall({ threadId: 'thread-1', resourceId: 'user-1', vectorSearchString: 'hobbies' } as never);
+
+    expect(fake.calls.recall[0]?.options).toEqual({
+      k: 3,
+      sessionId: 'sess-1',
+      lens: [['mastra', 'thread', 'thread-1']],
+    });
   });
 
   it('does not call AgentMemoryClient recall when no vectorSearchString', async () => {
