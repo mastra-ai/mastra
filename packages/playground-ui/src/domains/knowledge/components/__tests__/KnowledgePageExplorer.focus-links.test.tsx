@@ -147,15 +147,19 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     );
   });
 
-  it('does not fetch a [[Name]] link, which the page route cannot resolve, but still fetches its scope ref', () => {
+  it('does not fetch a [[Name]] link, which the page route cannot resolve, but still fetches a page id or scope ref', () => {
     const requested: string[][] = [];
     render({
-      wardPage: page('ward', 'authors', { body: 'See [[Pricing]] and [[site:mastra#blog/far-out-post]].' }),
+      wardPage: page('ward', 'authors', {
+        body: 'See [[Pricing]], [[01M6DDVVE4E0CKBVC6KCDCPTDF]] and [[site:mastra#blog/far-out-post]].',
+      }),
       reachable,
       requested,
     });
     expect(requested.flat()).not.toContain('Pricing');
-    expect(requested[requested.length - 1]).toEqual(['site:mastra#blog/far-out-post']);
+    expect((requested[requested.length - 1] ?? []).sort()).toEqual(
+      ['01M6DDVVE4E0CKBVC6KCDCPTDF', 'site:mastra#blog/far-out-post'].sort(),
+    );
   });
 
   it('draws the pages it links to and the pages that link to it, with their edges', () => {

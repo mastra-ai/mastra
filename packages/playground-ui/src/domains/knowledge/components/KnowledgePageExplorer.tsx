@@ -78,14 +78,16 @@ export interface KnowledgeExplorerTreeRequest {
   cursor?: string;
 }
 
+/** Page ids are ULIDs; a bare `[[id]]` is askable, a bare `[[Name]]` is not. */
+const PAGE_ID_SHAPE = /^[0-9A-Z]{26}$/;
+const JUST_CREATED_MS = 60_000;
+const isJustCreated = (page: KnowledgePagePayload) => Date.now() - Date.parse(page.createdAt) < JUST_CREATED_MS;
+
 /**
  * Host data hooks. Each host binds them to its own routes (Studio to the Mastra client, Factory to its
  * project-scoped routes), so the explorer never knows a URL or an id outside the page ids it shows.
  * Pass the same functions every render: they are called as hooks.
  */
-const JUST_CREATED_MS = 60_000;
-const isJustCreated = (page: KnowledgePagePayload) => Date.now() - Date.parse(page.createdAt) < JUST_CREATED_MS;
-
 export interface KnowledgeExplorerSource {
   /** One page; `noteCursor` fetches a later page of its notes. Disabled when `pageId` is null. */
   usePage: (pageId: string | null, noteCursor?: string) => KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>;
@@ -750,7 +752,9 @@ export function KnowledgePageExplorer({
     // The page route resolves ids and `scope#path` refs, never a bare name: a `[[Name]]` the explorer does not hold
     // is not fetched (the link index supplies its edge), so it does not 404.
     const mentioned = new Set(mentions);
-    const unaskable = new Set(refs.filter(ref => !ref.includes(':') && !mentioned.has(ref)));
+    const unaskable = new Set(
+      refs.filter(ref => !ref.includes(':') && !PAGE_ID_SHAPE.test(ref) && !mentioned.has(ref)),
+    );
     // Notes that mention this page, and (when the host lists links) bodies that link to it: a note edge is a
     // mention, a body edge a link, so a page that both links and mentions draws each once.
     const listed = (focusLinkList?.edges ?? []).filter(edge => edge.toPageId === own);
