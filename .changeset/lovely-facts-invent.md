@@ -3,4 +3,4 @@
 "@mastra/code-sdk": patch
 ---
 
-Mastra Code now uses the same AI SDK v7 providers as `@mastra/core` for Claude, OpenAI, Codex, Gemini, xAI, Kimi, GitHub Copilot, custom endpoints and the Mastra gateway. Sign-ins, API keys, thinking levels, prompt caching and image tool results work as before, including when you switch providers mid-thread. Vertex AI models are unchanged.
+Mastra Code now runs on AI SDK v7. Claude, OpenAI, Codex, Kimi, xAI sign-in, GitHub Copilot and custom endpoints use the v7 provider packages. Sign-ins, API keys, thinking levels, prompt caching and image tool results work as before, including when you switch providers mid-thread. Gemini, Vertex AI, Bedrock and other models served through `@mastra/core` are unchanged.

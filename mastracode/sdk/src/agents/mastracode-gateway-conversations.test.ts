@@ -41,14 +41,14 @@ const anthropicThinkingWithCachedSystem = {
   ]),
 };
 const openAIReasoningWithThreadCache = { reasoning: { effort: 'high' }, prompt_cache_key: 'picture-thread' };
-const geminiThinkingWithJsonSchemaTools = {
+const geminiThinkingWithTools = {
   generationConfig: { thinkingConfig: { thinkingLevel: 'high' } },
   tools: [
     {
       functionDeclarations: [
         {
           name: 'read_file',
-          parametersJsonSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+          parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
         },
       ],
     },
@@ -110,7 +110,7 @@ const routes: Route[] = [
     credential: 'api_key',
     origin: 'https://generativelanguage.googleapis.com',
     headers: { 'x-goog-api-key': 'tenant-key' },
-    request: geminiThinkingWithJsonSchemaTools,
+    request: geminiThinkingWithTools,
   },
   {
     name: 'custom endpoint',
@@ -346,7 +346,7 @@ describe.each(routes)('conversations through $name', route => {
 });
 
 describe('Gemini structured output', () => {
-  it.each(['generate', 'stream'] as const)('%s returns validated output from the native JSON schema', async method => {
+  it.each(['generate', 'stream'] as const)('%s returns validated output with thinking enabled', async method => {
     const answer = { selection: 'C', reason: 'Reliability matters most.' };
     mock.reset().on({ sequenceIndex: 0 }, { content: JSON.stringify(answer), usage: USAGE });
     const gateway = new MastraCodeGateway({
@@ -389,16 +389,14 @@ describe('Gemini structured output', () => {
     expect(sent[0]!.body).toMatchObject({
       generationConfig: {
         responseMimeType: 'application/json',
-        responseJsonSchema: {
+        responseSchema: {
           type: 'object',
           properties: { selection: { type: 'string', enum: ['A', 'B', 'C'] }, reason: { type: 'string' } },
           required: ['selection', 'reason'],
-          additionalProperties: false,
         },
         thinkingConfig: { thinkingLevel: 'high' },
       },
     });
-    expect(sent[0]!.body.generationConfig).not.toHaveProperty('responseSchema');
     expect(JSON.stringify(sent[0]!.body.contents)).toContain('I will select the most reliable option.');
   });
 });

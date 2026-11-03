@@ -115,112 +115,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function sortJsonObjectKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
-  if (!isRecord(value)) return value;
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map(key => [key, sortJsonObjectKeys(value[key])]),
-  );
-}
-
-function sortJsonToolOutputKeys(output: unknown): unknown {
-  if (typeof output !== 'string') return output;
-  try {
-    const parsed = JSON.parse(output);
-    const lossless = (isRecord(parsed) || Array.isArray(parsed)) && JSON.stringify(parsed) === output;
-    return lossless ? JSON.stringify(sortJsonObjectKeys(parsed)) : output;
-  } catch {
-    return output;
-  }
-}
-
-function normalizeAnthropicToolOutputs(body: unknown): unknown {
-  if (!isRecord(body) || !Array.isArray(body.messages)) return body;
-  return {
-    ...body,
-    messages: body.messages.map(message =>
-      isRecord(message) && message.role === 'user' && Array.isArray(message.content)
-        ? {
-            ...message,
-            content: message.content.map(part =>
-              isRecord(part) && part.type === 'tool_result'
-                ? { ...part, content: sortJsonToolOutputKeys(part.content) }
-                : part,
-            ),
-          }
-        : message,
-    ),
-  };
-}
-
-function normalizeGoogleToolSchemaKeys(body: unknown): unknown {
-  if (!isRecord(body) || !Array.isArray(body.tools)) return body;
-  return {
-    ...body,
-    tools: body.tools.map(tool =>
-      isRecord(tool) && Array.isArray(tool.functionDeclarations)
-        ? {
-            ...tool,
-            functionDeclarations: tool.functionDeclarations.map(declaration => {
-              if (
-                !isRecord(declaration) ||
-                !isRecord(declaration.parameters) ||
-                Object.hasOwn(declaration, 'parametersJsonSchema')
-              ) {
-                return declaration;
-              }
-              const { parameters, ...rest } = declaration;
-              return { ...rest, parametersJsonSchema: parameters };
-            }),
-          }
-        : tool,
-    ),
-  };
-}
-
-function normalizeOpenAIResponseToolOutputs(body: unknown): unknown {
-  if (!isRecord(body) || !Array.isArray(body.input)) return body;
-  return {
-    ...body,
-    input: body.input.map(item =>
-      isRecord(item) && item.type === 'function_call_output'
-        ? { ...item, output: sortJsonToolOutputKeys(item.output) }
-        : item,
-    ),
-  };
-}
-
-function normalizeOpenAIResponseAssistantText(body: unknown): unknown {
-  if (!isRecord(body) || !Array.isArray(body.input)) return body;
-
-  return {
-    ...body,
-    input: body.input.map(message => {
-      if (
-        !isRecord(message) ||
-        message.role !== 'assistant' ||
-        (message.type !== undefined && message.type !== 'message') ||
-        !Array.isArray(message.content) ||
-        message.content.length === 0 ||
-        !message.content.every(
-          part =>
-            isRecord(part) &&
-            part.type === 'output_text' &&
-            typeof part.text === 'string' &&
-            Object.keys(part).length === 2,
-        )
-      ) {
-        return message;
-      }
-
-      const text = message.content.map(part => part.text).join('');
-      return text.length > 0 ? { ...message, content: text } : message;
-    }),
-  };
-}
-
 // Google provider versions disagree on whether text emitted before a tool call
 // belongs beside that call or after its response. Use the current combined form
 // so old recordings and current requests hash to the same value.
@@ -285,15 +179,9 @@ function normalizeGoogleToolCallMessages(body: unknown): unknown {
 
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
   let normalizedBody = normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body));
-  const { hostname, pathname } = new URL(url);
-  if (hostname === 'api.openai.com' && pathname === '/v1/responses') {
-    normalizedBody = normalizeOpenAIResponseAssistantText(normalizeOpenAIResponseToolOutputs(normalizedBody));
-  }
-  if (hostname === 'api.anthropic.com' && pathname === '/v1/messages') {
-    normalizedBody = normalizeAnthropicToolOutputs(normalizedBody);
-  }
+  const { hostname } = new URL(url);
   if (hostname === 'generativelanguage.googleapis.com') {
-    normalizedBody = normalizeGoogleToolCallMessages(normalizeGoogleToolSchemaKeys(normalizedBody));
+    normalizedBody = normalizeGoogleToolCallMessages(normalizedBody);
   }
   if (hostname === 'openrouter.ai') {
     normalizedBody = normalizeOpenRouterTextContent(normalizedBody);
