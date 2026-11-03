@@ -138,7 +138,7 @@ It gets back each page's ref, name and number of child pages, such as `handbook:
 
 ## One scope per department
 
-Each department has its own scope under a firm-wide one. HR's onboarding checklists live in `dept:initech:hr`. An engineer's search finds nothing there, while everyone finds the firm-wide holidays page:
+Each department has its own scope under a firm-wide one. HR's onboarding checklists live in `dept:initech:hr`. Your server passes each employee's runs `firm:initech` and their department's scope. An engineer's search finds nothing in HR's scope, while every run holding `firm:initech` finds the firm-wide holidays page:
 
 ```typescript
 const scopes = {
