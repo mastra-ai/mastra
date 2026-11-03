@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { workItemBranch } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
 import {
   boardForWorkItem,
+  cardOwnsBranch,
+  hasBuilderSession,
   isTerminalWorkItem,
   resolveBoardClosure,
   resolveBoardToolRule,
@@ -183,5 +186,27 @@ describe('resolveBoardClosure', () => {
   it('is undefined for boards that declare no mapping or are not installed', () => {
     expect(resolveBoardClosure(boards, { board: 'release', externalSource: null, stages: ['queued'] })).toBeUndefined();
     expect(resolveBoardClosure(boards, { board: 'gone', externalSource: null, stages: ['queued'] })).toBeUndefined();
+  });
+});
+
+describe('building started and branch ownership', () => {
+  const card = {
+    id: 'item-0001',
+    externalSource: { integrationId: 'github', type: 'issue' as const, externalId: '42' },
+    workItem: { metadata: { number: 42 } },
+  };
+  const buildBranch = workItemBranch({ id: 'item-0001', source: 'github-issue', metadata: { number: 42 } });
+
+  it('counts a card that has been in Building as built, after its session is gone', () => {
+    expect(hasBuilderSession({ sessions: {}, stageHistory: [{ stage: 'intake' }] })).toBe(false);
+    expect(hasBuilderSession({ sessions: {}, stageHistory: [{ stage: 'intake' }, { stage: 'execute' }] })).toBe(true);
+    expect(hasBuilderSession({ sessions: { work: { branch: 'b' } }, stageHistory: [] })).toBe(true);
+  });
+
+  it("owns its build branch with no session, plus any session's branch, and nothing else", () => {
+    expect(cardOwnsBranch({ ...card, sessions: {} }, buildBranch)).toBe(true);
+    expect(cardOwnsBranch({ ...card, sessions: { work: { branch: 'legacy/42' } } }, 'legacy/42')).toBe(true);
+    expect(cardOwnsBranch({ ...card, sessions: {} }, 'feature-42')).toBe(false);
+    expect(cardOwnsBranch({ ...card, sessions: {} }, '')).toBe(false);
   });
 });
