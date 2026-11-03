@@ -237,7 +237,7 @@ scopes: {
   'org:$orgId': {
     displayLabel: '$orgId organization',
     access: [{ principal: 'self', role: 'editor' }],
-    children: [{ name: 'private', displayLabel: 'Private', access: [{ principal: 'self', role: 'owner' }] }],
+    children: [{ name: 'private', displayLabel: 'Private', access: [{ principal: 'org:$orgId', role: 'owner' }] }],
   },
   'org:acme': { displayLabel: 'Acme HQ' },
 }
