@@ -99,6 +99,63 @@ export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
 export const MASTRA_MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
 
 /**
+ * Reserved key holding the authenticated end user, normalized to the
+ * `MastraUser` shape (`{ id, name?, email?, avatarUrl?, role? }`).
+ *
+ * Set by the server auth middleware after an auth provider authenticates the
+ * request (via `MastraAuthProvider.toMastraUser()`). Read at
+ * `DynamicArgument` resolution time so config callbacks receive an optional
+ * `user` argument. The raw provider-specific user object is stored separately
+ * under `mastra__user`.
+ */
+export const MASTRA_NORMALIZED_USER_KEY = 'mastra__normalizedUser';
+
+/**
+ * Keys that only describe the request that set them: the bearer token and the
+ * authenticated user with their roles, permissions and Knowledge principals.
+ * The user keys are set by the server auth middleware (`mastra__user`,
+ * `mastra__userRoles`, `mastra__userPermissions` and
+ * `mastra__knowledgePrincipals` are defined in `@mastra/server`) and are
+ * reserved, so clients cannot supply them.
+ */
+const LIVE_REQUEST_KEYS = [
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
+  'mastra__user',
+  'mastra__userPermissions',
+  'mastra__userRoles',
+  'mastra__knowledgePrincipals',
+];
+
+/**
+ * Unprefixed aliases the server auth middleware writes next to the namespaced
+ * keys for backward compatibility. They aren't reserved, and apps without the
+ * server may store their own values under them, so each alias is only dropped
+ * when its namespaced key shows the auth middleware wrote it.
+ */
+const LEGACY_USER_ALIASES: Record<string, string> = {
+  user: 'mastra__user',
+  userRoles: 'mastra__userRoles',
+  userPermissions: 'mastra__userPermissions',
+};
+
+/**
+ * Returns a copy of a persisted request context without the keys that belong to
+ * the request that wrote it (the bearer token and the authenticated user, roles
+ * and permissions). Workflow and durable-agent resume, restart and time travel
+ * use this so those values come from the request doing the resuming, and a
+ * resume without a signed-in user can't act as the user who started the run.
+ */
+export function withoutLiveRequestKeys(requestContext: Record<string, any> | undefined): Record<string, any> {
+  const rest = { ...requestContext };
+  for (const [alias, key] of Object.entries(LEGACY_USER_ALIASES)) {
+    if (key in rest) delete rest[alias];
+  }
+  for (const key of LIVE_REQUEST_KEYS) delete rest[key];
+  return rest;
+}
+
+/**
  * Whether a request-context key is reserved for Mastra itself.
  *
  * Framework keys use the `mastra__` prefix (e.g. `mastra__threadId`,
