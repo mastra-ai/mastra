@@ -29,7 +29,7 @@ import type {
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { buildKnowledgePageTools } from './page-tools';
-import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins, MAX_PINNED_MAX_TOKENS } from './pinned';
+import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
@@ -40,11 +40,10 @@ import type { KnowledgeAccessExplanation } from './scope-runtime';
 function resolvePins(pins: KnowledgeConfig['pinnedContext']): false | PinBudget {
   if (!pins) return false;
   const options = pins === true ? {} : pins;
-  const maxTokens = options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS;
-  if (maxTokens > MAX_PINNED_MAX_TOKENS) {
-    throw new Error(`Knowledge pinnedContext.maxTokens is at most ${MAX_PINNED_MAX_TOKENS}.`);
-  }
-  return { maxPins: options.maxPins ?? DEFAULT_MAX_PINS, maxTokens };
+  return {
+    maxPins: options.maxPins ?? DEFAULT_MAX_PINS,
+    maxTokens: options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS,
+  };
 }
 
 /** Below this share of the pin budget each, config pins are too cut down to be useful. */

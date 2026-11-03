@@ -39,8 +39,7 @@ export interface KnowledgeConfig {
   tools?: boolean | { read?: boolean | { maxTokens?: number }; write?: boolean };
   /**
    * Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs
-   * Memory. Off by default. `maxPins` defaults to 20, `maxTokens` (estimated, whole set) to 500, at
-   * most 2000.
+   * Memory. Off by default. `maxPins` defaults to 20, `maxTokens` (estimated, whole set) to 500.
    */
   pinnedContext?: boolean | { maxPins?: number; maxTokens?: number };
   /** Usage instructions added whenever Knowledge attaches tools. */
