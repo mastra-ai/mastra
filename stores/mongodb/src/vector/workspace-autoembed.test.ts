@@ -19,7 +19,8 @@ import { MongoDBVector } from './';
  *
  * Against Atlas: set MONGODB_AUTOEMBED_URL. No Docker is needed.
  * Against the local container: set VOYAGE_API_KEY and ATLAS_LOCAL_TAG=preview in
- * stores/mongodb/.env, then recreate it with `docker compose up -d --force-recreate --wait`.
+ * stores/mongodb/.env, then recreate it from any directory with
+ *   pnpm --filter @mastra/mongodb exec docker compose up -d --force-recreate --wait
  */
 const uri =
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
