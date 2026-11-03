@@ -12,7 +12,8 @@ export type KnowledgePageTarget = { pageId: string; pageRef?: never } | { pageRe
 
 /**
  * What a hover card says about a page. Called, as a hook, only while a card is open, so a host fetches
- * the page on hover and not for every link in the transcript. `undefined` while loading or unreadable.
+ * the page on hover and not for every link in the transcript. (Chat prose is the exception: a bare address
+ * in text calls it on render, since it links only if the page resolves.) `undefined` while loading or unreadable.
  */
 export type UseKnowledgePagePreview = (target: KnowledgePageTarget) => KnowledgePageCardProps | undefined;
 
