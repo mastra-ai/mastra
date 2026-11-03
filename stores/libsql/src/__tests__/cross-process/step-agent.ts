@@ -36,6 +36,8 @@ export interface StepAgentOptions {
   release?: Promise<void>;
   /** Text returned after the scripted tool calls complete. */
   finalText?: string;
+  /** Script each run from its own transcript instead of the agent's lifetime call count. */
+  perRun?: boolean;
   onToolEvent?: (event: StepToolEvent) => void;
   onModelCall?: (call: number) => void;
   inputProcessors?: AgentConfig['inputProcessors'];
@@ -69,6 +71,7 @@ export function createStepAgent({
   blockAt,
   release,
   finalText = `finished ${steps} steps`,
+  perRun = false,
   memory,
   onToolEvent,
   onModelCall,
@@ -77,22 +80,23 @@ export function createStepAgent({
 }: StepAgentOptions) {
   let calls = 0;
   const model = new MastraLanguageModelV2Mock({
-    doStream: async () => {
+    doStream: async ({ prompt }) => {
       const call = ++calls;
       onModelCall?.(call);
+      const turn = perRun ? prompt.filter(message => message.role === 'tool').length + 1 : call;
       const head = [
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: `resp-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
       ];
-      if (call <= steps) {
+      if (turn <= steps) {
         return {
           stream: chunks([
             ...head,
             {
               type: 'tool-call',
-              toolCallId: `call-${call}`,
+              toolCallId: `call-${turn}`,
               toolName: 'step',
-              input: JSON.stringify({ n: call }),
+              input: JSON.stringify({ n: turn }),
               providerExecuted: false,
             },
             { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
