@@ -68,4 +68,16 @@ describe('KnowledgePageLink hover card', () => {
     expect(card.textContent).toContain('3 children');
     expect(card.textContent).toContain('4 links in');
   });
+
+  it('opens no empty card while the page is still loading', async () => {
+    render(
+      <KnowledgeLinksProvider pageHref={id => `/k?page=${id}`} Link={Anchor} usePagePreview={() => undefined}>
+        <KnowledgePageLink pageId="p1">Refunds</KnowledgePageLink>
+      </KnowledgeLinksProvider>,
+    );
+    fireEvent.pointerEnter(screen.getByRole('link', { name: 'Refunds' }), { pointerType: 'mouse' });
+    fireEvent.mouseEnter(screen.getByRole('link', { name: 'Refunds' }));
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(screen.queryByTestId('knowledge-link-card')).toBeNull();
+  });
 });

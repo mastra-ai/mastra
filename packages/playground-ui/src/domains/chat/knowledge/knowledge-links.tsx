@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import { knowledgePageHref } from './pinned-knowledge-data';
 import { KnowledgePageCard } from '@/domains/knowledge/components/KnowledgePageCard';
@@ -28,6 +28,8 @@ interface KnowledgeLinks {
    */
   refHref?: (ref: string) => string | undefined;
   Link?: LinkComponent;
+  /** Set by the provider: this host has Knowledge pages, so references in chat prose become links. */
+  provided?: boolean;
 }
 
 const KnowledgeLinksContext = createContext<KnowledgeLinks>({
@@ -45,18 +47,23 @@ export function KnowledgeLinksProvider({
   Link,
   usePagePreview,
   children,
-}: KnowledgeLinks & { children: ReactNode }) {
+}: Omit<KnowledgeLinks, 'provided'> & { children: ReactNode }) {
   return (
-    <KnowledgeLinksContext.Provider value={{ pageHref, refHref, Link, usePagePreview }}>
+    <KnowledgeLinksContext.Provider value={{ pageHref, refHref, Link, usePagePreview, provided: true }}>
       {children}
     </KnowledgeLinksContext.Provider>
   );
 }
 
+/** Whether this host mounted a `KnowledgeLinksProvider`, i.e. has Knowledge pages chat prose can link to. */
+export function useHasKnowledgeLinks(): boolean {
+  return useContext(KnowledgeLinksContext).provided === true;
+}
+
 const LINK_CLASS = 'min-w-0 truncate text-foreground underline-offset-2 hover:underline';
 
-/** Mounted by the open card only, so the host's lookup runs on hover. */
-function PagePreviewCard({
+/** Mounted only while the card is open, so the host's lookup runs on hover. Nothing opens until the page is known. */
+function PagePreviewContent({
   target,
   usePagePreview,
 }: {
@@ -64,7 +71,12 @@ function PagePreviewCard({
   usePagePreview: UseKnowledgePagePreview;
 }) {
   const card = usePagePreview(target);
-  return card ? <KnowledgePageCard {...card} /> : null;
+  if (!card) return null;
+  return (
+    <HoverCardContent data-testid="knowledge-link-card" className="flex w-max max-w-72 flex-col px-2 py-1">
+      <KnowledgePageCard {...card} />
+    </HoverCardContent>
+  );
 }
 
 /** A link to a Knowledge page, through the host's link component and route. */
@@ -78,6 +90,7 @@ export function KnowledgePageLink({
   className?: string;
 } & KnowledgePageTarget) {
   const links = useContext(KnowledgeLinksContext);
+  const [open, setOpen] = useState(false);
   const { Link: FrameworkLink } = useLinkComponent();
   const Link = links.Link ?? FrameworkLink;
   const href = pageId !== undefined ? links.pageHref(pageId) : links.refHref?.(pageRef);
@@ -89,13 +102,11 @@ export function KnowledgePageLink({
   );
   const { usePagePreview } = links;
   if (!usePagePreview) return link;
-  const target = pageId !== undefined ? { pageId } : { pageRef: pageRef as string };
+  const target: KnowledgePageTarget = pageId !== undefined ? { pageId } : { pageRef };
   return (
-    <HoverCard>
+    <HoverCard open={open} onOpenChange={setOpen}>
       <HoverCardTrigger render={<Link href={href} className={className} />}>{children}</HoverCardTrigger>
-      <HoverCardContent data-testid="knowledge-link-card" className="flex w-max max-w-72 flex-col px-2 py-1">
-        <PagePreviewCard target={target} usePagePreview={usePagePreview} />
-      </HoverCardContent>
+      {open ? <PagePreviewContent target={target} usePagePreview={usePagePreview} /> : null}
     </HoverCard>
   );
 }
