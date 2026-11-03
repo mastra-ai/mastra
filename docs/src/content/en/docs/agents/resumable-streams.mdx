@@ -33,7 +33,7 @@ export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support agent',
   instructions: 'You help customers with their orders.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   streams: {
     // Keep finished runs replayable for 2 minutes instead of 30 seconds
     cleanupTimeoutMs: 120_000,
@@ -63,7 +63,7 @@ export const batchAgent = new Agent({
   id: 'batch-agent',
   name: 'Batch agent',
   instructions: 'You classify support tickets.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   streams: false,
 })
 ```
@@ -76,7 +76,7 @@ A run's events and its ownership record are cleared `cleanupTimeoutMs` after it 
 
 The cache bounds everything else:
 
-- Run logs and ownership records ask the cache for a 24-hour TTL. A cache can apply its own limits: the in-memory cache's list writes keep its default TTL (5 minutes unless configured).
+- Run logs and ownership records ask the cache for a 24-hour TTL. The in-memory cache uses at least this TTL for indexed run logs, unless cache expiry is disabled. Cache entry limits can evict data sooner.
 - The in-memory cache holds 1,000 entries by default. Entries are cache keys, not runs: each run uses several (its event log, a counter and its ownership record), so heavy traffic evicts older runs sooner.
 - Once a run's log or record is evicted or expires, observing or aborting it returns 404, as for an unknown run.
 
@@ -90,6 +90,7 @@ Call `observe()` with the run's ID to follow it from any agent instance that sha
 const { output, detach } = await supportAgent.observe(runId)
 
 request.signal.addEventListener('abort', detach, { once: true })
+if (request.signal.aborted) detach()
 
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
