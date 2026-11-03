@@ -448,6 +448,27 @@ describe('workspace_read_file', () => {
     expect(result).not.toContain('binary file not readable as text');
   });
 
+  it.each([
+    'application/x-ndjson; charset=utf-16le',
+    'text/plain; charset="UTF-16"',
+    'application/json; charset=latin1',
+  ])('returns binary metadata for MIME type %s instead of decoding it as utf-8', async mimeType => {
+    await fs.writeFile(path.join(tempDir, 'events.ndjson'), Buffer.from('{"a":1}\n', 'utf16le'));
+    class CharsetFilesystem extends LocalFilesystem {
+      override async stat(filePath: string) {
+        return { ...(await super.stat(filePath)), mimeType };
+      }
+    }
+    const workspace = new Workspace({ filesystem: new CharsetFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'events.ndjson' }, { workspace });
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('binary file not readable as text');
+    expect(result).toContain(mimeType);
+  });
+
   it('should read files with unknown extensions as text (octet-stream fallback)', async () => {
     // An unknown extension maps to application/octet-stream but is likely text.
     await fs.writeFile(path.join(tempDir, 'app.log'), 'INFO server started\nWARN slow query');

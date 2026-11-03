@@ -44,9 +44,25 @@ const TEXT_APPLICATION_TYPES = new Set([
   'application/dart',
 ]);
 
+/**
+ * Charsets whose bytes decode correctly as utf-8. Text content declared with
+ * any other charset (e.g. `utf-16le`) would be garbled by a utf-8 read.
+ */
+const UTF8_COMPATIBLE_CHARSETS = new Set(['utf-8', 'utf8', 'us-ascii', 'ascii']);
+
 function isTextLikeMimeType(mimeType: string | undefined): boolean {
   if (!mimeType) return true;
-  mimeType = mimeType.split(';', 1)[0]!.trim().toLowerCase();
+  const [essence, ...params] = mimeType.split(';');
+  for (const param of params) {
+    const [name, value = ''] = param.split('=', 2);
+    if (name!.trim().toLowerCase() !== 'charset') continue;
+    const charset = value
+      .trim()
+      .replace(/^"(.*)"$/, '$1')
+      .toLowerCase();
+    if (!UTF8_COMPATIBLE_CHARSETS.has(charset)) return false;
+  }
+  mimeType = essence!.trim().toLowerCase();
   // `application/octet-stream` is the catch-all for unknown extensions; we
   // optimistically treat it as text so files like `.log` or `.conf` (which
   // have no registered mime mapping) still get read as utf-8.
