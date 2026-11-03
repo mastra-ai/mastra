@@ -18,6 +18,21 @@ describe('Factory tool body', () => {
     });
   });
 
+  describe('when a command fails after printing a long output', () => {
+    const listing = Array.from({ length: 120 }, (_, index) => `file-${index}.ts`).join('\n');
+    const failedCommand = { ...commandTool, status: 'error' as const, result: `${listing}\n\nExit code: 1` };
+
+    it.each([
+      ['live, with its output streamed', listing],
+      ['after a reload, with no streamed output', ''],
+    ])('shows how it exited, %s', async (_, output) => {
+      renderWithProviders(<ToolCard tool={{ ...failedCommand, output }} />);
+      await userEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/Exit code: 1/)).toBeVisible();
+    });
+  });
+
   describe('when an edit succeeds', () => {
     it('shows the change without the redundant success result', async () => {
       renderWithProviders(<ToolCard tool={editTool} />);

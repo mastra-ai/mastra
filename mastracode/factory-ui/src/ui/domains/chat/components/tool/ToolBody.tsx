@@ -33,6 +33,11 @@ function toolResultText(tool: ToolCall): string | undefined {
   return stripSerializedAnsi(stringifyToolValue(tool.result)) || undefined;
 }
 
+function commandOutputText(tool: ToolCall, resultText: string | undefined): string | undefined {
+  if (tool.status === 'error') return resultText ?? tool.output;
+  return tool.output || resultText;
+}
+
 export function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
   if (toolKnowledgeCard(tool)) return true;
   if (command !== undefined || tool.output) return true;
@@ -107,14 +112,11 @@ export function ToolBody({ tool, command }: { tool: ToolCall; command?: string }
   }
 
   if (command) {
+    const output = commandOutputText(tool, resultText);
     return (
       <>
         <ToolCallCommand command={command} />
-        {tool.output ? (
-          <ToolCallOutput text={tool.output} />
-        ) : (
-          resultText !== undefined && <ToolCallOutput text={resultText} maxLength={800} />
-        )}
+        {output && <ToolCallOutput text={output} />}
       </>
     );
   }
