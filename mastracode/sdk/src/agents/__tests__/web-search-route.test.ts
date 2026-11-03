@@ -181,7 +181,12 @@ describe('provider web search follows the model transport', () => {
         get: providerId =>
           providerId === 'anthropic'
             ? credentialType === 'oauth'
-              ? ({ type: 'oauth', access: 'tenant-access', refresh: 'tenant-refresh', expires: Date.now() + 60_000 } as any)
+              ? ({
+                  type: 'oauth',
+                  access: 'tenant-access',
+                  refresh: 'tenant-refresh',
+                  expires: Date.now() + 60_000,
+                } as any)
               : { type: 'api_key', key: 'sk-tenant' }
             : undefined,
         getStoredApiKey: () => undefined,
