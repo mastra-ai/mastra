@@ -301,12 +301,14 @@ describe('Slack workspace tools', () => {
   it('stops listing members when Slack repeats a pagination cursor', async () => {
     const { run, apiCall } = await slackSession();
     const slack = apiCall.getMockImplementation()!;
-    apiCall.mockImplementation(async (method, args) =>
-      method === 'conversations.members'
-        ? { ok: true, members: ['UFILL0'], response_metadata: { next_cursor: 'same' } }
-        : slack(method, args),
-    );
+    let pages = 0;
+    apiCall.mockImplementation(async (method, args) => {
+      if (method !== 'conversations.members') return slack(method, args);
+      if (++pages > 2) throw new Error('member pages kept being requested');
+      return { ok: true, members: ['UFILL0'], response_metadata: { next_cursor: 'same' } };
+    });
     await expect(run(SLACK_READ_TOOL_NAME, { target: 'GBIG' })).rejects.toThrow(/same page of channel members/);
+    expect(pages).toBe(2);
   });
 
   it('explains a missing scope instead of surfacing the raw API error', async () => {

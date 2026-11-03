@@ -741,7 +741,7 @@ Like the other channel tools, it's only available when you pass it to the agent 
 
 The tool takes the attachment `url`, plus an optional byte `offset` and `length` (at most 128 KiB per call). It returns `{ name, mimeType, size, offset, encoding, content, nextOffset }`.
 
-Text files come back as UTF-8, with chunks ending on a character boundary. Other files come back as base64. Pass `nextOffset` to read the next chunk. Files larger than 10 MiB are refused. If the adapter doesn't report a file's size, the tool downloads it and checks the size before returning anything.
+Text files come back as UTF-8 with chunks ending on a character boundary, while other files come back as base64. Pass `nextOffset` to read the next chunk. Files larger than 10 MiB are refused, although a file whose size the adapter doesn't report is downloaded first and checked before anything is returned.
 
 ## Inline links
 
