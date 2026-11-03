@@ -23,6 +23,8 @@
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/platform-memory": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@types/node": "22.19.15",
     "tsdown": "0.23.1",
