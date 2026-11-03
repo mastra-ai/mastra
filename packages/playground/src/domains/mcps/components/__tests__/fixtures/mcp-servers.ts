@@ -1,5 +1,6 @@
 import type { McpServerInfo, McpServerToolListResponse, McpToolInfo } from '@mastra/client-js';
 import type { AuthCapabilities } from '@mastra/react/hooks/auth';
+import type { ReadMcpServerResourceResponse } from '@mastra/react/hooks/mcps';
 
 const versionDetail: McpServerInfo['version_detail'] = {
   version: '1.0.0',
@@ -35,6 +36,19 @@ export const echoTool: McpToolInfo = {
   name: 'echo',
   description: 'Echoes its input',
   inputSchema: JSON.stringify({ type: 'object', properties: { message: { type: 'string' } } }),
+};
+
+/** A tool that ships an MCP App, rendered above its Playground form. */
+export const dashboardTool: McpToolInfo = {
+  id: 'showDashboard',
+  name: 'showDashboard',
+  description: 'Shows a dashboard',
+  inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+  _meta: { ui: { resourceUri: 'ui://dashboard/app' } },
+};
+
+export const dashboardAppResource: ReadMcpServerResourceResponse = {
+  contents: [{ uri: 'ui://dashboard/app', text: '<!DOCTYPE html><html><body>dashboard</body></html>' }],
 };
 
 export const emptyToolList: McpServerToolListResponse = { tools: [] };
