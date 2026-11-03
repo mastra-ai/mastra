@@ -708,7 +708,7 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
-  describe('shell pipelines', () => {
+  describe.skipIf(process.platform === 'win32')('shell pipelines', () => {
     const resources: { sandbox: LocalSandbox; directory: string }[] = [];
 
     afterEach(async () => {
