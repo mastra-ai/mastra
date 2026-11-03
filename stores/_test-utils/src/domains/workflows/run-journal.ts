@@ -236,6 +236,81 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         });
       });
 
+      it('writes a checkpoint or an append only when the stored status matches expectedStatus', async () => {
+        const notCanceled = ['running', 'success'] as const;
+        // A run that isn't stored yet is always written.
+        const id = runId();
+        expect(
+          await store.writeWorkflowRunCheckpoint({
+            workflowName,
+            runId: id,
+            header: makeHeader(id),
+            steps: { a: ok(1) },
+            state: { n: 1 },
+            expectedStatus: [...notCanceled],
+          }),
+        ).toEqual({ lastSeq: 2 });
+        const appended = runId();
+        expect(
+          await store.appendWorkflowRunEntries({
+            workflowName,
+            runId: appended,
+            header: makeHeader(appended),
+            steps: { a: ok(1) },
+            expectedStatus: [],
+          }),
+        ).toEqual({ lastSeq: 1 });
+        expect(
+          await store.appendWorkflowRunEntries({
+            workflowName,
+            runId: id,
+            header: makeHeader(id),
+            steps: { b: ok(2) },
+            expectedStatus: 'running',
+          }),
+        ).toEqual({ lastSeq: 3 });
+
+        // Another process cancels the run: guarded writes of its owner leave it exactly as it is.
+        await store.updateWorkflowRunHeader({ workflowName, runId: id, opts: { status: 'canceled' } });
+        const stored = await loadRun(id);
+        expect(
+          await store.appendWorkflowRunEntries({
+            workflowName,
+            runId: id,
+            header: makeHeader(id, { status: 'success' }),
+            steps: { c: ok(3) },
+            state: { n: 2 },
+            expectedStatus: [...notCanceled],
+          }),
+        ).toBeNull();
+        expect(
+          await store.writeWorkflowRunCheckpoint({
+            workflowName,
+            runId: id,
+            header: makeHeader(id),
+            steps: {},
+            state: {},
+            expectedStatus: [...notCanceled],
+          }),
+        ).toBeNull();
+        expect(await loadRun(id)).toEqual(stored);
+        expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toMatchObject({
+          header: { status: 'canceled' },
+          lastSeq: 3,
+        });
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: id })).toBe('canceled');
+
+        // Without a guard, the write lands on the canceled run.
+        expect(
+          await store.appendWorkflowRunEntries({
+            workflowName,
+            runId: id,
+            header: makeHeader(id, { status: 'canceled' }),
+            steps: { c: ok(3) },
+          }),
+        ).toEqual({ lastSeq: 4 });
+      });
+
       it("records the drive's start state seq, and loads the state as of a seq", async () => {
         const id = runId();
         const run = { workflowName, runId: id };
@@ -908,6 +983,9 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await load('v1-run', 1)).toMatchObject({ status: 'success' });
         expect(await load('v2-run', 1)).toBeNull();
         expect(await load('v1-run', 2)).toBeNull();
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: 'v1-run' })).toBe('success');
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: 'v2-run' })).toBe('suspended');
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: 'nope' })).toBeNull();
 
         const v2 = await store.getWorkflowRunById({ runId: 'v2-run', workflowName });
         expect(v2).toMatchObject({ runId: 'v2-run', workflowName, resourceId: 'res', storageVersion: 2 });
@@ -1036,6 +1114,8 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         const rejected = (write: Promise<unknown>) => expect(write).rejects.toSatisfy(isRunFenceConflictError);
         await rejected(append(id, changed, ['a', 'b'], true, { fence }));
         await rejected(checkpoint(id, changed, { fence }));
+        await rejected(append(id, changed, ['a', 'b'], true, { fence, expectedStatus: 'running' }));
+        await rejected(checkpoint(id, changed, { fence, expectedStatus: 'running' }));
         await rejected(store.updateWorkflowRunHeader({ workflowName, runId: id, opts: { status: 'canceled' }, fence }));
         await rejected(
           store.updateWorkflowState({

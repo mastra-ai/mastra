@@ -262,6 +262,65 @@ export function createWorkflowEngineTests({
         expect(result.status).toBe('success');
         expect(seenByLast).toBe(3);
       });
+
+      it(`stops a run canceled by another process before its next step, and keeps it canceled: v${storageVersion}`, async () => {
+        const workflowName = id(`remote-cancel-v${storageVersion}`);
+        let releaseFirst!: () => void;
+        let firstStarted!: () => void;
+        const started = new Promise<void>(resolve => (firstStarted = resolve));
+        let laterRan = false;
+        const build = (first: () => Promise<void>) =>
+          createWorkflow({ id: workflowName, inputSchema: num, outputSchema: num, options: { storageVersion } })
+            .then(
+              createStep({
+                id: 'first',
+                inputSchema: num,
+                outputSchema: num,
+                execute: async ({ inputData }) => {
+                  await first();
+                  return inputData;
+                },
+              }),
+            )
+            .then(
+              createStep({
+                id: 'later',
+                inputSchema: num,
+                outputSchema: num,
+                execute: async ({ inputData }) => {
+                  laterRan = true;
+                  return inputData;
+                },
+              }),
+            )
+            .commit();
+        const owner = new Mastra({
+          logger: false,
+          storage,
+          workflows: {
+            [workflowName]: build(() => {
+              firstStarted();
+              return new Promise<void>(resolve => (releaseFirst = resolve));
+            }),
+          },
+        });
+        // Another process: its own Mastra and workflow, sharing only the storage.
+        const other = new Mastra({ logger: false, storage, workflows: { [workflowName]: build(async () => {}) } });
+
+        const run = await owner.getWorkflow(workflowName).createRun({ runId: `${prefix}-remote-cancel` });
+        const resultPromise = run.start({ inputData: { n: 0 } });
+        await started;
+        await (await other.getWorkflow(workflowName).createRun({ runId: run.runId })).cancel();
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: run.runId })).toBe('canceled');
+
+        releaseFirst();
+        expect((await resultPromise).status).toBe('canceled');
+        expect(laterRan).toBe(false);
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: run.runId })).toBe('canceled');
+        expect((await store.loadWorkflowSnapshot({ workflowName, runId: run.runId, storageVersion }))?.status).toBe(
+          'canceled',
+        );
+      });
     }
 
     it('sends only the changed steps on each v2 write', async () => {

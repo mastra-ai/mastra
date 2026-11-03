@@ -48,7 +48,13 @@ import {
 import type { WorkflowRunState, WorkflowRunStatus, StepResult } from '@mastra/core/workflows';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import type { SqliteClient as Client, SqliteInValue as InValue, SqliteStatement, SqliteValue } from '../../db/client';
+import type {
+  SqliteClient as Client,
+  SqliteInValue as InValue,
+  SqliteResultSet,
+  SqliteStatement,
+  SqliteValue,
+} from '../../db/client';
 import { assertRunFence, DB_NOW_MS, inWriteTransaction, withRunFence } from '../../db/run-fencing';
 import type { RunFenceCheck } from '../../db/run-fencing';
 import { createExecuteWriteOperationWithRetry, safeStringify } from '../../db/utils';
@@ -426,6 +432,31 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   /**
+   * Runs a storage v2 write's statements behind the run's fence. With `expectedStatus`, in a
+   * write transaction that first reads the stored status, and writes nothing (resolving to null)
+   * when the run is stored and its status doesn't match.
+   */
+  #writeRun(
+    check: RunFenceCheck | undefined,
+    run: RunWrite,
+    expectedStatus: WorkflowRunStatus | WorkflowRunStatus[] | undefined,
+    statements: SqliteStatement[],
+  ): Promise<SqliteResultSet[] | null> {
+    if (expectedStatus === undefined) return withRunFence(this.#client, check, writer => writer.batch(statements));
+    return inWriteTransaction(this.#client, async tx => {
+      if (check) await assertRunFence(tx, check);
+      const { rows } = await tx.execute({
+        sql: `SELECT status FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
+        args: [run.workflowName, run.runId],
+      });
+      if (rows[0] && !matchesExpectedWorkflowStatus(rows[0].status as WorkflowRunStatus, expectedStatus)) return null;
+      const results: SqliteResultSet[] = [];
+      for (const statement of statements) results.push(await tx.execute(statement));
+      return results;
+    });
+  }
+
+  /**
    * Selects v1 snapshot rows and storage v2 runs as one result, newest first. Each version
    * has its own WHERE clause; `null` leaves it out. Storage v2 rows carry their header and
    * entries, or in summary mode only the summary snapshot. `page` is appended to the
@@ -708,12 +739,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   /**
-   * One batch behind the write lock: marking the run a state base builds on as shared, the header
-   * upsert, then the deletion of the run's entries (only its steps when another run builds on its
-   * state, see `stateShared`), then the new ones.
+   * One batch behind the write lock (see `#writeRun` for `expectedStatus`): marking the run a state
+   * base builds on as shared, the header upsert, then the deletion of the run's entries (only its
+   * steps when another run builds on its state, see `stateShared`), then the new ones.
    */
   async writeWorkflowRunCheckpoint({
     fence,
+    expectedStatus,
     steps,
     state,
     stateBase,
@@ -725,7 +757,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     stateBase?: StateRef;
     statePatch?: StatePatchOp[];
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     const entries = journalEntries(steps, { state, stateBase, statePatch }, true);
     const check = this.#runFenceCheck(fence, run.runId, 'writeWorkflowRunCheckpoint');
     try {
@@ -746,10 +779,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         insertEntries(run, entries),
       );
       const results = await this.executeWithRetry(
-        () => withRunFence(this.#client, check, writer => writer.batch(statements)),
+        () => this.#writeRun(check, run, expectedStatus, statements),
         'writeWorkflowRunCheckpoint',
       );
-      return { lastSeq: Number(results[statements.length - 3]!.rows[0]!.lastSeq) };
+      return results && { lastSeq: Number(results[statements.length - 3]!.rows[0]!.lastSeq) };
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw this.#runError('WRITE_WORKFLOW_RUN_CHECKPOINT', run.workflowName, run.runId, error);
@@ -757,8 +790,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   /**
-   * One batch behind the write lock: the header upsert adds the entry count to `lastSeq`,
-   * and the insert numbers the entries up to it, so writes to one run never interleave.
+   * One batch behind the write lock (see `#writeRun` for `expectedStatus`): the header upsert adds
+   * the entry count to `lastSeq`, and the insert numbers the entries up to it, so writes to one run
+   * never interleave.
    */
   async appendWorkflowRunEntries({
     fence,
@@ -767,6 +801,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     state,
     statePatch,
     startStateSeq,
+    expectedStatus,
     ...run
   }: RunWrite & {
     steps: Record<string, StepResult<any, any, any, any>>;
@@ -775,21 +810,20 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     statePatch?: StatePatchOp[];
     startStateSeq?: number;
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     const entries = journalEntries(steps, { state, statePatch }, false, stepPatches);
     const check = this.#runFenceCheck(fence, run.runId, 'appendWorkflowRunEntries');
     try {
-      const [header] = await this.executeWithRetry(
+      const results = await this.executeWithRetry(
         () =>
-          withRunFence(this.#client, check, writer =>
-            writer.batch([
-              upsertHeader(run, entries.length, { checkpoint: false, startStateSeq }),
-              insertEntries(run, entries),
-            ]),
-          ),
+          this.#writeRun(check, run, expectedStatus, [
+            upsertHeader(run, entries.length, { checkpoint: false, startStateSeq }),
+            insertEntries(run, entries),
+          ]),
         'appendWorkflowRunEntries',
       );
-      return { lastSeq: Number(header!.rows[0]!.lastSeq) };
+      return results && { lastSeq: Number(results[0]!.rows[0]!.lastSeq) };
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw this.#runError('APPEND_WORKFLOW_RUN_ENTRIES', run.workflowName, run.runId, error);
@@ -1305,9 +1339,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunStatus | null> {
+    // A storage v2 run's header first, then a v1 snapshot, as `loadWorkflowSnapshot` looks.
     const result = await this.#client.execute({
-      sql: `SELECT json_extract(snapshot, '$.status') AS status FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
-      args: [workflowName, runId],
+      sql: `SELECT COALESCE(
+          (SELECT status FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?),
+          (SELECT json_extract(snapshot, '$.status') FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?)
+        ) AS status`,
+      args: [workflowName, runId, workflowName, runId],
     });
     const status = result.rows?.[0]?.status;
     return (status ?? null) as WorkflowRunStatus | null;

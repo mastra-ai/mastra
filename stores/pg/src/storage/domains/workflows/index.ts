@@ -985,9 +985,10 @@ export class WorkflowsPG extends WorkflowsStorage {
    * number of entries the write adds) to `lastSeq`, and returns the new `lastSeq` and
    * `stateShared`. A checkpoint's state entries come last, so its `startStateSeq` is the new
    * `lastSeq`; an append keeps the stored one unless given `$12`. The header's row lock is held
-   * until commit, so the writes to one run commit in `seq` order.
+   * until commit, so the writes to one run commit in `seq` order. With `expectedParam` (a text
+   * array of statuses), a stored run whose status isn't in it is left as is and nothing is returned.
    */
-  #upsertHeaderSql(checkpoint: boolean): string {
+  #upsertHeaderSql(checkpoint: boolean, expectedParam?: string): string {
     const startStateSeq = checkpoint
       ? { insert: '$7::int', update: 'r."lastSeq" + EXCLUDED."lastSeq"' }
       : { insert: 'COALESCE($12::int, 0)', update: 'COALESCE($12::int, r."startStateSeq")' };
@@ -1000,6 +1001,7 @@ export class WorkflowsPG extends WorkflowsStorage {
            status = EXCLUDED.status, header = EXCLUDED.header, "lastSeq" = r."lastSeq" + EXCLUDED."lastSeq",
            "startStateSeq" = ${startStateSeq.update},
            "updatedAt" = EXCLUDED."updatedAt", "updatedAtZ" = EXCLUDED."updatedAtZ"
+       ${expectedParam ? `WHERE r.status = ANY(${expectedParam}::text[])` : ''}
        RETURNING "lastSeq", "stateShared"`;
   }
 
@@ -1022,6 +1024,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   async writeWorkflowRunCheckpoint({
     fence: explicitFence,
+    expectedStatus,
     steps,
     state,
     stateBase,
@@ -1033,9 +1036,11 @@ export class WorkflowsPG extends WorkflowsStorage {
     stateBase?: StateRef;
     statePatch?: StatePatchOp[];
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     const entries = journalEntries(steps, { state, stateBase, statePatch }, true);
     const fence = resolveRunFence(this, explicitFence, run.runId);
+    const expected = expectedStatus === undefined ? [] : [[expectedStatus].flat()];
     try {
       return await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'writeWorkflowRunCheckpoint');
@@ -1048,10 +1053,13 @@ export class WorkflowsPG extends WorkflowsStorage {
             [stateBase.workflowName, stateBase.runId],
           );
         }
-        const { lastSeq, stateShared } = await t.one<{ lastSeq: number; stateShared: boolean }>(
-          this.#upsertHeaderSql(true),
-          this.#headerParams(run, entries.length),
+        const header = await t.oneOrNone<{ lastSeq: number; stateShared: boolean }>(
+          this.#upsertHeaderSql(true, expected.length ? '$12' : undefined),
+          [...this.#headerParams(run, entries.length), ...expected],
         );
+        // `expectedStatus` rejected the write: the header is left as is, and so are the entries.
+        if (!header) return null;
+        const { lastSeq, stateShared } = header;
         // A new statement under READ COMMITTED: with the header locked above, it sees every
         // append that committed before this checkpoint, so none of their entries survive it.
         // The state entries do when another run's state builds on this one's, which can name
@@ -1083,6 +1091,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     state,
     statePatch,
     startStateSeq,
+    expectedStatus,
     ...run
   }: RunWrite & {
     steps: Record<string, StepResult<any, any, any, any>>;
@@ -1091,8 +1100,10 @@ export class WorkflowsPG extends WorkflowsStorage {
     statePatch?: StatePatchOp[];
     startStateSeq?: number;
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     const entries = journalEntries(steps, { state, statePatch }, false, stepPatches);
+    const expected = expectedStatus === undefined ? [] : [[expectedStatus].flat()];
     try {
       return await withRunFence(
         this.#db.client,
@@ -1100,15 +1111,16 @@ export class WorkflowsPG extends WorkflowsStorage {
         resolveRunFence(this, fence, run.runId),
         'appendWorkflowRunEntries',
         q =>
-          q.one<{ lastSeq: number }>(
-            `WITH h AS (${this.#upsertHeaderSql(false)}),
+          // When `expectedStatus` rejects the write, `h` has no row, so neither has the insert.
+          q.oneOrNone<{ lastSeq: number }>(
+            `WITH h AS (${this.#upsertHeaderSql(false, expected.length ? '$14' : undefined)}),
              e AS (
                INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
                SELECT $1, $2, h."lastSeq" - $7::int + e.ord, ${ENTRY_VALUES}
                FROM h, ${entryRows('$13')}
              )
              SELECT "lastSeq" FROM h`,
-            [...this.#headerParams(run, entries.length), startStateSeq ?? null, toPgJson(entries)],
+            [...this.#headerParams(run, entries.length), startStateSeq ?? null, toPgJson(entries), ...expected],
           ),
       );
     } catch (error) {
@@ -1574,8 +1586,13 @@ export class WorkflowsPG extends WorkflowsStorage {
   }): Promise<WorkflowRunStatus | null> {
     try {
       const statusExpr = await this.#statusExpression('snapshot');
+      // A storage v2 run's header first, then a v1 snapshot, as `loadWorkflowSnapshot` looks.
       const row = await this.#db.client.oneOrNone<{ status: unknown }>(
-        `SELECT ${statusExpr} AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE "workflow_name" = $1 AND "run_id" = $2 ORDER BY "createdAt" DESC LIMIT 1`,
+        `SELECT COALESCE(
+           (SELECT status FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2),
+           (SELECT ${statusExpr} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+            WHERE "workflow_name" = $1 AND "run_id" = $2 ORDER BY "createdAt" DESC LIMIT 1)
+         ) AS status`,
         [workflowName, runId],
       );
       const status = row?.status;
