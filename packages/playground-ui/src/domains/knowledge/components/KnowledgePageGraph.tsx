@@ -21,7 +21,7 @@ import type { CSSProperties } from 'react';
 
 import { fitWords } from '../lib/circleText';
 import { fitTargets } from '../lib/fitTargets';
-import { fitDuration, fitViewport } from '../lib/fitViewport';
+import { fitDuration, fitViewport, nudgeAxis } from '../lib/fitViewport';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -1362,22 +1362,22 @@ function KnowledgePageGraphInner({
     void flow.setViewport(viewport, duration ? { duration } : undefined);
   }, []);
 
-  // A refocus only pans: the newly focused page moves to the centre and the zoom stays where the user
-  // left it. A pane that merely changes size does the same. Fit view is the one control that changes zoom.
-  const panToSelection = useCallback((duration?: number) => {
+  // A refocus leaves the view exactly where the user put it, pan and zoom. Only when the newly focused page
+  // would land outside the pane (or too close to its edge) does the view move, and then by just enough to
+  // bring the page back in. A pane that merely changes size does the same. Fit view is the one control that
+  // changes zoom.
+  const nudgeToSelection = useCallback((duration?: number) => {
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
     const height = container?.clientHeight ?? 0;
     const { nodes: current, selectedPageId: selected, centerId: centre, reactFlow: flow } = fitState.current;
     const anchor = current.find(node => node.id === (selected ?? centre));
     if (!anchor || width === 0 || height === 0) return;
-    const { zoom } = flow.getViewport();
-    const cx = anchor.position.x + (anchor.width ?? 0) / 2;
-    const cy = anchor.position.y + (anchor.height ?? 0) / 2;
-    void flow.setViewport(
-      { zoom, x: width / 2 - cx * zoom, y: height / 2 - cy * zoom },
-      duration ? { duration } : undefined,
-    );
+    const view = flow.getViewport();
+    const dx = nudgeAxis(anchor.position.x * view.zoom + view.x, (anchor.width ?? 0) * view.zoom, width);
+    const dy = nudgeAxis(anchor.position.y * view.zoom + view.y, (anchor.height ?? 0) * view.zoom, height);
+    if (dx === 0 && dy === 0) return;
+    void flow.setViewport({ zoom: view.zoom, x: view.x + dx, y: view.y + dy }, duration ? { duration } : undefined);
   }, []);
 
   // A host that hides the graph behind a Tree/Graph toggle gives it zero size at first, so fit when the
@@ -1405,7 +1405,7 @@ function KnowledgePageGraphInner({
         if (needsFit || fitPending.current) {
           needsFit = false;
           fit(true);
-        } else panToSelection();
+        } else nudgeToSelection();
       });
     });
     observer.observe(container);
@@ -1413,7 +1413,7 @@ function KnowledgePageGraphInner({
       observer.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
     };
-  }, [hasNodes, fit, panToSelection]);
+  }, [hasNodes, fit, nudgeToSelection]);
 
   // A selection made outside the graph (tree, search, a link) pans to that page at the current zoom. A
   // click on the graph itself leaves the view where the user put it.
@@ -1425,8 +1425,8 @@ function KnowledgePageGraphInner({
     const fromGraph = selectedHere.current === selectedPageId;
     selectedHere.current = null;
     if (fromGraph) return;
-    panToSelection(fitDuration(prefersMotion()));
-  }, [selectedPageId, selectedIsLoaded, panToSelection]);
+    nudgeToSelection(fitDuration(prefersMotion()));
+  }, [selectedPageId, selectedIsLoaded, nudgeToSelection]);
 
   // First click selects; a click on the page that is already selected opens it. A double-click is the two.
   const activate = (page: KnowledgePagePayload) => {

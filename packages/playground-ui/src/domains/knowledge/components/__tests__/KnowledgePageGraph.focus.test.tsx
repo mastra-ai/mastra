@@ -12,6 +12,7 @@ import { KnowledgePageGraph } from '../KnowledgePageGraph';
 const setViewport = vi.fn(async (_viewport: Viewport, _options?: { duration?: number }) => true);
 // The zoom the user has chosen, as React Flow would report it.
 let currentZoom = 1;
+let currentPan = { x: 0, y: 0 };
 vi.mock('@xyflow/react', async importOriginal => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
   return {
@@ -19,7 +20,7 @@ vi.mock('@xyflow/react', async importOriginal => {
     useReactFlow: () => ({
       ...actual.useReactFlow(),
       setViewport,
-      getViewport: () => ({ x: 0, y: 0, zoom: currentZoom }),
+      getViewport: () => ({ ...currentPan, zoom: currentZoom }),
     }),
   };
 });
@@ -61,6 +62,15 @@ const page = (id: string, parentId: string | null): KnowledgePagePayload => ({
 const pages = [page('org', null), page('refunds', 'org'), page('billing', 'org'), page('roadmap', 'org')];
 const mentions: KnowledgePageEdge[] = [{ source: 'refunds', target: 'billing', kind: 'mention', count: 1 }];
 
+/** A page circle's centre in the graph's own coordinates, before any pan or zoom. */
+function flowCentre(id: string) {
+  const element = document.querySelector<HTMLElement>(`.react-flow__node [data-page-id="${id}"]`);
+  const node = element?.closest<HTMLElement>('.react-flow__node');
+  const [, x = '0', y = '0'] = /translate\((-?[\d.]+)px, ?(-?[\d.]+)px\)/.exec(node?.style.transform ?? '') ?? [];
+  const half = Number.parseFloat(element?.style.width ?? '0') / 2;
+  return { x: Number(x) + half, y: Number(y) + half };
+}
+
 /** Where the given pages' circles land on screen under the last viewport set: their bounding box. */
 function screenBox(ids: string[]) {
   const viewport = setViewport.mock.calls.at(-1)?.[0];
@@ -89,24 +99,41 @@ describe('KnowledgePageGraph focus on the selected page', () => {
   beforeEach(() => {
     setViewport.mockClear();
     currentZoom = 1;
+    currentPan = { x: 0, y: 0 };
   });
 
   describe('when a page is selected outside the graph (tree, search, link)', () => {
-    it('pans to that page and keeps the zoom the user had', async () => {
+    /** Mounts with nothing selected at 0.45 zoom, then selects `refunds`; `panFor` picks the pan the user had. */
+    async function selectRefunds(panFor: (centre: { x: number; y: number }) => { x: number; y: number }) {
       const { rerender } = renderWithProviders(
         <KnowledgePageGraph pages={pages} edges={mentions} selectedPageId={null} onSelect={() => {}} />,
       );
       await screen.findAllByTestId('knowledge-page-node');
       currentZoom = 0.45;
+      currentPan = panFor(flowCentre('refunds'));
       setViewport.mockClear();
-
       rerender(<KnowledgePageGraph pages={pages} edges={mentions} selectedPageId="refunds" onSelect={() => {}} />);
+    }
+
+    it('leaves pan and zoom alone when the page is already on screen', async () => {
+      await selectRefunds(centre => ({ x: WIDTH / 2 - centre.x * 0.45, y: HEIGHT / 2 - centre.y * 0.45 }));
+
+      expect(setViewport).not.toHaveBeenCalled();
+    });
+
+    it('nudges a page that would land off screen back in, keeping the zoom', async () => {
+      await selectRefunds(() => ({ x: -50000, y: -50000 }));
 
       expect(setViewport).toHaveBeenCalledTimes(1);
-      expect(setViewport.mock.calls[0]?.[0].zoom).toBe(0.45);
-      const box = screenBox(['refunds']);
-      expect((box.left + box.right) / 2).toBeCloseTo(WIDTH / 2, 0);
-      expect((box.top + box.bottom) / 2).toBeCloseTo(HEIGHT / 2, 0);
+      const viewport = setViewport.mock.calls[0]?.[0];
+      expect(viewport?.zoom).toBe(0.45);
+      const centre = flowCentre('refunds');
+      const x = centre.x * 0.45 + (viewport?.x ?? 0);
+      const y = centre.y * 0.45 + (viewport?.y ?? 0);
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(WIDTH);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeLessThan(HEIGHT);
     });
 
     it('does not move the view again when the same data is refetched', async () => {

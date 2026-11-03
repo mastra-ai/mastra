@@ -36,3 +36,17 @@ export function fitViewport({ bounds, width, height, focus, ring, anchor }: FitI
 
 /** How long a view change animates: the same as the layout's own transition, and none under reduced motion. */
 export const fitDuration = (motion: boolean) => (motion ? KNOWLEDGE_GRAPH_TRANSITION_MS : 0);
+
+/** How close to the pane's edge a refocused page may sit before the view moves to bring it in. */
+export const NUDGE_PADDING = 24;
+
+/**
+ * How far to move the view along one axis so a page at `start` (screen position) of `size` stays inside a
+ * pane of `extent`, with padding. Zero when it already is; centred when it can't fit with the padding.
+ */
+export function nudgeAxis(start: number, size: number, extent: number): number {
+  if (size + NUDGE_PADDING * 2 > extent) return extent / 2 - (start + size / 2);
+  if (start < NUDGE_PADDING) return NUDGE_PADDING - start;
+  const overflow = start + size - (extent - NUDGE_PADDING);
+  return overflow > 0 ? -overflow : 0;
+}

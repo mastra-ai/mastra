@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitDuration, fitViewport, RING_MIN_ZOOM } from './fitViewport';
+import { fitDuration, fitViewport, NUDGE_PADDING, nudgeAxis, RING_MIN_ZOOM } from './fitViewport';
 import { READABLE_MIN_ZOOM } from './graphShape';
 import { KNOWLEDGE_GRAPH_TRANSITION_MS } from './useLeavingNodes';
 
@@ -32,5 +32,25 @@ describe('fitDuration', () => {
   it('animates over the layout transition, and not at all under reduced motion', () => {
     expect(fitDuration(true)).toBe(KNOWLEDGE_GRAPH_TRANSITION_MS);
     expect(fitDuration(false)).toBe(0);
+  });
+});
+
+describe('nudgeAxis', () => {
+  it('does not move a page that is comfortably inside the pane', () => {
+    expect(nudgeAxis(300, 100, 800)).toBe(0);
+    expect(nudgeAxis(NUDGE_PADDING, 100, 800)).toBe(0);
+  });
+
+  it('moves a page past the start edge back in by just the missing distance', () => {
+    expect(nudgeAxis(-200, 100, 800)).toBe(200 + NUDGE_PADDING);
+    expect(nudgeAxis(10, 100, 800)).toBe(NUDGE_PADDING - 10);
+  });
+
+  it('moves a page past the end edge back in by just the missing distance', () => {
+    expect(nudgeAxis(900, 100, 800)).toBe(-(900 + 100 - (800 - NUDGE_PADDING)));
+  });
+
+  it('centres a page too big to fit with its padding', () => {
+    expect(nudgeAxis(-100, 760, 800)).toBe(400 - (-100 + 380));
   });
 });
