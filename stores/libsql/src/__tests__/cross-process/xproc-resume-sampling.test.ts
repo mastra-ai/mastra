@@ -89,10 +89,20 @@ for (const sampled of [false, true])
         JSON.stringify({ sampled, counts, hooks: events.filter(r => r.signal === 'hook') }),
       );
       if (sampled) {
-        expect(counts.agent_run).toBe(4);
-        expect(counts.model_generation).toBe(4);
+        for (const type of ['agent_run', 'model_generation']) {
+          const spans = events.filter(row => row.signal === 'span' && row.type === type);
+          const ids = new Set(spans.map(row => row.id));
+          expect(ids.size).toBe(2);
+          for (const id of ids) {
+            expect(spans.filter(row => row.id === id && row.event === 'span_started')).toHaveLength(1);
+            expect(spans.filter(row => row.id === id && row.event === 'span_ended')).toHaveLength(1);
+          }
+        }
         expect(counts.score).toBe(1);
-      } else expect(counts).toEqual({});
+      } else {
+        expect(counts).toEqual({});
+        expect(events.filter(row => row.signal === 'hook')).toEqual([]);
+      }
     } finally {
       for (const peer of peers) await peer.kill().catch(() => {});
       await mastra.shutdown();
