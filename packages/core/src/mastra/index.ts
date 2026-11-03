@@ -101,6 +101,7 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import { cancelNestedRun, nestedRunParentOf, nestedRunRecoveryAction } from '../workflows/nested-run-recovery';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire } from '../workflows/scheduler/cron';
@@ -4323,14 +4324,30 @@ export class Mastra<
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    // A nested run whose parent is restarted here is re-driven by its parent's step. Restarting it
-    // too would run the same nested run twice at once.
-    const active = new Set(activeRuns.runs.map(run => `${run.workflowName}\u0000${run.runId}`));
-    const runs = activeRuns.runs.filter(run => {
-      const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
-      const parent = snapshot?.parentWorkflow;
-      return !parent || !active.has(`${parent.workflowId}\u0000${parent.runId}`);
-    });
+    const workflowsStore = await this.#storage?.getStore('workflows');
+    const runs: WorkflowRuns['runs'] = [];
+    for (const run of activeRuns.runs) {
+      const parent = nestedRunParentOf(run.snapshot);
+      if (!parent) {
+        runs.push(run);
+        continue;
+      }
+      // A nested run is collected by its parent's step, so the parent's stored status decides what
+      // restarting it standalone would do: run it twice while the parent drives it, or re-run the
+      // item after the parent already finished it.
+      const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
+      const recovery = nestedRunRecoveryAction(parentStatus);
+      if (recovery === 'restart') {
+        runs.push(run);
+      } else if (recovery === 'cancel' && workflowsStore) {
+        await cancelNestedRun({
+          store: workflowsStore,
+          workflowName: run.workflowName,
+          runId: run.runId,
+          logger: this.#logger,
+        });
+      }
+    }
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
