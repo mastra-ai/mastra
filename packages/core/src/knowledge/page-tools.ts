@@ -46,13 +46,23 @@ function maxTokensOf(host: KnowledgePageToolHost): number {
   return host.maxTokens ?? KNOWLEDGE_READ_BODY_TOKENS;
 }
 
+const EMBED_FAILED =
+  'Knowledge semantic index update failed; the content stays findable by keyword search and is embedded again the next time it changes';
+/** Search re-reads every vector hit, so a vector left behind by a removed page or note never surfaces. */
+const UNEMBED_FAILED =
+  'Knowledge semantic index removal failed; the removed content may keep its vectors, but search skips content that no longer exists';
+
 /** Embeds after a committed write. A failure only costs recall, so it warns instead of failing the write. */
-async function reindex(host: KnowledgePageToolHost, work: (index: KnowledgeSemanticIndex) => Promise<void>) {
+async function embed(
+  host: KnowledgePageToolHost,
+  work: (index: KnowledgeSemanticIndex) => Promise<void>,
+  failure = EMBED_FAILED,
+) {
   if (!host.semantic) return;
   try {
     await work(host.semantic);
   } catch (error) {
-    host.warn?.(`Knowledge semantic index update failed; run knowledge.reindex() to repair: ${String(error)}`);
+    host.warn?.(`${failure}: ${String(error)}`);
   }
 }
 
@@ -1154,7 +1164,7 @@ function pageTool(host: KnowledgePageToolHost) {
             body: writtenBody(args, page, maxTokensOf(host)),
             provenance,
           });
-          await reindex(host, index => index.indexPage(updated));
+          await embed(host, index => index.indexPage(updated));
           return done(updated);
         }
         if (!args.scope || !args.name) throw new Error('Creating a page needs scope and name.');
@@ -1171,7 +1181,7 @@ function pageTool(host: KnowledgePageToolHost) {
           body: args.body,
           provenance,
         });
-        await reindex(host, index => index.indexPage(created));
+        await embed(host, index => index.indexPage(created));
         return done(created);
       }
 
@@ -1202,7 +1212,7 @@ function pageTool(host: KnowledgePageToolHost) {
           }
           throw error;
         }
-        await reindex(host, index => index.removePage(page.id));
+        await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
         return done(deleted);
       }
 
@@ -1243,7 +1253,7 @@ function pageTool(host: KnowledgePageToolHost) {
         targetId: target.id,
         provenance,
       });
-      await reindex(host, index => index.removePage(page.id));
+      await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
       return done(merged);
     },
   });
@@ -1313,7 +1323,7 @@ function noteTool(host: KnowledgePageToolHost) {
           mentions: await resolveMentions(run, args.text),
           provenance,
         });
-        await reindex(host, index => index.indexNote(note));
+        await embed(host, index => index.indexNote(note));
         return { note: noteSummary(note, await noteMentions(run, note)), page: page.id };
       }
 
@@ -1334,7 +1344,7 @@ function noteTool(host: KnowledgePageToolHost) {
         return { note: noteSummary(restamped, await noteMentions(run, restamped)), page: page.id };
       }
       await storage.removeNote({ id: note.id, deletedBy: provenance.author, provenance });
-      await reindex(host, index => index.remove([`note:${note.id}`]));
+      await embed(host, index => index.remove([`note:${note.id}`]), UNEMBED_FAILED);
       return { removed: note.id };
     },
   });

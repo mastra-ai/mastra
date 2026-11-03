@@ -291,15 +291,6 @@ export class Knowledge extends MastraBase {
     };
   }
 
-  /**
-   * Re-embeds every live page and note into the vector store, for content written outside the tools
-   * or after a failed embed. Returns how many were indexed; throws without `vector` and `embedder`.
-   */
-  async reindex(): Promise<number> {
-    if (!this.#semantic) throw new Error('Knowledge has no `vector` and `embedder` to reindex into.');
-    return this.#semantic.reindex(await this.getStorage());
-  }
-
   /** The usage block that goes with `createTools(options)`. */
   getInstructions(options?: KnowledgeToolSelection): string {
     return buildKnowledgeInstructions(this.#groups(options), this.#instructions);

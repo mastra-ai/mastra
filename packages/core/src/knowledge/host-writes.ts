@@ -89,12 +89,22 @@ function splitPath(path: string): string[] {
   return keys;
 }
 
-async function embed(host: KnowledgeHostWriter, work: (index: KnowledgeSemanticIndex) => Promise<void>) {
+const EMBED_FAILED =
+  'Knowledge semantic index update failed; the content stays findable by keyword search and is embedded again the next time it changes';
+/** Search re-reads every vector hit, so a vector left behind by a removed page or note never surfaces. */
+const UNEMBED_FAILED =
+  'Knowledge semantic index removal failed; the removed content may keep its vectors, but search skips content that no longer exists';
+
+async function embed(
+  host: KnowledgeHostWriter,
+  work: (index: KnowledgeSemanticIndex) => Promise<void>,
+  failure = EMBED_FAILED,
+) {
   if (!host.semantic) return;
   try {
     await work(host.semantic);
   } catch (error) {
-    host.warn(`Knowledge semantic index update failed; run knowledge.reindex() to repair: ${String(error)}`);
+    host.warn(`${failure}: ${String(error)}`);
   }
 }
 
@@ -196,7 +206,7 @@ export async function removeKnowledgePage(
     }
     throw error;
   }
-  await embed(host, index => index.removePage(page.id));
+  await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
   return deleted;
 }
 
@@ -299,6 +309,6 @@ export async function removeKnowledgeNote(
     if ((error as Error | undefined)?.name === 'KnowledgeNotFoundError') return null;
     throw error;
   }
-  await embed(host, index => index.remove([`note:${note.id}`]));
+  await embed(host, index => index.remove([`note:${note.id}`]), UNEMBED_FAILED);
   return removed;
 }
