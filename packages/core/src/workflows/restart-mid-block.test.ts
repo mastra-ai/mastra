@@ -82,7 +82,7 @@ async function editStoredStep(
     await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
     return;
   }
-  const steps = await store.loadWorkflowRunSteps({ workflowName, runId, stepIds: [stepId] });
+  const steps = (await store.loadWorkflowRunSteps({ workflowName, runId, stepIds: [stepId] }))!;
   edit(steps[stepId]);
   await store.appendWorkflowRunEntries({ workflowName, runId, header: stored.header, steps });
 }

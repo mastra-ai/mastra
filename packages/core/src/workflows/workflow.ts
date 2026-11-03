@@ -385,7 +385,7 @@ async function loadRunForCancel(
       return {
         header: v2Header,
         storageVersion: 2,
-        loadSteps: async () => (stepIds.length ? store.loadWorkflowRunSteps({ ...run, stepIds }) : {}),
+        loadSteps: async () => (stepIds.length ? ((await store.loadWorkflowRunSteps({ ...run, stepIds })) ?? {}) : {}),
       };
     }
     if (storageVersion === 2) return null;

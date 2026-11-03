@@ -149,14 +149,17 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * The latest result of each given step of a storage v2 run (as `latestStepResults` rebuilds it).
-   * Steps without an entry are left out.
+   * Steps without an entry are left out. Null when the run isn't stored, or when `expectedLastSeq`
+   * is given and the run's `lastSeq` differs from it (the run was written to since). The check and
+   * the read see the same version of the run.
    * @experimental
    */
   async loadWorkflowRunSteps(_args: {
     workflowName: string;
     runId: string;
     stepIds: string[];
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    expectedLastSeq?: number;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | null> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 

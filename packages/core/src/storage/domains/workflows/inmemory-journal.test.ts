@@ -385,7 +385,35 @@ describe('WorkflowsInMemory storage v2 methods', () => {
 
     expect(await store.loadWorkflowRunSteps({ ...run, stepIds: ['a', 'missing'] })).toEqual({ a: ok(10) });
     expect(await store.loadWorkflowRunSteps({ ...run, stepIds: [] })).toEqual({});
-    expect(await store.loadWorkflowRunSteps({ workflowName: 'wf', runId: 'nope', stepIds: ['a'] })).toEqual({});
+    expect(await store.loadWorkflowRunSteps({ workflowName: 'wf', runId: 'nope', stepIds: ['a'] })).toBeNull();
+  });
+
+  it('loads the steps only while the run is at `expectedLastSeq`', async () => {
+    const { store } = setup();
+    const load = (expectedLastSeq: number) => store.loadWorkflowRunSteps({ ...run, stepIds: ['a'], expectedLastSeq });
+    const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
+      ...run,
+      header: makeHeader('r1'),
+      steps: { a: ok(1) },
+      state: {},
+    }))!;
+    expect(await load(lastSeq)).toEqual({ a: ok(1) });
+
+    // A draft leaves the steps as they are, but it is a write to the run.
+    const { seq } = await store.appendWorkflowRunStateDraft({ ...run, state: { x: 1 } });
+    expect(await load(lastSeq)).toBeNull();
+    expect(await load(seq)).toEqual({ a: ok(1) });
+
+    const appended = (await store.appendWorkflowRunEntries({ ...run, header: makeHeader('r1'), steps: { a: ok(2) } }))!;
+    expect(await load(seq)).toBeNull();
+    expect(await load(appended.lastSeq)).toEqual({ a: ok(2) });
+
+    // A header update (a cancel, a resume's claim) isn't a write to the run's entries.
+    await store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' } });
+    expect(await load(appended.lastSeq)).toEqual({ a: ok(2) });
+
+    await store.deleteWorkflowRunById(run);
+    expect(await load(appended.lastSeq)).toBeNull();
   });
 
   it('loads the header without the entries, and only for v2 runs', async () => {
@@ -499,7 +527,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     (loaded!.steps.a as any).output.list.push(3);
     loaded!.header.activePaths.push(3);
     (await store.loadWorkflowRunHeader(run))!.header.activePaths.push(4);
-    (await store.loadWorkflowRunSteps({ ...run, stepIds: ['a'] })).a!.payload.x = 1;
+    (await store.loadWorkflowRunSteps({ ...run, stepIds: ['a'] }))!.a!.payload.x = 1;
     expect(await store.loadWorkflowRun({ ...run, successfulSteps: 'full' })).toMatchObject({
       header: { activePaths: [0] },
       steps: { a: ok({ list: [1] }) },
