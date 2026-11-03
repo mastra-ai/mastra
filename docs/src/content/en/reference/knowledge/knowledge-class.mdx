@@ -232,7 +232,7 @@ Moves stored scopes created from declaration key `from`, and its child scopes (`
 getStorage(): Promise<KnowledgeStorage>
 ```
 
-Returns the Knowledge store, for host code such as admin pages, deletes and your own import scripts. Its methods skip role checks, so pass the `read` value from `readScopeFor()` whenever a read should be limited to what a user can see.
+Returns the Knowledge store, for host code such as admin pages, deletes and your own import scripts. Its read methods take `read`: `'all'` skips the role checks, so pass the value from `readScopeFor()` whenever a read should be limited to what a user can see.
 
 ```typescript
 const store = await knowledge.getStorage()
@@ -240,6 +240,14 @@ const read = await knowledge.readScopeFor(['org:acme'])
 const [scope] = await store.getScopesByAddress(['team:acme:support'])
 const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', 'refunds'], read })
 ```
+
+### `reindexLinks()`
+
+```typescript oxfmt:false
+reindexLinks(): Promise<number>
+```
+
+Rebuilds the page link index from every page body, and resolves to how many pages it indexed. Writes keep the index current, so this is for pages that predate it or were written straight to the store. It needs no vector store.
 
 ### `upsertPage()`
 
@@ -254,7 +262,7 @@ upsertPage(input: {
 }): Promise<{ page: KnowledgePage; status: 'created' | 'updated' | 'unchanged' }>
 ```
 
-Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [Seed data](/docs/knowledge/seed-data).
+Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. A path with no keys throws `Knowledge page path "<path>" needs at least one key.` See [Seed data](/docs/knowledge/seed-data).
 
 `upsertPage()`, `removePage()`, `addNote()`, `updateNote()` and `removeNote()` are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
 
@@ -287,7 +295,7 @@ Adds a note to the page at `path`. `text` is at most 250 tokens. `[[scope#path]]
 updateNote(input: { id: string; text: string; when?: Date; stamps?: string[]; author?: string }): Promise<KnowledgeNote>
 ```
 
-Replaces a note: adds the new note, then removes the old one, and resolves to the new note with a new ID. `when` and `stamps` keep their old values when left out. If removing the old note fails, the new note is already written, so call `removeNote()` with the old ID.
+Replaces a note: adds the new note, then removes the old one, and resolves to the new note with a new ID. `when` and `stamps` keep their old values when left out or empty. If removing the old note fails after the add, both notes exist and the call throws, so remove the one you don't want. When the old note was already removed by someone else, the new note is removed too and nothing is left behind.
 
 ### `removeNote()`
 
@@ -329,6 +337,14 @@ scopeDeclaration(key: string): KnowledgeScopeDeclarationInfo | undefined
 ```
 
 Returns the declaration a scope was created from, by its declaration key, for display: `{ key, description?, displayLabel?, belongsTo?, children }`. Child keys work too, such as `org:$orgId/private`. Access rules are left out. Use `explainAccess()` for those. Returns `undefined` for an unknown key.
+
+### `scopeGrants()`
+
+```typescript oxfmt:false
+scopeGrants(scope: { address: string; parentAddress?: string | null }): KnowledgeScopeGrant[]
+```
+
+The roles the declarations give other scopes on this one, as `{ principal, role }` with the strongest role per principal and `self` rules left out. It reads no storage. `parentAddress` supplies the tree parent that rules binding through `belongsTo` need. Use it for a browsing UI that draws access between scopes. Use `explainAccess()` for one run's view.
 
 ### `scopeLabel()`
 

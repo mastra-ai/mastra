@@ -227,6 +227,9 @@ const sidebars = {
             type: 'doc',
             id: 'knowledge/overview',
           },
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             {
               type: 'doc',

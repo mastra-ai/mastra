@@ -71,6 +71,8 @@ results: no page or note contains any word of "enterprise pricing tiers". Search
 
 `scope` takes scope addresses. A page ref such as `docs:acme#billing` is refused with a pointer to `knowledge_list`.
 
+A search that fills `limit` also returns `more`, saying how many results were shown and to narrow the query or raise `limit` (up to 50) when none of them fits.
+
 ## `knowledge_list`
 
 Lists the page tree under a starting point, so an agent can see how a scope or section is organized before it searches or reads. Without `from`, it lists the scopes the run can read. Scopes the run can't read are left out.
@@ -131,7 +133,7 @@ Reads a page: its body, notes, child pages, and the notes on other pages that me
     name: 'match',
     type: 'string | string[]',
     description:
-      'Return only the lines that contain this term, or any of these terms, case-insensitively, with `context` lines around each, like `grep -C`.',
+      'Return only the lines that contain this term, or any of these terms (up to 10), case-insensitively, with `context` lines around each, like `grep -C`.',
     isOptional: true,
   },
   {
@@ -318,7 +320,12 @@ Adds, restamps and removes notes. A note is one durable fact on a page. Link oth
   { name: 'op', type: "'add' | 'restamp' | 'remove'", description: 'What to do.' },
   { name: 'page', type: 'string', description: 'Add: the page.', isOptional: true },
   { name: 'note', type: 'string', description: 'Restamp or remove: the note ID.', isOptional: true },
-  { name: 'scope', type: 'string[]', description: 'Add or restamp: the stamp scope addresses.', isOptional: true },
+  {
+    name: 'scope',
+    type: 'string[]',
+    description: 'Add and restamp: the stamp scope addresses. Required for both.',
+    isOptional: true,
+  },
   {
     name: 'text',
     type: 'string',
