@@ -1895,7 +1895,7 @@ export class MCPServer extends MCPServerBase {
         // Clients may read the JSON text block of a structured result, so it stays first.
         result = {
           ...result,
-          content: result.structuredContent ? [...result.content, ...mapped.content] : mapped.content,
+          content: result.structuredContent !== undefined ? [...result.content, ...mapped.content] : mapped.content,
         };
       }
     }

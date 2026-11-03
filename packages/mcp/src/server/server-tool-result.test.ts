@@ -89,6 +89,14 @@ function makeTools() {
       execute: async () => ({ total: 3 }),
       toModelOutput: () => ({ type: 'content', value: [{ type: 'media', data: PNG_BASE64, mediaType: 'image/png' }] }),
     }),
+    falsyStructured: createTool({
+      id: 'falsy-structured',
+      description: 'Has an output schema, returns a falsy value and has a toModelOutput',
+      inputSchema: z.object({}),
+      outputSchema: z.number(),
+      execute: async () => 0,
+      toModelOutput: () => ({ type: 'content', value: [{ type: 'media', data: PNG_BASE64, mediaType: 'image/png' }] }),
+    }),
     errorText: createTool({
       id: 'error-text',
       description: 'toModelOutput reports an error',
@@ -286,6 +294,14 @@ describe('MCPServer toolResult (Issue #29136)', () => {
           { type: 'image', data: PNG_BASE64, mimeType: 'image/png' },
         ],
       });
+    });
+
+    it('keeps the JSON text block for a falsy structured output', async () => {
+      const result = await server.call('falsyStructured');
+      expect(result.content).toEqual([
+        { type: 'text', text: '0' },
+        { type: 'image', data: PNG_BASE64, mimeType: 'image/png' },
+      ]);
     });
 
     it('reports error outputs as tool errors, without structuredContent', async () => {

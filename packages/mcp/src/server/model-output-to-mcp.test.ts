@@ -101,6 +101,24 @@ describe('modelOutputToMcpContent', () => {
     ]);
   });
 
+  it('falls back to text for data: URIs that cannot be decoded', () => {
+    expect(
+      modelOutputToMcpContent(
+        {
+          type: 'content',
+          value: [
+            { type: 'file-url', url: 'data:text/plain,100%' },
+            { type: 'media', data: 'data:text/plain,100%', mediaType: 'text/plain' },
+          ],
+        },
+        't',
+      )?.content,
+    ).toEqual([
+      { type: 'text', text: 'data:text/plain,100%' },
+      { type: 'text', text: JSON.stringify({ type: 'media', data: 'data:text/plain,100%', mediaType: 'text/plain' }) },
+    ]);
+  });
+
   it('turns remote URLs into text blocks', () => {
     expect(
       modelOutputToMcpContent({ type: 'content', value: [{ type: 'image-url', url: 'https://x.dev/a.png' }] }, 't')

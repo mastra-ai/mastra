@@ -184,7 +184,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     type: 'MCPServerToolResultOptions',
     isOptional: true,
     description:
-      "Controls how completed tool calls become MCP results. `modelOutput: true` builds the result content from each tool's `toModelOutput`, so tools can return images, audio, and files. `transform` rewrites a result before it is sent. See [Tool results](#tool-results) for details.",
+      "Controls how completed tool calls become MCP results. `modelOutput: true` builds the result content from each tool's `toModelOutput`, so tools can return images, audio, and files. `transform` rewrites a result before it's sent. See [Tool results](#tool-results) for details.",
   },
   {
     name: 'jsonSchemaValidator',
@@ -259,7 +259,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 
 By default, a tool's output is sent to the MCP client as a single text block. A string is sent as-is and any other value as JSON. A tool with an `outputSchema` also returns the value as `structuredContent`.
 
-Use the `toolResult` option to send the model-facing output of a tool instead, or to rewrite results before they are sent.
+Use the `toolResult` option to send the model-facing output of a tool instead, or to rewrite results before they're sent.
 
 ```typescript title="src/mastra/mcp/server.ts"
 import { MCPServer } from '@mastra/mcp'

@@ -50,6 +50,8 @@ function partToBlock(part: unknown, toolName: string, index: number): ContentBlo
       if (typeof part.data === 'string') {
         const uri = parseDataUri(part.data);
         if (uri) return mediaBlock(uri.data, mediaType ?? (uri.mediaType || fallback), toolName, index);
+        // A `data:` URI that can't be decoded isn't Base64 either, so it falls back to JSON text.
+        if (/^data:/i.test(part.data)) break;
         return mediaBlock(part.data, mediaType ?? fallback, toolName, index);
       }
       if (part.data instanceof Uint8Array) {
@@ -80,13 +82,20 @@ function mediaBlock(data: string, mimeType: string, toolName: string, index: num
   };
 }
 
-/** Splits a `data:` URI into its media type and Base64 payload. */
+/** Splits a `data:` URI into its media type and Base64 payload. Returns `undefined` if it can't be decoded. */
 function parseDataUri(value: string): { mediaType: string; data: string } | undefined {
   const match = DATA_URI.exec(value);
   if (!match) return undefined;
   const [, mediaType = '', params = '', payload = ''] = match;
   const base64 = params.split(';').some(param => param.toLowerCase() === 'base64');
-  const data = base64 ? payload : Buffer.from(decodeURIComponent(payload), 'utf8').toString('base64');
+  let data = payload;
+  if (!base64) {
+    try {
+      data = Buffer.from(decodeURIComponent(payload), 'utf8').toString('base64');
+    } catch {
+      return undefined;
+    }
+  }
   return { mediaType: mediaType.trim().toLowerCase(), data };
 }
 
