@@ -32,7 +32,6 @@ export const reviewItem: WorkItemRow = {
   metadata: { number: 42, state: 'open' },
   triageType: null,
   autonomyArmedAt: null,
-  plansPreapprovedAt: null,
   acceptedAt: null,
   commentCount: 0,
   feedActivityAt: null,

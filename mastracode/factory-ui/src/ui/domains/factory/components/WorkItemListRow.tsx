@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
 import type { DragPayload } from '../boardDrag';
-import { sourceCreatedAt, workItemKey } from '../boardItems';
+import { sourceCreatedAt } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditActorProfile } from '../services/audit';
@@ -13,6 +13,7 @@ import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import {
   CardActions,
+  CardKey,
   CardStatus,
   CommentCount,
   MetadataLabels,
@@ -74,7 +75,7 @@ export function WorkItemListRow({
       createdAt={sourceCreatedAt(item.metadata) ?? item.createdAt}
       cells={{
         icon: <WorkItemSourceIcon item={item} />,
-        key: workItemKey(item),
+        key: <CardKey item={item} />,
         title: (
           <Txt as="span" variant="label" tone="ink" className="truncate font-[550] tracking-tight">
             <SourceTitle source={item.source} title={item.title} />

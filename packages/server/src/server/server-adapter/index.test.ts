@@ -1185,6 +1185,39 @@ describe('Knowledge route FGA metadata', () => {
     expect(result).toMatchObject({ status: 403 });
   });
 
+  it('checks the link-count and page-link routes against the knowledge key and refuses a denied caller with 403', async () => {
+    const { checkRouteFGA } = await import('./index');
+    const linkRoutes = KNOWLEDGE_ROUTES.filter(
+      route =>
+        route.path === '/knowledge/:knowledgeKey/link-counts' ||
+        route.path === '/knowledge/:knowledgeKey/pages/:pageId/links',
+    );
+    expect(linkRoutes.map(route => route.path).sort()).toEqual([
+      '/knowledge/:knowledgeKey/link-counts',
+      '/knowledge/:knowledgeKey/pages/:pageId/links',
+    ]);
+
+    for (const route of linkRoutes) {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      const params = { knowledgeKey: 'main', pageId: 'page-1' };
+
+      const allowed = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+      expect(
+        await checkRouteFGA({ getServer: () => ({ fga: allowed }) }, route as any, requestContext, params),
+      ).toBeNull();
+      expect(allowed.check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({ resource: { type: 'knowledge', id: 'main' }, permission: 'knowledge:read' }),
+      );
+
+      const denied = { ...createMockFGAProvider(false), requireForProtectedRoutes: true };
+      expect(
+        await checkRouteFGA({ getServer: () => ({ fga: denied }) }, route as any, requestContext, params),
+      ).toMatchObject({ status: 403 });
+    }
+  });
+
   it('leaves only the instance list out of the protected-route audit', async () => {
     const mastra = new Mastra({
       logger: false,

@@ -1,6 +1,7 @@
 import {
   createKnowledgePagesCoreLoader,
   knowledgePageKeyProblem,
+  KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
@@ -52,6 +53,7 @@ export const KNOWLEDGE_PAGE_TABLES = {
   pins: 'mastra_knowledge_pins',
   pinAudiences: 'mastra_knowledge_pin_audiences',
   activity: 'mastra_knowledge_activity',
+  links: 'mastra_knowledge_page_links',
 } as const;
 
 const T = KNOWLEDGE_PAGE_TABLES;
@@ -145,6 +147,16 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     createdAt TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kactivity_page ON "${T.activity}" (pageId, id DESC)`,
+  // Outgoing body `[[links]]` per page; an unresolved link keeps its ref with a null target.
+  `CREATE TABLE IF NOT EXISTS "${T.links}" (
+    fromPageId TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    toPageId TEXT,
+    count INTEGER NOT NULL,
+    PRIMARY KEY (fromPageId, ref)
+  ) WITHOUT ROWID`,
+  `CREATE INDEX IF NOT EXISTS idx_klinks_to ON "${T.links}" (toPageId) WHERE toPageId IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_klinks_ref ON "${T.links}" (ref) WHERE toPageId IS NULL`,
 ];
 
 type Row = Record<string, unknown>;
@@ -344,10 +356,10 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     this.#transaction = config.transaction;
   }
 
-  /** Deletes every row from the page tables (scopes, pages, notes, pins, activity). */
+  /** Deletes every row from the page tables (scopes, pages, notes, pins, activity, links). */
   async clearAll(): Promise<void> {
     await this.#transaction(async tx => {
-      for (const table of [T.activity, T.pinAudiences, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
+      for (const table of [T.links, T.activity, T.pinAudiences, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
         await tx.execute({ sql: `DELETE FROM ${table}`, args: [] });
       }
     });
@@ -552,6 +564,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
 
   async listChildScopes(input: {
     parentId: string | null;
+    read?: KnowledgeReadScope;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
@@ -559,6 +572,12 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const args: InValue[] = [input.parentId];
+    let filter = '';
+    if (input.read) {
+      const readable = readableScopes(input.read);
+      filter = ` AND id IN (${readable.sql})`;
+      args.push(...readable.args);
+    }
     let after = '';
     if (cursor) {
       after = ` AND (position > ? OR (position = ? AND id > ?))`;
@@ -567,7 +586,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     args.push(limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT * FROM "${T.pages}" WHERE isScope = 1 AND parentId IS ?${after} ORDER BY position, id LIMIT ?`,
+      `SELECT * FROM "${T.pages}" WHERE isScope = 1 AND parentId IS ?${filter}${after} ORDER BY position, id LIMIT ?`,
       args,
     );
     return this.#pageOutput(rows, limit, row => [String(row.position), String(row.id)]);
@@ -1058,6 +1077,149 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countChildScopes(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (ids.length === 0) return counts;
+    const readable = readableScopes(input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT parentId, COUNT(*) AS total FROM "${T.pages}" WHERE parentId IN (SELECT value FROM json_each(?)) AND isScope = 1 AND id IN (${readable.sql}) GROUP BY parentId`,
+      [jsonList(ids), ...readable.args],
+    );
+    for (const row of rows) counts[String(row.parentId)] = Number(row.total);
+    return counts;
+  }
+
+  async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (ids.length === 0) return counts;
+    const readable = pageReadable('p', input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT p.parentId AS parentId, COUNT(*) AS total FROM "${T.pages}" p WHERE p.parentId IN (SELECT value FROM json_each(?)) AND p.isScope = 0 AND p.deletedAt IS NULL AND ${readable.sql} GROUP BY p.parentId`,
+      [jsonList(ids), ...readable.args],
+    );
+    for (const row of rows) counts[String(row.parentId)] = Number(row.total);
+    return counts;
+  }
+
+  async replacePageBodyLinks(input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0]): Promise<void> {
+    await this.#transaction(async tx => {
+      await tx.execute({ sql: `DELETE FROM "${T.links}" WHERE fromPageId = ?`, args: [input.pageId] });
+      if (input.links.length === 0) return;
+      await tx.execute({
+        sql: `INSERT INTO "${T.links}" (fromPageId, ref, toPageId, count) SELECT ?, json_extract(value, '$.ref'), json_extract(value, '$.toPageId'), json_extract(value, '$.count') FROM json_each(?)`,
+        args: [input.pageId, JSON.stringify(input.links.map(({ ref, toPageId, count }) => ({ ref, toPageId, count })))],
+      });
+    });
+  }
+
+  async listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): Promise<string[]> {
+    const refs = input.refs ?? [];
+    const targets = input.toPageIds ?? [];
+    if (refs.length === 0 && targets.length === 0) return [];
+    const rows = await this.#query(
+      this.#read,
+      `SELECT DISTINCT fromPageId FROM "${T.links}" WHERE (toPageId IS NULL AND ref IN (SELECT value FROM json_each(?))) OR toPageId IN (SELECT value FROM json_each(?)) ORDER BY fromPageId`,
+      [jsonList(refs), jsonList(targets)],
+    );
+    return rows.map(row => String(row.fromPageId));
+  }
+
+  /**
+   * Visible links touching `ids` (from them for `out`, to them for `in`): resolved, both ends live
+   * and readable, not self-links; a note link also needs a visible live note. One row per
+   * (from, to, kind), counts summed.
+   */
+  async #links(
+    read: KnowledgeReadScope,
+    kinds: Parameters<KnowledgePageStore['listPageLinks']>[0]['kinds'],
+    ids: string[],
+    direction: 'in' | 'out' | 'both',
+  ): Promise<Row[]> {
+    const wanted = new Set(kinds ?? ['body', 'note']);
+    const touches = (from: string, to: string): Fragment => {
+      const parts: string[] = [];
+      const args: InValue[] = [];
+      if (direction !== 'in') {
+        parts.push(`${from} IN (SELECT value FROM json_each(?))`);
+        args.push(jsonList(ids));
+      }
+      if (direction !== 'out') {
+        parts.push(`${to} IN (SELECT value FROM json_each(?))`);
+        args.push(jsonList(ids));
+      }
+      return { sql: `(${parts.join(' OR ')})`, args };
+    };
+    const sources: string[] = [];
+    const args: InValue[] = [];
+    if (wanted.has('body')) {
+      const near = touches('l.fromPageId', 'l.toPageId');
+      sources.push(
+        `SELECT l.fromPageId AS fromPageId, l.toPageId AS toPageId, 'body' AS kind, l.count AS count FROM "${T.links}" l WHERE l.toPageId IS NOT NULL AND ${near.sql}`,
+      );
+      args.push(...near.args);
+    }
+    if (wanted.has('note')) {
+      const near = touches('n.pageId', 'm.pageId');
+      const visible = noteReadable('n', read);
+      sources.push(
+        `SELECT n.pageId AS fromPageId, m.pageId AS toPageId, 'note' AS kind, 1 AS count FROM "${T.mentions}" m JOIN "${T.notes}" n ON n.id = m.noteId WHERE n.deletedAt IS NULL AND ${near.sql} AND ${visible.sql}`,
+      );
+      args.push(...near.args, ...visible.args);
+    }
+    if (sources.length === 0) return [];
+    const fromReadable = pageReadable('fp', read);
+    const toReadable = pageReadable('tp', read);
+    return this.#query(
+      this.#read,
+      `SELECT e.fromPageId AS fromPageId, e.toPageId AS toPageId, e.kind AS kind, SUM(e.count) AS count
+        FROM (${sources.join(' UNION ALL ')}) e
+        JOIN "${T.pages}" fp ON fp.id = e.fromPageId AND fp.deletedAt IS NULL AND ${fromReadable.sql}
+        JOIN "${T.pages}" tp ON tp.id = e.toPageId AND tp.deletedAt IS NULL AND ${toReadable.sql}
+        WHERE e.fromPageId <> e.toPageId
+        GROUP BY e.fromPageId, e.toPageId, e.kind
+        ORDER BY e.fromPageId, e.toPageId, CASE e.kind WHEN 'body' THEN 0 ELSE 1 END`,
+      [...args, ...fromReadable.args, ...toReadable.args],
+    );
+  }
+
+  async countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): Promise<Record<string, { in: number; out: number }>> {
+    const ids = [...new Set(input.pageIds)];
+    const linked = new Map(ids.map(id => [id, { in: new Set<string>(), out: new Set<string>() }]));
+    if (ids.length === 0) return {};
+    for (const row of await this.#links(input.read, input.kinds, ids, 'both')) {
+      const from = String(row.fromPageId);
+      const to = String(row.toPageId);
+      linked.get(from)?.out.add(to);
+      linked.get(to)?.in.add(from);
+    }
+    return Object.fromEntries([...linked].map(([id, sets]) => [id, { in: sets.in.size, out: sets.out.size }]));
+  }
+
+  async listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    const limit = input.limit ?? 1_000;
+    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const ids = [...new Set(input.pageIds)];
+    if (ids.length === 0) return [];
+    const core = await loadPagesCore();
+    const rows = await this.#links(input.read, input.kinds, ids, input.direction ?? 'both');
+    return rows.slice(0, Math.min(limit, core.MAX_KNOWLEDGE_PAGE_LINKS)).map(row => ({
+      fromPageId: String(row.fromPageId),
+      toPageId: String(row.toPageId),
+      kind: row.kind === 'note' ? 'note' : 'body',
+      count: Number(row.count),
+    }));
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
@@ -1248,26 +1410,33 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const readable = pageReadable('p', input.read);
     const scopeFilter = input.scopeIds ? ` AND p.scopeId IN (SELECT value FROM json_each(?))` : '';
     const scopeArgs: InValue[] = input.scopeIds ? [jsonList(input.scopeIds)] : [];
+    const field = (column: string) => `lower(COALESCE(${column}, '')) LIKE ? ESCAPE '='`;
     const pageMatch = words
+      .map(() => `(${field('p.name')} OR ${field('p.description')} OR ${field('p.body')})`)
+      .join(' OR ');
+    const pageScore = words
       .map(
         () =>
-          `(lower(p.name) LIKE ? ESCAPE '=' OR lower(COALESCE(p.description, '')) LIKE ? ESCAPE '=' OR lower(COALESCE(p.body, '')) LIKE ? ESCAPE '=')`,
+          `(CASE WHEN ${field('p.name')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.name} WHEN ${field('p.description')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.description} WHEN ${field('p.body')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.body} ELSE 0 END)`,
       )
-      .join(' AND ');
-    const nameMatch = words.map(() => `lower(p.name) LIKE ? ESCAPE '='`).join(' AND ');
+      .join(' + ');
+    const pageCount = words
+      .map(() => `(CASE WHEN ${field('p.name')} OR ${field('p.description')} OR ${field('p.body')} THEN 1 ELSE 0 END)`)
+      .join(' + ');
+    const triple = likes.flatMap(like => [like, like, like]);
     const pageRows = await this.#query(
       this.#read,
-      `SELECT p.* FROM "${T.pages}" p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND ${pageMatch} ORDER BY CASE WHEN instr(p.canonicalName, ?) > 0 THEN 0 WHEN ${nameMatch} THEN 1 ELSE 2 END, p.updatedAt DESC, p.id ASC LIMIT ?`,
-      [...readable.args, ...scopeArgs, ...likes.flatMap(like => [like, like, like]), phrase, ...likes, limit],
+      `SELECT p.* FROM "${T.pages}" p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND (${pageMatch}) ORDER BY CASE WHEN instr(p.canonicalName, ?) > 0 THEN 0 ELSE 1 END, (${pageCount}) DESC, (${pageScore}) DESC, p.updatedAt DESC, p.id ASC LIMIT ?`,
+      [...readable.args, ...scopeArgs, ...triple, phrase, ...triple, ...triple, limit],
     );
     const hits: KnowledgePageSearchHit[] = pageRows.map(row => ({ type: 'page', page: toPage(row) }));
     if (hits.length >= limit) return hits;
     const noteVisible = noteReadable('n', input.read);
-    const noteMatch = words.map(() => `lower(n.text) LIKE ? ESCAPE '='`).join(' AND ');
+    const noteHas = words.map(() => `lower(n.text) LIKE ? ESCAPE '='`);
     const noteRows = await this.#query(
       this.#read,
-      `SELECT n.* FROM "${T.notes}" n JOIN "${T.pages}" p ON p.id = n.pageId WHERE n.deletedAt IS NULL AND p.deletedAt IS NULL${scopeFilter} AND ${noteMatch} AND ${noteVisible.sql} ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
-      [...scopeArgs, ...likes, ...noteVisible.args, limit - hits.length],
+      `SELECT n.* FROM "${T.notes}" n JOIN "${T.pages}" p ON p.id = n.pageId WHERE n.deletedAt IS NULL AND p.deletedAt IS NULL${scopeFilter} AND (${noteHas.join(' OR ')}) AND ${noteVisible.sql} ORDER BY (${noteHas.map(has => `(CASE WHEN ${has} THEN 1 ELSE 0 END)`).join(' + ')}) DESC, n.updatedAt DESC, n.id DESC LIMIT ?`,
+      [...scopeArgs, ...likes, ...noteVisible.args, ...likes, limit - hits.length],
     );
     const notes = await this.#hydrateNotes(this.#read, noteRows);
     for (const note of notes) {
