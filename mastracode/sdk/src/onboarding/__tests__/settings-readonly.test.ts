@@ -18,20 +18,26 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
 }
 
 describe('loading sparse settings', () => {
-  it('resolves defaults without rewriting the supplied settings file', () => {
+  it('adds only the resolved preview limit to the supplied settings file', () => {
     withTempSettingsFile(filePath => {
-      const original = '{\n  "preferences": { "subagentsEnabled": false },\n  "customOption": "keep me"\n}\n';
-      writeFileSync(filePath, original, { encoding: 'utf-8', mode: 0o400 });
+      const original = { preferences: { subagentsEnabled: false }, customOption: 'keep me' };
+      writeFileSync(filePath, JSON.stringify(original, null, 2), { encoding: 'utf-8', mode: 0o400 });
       const originalMode = statSync(filePath).mode;
 
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const settings = loadSettings(filePath);
-        expect(settings.preferences.previewLines).toBe(2);
-        expect(settings.preferences.subagentsEnabled).toBe(false);
-        expect(settings.preferences.thinkingLevel).toBe('off');
-        expect(readFileSync(filePath, 'utf-8')).toBe(original);
-        expect(statSync(filePath).mode).toBe(originalMode);
-      }
+      const settings = loadSettings(filePath);
+      expect(settings.preferences.previewLines).toBe(2);
+      expect(settings.preferences.subagentsEnabled).toBe(false);
+      expect(settings.preferences.thinkingLevel).toBe('off');
+      expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual({
+        preferences: { subagentsEnabled: false, previewLines: 2 },
+        customOption: 'keep me',
+      });
+      expect(statSync(filePath).mode).toBe(originalMode);
+
+      // Once the preview limit is stored, loading leaves the file untouched.
+      const persisted = readFileSync(filePath, 'utf-8');
+      expect(loadSettings(filePath).preferences.previewLines).toBe(2);
+      expect(readFileSync(filePath, 'utf-8')).toBe(persisted);
     });
   });
 

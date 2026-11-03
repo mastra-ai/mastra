@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Fixed loading sparse settings files to keep preview defaults in memory without rewriting the file. Explicit saves and legacy migrations still persist settings.
+Fixed loading sparse settings files rewriting them with every default. When `preferences.previewLines` is missing, loading now adds only the resolved preview limit and leaves the rest of the file as written. Explicit saves and legacy migrations still persist the full settings.

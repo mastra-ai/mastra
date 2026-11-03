@@ -815,7 +815,7 @@ describe('customProviders parsing/persistence', () => {
       return JSON.parse(readFileSync(filePath, 'utf-8'));
     }
 
-    it('resolves the legacy preview limit without rewriting legacy keys', () => {
+    it('migrates the legacy preview limit and persists it without touching legacy keys', () => {
       withTempSettingsFile(filePath => {
         writeFileSync(
           filePath,
@@ -826,7 +826,7 @@ describe('customProviders parsing/persistence', () => {
         expect(loadSettings(filePath).preferences.previewLines).toBe(4);
 
         const persisted = readFile(filePath);
-        expect(persisted.preferences).not.toHaveProperty('previewLines');
+        expect(persisted.preferences.previewLines).toBe(4);
         expect(persisted.preferences.quietMode).toBe(false);
         expect(persisted.preferences.quietModeMaxToolPreviewLines).toBe(4);
         expect(persisted.onboarding.quietModePreferenceSelected).toBe(true);
@@ -849,7 +849,7 @@ describe('customProviders parsing/persistence', () => {
         expect(loadSettings(filePath).preferences.previewLines).toBe(8);
 
         const persisted = readFile(filePath);
-        expect(persisted.preferences).not.toHaveProperty('previewLines');
+        expect(persisted.preferences.previewLines).toBe(8);
         expect(persisted.preferences.quietMode).toBe(true);
         expect(persisted.preferences.quietModeMaxToolPreviewLines).toBe(8);
       });
@@ -875,7 +875,7 @@ describe('customProviders parsing/persistence', () => {
       });
     });
 
-    it('resolves an invalid preview limit without rewriting the original values', () => {
+    it('falls back to the legacy key when previewLines is invalid and persists the resolved value', () => {
       withTempSettingsFile(filePath => {
         writeFileSync(
           filePath,
@@ -888,7 +888,7 @@ describe('customProviders parsing/persistence', () => {
           'utf-8',
         );
         expect(loadSettings(filePath).preferences.previewLines).toBe(4);
-        expect(readFile(filePath).preferences.previewLines).toBe('x');
+        expect(readFile(filePath).preferences.previewLines).toBe(4);
         expect(readFile(filePath).preferences.quietModeMaxToolPreviewLines).toBe(4);
 
         writeFileSync(
@@ -902,7 +902,7 @@ describe('customProviders parsing/persistence', () => {
           'utf-8',
         );
         expect(loadSettings(filePath).preferences.previewLines).toBe(2);
-        expect(readFile(filePath).preferences.previewLines).toBe('x');
+        expect(readFile(filePath).preferences.previewLines).toBe(2);
         expect(readFile(filePath).preferences.quietModeMaxToolPreviewLines).toBe('y');
       });
     });
@@ -967,7 +967,7 @@ describe('customProviders parsing/persistence', () => {
 
         expect(loadSettings(filePath).preferences.previewLines).toBe(2);
         const persisted = readFile(filePath);
-        expect(persisted.preferences).not.toHaveProperty('previewLines');
+        expect(persisted.preferences.previewLines).toBe(2);
         expect(persisted.preferences.quietMode).toBe(false);
         expect(persisted.onboarding).not.toHaveProperty('quietModePreferenceSelected');
       });
