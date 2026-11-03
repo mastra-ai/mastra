@@ -7,15 +7,26 @@ import { useMetricsFilters } from '../../metrics/hooks/use-metrics-filters';
 import { useScorers } from '../hooks/use-scorers';
 import type { DashboardScope } from '../lib/definition';
 import type { Scorer } from '../lib/scores';
-import { EDITOR_KINDS, findEntry, isTimeseriesKind } from './catalogue';
+import { EDITOR_KINDS, defaultAggregation, findEntry, isTimeseriesKind } from './catalogue';
 import type { EditorKind } from './catalogue';
 import { draftToWidget, effectiveKind, misfit, widgetToDraft } from './codec';
-import { copyLabel, defaultSpan, emptyView, emptyWidget, newWidgetTitle, nextViewLabel, unsplit } from './draft';
-import type { WidgetDraft } from './draft';
+import {
+  DEFAULT_VIEW_LABEL,
+  copyLabel,
+  defaultSpan,
+  emptyView,
+  emptyWidget,
+  metricKey,
+  newWidgetTitle,
+  nextViewLabel,
+  unsplit,
+} from './draft';
+import type { ViewDraft, WidgetDraft } from './draft';
 import { TitleInput } from './title-input';
 import { ViewEditor } from './view-editor';
 import { ViewTabs } from './view-tabs';
 import { WidgetPreview } from './widget-preview';
+import { WidgetStarter } from './widget-starter';
 import {
   Dialog,
   DialogAction,
@@ -164,6 +175,18 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
   const views = draft.views;
   const setViews = (next: WidgetDraft['views']) => setValue('views', next, { shouldDirty: true });
 
+  // A new widget opens on a starter screen until it has something to draw.
+  const firstStep = creating && views.length === 1 && !hasMetrics;
+  const start = (view: Omit<ViewDraft, 'label'>, title: string, picked?: EditorKind) => {
+    setViews([{ ...view, label: views[0]?.label ?? DEFAULT_VIEW_LABEL }]);
+    // Only a title the user hasn't touched follows what they picked.
+    if (draft.title === initial.title) setValue('title', title, { shouldDirty: true });
+    if (picked) {
+      setValue('kind', picked, { shouldDirty: true });
+      setValue('kindPicked', true, { shouldDirty: true });
+    }
+  };
+
   return (
     <FormProvider {...methods}>
       <Form
@@ -173,117 +196,150 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
           if (encoded.widget && issues.length === 0) onSave(encoded.widget);
         }}
       >
-        {/* The kind is the widget's, shared by every view: it sits with the title, above the tabs. */}
-        <DialogHeader className="flex-row items-center gap-3 pt-0 pr-12 pb-3">
-          <DialogTitle className="sr-only">{creating ? 'Add widget' : 'Edit widget'}</DialogTitle>
-          <div className="min-w-0 flex-1">
-            <TitleInput
-              aria-label="Widget title"
-              placeholder="Untitled widget"
-              aria-invalid={triedSave && !draft.title.trim() ? true : undefined}
-              {...register('title')}
-            />
-          </div>
-          {hasMetrics && !draft.kindPicked && (
-            <Txt variant="caption" tone="muted">
-              Suggested for these metrics
-            </Txt>
-          )}
-          <SegmentedControl
-            aria-label="Widget kind"
-            size="sm"
-            value={kind}
-            onValueChange={value => {
-              if (value === kind) return;
-              setValue('views', unsplitViews, { shouldDirty: true });
-              setValue('kind', value, { shouldDirty: true });
-              setValue('kindPicked', true, { shouldDirty: true });
-            }}
-          >
-            {kinds.map(k => (
-              <SegmentedControlItem
-                key={k.value}
-                value={k.value}
-                disabled={!!k.misfit && k.value !== kind}
-                title={k.misfit}
+        {firstStep ? (
+          <>
+            <DialogTitle className="sr-only">Add widget</DialogTitle>
+            <DialogBody layout="fill" flush>
+              <WidgetStarter
+                scorers={scorers}
+                onQuickMetric={m =>
+                  start(
+                    { ...emptyView(''), metrics: [{ key: metricKey(), entry: m.entry, aggregation: m.aggregation }] },
+                    m.label,
+                  )
+                }
+                onPreset={preset => start(preset.view(), preset.title, preset.kind)}
+                onPick={entry =>
+                  start(
+                    {
+                      ...emptyView(''),
+                      metrics: [{ key: metricKey(), entry: entry.id, aggregation: defaultAggregation(entry) }],
+                    },
+                    entry.label,
+                  )
+                }
+              />
+            </DialogBody>
+          </>
+        ) : (
+          <>
+            {/* The kind is the widget's, shared by every view: it sits with the title, above the tabs. */}
+            <DialogHeader className="animate-in flex-row items-center gap-3 pt-0 pr-12 pb-3 duration-300 fade-in-0 motion-reduce:animate-none">
+              <DialogTitle className="sr-only">{creating ? 'Add widget' : 'Edit widget'}</DialogTitle>
+              <div className="min-w-0 flex-1">
+                <TitleInput
+                  aria-label="Widget title"
+                  placeholder="Untitled widget"
+                  aria-invalid={triedSave && !draft.title.trim() ? true : undefined}
+                  {...register('title')}
+                />
+              </div>
+              {hasMetrics && !draft.kindPicked && (
+                <Txt variant="caption" tone="muted">
+                  Suggested for these metrics
+                </Txt>
+              )}
+              <SegmentedControl
+                aria-label="Widget kind"
+                size="sm"
+                value={kind}
+                onValueChange={value => {
+                  if (value === kind) return;
+                  setValue('views', unsplitViews, { shouldDirty: true });
+                  setValue('kind', value, { shouldDirty: true });
+                  setValue('kindPicked', true, { shouldDirty: true });
+                }}
               >
-                {k.label}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControl>
-        </DialogHeader>
-        <DialogBody layout="fill" flush className="gap-0">
-          {/* The tabs span the form and the preview: both show the active view. */}
-          <div className="border-y border-border px-5 py-3">
-            <ViewTabs
-              labels={views.map(v => v.label)}
-              active={active}
-              onActiveChange={setActive}
-              onAdd={() => {
-                setViews([...views, emptyView(nextViewLabel(views))]);
-                setActive(views.length);
-              }}
-              onRename={(index, label) => setViews(views.map((v, i) => (i === index ? { ...v, label } : v)))}
-              onDuplicate={index => {
-                const source = views[index];
-                if (!source) return;
-                // Metric keys only need to be unique within a view, so the copy keeps them.
-                const copy = { ...structuredClone(source), label: copyLabel(source.label, views) };
-                setViews([...views.slice(0, index + 1), copy, ...views.slice(index + 1)]);
-                setActive(index + 1);
-              }}
-              onDelete={index => {
-                setViews(views.filter((_, i) => i !== index));
-                setActive(Math.max(0, Math.min(active, views.length - 2)));
-              }}
-            />
-          </div>
-          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
-            <div className="flex min-h-0 flex-col">
-              <ScrollArea className="min-h-0 flex-1" mask>
-                <ScrollAreaViewport className="h-full">
-                  <div className="p-5">
-                    <ViewEditor key={active} index={active} kind={kind} scorers={scorers} />
+                {kinds.map(k => (
+                  <SegmentedControlItem
+                    key={k.value}
+                    value={k.value}
+                    disabled={!!k.misfit && k.value !== kind}
+                    title={k.misfit}
+                  >
+                    {k.label}
+                  </SegmentedControlItem>
+                ))}
+              </SegmentedControl>
+            </DialogHeader>
+            <DialogBody
+              layout="fill"
+              flush
+              className="animate-in gap-0 duration-300 fade-in-0 motion-reduce:animate-none"
+            >
+              {/* The tabs span the form and the preview: both show the active view. */}
+              <div className="border-y border-border px-5 py-3">
+                <ViewTabs
+                  labels={views.map(v => v.label)}
+                  active={active}
+                  onActiveChange={setActive}
+                  onAdd={() => {
+                    setViews([...views, emptyView(nextViewLabel(views))]);
+                    setActive(views.length);
+                  }}
+                  onRename={(index, label) => setViews(views.map((v, i) => (i === index ? { ...v, label } : v)))}
+                  onDuplicate={index => {
+                    const source = views[index];
+                    if (!source) return;
+                    // Metric keys only need to be unique within a view, so the copy keeps them.
+                    const copy = { ...structuredClone(source), label: copyLabel(source.label, views) };
+                    setViews([...views.slice(0, index + 1), copy, ...views.slice(index + 1)]);
+                    setActive(index + 1);
+                  }}
+                  onDelete={index => {
+                    setViews(views.filter((_, i) => i !== index));
+                    setActive(Math.max(0, Math.min(active, views.length - 2)));
+                  }}
+                />
+              </div>
+              <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
+                <div className="flex min-h-0 flex-col">
+                  <ScrollArea className="min-h-0 flex-1" mask>
+                    <ScrollAreaViewport className="h-full">
+                      <div className="p-5">
+                        <ViewEditor key={active} index={active} kind={kind} scorers={scorers} />
+                      </div>
+                    </ScrollAreaViewport>
+                  </ScrollArea>
+                </div>
+                <div className="flex min-h-0 flex-col border-border bg-surface-panel p-5 md:border-l">
+                  <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                    {/* my-auto rather than justify-center: a card taller than the box still scrolls from its top. */}
+                    <div className="my-auto">
+                      <WidgetPreview
+                        widget={{
+                          id: draft.id,
+                          span: draft.span,
+                          kind: encoded.widget?.kind ?? kindName(kind),
+                          title: draft.title,
+                        }}
+                        view={activeView?.view}
+                        issue={activeView?.issues[0]}
+                        scope={scope}
+                      />
+                    </div>
                   </div>
-                </ScrollAreaViewport>
-              </ScrollArea>
-            </div>
-            <div className="flex min-h-0 flex-col border-border bg-surface-panel p-5 md:border-l">
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-                {/* my-auto rather than justify-center: a card taller than the box still scrolls from its top. */}
-                <div className="my-auto">
-                  <WidgetPreview
-                    widget={{
-                      id: draft.id,
-                      span: draft.span,
-                      kind: encoded.widget?.kind ?? kindName(kind),
-                      title: draft.title,
-                    }}
-                    view={activeView?.view}
-                    issue={activeView?.issues[0]}
-                    scope={scope}
-                  />
                 </div>
               </div>
-            </div>
-          </div>
-        </DialogBody>
-        <DialogFooter className="border-t border-border pt-3 pb-0">
-          {triedSave && issues.length > 0 && (
-            <ul className="mr-auto flex flex-col gap-0.5" role="alert">
-              {issues.map(issue => (
-                <li key={issue} className="flex items-center gap-1.5">
-                  <CircleAlertIcon className="size-3.5 shrink-0 text-destructive-indicator" />
-                  <Txt as="span" variant="caption" tone="muted">
-                    {issue}
-                  </Txt>
-                </li>
-              ))}
-            </ul>
-          )}
-          <DialogCancel>Cancel</DialogCancel>
-          <DialogAction type="submit">{creating ? 'Add widget' : 'Save widget'}</DialogAction>
-        </DialogFooter>
+            </DialogBody>
+            <DialogFooter className="border-t border-border pt-3 pb-0">
+              {triedSave && issues.length > 0 && (
+                <ul className="mr-auto flex flex-col gap-0.5" role="alert">
+                  {issues.map(issue => (
+                    <li key={issue} className="flex items-center gap-1.5">
+                      <CircleAlertIcon className="size-3.5 shrink-0 text-destructive-indicator" />
+                      <Txt as="span" variant="caption" tone="muted">
+                        {issue}
+                      </Txt>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction type="submit">{creating ? 'Add widget' : 'Save widget'}</DialogAction>
+            </DialogFooter>
+          </>
+        )}
       </Form>
     </FormProvider>
   );

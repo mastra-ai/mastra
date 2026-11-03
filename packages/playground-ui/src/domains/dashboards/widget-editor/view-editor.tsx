@@ -474,7 +474,7 @@ type MetricPickerProps = {
 };
 
 /** The catalogue, grouped, with what the view can't draw left out. */
-function MetricPicker({ entries: offered, disabled, onPick }: MetricPickerProps) {
+export function MetricPicker({ entries: offered, disabled, onPick }: MetricPickerProps) {
   const groups = METRIC_GROUPS.map(group => ({ value: group, items: offered.filter(e => e.group === group) })).filter(
     g => g.items.length > 0,
   );
@@ -631,13 +631,16 @@ function SplitBy({ view, entry, kind, hasScores, fits, sortItems, onChange }: Sp
   ];
   const options = [...new Set([...values, ...view.splitValues])].map(v => ({ value: v, label: v }));
   const blocked = !view.splitBy && !fits({ splitBy: 'environment', splitValues: [] });
+  // Nothing to pick but "None": say why instead of showing a dead select.
+  if (blocked) {
+    return (
+      <Txt variant="caption" tone="muted" className="flex min-h-control-sm items-center">
+        Combinations, scores and percentiles can't be split. Remove them to split this view.
+      </Txt>
+    );
+  }
   return (
     <div className="flex flex-col gap-3">
-      {blocked && (
-        <Txt variant="caption" tone="muted">
-          Combinations, scores and percentiles can't be split. Remove them to split this view.
-        </Txt>
-      )}
       <div className="flex flex-wrap items-center gap-2">
         <Select
           value={view.splitBy ?? NONE}
