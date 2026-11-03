@@ -8,7 +8,7 @@ import { rolldown } from 'rolldown';
 import type { Plugin, RolldownOutput } from 'rolldown';
 import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { BARE_SPECIFIER_FILTER, TREESHAKE_SMALLEST } from '../rolldown';
+import { BARE_SPECIFIER_FILTER, TREESHAKE_SMALLEST, lodashImports } from '../rolldown';
 import { isBareModuleSpecifier } from '../utils';
 
 const TS_SOURCE = /\.tsx?$/;
@@ -83,6 +83,8 @@ export function extractMastraOptionBundler(
     plugins: [
       tsConfigPaths(),
       typescriptSourcesResolver(entryFile),
+      // Inlined sources import lodash by file URL, where Node can't pick named exports out of CommonJS.
+      lodashImports(),
       removeAllOptionsFromMastraExceptPlugin(entryFile, name, result, { logger }),
     ],
   });
