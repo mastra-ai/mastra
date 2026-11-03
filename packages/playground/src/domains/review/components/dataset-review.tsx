@@ -403,12 +403,13 @@ export function DatasetReview({
   });
 
   const displayQuery = showCompleted ? completedQuery : reviewQuery;
-  // A deep-linked item can sit on a page that is not loaded yet.
+  // Tag filters and deep links only see loaded pages, so keep loading until something shows.
+  const needsMoreItems = displayItems.length === 0 || Boolean(featuredItemId && !featuredItem);
   useEffect(() => {
-    if (featuredItemId && !featuredItem && displayQuery.hasNextPage && !displayQuery.isFetchingNextPage) {
+    if (needsMoreItems && displayQuery.hasNextPage && !displayQuery.isFetchingNextPage) {
       void displayQuery.fetchNextPage();
     }
-  }, [featuredItemId, featuredItem, displayQuery]);
+  }, [needsMoreItems, displayQuery]);
 
   const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
   const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;
@@ -686,7 +687,7 @@ export function DatasetReview({
 
       <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
-          {isLoadingDisplay ? (
+          {isLoadingDisplay || (displayItems.length === 0 && displayQuery.hasNextPage) ? (
             <Spinner fill />
           ) : displayItems.length === 0 ? (
             <EmptyState

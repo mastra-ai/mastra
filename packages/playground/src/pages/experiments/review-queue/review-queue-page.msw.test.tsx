@@ -158,6 +158,47 @@ describe('Review Queue page', () => {
       expect(screen.getByText(/flagged question 0\b/)).toBeTruthy();
       expect(requestedPages).toEqual(['0', '1']);
     });
+
+    it('keeps loading when no loaded result matches the tag filter yet', async () => {
+      const taggedFlagged = {
+        ...results[2],
+        id: 'res-tagged',
+        input: { q: 'tagged flagged question' },
+        tags: ['alpha'],
+      };
+      const completed = Array.from({ length: 150 }, (_, index) => ({
+        ...results[0],
+        id: `res-done-${index}`,
+        itemId: `item-done-${index}`,
+        status: 'complete' as const,
+        input: { q: `done question ${index}` },
+        tags: index >= 100 ? ['alpha'] : [],
+      }));
+      const all = [taggedFlagged, ...completed];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const status = query.get('status');
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          const list = all.filter(r => r.status === status);
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      await screen.findByText(/tagged flagged question/);
+      await pickFilter('Tag', 'alpha');
+      await screen.findByRole('group', { name: 'Tag alpha' });
+      await pickFilter('Status', 'Completed');
+
+      await screen.findByText(/done question 120\b/);
+      expect(screen.queryByText('No completed reviews yet')).toBeNull();
+      expect(screen.queryByText(/done question 0\b/)).toBeNull();
+    });
   });
 
   describe('when no experiment is selected', () => {
