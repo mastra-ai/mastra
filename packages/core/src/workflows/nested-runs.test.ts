@@ -282,6 +282,28 @@ describe('restarting a nested run whose process died', () => {
     expect(await innerStatuses()).not.toContain('canceled');
   });
 
+  it('says the workflow-level sweep left a nested run for its parent', async () => {
+    const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
+    const debug = vi.fn();
+
+    const { inner } = build(calls);
+    new Mastra({
+      logger: { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+      storage,
+      workflows: { inner },
+    });
+    await inner.restartAllActiveWorkflowRuns();
+
+    // Same rule and the same reason to say it out loud as the Mastra-level sweep: nothing here
+    // restarts a paused parent, so the run is only visible in `inner`'s own active runs.
+    expect(calls).toEqual([0, 1]);
+    expect(await innerStatuses()).toContain('running');
+    expect(debug).toHaveBeenCalledWith(
+      'Left a nested workflow run for its parent to drive',
+      expect.objectContaining({ workflowId: 'inner', parentWorkflow: 'outer', parentStatus: 'paused' }),
+    );
+  });
+
   it('restarts a nested run on its own when its parent run is gone', async () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
     await storage.stores.workflows!.deleteWorkflowRunById({ workflowName: 'outer', runId: 'run-1' });
