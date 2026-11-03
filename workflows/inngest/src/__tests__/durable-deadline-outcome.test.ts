@@ -3,6 +3,11 @@
  * steps run on a connect worker pool. The worker has to stop at the deadline too: finish only the
  * tool it is in, call the model no more, end the run's root spans once as `limit / timeout`, and
  * leave the snapshot the caller deleted at the deadline deleted.
+ *
+ * The scenario needs the first model call to land before the deadline, so the tool is running when
+ * it passes. Inngest's dispatch to a worker eats into the budget, so the budget is generous and the
+ * test checks that precondition with its own message rather than letting a stalled dispatch look
+ * like a worker that never called the model.
  */
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
@@ -19,11 +24,12 @@ import { INNGEST_PORT, startConnectInngestDevServer, stopInngestDevServer } from
 import {
   buildDeadlineAgent,
   modelLogPath,
-  SLOW_TOOL_MS,
   spanLogPath,
+  TOOL_AFTER_DEADLINE_MS,
+  TOOL_CAP_MS,
   TOTAL_TIMEOUT_MS,
 } from './fixtures/deadline-agent';
-import type { SpanRow } from './fixtures/deadline-agent';
+import type { ModelCallRow, SpanRow } from './fixtures/deadline-agent';
 
 vi.setConfig({ testTimeout: 240_000, hookTimeout: 120_000 });
 
@@ -109,6 +115,7 @@ describe('a run whose budget expires while a worker runs its tool', () => {
     for (let attempt = 0; attempt < REPEATS; attempt++) {
       const label = `attempt #${attempt}`;
       const modelCallsBefore = readRows(modelLogPath(logDir)).length;
+      const startedAt = Date.now();
       const result = await durableAgent.stream([{ role: 'user', content: 'Call the slow tool' }], {
         modelSettings: { timeout: { totalMs: TOTAL_TIMEOUT_MS } },
       });
@@ -130,7 +137,7 @@ describe('a run whose budget expires while a worker runs its tool', () => {
         rowsOf().filter(row => row.event === 'span_ended' && ['agent_run', 'model_generation'].includes(row.type));
       // The worker ends the roots once its in-flight tool returns.
       await vi.waitFor(() => expect(rootEnds().map(row => row.type)).toContain('agent_run'), {
-        timeout: SLOW_TOOL_MS + 30_000,
+        timeout: TOOL_CAP_MS + 30_000,
         interval: 250,
       });
       // Give a worker that would call the model again, or persist again, time to do so.
@@ -153,8 +160,13 @@ describe('a run whose budget expires while a worker runs its tool', () => {
           stopReason: 'timeout',
         });
       }
-      // The worker finished the tool it was in and made no further model call.
-      expect(readRows(modelLogPath(logDir)).length - modelCallsBefore, `${label}: model calls`).toBe(1);
+      // The worker finished the tool it was in and made no further model call. The one call
+      // landed before the deadline, or the run never reached the scenario this test is about.
+      const modelCalls = readRows<ModelCallRow>(modelLogPath(logDir)).slice(modelCallsBefore);
+      expect(
+        modelCalls.map(call => (call.at < startedAt + TOTAL_TIMEOUT_MS ? 'before deadline' : 'after deadline')),
+        `${label}: model calls (one before the deadline: budget ${TOTAL_TIMEOUT_MS}ms, tool runs ${TOOL_AFTER_DEADLINE_MS}ms past it)`,
+      ).toEqual(['before deadline']);
       // The snapshot deleted at the deadline stays deleted.
       const loopSnapshot = await workflows!.loadWorkflowSnapshot({
         workflowName: InngestDurableStepIds.AGENTIC_LOOP,

@@ -20,9 +20,16 @@ import { z } from 'zod';
 import { createInngestAgent } from '../../durable-agent';
 import { createInngestDurableAgenticWorkflow } from '../../durable-agent/create-inngest-agentic-workflow';
 
-/** The tool outlives the run's budget, as a slow upstream call does. */
-export const SLOW_TOOL_MS = 4000;
-export const TOTAL_TIMEOUT_MS = 1500;
+/**
+ * The budget is armed in the caller when `stream()` returns, so Inngest's dispatch of the first
+ * step to a worker eats into it. It is generous enough that the first model call lands before the
+ * deadline on a loaded machine; the test asserts that it did.
+ */
+export const TOTAL_TIMEOUT_MS = 6000;
+/** How long the tool keeps running after the deadline aborts it, as a slow upstream call does. */
+export const TOOL_AFTER_DEADLINE_MS = 1000;
+/** The tool returns at the latest here, so a deadline that never reaches it still ends the test. */
+export const TOOL_CAP_MS = TOTAL_TIMEOUT_MS + 10_000;
 
 export interface SpanRow {
   pid: number;
@@ -32,6 +39,12 @@ export interface SpanRow {
   runId?: string;
   outcome: unknown;
   stopReason: unknown;
+}
+
+export interface ModelCallRow {
+  pid: number;
+  afterTool: boolean;
+  at: number;
 }
 
 export const spanLogPath = (logDir: string) => path.join(logDir, 'spans.jsonl');
@@ -68,7 +81,10 @@ function slowThenTextModel(logDir: string): any {
     supportedUrls: {},
     async doStream({ prompt }: { prompt: Array<{ role: string }> }) {
       const stepped = prompt.some(message => message.role === 'tool');
-      appendFileSync(modelLogPath(logDir), JSON.stringify({ pid: process.pid, afterTool: stepped }) + '\n');
+      appendFileSync(
+        modelLogPath(logDir),
+        JSON.stringify({ pid: process.pid, afterTool: stepped, at: Date.now() } satisfies ModelCallRow) + '\n',
+      );
       const chunks = [
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: stepped ? 'id-1' : 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
@@ -117,8 +133,16 @@ export function buildDeadlineAgent({
     id: 'slow',
     description: 'A slow operation.',
     inputSchema: z.object({}),
-    execute: async () => {
-      await new Promise(resolve => setTimeout(resolve, SLOW_TOOL_MS));
+    // Outlives the deadline by construction: it returns a moment after the run's abort signal
+    // fires, so neither a fast nor a slow machine changes what the test proves.
+    execute: async (_input, context) => {
+      const signal = (context as { abortSignal?: AbortSignal } | undefined)?.abortSignal;
+      await new Promise<void>(resolve => {
+        const afterDeadline = () => setTimeout(resolve, TOOL_AFTER_DEADLINE_MS);
+        if (!signal || signal.aborted) return afterDeadline();
+        signal.addEventListener('abort', afterDeadline, { once: true });
+        setTimeout(resolve, TOOL_CAP_MS);
+      });
       return { ok: true };
     },
   });
