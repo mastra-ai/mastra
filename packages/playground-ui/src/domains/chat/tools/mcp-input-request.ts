@@ -44,6 +44,26 @@ export function isMcpInputRequest(payload: unknown): payload is McpInputRequestP
   );
 }
 
+/** More questions at once than any real task asks; the server decides these, so Studio bounds them. */
+export const MAX_INPUT_REQUESTS = 20;
+export const MAX_REQUEST_MESSAGE_LENGTH = 2_000;
+export const MAX_INPUT_REQUESTS_SIZE = 64 * 1024;
+
+/** Whether the server sent more than Studio draws: too many questions, a huge message, or huge params. */
+export function inputRequestTooLarge(payload: McpInputRequestPayload): boolean {
+  const requests = Object.values(payload.requests);
+  if (requests.length > MAX_INPUT_REQUESTS) return true;
+  if (
+    requests.some(
+      request =>
+        typeof request.params?.message === 'string' && request.params.message.length > MAX_REQUEST_MESSAGE_LENGTH,
+    )
+  ) {
+    return true;
+  }
+  return JSON.stringify(payload.requests).length > MAX_INPUT_REQUESTS_SIZE;
+}
+
 /**
  * This call's own suspension. Saved entries are keyed by call id, but a live run keys them by tool
  * name (two calls of one tool share that key), so the entry's own `toolCallId` decides.

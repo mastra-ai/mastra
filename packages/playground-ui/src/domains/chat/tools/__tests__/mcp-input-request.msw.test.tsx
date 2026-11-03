@@ -21,7 +21,7 @@ import {
   suspendedEvent,
 } from './fixtures/mcp-input-request';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import type { McpInputRequestPayload } from '@/domains/chat/tools/mcp-input-request';
+import type { McpInputRequest, McpInputRequestPayload } from '@/domains/chat/tools/mcp-input-request';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { server } from '@/test/msw-server';
 import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -338,6 +338,61 @@ describe('a deferred call whose MCP task asks for input', () => {
   });
 });
 
+describe('a deferred call whose server asks for more than Studio shows', () => {
+  const ask = (message: string): McpInputRequest => ({ method: 'elicitation/create', params: { message } });
+  const requests = (count: number) =>
+    Object.fromEntries(Array.from({ length: count }, (_, i) => [`q${i}`, ask(`Q${i}?`)]));
+
+  it.each([
+    ['too many questions', { ...confirmRequest, requests: requests(21) }],
+    ['a huge message', { ...confirmRequest, requests: { confirm: ask('x'.repeat(2_001)) } }],
+    [
+      'huge params',
+      {
+        ...confirmRequest,
+        requests: { confirm: { method: 'elicitation/create', params: { message: 'Hi', blob: 'x'.repeat(70_000) } } },
+      },
+    ],
+  ])('shows one card for %s and cancels every request', async (_, payload: McpInputRequestPayload) => {
+    const backend = serveBackground(suspendedBackgroundTask(payload));
+    renderWithProviders(<Shell props={deferredCall} />);
+
+    const request = await screen.findByTestId('mcp-input-request');
+    expect(within(request).getByText('reports sent more than Studio can show here.')).toBeTruthy();
+    expect(within(request).queryAllByRole('region')).toHaveLength(0);
+    expect(within(request).queryByRole('button', { name: 'Accept' })).toBeNull();
+
+    fireEvent.click(within(request).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(backend.resumes).toHaveLength(1));
+    const cancelled = Object.fromEntries(Object.keys(payload.requests).map(key => [key, { action: 'cancel' }]));
+    expect(backend.resumes[0]).toEqual({ resumeData: { inputResponses: cancelled }, suspendedAt: SUSPENDED_AT });
+  });
+
+  it('still draws twenty questions', async () => {
+    serveBackground(suspendedBackgroundTask({ ...confirmRequest, requests: requests(20) }));
+    renderWithProviders(<Shell props={deferredCall} />);
+
+    const request = await screen.findByTestId('mcp-input-request');
+    expect(within(request).getByText('Q19?')).toBeTruthy();
+    expect(within(request).queryByText(/more than Studio can show/)).toBeNull();
+  });
+});
+
+describe('a live deferred call with no MCP task progress yet', () => {
+  it('shows input required on the chip while its task waits', async () => {
+    serveBackground(suspendedBackgroundTask());
+    renderWithProviders(
+      <Shell
+        props={{ ...deferredCall, output: undefined, state: 'input-available', backgroundTaskStatus: 'running' }}
+      />,
+    );
+
+    await screen.findByTestId('mcp-input-request');
+    await waitFor(() => expect(chipText()).toContain('task · input required'));
+  });
+});
+
 describe('a foreground call whose MCP task asks for input', () => {
   const foregroundCall: ToolCardProps = {
     toolName: 'reports_slow_report',
@@ -393,6 +448,41 @@ describe('a foreground call whose MCP task asks for input', () => {
 
     await waitFor(() => expect(approveToolcall).toHaveBeenCalledTimes(2));
     expect(approveToolcall).toHaveBeenLastCalledWith('call-1', { inputResponses: { confirm: { action: 'decline' } } });
+  });
+
+  it("shows why an answer didn't go through and clears it on the next try", async () => {
+    serveBackground(suspendedBackgroundTask());
+    const approveToolcall = vi
+      .fn<(toolCallId: string, resumeData?: unknown) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('The run is no longer suspended.'))
+      .mockResolvedValueOnce(undefined);
+    renderWithProviders(<Shell props={foregroundCall} approveToolcall={approveToolcall} />);
+
+    const request = await screen.findByTestId('mcp-input-request');
+    fireEvent.click(within(request).getByRole('button', { name: 'Decline' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('The run is no longer suspended.');
+
+    fireEvent.click(await within(request).findByRole('button', { name: 'Decline' }));
+    await waitFor(() => expect(approveToolcall).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('shows the question without answer buttons in a network run', async () => {
+    serveBackground(suspendedBackgroundTask());
+    const approveToolcall = vi.fn<(toolCallId: string, resumeData?: unknown) => void>();
+    renderWithProviders(
+      <Shell
+        props={{ ...foregroundCall, metadata: { ...foregroundSuspendedMetadata(), mode: 'network' } }}
+        approveToolcall={approveToolcall}
+      />,
+    );
+
+    const request = await screen.findByTestId('mcp-input-request');
+    expect(within(request).getByText('Include the draft figures in the Q3 report?')).toBeTruthy();
+    expect(within(request).getByText("Studio can't answer this request in a network run yet.")).toBeTruthy();
+    for (const name of ['Accept', 'Decline', 'Cancel']) {
+      expect(within(request).queryByRole('button', { name })).toBeNull();
+    }
   });
 
   it('finds its suspension saved under the tool name while the run is live', async () => {

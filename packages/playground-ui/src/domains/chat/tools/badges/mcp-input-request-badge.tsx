@@ -10,27 +10,35 @@ export function ForegroundMcpInputRequest({
   toolCallId,
   payload,
   readOnly,
+  isNetwork,
 }: {
   toolCallId: string;
   payload: McpInputRequestPayload;
   readOnly?: boolean;
+  /** A network run resumes through its own route, which can't carry these answers yet. */
+  isNetwork?: boolean;
 }) {
   const { approveToolcall, isRunning } = useToolCall();
   // Not `toolCallApprovals`: it keeps the call approved after the first answer, which would lock the
   // form when the same call suspends again. This state starts over with each suspension's key.
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string>();
   return (
     <McpInputRequestTool
       payload={payload}
-      readOnly={readOnly}
+      readOnly={readOnly || isNetwork}
+      notice={isNetwork ? "Studio can't answer this request in a network run yet." : undefined}
       isSubmitting={isRunning || sent}
+      error={error}
       onSubmit={async resumeData => {
         setSent(true);
+        setError(undefined);
         try {
           await approveToolcall(toolCallId, resumeData);
-        } catch (error) {
+        } catch (failure) {
           setSent(false);
-          throw error;
+          setError(failure instanceof Error && failure.message ? failure.message : "Couldn't send the answer.");
+          throw failure;
         }
       }}
     />

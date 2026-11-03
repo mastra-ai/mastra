@@ -7,6 +7,7 @@ import type {
   McpInputResponse,
   McpInputResumeData,
 } from './mcp-input-request';
+import { inputRequestTooLarge } from './mcp-input-request';
 import { AskUserBody, AskUserContainer, AskUserLabel } from '@/ds/components/ai/ask-user';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
@@ -24,6 +25,8 @@ export interface McpInputRequestToolProps {
   error?: string;
   /** History view: show the question without answering it. */
   readOnly?: boolean;
+  /** Why the request can't be answered here, shown with the questions. */
+  notice?: string;
 }
 
 const ACTION_LABEL: Record<McpInputAction, string> = {
@@ -108,15 +111,33 @@ function viewRequest({ method, params }: McpInputRequest): RequestView {
  * The questions an MCP server asked while a tool call's task waits. Every request key needs an answer
  * before the call can continue, so answers are held until the last one is given, then sent together.
  */
-export function McpInputRequestTool({ payload, onSubmit, isSubmitting, error, readOnly }: McpInputRequestToolProps) {
+export function McpInputRequestTool({
+  payload,
+  onSubmit,
+  isSubmitting,
+  error,
+  readOnly,
+  notice,
+}: McpInputRequestToolProps) {
   const [answers, setAnswers] = useState<Record<string, McpInputResponse>>({});
   const keys = Object.keys(payload.requests);
+  const tooLarge = useMemo(() => inputRequestTooLarge(payload), [payload]);
+
+  const send = (inputResponses: Record<string, McpInputResponse>) => {
+    void Promise.resolve(onSubmit({ inputResponses })).catch(() => setAnswers({}));
+  };
 
   const answer = (key: string, response: McpInputResponse) => {
     const next = { ...answers, [key]: response };
     setAnswers(next);
     if (!keys.every(requestKey => next[requestKey])) return;
-    void Promise.resolve(onSubmit({ inputResponses: next })).catch(() => setAnswers({}));
+    send(next);
+  };
+
+  const cancelAll = () => {
+    const next = Object.fromEntries(keys.map(key => [key, { action: 'cancel' as const }]));
+    setAnswers(next);
+    send(next);
   };
 
   return (
@@ -125,17 +146,36 @@ export function McpInputRequestTool({ payload, onSubmit, isSubmitting, error, re
         {payload.serverName} needs input to continue {payload.toolName}
       </AskUserLabel>
       <AskUserBody className="flex flex-col gap-4">
-        {Object.entries(payload.requests).map(([key, request]) => (
-          <InputRequest
-            key={key}
-            requestKey={key}
-            request={request}
-            answered={answers[key]?.action}
-            disabled={readOnly || isSubmitting || answers[key] !== undefined}
-            readOnly={readOnly}
-            onAnswer={response => answer(key, response)}
-          />
-        ))}
+        {notice && <Notice variant="info">{notice}</Notice>}
+        {tooLarge ? (
+          <>
+            <Txt tone="muted">{payload.serverName} sent more than Studio can show here.</Txt>
+            {!readOnly && (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={isSubmitting || Object.keys(answers).length > 0}
+                  onClick={cancelAll}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          Object.entries(payload.requests).map(([key, request]) => (
+            <InputRequest
+              key={key}
+              requestKey={key}
+              request={request}
+              answered={answers[key]?.action}
+              disabled={readOnly || isSubmitting || answers[key] !== undefined}
+              readOnly={readOnly}
+              onAnswer={response => answer(key, response)}
+            />
+          ))
+        )}
         {error && (
           <Notice variant="destructive" role="alert">
             {error}

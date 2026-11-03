@@ -183,6 +183,7 @@ export const ToolCardInner = ({
               toolCallId={toolCallId}
               payload={payload}
               readOnly={readOnly}
+              isNetwork={isNetwork}
             />
           </>
         );
@@ -332,6 +333,7 @@ export const ToolCardInner = ({
           status={status}
           backgroundTaskId={backgroundTaskId}
           backgroundTaskStatus={backgroundTaskStatus}
+          mcpInputRequest={deferredRequest?.payload}
         />
         <ToolResultMedia modelOutput={modelOutput} />
         {mcpAppInfo && output !== undefined && (
