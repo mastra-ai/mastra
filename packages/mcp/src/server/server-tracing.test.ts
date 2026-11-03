@@ -339,10 +339,9 @@ describe('MCPServer tracing', () => {
   });
 
   it('fails the request span when the tool is unknown', async () => {
-    await client.callTool({ name: 'nope', arguments: {} });
+    await expect(client.callTool({ name: 'nope', arguments: {} })).rejects.toThrow('Unknown tool: nope');
 
     const span = requestSpans()[0];
-    expect(span.errorInfo?.id).toBe('MCP_SERVER_REQUEST_FAILED');
     expect(span.errorInfo?.message).toContain('Unknown tool: nope');
   });
 

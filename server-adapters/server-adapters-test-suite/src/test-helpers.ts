@@ -1323,6 +1323,9 @@ export function parseDatesInResponse(data: any, schema?: any, currentPath: strin
   return data;
 }
 
+// Taken before any spy so repeated setups call the real registration, not an earlier spy
+const registerTemporaryWorkflows = WorkflowRegistry.registerTemporaryWorkflows.bind(WorkflowRegistry);
+
 async function setupWorkflowRegistryMocks(
   workflows: Record<string, Workflow<any, any, any, any, any, any, any, any>>,
   mastra: Mastra,
@@ -1339,23 +1342,12 @@ async function setupWorkflowRegistryMocks(
     await mockWorkflowRun(workflow);
   }
 
-  // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
-  vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {
-    for (const [id, workflow] of Object.entries(workflows)) {
-      // Register Mastra instance with the workflow
-      if (mastra) {
-        workflow.__registerMastra(mastra);
-        workflow.__registerPrimitives({
-          logger: mastra.getLogger(),
-          storage: mastra.getStorage(),
-          agents: mastra.listAgents(),
-          tts: mastra.getTTS(),
-          vectors: mastra.listVectors(),
-        });
-      }
-      WorkflowRegistry['additionalWorkflows'][id] = workflow;
-    }
-  });
+  // Register the mocked workflows in place of the real agent-builder ones
+  vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(
+    (_workflows: Record<string, Workflow<any, any, any, any, any, any, any, any>>, requestMastra?: Mastra) => {
+      registerTemporaryWorkflows(workflows, requestMastra ?? mastra);
+    },
+  );
 }
 
 export function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {

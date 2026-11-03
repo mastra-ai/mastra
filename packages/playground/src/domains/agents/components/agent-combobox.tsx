@@ -22,8 +22,8 @@ export interface AgentComboboxProps {
 export function AgentCombobox({
   value,
   onValueChange,
-  placeholder = 'Select an agent...',
-  searchPlaceholder = 'Search agents...',
+  placeholder = 'Select an agent',
+  searchPlaceholder = 'Search agents',
   emptyText = 'No agents found.',
   className,
   disabled = false,
