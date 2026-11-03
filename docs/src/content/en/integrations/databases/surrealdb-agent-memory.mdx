@@ -185,6 +185,7 @@ Pass `onExtracted` to an extractor. Values are stored as they are, without runni
 
 - Deleting a thread or messages removes only the verbatim rows. Facts Agent Memory already derived from them stay in Agent Memory.
 - `agentMemoryForget` matches its query across the whole Agent Memory context, so it only runs with `allowUnscoped: true`.
+- Documents are a shared corpus: `searchDocuments` and `agentMemorySearchDocuments` search every document in the Agent Memory context.
 - `recall()` adds Agent Memory hits only when a search string is provided. For recall the agent decides on, use the `agentMemoryRecall` tool.
 - With a shared API key, `resourceId` maps to Agent Memory scopes, not a hard tenant boundary.
 

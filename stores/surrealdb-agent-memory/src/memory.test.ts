@@ -195,6 +195,14 @@ describe('AgentMemory', () => {
     expect(contextCalls[0]).toMatchObject({ lens: [['mastra/resource/user-1']] });
   });
 
+  it("does not read a deleted thread's remaining facts", async () => {
+    await memory.deleteThread('thread-1');
+
+    await memory.recall({ threadId: 'thread-1', resourceId: 'user-2', vectorSearchString: 'hobbies' } as never);
+
+    expect(calls.recall[0]?.options).toMatchObject({ lens: [['mastra/resource/user-2']] });
+  });
+
   it('does not call AgentMemoryClient recall when no vectorSearchString', async () => {
     await memory.saveMessages({ messages: [textMsg('m1', 'user', 'hi')] });
     const res = await memory.recall({
@@ -237,6 +245,7 @@ describe('AgentMemory', () => {
       },
     });
     const mem = new AgentMemory({ agentMemory: fake.agentMemory, storage: new InMemoryStore(), injectProfile: true });
+    await mem.saveThread({ thread });
 
     const message = await mem.getSystemMessage({ threadId: 'thread-1', resourceId: 'user-1' });
 

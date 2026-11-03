@@ -171,25 +171,27 @@ export class AgentMemory extends MastraMemory {
   }
 
   /**
-   * The read lens for semantic recall: the thread's region for `scope: 'thread'`,
-   * otherwise the resource's and thread's regions (the same region writes are tagged
-   * with). Returns undefined when there is nothing to scope the read to.
-   */
-  /**
-   * The thread id when it may join a read lens: a thread stored for a different
-   * resource is dropped, so pairing your own resourceId with someone else's
-   * threadId never reads their thread's facts.
+   * The thread id when it may join a read lens: only a stored thread that belongs
+   * to the requested resource. Pairing your own resourceId with someone else's
+   * threadId, or with a deleted thread whose facts remain in Agent Memory, never
+   * reads that thread's facts.
    */
   private async ownedThreadId(
     threadId: string | undefined,
     resourceId: string | undefined,
   ): Promise<string | undefined> {
-    if (!threadId || !resourceId) return threadId;
+    if (!threadId) return undefined;
     const store = await this.getMemoryStore();
     const thread = await store.getThreadById({ threadId });
-    return thread && thread.resourceId !== resourceId ? undefined : threadId;
+    if (!thread) return undefined;
+    return resourceId && thread.resourceId !== resourceId ? undefined : threadId;
   }
 
+  /**
+   * The read lens for semantic recall: the thread's region for `scope: 'thread'`,
+   * otherwise the resource's and thread's regions (the same region writes are tagged
+   * with). Returns undefined when there is nothing to scope the read to.
+   */
   private recallLens(resourceId: string | undefined, threadId: string | undefined): string[][] | undefined {
     if (this.recallScope === 'thread') {
       return threadId ? [[threadScope(this.scopePrefix, threadId)]] : undefined;
