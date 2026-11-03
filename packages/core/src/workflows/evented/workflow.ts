@@ -2479,6 +2479,8 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    /** The span the resumed run nests under, as `start()` takes it; absent, it continues the saved trace. */
+    tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const fgaProvider = this.mastra?.getServer()?.fga;
     if (fgaProvider && !this.isInternalWorkflow) {
@@ -2635,6 +2637,7 @@ export class EventedRun<
       },
       tracingPolicy: this.tracingPolicy,
       resumeFrom: snapshot.tracingContext,
+      tracingContext: params.tracingContext,
       requestContext,
       mastra: this.mastra,
     });

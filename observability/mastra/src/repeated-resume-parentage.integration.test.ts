@@ -185,7 +185,9 @@ async function resumeParents(
     const invocations = invocationIds.map(id => spans.find(span => span.id === id)!);
     const parents = invocations.map(span => {
       if (!span.parentSpanId) return null;
-      expect(span.metadata?.resumedFromSpanId).toBe(span.parentSpanId);
+      // A durable segment nests under the segment it continues and names the chain's first
+      // segment as its origin; a normal resume nests under that origin directly.
+      expect(span.metadata?.resumedFromSpanId).toBe(engine === 'normal' ? span.parentSpanId : invocationIds[0]);
       const parent = allSpans.get(span.parentSpanId);
       expect(parent, 'resume parent must be exported').toBeDefined();
       let ancestor = parent;
@@ -216,6 +218,14 @@ const siblingsUnderInitial = [
   { parentType: SpanType.AGENT_RUN, parentInvocation: 0 },
   { parentType: SpanType.AGENT_RUN, parentInvocation: 0 },
 ];
+/** Each durable segment nests under the segment it continues (see the tracing overview docs). */
+const chainedUnderPrevious = [
+  null,
+  { parentType: SpanType.AGENT_RUN, parentInvocation: 0 },
+  { parentType: SpanType.AGENT_RUN, parentInvocation: 1 },
+];
+const parentsFor = (engine: 'normal' | 'durable' | 'evented') =>
+  engine === 'normal' ? siblingsUnderInitial : chainedUnderPrevious;
 
 it('an explicit trace override saves the new agent run as the parent for subsequent resumes', async () => {
   expect(await resumeParents('normal', { recreateAgent: true, overrideTrace: true })).toEqual({
@@ -225,22 +235,26 @@ it('an explicit trace override saves the new agent run as the parent for subsequ
   });
 });
 
-it('normal and durable resumes are siblings under the initial agent after two suspensions', async () => {
-  const expected = { parents: siblingsUnderInitial, resumedFrom: [null, 0, 0], external: [null, null, null] };
-  expect(await resumeParents('normal'), 'normal resume parentage').toEqual(expected);
-  expect(await resumeParents('durable'), 'durable resume parentage').toEqual(expected);
-  expect(await resumeParents('evented'), 'evented resume parentage').toEqual(expected);
+it('normal resumes are siblings under the initial agent; durable segments chain under the previous one', async () => {
+  const expected = (engine: 'normal' | 'durable' | 'evented') => ({
+    parents: parentsFor(engine),
+    resumedFrom: [null, 0, 0],
+    external: [null, null, null],
+  });
+  expect(await resumeParents('normal'), 'normal resume parentage').toEqual(expected('normal'));
+  expect(await resumeParents('durable'), 'durable resume parentage').toEqual(expected('durable'));
+  expect(await resumeParents('evented'), 'evented resume parentage').toEqual(expected('evented'));
   expect(
     await resumeParents('normal', { recreateAgent: true }),
     'fresh agents must recover the initial parent from storage',
-  ).toEqual(expected);
+  ).toEqual(expected('normal'));
 }, 30_000);
 
 it.each(['durable', 'evented'] as const)(
   '%s resumes from a fresh Mastra stay on the initial agent trace',
   async engine => {
     expect(await resumeParents(engine, { recreateAgent: true })).toEqual({
-      parents: siblingsUnderInitial,
+      parents: chainedUnderPrevious,
       resumedFrom: [null, 0, 0],
       external: [null, null, null],
     });
@@ -259,7 +273,7 @@ it.each([
   '%s resumes (recreated host: %s) keep the external parent the initial run started under',
   async (engine, recreateAgent) => {
     expect(await resumeParents(engine, { recreateAgent, external: 'start' })).toEqual({
-      parents: siblingsUnderInitial,
+      parents: parentsFor(engine),
       resumedFrom: [null, 0, 0],
       external: [EXTERNAL_AT_START, EXTERNAL_AT_START, EXTERNAL_AT_START],
     });
@@ -454,11 +468,13 @@ it.each(['normal', 'durable'] as const)(
       expect(runs.filter(span => !span.parentSpanId)).toEqual([outerRuns[0]]);
       for (const family of [outerRuns, innerRuns]) {
         expect(family[0]!.resumedFromSpanId).toBeUndefined();
-        for (const resumed of family.slice(1)) {
-          expect(resumed.parentSpanId).toBe(family[0]!.id);
+        // A durable segment nests under the one it continues; a normal resume under the family's
+        // first run. Both name that first run as origin.
+        family.slice(1).forEach((resumed, index) => {
+          expect(resumed.parentSpanId).toBe(engine === 'normal' ? family[0]!.id : family[index]!.id);
           expect(resumed.metadata?.resumedFromSpanId).toBe(family[0]!.id);
           expect(resumed.resumedFromSpanId).toBe(family[0]!.id);
-        }
+        });
       }
       expect(outerRuns.map(span => span.externalParentSpanId)).toEqual(Array(3).fill(EXTERNAL_AT_START));
       expect(innerRuns.map(span => span.externalParentSpanId ?? null)).toEqual([null, null, null]);
@@ -573,19 +589,30 @@ async function recoverThenResume({
     recovering = openProcess(false);
     const recovered = await recovering.agent.recover(runId, { force: true });
     cleanups.push(recovered.cleanup);
-    const expectedRuns = sampleCrashedRun ? 3 : 2;
-    await vi.waitFor(() => expect(exporter.getSpansByType(SpanType.AGENT_RUN)).toHaveLength(expectedRuns - 1), {
-      timeout: 10_000,
-    });
+    // A segment inherits the sampling decision of the one it continues: an unsampled start stays
+    // unsampled through recovery and resume, so no span of the run is exported.
+    const expectedRuns = sampleCrashedRun ? 3 : 0;
+    await vi.waitFor(
+      () => expect(exporter.getSpansByType(SpanType.AGENT_RUN)).toHaveLength(Math.max(expectedRuns - 1, 0)),
+      { timeout: 10_000 },
+    );
     const resumed = await recovering.agent.resumeGenerate(runId, { approved: true }, { toolCallId: 'call-2' });
     expect(resumed.text).toBe('Both approvals received.');
 
     await expect.poll(() => exporter.getSpansByType(SpanType.AGENT_RUN).length).toBe(expectedRuns);
+    await recovering.host.observability?.flush();
     const runs = exporter.getSpansByType(SpanType.AGENT_RUN);
     return {
       initial: runs.find(span => span.name.endsWith("'recovered-resume'")),
       recoveredRun: runs.find(span => span.name.endsWith('(recovered)'))!,
       laterResume: runs.find(span => span.name.endsWith('(resumed)'))!,
+      spans: exporter.getAllSpans().map(span => ({
+        type: span.type,
+        name: span.name,
+        parentSpanId: span.parentSpanId ?? null,
+        traceId: span.traceId,
+        metadata: span.metadata,
+      })),
     };
   } finally {
     for (const cleanup of cleanups) cleanup();
@@ -610,11 +637,12 @@ it('a recovered durable run and a later resume keep the initial invocation as th
   });
 }, 30_000);
 
-it('recovering a run whose start was not sampled starts a new lineage at the recovered run', async () => {
-  const { initial, recoveredRun, laterResume } = await recoverThenResume({ sampleCrashedRun: false });
+it('recovering a run whose start was not sampled keeps the recovery and the later resume unsampled', async () => {
+  const { initial, recoveredRun, laterResume, spans } = await recoverThenResume({ sampleCrashedRun: false });
   expect(initial).toBeUndefined();
-  expect(recoveredRun.resumedFromSpanId).toBeUndefined();
-  expect(laterResume).toMatchObject({ parentSpanId: recoveredRun.id, resumedFromSpanId: recoveredRun.id });
+  expect(recoveredRun).toBeUndefined();
+  expect(laterResume).toBeUndefined();
+  expect(spans, 'no span of any type is exported for the run').toEqual([]);
 }, 30_000);
 
 it.each([

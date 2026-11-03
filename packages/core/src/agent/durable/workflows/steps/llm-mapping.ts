@@ -18,6 +18,7 @@ import { DurableStepIds } from '../../constants';
 import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { getRunRegistryEntry } from '../../run-registry';
+import { currentSegment } from '../../segment-spans';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
@@ -68,6 +69,7 @@ const durableLLMMappingOutputSchema = z.object({
   deferredStepFinishChunk: z.any().optional(),
   completionStartTime: z.coerce.date().optional(),
   timeToFirstTokenMs: z.number().optional(),
+  clockSpanId: z.string().optional(),
   response: responseRecordSchema.optional(),
 });
 
@@ -174,8 +176,18 @@ export function createDurableLLMMappingStep() {
         | undefined;
       if (llmOutput.stepSpanData) {
         try {
-          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-          stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+          // The step of a resumed iteration was opened by the segment that suspended, which
+          // already ended it; this segment leaves it alone.
+          const segment = currentSegment({
+            mastra: mastra as Mastra | undefined,
+            requestContext,
+            runId: _runId,
+            state: (getInitData?.() ?? {}) as DurableAgenticWorkflowInput,
+          });
+          if (segment.ownsStep(llmOutput.stepSpanData)) {
+            const observability = mastra?.observability?.getSelectedInstance({ requestContext });
+            stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+          }
         } catch {
           // Span bookkeeping must never break the merge step.
         }
@@ -423,6 +435,7 @@ export function createDurableLLMMappingStep() {
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
+        clockSpanId: llmOutput.clockSpanId,
         response: llmOutput.response,
       };
 

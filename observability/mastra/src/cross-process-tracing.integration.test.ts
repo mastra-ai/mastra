@@ -217,10 +217,17 @@ describe('a durable agent run resumed by another process', () => {
         toolCallId: toolCallId!,
       }),
     );
-    await scoreOf(storage, started.runId);
+    // Scorers run after the stream ends: give them the time a scored run needs, then flush.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    for (const host of hosts) await host.observability?.flush();
 
-    const inputProcessorSpans = exporter.getAllSpans().filter(span => span.name === 'input processor: pass-through');
-    expect(inputProcessorSpans).toEqual([]);
+    const scores = await storage.getStore('scores');
+    const scored = await scores!.listScoresByRunId({ runId: started.runId, pagination: { page: 0, perPage: 10 } });
+    expect(scored.scores, 'a run its sampler skipped gets no score').toEqual([]);
+    expect(
+      exporter.getAllSpans().map(span => `${span.type} ${span.name}`),
+      'and no span of any type',
+    ).toEqual([]);
     expect(exporter.getIncompleteSpans().map(({ span }) => `${span?.type} ${span?.name}`)).toEqual([]);
     expect(consoleError.mock.calls.filter(([message]) => String(message).includes('Invalid traceId'))).toEqual([]);
     consoleError.mockRestore();

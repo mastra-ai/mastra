@@ -117,3 +117,9 @@ export const DurableStepIds = {
   /** isTaskComplete evaluation step */
   IS_TASK_COMPLETE: 'durable-is-task-complete',
 } as const;
+
+/**
+ * The outer step that publishes FINISH and ends the run's root spans. Recovery reads its saved
+ * status to tell whether FINISH already went out before a crash.
+ */
+export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';

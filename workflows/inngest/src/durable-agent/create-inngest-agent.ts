@@ -70,7 +70,7 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
@@ -95,7 +95,7 @@ import {
   buildDurableTriggerEventData,
   mergeResumeRequestContext,
 } from '../durable-event-payload';
-import { endRunSpansWithError } from '../observability-compat';
+import { endRunSpansWithError, openSegment, segmentFromSnapshot } from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
@@ -1702,8 +1702,31 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Steps and stream-side processors on this segment see the merged
       // context, as core `DurableAgent.resume` does.
       existingEntry.requestContext = callbackOptions.requestContext;
-      // Resume span identity must travel with the worker handoff before we can
-      // open a separate traced segment here (OBS-754).
+      // The context the resume event carries: the suspended run's values with the caller's on
+      // top. The resumed segment's spans ride on it to the worker that ends them.
+      const eventRequestContext = mergeResumeRequestContext(
+        suspendedSnapshot?.requestContext,
+        resumeOptions?.requestContext,
+      );
+      // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment under the pair the
+      // suspension persisted, and carry it with the event. The registry holds only the pair this
+      // process opened, so a warm entry's suspended pair cannot be ended by an error path.
+      existingEntry.agentSpan = undefined;
+      existingEntry.modelSpan = undefined;
+      const opened = openSegment({
+        mastra,
+        kind: 'resumed',
+        runId,
+        agent,
+        model:
+          (existingEntry.model as { modelId?: unknown; provider?: unknown } | undefined) ??
+          suspendedSnapshot?.context?.input?.modelConfig,
+        previous: segmentFromSnapshot(suspendedSnapshot, runId).agentSpanData,
+        requestContext: callbackOptions.requestContext,
+        carryInto: eventRequestContext,
+      });
+      existingEntry.agentSpan = opened?.agentSpan;
+      existingEntry.modelSpan = opened?.modelSpan;
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
@@ -1827,6 +1850,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         outputProcessors: existingEntry.outputProcessors,
         processorStates: existingEntry.processorStates,
         requestContext: callbackOptions.requestContext,
+        // Per-chunk processor spans parent under the resumed segment, as core does.
+        tracingContext: opened ? { currentSpan: opened.agentSpan } : undefined,
         onChunk: chunk => {
           resumedChunkSeen = true;
           if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
@@ -1881,7 +1906,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       const dispatch = ready.then(async () => {
         const snapshot = suspendedSnapshot;
-        const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        const requestContext = eventRequestContext;
         try {
           keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
         } catch (error) {
@@ -1928,6 +1953,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       try {
         await dispatch;
       } catch (error) {
+        // No worker will run the resumed segment, so its creator ends its pair with the error
+        // (the suspended pair is untouched), as the start path does for a run that never
+        // reached a worker.
+        endRunSpansWithError(runId, getErrorFromUnknown(error));
         // A run that was never resumed must not keep its registry entry or stream
         // subscription, otherwise a later resume of the same runId is blocked.
         streamCleanup();

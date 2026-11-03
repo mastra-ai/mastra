@@ -260,5 +260,14 @@ export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
 
 // Shared runtime outcome classification for external durable engines.
 export { endRunSpansWithError } from './run-registry';
+// Which AGENT_RUN + MODEL_GENERATION pair a resumed or recovered execution reports under.
+export {
+  currentSegment,
+  nextSegmentClocks,
+  openSegment,
+  segmentEndedBeforeCrash,
+  segmentFromSnapshot,
+} from './segment-spans';
+export type { DurableSegment, OpenedSegment, SegmentAgent, SegmentSpanData, SegmentState } from './segment-spans';
 /** @internal Runtime instrumentation helpers. */
 export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

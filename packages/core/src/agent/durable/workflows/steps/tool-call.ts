@@ -61,6 +61,7 @@ import {
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import { currentSegment, toolRequestContext, withoutDurableEngineKeys } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -78,7 +79,6 @@ import {
 } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
-import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
 
 /**
@@ -104,6 +104,8 @@ const durableToolCallInputSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   // Time to first token of the same step, used the same way
   timeToFirstTokenMs: z.number().optional(),
+  // The MODEL_GENERATION those clocks were measured under
+  clockSpanId: z.string().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
 });
@@ -445,9 +447,13 @@ export function createDurableToolCallStep() {
       const { runId, options: agentOptions, state } = initData;
       const logger = (mastra as any)?.getLogger?.();
 
+      // The segment this execution reports under: the run's first pair from the iteration
+      // state, or the pair a resume or recovery carried in the request context.
+      const segment = currentSegment({ mastra: mastra as Mastra | undefined, requestContext, runId, state: initData });
+
       // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before
       // pausing — stores persist only span-end events, so an un-ended root is dropped if
-      // the run is never resumed. On resume a fresh root is opened (see DurableAgent.resume).
+      // the run is never resumed. A resume opens the next segment's pair (see DurableAgent.resume).
       const endSpansAsSuspended = (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
         try {
           const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
@@ -458,67 +464,27 @@ export function createDurableToolCallStep() {
             toolName: info.toolName,
             toolCallId: info.toolCallId,
           };
-          // After a prior resume, end the resume spans (registry override) — they are the
-          // active root for this segment. Otherwise end the threaded originals.
-          const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-          const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
-          const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
-          // Rebuilt spans come from the run-start snapshot, so end them with the clocks
-          // their segment captured: the loop state's (or this step's, on the first
-          // iteration) for the originals.
-          const attributes = carriedSpanClocks(
-            reg,
-            initData.completionStartTime
-              ? { completionStartTime: initData.completionStartTime, timeToFirstTokenMs: initData.timeToFirstTokenMs }
-              : {
-                  completionStartTime: typedInput.completionStartTime,
-                  timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
-                },
-          );
-          if (typedInput.stepSpanData) {
-            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
-              output,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
-              stopReasonContext:
-                info.reason === 'approval'
-                  ? compactStopReasonContext('approval_required', {
-                      toolCallId: info.toolCallId,
-                      toolName: info.toolName,
-                    })
-                  : null,
-            });
+          const stop = {
+            stopReason: info.reason === 'approval' ? ('approval_required' as const) : null,
+            stopReasonContext:
+              info.reason === 'approval'
+                ? compactStopReasonContext('approval_required', {
+                    toolCallId: info.toolCallId,
+                    toolName: info.toolName,
+                  })
+                : null,
+          };
+          // Rebuilt spans come from the run-start snapshot, so end them with the clocks their
+          // segment captured: the loop state's, or this step's on its first iteration.
+          const attributes = segment.clocks(initData, typedInput);
+          // A step opened before an earlier suspension was already ended with that segment.
+          if (typedInput.stepSpanData && segment.ownsStep(typedInput.stepSpanData)) {
+            obs
+              .rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
+              ?.end({ output, outcome: 'suspend', ...stop });
           }
-          if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({
-              output,
-              attributes,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
-              stopReasonContext:
-                info.reason === 'approval'
-                  ? compactStopReasonContext('approval_required', {
-                      toolCallId: info.toolCallId,
-                      toolName: info.toolName,
-                    })
-                  : null,
-            });
-          }
-          if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({
-              output,
-              attributes,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
-              stopReasonContext:
-                info.reason === 'approval'
-                  ? compactStopReasonContext('approval_required', {
-                      toolCallId: info.toolCallId,
-                      toolName: info.toolName,
-                    })
-                  : null,
-            });
-          }
+          segment.modelSpan()?.end({ output, attributes, outcome: 'suspend', ...stop });
+          segment.agentSpan()?.end({ output, attributes, outcome: 'suspend', ...stop });
         } catch (error) {
           // Span bookkeeping must never break suspension.
           logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);
@@ -557,15 +523,9 @@ export function createDurableToolCallStep() {
         (registryEntry.baseTools !== undefined || registryEntry.tools !== undefined);
       const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
 
-      // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
+      // Tracing context for per-chunk PROCESSOR_RUN spans: the segment's AGENT_RUN span (live
       // in-process, rebuilt cross-process). Without it they export as orphan trace roots.
-      const processorAgentSpanData = registryEntry?.resumeAgentSpanData ?? initData.agentSpanData;
-      const processorAgentSpan =
-        registryEntry?.resumeAgentSpan ??
-        registryEntry?.agentSpan ??
-        (processorAgentSpanData && observability
-          ? observability.rebuildSpan(processorAgentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
-          : undefined);
+      const processorAgentSpan = segment.agentSpan();
       const processorObservabilityContext = processorAgentSpan
         ? createObservabilityContext({ currentSpan: processorAgentSpan })
         : undefined;
@@ -883,7 +843,9 @@ export function createDurableToolCallStep() {
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
         requestContext: Object.fromEntries(
-          [...approvalRequestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+          [...withoutDurableEngineKeys(approvalRequestContext).entries()].filter(
+            ([key]) => key !== '__mastra_requireToolApproval',
+          ),
         ),
         // Use the same rebuilt-workspace fallback as execution (above), so
         // workspace-aware approval policies see their workspace cross-process.
@@ -1438,7 +1400,10 @@ export function createDurableToolCallStep() {
         messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
-        requestContext,
+        // The instance the tool was built over when this execution's context is or reads through
+        // to it, so a value the tool writes reaches the next step; otherwise the run's values
+        // without the engine's claim and segment carrier.
+        requestContext: toolRequestContext(requestContext, registryEntry?.requestContext ?? rebuiltRequestContext),
         mcp: registryEntry?.mcp,
         tracingContext: toolTracingContext,
         // Use the actor supplied for this workflow segment. A resumed segment

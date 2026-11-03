@@ -5,6 +5,7 @@ import { createObservabilityContext } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
 import { MessageList } from '../../../message-list';
 import type { StoredMessageLoader } from '../../../message-list/memory-message-refs';
+import { currentSegment } from '../../segment-spans';
 import type { DurableAgenticLoopOutput, DurableAgenticWorkflowInput } from '../../types';
 
 export interface ExecuteDurableAgentScorersParams {
@@ -53,6 +54,8 @@ export async function executeDurableAgentScorers({
     return;
   }
 
+  const agentSpan = currentSegment({ mastra, requestContext, runId: initData.runId, state: initData }).agentSpan();
+  const scoringContext = agentSpan ? { currentSpan: agentSpan } : tracingContext;
   const logger = mastra?.getLogger?.();
 
   // Messages as they stood before generation are the scorer's input.
@@ -136,7 +139,7 @@ export async function executeDurableAgentScorers({
         entityType: 'AGENT',
         threadId: initData.state?.threadId,
         resourceId: initData.state?.resourceId,
-        ...createObservabilityContext(tracingContext),
+        ...createObservabilityContext(scoringContext),
       });
     } catch (error) {
       // Scoring is observability, not execution: never fail a run over it.

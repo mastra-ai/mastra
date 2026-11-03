@@ -66,6 +66,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { isReservedRequestContextKey } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
@@ -3526,7 +3527,24 @@ export class Workflow<
       return { runs: [], total: 0 };
     }
 
-    return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    const result = await workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    return {
+      ...result,
+      runs: result.runs.map(run => {
+        let snapshot = run.snapshot;
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+          } catch {
+            return run;
+          }
+        }
+        if (!snapshot?.requestContext || !('mastra__durableSegments' in snapshot.requestContext)) return run;
+        const { mastra__durableSegments: _segments, ...requestContext } = snapshot.requestContext;
+        const projected = { ...snapshot, requestContext };
+        return { ...run, snapshot: typeof run.snapshot === 'string' ? JSON.stringify(projected) : projected };
+      }),
+    };
   }
 
   public async listActiveWorkflowRuns() {
@@ -3795,7 +3813,17 @@ export class Workflow<
       suspendedPaths: includeAllFields || fieldsSet.has('suspendedPaths') ? snapshotState.suspendedPaths : undefined,
       resumeLabels: includeAllFields || fieldsSet.has('resumeLabels') ? snapshotState.resumeLabels : undefined,
       waitingPaths: includeAllFields || fieldsSet.has('waitingPaths') ? snapshotState.waitingPaths : undefined,
-      ...(fieldsSet.has('requestContext') ? { requestContext: snapshotState.requestContext } : {}),
+      // Reserved keys are framework state (identity, auth, durable-engine plumbing), not caller
+      // data: left out here as they are from span serialization and score snapshots.
+      ...(fieldsSet.has('requestContext')
+        ? {
+            requestContext: snapshotState.requestContext
+              ? Object.fromEntries(
+                  Object.entries(snapshotState.requestContext).filter(([key]) => !isReservedRequestContextKey(key)),
+                )
+              : snapshotState.requestContext,
+          }
+        : {}),
       ...(fieldsSet.has('tracingContext') ? { tracingContext: snapshotState.tracingContext } : {}),
     };
 

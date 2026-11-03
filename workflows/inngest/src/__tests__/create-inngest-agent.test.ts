@@ -1487,11 +1487,11 @@ describe('InngestAgent parity surface', () => {
       expect(sendSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            requestContext: {
+            requestContext: expect.objectContaining({
               userId: 'user-1',
               organizationId: 'org-2',
               requestId: 'request-1',
-            },
+            }),
             tracingOptions: {
               traceId: 'trace-1',
               parentSpanId: 'span-1',
@@ -1500,6 +1500,11 @@ describe('InngestAgent parity surface', () => {
         }),
       );
       const sentEvent = sendSpy.mock.calls[0]?.[0];
+      // This resumer has no observability, so the event tells the worker the resumed segment is
+      // untraced instead of letting it end the suspended pair again.
+      expect(sentEvent?.data?.requestContext?.mastra__durableSegments).toEqual({
+        [runId]: { v: 1, agent: null, model: null },
+      });
       expect(sentEvent?.data).not.toHaveProperty('initialState');
       expect(sentEvent?.data).not.toHaveProperty('stepResults');
       expect(sentEvent?.data.resume).not.toHaveProperty('stepResults');
