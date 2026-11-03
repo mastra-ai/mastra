@@ -243,7 +243,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // A caller whose execution lost the run would otherwise wait forever: a successor's finish is foreign to it,
     // and a run released with nobody left to finish it publishes none. Stop waiting, without writing anything.
     const stopWatchingLoss = watchExecutionLoss?.(params.requestContext, params.runId, error => {
-      void pubsub.unsubscribe('workflows-finish', finishCb).finally(() => rejectResult(error));
+      void pubsub
+        .unsubscribe('workflows-finish', finishCb)
+        .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err))
+        .finally(() => rejectResult(error));
     });
     if (stopWatchingLoss) void resultPromise.then(stopWatchingLoss, stopWatchingLoss);
 

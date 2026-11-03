@@ -1454,9 +1454,67 @@ it.each(['exhausted', 'healthy'] as const)(
   },
 );
 
-it.each(['released', 'taken over'] as const)(
+it('releases an abandoned unpublished terminal on a serialized redelivery after its first release failed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-redelivery-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  coordinator.stopHeartbeat();
+  const threadKey = 'resource\u0000thread';
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
+  const requestContext = {
+    [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: { ...coordinator.claim, threadId: 'thread', resourceId: 'resource' } },
+  };
+  const terminal: Event = {
+    id: 'abandoned-redelivered',
+    type: 'workflow.end',
+    runId: 'run',
+    createdAt: new Date(),
+    data: { workflowId: 'durable-agentic-loop', runId: 'run', requestContext },
+  };
+  const processor = new WorkflowEventProcessor({ mastra });
+  vi.spyOn(processor, 'loadData').mockRejectedValue(
+    Object.assign(new Error('SQLITE_BUSY: database is locked (test)'), { code: 'SQLITE_BUSY' }),
+  );
+  vi.spyOn(processor, 'errorWorkflow').mockRejectedValue(new Error('publish failed (test)'));
+  const releaseSharedClaim = vi
+    .spyOn(ExecutionFence, 'releaseSharedClaim')
+    .mockRejectedValueOnce(new Error('release failed (test)'));
+  // Each delivery is a fresh object, as a transport that serializes events hands it over.
+  const redeliver = () => processor.handle(JSON.parse(JSON.stringify(terminal)));
+  try {
+    const results = [];
+    for (let delivery = 0; delivery < 6; delivery++) results.push((await redeliver()).retry);
+    // The abandoning delivery fails its release and asks for a retry; the next one finds the event terminal.
+    expect(results).toEqual([true, true, true, true, true, false]);
+    expect(releaseSharedClaim).toHaveBeenCalledTimes(2);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+      ownerId: coordinator.executionId,
+      generation: coordinator.generation,
+      leaseExpiresAt: null,
+      live: false,
+    });
+    expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
+  } finally {
+    releaseSharedClaim.mockRestore();
+    await stopDurableExecutionParticipants(mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it.each(['released', 'taken over', 'released while unsubscribe fails'] as const)(
   'stops a shared caller waiting on a run whose claim was %s, without writing to the run',
   async loss => {
+    const released = loss !== 'taken over';
     const directory = await mkdtemp(join(tmpdir(), 'mastra-caller-loss-'));
     const socket = join(directory, 'pubsub.sock');
     const storage = new InMemoryStore();
@@ -1481,11 +1539,15 @@ it.each(['released', 'taken over'] as const)(
     const threadKey = 'resource\u0000thread';
     const execute = vi.spyOn(EventedExecutionEngine.prototype, 'execute');
     const unsubscribe = vi.spyOn(apiPubsub, 'unsubscribe');
+    // A failed unsubscribe must still reject the caller with the loss, not surface as an unhandled rejection.
+    if (loss === 'released while unsubscribe fails') {
+      unsubscribe.mockRejectedValueOnce(new Error('publisher queue full (test)'));
+    }
     let successor: ExecutionFence | undefined;
     try {
       await worker.startWorkers();
       const { runId } = await apiAgent.stream('Answer the question.', {
-        runId: `caller-loss-${loss.replace(' ', '-')}`,
+        runId: `caller-loss-${loss.replaceAll(' ', '-')}`,
         memory: { resource: 'resource', thread: 'thread' },
       });
       await entered.promise;
@@ -1496,7 +1558,7 @@ it.each(['released', 'taken over'] as const)(
       );
       const claimed = (await workflows.getRunOwnership({ runId }))!;
 
-      if (loss === 'released') {
+      if (released) {
         await workflows.releaseRunOwnership({ runId, generation: claimed.generation, ownerId: claimed.ownerId });
       } else {
         successor = await ExecutionFence.claim({
@@ -1515,7 +1577,7 @@ it.each(['released', 'taken over'] as const)(
 
       expect(await outcome).toEqual({
         settled: 'rejected',
-        id: loss === 'released' ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
+        id: released ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
       });
       expect(unsubscribe.mock.calls.some(([topic]) => topic === 'workflows-finish')).toBe(true);
       expect(publish.mock.calls.filter(([topic]) => topic === 'workflows' || topic === 'workflows-finish')).toEqual([]);
