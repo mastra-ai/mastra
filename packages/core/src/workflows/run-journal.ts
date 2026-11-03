@@ -627,3 +627,83 @@ function isPlainJson(value: unknown, ancestors: Set<object>): boolean {
       return false;
   }
 }
+
+/** The `steps` loader of a storage v2 result -> the step results it was built from (see `residentStepResults`). */
+const residentResults = new WeakMap<object, StepResults>();
+
+/**
+ * The `steps()` of a storage v2 run's result: its step results as the execution left them, formatted
+ * by `format`. The successful results the journal evicted are read from storage on the first call,
+ * with one read shared by concurrent calls; the read fails if the run was written to since its
+ * execution ended (e.g. resumed or restarted), since storage then no longer holds what the result
+ * describes. A failed read isn't cached, so a later call retries.
+ *
+ * Holds the stubs and the results that weren't evicted, not the journal. Call it after the run's
+ * last write is sent, and close the journal before anything awaits the loader.
+ *
+ * @internal
+ */
+export function lazyStepResults(
+  journal: RunJournal,
+  stepResults: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  const { store, workflowName, runId, settledLastSeq } = journal;
+  const results = { ...stepResults };
+  let loaded: Promise<StepResults> | undefined;
+
+  const load = async (): Promise<StepResults> => {
+    const stubbed = Object.keys(results).filter(stepId => isStepResultStub(results[stepId]));
+    if (!stubbed.length) return format(results);
+
+    const stored = await store!.loadWorkflowRunSteps({
+      workflowName,
+      runId,
+      stepIds: stubbed,
+      expectedLastSeq: await settledLastSeq,
+    });
+    if (!stored) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_STEPS_STALE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `The steps of run ${runId} can't be loaded for this result: the run was written to (e.g. resumed or restarted) or deleted since. Read the run again for its current steps.`,
+      });
+    }
+    const full = { ...results };
+    for (const stepId of stubbed) {
+      const result = stored[stepId];
+      if (!result) {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.SYSTEM,
+          text: `The stored result of step "${stepId}" in run ${runId} is missing.`,
+        });
+      }
+      full[stepId] = result;
+    }
+    return format(full);
+  };
+
+  const steps = () => {
+    loaded ??= load().catch(error => {
+      loaded = undefined;
+      throw error;
+    });
+    return loaded;
+  };
+  residentResults.set(steps, results);
+  return steps;
+}
+
+/**
+ * The step results a storage v2 result's `steps` loader holds without reading storage: every result
+ * but the successful ones that were evicted, which are stubs. Undefined for anything else (a v1
+ * result's `steps` record). For the engine's own reads of a nested run's suspended and failed steps.
+ *
+ * @internal
+ */
+export function residentStepResults(steps: unknown): StepResults | undefined {
+  return typeof steps === 'function' ? residentResults.get(steps) : undefined;
+}

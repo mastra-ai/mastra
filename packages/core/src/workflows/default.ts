@@ -37,7 +37,7 @@ import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepU
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import { rebaseNestedState } from './nested-state';
-import { RunJournal } from './run-journal';
+import { lazyStepResults, RunJournal } from './run-journal';
 import type { StateBase } from './run-journal';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
@@ -628,6 +628,24 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   /**
+   * `fmtReturnValue` for the result `execute` returns. On storage v2 its `steps` is a loader
+   * (`lazyStepResults`), so returning the result reads none of the steps the journal evicted.
+   */
+  async #fmtResult(
+    journal: RunJournal | undefined,
+    pubsub: PubSub,
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    lastOutput: StepResult<any, any, any, any>,
+    error?: Error | unknown,
+    stepExecutionPath?: string[],
+  ): Promise<any> {
+    if (!journal) return this.fmtReturnValue(pubsub, stepResults, lastOutput, error, stepExecutionPath);
+    const { status, ...envelope } = this.fmtResultEnvelope(stepResults, lastOutput, error, stepExecutionPath);
+    const steps = lazyStepResults(journal, stepResults, results => this.fmtResultSteps(results, stepExecutionPath));
+    return { status, steps, ...envelope };
+  }
+
+  /**
    * Every field of a result except `steps`. Reads only `input` and results that aren't successful,
    * which storage v2 never evicts.
    */
@@ -1039,8 +1057,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 attributes: { status: 'waiting' },
               });
 
-              await journal?.hydrate(stepResults);
-              const formattedResult = await this.fmtReturnValue<any>(
+              const formattedResult = await this.#fmtResult(
+                journal,
                 params.pubsub,
                 stepResults,
                 { status: 'waiting', payload: undefined, startedAt: Date.now() },
@@ -1087,8 +1105,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
           });
 
-          await journal?.hydrate(stepResults);
-          const formattedResult = await this.fmtReturnValue<any>(
+          const formattedResult = await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             { status: 'canceled' },
@@ -1096,6 +1114,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepExecutionPath,
           );
 
+          // The run writes nothing more; a callback awaiting `steps()` waits for the journal to close.
+          journal?.close();
           await this.invokeLifecycleCallbacks({
             status: 'canceled',
             result: undefined,
@@ -1204,8 +1224,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             attributes: { status: 'waiting' },
           });
 
-          await journal?.hydrate(stepResults);
-          const formattedResult = await this.fmtReturnValue<any>(
+          const formattedResult = await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             lastOutput.result,
@@ -1221,8 +1241,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }
 
         if (perStep && lastOutput.result.status === 'success') {
-          await journal?.hydrate(stepResults);
-          const result = (await this.fmtReturnValue(
+          const result = (await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             lastOutput.result,
@@ -1282,8 +1302,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             lastOutput.result = succeeded;
           }
 
-          await journal?.hydrate(stepResults);
-          let result = (await this.fmtReturnValue(
+          let result = (await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             lastOutput.result,
@@ -1321,7 +1341,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           if (this.writeRejectedByCancellation(runId, result.status)) {
             // The store rejected the write because the run was canceled meanwhile.
             lastOutput.result = { status: 'canceled' };
-            result = await this.fmtReturnValue(
+            result = await this.#fmtResult(
+              journal,
               params.pubsub,
               stepResults,
               lastOutput.result,
@@ -1350,6 +1371,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
           if (lastOutput.result.status !== 'paused') {
             // Invoke lifecycle callbacks before returning
+            // The run writes nothing more; a callback awaiting `steps()` waits for the journal to close.
+            journal?.close();
             await this.invokeLifecycleCallbacks({
               status: result.status,
               result: result.result,
@@ -1431,8 +1454,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       // after all steps are successful, return result
-      await journal?.hydrate(stepResults);
-      let result = (await this.fmtReturnValue(
+      let result = (await this.#fmtResult(
+        journal,
         params.pubsub,
         stepResults,
         lastOutput.result,
@@ -1455,7 +1478,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       if (this.writeRejectedByCancellation(runId, result.status)) {
         // The store rejected the final write because the run was canceled meanwhile.
-        result = await this.fmtReturnValue(
+        result = await this.#fmtResult(
+          journal,
           params.pubsub,
           stepResults,
           { status: 'canceled' },
@@ -1472,6 +1496,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
+      // The run writes nothing more; a callback awaiting `steps()` waits for the journal to close.
+      journal?.close();
       await this.invokeLifecycleCallbacks({
         status: result.status,
         result: result.result,

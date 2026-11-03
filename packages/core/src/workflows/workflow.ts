@@ -89,6 +89,7 @@ import { validateTemplate } from './mapping-template';
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { residentStepResults } from './run-journal';
 import type { ParentStateLink, StateBase } from './run-journal';
 import { claimWorkflowRunOwnership } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
@@ -3584,7 +3585,10 @@ export class Workflow<
       unwatch();
     }
 
-    const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
+    // On storage v2 `res.steps` is a loader. The suspended and failed results read here are never
+    // evicted, so the ones it holds are enough.
+    const nestedSteps = residentStepResults(res.steps) ?? res.steps;
+    const suspendedSteps = Object.entries(nestedSteps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
     });
@@ -3595,7 +3599,6 @@ export class Workflow<
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
-        // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
         // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
@@ -3629,7 +3632,7 @@ export class Workflow<
     }
 
     if (res.status === 'failed') {
-      const isNonRetryable = Object.values(res.steps).some(stepResult => {
+      const isNonRetryable = Object.values(nestedSteps).some(stepResult => {
         const result = stepResult as StepResult<any, any, any, any>;
         return result.status === 'failed' && result.nonRetryable;
       });
