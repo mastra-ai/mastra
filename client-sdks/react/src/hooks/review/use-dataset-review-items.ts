@@ -2,6 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
+import { listAllExperimentResults } from '../datasets/list-all-experiment-results';
 import { useExperimentsForDatasetFilter } from '../experiments';
 import type { ExperimentTargetFilter } from '../experiments';
 import type { MastraQueryOptions } from '../shared/query-options';
@@ -62,7 +63,7 @@ const useReviewItemsByStatus = (
         scopedExperiments.map(async exp => {
           if (!exp.datasetId) return [];
           try {
-            const { results } = await client.listDatasetExperimentResults(exp.datasetId, exp.id);
+            const results = await listAllExperimentResults(client, exp.datasetId, exp.id);
             return results
               .filter(r => r.status === status)
               .map(r => ({
