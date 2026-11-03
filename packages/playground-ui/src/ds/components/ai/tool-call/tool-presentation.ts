@@ -69,11 +69,11 @@ export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined 
   const name = canonicalToolName(toolName);
   const path = stringField(args, 'path') ?? stringField(args, 'file_path');
   const newText = stringField(args, 'new_string');
-  if (['string_replace', 'string_replace_lsp', 'str_replace', 'edit_file'].includes(name) && newText !== undefined) {
+  if (name === 'edit_file' && newText !== undefined) {
     return { path, oldText: stringField(args, 'old_string') ?? '', newText };
   }
   const content = stringField(args, 'content');
-  if (['write_file', 'create_file'].includes(name) && content !== undefined) return { path, content };
+  if (name === 'write_file' && content !== undefined) return { path, content };
   return undefined;
 }
 

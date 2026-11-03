@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { toolIconExamples } from '../ai/tool-call/tool-icon-examples';
-import { presentTool } from '../ai/tool-call/tool-presentation';
 import { AgentIndicator } from './agent-indicator';
 import { frameParts } from './paint';
-import { agentIndicatorStates, poses } from './poses';
+import { agentIndicatorStates, poses, restsAfterSeconds } from './poses';
 import { FRAME } from './shapes';
 
 const firstStroke = (container: HTMLElement) => {
@@ -86,15 +84,10 @@ describe('AgentIndicator', () => {
     }
   });
 
-  it('updates every active tool family while work runs', () => {
-    const activePoses = new Set(
-      Object.values(toolIconExamples).flatMap(examples =>
-        examples.map(example => presentTool(example.toolName, example.args).pose),
-      ),
-    );
-    activePoses.add('tool');
+  it('keeps moving in every state that never comes to rest', () => {
+    const restless = agentIndicatorStates.filter(state => !Object.hasOwn(restsAfterSeconds, state));
 
-    for (const state of activePoses) {
+    for (const state of restless) {
       const { container, unmount } = render(<AgentIndicator state={state} />);
       const still = container.innerHTML;
       let changed = false;

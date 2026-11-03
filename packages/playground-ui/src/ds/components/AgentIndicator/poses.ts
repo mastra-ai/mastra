@@ -306,6 +306,8 @@ const twoStrokes = (first: (u: number) => Point, second: (u: number) => Point, w
 
 const waiting = once(() => twoStrokes(line([-2.7, -3.4], [-2.7, 3.4]), line([2.7, -3.4], [2.7, 3.4]), 2.2));
 
+const OUTCOME_STROKE_WIDTH = 2.1;
+
 const CHECK: [Point, Point, Point] = [
   [-6.2, 0.4],
   [-2.2, 4.4],
@@ -317,7 +319,7 @@ const done: Pose = (_, s) => {
   const k = 1 + 0.08 * Math.exp(-q * 7) * Math.sin(q * 15);
   const at = ([x, y]: Point): Point => [x * k, y * k];
   const [a, b, c] = CHECK;
-  return twoStrokes(line(at(a), at(b)), line(at(b), at(c)), 2.8);
+  return twoStrokes(line(at(a), at(b)), line(at(b), at(c)), OUTCOME_STROKE_WIDTH);
 };
 
 const CROSS = 4.6;
@@ -328,7 +330,7 @@ const error: Pose = (_, s) => {
   return twoStrokes(
     line([-CROSS + shake, -CROSS], [CROSS + shake, CROSS]),
     line([CROSS + shake, -CROSS], [-CROSS + shake, CROSS]),
-    2.1,
+    OUTCOME_STROKE_WIDTH,
   );
 };
 

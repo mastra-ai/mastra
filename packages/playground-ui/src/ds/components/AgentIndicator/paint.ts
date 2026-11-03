@@ -50,6 +50,9 @@ function segment(x1: number, y1: number, x2: number, y2: number, width: number):
 
 const HOLE_AT = 2 + RAYS;
 const LINES_AT = BODY + 3 * BALLS;
+const RINGS_AT = LINES_AT + 10 * LINES;
+
+type Outline = (cx: number, cy: number, radii: number[]) => string;
 
 function describeFrame(f: Frame, bodyOutline: Outline, holeOutline: Outline): FrameParts {
   const at = (i: number) => f[i] ?? 0;
@@ -65,7 +68,7 @@ function describeFrame(f: Frame, bodyOutline: Outline, holeOutline: Outline): Fr
       return { cx: at(k).toFixed(2), cy: at(k + 1).toFixed(2), r: Math.max(0, at(k + 2)).toFixed(2) };
     }),
     rings: range(RINGS).map(i => {
-      const k = KIT - 4 * RINGS + 4 * i;
+      const k = RINGS_AT + 4 * i;
       return {
         cx: at(k).toFixed(2),
         cy: at(k + 1).toFixed(2),
@@ -83,8 +86,6 @@ function describeFrame(f: Frame, bodyOutline: Outline, holeOutline: Outline): Fr
 export function frameParts(frame: Frame): FrameParts {
   return describeFrame(frame, outline, outline);
 }
-
-type Outline = (cx: number, cy: number, radii: number[]) => string;
 
 function cachedOutline(): Outline {
   let previousX: number | undefined;

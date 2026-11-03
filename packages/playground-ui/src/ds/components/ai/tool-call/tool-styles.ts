@@ -343,13 +343,20 @@ function nativeToolStyle(toolName: string): ToolStyle | undefined {
   return undefined;
 }
 
+function namespacedLeaf(toolName: string): string | undefined {
+  if (toolName.startsWith('mcp__')) {
+    const separator = toolName.lastIndexOf('__');
+    return separator > 'mcp__'.length ? toolName.slice(separator + 2) : undefined;
+  }
+  const separator = toolName.lastIndexOf('.');
+  return separator > 0 ? toolName.slice(separator + 1) : undefined;
+}
+
 export function canonicalToolName(toolName: string): string {
   const direct = unprefixedToolName(toolName);
   if (Object.hasOwn(TOOL_STYLES, direct) || nativeToolStyle(direct)) return direct;
-  const separator = toolName.startsWith('mcp__') ? toolName.lastIndexOf('__') : toolName.lastIndexOf('.');
-  if (separator < 1 || (toolName.startsWith('mcp__') && separator <= 5)) return toolName;
-  const leaf = toolName.slice(separator + (toolName.startsWith('mcp__') ? 2 : 1));
-  if (AMBIGUOUS_NAMESPACE_NAMES.has(leaf)) return toolName;
+  const leaf = namespacedLeaf(toolName);
+  if (!leaf || AMBIGUOUS_NAMESPACE_NAMES.has(leaf)) return toolName;
   const canonical = unprefixedToolName(leaf);
   return Object.hasOwn(TOOL_STYLES, canonical) ? canonical : toolName;
 }

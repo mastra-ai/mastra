@@ -453,7 +453,7 @@ export function knowledgeCard(
 
 export interface KnowledgeToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   card: KnowledgeCard;
-  args?: unknown;
+  args: unknown;
   metadata?: MessageMetadata;
   status?: ActivityStatus;
 }

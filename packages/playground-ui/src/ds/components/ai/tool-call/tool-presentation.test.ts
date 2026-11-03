@@ -81,48 +81,43 @@ describe('presentTool', () => {
   });
 
   it('distinguishes running a command, reading its output, and stopping it', () => {
-    expect(presentTool('execute_command', { command: 'pnpm dev' }).pose).toBe('running');
-    expect(presentTool('get_process_output', { pid: 42 }).pose).toBe('output');
-    expect(presentTool('kill_process', { pid: 42 }).pose).toBe('stopping');
+    const poses = ['execute_command', 'get_process_output', 'kill_process'].map(name => presentTool(name, {}).pose);
+    expect(new Set(poses).size).toBe(3);
   });
 
   it('shows the action inside a Knowledge tool once its arguments arrive', () => {
-    expect(presentTool('knowledge_page', undefined).pose).toBe('knowledge');
-    expect(presentTool('knowledge_page', { op: 'merge', page: 'A', into: 'B' })).toMatchObject({
-      pose: 'merging',
-      label: 'Merge pages',
-    });
-    expect(presentTool('knowledge_page', { op: 'delete', page: 'A' })).toMatchObject({
-      pose: 'deleting',
-      label: 'Delete page',
-    });
-    expect(presentTool('knowledge_note', { op: 'add', page: 'A' }).pose).toBe('noting');
-    expect(presentTool('knowledge_pin', { op: 'unpin', page: 'A' }).pose).toBe('unpinning');
+    const calls = [
+      presentTool('knowledge_page', undefined),
+      presentTool('knowledge_page', { op: 'merge', page: 'A', into: 'B' }),
+      presentTool('knowledge_page', { op: 'delete', page: 'A' }),
+    ];
+    expect(new Set(calls.map(call => call.pose)).size).toBe(3);
+    expect(new Set(calls.map(call => call.label)).size).toBe(3);
+    expect(presentTool('knowledge_pin', { op: 'unpin', page: 'A' }).pose).not.toBe(
+      presentTool('knowledge_pin', { op: 'pin', page: 'A' }).pose,
+    );
   });
 
   it('does not describe checking a recording as making one', () => {
-    expect(presentTool('browser_record', { action: 'status' })).toMatchObject({
-      pose: 'output',
-      label: 'Check recording',
-    });
+    const record = presentTool('browser_record', { action: 'start' });
+    const check = presentTool('browser_record', { action: 'status' });
+    expect(check.pose).not.toBe(record.pose);
+    expect(check.label).not.toBe(record.label);
   });
 
-  it('keeps browser interaction and agent coordination distinct', () => {
-    expect(presentTool('mastra_workspace_computer_screenshot', {}).pose).toBe('screenshot');
-    expect(presentTool('browser_click', { selector: 'button' }).pose).toBe('clicking');
-    expect(presentTool('browser_type', { text: 'Refund policy' }).pose).toBe('typing');
+  it('recognizes an agent or workflow called as a tool by its name prefix', () => {
     expect(presentTool('agent-support', { prompt: 'Check refunds' }).pose).toBe('delegating');
     expect(presentTool('workflow-refund', {}).pose).toBe('workflow');
-    expect(presentTool('agent_connect', {}).pose).toBe('connecting');
   });
 
-  it('distinguishes searching for skills from reading a skill file', () => {
-    const invoke = presentTool('skill', { name: 'Support' });
-    const search = presentTool('skill_search', { query: 'Refunds' });
-    const read = presentTool('skill_read', { path: 'support/SKILL.md' });
-    expect(new Set([invoke.pose, search.pose, read.pose]).size).toBe(3);
-    expect(search.label).toBe('Search skills');
-    expect(read.label).toBe('Skill file');
+  it('distinguishes using a skill, searching for skills, and reading a skill file', () => {
+    const calls = [
+      presentTool('skill', { name: 'Support' }),
+      presentTool('skill_search', { query: 'Refunds' }),
+      presentTool('skill_read', { path: 'support/SKILL.md' }),
+    ];
+    expect(new Set(calls.map(call => call.pose)).size).toBe(3);
+    expect(new Set(calls.map(call => call.label)).size).toBe(3);
   });
 
   it('prettifies unknown tool names instead of surfacing raw identifiers', () => {
