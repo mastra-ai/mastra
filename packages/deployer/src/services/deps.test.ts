@@ -301,6 +301,20 @@ packageExtensions:
     },
   );
 
+  it('does not approve builds from package.json that pnpm-workspace.yaml sets under a quoted key', async () => {
+    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 1440\n"onlyBuiltDependencies": []\n');
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'source', packageManager: 'pnpm@10.34.6', pnpm: { onlyBuiltDependencies: ['esbuild'] } }),
+    );
+
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.minimumReleaseAge).toBe(1440);
+    expect(workspace.onlyBuiltDependencies).not.toEqual(['esbuild']);
+  });
+
   it('preserves existing behavior when custom settings are omitted', async () => {
     await new DepsService(sourceRoot).install({ dir: outputDir });
     expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({

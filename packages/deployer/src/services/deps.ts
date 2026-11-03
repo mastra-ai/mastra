@@ -357,9 +357,17 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     }
   }
 
-  // pnpm 10 also reads these keys from the `pnpm` field of package.json. The workspace file wins when both set one.
+  // pnpm 10 also reads these keys from the `pnpm` field of package.json. The workspace file wins when both set one,
+  // so its keys are read from the parsed YAML too: the line scanner above skips quoted keys.
+  let sourceKeys: string[] = [];
+  try {
+    const parsed = parse(source);
+    sourceKeys = isRecord(parsed) ? Object.keys(parsed) : [];
+  } catch {
+    // An unparsable workspace file falls back to the keys the scanner copied.
+  }
   for (const [key, value] of Object.entries(options.pnpmManifestSettings ?? {})) {
-    if (copiedKeys.has(key) || !shouldCopy(key) || value === undefined) continue;
+    if (copiedKeys.has(key) || sourceKeys.includes(key) || !shouldCopy(key) || value === undefined) continue;
     const block = stringify({ [key]: value }).trimEnd();
     validatePnpmBuildApprovals(key, block);
     blocks.push(block);
