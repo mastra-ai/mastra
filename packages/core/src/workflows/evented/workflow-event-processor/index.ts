@@ -1106,6 +1106,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
     const resourceId = existingRun?.resourceId ?? eventResourceId;
+    // The process that started the run saved its resume tracing context with the run record. This
+    // worker may have no live span for the run, so a suspend here can only save what it carries over.
+    const existingSnapshot =
+      typeof existingRun?.snapshot === 'string'
+        ? (JSON.parse(existingRun.snapshot) as WorkflowRunState)
+        : existingRun?.snapshot;
+    const tracingContext = existingSnapshot?.tracingContext;
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -1141,6 +1148,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         guardedOnlySnapshot: !!requiresGuardedSnapshot && !shouldPersist,
         value: initialState,
+        ...(tracingContext ? { tracingContext } : {}),
       };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflow.id,

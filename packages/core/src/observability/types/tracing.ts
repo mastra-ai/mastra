@@ -2104,6 +2104,13 @@ export interface ResumeTracingContext {
   resumedFromSpanId?: string;
   /** External parent of the suspended invocation, kept by a resume that gives none of its own */
   externalParentSpanId?: string;
+  /**
+   * Whether the suspended invocation was sampled. A resume repeats this decision instead of
+   * sampling again; snapshots from older versions lack it, so their resumes sample as before.
+   */
+  sampled?: boolean;
+  /** Trace-level state of the suspended invocation, so a resume keeps its hidden input/output and keys. */
+  traceState?: TraceState;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */

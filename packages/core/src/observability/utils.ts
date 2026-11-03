@@ -13,6 +13,7 @@ import type {
   AnySpan,
   AnyExportedSpan,
   ResumeTracingContext,
+  SpanSnapshot,
   TracingOptions,
   TracingProperties,
 } from './types';
@@ -134,24 +135,34 @@ export function resolveExportedSpanId(
 }
 
 const NO_OP_TRACE_ID = 'no-op-trace';
+const NO_OP_SPAN_ID = 'no-op';
 
 /**
  * The context a suspending run saves so that its resume continues it (see `resumeFrom`).
  * Takes the run's live span, or its exported span when another process persisted it.
- * An unsampled run saves nothing: its no-op span has no real trace for a resume to join.
+ * An unsampled run saves only that decision: its no-op span has no trace for a resume to
+ * join, and the resume must stay unrecorded rather than sample again.
  */
 export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefined): ResumeTracingContext | undefined {
   if (!span) return undefined;
   const live = 'exportSpan' in span;
-  if (live && !span.isValid) return undefined;
+  if (live ? !span.isValid : span.id === NO_OP_SPAN_ID) return { sampled: false };
   const exported = live ? span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans) : span;
-  return {
+  const context: ResumeTracingContext = {
     traceId: span.traceId,
     spanId: live ? resolveExportedSpanId(span) : span.id,
     parentSpanId: exported?.parentSpanId,
     resumedFromSpanId: exported && (exported.resumedFromSpanId ?? exported.id),
     externalParentSpanId: exported?.externalParentSpanId,
+    sampled: true,
   };
+  const traceState = live ? span.traceState : (span as SpanSnapshot<SpanType>).traceState;
+  if (traceState) {
+    // `nestedUnderParent` describes the original call's own parent; a resume supplies its own.
+    const { nestedUnderParent: _nested, ...ownTraceState } = traceState;
+    context.traceState = ownTraceState;
+  }
+  return context;
 }
 
 function resumeInSavedTrace(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {
@@ -175,8 +186,18 @@ function resumeInSavedTrace(saved: ResumeTracingContext | undefined, targetTrace
  * @returns The created Span or undefined if tracing is disabled
  */
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
-  const { type, attributes, tracingContext, requestContext, tracingOptions, resumeFrom, resumedFromSpanId, ...rest } =
-    options;
+  const {
+    type,
+    attributes,
+    tracingContext,
+    requestContext,
+    tracingOptions,
+    resumeFrom,
+    resumedFromSpanId,
+    samplingDecision,
+    traceState,
+    ...rest
+  } = options;
 
   // tracingOptions.metadata takes precedence, but a key it merely names with
   // an `undefined` value must not erase the span's own metadata value.
@@ -185,6 +206,9 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     ...Object.fromEntries(Object.entries(tracingOptions?.metadata ?? {}).filter(([, value]) => value !== undefined)),
   };
   const resumed = resumeInSavedTrace(resumeFrom, tracingContext?.currentSpan?.traceId ?? tracingOptions?.traceId);
+  // The saved decision holds when the resume continues the saved trace, or when the original saved none because
+  // it was unsampled. An explicit caller decision wins, as it does for resumed agent runs.
+  const saved = resumeFrom && (resumed || resumeFrom.sampled === false) ? resumeFrom : undefined;
 
   // If we have a current span, create a child span
   if (tracingContext?.currentSpan) {
@@ -210,6 +234,8 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     requestContext,
     tracingOptions: rootTracingOptions,
     traceId: rootTracingOptions?.traceId,
+    samplingDecision: samplingDecision ?? saved?.sampled,
+    traceState: traceState ?? saved?.traceState,
     // A resumed run's parent is the suspended span, a Mastra span in the trace.
     parentSpanId: resumed ? resumed.parentSpanId : resumedFromSpanId,
     resumedFromSpanId: resumed?.resumedFromSpanId,
