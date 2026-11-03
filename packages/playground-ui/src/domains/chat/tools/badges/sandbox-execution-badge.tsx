@@ -7,7 +7,7 @@ import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-appr
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { presentTool, ToolCallCommand, ToolCallMono } from '@/ds/components/ai/tool-call';
+import { commandOutputText, presentTool, ToolCallCommand, ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Txt } from '@/ds/components/Txt';
 import { useElapsedTime } from '@/hooks/use-elapsed-time';
 import { cn } from '@/utils/cn';
@@ -73,10 +73,12 @@ export const SandboxExecutionBadge = ({
       (part.name === 'sandbox-stdout' || part.name === 'sandbox-stderr') &&
       part.data?.toolCallId === toolCallId,
   );
-  const output =
-    outputChunks.map(part => part.data?.output ?? '').join('') || (typeof result === 'string' ? result : '');
-
   const exit: SandboxExit | undefined = toolDataParts(dataParts, 'sandbox-exit', toolCallId)[0]?.data;
+  const output = commandOutputText({
+    streamed: outputChunks.map(part => part.data?.output ?? '').join(''),
+    result: typeof result === 'string' ? result : undefined,
+    failed: status === 'error' || exit?.success === false,
+  });
   const workspace = workspaceMetadata(dataParts, toolCallId);
   const isRunning = status === 'running' && Boolean(workspace) && !exit;
   const toolCalled = toolCalledProp ?? (Boolean(workspace) || Boolean(exit) || typeof result === 'string');

@@ -150,6 +150,18 @@ export function hasToolArguments(input: ToolArgumentsInput): boolean {
   return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
 }
 
+export interface CommandOutputInput {
+  streamed: string;
+  result?: string;
+  failed: boolean;
+}
+
+export function commandOutputText({ streamed, result, failed }: CommandOutputInput): string | undefined {
+  // Only the result carries the exit code and any error.
+  if (failed && result) return result;
+  return streamed || result;
+}
+
 /** Task tools draw in the docked task list, never as a transcript row. */
 const TASK_TOOLS = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 

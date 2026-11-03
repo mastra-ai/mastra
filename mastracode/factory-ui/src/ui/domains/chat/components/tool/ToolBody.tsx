@@ -2,6 +2,7 @@ import {
   ToolCallArguments,
   ToolCallCommand,
   ToolCallOutput,
+  commandOutputText,
   hasToolArguments,
   stringifyToolValue,
   stripSerializedAnsi,
@@ -31,11 +32,6 @@ export function toolKnowledgeCard(tool: ToolCall) {
 function toolResultText(tool: ToolCall): string | undefined {
   if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
   return stripSerializedAnsi(stringifyToolValue(tool.result)) || undefined;
-}
-
-function commandOutputText(tool: ToolCall, resultText: string | undefined): string | undefined {
-  if (tool.status === 'error') return resultText ?? tool.output;
-  return tool.output || resultText;
 }
 
 export function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
@@ -112,7 +108,7 @@ export function ToolBody({ tool, command }: { tool: ToolCall; command?: string }
   }
 
   if (command) {
-    const output = commandOutputText(tool, resultText);
+    const output = commandOutputText({ streamed: tool.output, result: resultText, failed: tool.status === 'error' });
     return (
       <>
         <ToolCallCommand command={command} />

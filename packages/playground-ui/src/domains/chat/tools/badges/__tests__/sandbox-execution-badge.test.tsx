@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SandboxExecutionBadge } from '../sandbox-execution-badge';
@@ -86,6 +86,25 @@ describe('SandboxExecutionBadge', () => {
       const line = screen.getByTestId('sandbox-execution-badge');
       expect(line.getAttribute('aria-busy')).toBe('false');
       expect(line.getAttribute('aria-invalid')).toBe('true');
+    });
+  });
+
+  describe('when a command fails after printing output', () => {
+    it('shows the error its result carries, not just what it printed', () => {
+      renderBadge({
+        result: 'building\n\nError: sandbox connection lost\nExit code: -1',
+        dataParts: [
+          {
+            type: 'data',
+            name: 'sandbox-stdout',
+            data: { output: 'building\n', timestamp: Date.now(), toolCallId: 'call-command' },
+          },
+          { type: 'data', name: 'sandbox-exit', data: { exitCode: -1, success: false, toolCallId: 'call-command' } },
+        ],
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/Error: sandbox connection lost/)).not.toBeNull();
     });
   });
 });
