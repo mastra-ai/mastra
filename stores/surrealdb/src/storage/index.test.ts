@@ -88,6 +88,29 @@ createClientAcceptanceTests({
 });
 
 describe('SurrealDBStore with a caller-managed client', () => {
+  it('keeps the namespace a client selected and adds the default database', async () => {
+    const namespace = process.env.SURREALDB_NAMESPACE || 'mastra_test';
+    const client = new Surreal({ codecOptions: { useNativeDates: true } });
+    await client.connect(SURREALDB_URL, {
+      authentication: {
+        username: process.env.SURREALDB_USERNAME || 'root',
+        password: process.env.SURREALDB_PASSWORD || 'root',
+      },
+    });
+    await client.query(`DEFINE NAMESPACE IF NOT EXISTS ${namespace}`).collect();
+    await client.use({ namespace });
+    const store = new SurrealDBStore({ id: 'surrealdb-namespace-only', db: client });
+    try {
+      await store.init();
+
+      const [selection] = await client.query('RETURN [session::ns(), session::db()]').collect<[string[]]>();
+      expect(selection).toEqual([namespace, 'mastra']);
+    } finally {
+      await store.close();
+      await client.close();
+    }
+  });
+
   it('selects the default namespace and database on a client with none selected', async () => {
     const client = new Surreal({ codecOptions: { useNativeDates: true } });
     await client.connect(SURREALDB_URL, {

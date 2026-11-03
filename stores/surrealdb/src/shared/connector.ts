@@ -102,27 +102,28 @@ export class SurrealDBConnector {
     this.#bootstrapped ??= (async () => {
       await this.connect();
       const config = this.#config;
-      // A caller-managed client with no configured namespace or database keeps the
-      // selection its owner made; switching it would move the owner's own queries too.
-      // A client with nothing selected yet falls through to the defaults below.
+      let namespace = this.namespace;
+      let database = this.database;
       if (isInstanceConfig(config) && config.namespace === undefined && config.database === undefined) {
-        const [selection] = await this.db
-          .query('RETURN [session::ns(), session::db()]')
-          .collect<[(string | null | undefined)[]]>();
-        if (selection?.[0] && selection[1]) return;
+        // A caller-managed client keeps the selection its owner made; switching it would
+        // move the owner's own queries too. The SDK tracks the selection client-side, so
+        // this needs no server query. Only what is missing falls back to the defaults.
+        if (this.db.namespace && this.db.database) return;
+        namespace = this.db.namespace ?? namespace;
+        database = this.db.database ?? database;
       }
       try {
         await this.db
           .query(
-            `DEFINE NAMESPACE IF NOT EXISTS ${escapeIdent(this.namespace)};
-             USE NS ${escapeIdent(this.namespace)};
-             DEFINE DATABASE IF NOT EXISTS ${escapeIdent(this.database)};`,
+            `DEFINE NAMESPACE IF NOT EXISTS ${escapeIdent(namespace)};
+             USE NS ${escapeIdent(namespace)};
+             DEFINE DATABASE IF NOT EXISTS ${escapeIdent(database)};`,
           )
           .collect();
       } catch {
         // Not permitted, or already present: queries below report anything that is actually wrong.
       } finally {
-        await this.db.use({ namespace: this.namespace, database: this.database });
+        await this.db.use({ namespace, database });
       }
     })().catch(error => {
       this.#bootstrapped = undefined;
