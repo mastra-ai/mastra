@@ -67,6 +67,14 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
       'Promote URLs found in message text to file parts so the model can process linked content. Each entry matches a domain. Disabled by default.',
   },
   {
+    name: 'maxAttachmentStorageBytes',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '104857600 (100 MiB)',
+    description:
+      'Total size of attachments the agent may store under `channel-attachments/` in its workspace. Binary attachments that need an authenticated download, such as Slack files, are saved there (up to 10 MiB each) so workspace tools can open them. When saving a file would go over this limit, the agent gets the attachment URL instead and nothing is written.',
+  },
+  {
     name: 'tools',
     type: 'boolean',
     isOptional: true,
@@ -709,6 +717,8 @@ The `ResolveThreadIdContext` passed to the function:
 ## Inline media
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
+
+Text-like attachments that don't match (`text/*`, JSON, YAML, XML, and similar) are downloaded through the adapter's authenticated fetch when one is available (for example, Slack private files) and given to the agent as text. Contents over 128 KB are truncated. Files the adapter reports as larger than 10 MB aren't downloaded.
 
 The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 

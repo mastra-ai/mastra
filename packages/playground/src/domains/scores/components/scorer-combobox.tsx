@@ -22,8 +22,8 @@ export interface ScorerComboboxProps {
 export function ScorerCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a scorer...',
-  searchPlaceholder = 'Search scorers...',
+  placeholder = 'Select a scorer',
+  searchPlaceholder = 'Search scorers',
   emptyText = 'No scorers found.',
   className,
   disabled = false,

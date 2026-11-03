@@ -41,6 +41,9 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryContextIds: z
     .boolean()
     .describe('`runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries'),
+  traceQueryContextFields: z
+    .boolean()
+    .describe('`requestId`, `serviceName` and `experimentId` predicates in trace and thread queries'),
   traceQueryTimeToFirstChunk: z
     .boolean()
     .describe(
@@ -86,6 +89,36 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .default(false)
     .describe(
       'Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable.',
+    ),
+  spanQueryModelFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable.',
+    ),
+  spanAggregateModelDimensions: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`model` and `provider` in span aggregate `groupBy` and `countDistinct`. Treat a missing value as unavailable.',
+    ),
+  aggregateTimeToFirstMeasures: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`timeToFirstToken.*` and `timeToFirstChunk.*` measures in trace and span aggregates. Treat a missing value as unavailable.',
+    ),
+  spanQueryOutcomeFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`outcome` and `stopReason` predicates in span queries and span aggregates (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows. Treat a missing value as unavailable.',
+    ),
+  traceQueryOutcomeFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      "The root span's `outcome` and `stopReason` in trace-scope predicates and trace aggregates, both fields in `spans.some`/`spans.none` predicates and value discovery, and the root span's `outcome`, `stopReason` and `stopReasonContext` on trace rows. Treat a missing value as unavailable.",
     ),
   traceRetentionDays: z
     .number()

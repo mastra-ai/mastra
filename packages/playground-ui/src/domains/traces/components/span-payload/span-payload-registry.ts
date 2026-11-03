@@ -2,6 +2,7 @@ import { SpanType, describeProcessorPipeline, describeSpanInput, describeSpanOut
 import type { ProcessorRunInputByPhase, ProcessorSpanPayload } from '@mastra/core/observability';
 import type { ComponentType } from 'react';
 import type { SpanRecord } from '../../types';
+import { hasProcessorPreview, processorInputToolKeys } from './span-payload-processor-fields';
 import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 import type { LinkComponentPaths } from '@/lib/framework';
 
@@ -38,9 +39,16 @@ export function asCoreSpan(span: SpanRecord): CoreSpanRecord {
 
 export const hasItems = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
 
-/** Whether a span's input has a rendered preview, rather than only its raw JSON. */
-export function hasSpanInputPreview(span: SpanRecord): boolean {
-  return getSpanSignal(span) !== undefined || describeSpanInput(asCoreSpan(span))?.type !== 'json';
+/**
+ * Whether a span's input has a rendered preview, rather than only its raw JSON.
+ * Pass the processor keys a caller leaves out of its preview, so they don't count as formatted.
+ */
+export function hasSpanInputPreview(span: SpanRecord, hiddenProcessorKeys?: readonly string[]): boolean {
+  if (getSpanSignal(span) !== undefined) return true;
+  const description = describeSpanInput(asCoreSpan(span));
+  if (description?.type !== 'processor') return description?.type !== 'json';
+  const { data } = description.value;
+  return hasProcessorPreview(data, hiddenProcessorKeys ?? processorInputToolKeys(data));
 }
 
 const hasText = (value: unknown) => typeof value === 'string' && value.length > 0;
@@ -54,6 +62,8 @@ export function hasSpanOutputPreview(span: SpanRecord): boolean {
   switch (description?.type) {
     case 'json':
       return false;
+    case 'processor':
+      return hasProcessorPreview(description.value.data);
     case 'model-step-result': {
       const { text, object, steps } = description.value;
       return hasText(text) || object !== undefined || hasItems(steps);

@@ -1,7 +1,7 @@
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { MODEL_LANES, MODEL_ROUTES, connectorPath } from './model-routes';
+import { MODEL_LANES, MODEL_ROUTES, MODEL_SCOPE_LABELS, connectorPath } from './model-routes';
 import type { ModelDefaults, ModelLane } from './model-routes';
 
 const GLYPH_LANE_Y: Record<ModelLane, number> = { chats: 4, runs: 12 };
@@ -20,15 +20,15 @@ export function ModelRoutingSwitch({
     <SegmentedControl aria-label="Model routing" aria-busy={pending} value={value} onValueChange={onValueChange}>
       <SegmentedControlItem value="user">
         <RouteGlyph scope="user" />
-        Personal
+        {MODEL_SCOPE_LABELS.user}
       </SegmentedControlItem>
       <SegmentedControlItem value="hybrid">
         <RouteGlyph scope="hybrid" />
-        Hybrid
+        {MODEL_SCOPE_LABELS.hybrid}
       </SegmentedControlItem>
       <SegmentedControlItem value="factory">
         <RouteGlyph scope="factory" />
-        Factory
+        {MODEL_SCOPE_LABELS.factory}
       </SegmentedControlItem>
     </SegmentedControl>
   );

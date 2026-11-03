@@ -95,7 +95,7 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
     .join(' · ');
 
   return (
-    <ActivityItem icon={<Braces />} label="Extractions" detail={detail} detailFont="sans" aria-label="Extractions">
+    <ActivityItem icon={<Braces />} label="Extractions" detail={detail} aria-label="Extractions">
       {entries.map(([slug, value]) => (
         <div key={slug} className="rounded-md border border-border bg-fill-subtle p-2">
           <Txt as="p" variant="meta" tone="muted" className="uppercase">

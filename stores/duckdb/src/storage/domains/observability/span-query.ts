@@ -8,8 +8,8 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
-import { timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
-import { payloadColumnSql } from './helpers';
+import { spanQueryOutcomeFieldsSupported, timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
+import { parseJson, payloadColumnSql } from './helpers';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
 
@@ -45,6 +45,8 @@ const fields = [
   'executionSource',
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ];
 
 function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string {
@@ -109,12 +111,8 @@ export function compileDuckDBSpanSelection(plan: Pick<TrustedSpanQueryPlan, 'tim
   values.push(plan.timeRange.from, plan.timeRange.to, ...predicate.values);
   const join = identityFields.map(field => `e.${field} IS NOT DISTINCT FROM c.${field}`).join(' AND ');
   const partition = identityFields.map(field => `e.${field}`).join(', ');
-  // Preserve predicates accepted by older core without adding JSON work to the new contract.
-  const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
-    ? ''
-    : `CASE WHEN json_type(e.attributes, '$.model') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.model') END AS model,
-       CASE WHEN json_type(e.attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.provider') END AS provider,`;
   // Start timestamps select identities; all events for those identities participate in reconstruction.
+  // `model` and `provider` filters read only their dedicated columns, never span attributes.
   const ctes = [
     `candidates AS MATERIALIZED (
     SELECT ${identities} FROM span_events
@@ -125,7 +123,7 @@ export function compileDuckDBSpanSelection(plan: Pick<TrustedSpanQueryPlan, 'tim
     `span_versions AS (
     SELECT ${fields.map(columnSql).join(', ')},
       min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}) AS startedAt, e.endedAt, e.cursorId,
-      ${legacyModelFields}
+      e.model, e.provider,
       date_diff('millisecond', min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}), e.endedAt) AS durationMs,
       CASE WHEN e.error IS NULL THEN 'success' ELSE 'error' END AS status,
       CASE WHEN e.error IS NULL THEN NULL ELSE 'error' END AS error,
@@ -182,7 +180,16 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   const compiled = compileDuckDBSpanQuery(plan);
   const rows = await query<Selected>(compiled.sql, compiled.values);
   const selected = rows.map(
-    ({ cursorId: _cursorId, startedAt, endedAt, timeToFirstChunkMs, timeToFirstTokenMs, ...row }) => ({
+    ({
+      cursorId: _cursorId,
+      startedAt,
+      endedAt,
+      timeToFirstChunkMs,
+      timeToFirstTokenMs,
+      outcome,
+      stopReason,
+      ...row
+    }) => ({
       ...row,
       startedAt: startedAt.toISOString(),
       endedAt: endedAt.toISOString(),
@@ -192,6 +199,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
       ...(timeToFirstTokenSupported && {
         timeToFirstTokenMs: timeToFirstTokenMs == null ? null : Number(timeToFirstTokenMs),
       }),
+      ...(spanQueryOutcomeFieldsSupported && { outcome: outcome ?? null, stopReason: stopReason ?? null }),
     }),
   );
   const page = rows.slice(0, plan.limit);
@@ -205,13 +213,16 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     })
     .join(' OR ');
   // Stored previews of the selected event row. A row written before previews were stored has NULL
-  // previews, so its payload is read instead (only for that row) and previewed the same way.
+  // previews, so its payload is read instead (only for that row) and previewed the same way. Model
+  // and provider fall back to span attributes for rows written before their columns existed; that
+  // fallback is returned, never filtered on.
   const previewRows = await query<
-    SpanQueryIdentity & Record<(typeof previewPayloads)[number][0] | 'model' | 'provider', string | null>
+    SpanQueryIdentity &
+      Record<(typeof previewPayloads)[number][0] | 'model' | 'provider' | 'stopReasonContext', string | null>
   >(
-    `SELECT DISTINCT ${identities},
-    CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END AS model,
-    CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END AS provider,
+    `SELECT DISTINCT ${identities}, CAST(stopReasonContext AS VARCHAR) AS stopReasonContext,
+    COALESCE(model, CASE WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model') END) AS model,
+    COALESCE(provider, CASE WHEN json_type(attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(attributes, '$.provider') END) AS provider,
     ${previewPayloads
       .map(
         ([preview, payload]) =>
@@ -242,6 +253,10 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     ...row,
     model: metadata.get(coreStorage.spanQueryIdentityKey(row))?.model ?? null,
     provider: metadata.get(coreStorage.spanQueryIdentityKey(row))?.provider ?? null,
+    ...(spanQueryOutcomeFieldsSupported && {
+      stopReasonContext: (parseJson(metadata.get(coreStorage.spanQueryIdentityKey(row))?.stopReasonContext) ??
+        null) as Record<string, unknown> | null,
+    }),
   }));
   // Preserve costs only for older core contracts that still return them.
   let metrics: SpanQueryCostMetric[] = [];

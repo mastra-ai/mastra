@@ -115,3 +115,12 @@ export const Failed: Story = {
     spans: traceSpans({ ...rootSpan, error: { message: 'Weather API returned 503' } }),
   },
 };
+
+/** The second generation's inference started at 1.62s and sent its first chunk at 1.83s. */
+export const StreamedOnTimeline: Story = {
+  args: {
+    ...studioSidePanelArgs,
+    spanView: 'timeline',
+    rootStreamingTimings: { timeToFirstChunkMs: 1830, timeToFirstTokenMs: 210 },
+  },
+};

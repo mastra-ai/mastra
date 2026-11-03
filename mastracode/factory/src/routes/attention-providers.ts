@@ -1,5 +1,7 @@
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 /**
  * Per-kind attention providers. Each kind owns its counts, its bounded page
@@ -190,14 +192,14 @@ export class DecisionAttentionProvider implements AttentionProvider {
   readonly kind: FactoryAttentionKind;
   readonly #workItems: WorkItemsStorage;
   readonly #spec: DecisionAttentionSpec;
-  readonly #boards: BoardRegistry;
+  readonly #boards: ProjectBoardSource;
 
   constructor(
-    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry },
+    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry | ProjectBoardSource },
     spec: DecisionAttentionSpec,
   ) {
     this.#workItems = workItems;
-    this.#boards = boards;
+    this.#boards = toBoardSource(boards);
     this.#spec = spec;
     this.kind = spec.kind;
   }
@@ -261,7 +263,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
       const [receiptByKey, itemById, overtaken] = await Promise.all([
         this.#receiptsFor(scope, decisions),
         this.#linkedItems(scope, decisions),
-        overtakenDecisionIds(this.#workItems, this.#boards, scope, decisions),
+        this.#boards.load(scope).then(boards => overtakenDecisionIds(this.#workItems, boards, scope, decisions)),
       ]);
       const entries: AttentionEntry[] = [];
       for (const decision of decisions) {

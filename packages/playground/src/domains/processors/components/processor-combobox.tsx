@@ -22,8 +22,8 @@ export interface ProcessorComboboxProps {
 export function ProcessorCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a processor...',
-  searchPlaceholder = 'Search processors...',
+  placeholder = 'Select a processor',
+  searchPlaceholder = 'Search processors',
   emptyText = 'No processors found.',
   className,
   disabled = false,

@@ -50,7 +50,7 @@ These scorers evaluate the agent's text output:
 | - | - | - |
 | `checks.includes(str)` | Output contains substring | 1 or 0 |
 | `checks.excludes(str)` | Output doesn't contain substring | 1 or 0 |
-| `checks.equals(str)` | Output exactly equals string | 1 or 0 |
+| `checks.equals(str)` | Output equals string (case-insensitive by default; pass `{ ignoreCase: false }` for an exact match) | 1 or 0 |
 | `checks.matches(regex)` | Output matches regular expression | 1 or 0 |
 | `checks.similarity(str)` | Dice coefficient similarity to string | 0-1 (or binary with `threshold`) |
 

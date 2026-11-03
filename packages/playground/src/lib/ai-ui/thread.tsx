@@ -463,7 +463,7 @@ const AgentComposer = ({
               <ComposerInput
                 ref={textareaRef}
                 value={text}
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                placeholder={canExecuteAgent ? 'Enter your message' : "You don't have permission to execute agents"}
                 onChange={event => {
                   setThreadInput(event.target.value);
                 }}

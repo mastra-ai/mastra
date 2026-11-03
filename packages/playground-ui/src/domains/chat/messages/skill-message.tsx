@@ -1,17 +1,28 @@
-import { BookOpen } from 'lucide-react';
-
 import type { SkillActivation } from './skill-activation';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import { ActivityItem, SignalActivity } from '@/ds/components/ai/activity';
+import type { ActivityAppearance } from '@/ds/components/ai/activity';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 
-export function SkillMessage({ activation, defaultOpen }: { activation: SkillActivation; defaultOpen?: boolean }) {
+const SkillGlyph = agentGlyph('skill');
+
+export function SkillMessage({
+  activation,
+  defaultOpen,
+  appearance = 'row',
+}: {
+  activation: SkillActivation;
+  defaultOpen?: boolean;
+  appearance?: ActivityAppearance;
+}) {
   const { name, arguments: args, instructions, feed } = activation;
   const item = (
     <ActivityItem
+      appearance={appearance}
       label="Skill"
       detail={args ? `${name} ${args}` : name}
-      icon={<BookOpen className="text-span-skill" aria-hidden />}
+      icon={<SkillGlyph className={appearance === 'inline' ? undefined : 'text-span-skill'} aria-hidden />}
       data-skill-name={name}
       aria-label={`Skill: ${name}`}
       defaultOpen={defaultOpen}
@@ -27,7 +38,7 @@ export function SkillMessage({ activation, defaultOpen }: { activation: SkillAct
   return (
     <div className="flex flex-col">
       {item}
-      <SignalActivity kind="reactive" label="Work item feed" message={feed} />
+      <SignalActivity kind="reactive" label="Work item feed" message={feed} appearance={appearance} />
     </div>
   );
 }

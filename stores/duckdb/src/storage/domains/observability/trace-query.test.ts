@@ -124,7 +124,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
-  it('projects canonical span values with guarded JSON strings and typed timestamps', () => {
+  it('projects canonical span values from columns or guarded JSON strings with typed timestamps', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({
         where: {
@@ -150,9 +150,12 @@ describe('DuckDB advanced trace query', () => {
     );
 
     expect(compiled.sql.match(/FROM current_spans s/g)).toHaveLength(1);
+    // Model and provider read the column, falling back to string attributes for older spans.
     expect(compiled.sql).toContain(`json_type(attributes, '$.model') = 'VARCHAR'`);
-    expect(compiled.sql).toContain(`json_extract_string(attributes, '$.model')`);
     expect(compiled.sql).toContain(`json_type(attributes, '$.provider') = 'VARCHAR'`);
+    expect(compiled.sql).toMatch(/COALESCE\(\s*model,/);
+    expect(compiled.sql).toContain('s.model IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.provider IS NOT DISTINCT FROM ?');
     expect(compiled.sql).toContain(`date_diff('millisecond', startedAt, endedAt) AS durationMs`);
     expect(compiled.sql).toContain('s.startedAt IS NOT NULL AND s.startedAt >= CAST(? AS TIMESTAMP)');
     expect(compiled.sql).toContain('s.durationMs IS NOT NULL AND s.durationMs > ?');
@@ -580,9 +583,12 @@ describe('DuckDB advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(20);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(23);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
+      outcome: null,
+      stopReason: null,
+      stopReasonContext: null,
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',

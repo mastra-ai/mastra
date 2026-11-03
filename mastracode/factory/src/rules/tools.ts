@@ -2,8 +2,16 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardForWorkItem,
+  isPullRequestCard,
+  pullRequestReviewPhase,
+  reviewsPullRequest,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { SELF_REVIEW_ROUND_LIMIT } from '../boards/work.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -11,7 +19,7 @@ import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-item
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { FACTORY_TRIAGE_TYPES } from './types.js';
+import { FACTORY_TRIAGE_TYPES, workItemSource } from './types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
@@ -45,7 +53,7 @@ export async function createFactoryTransitionTools(options: {
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   sessions?: FactorySessionSourceLookup;
-  boards?: BoardRegistry;
+  boards?: BoardRegistry | ProjectBoardSource;
 }): Promise<IntegrationTools> {
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
@@ -65,7 +73,10 @@ export async function createFactoryTransitionTools(options: {
     const retired = await options.storage.findRunBindingBySession(resolution.address);
     if (retired && retired.status === 'revoked' && options.boards) {
       const item = await options.storage.get({ orgId: retired.orgId, id: retired.workItemId });
-      if (item && workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') {
+      if (
+        item &&
+        workItemPhaseSemantics(await toBoardSource(options.boards).load(retired), item)?.kind === 'terminal'
+      ) {
         return { factory_transition_work_item: createRetiredSessionTool(retired.workItemId, item.stages[0]) };
       }
     }
@@ -175,7 +186,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On the card of a pull request it records the published PR verdict and the card stays in Review. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, findings }, execution) => {
@@ -190,8 +201,12 @@ function createReviewVerdictTool(
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        const board = boardForWorkItem(item);
+        const source = workItemSource(item.externalSource);
+        const pullRequestCard = isPullRequestCard({ source });
         if (
-          boardForWorkItem(item) === 'work' &&
+          board === 'work' &&
+          !pullRequestCard &&
           item.stages[0] === 'review' &&
           typeof item.metadata?.openPullRequestNumber !== 'number'
         ) {
@@ -206,7 +221,7 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (boardForWorkItem(item) !== 'review' || item.stages[0] !== 'review') {
+        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== pullRequestReviewPhase(board)) {
           throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();

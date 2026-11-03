@@ -1,3 +1,4 @@
+export * from './outcome-fields';
 export * from './span-aggregate';
 export * from './trace-aggregate';
 export * from './trace-query';
@@ -45,7 +46,8 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
 import type { TraceAggregateFixtureData } from './trace-aggregate';
-import type { TraceQueryFixtureData } from './trace-query';
+import type { ThreadQueryConformanceCase, TraceQueryConformanceCase, TraceQueryFixtureData } from './trace-query';
+import { createOutcomeFieldTests } from './outcome-fields';
 import { TIMING_FIELDS, timingValue } from './timing-fields';
 
 export interface ObservabilityVNextCapabilities {
@@ -210,6 +212,10 @@ export async function writeTraceQueryFixture(
       rootEntityType: (span.rootEntityType ?? null) as EntityType | null,
       rootEntityId: span.rootEntityId ?? null,
       rootEntityName: span.rootEntityName ?? null,
+      model: span.model ?? null,
+      provider: span.provider ?? null,
+      timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+      timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
@@ -339,6 +345,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await storage.dangerouslyClearAll();
       }
     });
+
+    const runsConformanceCase = (testCase: TraceQueryConformanceCase | ThreadQueryConformanceCase) =>
+      !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) &&
+      (testCase.requiresFeature === undefined || storage.getFeatures()?.includes(testCase.requiresFeature) === true);
 
     it('reports observability strategy preference', () => {
       expect(storage.observabilityStrategy?.preferred).toBe(capabilities.preferredStrategy);
@@ -542,9 +552,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         coreFeatures.add(feature);
         try {
           const cases = TRACE_QUERY_CONFORMANCE_CASES.filter(
-            testCase =>
-              !testCase.request.group &&
-              !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false),
+            testCase => !testCase.request.group && runsConformanceCase(testCase),
           );
           const requests = await Promise.all(
             cases.map(async testCase => {
@@ -703,9 +711,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
-          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
-            continue;
-          }
+          if (!runsConformanceCase(testCase)) continue;
           const plan = planTraceQuery(parseTraceQueryRequest(testCase.request), { scope: testCase.scope });
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
@@ -923,9 +929,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await writeTraceQueryFixture(storage, THREAD_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
         for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
-          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
-            continue;
-          }
+          if (!runsConformanceCase(testCase)) continue;
           const plan = planThreadQuery(parseQueryThreadsInput(testCase.request), { scope: testCase.scope });
           const response = await storage.queryThreads(plan);
           expect(response.threads, testCase.name).toEqual(testCase.expected);
@@ -2599,8 +2603,9 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       if (capabilities.traceQuery) {
         it('reads model and provider from attributes when the columns are empty', async () => {
           // Rows written before the columns existed are never backfilled, so a
-          // span read must agree with the trace and span queries, which read
-          // the model-call attributes.
+          // span read must agree with trace-query filters and span-query results,
+          // which fall back to the model-call attributes. Span-query filters read
+          // only the columns.
           await storage.batchCreateSpans({
             records: [
               makeSpan({
@@ -2619,6 +2624,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       }
     });
+
+    if (capabilities.traceQuery) {
+      createOutcomeFieldTests({ getStorage: () => storage, flushPendingMerges, refreshDiscovery });
+    }
 
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {
