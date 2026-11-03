@@ -1108,12 +1108,11 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
   async replacePageBodyLinks(input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0]): Promise<void> {
     await this.#transaction(async tx => {
       await tx.execute({ sql: `DELETE FROM "${T.links}" WHERE fromPageId = ?`, args: [input.pageId] });
-      for (const link of input.links) {
-        await tx.execute({
-          sql: `INSERT INTO "${T.links}" (fromPageId, ref, toPageId, count) VALUES (?, ?, ?, ?)`,
-          args: [input.pageId, link.ref, link.toPageId, link.count],
-        });
-      }
+      if (input.links.length === 0) return;
+      await tx.execute({
+        sql: `INSERT INTO "${T.links}" (fromPageId, ref, toPageId, count) SELECT ?, json_extract(value, '$.ref'), json_extract(value, '$.toPageId'), json_extract(value, '$.count') FROM json_each(?)`,
+        args: [input.pageId, JSON.stringify(input.links.map(({ ref, toPageId, count }) => ({ ref, toPageId, count })))],
+      });
     });
   }
 
