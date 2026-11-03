@@ -132,7 +132,11 @@ async function openSession(requestContext: RequestContext, deps: ShareFileToolDe
     do {
       const page = await call('conversations.members', { channel, limit: 1000, ...(cursor ? { cursor } : {}) }, action);
       if ((page.members as string[] | undefined)?.includes(user)) return true;
-      cursor = page.response_metadata?.next_cursor || undefined;
+      const next: string | undefined = page.response_metadata?.next_cursor || undefined;
+      if (next && next === cursor) {
+        throw new Error(`Cannot ${action}: Slack returned the same page of channel members twice.`);
+      }
+      cursor = next;
     } while (cursor);
     return false;
   };

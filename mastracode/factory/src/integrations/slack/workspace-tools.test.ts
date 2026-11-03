@@ -298,6 +298,17 @@ describe('Slack workspace tools', () => {
     await expect(run(SLACK_READ_TOOL_NAME, { target: 'C2' })).resolves.toMatchObject({ channel: { id: 'C2' } });
   });
 
+  it('stops listing members when Slack repeats a pagination cursor', async () => {
+    const { run, apiCall } = await slackSession();
+    const slack = apiCall.getMockImplementation()!;
+    apiCall.mockImplementation(async (method, args) =>
+      method === 'conversations.members'
+        ? { ok: true, members: ['UFILL0'], response_metadata: { next_cursor: 'same' } }
+        : slack(method, args),
+    );
+    await expect(run(SLACK_READ_TOOL_NAME, { target: 'GBIG' })).rejects.toThrow(/same page of channel members/);
+  });
+
   it('explains a missing scope instead of surfacing the raw API error', async () => {
     const { run, apiCall } = await slackSession();
     apiCall.mockRejectedValueOnce(

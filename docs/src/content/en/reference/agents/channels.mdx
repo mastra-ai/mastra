@@ -735,13 +735,13 @@ For platforms with private CDNs (e.g. Slack), attachments are fetched with authe
 
 ## Reading attachments
 
-The `read_attachment` tool from `getTools()` downloads a file shared in the current conversation each time it's called and returns one chunk of it. Nothing is written to the workspace. The tool only reads files attached to messages in the current thread. Any other URL is refused without a download.
+The `read_attachment` tool from `getTools()` downloads a file shared in the current conversation each time it's called and returns one chunk of it. Nothing is written to the workspace. The tool only reads files attached to the 500 newest messages in the current thread. Any other URL is refused without a download. To read an older file, share it in the thread again.
 
 Like the other channel tools, it's only available when you pass it to the agent with `tools: { ...channels.getTools() }`.
 
 The tool takes the attachment `url`, plus an optional byte `offset` and `length` (at most 128 KiB per call). It returns `{ name, mimeType, size, offset, encoding, content, nextOffset }`.
 
-Text files come back as UTF-8, with chunks ending on a character boundary. Other files come back as base64. Pass `nextOffset` to read the next chunk. Files larger than 10 MiB aren't downloaded.
+Text files come back as UTF-8, with chunks ending on a character boundary. Other files come back as base64. Pass `nextOffset` to read the next chunk. Files larger than 10 MiB are refused. If the adapter doesn't report a file's size, the tool downloads it and checks the size before returning anything.
 
 ## Inline links
 
