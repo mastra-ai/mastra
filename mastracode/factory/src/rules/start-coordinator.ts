@@ -247,10 +247,14 @@ export class FactoryStartCoordinator {
     // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
     // or reminders — those files are attacker-writable in a PR branch.
     // An issue card's PR review checks out the attached pull request's head, so it counts too.
+    // The run's stage is where the card is going: a card started from Intake into PR review
+    // is moved only after the session is ready.
+    const runStage = request.destinationStage ?? storedItem?.stages[0];
     const untrustedCheckout =
       request.workItem.input.externalSource?.type === 'pull-request' ||
       (request.workItem.role === 'review' &&
-        storedItem?.stages[0] === PULL_REQUEST_REVIEW_PHASE &&
+        runStage === PULL_REQUEST_REVIEW_PHASE &&
+        storedItem != null &&
         hasPullRequest({ workItem: storedItem.workItem }));
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's

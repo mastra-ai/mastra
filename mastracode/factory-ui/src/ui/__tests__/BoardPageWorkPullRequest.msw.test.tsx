@@ -132,8 +132,10 @@ function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCan
   return { created, transitions };
 }
 
-function renderBoard(board: 'work' | 'review') {
-  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/${board}`] });
+function renderBoard(board: 'work' | 'review', search = '') {
+  const router = createMemoryRouter(createAppRoutes(), {
+    initialEntries: [`/factories/${FACTORY_ID}/${board}${search}`],
+  });
   return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
@@ -184,6 +186,15 @@ describe('Pull requests on the Work board', () => {
     renderBoard('work');
     const prReview = await screen.findByRole('region', { name: 'PR review' });
     expect(await within(prReview).findByText(reviewItem.title)).toBeVisible();
+  });
+
+  it("keeps an old Review board link's card on the way to Work", async () => {
+    stubBoards({ items: [issueWithPullRequest] });
+    const { router } = renderBoard('review', `?item=${issueWithPullRequest.id}`);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`));
+    expect(new URLSearchParams(router.state.location.search).get('item')).toBe(issueWithPullRequest.id);
+    expect(new URLSearchParams(router.state.location.search).getAll('source')).toEqual(['pull-request']);
   });
 
   it("lists an issue card carrying a pull request under the pull request filter, with that PR's status", async () => {

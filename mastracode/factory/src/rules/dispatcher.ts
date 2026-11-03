@@ -1604,12 +1604,28 @@ export class FactoryDecisionDispatcher {
       source: externalSourceForDecision(requested),
     });
     // A pull request attached to its issue's card is filed already. Re-filing it (a replayed
-    // or swept "opened") must not write its facts onto the card's primary issue source.
+    // or swept "opened") must not write its facts onto the card's primary issue source. A
+    // reopen is the one fact it brings: the attached source is open again.
     if (
       existing &&
       externalSourceKey(existing.externalSource) !== externalSourceKey(externalSourceForDecision(requested))
-    )
+    ) {
+      const source = externalSourceForDecision(requested);
+      const facts = workItemProviderAdapter(source).toSource(source, requested.metadata ?? null);
+      if (facts?.state === 'open') {
+        await this.#storage.syncWorkItemSource({
+          orgId: record.orgId,
+          factoryProjectId: record.factoryProjectId,
+          provider: facts.provider,
+          externalId: facts.externalId,
+          patch: current =>
+            current.state === 'closed' || current.state === 'merged'
+              ? { state: facts.state, metadata: { ...current.metadata, ...facts.metadata } }
+              : null,
+        });
+      }
       return;
+    }
     if (!existing && requested.attachTo && (await this.#attachLinkedItem(record, requested, causalChain))) return;
     const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     // Filing the card *was* the placement, so a retry of the same decision has
@@ -1798,6 +1814,9 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<boolean> {
+    // A dry run of the work item split has no sources table to attach to: the pull request
+    // gets its own card, as before.
+    if (this.#storage.legacyMode) return false;
     const target = decision.attachTo!;
     const boards = await this.#boards.load(record);
     const card = await this.#storage.get({ orgId: record.orgId, id: target.workItemId });
@@ -1838,7 +1857,13 @@ export class FactoryDecisionDispatcher {
       cause: 'linked_item_attached',
       causalChain,
     });
-    if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+    // The pull request is on the card either way. A board that refuses the move (an edited
+    // Work board without PR review) keeps the card where it is; a retry would not move it.
+    if (moved.status === 'rejected') {
+      console.warn(
+        `[factory] attached a pull request to ${attached.id} but could not move it to PR review: ${moved.code}: ${moved.reason}`,
+      );
+    }
     return true;
   }
 
