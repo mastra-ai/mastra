@@ -155,6 +155,12 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return this.#pages.listNotes(input);
   }
 
+  override countChildPages(
+    input: Parameters<KnowledgePageStore['countChildPages']>[0],
+  ): ReturnType<KnowledgePageStore['countChildPages']> {
+    return this.#pages.countChildPages(input);
+  }
+
   override countNotes(
     input: Parameters<KnowledgePageStore['countNotes']>[0],
   ): ReturnType<KnowledgePageStore['countNotes']> {

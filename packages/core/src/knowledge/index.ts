@@ -64,7 +64,7 @@ export class Knowledge extends MastraBase {
   #storageSource?: MastraCompositeStore;
   #storagePromise?: Promise<KnowledgeStorage>;
   #runtime: KnowledgeScopeRuntime;
-  #tools: { read: boolean; write: boolean };
+  #tools: { read: boolean; write: boolean; maxTokens?: number };
   #pins: false | PinBudget;
   #instructions?: KnowledgeInstructionsOption;
   #semantic?: KnowledgeSemanticIndex;
@@ -104,8 +104,16 @@ export class Knowledge extends MastraBase {
     const tools = config.tools;
     this.#tools =
       typeof tools === 'object'
-        ? { read: Boolean(tools.read), write: Boolean(tools.write) }
+        ? {
+            read: Boolean(tools.read),
+            write: Boolean(tools.write),
+            maxTokens: typeof tools.read === 'object' ? tools.read.maxTokens : undefined,
+          }
         : { read: Boolean(tools), write: Boolean(tools) };
+    const maxTokens = this.#tools.maxTokens;
+    if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens < 100)) {
+      throw new Error(`Knowledge \`tools.read.maxTokens\` must be a whole number of at least 100; got ${maxTokens}.`);
+    }
     this.#pins = resolvePins(config.pinnedContext);
     this.#instructions = config.instructions;
     if (Boolean(config.vector) !== Boolean(config.embedder)) {
@@ -203,6 +211,7 @@ export class Knowledge extends MastraBase {
         getStorage: () => this.getStorage(),
         semantic: this.#semantic,
         warn: message => this.logger.warn(message),
+        maxTokens: this.#tools.maxTokens,
       },
       this.#groups(options),
       // A pin write changes what the pins lane shows; drop the turn's memoized read.

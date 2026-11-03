@@ -1039,7 +1039,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         );
       });
 
-      it('matches every query word anywhere in a page, ranking phrase-in-name, then words-in-name, then other pages, then notes', async () => {
+      it('matches any query word, ranking phrase-in-name, then words matched, then weight name > description > body, then notes', async () => {
         const acme = await scope('org:acme', ORG);
         await scope('org:refund', ORG);
         const pause = () => new Promise(resolve => setTimeout(resolve, 15));
@@ -1072,14 +1072,17 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? `page:${hit.page.name}` : `note:${hit.note.text}`;
 
-        // 'Refund window' has "refund" in its name and "approval" only in a note: not a page hit,
-        // but the note containing both words is. Scope pages (org:refund) never hit.
+        // Any word matches. Pages first: the phrase in the name, then most words matched, then points (a
+        // matched word earns 3 in the name, else 2 in the description, else 1 in the body), newest first on
+        // ties; so both words in the body beat one word in the name. Then notes by words matched. 'Refund window' matches on "refund" alone; scope pages (org:refund) never hit.
         expect((await store.searchPages({ query: '  refund   APPROVAL ', read: r })).map(label)).toEqual([
           `page:${phrase.name}`,
           `page:${scattered.name}`,
-          `page:${inBody.name}`,
           `page:${acrossFields.name}`,
+          `page:${inBody.name}`,
+          `page:${nameOnly.name}`,
           `note:${noteBoth.text}`,
+          'note:Approval is logged.',
         ]);
         expect((await store.searchPages({ query: 'refund approval', read: r, limit: 2 })).map(label)).toEqual([
           `page:${phrase.name}`,
@@ -1096,9 +1099,67 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         ]);
         expect(await store.searchPages({ query: '   ', read: r })).toEqual([]);
         // Repeated words count once for matching.
-        expect((await store.searchPages({ query: 'refund approval refund', read: r })).map(label)).toHaveLength(5);
+        expect((await store.searchPages({ query: 'refund approval refund', read: r })).map(label)).toHaveLength(7);
         expect((await store.searchPages({ query: 'approval  RULES', read: r })).map(label).slice(0, 1)).toEqual([
           `page:${phrase.name}`,
+        ]);
+      });
+
+      it('ranks by words matched, then field weight, then recency, and never returns pages that match no word', async () => {
+        const acme = await scope('org:acme', ORG);
+        const pause = () => new Promise(resolve => setTimeout(resolve, 15));
+        const inName = await page(acme.id, 'Zebra care');
+        await pause();
+        const inDescription = await page(acme.id, 'Stripes', { description: 'About a zebra' });
+        await pause();
+        const bothInBody = await page(acme.id, 'Safari', { body: 'A zebra and a giraffe walk by.' });
+        await pause();
+        const oneInBody = await page(acme.id, 'Savanna', { body: 'A giraffe grazes.' });
+        await pause();
+        await page(acme.id, 'Penguins', { body: 'Cold weather birds.' });
+        const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
+          hit.type === 'page' ? hit.page.name : hit.note.text;
+        const r = read(['org:acme']);
+        // Words matched first, then points, then newest. Safari matches 2 words (zebra, giraffe), the others 1:
+        // Zebra care 3 points, Stripes 2, Savanna 1. Two body words beat one name word.
+        expect((await store.searchPages({ query: 'zebra giraffe lion', read: r })).map(label)).toEqual([
+          bothInBody.name,
+          inName.name,
+          inDescription.name,
+          oneInBody.name,
+        ]);
+        // Same word count: name beats description beats body, though the body page is newer.
+        expect((await store.searchPages({ query: 'zebra', read: r })).map(label)).toEqual([
+          inName.name,
+          inDescription.name,
+          bothInBody.name,
+        ]);
+        // Equal points: newest first, and the limit applies after ranking.
+        expect((await store.searchPages({ query: 'giraffe', read: r, limit: 1 })).map(label)).toEqual([oneInBody.name]);
+      });
+
+      it('ranks the page that has every query word above newer pages that match one word in their name', async () => {
+        const acme = await scope('org:acme', ORG);
+        const pause = () => new Promise(resolve => setTimeout(resolve, 15));
+        // The podcast page names none of the words but contains all three in its body.
+        const podcast = await page(acme.id, 'Opus 5.5 launches: is Anthropic back?', {
+          body: 'Peter Steinberger, creator of OpenClaw, joins the show.',
+        });
+        await pause();
+        const peter = await page(acme.id, 'Peter profile', { body: 'Bio.' });
+        await pause();
+        const steinberger = await page(acme.id, 'Steinberger interview', { body: 'Notes.' });
+        await pause();
+        const openclaw = await page(acme.id, 'OpenClaw roadmap', { body: 'Plans.' });
+        const names = async (query: string) =>
+          (await store.searchPages({ query, read: read(['org:acme']) })).map(hit =>
+            hit.type === 'page' ? hit.page.name : hit.note.text,
+          );
+        expect(await names('Peter Steinberger OpenClaw')).toEqual([
+          podcast.name,
+          openclaw.name,
+          steinberger.name,
+          peter.name,
         ]);
       });
 
@@ -1122,7 +1183,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           mentions: [],
           provenance: alex,
         });
-        const hits = await store.searchPages({ query: 'checklist launch', read: read(['org:acme']), limit: 1 });
+        const hits = await store.searchPages({ query: 'checklist private', read: read(['org:acme']), limit: 1 });
         expect(hits.map(hit => (hit.type === 'note' ? hit.note.id : hit.page.id))).toEqual([visible.id]);
       });
 
@@ -1137,7 +1198,9 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           (await store.searchPages({ query, read: r })).map(hit => (hit.type === 'page' ? hit.page.id : hit.note.id));
         expect(await ids('50%')).toEqual([percent.id]);
         expect(await ids('a_b')).toEqual([underscore.id]);
-        expect(await ids('off 50%')).toEqual([percent.id]);
+        // "off" also matches 'Discount 500 off', but 50% (literal) and off both match only the first.
+        expect((await ids('off 50%'))[0]).toBe(percent.id);
+        expect(await ids('off 50%')).toHaveLength(2);
       });
 
       it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {
@@ -1343,6 +1406,31 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           [a.id]: 3,
         });
         expect(await store.countNotes({ pageIds: [], read: read(['org:acme']) })).toEqual({});
+      });
+
+      it('counts the child pages a reader can see under each parent in one call', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:support', ORG, acme.id);
+        const guides = await page(acme.id, 'guides');
+        await page(guides.id, 'install');
+        await page(guides.id, 'login');
+        const gone = await page(guides.id, 'gone');
+        await store.deletePage({ id: gone.id, expectedVersion: gone.version, deletedBy: 'agent:alex' });
+        const leaf = await page(acme.id, 'leaf');
+        await page(team.id, 'roster');
+
+        // Child scopes are not child pages; deleted pages don't count.
+        expect(
+          await store.countChildPages({
+            parentIds: [acme.id, guides.id, guides.id, leaf.id, 'missing'],
+            read: read(['org:acme', 'team:acme:support']),
+          }),
+        ).toEqual({ [acme.id]: 2, [guides.id]: 2, [leaf.id]: 0, missing: 0 });
+        // A reader who can't read the child scope sees none of its pages.
+        expect(await store.countChildPages({ parentIds: [team.id], read: read(['org:acme']) })).toEqual({
+          [team.id]: 0,
+        });
+        expect(await store.countChildPages({ parentIds: [], read: read(['org:acme']) })).toEqual({});
       });
     });
   });

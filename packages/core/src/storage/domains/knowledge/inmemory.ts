@@ -85,6 +85,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   override getNote(input: Parameters<KnowledgePageStore['getNote']>[0]): ReturnType<KnowledgePageStore['getNote']> {
     return this.#pageStore.getNote(input);
   }
+  override countChildPages(
+    input: Parameters<KnowledgePageStore['countChildPages']>[0],
+  ): ReturnType<KnowledgePageStore['countChildPages']> {
+    return this.#pageStore.countChildPages(input);
+  }
   override countNotes(
     input: Parameters<KnowledgePageStore['countNotes']>[0],
   ): ReturnType<KnowledgePageStore['countNotes']> {

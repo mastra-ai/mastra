@@ -1,6 +1,7 @@
 import {
   createKnowledgePagesCoreLoader,
   inspectKnowledgePagesSchema,
+  KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
   KNOWLEDGE_PAGES_SCHEMA_VERSION,
   KNOWLEDGE_RESETTABLE_TABLE_NAMES,
@@ -1260,6 +1261,23 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const readable = await this.#readable(input.read);
+    const rows = await (
+      await this.#c('pages')
+    )
+      .aggregate([
+        { $match: { parentId: { $in: ids }, ...notScope, ...live, ...this.#inScopes('scopeId', readable) } },
+        { $group: { _id: '$parentId', count: { $sum: 1 } } },
+      ])
+      .toArray();
+    for (const row of rows) counts[row._id as string] = row.count as number;
+    return counts;
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
@@ -1503,37 +1521,39 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       ...live,
       ...notScope,
       ...inScope('scopeId'),
-      $and: words.map(word => ({
-        $or: [{ name: matcher(word) }, { description: matcher(word) }, { body: matcher(word) }],
-      })),
+      $or: words.flatMap(word => [{ name: matcher(word) }, { description: matcher(word) }, { body: matcher(word) }]),
     };
+    const has = (field: string, word: string) => ({
+      $regexMatch: { input: { $ifNull: [`$${field}`, ''] }, regex: escapeRegex(word), options: 'i' },
+    });
     const rows = await pages
       .aggregate([
         { $match: pageFilter },
         {
           $addFields: {
-            searchTier: {
-              $cond: [
-                { $regexMatch: { input: '$canonicalName', regex: escapeRegex(phrase) } },
-                0,
-                {
-                  $cond: [
-                    {
-                      $and: words.map(word => ({
-                        $regexMatch: { input: '$name', regex: escapeRegex(word), options: 'i' },
-                      })),
-                    },
-                    1,
-                    2,
+            searchTier: { $cond: [{ $regexMatch: { input: '$canonicalName', regex: escapeRegex(phrase) } }, 0, 1] },
+            searchCount: {
+              $add: words.map(word => ({
+                $cond: [{ $or: [has('name', word), has('description', word), has('body', word)] }, 1, 0],
+              })),
+            },
+            searchScore: {
+              $add: words.map(word => ({
+                $switch: {
+                  branches: [
+                    { case: has('name', word), then: KNOWLEDGE_SEARCH_WEIGHTS.name },
+                    { case: has('description', word), then: KNOWLEDGE_SEARCH_WEIGHTS.description },
+                    { case: has('body', word), then: KNOWLEDGE_SEARCH_WEIGHTS.body },
                   ],
+                  default: 0,
                 },
-              ],
+              })),
             },
           },
         },
-        { $sort: { searchTier: 1, updatedAt: -1, id: 1 } },
+        { $sort: { searchTier: 1, searchCount: -1, searchScore: -1, updatedAt: -1, id: 1 } },
         { $limit: limit },
-        { $project: { searchTier: 0, _id: 0 } },
+        { $project: { searchTier: 0, searchCount: 0, searchScore: 0, _id: 0 } },
       ])
       .toArray();
     const hits: KnowledgePageSearchHit[] = rows.map(row => ({ type: 'page' as const, page: toPage(row) }));
@@ -1542,17 +1562,20 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     const noteRows = await (
       await this.#c('notes')
     )
-      .find(
+      .aggregate([
         {
-          ...live,
-          ...this.#visibleNotes(ids),
-          ...(scopes ? { pageScopeId: { $in: ids === null ? scopes : scopes.filter(id => ids.includes(id)) } } : {}),
-          $and: words.map(word => ({ text: matcher(word) })),
+          $match: {
+            ...live,
+            ...this.#visibleNotes(ids),
+            ...(scopes ? { pageScopeId: { $in: ids === null ? scopes : scopes.filter(id => ids.includes(id)) } } : {}),
+            $or: words.map(word => ({ text: matcher(word) })),
+          },
         },
-        noProjection,
-      )
-      .sort({ updatedAt: -1, id: -1 })
-      .limit(limit - hits.length)
+        { $addFields: { searchScore: { $add: words.map(word => ({ $cond: [has('text', word), 1, 0] })) } } },
+        { $sort: { searchScore: -1, updatedAt: -1, id: -1 } },
+        { $limit: limit - hits.length },
+        { $project: { searchScore: 0, _id: 0 } },
+      ])
       .toArray();
     const notePages = new Map(
       (
