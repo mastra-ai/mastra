@@ -42,6 +42,50 @@ const MASTRA_DURABLE_SEGMENTS_KEY = 'mastra__durableSegments';
 /** Request-context keys the durable engine keeps for itself: the execution claim and the segment carrier. */
 const DURABLE_ENGINE_KEYS: ReadonlySet<string> = new Set([MASTRA_DURABLE_EXECUTIONS_KEY, MASTRA_DURABLE_SEGMENTS_KEY]);
 
+/** A Map view whose reads and mutations use the context's visibility and write-through rules. */
+class RequestContextMap extends Map<string, unknown> {
+  constructor(private readonly context: RequestContext) {
+    super();
+  }
+  override get(key: string): unknown {
+    return this.context.getRaw(key);
+  }
+  override set(key: string, value: unknown): this {
+    this.context.setRaw(key, value);
+    return this;
+  }
+  override has(key: string): boolean {
+    return this.context.hasRaw(key);
+  }
+  override delete(key: string): boolean {
+    return this.context.deleteRaw(key);
+  }
+  override clear(): void {
+    this.context.clear();
+  }
+  override get size(): number {
+    return this.context.size();
+  }
+  override *entries(): MapIterator<[string, unknown]> {
+    yield* this.context.entries();
+  }
+  override *keys(): MapIterator<string> {
+    for (const [key] of this.context.entries()) yield key;
+  }
+  override *values(): MapIterator<unknown> {
+    for (const [, value] of this.context.entries()) yield value;
+  }
+  override [Symbol.iterator](): MapIterator<[string, unknown]> {
+    return this.entries();
+  }
+  override forEach(
+    callbackfn: (value: unknown, key: string, map: Map<string, unknown>) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const [key, value] of this.context.entries()) callbackfn.call(thisArg, value, key, this);
+  }
+}
+
 /**
  * A request context layered over another. Every read and write goes to `backing`, except for the
  * keys it keeps to itself (`own`, held here and never written to `backing`) and the keys it hides
@@ -51,6 +95,7 @@ const DURABLE_ENGINE_KEYS: ReadonlySet<string> = new Set([MASTRA_DURABLE_EXECUTI
 class LayeredRequestContext extends RequestContext<unknown> {
   private readonly ownKeys: ReadonlySet<string>;
   private readonly ownValues = new Map<string, unknown>();
+  private readonly callbackMap = new RequestContextMap(this);
 
   constructor(
     readonly backing: RequestContext,
@@ -117,8 +162,7 @@ class LayeredRequestContext extends RequestContext<unknown> {
     return [...this.visibleEntries()].length;
   }
   override forEach<K extends string>(callbackfn: (value: unknown, key: K, map: Map<string, unknown>) => void): void {
-    const map = new Map(this.visibleEntries());
-    for (const [key, value] of map) callbackfn(value, key as K, map);
+    this.callbackMap.forEach((value, key, map) => callbackfn(value, key as K, map));
   }
   override toJSON(): Record<string, any> {
     const json = this.backing.toJSON();
