@@ -60,17 +60,15 @@ const results = await vector.query({
 
 To share one connection with the storage, pass `connector: storage.connector` instead of connection options.
 
-## Development
-
-Tests run against SurrealDB in Docker on port `8010`:
-
-```bash
-pnpm test
-```
-
-Set `SURREALDB_URL` to use another server.
-
 ## Documentation
 
 - [SurrealDB integration guide](https://mastra.ai/integrations/databases/surrealdb)
 - [SurrealDB vector store](https://mastra.ai/integrations/vectors/surrealdb)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/surrealdb/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

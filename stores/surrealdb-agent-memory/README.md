@@ -5,8 +5,10 @@
 ## Installation
 
 ```bash
-npm install @mastra/surrealdb-agent-memory zod
+npm install @mastra/surrealdb-agent-memory
 ```
+
+The package also needs `zod` (v3.25 or v4) as a peer dependency.
 
 ## Usage
 
@@ -48,14 +50,14 @@ await ingestDocument(client, { file, title: 'Handbook' });
 const results = await searchDocuments(client, { query: 'refund policy', k: 5 });
 ```
 
-## Development
-
-```bash
-pnpm test
-```
-
-Integration tests run when `AGENT_MEMORY_ENDPOINT`, `AGENT_MEMORY_CONTEXT` and `AGENT_MEMORY_API_KEY` are set.
-
 ## Documentation
 
 - [SurrealDB Agent Memory integration guide](https://mastra.ai/integrations/databases/surrealdb-agent-memory)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/surrealdb-agent-memory/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
