@@ -418,7 +418,7 @@ describe('getFollowTarget', () => {
     expect(getFollowTarget(withRoom)).toBe(0);
   });
 
-  it('rests the last drawn row, not a hidden one registered after it', () => {
+  it('rests on the last drawn row, not a hidden one registered after it', () => {
     const scroll = makeScroll({ rowTop: 700, rowHeight: 100 });
     const hidden = document.createElement('div');
     hidden.getBoundingClientRect = () => rectAt(0, 0);
