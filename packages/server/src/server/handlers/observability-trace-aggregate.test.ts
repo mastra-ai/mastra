@@ -308,10 +308,30 @@ describe('AGGREGATE_TRACES', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_AGGREGATE_UNSUPPORTED',
-        message: 'Context identifier predicates are not supported by the configured observability store',
+        message: 'Context field predicates are not supported by the configured observability store',
       });
       expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
     }
+  });
+
+  it('returns 501 before calling a store that predates request, service and experiment predicates', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-context-ids']);
+    const error = await captureHttpException(
+      AGGREGATE_TRACES.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'experimentId' }, right: { literal: 'exp-1' } },
+          measures: ['count'],
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Context field predicates are not supported by the configured observability store',
+    });
+    expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
   });
 
   it('passes context identifier predicates to stores that advertise support', async () => {

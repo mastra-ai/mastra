@@ -104,13 +104,12 @@ import {
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE,
   assertObservabilityTraceQueryDiscoverySupported,
-  assertObservabilityTraceQueryContextIdsSupported,
+  assertObservabilityTraceQueryContextFieldsSupported,
   assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSortSupported,
   assertObservabilityTraceQueryTimeToFirstTokenSupported,
   assertObservabilityTraceQueryTimeToFirstTokenSortSupported,
-  isTraceQueryContextIdField,
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
   supportsObservabilityTraceQueryRootSpanField,
@@ -123,7 +122,7 @@ import {
   NEW_ROUTE_DEFS,
   NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
-  supportsObservabilityTraceQueryContextIds,
+  supportsObservabilityTraceQueryContextField,
   supportsObservabilityTraceQueryRootDuration,
   supportsObservabilityTraceQueryTimeToFirstChunk,
   supportsObservabilityTraceQueryTimeToFirstToken,
@@ -376,7 +375,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
-      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
@@ -518,7 +517,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityTraceAggregateSupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
-      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
@@ -873,10 +872,7 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
             field.path !== 'durationMs' ||
             supportsObservabilityTraceQueryRootDuration(observabilityStore),
         )
-        .filter(
-          field =>
-            !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
-        )
+        .filter(field => supportsObservabilityTraceQueryContextField(observabilityStore, field.path))
         .filter(
           field =>
             field.path !== 'timeToFirstChunkMs' || supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore),
@@ -1064,11 +1060,11 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
         assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       } else {
         assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
-        assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
+        assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.traces.where);
         assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
-        assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+        assertObservabilityTraceQueryContextFieldsSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan.traces);

@@ -3457,6 +3457,64 @@ describe('FactoryDecisionDispatcher', () => {
     expect(run?.status).not.toBe('proposed');
   });
 
+  it.each([
+    ['pull-request', 'succeeded'],
+    ['issue', 'proposed'],
+  ] as const)(
+    're-reviews a push to a Factory-authored %s card on the Work board only when it is the PR card (%s)',
+    async (type, status) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          board: 'work',
+          externalSource: { integrationId: 'github', type, externalId: `github-${type}:9` },
+          title: 'Factory change',
+          stages: ['done'],
+          sessions: {},
+          metadata: { authorTrusted: true, factoryAuthored: true },
+        },
+      });
+      const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+      await storage.commitRuleEvaluation({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        ingress: { identity: 'push-w', triggerType: 'github' },
+        configVersion: 'rules-v1',
+        expectedRevision: item.revision,
+        actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'transition',
+            board: 'work',
+            // A pull request's own card is reviewed in PR review; an issue card's Review is self-review.
+            stage: type === 'pull-request' ? 'pr-review' : 'review',
+            idempotencyKey: 're-review-w',
+          },
+        ],
+        causalChain: [],
+        now: new Date('2030-01-01T00:00:00Z'),
+      });
+      const { controller } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+      const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(rows.find(row => row.idempotencyKey === 're-review-w')?.status).toBe(status);
+    },
+  );
+
   it('lets an external push move a card a person already handed over', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage);
@@ -3679,7 +3737,9 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 0 });
   });
 
-  it('keeps an externally authored card from self-starting, even armed with auto-run on', async () => {
+  // Trust decides only where a card arrives (the default intake route keeps outside work in Intake).
+  // Once a person has armed a card, its runs start like any other card's.
+  it('runs an externally authored card a person armed, with auto-run on', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -3727,7 +3787,12 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    // Not parked for a person: the dispatcher tries to start it, and retries only because this
+    // card has no review session bound.
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      lastError: 'No active Factory binding for role review.',
+    });
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
@@ -3794,9 +3859,9 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
-  it('fails closed on a GitHub card missing its trust stamp, even armed with auto-run on', async () => {
-    // Cards created before arrival stamps existed carry no `authorTrusted`;
-    // absence must not read as trust, or a pre-stamp external PR slips the gate.
+  it('runs a GitHub card missing its trust stamp a person armed, with auto-run on', async () => {
+    // Cards created before arrival stamps existed carry no `authorTrusted`; the default intake
+    // route treats that as untrusted at arrival, and a person's arming releases it like any card.
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -3842,7 +3907,12 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    // Not parked for a person: the dispatcher tries to start it, and retries only because this
+    // card has no review session bound.
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      lastError: 'No active Factory binding for role review.',
+    });
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
@@ -6135,6 +6205,39 @@ describe('custom-board deferred targets', () => {
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
   });
 
+  it('places a pull request card filed on Review before where it sits, not on Work', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'review',
+        title: 'Legacy review card',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:legacy-placement' },
+      },
+    });
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'legacy-placement',
+      board: 'work',
+      stage: 'review',
+      source: 'github-pr',
+      sourceKey: 'github-pr:legacy-placement',
+      skipRules: true,
+    });
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({})).runOnce();
+
+    // The same board the rule-running path resolves: a legacy Review card is
+    // acted on where it sits, so placement does not relocate it onto Work.
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'review', stages: ['review'] });
+    expect(await decisionByKey(storage, 'legacy-placement')).toMatchObject({ status: 'succeeded' });
+  });
+
   it('leaves an existing card that already carries the materialization key where it moved to', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item } = await storage.upsert({
@@ -7091,7 +7194,40 @@ describe('board phase automation', () => {
     }
   });
 
-  it('never auto-starts a phase for a card from outside the write-access circle', async () => {
+  it("starts a phase whose rule asks for a trusted author only for a trusted author's card", async () => {
+    const trusted = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'author.trusted', operator: 'equals' as const, value: true }],
+    };
+    const boards = boardsWithBuilding({ autoStart: true, autoStartWhen: trusted });
+    for (const [metadata, expected] of [
+      [{ authorTrusted: true, factoryAuthored: false }, 'succeeded'],
+      [{ authorTrusted: false, factoryAuthored: true }, 'succeeded'],
+      [{ authorTrusted: false, factoryAuthored: false }, 'proposed'],
+    ] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueBuild(
+        storage,
+        [],
+        `auto-start-trusted-${JSON.stringify(metadata)}`,
+      );
+      await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { metadata } });
+      const { controller } = createSession();
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe(expected);
+    }
+  });
+
+  // A phase that should wait for trusted authors says so in `autoStartWhen` (see above).
+  it('auto-starts a phase for a card from outside the write-access circle when its rule asks nothing of trust', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueBuild(storage, ['effort:low'], 'auto-start-outsider');
     await storage.update({
@@ -7110,7 +7246,7 @@ describe('board phase automation', () => {
       isAutoRunEnabled: async () => true,
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
   it("approves a phase's submit_plan only for the cards its rule matches", async () => {

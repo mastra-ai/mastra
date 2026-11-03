@@ -943,3 +943,28 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     });
   });
 });
+
+// The process that dispatched a task records its open request on the tool call through
+// its task context. Another process can cancel that task, so the owner has to hear about
+// it to drop the request. (#28986)
+describe('BackgroundTaskManager: cancelling a suspended task from another process', () => {
+  it("runs the owner's execution hook so it can drop the open request", async () => {
+    const pubsub = new EventEmitterPubSub();
+    const owner = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10 }, pubsub);
+    const other = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10 }, pubsub);
+    const executions: Array<{ suspendedAt?: Date }> = [];
+    const { task } = await owner.enqueue(payload('agent-1', 'call-1'), {
+      executor: { execute: async (_args, opts) => opts?.suspend?.({ question: 'ok?' }) },
+      onExecution: async info => {
+        executions.push(info);
+      },
+    });
+    await vi.waitFor(async () => expect((await owner.getTask(task.id))?.status).toBe('suspended'));
+    await vi.waitFor(() => expect(executions.at(-1)?.suspendedAt).toBeInstanceOf(Date));
+
+    await other.cancel(task.id);
+
+    expect((await owner.getTask(task.id))?.status).toBe('cancelled');
+    await vi.waitFor(() => expect(executions.at(-1)?.suspendedAt).toBeUndefined());
+  });
+});

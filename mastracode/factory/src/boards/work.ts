@@ -3,6 +3,7 @@ import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
+import { reviewPullRequest } from './pull-request-review.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
@@ -269,10 +270,27 @@ function completeIssue(context: FactoryStageRuleContext) {
   } as const;
 }
 
-export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
+export type WorkBoardPhase =
+  | 'intake'
+  | 'triage'
+  | 'planning'
+  | 'execute'
+  | 'review'
+  | 'pr-review'
+  | 'done'
+  | 'canceled';
 
 /** Every Work phase: a card may move from any phase to any other. */
-const ALL_PHASES: readonly WorkBoardPhase[] = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
+const ALL_PHASES: readonly WorkBoardPhase[] = [
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+  'pr-review',
+  'done',
+  'canceled',
+];
 
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
@@ -347,6 +365,19 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
         jiraIssue: selfReviewWorkItem,
         incidentioFollowUp: selfReviewWorkItem,
         manual: selfReviewWorkItem,
+      },
+    },
+    'pr-review': {
+      name: 'PR review',
+      // A pull request's own card is reviewed here by the independent reviewer, in its own
+      // review seat. Kept apart from Review, the builder's self-review, so a card never
+      // reaches the builder's lanes through a pull request's.
+      kind: 'working',
+      runner: { context: 'work' },
+      nextPhases: ALL_PHASES,
+      onEnter: {
+        pullRequest: reviewPullRequest,
+        gitlabPullRequest: reviewPullRequest,
       },
     },
     done: {

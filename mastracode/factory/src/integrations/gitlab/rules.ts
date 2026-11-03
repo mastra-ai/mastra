@@ -421,7 +421,7 @@ export class GitLabRules {
           factoryAuthored: Boolean(authoringItem),
           item,
           ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
-          // A merge request opening concerns two cards: its own Review card,
+          // A merge request opening concerns two cards: its own card,
           // which the integration handler files against the authoring item,
           // and that authoring item, which its board may react to. The second
           // evaluation runs only the board handler, under an id-suffixed

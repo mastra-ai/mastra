@@ -35,13 +35,20 @@ const PREPARE_APPROVAL: CardMove = {
   stage: 'triage',
   awaitsHumanDecision: true,
 };
-const REVIEW: CardMove = { label: 'Review', role: 'review', stage: 'review' };
-const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
+/** A pull request's own card is reviewed in Work's PR review, or in Reviewing on the Review board it was filed on. */
+function reviewMoves(item: MovableCard): { review: CardMove; reReview: CardMove } {
+  // Pull request cards with no board predate persisted boards and sit on Review.
+  const stage = (item.board ?? 'review') === 'review' ? 'review' : 'pr-review';
+  return {
+    review: { label: 'Review', role: 'review', stage },
+    reReview: { label: 'Re-review', role: 'review', stage },
+  };
+}
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
-  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
+  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [reviewMoves(item).reReview] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
   if (
@@ -52,7 +59,7 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   ) {
     return [INVESTIGATE, BUILD];
   }
-  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW] : [];
+  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [reviewMoves(item).review] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
@@ -63,7 +70,8 @@ function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): bo
   );
 }
 
-const WORKING_LANES: readonly FactoryRuleStage[] = Object.values(FACTORY_ROLE_STAGES);
+// PR review carries a pull request card's reviewer, after the builder's lanes.
+const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROLE_STAGES), 'pr-review'];
 
 /**
  * Resume re-enters the deepest working lane a card parked in Intake has been in, and lets

@@ -88,31 +88,13 @@
     "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "mistral-medium-2604": [
+    "glm-5-2": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-large-4-0-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high", "max"]
       }
     ],
     "mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "labs-leanstral-1-5-1": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -124,28 +106,22 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-3-flash": [
+    "mistral-large-4-0-8": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "mistral-small-2603": [
+    "mistral-medium-2604": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "deepseek-v4-1-flash-1017": [
+    "magistral-medium-latest": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "zai-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
     "mistral-large-4": [
@@ -154,10 +130,34 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-5-2": [
+    "labs-leanstral-1-5-1": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "zai-glm-5-2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "zai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "zai-glm-5-3": [

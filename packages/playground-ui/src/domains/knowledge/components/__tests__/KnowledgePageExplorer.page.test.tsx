@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -138,6 +138,29 @@ function Host({
   );
 }
 
+/** Selection changed from outside the explorer, the way search or a link picks a page. */
+function OutsidePickerHost() {
+  const [selected, setSelected] = useState<string | null>('child-2');
+  return (
+    <>
+      <button type="button" onClick={() => setSelected(null)}>
+        Clear selection
+      </button>
+      <button type="button" onClick={() => setSelected('child-2')}>
+        Pick child-2
+      </button>
+      <KnowledgePageExplorer
+        graph={graph}
+        source={source}
+        selectedPageId={selected}
+        onSelect={setSelected}
+        view="page"
+        onViewChange={() => {}}
+      />
+    </>
+  );
+}
+
 beforeAll(() => {
   window.ResizeObserver ??= class {
     observe() {}
@@ -239,12 +262,15 @@ describe('KnowledgePageExplorer page view', () => {
   });
 
   describe('when a page is clicked in the graph', () => {
-    const escalationNode = async () => {
-      const nodes = await screen.findAllByTestId('knowledge-page-node');
-      const node = nodes.find(n => n.textContent?.includes('Escalation Process'));
-      if (!node) throw new Error('no Escalation Process node');
-      return node;
-    };
+    // Escalation sits two links from the scope at the centre, so it starts as a dot and grows into a
+    // labelled circle once focused.
+    const escalationNode = () =>
+      waitFor(() => {
+        const node = document.querySelector<HTMLElement>('.react-flow__node [data-page-id="escalation"]');
+        if (!node) throw new Error('no Escalation Process node');
+        return node;
+      });
+    const graphNodes = () => [...document.querySelectorAll<HTMLElement>('.react-flow__node [data-page-id]')];
 
     it('selects it on the first click and stays on the graph', async () => {
       renderWithProviders(<Host />);
@@ -266,16 +292,20 @@ describe('KnowledgePageExplorer page view', () => {
     it('clears the selection on a click on empty canvas', async () => {
       const { container } = renderWithProviders(<Host />);
       fireEvent.click(await escalationNode());
-      expect(screen.getAllByTestId('knowledge-page-node').some(node => node.style.opacity === '0.35')).toBe(true);
+      expect(document.querySelector('.knowledge-graph')?.getAttribute('data-emphasis')).toBe('on');
+      expect(
+        graphNodes().some(node => !node.closest('.react-flow__node')?.classList.contains('knowledge-neighbour')),
+      ).toBe(true);
 
       const pane = container.querySelector('.react-flow__pane');
       if (!pane) throw new Error('no graph pane');
       fireEvent.pointerDown(pane, { clientX: 40, clientY: 40 });
       fireEvent.click(pane, { clientX: 40, clientY: 40 });
 
-      expect((await escalationNode()).querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(false);
+      // Unfocused again, it may shrink back to a dot; either way nothing marks it selected.
+      expect((await escalationNode()).querySelector('[data-selected]')).toBeNull();
       expect(screen.queryByRole('treeitem', { selected: true })).toBeNull();
-      expect(screen.getAllByTestId('knowledge-page-node').every(node => node.style.opacity === '1')).toBe(true);
+      expect(document.querySelector('.knowledge-graph')?.hasAttribute('data-emphasis')).toBe(false);
       expect(screen.getByTestId('view').textContent).toBe('graph');
     });
 
@@ -330,6 +360,34 @@ describe('KnowledgePageExplorer page view', () => {
       renderWithProviders(<Host initial="child-2" initialView="page" />);
       const tree = within(screen.getByRole('tree'));
       expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Child 2');
+    });
+
+    describe('when a parent of the selected page is collapsed', () => {
+      it('stays collapsed, hiding the selected page', () => {
+        renderWithProviders(<Host initial="child-2" initialView="page" />);
+        const tree = within(screen.getByRole('tree'));
+        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('false');
+        expect(tree.queryByRole('treeitem', { selected: true })).toBeNull();
+      });
+
+      it('opens the path again when another page is selected under it', async () => {
+        renderWithProviders(<Host initial="child-2" initialView="page" />);
+        const tree = within(screen.getByRole('tree'));
+        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(within(pageView()).getByRole('button', { name: /Refund Policy/ }));
+        expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Refund Policy');
+      });
+
+      it('opens the path again when the same page is picked after the selection was cleared', () => {
+        renderWithProviders(<OutsidePickerHost />);
+        const tree = within(screen.getByRole('tree'));
+        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick child-2' }));
+        expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('true');
+        expect(tree.getByRole('treeitem', { selected: true })).toBeTruthy();
+      });
     });
   });
 });
