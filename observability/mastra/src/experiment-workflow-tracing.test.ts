@@ -2,7 +2,7 @@ import { executeTarget } from '@mastra/core/datasets';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { createEventedWorkflow, createStep, createWorkflow } from '@mastra/core/workflows';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -10,14 +10,17 @@ import { Observability } from './default';
 import { TestExporter } from './exporters';
 
 /**
- * Regression test for workflow-target dataset experiments: every span of the
- * run, including the spans of an auto-resumed suspension, must carry the
- * experimentId so Studio can total cost, tokens and duration per experiment.
+ * Regression test for workflow-target dataset experiments (#29232): every span
+ * of the run, including the spans of an auto-resumed suspension, must carry the
+ * experimentId so Studio can total cost and tokens per experiment. Runs on both
+ * workflow engines because each creates its own workflow-run spans.
  */
+
+type Engine = 'default' | 'evented';
 
 const empty = z.object({});
 
-function buildWorkflow(exporter: TestExporter) {
+function buildMastra(engine: Engine, exporter: TestExporter) {
   const prepare = createStep({
     id: 'prepare',
     inputSchema: empty,
@@ -39,7 +42,7 @@ function buildWorkflow(exporter: TestExporter) {
     },
   });
 
-  const workflow = createWorkflow({
+  const workflow = (engine === 'evented' ? createEventedWorkflow : createWorkflow)({
     id: 'experiment-tracing-workflow',
     inputSchema: empty,
     outputSchema: z.object({ approved: z.boolean() }),
@@ -49,7 +52,7 @@ function buildWorkflow(exporter: TestExporter) {
     .then(approval)
     .commit();
 
-  new Mastra({
+  const mastra = new Mastra({
     logger: false,
     storage: new MockStore(),
     workflows: { 'experiment-tracing-workflow': workflow },
@@ -58,10 +61,25 @@ function buildWorkflow(exporter: TestExporter) {
     }),
   });
 
-  return workflow;
+  return { mastra, workflow };
 }
 
-describe('workflow-target experiment tracing', () => {
+async function runItem(engine: Engine, exporter: TestExporter, experimentId?: string) {
+  const { mastra, workflow } = buildMastra(engine, exporter);
+  try {
+    if (engine === 'evented') await mastra.startWorkers();
+    return await executeTarget(
+      workflow,
+      'workflow',
+      { input: {}, resumeData: { approved: true } },
+      experimentId ? { experimentId } : undefined,
+    );
+  } finally {
+    await mastra.shutdown();
+  }
+}
+
+describe.each(['default', 'evented'] as const)('workflow-target experiment tracing (%s engine)', engine => {
   let exporter: TestExporter;
 
   beforeEach(() => {
@@ -69,14 +87,7 @@ describe('workflow-target experiment tracing', () => {
   });
 
   it('tags every span of the started and resumed run with experimentId', async () => {
-    const workflow = buildWorkflow(exporter);
-
-    const result = await executeTarget(
-      workflow,
-      'workflow',
-      { input: {}, resumeData: { approved: true } },
-      { experimentId: 'exp-wf-1' },
-    );
+    const result = await runItem(engine, exporter, 'exp-wf-1');
 
     expect(result.error).toBeNull();
     expect(result.output).toEqual({ approved: true });
@@ -91,10 +102,19 @@ describe('workflow-target experiment tracing', () => {
     }
   });
 
-  it('leaves experimentId unset when the run is not part of an experiment', async () => {
-    const workflow = buildWorkflow(exporter);
+  // Studio matches each item's usage and trace link through the item result's traceId.
+  it('returns the trace id that the started and resumed spans were recorded under', async () => {
+    const result = await runItem(engine, exporter, 'exp-wf-1');
 
-    const result = await executeTarget(workflow, 'workflow', { input: {}, resumeData: { approved: true } });
+    expect(result.error).toBeNull();
+    const spans = exporter.getAllSpans();
+    expect(spans.length).toBeGreaterThan(0);
+    expect(result.traceId).toBeTruthy();
+    expect(new Set(spans.map(span => span.traceId))).toEqual(new Set([result.traceId]));
+  });
+
+  it('leaves experimentId unset when the run is not part of an experiment', async () => {
+    const result = await runItem(engine, exporter);
 
     expect(result.error).toBeNull();
     const spans = exporter.getAllSpans();
