@@ -28,7 +28,7 @@ describe('mastra dev/build in a monorepo app', () => {
     // The repo root has a stale install that is inconsistent with itself.
     writeJson(join(repoDir, 'package.json'), { name: 'repo', private: true });
     installPackage(repoDir, '@mastra/core', '1.46.0');
-    installPackage(repoDir, '@mastra/memory', '1.20.0', { '@mastra/core': '>=1.50.0-0 <2.0.0-0' });
+    installPackage(repoDir, '@mastra/memory', '1.20.0', { '@mastra/core': '>=1.47.0-0 <1.50.0-0' });
 
     writeJson(join(appDir, 'package.json'), {
       name: 'app',
@@ -69,7 +69,7 @@ describe('mastra dev/build in a monorepo app', () => {
         package: '@mastra/memory',
         packageVersion: '1.20.0',
         peerDep: '@mastra/core',
-        requiredRange: '>=1.50.0-0 <2.0.0-0',
+        requiredRange: '>=1.47.0-0 <1.50.0-0',
         installedVersion: '1.46.0',
       },
     ]);
