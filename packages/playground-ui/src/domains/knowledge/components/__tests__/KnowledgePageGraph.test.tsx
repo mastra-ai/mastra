@@ -425,7 +425,28 @@ describe('KnowledgePageGraph', () => {
     it('says in the legend which circle each dot colour hangs under', () => {
       renderGraph({ pages: deep });
       const rows = within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('knowledge-legend-branch');
-      expect(rows.map(row => row.textContent)).toEqual(['Under Support']);
+      expect(rows.map(row => row.textContent)).toEqual(['Under parent scope']);
+      expect(
+        within(rows[0])
+          .getByText('Under parent scope')
+          .getAttribute('title'),
+      ).toBe('Support');
+    });
+
+    it('says "Under parent page" when the dots hang under a page, not a scope', () => {
+      const pages = [
+        page('org', null, { name: 'Acme', address: 'org:acme' }),
+        page('guide', 'org', { name: 'Guide', key: 'guide' }),
+        page('a', 'guide', { name: 'A', key: 'a' }),
+        page('b', 'a', { name: 'B', key: 'b' }),
+        page('c', 'b', { name: 'C', key: 'c' }),
+        page('d', 'c', { name: 'D', key: 'd' }),
+      ];
+      renderGraph({ pages });
+      const rows = within(screen.getByRole('list', { name: 'Legend' })).queryAllByTestId('knowledge-legend-branch');
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.map(row => row.textContent)).not.toContain('Under parent scope');
+      expect(rows.every(row => row.textContent === 'Under parent page')).toBe(true);
     });
 
     it('leaves colours out of the legend when there are no dots', () => {

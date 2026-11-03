@@ -541,6 +541,14 @@ function PinBadge({ size }: { size: number }) {
   );
 }
 
+/** A colour the legend explains: the circle the dots of that colour hang under. */
+interface LegendBranch {
+  id: string;
+  name: string;
+  color: string;
+  scope: boolean;
+}
+
 type RimEdgeData = PageFlowEdge['data'] & { from: Circle; to: Circle; offset: EdgeOffset };
 
 function RimEdgeComponent({ id, data, style, markerEnd }: EdgeProps<Edge<RimEdgeData>>) {
@@ -616,7 +624,7 @@ function GraphLegend({
   /** Which kinds of higher-level circle are drawn, to explain their icons. */
   levels: GraphLevel[];
   /** The branches dots are coloured by, each named for the circle it hangs under. */
-  branches: Array<{ id: string; name: string; color: string }>;
+  branches: LegendBranch[];
 }) {
   return (
     <ul
@@ -678,8 +686,8 @@ function GraphLegend({
             style={{ background: branch.color }}
             aria-hidden
           />
-          <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate">
-            Under {branch.name}
+          <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate" title={branch.name}>
+            {branch.scope ? 'Under parent scope' : 'Under parent page'}
           </Txt>
         </li>
       ))}
@@ -1048,14 +1056,14 @@ function KnowledgePageGraphInner({
   }, [laidOut]);
   // Each dot takes its branch's colour; the legend says which circle each colour hangs under.
   const dotBranches = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string; color: string }>();
+    const seen = new Map<string, LegendBranch>();
     for (const node of laidOut.nodes) {
       if (laidOut.shape.form.get(node.id) !== 'dot' || isChildPlaceholder(node.data.page)) continue;
       const branch = laidOut.shape.branch.get(node.id);
       const color = branch ? laidOut.colors.get(branch) : undefined;
       const owner = branch ? pageById.get(branch) : undefined;
       if (branch && color && owner && !seen.has(branch))
-        seen.set(branch, { id: branch, name: owner.displayLabel ?? owner.name, color });
+        seen.set(branch, { id: branch, name: owner.displayLabel ?? owner.name, color, scope: !!owner.isScope });
     }
     return [...seen.values()];
   }, [laidOut, pageById]);
