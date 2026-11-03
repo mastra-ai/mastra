@@ -1546,10 +1546,21 @@ it.each(['released', 'taken over', 'released while unsubscribe fails'] as const)
     let successor: ExecutionFence | undefined;
     try {
       await worker.startWorkers();
-      const { runId } = await apiAgent.stream('Answer the question.', {
+      const output = await apiAgent.stream('Answer the question.', {
         runId: `caller-loss-${loss.replaceAll(' ', '-')}`,
         memory: { resource: 'resource', thread: 'thread' },
       });
+      const { runId } = output;
+      const streamEnd = (async () => {
+        let last: { type: string; message?: string } | undefined;
+        for await (const chunk of output.fullStream) {
+          last = {
+            type: chunk.type,
+            ...(chunk.type === 'error' ? { message: (chunk.payload.error as Error)?.message } : {}),
+          };
+        }
+        return last;
+      })().catch(() => undefined);
       await entered.promise;
       const started = execute.mock.results[0]!.value as Promise<unknown>;
       const outcome = started.then(
@@ -1583,6 +1594,13 @@ it.each(['released', 'taken over', 'released while unsubscribe fails'] as const)
       expect(publish.mock.calls.filter(([topic]) => topic === 'workflows' || topic === 'workflows-finish')).toEqual([]);
       expect(await workflows.getRunOwnership({ runId })).toEqual(ownership);
       expect(await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP })).toEqual(loopRow);
+      // Nobody else will publish to a released run's stream, so the caller's stream must end with the loss.
+      if (released) {
+        expect(await streamEnd).toEqual({
+          type: 'error',
+          message: expect.stringContaining('could not verify that this execution still owns the run'),
+        });
+      }
       if (loss === 'taken over') {
         expect(ownership).toMatchObject({ ownerId: successor!.executionId, generation: successor!.generation });
         expect(await workerPubsub.getLeaseOwner(threadKey)).toBe(threadOwner);

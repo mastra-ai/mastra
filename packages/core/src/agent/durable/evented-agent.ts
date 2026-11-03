@@ -15,7 +15,7 @@ import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
-import { setExecutionClaim } from './execution-fence';
+import { DurableExecutionFenceError, EXECUTION_UNVERIFIED_ERROR_ID, setExecutionClaim } from './execution-fence';
 import { getRunRegistryEntry } from './run-registry';
 import type { DurableAgenticWorkflowInput } from './types';
 import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic-workflow';
@@ -262,6 +262,13 @@ export class EventedAgent<
           error => {
             if (sharedExecution) {
               executionFence?.detach();
+              // A claim released with no successor leaves nobody to publish to this run's stream, so end it here
+              // without touching run state. After a takeover the successor publishes on the same topic.
+              if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_UNVERIFIED_ERROR_ID) {
+                return this.emitError(runId, error, executionFence?.generation).catch(publishError =>
+                  this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError }),
+                );
+              }
               this.getMastraInstance()
                 ?.getLogger()
                 ?.warn('Evented durable observer disconnected; workers retain settlement authority', {
