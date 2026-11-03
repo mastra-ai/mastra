@@ -322,7 +322,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         'pull-request',
       );
       for (let attempt = 0; attempt < 2; attempt++) {
-        await workItems.update({
+        await workItems.syncCard({
           ...scope,
           id: item.id,
           patch: {
@@ -354,14 +354,46 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
       const refreshed = await workItems.get({ orgId: scope.orgId, id: item.id });
       expect(refreshed).toMatchObject({
         revision: item.revision + (clearsSettled ? 1 : 0),
-        workItem: { state: 'open', author: 'maintainer', labels: ['updated'] },
-        metadata: { draft: false, merged: false, authorTrusted: false },
+        workItem: {
+          state: 'open',
+          author: 'maintainer',
+          labels: ['updated'],
+          metadata: { draft: false, merged: false },
+        },
+        metadata: { authorTrusted: false },
       });
       if (reconciliation === undefined)
         expect(refreshed!.metadata).not.toHaveProperty('factoryPullRequestReconciliation');
       else expect(refreshed!.metadata?.factoryPullRequestReconciliation).toBeNull();
     },
   );
+
+  it('still invalidates pending rules when a provider refresh changes a real trust stamp', async () => {
+    const { workItems, scope, item } = await setup();
+    const refreshed = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      patch: { metadata: { author: 'maintainer', authorTrusted: true, factoryPullRequestReconciliation: null } },
+    });
+    expect(refreshed?.item).toMatchObject({
+      revision: item.revision + 1,
+      metadata: { authorTrusted: true },
+      workItem: { author: 'maintainer' },
+    });
+    const commit = await workItems.commitRuleEvaluation({
+      ...scope,
+      workItemId: item.id,
+      expectedRevision: item.revision,
+      ingress: { identity: 'after-trust-change', triggerType: 'test' },
+      configVersion: '1',
+      actor: null,
+      outcome: { status: 'accepted' },
+      decisions: [],
+      causalChain: [],
+      now: new Date(),
+    });
+    expect(commit.status).toBe('stale');
+  });
 
   it.each(['update', 'non-stage upsert'] as const)(
     'keeps a pending rule valid through a provider %s and refreshes cached facts',
