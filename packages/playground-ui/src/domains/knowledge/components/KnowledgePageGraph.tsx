@@ -32,6 +32,7 @@ import {
   isRestCircle,
   isScopeGroup,
   radialLayout,
+  REST_BATCH,
 } from '../lib/graphShape';
 import type { GraphLevel, GraphNodeForm } from '../lib/graphShape';
 import { runLayout } from '../lib/layout';
@@ -382,13 +383,13 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       data-testid="knowledge-page-node"
       data-page-id={page.id}
       data-page-type={placeholder ? 'placeholder' : rest ? 'rest' : group ? 'group' : page.isScope ? 'scope' : 'page'}
-      className={`relative transition-opacity ${placeholder || rest ? 'cursor-default' : 'cursor-pointer'}`}
+      className={`relative transition-opacity ${placeholder ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ width: size, height: size }}
       title={
         placeholder
           ? `${kind} · ${page.address} · nothing written to it yet`
           : rest
-            ? `${page.name} pages not drawn. Open the tree to see them all.`
+            ? `Show ${Math.min(REST_BATCH, page.childCount ?? REST_BATCH)} more of ${page.childCount ?? 'the rest'}`
             : group
               ? `${page.name}: click to show them`
               : page.isScope && page.address
@@ -397,7 +398,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       }
     >
       <div
-        className="knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 text-center shadow-raised"
+        className={`knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 text-center shadow-raised ${rest ? 'hover:border-foreground' : ''}`}
         data-selected={selected || undefined}
         data-far={data.far || undefined}
         style={{

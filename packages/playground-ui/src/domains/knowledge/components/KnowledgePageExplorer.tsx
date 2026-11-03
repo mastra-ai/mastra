@@ -1,7 +1,7 @@
 import { ArrowLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
+import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
 import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
@@ -643,6 +643,8 @@ export function KnowledgePageExplorer({
   const [graphOpened, setGraphOpened] = useState<readonly string[]>([]);
   const [previewed, setPreviewed] = useState<readonly string[]>([]);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
+  // Children drawn past the cap, per parent, as its "+N more" circle is clicked.
+  const [revealed, setRevealed] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [allLinks, setAllLinks] = useState(false);
   const [dotCounts, setDotCounts] = useState(true);
   const lazy = useLazyTree(source, graph, selected.data, graphOpened);
@@ -658,6 +660,7 @@ export function KnowledgePageExplorer({
             rootKey: KNOWLEDGE_TREE_ROOT,
             focusId: selectedPageId,
             openGroups,
+            revealed,
           })
         : {
             pages: graph.pages,
@@ -665,7 +668,7 @@ export function KnowledgePageExplorer({
             wanted: [],
             hub: null,
           },
-    [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, graph.pages],
+    [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, revealed, graph.pages],
   );
   // The pages the focus needs are in (or failed to load): only then does the graph move to the new focus.
   const graphSettled = !lazyMode || drawnGraph.wanted.every(id => lazy.loaded.has(id) || lazy.failed.has(id));
@@ -1018,7 +1021,13 @@ export function KnowledgePageExplorer({
                 onSelect={page => {
                   // A stand-in loads its parent's children; a scope group opens into its scopes.
                   if (isChildPlaceholder(page)) return page.parentId ? previewParent(page.parentId) : undefined;
-                  if (isRestCircle(page)) return undefined;
+                  if (isRestCircle(page)) {
+                    const parentId = page.parentId;
+                    if (!parentId) return undefined;
+                    setRevealed(current => new Map(current).set(parentId, (current.get(parentId) ?? 0) + REST_BATCH));
+                    // Past the children loaded so far, fetch the next chunk too.
+                    return lazy.loadMore.get(parentId)?.();
+                  }
                   if (isScopeGroup(page)) return setOpenGroups(current => new Set(current).add(page.id));
                   onSelect(page.id);
                   // Hosts resolve a `?page=` with no view to the page view, so say graph outright.

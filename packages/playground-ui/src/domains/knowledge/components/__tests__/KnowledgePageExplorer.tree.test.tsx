@@ -266,6 +266,31 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       );
     });
 
+    describe('when the "+N more" circle is clicked', () => {
+      const restNode = () => document.querySelector<HTMLElement>('.react-flow__node [data-page-id="rest:site"]');
+      const clickRest = () => {
+        const node = restNode()?.closest('.react-flow__node');
+        if (!node) throw new Error('no +N more circle');
+        fireEvent.click(node);
+      };
+      const drawnChildren = (container: HTMLElement) =>
+        container.querySelectorAll('.react-flow__node [data-page-type="page"]').length;
+
+      it('draws the next batch of children, counting down, until the circle is gone', () => {
+        const { container } = renderWithProviders(<Host requested={[]} extraSiblings={60} siteChildCount={62} />);
+        fireEvent.click(row('site:mastra'));
+        expect(restNode()?.textContent).toContain('+14 more');
+        expect(restNode()?.getAttribute('title')).toBe('Show 12 more of 14');
+        expect(restNode()?.className).toContain('cursor-pointer');
+        const before = drawnChildren(container);
+        clickRest();
+        expect(drawnChildren(container)).toBe(before + 12);
+        expect(restNode()?.textContent).toContain('+2 more');
+        clickRest();
+        expect(restNode()).toBeNull();
+      });
+    });
+
     it('says nothing more when every child is drawn', () => {
       renderWithProviders(<Host requested={[]} />);
       fireEvent.click(row('site:mastra'));

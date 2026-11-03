@@ -400,6 +400,8 @@ export function branchColors(pages: readonly KnowledgePagePayload[], shape: Grap
 export const READABLE_MIN_ZOOM = 0.7;
 /** Children a drawn page shows at most; the rest are counted, not drawn. */
 export const GRAPH_CHILD_CAP = 48;
+/** How many more children a click on a "+N more" circle draws. */
+export const REST_BATCH = 12;
 /** Stand-in dots drawn at most for a page whose children haven't loaded yet. */
 export const PLACEHOLDER_CAP = 8;
 /** Most circles whose children are loaded just to draw them as dots around it. */
@@ -455,6 +457,8 @@ export interface LazyGraphInput {
   focusId: string | null;
   /** Scope groups the user opened, by group id. */
   openGroups: ReadonlySet<string>;
+  /** Children drawn past the cap, per parent: what clicks on its "+N more" circle have revealed. */
+  revealed?: ReadonlyMap<string, number>;
   cap?: number;
 }
 
@@ -563,7 +567,7 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
         drawnKids++;
         continue;
       }
-      if (drawnKids >= cap) break;
+      if (drawnKids >= cap + (input.revealed?.get(id) ?? 0)) break;
       add(kid, at + 1);
       drawnKids++;
     }

@@ -14,6 +14,7 @@ import {
   graphShape,
   isChildPlaceholder,
   isRestCircle,
+  REST_BATCH,
   isScopeGroup,
   lazyGraph,
   radialLayout,
@@ -388,6 +389,24 @@ describe('lazyGraph', () => {
     const rest = graph.pages.find(isRestCircle);
     expect(rest?.name).toBe(`+${60 - GRAPH_CHILD_CAP} more`);
     expect(rest?.parentId).toBe('blog');
+  });
+
+  it('draws a batch more children for each reveal, and drops the rest circle once all are drawn', () => {
+    const many = Array.from({ length: 60 }, (_, index) => page(`p${String(index).padStart(2, '0')}`, 'blog'));
+    const input = {
+      ...base,
+      pages: [page('site', null), page('blog', 'site', { childCount: 60 }), ...many],
+      loadedParents: new Set(['', 'site', 'blog']),
+      focusId: 'blog',
+    };
+    const kids = (graph: ReturnType<typeof lazyGraph>) =>
+      graph.pages.filter(candidate => candidate.parentId === 'blog' && !isRestCircle(candidate)).length;
+    const once = lazyGraph({ ...input, revealed: new Map([['blog', REST_BATCH]]) });
+    expect(kids(once)).toBe(GRAPH_CHILD_CAP + REST_BATCH);
+    expect(once.pages.find(isRestCircle)).toBeUndefined();
+    const part = lazyGraph({ ...input, cap: 40, revealed: new Map([['blog', 5]]) });
+    expect(kids(part)).toBe(45);
+    expect(part.pages.find(isRestCircle)?.name).toBe('+15 more');
   });
 
   it('collapses sibling memory scopes into one circle per type until opened, but not under the focus', () => {
