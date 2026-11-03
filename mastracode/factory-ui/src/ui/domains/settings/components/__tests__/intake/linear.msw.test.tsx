@@ -373,6 +373,17 @@ describe('IntakeSection linear', () => {
 
       await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject, deletedProject]));
     });
+
+    it('labels a team missing from a connected workspace as an unknown team', async () => {
+      const deletedTeam = encode('linear-team:', { workspaceId: 'ws-live', teamId: 't-deleted' });
+      const saved = useWorkspaceHandlers([liveProject, deletedProject, deletedTeam]);
+
+      renderIntakeSection();
+      expect(await screen.findByRole('button', { name: 'Remove Unknown Linear project' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Unknown Linear team' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject, deletedProject]));
+    });
   });
 
   describe('given Linear is connected', () => {
