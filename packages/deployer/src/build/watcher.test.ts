@@ -3,6 +3,7 @@ import { watch } from 'rolldown';
 import type { RolldownWatcher, RolldownWatcherEvent } from 'rolldown';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as BundlerModule from './bundler';
+import { chunkFileNames } from './rolldown';
 import { createWatcher, getInputOptions } from './watcher';
 
 vi.mock('rolldown', async importOriginal => ({
@@ -273,7 +274,7 @@ describe('watcher', () => {
             dir: '/out',
             format: 'esm',
             entryFileNames: '[name].mjs',
-            chunkFileNames: '[name].mjs',
+            chunkFileNames,
           }),
         }),
       );

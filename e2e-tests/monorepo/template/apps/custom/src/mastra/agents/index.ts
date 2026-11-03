@@ -4,7 +4,7 @@ import { MastraBrowser } from '@mastra/core/browser';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { tmpdir } from 'os';
 import { toolUsingNativeBindings, toolWithNativeBindingPackageDep } from '@inner/inner-tools';
-import { lodashTool } from '@/tools/lodash';
+import { lodashTool } from '@/tools/index';
 import { calculatorTool } from '@/tools/calculator-tool';
 import { helloWorldTool } from '@inner/hello-world';
 

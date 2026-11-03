@@ -16,6 +16,7 @@ import {
   EXTERNAL_PROTOCOL_RE,
   TREESHAKE_SMALLEST,
   bundlerLogLevel,
+  chunkFileNames,
   cjsGlobalsDefine,
   exactIdsRegex,
   getPlatformOptions,
@@ -199,7 +200,7 @@ export async function createBundler(
         ...outputOptions,
         format: 'esm',
         entryFileNames: '[name].mjs',
-        chunkFileNames: '[name].mjs',
+        chunkFileNames,
       });
     },
     close: () => {

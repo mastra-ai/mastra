@@ -1,4 +1,4 @@
-import type { InputOptions, TreeshakingOptions } from 'rolldown';
+import type { InputOptions, PreRenderedChunk, TreeshakingOptions } from 'rolldown';
 import type { BundlerPlatform } from '../utils';
 
 /**
@@ -11,6 +11,15 @@ export const TREESHAKE_SMALLEST: TreeshakingOptions = {
   unknownGlobalSideEffects: false,
   annotations: true,
 };
+
+/**
+ * `tools.mjs` is the tools manifest written next to the bundle (`#tools` resolves to it as an external). Rolldown names
+ * a shared chunk after the directory of an `index` module, so `src/mastra/tools/index.ts` would also become
+ * `tools.mjs`. Lowercased because macOS and Windows filesystems are case-insensitive.
+ */
+export function chunkFileNames(chunk: PreRenderedChunk): string {
+  return chunk.name.toLowerCase() === 'tools' ? '[name]-[hash].mjs' : '[name].mjs';
+}
 
 export const bundlerLogLevel = (): InputOptions['logLevel'] =>
   process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent';

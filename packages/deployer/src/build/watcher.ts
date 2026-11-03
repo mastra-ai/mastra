@@ -7,6 +7,7 @@ import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import { analyzeBundle } from './analyze';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { workspaceDepsWatcher } from './plugins/workspace-deps-watcher';
+import { chunkFileNames } from './rolldown';
 import type { BundlerOptions } from './types';
 import { getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
@@ -100,7 +101,7 @@ export async function createWatcher(
       ...outputOptions,
       format: 'esm',
       entryFileNames: '[name].mjs',
-      chunkFileNames: '[name].mjs',
+      chunkFileNames,
     },
   });
 
