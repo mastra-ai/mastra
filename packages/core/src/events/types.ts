@@ -13,6 +13,8 @@ export type Event = {
    * seen: a newer execution has taken the run over.
    */
   generation?: number;
+  /** Iteration index for durable agent execution boundary events. */
+  stepIndex?: number;
   /**
    * Position of this event in its topic's log.
    *
