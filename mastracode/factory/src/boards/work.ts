@@ -301,6 +301,12 @@ export function workPullRequestCardRejection(isPullRequest: boolean, toStage: st
   return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to pr-review, done, or canceled.`;
 }
 
+/**
+ * The numbered version of Work's default definition. Unedited project copies of an older version
+ * are upgraded to this one when a project's boards load; bump it whenever the default changes.
+ */
+export const WORK_BOARD_DEFAULT_VERSION = 1;
+
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
   name: 'Work',
