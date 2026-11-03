@@ -182,7 +182,7 @@
   .mastra-markdown thead::after {
     content: '';
     display: table-row;
-    height: var(--spacing);
+    height: 1px;
   }
 
   .mastra-markdown :is(th, td):first-child {
