@@ -1,16 +1,17 @@
 /**
- * Shared agent for the resume-context regression test (issue #19873).
+ * Shared agent for the resume-context regression test (issue #19873) and the resumed-segment
+ * tracing test (OBS-754).
  *
  * A durable run that suspends for tool approval must, on resume, see the SAME `requestContext` it
- * had on the initial run and continue the SAME trace. Both are lost today because the Inngest
- * engine's suspend snapshot never persists `requestContext`/`tracingContext`.
+ * had on the initial run and continue the SAME trace, with the resumed execution recorded as its own
+ * AGENT_RUN under the suspended one.
  *
  * The tool records the `tenant` it observed from `requestContext` into a file under a per-run OUT
  * dir, so the driver process (which can't see the worker's memory) can assert what the resumed tool
- * saw. Observability is configured so the workflow root span gets a real traceId — the test compares
- * the suspend snapshot's traceId with the resumed run's to prove the trace is continuous.
+ * saw. Every process also appends its span starts and ends to `${outDir}/span-events.jsonl`, so the
+ * driver can check who ended which span.
  *
- * Both the driver and the connect() worker build the SAME agent from this factory, mirroring
+ * The driver, the connect() worker and the resumer build the SAME agent from this factory, mirroring
  * production where a web replica and a worker pool each construct the agent from the same code but
  * keep their own in-memory globalRunRegistry.
  */
@@ -27,27 +28,41 @@ import { z } from 'zod';
 
 import { createInngestAgent } from '../../durable-agent';
 import { createInngestDurableAgenticWorkflow } from '../../durable-agent/create-inngest-agentic-workflow';
+import { SpanEventsExporter } from './span-events';
 
-/** First turn calls the approval tool; a later turn answers with text. */
-function toolCallThenText(): any {
-  let call = 0;
+export const SPAN_EVENTS_FILE = 'span-events.jsonl';
+
+function promptText(prompt: Array<{ role: string; content: unknown }>): string {
+  const user = prompt.find(message => message.role === 'user');
+  const content = user?.content;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map(part => (part as { text?: string }).text ?? '').join(' ');
+  return '';
+}
+
+/**
+ * Calls the approval tool once per note the user asked for ("save 2 notes"), then answers with text.
+ * Scripted from the transcript, so every process agrees on the turn after a worker restart.
+ */
+function saveNotesThenText(): any {
   return {
     specificationVersion: 'v2',
     provider: 'mock',
     modelId: 'mock-model',
     supportedUrls: {},
-    async doStream() {
-      call++;
+    async doStream({ prompt }: { prompt: Array<{ role: string; content: unknown }> }) {
+      const wanted = Number(/save (\d+) note/i.exec(promptText(prompt))?.[1] ?? 1);
+      const saved = prompt.filter(message => message.role === 'tool').length;
       const chunks =
-        call === 1
+        saved < wanted
           ? [
               { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
+              { type: 'response-metadata', id: `id-${saved}`, modelId: 'mock-model', timestamp: new Date(0) },
               {
                 type: 'tool-call',
-                toolCallId: 'call-1',
+                toolCallId: `call-${saved + 1}`,
                 toolName: 'save_note',
-                input: JSON.stringify({ text: 'note' }),
+                input: JSON.stringify({ text: `note ${saved + 1}` }),
                 providerExecuted: false,
               },
               {
@@ -58,7 +73,7 @@ function toolCallThenText(): any {
             ]
           : [
               { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model', timestamp: new Date(0) },
+              { type: 'response-metadata', id: `id-${saved}`, modelId: 'mock-model', timestamp: new Date(0) },
               { type: 'text-start', id: 't1' },
               { type: 'text-delta', id: 't1', delta: 'Done.' },
               { type: 'text-end', id: 't1' },
@@ -77,11 +92,14 @@ export function buildResumeContextAgent({
   agentId,
   inngestPort,
   outDir,
+  role,
 }: {
   dbUrl: string;
   agentId: string;
   inngestPort: number;
   outDir: string;
+  /** Which process this is, recorded on every span event it writes. */
+  role: string;
 }) {
   const inngest = new Inngest({ id: 'resume-context-test', baseUrl: `http://localhost:${inngestPort}` });
 
@@ -115,7 +133,7 @@ export function buildResumeContextAgent({
     id: agentId,
     name: 'Resume Context Agent',
     instructions: 'Call save_note, then confirm.',
-    model: toolCallThenText(),
+    model: saveNotesThenText(),
     tools: { save_note: saveNote },
     memory: new Memory({ storage }),
   });
@@ -128,7 +146,12 @@ export function buildResumeContextAgent({
     agents: { [agentId]: durableAgent } as any,
     workflows: { [workflow.id]: workflow } as any,
     observability: new Observability({
-      configs: { default: { serviceName: 'resume-context-test', exporters: [new MastraStorageExporter()] } },
+      configs: {
+        default: {
+          serviceName: 'resume-context-test',
+          exporters: [new MastraStorageExporter(), new SpanEventsExporter(`${outDir}/${SPAN_EVENTS_FILE}`, role)],
+        },
+      },
     }),
   });
 
