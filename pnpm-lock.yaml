@@ -5635,9 +5635,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/platform-memory':
+        specifier: workspace:*
+        version: link:../../platform/memory
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

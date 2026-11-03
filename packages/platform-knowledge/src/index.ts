@@ -14,9 +14,8 @@ export interface PlatformKnowledgeOptions extends Omit<KnowledgeConfig, 'storage
 // These are the schema-v4 page-store methods, not arbitrary object properties or storage lifecycle methods.
 const operations = [
   'materializeScope', 'getScopesByAddress', 'listScopeDeclarations', 'renameScopeDeclaration',
-  'listChildScopes', 'countChildScopes', 'getPage', 'getPages', 'getPageByPath', 'findPagesByName',
-  'listChildPages', 'countChildPages', 'replacePageBodyLinks', 'listPageBodyLinkSources',
-  'countPageLinks', 'listPageLinks', 'listPages', 'createPage', 'updatePage', 'movePage',
+  'listChildScopes', 'getPage', 'getPages', 'getPageByPath', 'findPagesByName',
+  'listChildPages', 'countChildPages', 'listPages', 'createPage', 'updatePage', 'movePage',
   'mergePages', 'deletePage', 'getNote', 'countNotes', 'listNotes', 'listNotesMentioning',
   'addNote', 'restampNote', 'removeNote', 'restoreNote', 'searchPages', 'listPageActivity',
   'addPinAudience', 'removePinAudience', 'listPins',
