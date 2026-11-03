@@ -1,6 +1,6 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ import {
   experiment,
   results,
 } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
+import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -120,6 +121,45 @@ const renderPage = (search = '') => {
 };
 
 describe('Review Queue page', () => {
+  describe('when an experiment has more flagged results than one page', () => {
+    const { intersect } = useMockIntersectionObserver();
+    const flagged = Array.from({ length: 150 }, (_, index) => ({
+      ...results[2],
+      id: `res-flagged-${index}`,
+      itemId: `item-flagged-${index}`,
+      input: { q: `flagged question ${index}` },
+    }));
+
+    it('shows the first page, then loads the rest when the user scrolls to the end', async () => {
+      const requestedPages: string[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const status = query.get('status');
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          const list = flagged.filter(r => r.status === status);
+          if (status === 'needs-review') requestedPages.push(String(page));
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      await screen.findByText(/flagged question 99\b/);
+      expect(screen.queryByText(/flagged question 120\b/)).toBeNull();
+      expect(requestedPages).toEqual(['0']);
+
+      act(() => intersect(true));
+
+      await screen.findByText(/flagged question 120\b/);
+      expect(screen.getByText(/flagged question 0\b/)).toBeTruthy();
+      expect(requestedPages).toEqual(['0', '1']);
+    });
+  });
+
   describe('when no experiment is selected', () => {
     it('lists items awaiting review across every experiment', async () => {
       renderPage();
