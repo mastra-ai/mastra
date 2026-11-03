@@ -24,6 +24,7 @@ import { getNeedsApprovalFn } from '../../tools/toolchecks';
 import type { IdGeneratorContext } from '../../types';
 import { safeStringify } from '../../utils/safe-stringify';
 import { createWorkflow } from '../../workflows/create';
+import { loadStepResults } from '../../workflows/run-journal';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
@@ -1323,7 +1324,9 @@ export async function createNetworkLoop({
 
       let runSuccess = true;
 
-      const workflowState = await stream.result;
+      const runResult = await stream.result;
+      // The whole run result goes to memory and the stream, so a storage v2 result's steps are loaded back.
+      const workflowState = runResult && { ...runResult, steps: await loadStepResults(runResult.steps) };
 
       if (!workflowState?.status || workflowState?.status === 'failed') {
         runSuccess = false;

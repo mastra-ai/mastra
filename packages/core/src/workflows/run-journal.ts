@@ -793,3 +793,13 @@ export function loadedStepResults(stepResults: StepResults): () => Promise<StepR
 export function residentStepResults(steps: unknown): StepResults | undefined {
   return typeof steps === 'function' ? residentResults.get(steps) : undefined;
 }
+
+/**
+ * Every step result of a run's result: a storage v2 result's `steps` loader is called, a v1
+ * result's record returned as is. For the framework's readers that hand all of them on.
+ *
+ * @internal
+ */
+export async function loadStepResults(steps: unknown): Promise<StepResults> {
+  return typeof steps === 'function' ? steps() : (steps as StepResults);
+}
