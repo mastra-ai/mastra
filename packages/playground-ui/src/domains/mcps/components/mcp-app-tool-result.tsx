@@ -59,6 +59,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
       toolResult={toolResult}
       onToolCall={readOnly ? undefined : handleToolCall}
       onSendMessage={readOnly ? undefined : onSendMessage}
+      className="rounded-md border border-border"
     />
   );
 }
