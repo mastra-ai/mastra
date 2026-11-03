@@ -95,6 +95,17 @@ describe('CitationMarkupStreamSanitizer', () => {
     expect(JSON.parse(expected)).toEqual({ text: 'Answer', path: 'C:\\tmp\nx"y' });
   });
 
+  it('keeps an escaped backslash before u + E200 text in tool-input deltas', () => {
+    // JSON for the literal string "\ue200cite" followed by raw marker separator/end characters.
+    const json = '{"text":"a\\\\ue200cite\uE202turn0search0\uE201"}';
+    const sanitizer = new CitationMarkupStreamSanitizer({ json: true });
+    for (const size of [1, 2, 3, 4, 50]) {
+      const deltas = json.match(new RegExp(`[\\s\\S]{1,${size}}`, 'g')) ?? [];
+      expect(pushAll(sanitizer, `call-${size}`, deltas)).toBe(stripCitationMarkupFromToolInput(json));
+    }
+    expect(stripCitationMarkupFromToolInput(json)).toBe(json);
+  });
+
   it('tracks ids independently', () => {
     const sanitizer = new CitationMarkupStreamSanitizer();
     const marker = cite('turn0search0');

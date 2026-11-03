@@ -33,10 +33,22 @@ export function stripCitationMarkup(text: string): string {
   return text.includes(CITATION_START) ? text.replace(CITATION_MARKER_RE, '') : text;
 }
 
-function stripCitationMarkupFromJson(json: string): string {
-  return json.includes(CITATION_START) || ESCAPED_CITATION_START_RE.test(json)
-    ? json.replace(JSON_CITATION_MARKER_RE, '')
-    : json;
+/**
+ * Whether the character at `offset` is escaped by an odd run of backslashes.
+ * `carryOdd` is the parity of backslashes that end text already emitted.
+ */
+function isEscaped(text: string, offset: number, carryOdd = false): boolean {
+  let i = offset;
+  while (i > 0 && text[i - 1] === '\\') i--;
+  return ((offset - i) % 2 === 1) !== (i === 0 && carryOdd);
+}
+
+function stripCitationMarkupFromJson(json: string, carryOdd = false): string {
+  if (!json.includes(CITATION_START) && !ESCAPED_CITATION_START_RE.test(json)) return json;
+  // After an odd run of backslashes, `\u` is literal text rather than an escape.
+  return json.replace(JSON_CITATION_MARKER_RE, (marker, offset: number) =>
+    marker.startsWith('\\') && isEscaped(json, offset, carryOdd) ? marker : '',
+  );
 }
 
 function stripCitationMarkupDeep(value: unknown): unknown {
@@ -74,6 +86,8 @@ export function stripCitationMarkupFromToolInput(input: string): string {
  */
 export class CitationMarkupStreamSanitizer {
   #pending = new Map<string, string>();
+  // Ids whose emitted JSON ends with an odd run of backslashes.
+  #oddTrailingBackslash = new Set<string>();
   readonly #json: boolean;
 
   constructor({ json = false }: { json?: boolean } = {}) {
@@ -85,8 +99,20 @@ export class CitationMarkupStreamSanitizer {
     if (pending === undefined && !this.#mayContainMarker(delta)) return delta;
 
     const joined = (pending ?? '') + delta;
-    const text = this.#json ? stripCitationMarkupFromJson(joined) : stripCitationMarkup(joined);
-    const start = this.#partialMarkerStart(text);
+    if (!this.#json) {
+      const text = stripCitationMarkup(joined);
+      return this.#release(id, text, this.#partialMarkerStart(text));
+    }
+    const carryOdd = this.#oddTrailingBackslash.has(id);
+    const text = stripCitationMarkupFromJson(joined, carryOdd);
+    const start = this.#partialMarkerStart(text, carryOdd);
+    const released = this.#release(id, text, start);
+    if (released && isEscaped(released + 'x', released.length, carryOdd)) this.#oddTrailingBackslash.add(id);
+    else if (released) this.#oddTrailingBackslash.delete(id);
+    return released;
+  }
+
+  #release(id: string, text: string, start: number): string {
     if (start === -1) {
       this.#pending.delete(id);
       return text;
@@ -99,6 +125,7 @@ export class CitationMarkupStreamSanitizer {
   flush(id: string): string {
     const pending = this.#pending.get(id);
     this.#pending.delete(id);
+    this.#oddTrailingBackslash.delete(id);
     return pending ?? '';
   }
 
@@ -106,6 +133,7 @@ export class CitationMarkupStreamSanitizer {
   flushAll(): Array<[id: string, text: string]> {
     const entries = [...this.#pending.entries()];
     this.#pending.clear();
+    this.#oddTrailingBackslash.clear();
     return entries;
   }
 
@@ -118,13 +146,14 @@ export class CitationMarkupStreamSanitizer {
    * only contains word characters, `-`, marker characters and (in JSON)
    * backslashes, so the search is limited to the trailing run of those.
    */
-  #partialMarkerStart(text: string): number {
+  #partialMarkerStart(text: string, carryOdd = false): number {
     const partialRe = this.#json ? JSON_PARTIAL_CITATION_MARKER_RE : PARTIAL_CITATION_MARKER_RE;
     let runStart = text.length;
     while (runStart > 0 && /[\w\-\uE200\uE202\\]/.test(text[runStart - 1]!)) runStart--;
     for (let i = runStart; i < text.length; i++) {
       const ch = text[i];
-      if ((ch === CITATION_START || (this.#json && ch === '\\')) && partialRe.test(text.slice(i))) return i;
+      const isStart = ch === CITATION_START || (this.#json && ch === '\\' && !isEscaped(text, i, carryOdd));
+      if (isStart && partialRe.test(text.slice(i))) return i;
     }
     return -1;
   }
