@@ -6,4 +6,4 @@ Fixed `mastra build` installing different dependency versions than your pnpm pro
 
 Also fixed `mastra build` failing with `Source contains multiple documents` in monorepos that pack workspace packages. This happened when `packageManager` is set and pnpm 11 or later starts `pnpm-lock.yaml` with an environment document.
 
-Settings in `pnpm-workspace.yaml` written with quoted keys, such as `"allowBuilds":`, are now copied to the build output. Lines the build does not copy, such as a registry auth token, are no longer copied along with the setting above them.
+Settings in `pnpm-workspace.yaml` written with quoted keys, such as `"allowBuilds":`, are now copied to the build output. Unrelated lines next to them, such as a registry auth token, are no longer copied.

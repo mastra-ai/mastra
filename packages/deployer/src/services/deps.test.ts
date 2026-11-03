@@ -99,6 +99,13 @@ describe('copyPnpmWorkspaceSettings', () => {
     expect((error as Error).message).toContain(invalidEntry);
   });
 
+  it('copies build approvals written as YAML explicit keys', () => {
+    expect(parse(copyPnpmWorkspaceSettings('? onlyBuiltDependencies\n: [esbuild]\n'))).toEqual({
+      packages: ['.'],
+      onlyBuiltDependencies: ['esbuild'],
+    });
+  });
+
   it('uses requested architecture over source supportedArchitectures', () => {
     const output = copyPnpmWorkspaceSettings(
       `packages:\n  - packages/*\n\nsupportedArchitectures:\n  os: ["linux"]\n`,

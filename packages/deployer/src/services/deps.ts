@@ -364,20 +364,27 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     }
   }
 
-  // pnpm 10 also reads these keys from the `pnpm` field of package.json. The workspace file wins when both set one,
-  // including keys the line scanner can't name, such as YAML explicit `? key` entries.
-  let sourceKeys: string[] = [];
+  // The scanner keeps the source formatting but can't name every key, such as YAML explicit `? key` entries.
+  // Those settings are copied from the parsed file instead.
+  let parsedSource: Record<string, unknown> = {};
   try {
     const parsed = parse(source);
-    sourceKeys = isRecord(parsed) ? Object.keys(parsed) : [];
+    parsedSource = isRecord(parsed) ? parsed : {};
   } catch {
     // An unparsable workspace file falls back to the keys the scanner copied.
   }
-  for (const [key, value] of Object.entries(options.pnpmManifestSettings ?? {})) {
-    if (copiedKeys.has(key) || sourceKeys.includes(key) || !shouldCopy(key) || value === undefined) continue;
+
+  // pnpm 10 also reads these keys from the `pnpm` field of package.json. The workspace file wins when both set one.
+  const sourceSettings = [
+    ...Object.entries(parsedSource),
+    ...Object.entries(options.pnpmManifestSettings ?? {}).filter(([key]) => !Object.hasOwn(parsedSource, key)),
+  ];
+  for (const [key, value] of sourceSettings) {
+    if (copiedKeys.has(key) || !shouldCopy(key) || value === undefined) continue;
     const block = stringify({ [key]: value }).trimEnd();
     validatePnpmBuildApprovals(key, block);
     blocks.push(block);
+    copiedKeys.add(key);
   }
 
   if (hasArchitecture) {
