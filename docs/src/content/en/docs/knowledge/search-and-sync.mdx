@@ -43,7 +43,7 @@ Pages and notes written through the tools are embedded as they're written. Scope
 
 A page too long for one embedding is embedded as overlapping chunks of about 2,000 tokens, cut between paragraphs and before headings. Each chunk starts with the page's name and description. Search still returns the page once, ranked by its best chunk. A page gets at most 100 chunks, about 200,000 tokens of body. Search finds the rest of a longer body by keyword only. Rewriting a page replaces its chunks, and deleting it removes them.
 
-Run `reindex()` to re-embed every page and note. It returns how many it indexed. Run it after:
+Run `reindex()` to re-embed every page and note in the store, in every scope. It embeds them one at a time and doesn't skip ones already embedded. On a large store, that means many embedding calls and a long run. It returns how many it indexed. Run it only after:
 
 - Content written straight to the store, outside the tools.
 - An upgrade from a release that didn't chunk long pages. Pages that were too long to embed then become searchable by meaning.
