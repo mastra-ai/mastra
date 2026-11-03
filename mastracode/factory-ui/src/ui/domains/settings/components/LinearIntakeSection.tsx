@@ -43,7 +43,8 @@ export function LinearIntakeSection({
   function missingSourceLabel(id: string) {
     const team = isLinearTeamSourceId(id);
     const sameKind = missingIds.filter(missing => isLinearTeamSourceId(missing) === team);
-    const label = team ? 'Unknown Linear team' : 'Unknown Linear project';
+    const kind = team ? 'Linear team' : 'Linear project';
+    const label = sourcesLoaded ? `Unknown ${kind}` : kind;
     return sameKind.length > 1 ? `${label} ${sameKind.indexOf(id) + 1}` : label;
   }
   const description = connectionDescription();

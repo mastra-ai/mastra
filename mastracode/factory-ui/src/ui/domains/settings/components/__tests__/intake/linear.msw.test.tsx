@@ -374,6 +374,19 @@ describe('IntakeSection linear', () => {
       await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject, deletedProject]));
     });
 
+    it('does not call saved sources unknown when the Linear lists fail to load', async () => {
+      useWorkspaceHandlers([liveProject, liveTeam]);
+      server.use(http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+
+      renderIntakeSection();
+
+      expect(await screen.findByText("Couldn't load Linear projects and teams.")).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove Linear project' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove All issues in Live team' })).toBeInTheDocument();
+      expect(screen.queryByText(/Unknown Linear/)).not.toBeInTheDocument();
+      expect(screen.queryByText(liveProject)).not.toBeInTheDocument();
+    });
+
     it('labels a team missing from a connected workspace as an unknown team', async () => {
       const deletedTeam = encode('linear-team:', { workspaceId: 'ws-live', teamId: 't-deleted' });
       const saved = useWorkspaceHandlers([liveProject, deletedProject, deletedTeam]);
