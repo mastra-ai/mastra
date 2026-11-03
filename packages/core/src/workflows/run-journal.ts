@@ -7,7 +7,7 @@ import { diffState } from '../storage/domains/workflows/state-patch';
 import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
 import { getStepResult, getStepResultAsync } from './step';
 import { stepRefId } from './step-refs';
-import type { StepResult, WorkflowRunState } from './types';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from './types';
 
 type StepResults = Record<string, StepResult<any, any, any, any>>;
 
@@ -229,23 +229,28 @@ export class RunJournal {
    * flight (an entry's end, a loop iteration's start, a finished parallel arm or foreach item,
    * sleeps, the run stopping): it sends every step result that changed since it was last written,
    * the state's changes, and the checkpoint when that is still to do.
+   * @param expectedStatus Sent with the write as the store's compare-and-set guard on the stored status.
+   * @returns False when the store rejected the write because of `expectedStatus`. Nothing was
+   * stored, as with a write that throws.
    */
   async write({
     resourceId,
     snapshot,
     stepIds,
+    expectedStatus,
   }: {
     resourceId?: string;
     snapshot: WorkflowRunState;
     stepIds?: readonly string[];
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus[];
+  }): Promise<boolean> {
     const store = this.store;
-    if (!store || this.#closed) return;
+    if (!store || this.#closed) return true;
 
     const boundary = stepIds === undefined;
     // The checkpoint replaces every stored entry, so no other write may be in flight with it. The
     // writes dropped here don't need resending: the checkpoint sends the whole run.
-    if (!boundary && this.#needsCheckpoint) return;
+    if (!boundary && this.#needsCheckpoint) return true;
 
     const { context, value, ...header } = snapshot;
     const results = context as Record<string, unknown>;
@@ -289,7 +294,7 @@ export class RunJournal {
     if (!boundary && !patched && !Object.keys(steps).length) {
       // Results that only changed object are stored as they are.
       this.#recordWritten(sentWrites);
-      return;
+      return true;
     }
 
     // The engine makes boundary writes only where nothing else of the run is running. Failing here
@@ -355,10 +360,15 @@ export class RunJournal {
         steps,
         state,
         statePatch,
+        ...(expectedStatus ? { expectedStatus } : {}),
       };
       const written = checkpoint
         ? await store.writeWorkflowRunCheckpoint({ ...run, stateBase })
         : await store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq });
+      if (written === null) {
+        if (checkpoint) this.#needsCheckpoint = true;
+        return false;
+      }
       lastSeq = written?.lastSeq;
       this.#startStateSeq = undefined;
     } catch (error) {
@@ -381,6 +391,7 @@ export class RunJournal {
     }
     this.#writtenState = writtenState;
     this.#patchBytes = patchBytes;
+    return true;
   }
 
   /**

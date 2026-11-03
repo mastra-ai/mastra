@@ -14,8 +14,8 @@ import { waitForSuspendedSnapshot } from './utils';
  */
 export interface RunStorage {
   loadHeader(): Promise<WorkflowRunHeader | null>;
-  /** True when the compare-and-set applied. */
-  updateHeader(opts: UpdateWorkflowStateOptions): Promise<boolean>;
+  /** The run's header as stored after the update, or null when the compare-and-set didn't apply. */
+  updateHeader(opts: UpdateWorkflowStateOptions): Promise<WorkflowRunHeader | null>;
   /** What resume needs. v2 returns successful steps as stubs. `wait` polls while running/pending. */
   loadForResume(opts: { wait: boolean }): Promise<WorkflowRunState | null>;
   /** Fully materialized, for restart and time travel. */
@@ -77,7 +77,7 @@ class RunStorageV1 implements RunStorage {
     return this.#load(await this.#getStore());
   }
 
-  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<boolean> {
+  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<WorkflowRunHeader | null> {
     const store = await this.#getStore();
     const updated = await store?.updateWorkflowState({
       workflowName: this.#workflowName,
@@ -85,7 +85,7 @@ class RunStorageV1 implements RunStorage {
       storageVersion: 1,
       opts,
     });
-    return !!updated;
+    return updated ?? null;
   }
 
   async loadForResume({ wait }: { wait: boolean }): Promise<WorkflowRunState | null> {
@@ -183,14 +183,14 @@ class RunStorageV2 implements RunStorage {
     return stored?.header ?? null;
   }
 
-  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<boolean> {
+  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<WorkflowRunHeader | null> {
     const store = await this.#getStore();
     const updated = await store?.updateWorkflowRunHeader({
       workflowName: this.#workflowName,
       runId: this.#runId,
       opts,
     });
-    return !!updated;
+    return updated?.header ?? null;
   }
 
   async loadForResume({ wait }: { wait: boolean }): Promise<WorkflowRunState | null> {

@@ -34,7 +34,8 @@ function checkStorageV2Writes(): string[] {
     // `stored` is what this write left, even while other writes to the run are in flight.
     const written = write.call(this, args);
     const stored = store.loadWorkflowRun({ workflowName, runId, successfulSteps: 'full' });
-    await written;
+    // A write the store rejected because the run was canceled stores nothing.
+    if (!(await written)) return false;
     const run = await stored;
     const problem = storageV2WriteMismatch(
       expected,
@@ -43,6 +44,7 @@ function checkStorageV2Writes(): string[] {
       args.stepIds,
     );
     if (problem) mismatches.push(`${workflowName}/${runId} (${expected.status}): ${problem}`);
+    return true;
   };
   return mismatches;
 }

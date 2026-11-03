@@ -124,7 +124,7 @@ async function crashAndRestart(
 
   const restarted = await (await second.workflow.createRun({ runId: run.runId })).restart();
   const stored = await storedSnapshot(freshStore, workflowName, run.runId);
-  return { original, restarted, stored, fns: second.fns };
+  return { original, restarted, stored, tables: await runTablesOf(freshStorage), fns: second.fns };
 }
 
 describe.each([1, 2] as const)(
@@ -455,6 +455,40 @@ describe.each([1, 2] as const)(
       expect(fns.item.mock.calls.map(call => call[0].inputData)).toEqual([2]);
       expect(restarted.status).toBe('success');
       expect(restarted.result).toEqual(original.result);
+    });
+
+    const buildForeachOverNested = (crash?: Crash): Built => {
+      const work = step('work', async ({ inputData }) => {
+        if (crash && inputData === 1) await crash();
+        return inputData * 10;
+      });
+      const inner = workflowOf('foreach-nested-inner').then(work.step).commit();
+      const workflow = workflowOf('foreach-nested').foreach(inner, { concurrency: 1 }).commit();
+      return { workflow, fns: { work: work.fn } };
+    };
+
+    it('restarts a foreach over a nested workflow whose item was running at the crash', async () => {
+      const { original, restarted, fns } = await crashAndRestart(buildForeachOverNested, [0, 1, 2]);
+
+      expect(restarted.status).toBe('success');
+      expect(restarted.result).toEqual(original.result);
+      // The finished item is skipped; the one running at the crash starts over.
+      expect(fns.work.mock.calls.map(call => call[0].inputData)).toEqual([1, 2]);
+    });
+
+    // COR-1501: the item's nested run id is recorded only when the item finishes, so the restart
+    // can't find the nested run that was in flight and leaves it stored as running.
+    it.fails('leaves no nested run in flight after restarting a foreach over a nested workflow', async () => {
+      const { restarted, tables } = await crashAndRestart(buildForeachOverNested, [0, 1, 2]);
+
+      expect(restarted.status).toBe('success');
+      const innerStatuses = [...tables.workflows.values(), ...tables.workflowRunHeaders.values()]
+        .filter(row => row.workflow_name === 'foreach-nested-inner')
+        .map(
+          row =>
+            row.header?.status ?? (typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot).status,
+        );
+      expect(innerStatuses).not.toContain('running');
     });
 
     it('writes at most one progress checkpoint per finished item, plus one running write', async () => {

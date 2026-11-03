@@ -180,7 +180,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * order, and start its state over: from `state`, or from `stateBase` with `statePatch` applied, or
    * from `{}`. Earlier state entries are kept, so a nested run built on an earlier version of this
    * run's state still reads it. Writes the header, creating the run if it isn't stored. Returns the
-   * run's `lastSeq`.
+   * run's `lastSeq`, or null when `expectedStatus` rejected the write (see `appendWorkflowRunEntries`).
    *
    * `threadId` is the whole run's thread (`getSnapshotMemoryInfo`), passed on every write.
    * Stores that keep it next to the header filter `listWorkflowRuns` by it without reading entries.
@@ -197,7 +197,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
     stateBase?: StateRef;
     statePatch?: StatePatchOp[];
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 
@@ -210,6 +211,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * Returns the run's `lastSeq`.
    *
    * `threadId` is the whole run's thread, as for `writeWorkflowRunCheckpoint`, not only the given steps'.
+   *
+   * `expectedStatus` is a compare-and-set guard, which every storage v2 store enforces atomically
+   * with the write (`supportsGuardedSnapshotWrites` is about v1 snapshots): when the run is stored
+   * and its header's status is not one of these values, nothing is written and the call resolves
+   * to null. A run that isn't stored yet is always written.
    * @experimental
    */
   async appendWorkflowRunEntries(_args: {
@@ -224,7 +230,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
     statePatch?: StatePatchOp[];
     startStateSeq?: number;
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 
@@ -348,8 +355,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * Returns only the persisted status of a run, or `null` when the run has no
-   * snapshot. Adapters should override this to avoid reading the whole snapshot;
-   * the default loads it.
+   * snapshot. Adapters that support run journals look in both stores, as
+   * `loadWorkflowSnapshot` does without `storageVersion`. Adapters should override
+   * this to avoid reading the whole snapshot (a storage v2 run's header has the
+   * status); the default loads it.
    */
   async loadWorkflowRunStatus({
     workflowName,

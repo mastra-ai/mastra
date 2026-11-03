@@ -71,6 +71,7 @@ import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
+import type { WorkflowRunHeader } from '../storage/domains/workflows/journal';
 import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -357,18 +358,54 @@ function getNestedWorkflowId(graph: SerializedStepFlowEntry[], stepId: string): 
   return undefined;
 }
 
+/** A stored run as the cancel cascade reads it: its header, and a read of the step results to look through. */
+type RunForCancel = {
+  header: WorkflowRunHeader;
+  storageVersion: 1 | 2;
+  loadSteps(): Promise<Record<string, unknown>>;
+};
+
 /**
- * Cancels the suspended nested runs reachable from `snapshot`. A suspended nested run has no live execution for
+ * A run as the cancel cascade reads it. A storage v2 run's header names its suspended steps, so only those
+ * that run a nested workflow are read. A v1 run is one snapshot. Without `storageVersion`, a run with a
+ * storage v2 header is a storage v2 run. `header` is a storage v2 header already read.
+ */
+async function loadRunForCancel(
+  store: WorkflowsStorage,
+  run: { workflowName: string; runId: string },
+  storageVersion?: 1 | 2,
+  header?: WorkflowRunHeader,
+): Promise<RunForCancel | null> {
+  if (storageVersion !== 1 && store.supportsRunJournal()) {
+    const v2Header = header ?? (await store.loadWorkflowRunHeader(run))?.header;
+    if (v2Header) {
+      const stepIds = Object.keys(v2Header.suspendedPaths ?? {}).filter(stepId =>
+        getNestedWorkflowId(v2Header.serializedStepGraph, stepId),
+      );
+      return {
+        header: v2Header,
+        storageVersion: 2,
+        loadSteps: async () => (stepIds.length ? store.loadWorkflowRunSteps({ ...run, stepIds }) : {}),
+      };
+    }
+    if (storageVersion === 2) return null;
+  }
+  const snapshot = await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 });
+  return snapshot && { header: snapshot, storageVersion: 1, loadSteps: async () => snapshot.context };
+}
+
+/**
+ * Cancels the suspended nested runs reachable from `run`. A suspended nested run has no live execution for
  * its parent's abort signal to reach, so only its persisted status changes. Descendants are canceled before their
  * parent, so a nested run left suspended by a failed write is found again when cancel() is retried.
  */
-async function cancelSuspendedNestedRuns(store: WorkflowsStorage, snapshot: WorkflowRunState): Promise<void> {
-  for (const [stepId, result] of Object.entries(snapshot.context)) {
+async function cancelSuspendedNestedRuns(store: WorkflowsStorage, run: RunForCancel): Promise<void> {
+  for (const [stepId, result] of Object.entries(await run.loadSteps())) {
     if ((result as StepResult<any, any, any, any>)?.status !== 'suspended') {
       continue;
     }
 
-    const workflowName = getNestedWorkflowId(snapshot.serializedStepGraph, stepId);
+    const workflowName = getNestedWorkflowId(run.header.serializedStepGraph, stepId);
 
     if (!workflowName) {
       continue;
@@ -391,18 +428,17 @@ async function cancelSuspendedNestedRuns(store: WorkflowsStorage, snapshot: Work
         continue;
       }
 
-      const nested = await store.loadWorkflowSnapshot({ workflowName, runId });
+      const nested = await loadRunForCancel(store, { workflowName, runId });
 
-      if (nested?.status !== 'suspended') {
+      if (nested?.header.status !== 'suspended') {
         continue;
       }
 
       await cancelSuspendedNestedRuns(store, nested);
-      await store.updateWorkflowState({
-        workflowName,
-        runId,
-        opts: { status: 'canceled', expectedStatus: 'suspended' },
-      });
+      const opts = { status: 'canceled', expectedStatus: 'suspended' } as const;
+      await (nested.storageVersion === 2
+        ? store.updateWorkflowRunHeader({ workflowName, runId, opts })
+        : store.updateWorkflowState({ workflowName, runId, storageVersion: 1, opts }));
     }
   }
 }
@@ -4206,12 +4242,19 @@ export class Run<
 
   /**
    * Cancels a canceled run's suspended nested runs. Running nested runs are canceled through the abort signal.
-   * @throws When reading this run's snapshot, or reading or updating a nested run's snapshot, fails.
+   * `header` is the storage v2 header the cancel just stored, so it isn't read again.
+   * @throws When reading this run, or reading or updating a nested run, fails.
    */
-  protected async cancelSuspendedNestedRuns(): Promise<void> {
+  protected async cancelSuspendedNestedRuns(header?: WorkflowRunHeader): Promise<void> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
-    if (workflowsStore && snapshot?.status === 'canceled') await cancelSuspendedNestedRuns(workflowsStore, snapshot);
+    if (!workflowsStore) return;
+    const run = await loadRunForCancel(
+      workflowsStore,
+      { workflowName: this.workflowId, runId: this.runId },
+      this.storageVersion,
+      this.storageVersion === 2 ? header : undefined,
+    );
+    if (run?.header.status === 'canceled') await cancelSuspendedNestedRuns(workflowsStore, run);
   }
 
   /**
@@ -4243,8 +4286,9 @@ export class Run<
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
+    let header: WorkflowRunHeader | null;
     try {
-      await this.runStorage.updateHeader({ status: 'canceled' });
+      header = await this.runStorage.updateHeader({ status: 'canceled' });
     } catch {
       // Storage errors should not prevent cancellation from succeeding
       // The abort signal and in-memory status are already updated
@@ -4252,7 +4296,7 @@ export class Run<
       return;
     }
 
-    await this.cancelSuspendedNestedRuns();
+    await this.cancelSuspendedNestedRuns(header ?? undefined);
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {

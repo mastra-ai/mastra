@@ -569,7 +569,12 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
 
       it('stores a checkpoint as a version of another run plus a patch', async () => {
         const { parent, child, header, childOf } = family();
-        const { lastSeq } = await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { p: 1 } });
+        const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: {},
+          state: { p: 1 },
+        }))!;
         await store.writeWorkflowRunCheckpoint({
           ...child,
           header: childOf('parent'),
@@ -590,12 +595,12 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
       it("starts a run from another run's state version, recursively", async () => {
         const { parent, child, grandchild, header, childOf } = family();
         await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { p: 1, list: [1] } });
-        const { lastSeq: parentSeq } = await store.appendWorkflowRunEntries({
+        const { lastSeq: parentSeq } = (await store.appendWorkflowRunEntries({
           ...parent,
           header,
           steps: {},
           statePatch: [set(['p'], 2)],
-        });
+        }))!;
         await store.writeWorkflowRunCheckpoint({
           ...child,
           header: childOf('parent'),
@@ -605,12 +610,12 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await statesOf(child)).state).toEqual({ p: 2, list: [1] });
 
         const c1 = [set(['list', 1], 2)];
-        const { lastSeq: childSeq } = await store.appendWorkflowRunEntries({
+        const { lastSeq: childSeq } = (await store.appendWorkflowRunEntries({
           ...child,
           header: childOf('parent'),
           steps: {},
           statePatch: c1,
-        });
+        }))!;
         await store.writeWorkflowRunCheckpoint({
           ...grandchild,
           header: childOf('child'),
@@ -635,12 +640,12 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
 
       it("keeps reading the version it was built on after the other run's state moves on or starts over", async () => {
         const { parent, child, header, childOf } = family();
-        const { lastSeq } = await store.writeWorkflowRunCheckpoint({
+        const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
           ...parent,
           header,
           steps: { a: ok(1) },
           state: { list: ['a', 'b', 'c'] },
-        });
+        }))!;
         await store.writeWorkflowRunCheckpoint({
           ...child,
           header: childOf('parent'),
@@ -697,12 +702,12 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
 
       it("serves a run's drafts to runs built on them, and leaves them out of the run's own state", async () => {
         const { run, parent, header, childOf } = family();
-        const { lastSeq } = await store.writeWorkflowRunCheckpoint({
+        const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
           ...parent,
           header,
           steps: {},
           state: { list: ['a'] },
-        });
+        }))!;
         const d1 = await store.appendWorkflowRunStateDraft({
           ...parent,
           on: { seq: lastSeq },
@@ -760,12 +765,12 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
       it('keeps the state of the runs built on a deleted run', async () => {
         const { run, parent, child, grandchild, header, childOf } = family();
         const sibling = run('sibling');
-        const { lastSeq } = await store.writeWorkflowRunCheckpoint({
+        const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
           ...parent,
           header,
           steps: {},
           state: { list: ['a'] },
-        });
+        }))!;
         const draft = await store.appendWorkflowRunStateDraft({
           ...parent,
           on: { seq: lastSeq },
@@ -779,12 +784,12 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
           stateBase: { ...parent, seq: lastSeq },
           statePatch: c1,
         });
-        const { lastSeq: siblingSeq } = await store.writeWorkflowRunCheckpoint({
+        const { lastSeq: siblingSeq } = (await store.writeWorkflowRunCheckpoint({
           ...sibling,
           header: childOf('parent'),
           steps: {},
           stateBase: { ...parent, seq: draft.seq, draft: true },
-        });
+        }))!;
         await store.writeWorkflowRunCheckpoint({
           ...grandchild,
           header: childOf('sibling'),
