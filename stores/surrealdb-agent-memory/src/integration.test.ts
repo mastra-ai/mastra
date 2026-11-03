@@ -1,6 +1,6 @@
 import { InMemoryStore } from '@mastra/core/storage';
 import { AgentMemory as AgentMemoryClient } from '@surrealdb/memory';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { searchDocuments } from './documents';
 import { AgentMemory } from './memory';
 
@@ -58,13 +58,20 @@ describe.skipIf(!hasCreds)('AgentMemory (integration)', () => {
       ],
     });
 
-    const res = await memory.recall({
-      threadId,
-      resourceId: 'it-user',
-      vectorSearchString: 'favourite colour',
-    } as never);
-    expect(res.messages.length).toBeGreaterThan(0);
-  });
+    // The verbatim message always comes back from storage, so only a synthesized
+    // `agentMemory:` hit proves the round trip. Extraction can finish after the write.
+    await vi.waitFor(
+      async () => {
+        const res = await memory.recall({
+          threadId,
+          resourceId: 'it-user',
+          vectorSearchString: 'favourite colour',
+        } as never);
+        expect(res.messages.some(m => m.id.startsWith('agentMemory:'))).toBe(true);
+      },
+      { timeout: 45_000, interval: 2_000 },
+    );
+  }, 60_000);
 
   it('searches the document corpus', async () => {
     const res = await searchDocuments(client, {
