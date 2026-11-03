@@ -206,7 +206,6 @@ function layoutLinkEnds(
   sizeOf: (page: KnowledgePagePayload) => number,
 ): { points: Map<string, Point>; reach: number } {
   const half = Math.max(...ends.map(page => sizeOf(page))) / 2;
-  const centerHalf = (positions.has(center) ? 0 : 0) + half;
   const blocked = firstRing.flatMap(id => {
     const at = positions.get(id);
     return at ? [Math.atan2(at.y, at.x)] : [];
@@ -230,6 +229,7 @@ function layoutLinkEnds(
     });
     const used = remaining.splice(0, Math.max(1, slots.length));
     used.forEach((page, index) => {
+      // A ring with no gap left puts its one circle at angle 0; the next ring is wider, so it stays clear.
       const angle = slots[index] ?? slots[0] ?? 0;
       points.set(page.id, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
     });
