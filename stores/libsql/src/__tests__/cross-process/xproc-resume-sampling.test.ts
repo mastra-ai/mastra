@@ -99,6 +99,14 @@ for (const sampled of [false, true])
           }
         }
         expect(counts.score).toBe(1);
+        const hook = events.find(row => row.signal === 'hook');
+        expect(hook?.isValid).toBe(true);
+        const score = events.find(row => row.signal === 'score')?.score;
+        expect(score).toMatchObject({ score: 1, spanId: hook.currentSpanId });
+        expect(events.find(row => row.id === score.spanId && row.event === 'span_ended')).toMatchObject({
+          type: 'agent_run',
+          outcome: 'success',
+        });
       } else {
         expect(counts).toEqual({});
         expect(events.filter(row => row.signal === 'hook')).toEqual([]);
