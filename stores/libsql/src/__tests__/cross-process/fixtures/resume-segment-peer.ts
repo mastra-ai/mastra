@@ -27,6 +27,8 @@ export interface ResumeSegmentPeerArgs {
   toolCallId?: string;
   blockAt?: number;
   failDispatch?: boolean;
+  /** This replica runs without observability: a resumer that opens no segment spans. */
+  tracingOff?: boolean;
 }
 
 export interface ResumeSegmentPeerResult {
@@ -37,7 +39,7 @@ export interface ResumeSegmentPeerResult {
 }
 
 runPeer<ResumeSegmentPeerArgs>(async (peer): Promise<ResumeSegmentPeerResult> => {
-  const { agentId, steps, eventsPath, mode, runId, toolCallId, blockAt, failDispatch } = peer.args;
+  const { agentId, steps, eventsPath, mode, runId, toolCallId, blockAt, failDispatch, tracingOff } = peer.args;
   const release = gate();
   if (blockAt) void peer.waitFor('release', { timeoutMs: 120_000 }).then(() => release.resolve());
   const { agent } = createStepAgent({
@@ -58,7 +60,7 @@ runPeer<ResumeSegmentPeerArgs>(async (peer): Promise<ResumeSegmentPeerResult> =>
     pubsub: peer.pubsub(),
     logger: false,
     workers: peer.workers ? undefined : false,
-    observability: createSegmentObservability(eventsPath, peer.config.role),
+    observability: tracingOff ? undefined : createSegmentObservability(eventsPath, peer.config.role),
   });
   const result: ResumeSegmentPeerResult = { pid: process.pid, chunkTypes: [], approvals: [], error: null };
   try {

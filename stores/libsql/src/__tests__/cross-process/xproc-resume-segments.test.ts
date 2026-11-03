@@ -359,4 +359,86 @@ describe('resumed and recovered durable runs keep one span pair per segment acro
     },
     CELL_TIMEOUT_MS,
   );
+
+  it(
+    'a resume from a process without observability leaves the suspended pair and its MODEL_STEP ended once',
+    async () => {
+      const { runner } = api(1);
+      const workerPeer = await worker('worker', 1);
+      const { runId, toolCallId } = await streamUntilApproval(runner, 1);
+
+      const resumer = await spawn('resumer-off', { mode: 'resumer', steps: 1, runId, toolCallId, tracingOff: true });
+      const resumed = await resumer.result<ResumeSegmentPeerResult>();
+      expect(resumed.chunkTypes, env.describe()).toContain('finish');
+      expect(resumed.error).toBeNull();
+
+      const spans = await settledSpans(runId);
+      const [first, ...more] = roots(spans, 'agent_run');
+      expect(more, `an untraced resumer opens no segment\n${describeSpans(spans)}`).toEqual([]);
+      expect(first?.endedBy).toEqual([{ role: 'worker', outcome: 'suspend', error: null }]);
+      const [generation] = roots(spans, 'model_generation');
+      expect(generation?.endedBy).toEqual([{ role: 'worker', outcome: 'suspend', error: null }]);
+      const suspendedStep = spans.find(span => span.type === 'model_step' && span.parentSpanId === generation!.spanId);
+      expect(
+        suspendedStep?.endedBy,
+        `the suspended MODEL_STEP keeps only its suspension\n${describeSpans(spans)}`,
+      ).toEqual([{ role: 'worker', outcome: 'suspend', error: null }]);
+      expectEndedOnce(spans);
+
+      await finishWorkers(workerPeer);
+    },
+    CELL_TIMEOUT_MS,
+  );
+
+  it(
+    'a recovery after a crash inside the resumed tool adopts nothing from the segment that suspended',
+    async () => {
+      const { runner } = api(1);
+      const original = await worker('worker-1', 1, 1);
+      const { runId, toolCallId } = await streamUntilApproval(runner, 1);
+
+      const resumer = await spawn('resumer', { mode: 'resumer', steps: 1, runId, toolCallId });
+      await original.waitFor('blocked');
+      await waitForSnapshotStatus(runId, 'running');
+      await original.pause();
+
+      const replacement = await worker('worker-2', 1);
+      const recoverer = await spawn('recoverer', { mode: 'recoverer', steps: 1, runId });
+      const recovered = await recoverer.result<ResumeSegmentPeerResult>();
+      expect(recovered.chunkTypes, env.describe()).toContain('finish');
+      expect(recovered.error).toBeNull();
+      await resumer.result<ResumeSegmentPeerResult>().catch(() => undefined);
+
+      await original.resume();
+      original.send('release');
+      await new Promise(resolve => setTimeout(resolve, 2_000));
+
+      const spans = await settledSpans(runId);
+      const [suspended, resumedRun, recoveredRun, ...more] = roots(spans, 'agent_run');
+      expect(more, describeSpans(spans)).toEqual([]);
+      expect(suspended?.endedBy).toEqual([{ role: 'worker-1', outcome: 'suspend', error: null }]);
+      expect(resumedRun, describeSpans(spans)).toMatchObject({
+        resumed: true,
+        endedBy: [{ role: 'recoverer', outcome: 'interrupted', error: null }],
+      });
+      expect(recoveredRun, describeSpans(spans)).toMatchObject({
+        recovered: true,
+        recoveredFromSpanId: resumedRun!.spanId,
+        parentSpanId: resumedRun!.spanId,
+        endedBy: [{ role: 'worker-2', outcome: 'success', error: null }],
+      });
+      const [firstGeneration] = roots(spans, 'model_generation');
+      const suspendedStep = spans.find(
+        span => span.type === 'model_step' && span.parentSpanId === firstGeneration!.spanId,
+      );
+      expect(
+        suspendedStep?.endedBy,
+        `the suspended MODEL_STEP keeps only its suspension\n${describeSpans(spans)}`,
+      ).toEqual([{ role: 'worker-1', outcome: 'suspend', error: null }]);
+      expectEndedOnce(spans);
+
+      await finishWorkers(original, replacement);
+    },
+    CELL_TIMEOUT_MS,
+  );
 });

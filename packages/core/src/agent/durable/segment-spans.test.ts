@@ -83,6 +83,7 @@ describe('currentSegment', () => {
       { v: 1, agent: second.agentSpanData, model: { ...second.modelSpanData, traceId: 'trace-2' } },
     ],
     ['a non-object', 'garbage'],
+    ['an adoptsStepsOf that is not a span id', { ...carriedSecond, adoptsStepsOf: 5 }],
   ])('falls back to the loop state for a malformed carrier: %s', (_label, entry) => {
     const segment = currentSegment({ mastra: undefined, requestContext: carrying(entry), runId: RUN_ID, state: first });
     expect(segment.agentSpanData?.id).toBe('agent-1');
@@ -131,18 +132,36 @@ describe('currentSegment', () => {
     expect(unknown.ownsStep({ parentSpanId: 'model-1' })).toBe(true);
   });
 
-  it('adopts the step a crashed segment left open when it is a recovered segment', () => {
-    const recovered = currentSegment({
+  it('owns no step when carried as untraced: the suspended step was ended by the segment that opened it', () => {
+    const untraced = currentSegment({
       mastra: undefined,
-      requestContext: carrying({
-        v: 1,
-        agent: span('agent_run' as SpanType.AGENT_RUN, 'agent-r', 'agent-1', { metadata: { recovered: true } }),
-        model: span('model_generation' as SpanType.MODEL_GENERATION, 'model-r', 'agent-r'),
-      }),
+      requestContext: carrying({ v: 1, agent: null, model: null }),
       runId: RUN_ID,
       state: first,
     });
-    expect(recovered.ownsStep({ parentSpanId: 'model-1' })).toBe(true);
+    expect(untraced.ownsStep({ parentSpanId: 'model-1' })).toBe(false);
+  });
+
+  it('adopts only the steps of the segment that crashed when it is a recovered segment', () => {
+    const recoveredSegment = (adoptsStepsOf?: string) =>
+      currentSegment({
+        mastra: undefined,
+        requestContext: carrying({
+          v: 1,
+          agent: span('agent_run' as SpanType.AGENT_RUN, 'agent-r', 'agent-2', { metadata: { recovered: true } }),
+          model: span('model_generation' as SpanType.MODEL_GENERATION, 'model-r', 'agent-r'),
+          ...(adoptsStepsOf ? { adoptsStepsOf } : {}),
+        }),
+        runId: RUN_ID,
+        state: first,
+      });
+    // The resumed segment (model-2) crashed mid-step; the first segment (model-1) had suspended.
+    const recovered = recoveredSegment('model-2');
+    expect(recovered.ownsStep({ parentSpanId: 'model-r' })).toBe(true);
+    expect(recovered.ownsStep({ parentSpanId: 'model-2' })).toBe(true);
+    expect(recovered.ownsStep({ parentSpanId: 'model-1' })).toBe(false);
+    // The crashed segment had already ended (a step was suspended): nothing to adopt.
+    expect(recoveredSegment().ownsStep({ parentSpanId: 'model-2' })).toBe(false);
   });
 
   it('takes clocks only from a state measured under its own MODEL_GENERATION', () => {
