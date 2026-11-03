@@ -19,6 +19,7 @@ import { createStep, createWorkflow } from '../../workflows/evented';
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { DurableStepIds } from './constants';
 import { createEventedAgent } from './create-evented-agent';
 import {
   participateInDurableExecution,
@@ -565,6 +566,81 @@ it('retries conditional terminal cleanup after release without renewing or trans
   });
 });
 
+async function seedRunningRows(workflowsStore: Awaited<ReturnType<typeof createExecution>>['workflowsStore']) {
+  for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName,
+      runId: 'run',
+      snapshot: { runId: 'run', status: 'running', value: {}, context: {} } as any,
+    });
+  }
+}
+
+async function storedRows(workflowsStore: Awaited<ReturnType<typeof createExecution>>['workflowsStore']) {
+  const rows: string[] = [];
+  for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
+    if (await workflowsStore.getWorkflowRunById({ runId: 'run', workflowName })) rows.push(workflowName);
+  }
+  return rows;
+}
+
+it('rejects terminal cleanup when a takeover lands between the ownership check and the snapshot delete', async () => {
+  const { workflowsStore, pubsub, mastra, event } = await createExecution();
+  await seedRunningRows(workflowsStore);
+  const remove = workflowsStore.deleteWorkflowRunById.bind(workflowsStore);
+  let successor: ExecutionFence | undefined;
+  const deletion = vi.spyOn(workflowsStore, 'deleteWorkflowRunById').mockImplementationOnce(async args => {
+    successor = await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'agent',
+      runId: 'run',
+      mode: 'takeover',
+    });
+    successor.stopHeartbeat();
+    return remove(args);
+  });
+
+  await expect(settleEventedDurableExecution(mastra, { ...event, type: 'workflow.end' })).rejects.toMatchObject({
+    id: RUN_FENCE_CONFLICT_ERROR_ID,
+  });
+
+  expect(deletion).toHaveBeenCalledTimes(1);
+  expect(await storedRows(workflowsStore)).toEqual([DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]);
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: successor?.executionId,
+    generation: successor?.generation,
+    live: true,
+  });
+});
+
+it('keeps the claim when a terminal snapshot delete fails partway, and clears both rows on redelivery', async () => {
+  const { workflowsStore, mastra, event, coordinator } = await createExecution();
+  await seedRunningRows(workflowsStore);
+  const terminal = { ...event, type: 'workflow.end' };
+  const remove = workflowsStore.deleteWorkflowRunById.bind(workflowsStore);
+  const deletion = vi
+    .spyOn(workflowsStore, 'deleteWorkflowRunById')
+    .mockImplementationOnce(remove)
+    .mockRejectedValueOnce(new Error('storage unavailable'));
+
+  await expect(settleEventedDurableExecution(mastra, terminal)).rejects.toThrow('storage unavailable');
+
+  expect(await storedRows(workflowsStore)).toEqual([DurableStepIds.AGENTIC_EXECUTION]);
+  const ownership = await workflowsStore.getRunOwnership({ runId: 'run' });
+  expect(ownership).toMatchObject({ ownerId: coordinator.executionId, generation: coordinator.generation });
+  expect(ownership?.leaseExpiresAt).not.toBeNull();
+  expect(await retrySettledDurableExecution(mastra, terminal)).toBe(false);
+
+  deletion.mockRestore();
+  await settleEventedDurableExecution(mastra, terminal);
+  expect(await storedRows(workflowsStore)).toEqual([]);
+  expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+    ownerId: coordinator.executionId,
+    generation: coordinator.generation,
+    leaseExpiresAt: null,
+  });
+});
 it('retries thread cleanup on a fresh worker after interruption between terminal lease releases', async () => {
   const { workflowsStore, pubsub, mastra, event, coordinator } = await createExecution();
   const threadKey = 'resource\u0000thread';
