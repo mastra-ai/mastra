@@ -470,6 +470,90 @@ describe('restarting a nested run whose process died', () => {
       expect(result.state).toEqual(state);
       expect((await storedStates(storage))['outer/run-1']).toEqual({ status: 'success', state });
     });
+
+    it('keeps a key the nested run never touched at the value a sibling left it', async () => {
+      const stateSchema = z.object({ items: z.array(z.string()), tag: z.string() });
+      let childStarted!: () => void;
+      const started = new Promise<void>(resolve => (childStarted = resolve));
+      let siblingWrote!: () => void;
+      const wrote = new Promise<void>(resolve => (siblingWrote = resolve));
+
+      // Writes `tag` once, only after the nested run has started. The restart re-runs this branch,
+      // and `inner`'s own copy of the state still says 'base', so the merge alone has to keep 'newer'.
+      let wroteTag = false;
+      const sibling = createStep({
+        id: 'sibling',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema,
+        execute: async ({ inputData, state, setState }) => {
+          await started;
+          if (!wroteTag) {
+            wroteTag = true;
+            await setState({ ...state, tag: 'newer' });
+            siblingWrote();
+          }
+          return inputData;
+        },
+      });
+      const innerWait = createStep({
+        id: 'inner-wait',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema,
+        resumeSchema: z.boolean(),
+        execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+          childStarted();
+          if (resumeData === undefined) {
+            await wrote;
+            return suspend({});
+          }
+          await setState({ ...state, items: [...state.items, `inner-wait:${inputData.n}`] });
+          return inputData;
+        },
+      });
+      const innerB = createStep({
+        id: 'inner-b',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema,
+        execute: async ({ inputData, state, setState }) => {
+          const n = inputData.n + 1;
+          await setState({ ...state, items: [...state.items, `inner-b:${n}`] });
+          return { n };
+        },
+      });
+      const buildParallel = () => {
+        const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema })
+          .then(innerWait)
+          .then(innerB)
+          .commit();
+        return createWorkflow({ id: 'outer', inputSchema: num, outputSchema: num, stateSchema })
+          .parallel([sibling, inner])
+          .commit();
+      };
+
+      const storage = new MockStore();
+      const dying = buildParallel();
+      new Mastra({ logger: false, storage, workflows: { outer: dying } });
+      const run = await dying.createRun({ runId: 'run-1' });
+      expect((await run.start({ inputData: { n: 0 }, initialState: { items: [], tag: 'base' } })).status).toBe(
+        'suspended',
+      );
+      const dead = dieAfterNestedSuccess(storage);
+      void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
+      await dead;
+
+      const outer = buildParallel();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const result = await (
+        await outer.createRun({ runId: 'run-1' })
+      ).restart({ outputOptions: { includeState: true } });
+
+      expect(result.status).toBe('success');
+      // `inner` hands back the items it appended; `tag` is the sibling's write, which it never saw.
+      expect(result.state).toEqual({ items: ['inner-wait:0', 'inner-b:1'], tag: 'newer' });
+    });
   });
 });
 

@@ -438,6 +438,14 @@ export async function executeStep(
           throw stateValidationError;
         }
         contextMutations.stateUpdate = stateData;
+        // The state this nested run started from, recorded when the parent parked on it. Merging
+        // against it replays only the nested run's own changes, so keys another step changed while
+        // it ran keep their newer value instead of reverting to the nested run's copy.
+        contextMutations.stateBase =
+          executionContext.foreachIndex !== undefined
+            ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]
+                ?.suspendPayload?.__workflow_meta?.startState
+            : stepResults[step.id]?.suspendPayload?.__workflow_meta?.startState;
         if (engine.requiresDurableContextSerialization()) {
           contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
         }

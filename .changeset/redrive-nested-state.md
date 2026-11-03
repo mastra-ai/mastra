@@ -1,0 +1,7 @@
+---
+'@mastra/core': patch
+---
+
+Fixed a nested workflow run that finished before its parent saved the result merging its whole state snapshot over the parent's current state on restart. The parent now records the state the nested run started from when it parks on it, and the re-drive merges only the nested run's own changes, so a key another step changed while the nested run was in flight keeps its newer value instead of reverting to the nested run's copy.
+
+Cancelling a leftover nested run whose parent finished now reports what happened: a run another process is driving, or one whose status moved since the sweep listed it, is left as it is and logged as such instead of reporting a cancel that did not happen. The next sweep decides again.

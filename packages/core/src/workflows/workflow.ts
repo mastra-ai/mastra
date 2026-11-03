@@ -3502,6 +3502,10 @@ export class Workflow<
             __workflow_meta: {
               ...nestedMeta,
               ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+              // The state this nested run started from. If the parent crashes and re-executes this
+              // step, the finished nested run's state is rebased onto the parent's current state
+              // with this base, so keys a sibling changed meanwhile are not overwritten.
+              ...(handBackBase ? { startState: handBackBase } : {}),
               runId: run.runId,
               path: suspendPath,
             },
