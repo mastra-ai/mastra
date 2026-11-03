@@ -454,7 +454,7 @@ These routes aren't registered by default. Add them with `KNOWLEDGE_ROUTES` from
 
 | Method | Path | Description |
 | - | - | - |
-| `GET` | `/api/knowledge` | List the Knowledge instances the caller can read |
+| `GET` | `/api/knowledge` | List the registered Knowledge instances, filtered by FGA when configured |
 | `GET` | `/api/knowledge/:knowledgeKey/tree` | List the root scopes, or the children of `parentId` |
 | `GET` | `/api/knowledge/:knowledgeKey/pages/:pageId` | Get a page with its ancestors, notes, pin and referenced pages |
 | `GET` | `/api/knowledge/:knowledgeKey/link-counts` | Count the links into and out of each page in `pageId` |
@@ -484,8 +484,8 @@ Without `server.auth` or `studio.auth`, the routes read as the instance owner an
 
 | Status | When |
 | - | - |
-| `403` | Auth is configured and `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` isn't set |
-| `404` | The instance doesn't exist or the FGA provider denies `knowledge:read` on it, or the page doesn't exist or the caller can't read it |
+| `403` | Auth is configured and `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` isn't set. `GET /api/knowledge` doesn't read the key, so it doesn't return `403` |
+| `404` | The instance doesn't exist or the FGA provider denies `knowledge:read` on it, or the page doesn't exist or the caller can't read it. For an unreadable page, the link routes report zero counts and no links instead |
 | `500` | `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` isn't an array or `'all'`, or holds a scope that matches no declared scope type |
 | `501` | `@mastra/core` is older than the route needs, or the store has no link index (link routes) |
 
