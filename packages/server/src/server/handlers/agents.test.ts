@@ -5063,6 +5063,37 @@ describe('plain Agent resumable streams', () => {
     expect(captured._detachObserverOnCancel).toBe(detaches);
   });
 
+  it('detaches a durable proxy wrapper whose wrapped agent has streams off', async () => {
+    // Inngest wraps its agent in a Proxy that forwards hasResumableStreams() to the wrapped Agent.
+    const inner = plainAgent('wrapped-agent', false);
+    const durable = createDurableAgent({ agent: inner, id: 'proxied-durable', name: 'proxied-durable' });
+    const proxied = new Proxy(durable, {
+      get(target, prop) {
+        if (prop === 'hasResumableStreams') return inner.hasResumableStreams.bind(inner);
+        const value = Reflect.get(target, prop);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const mastra = new Mastra({ agents: { 'proxied-durable': proxied as any }, logger: false });
+    let captured: any;
+    vi.spyOn(durable, 'stream').mockImplementation(async (_messages: any, options: any) => {
+      captured = options;
+      return { fullStream: new ReadableStream() } as any;
+    });
+    const abortSignal = new AbortController().signal;
+
+    await STREAM_GENERATE_ROUTE.handler({
+      mastra,
+      agentId: 'proxied-durable',
+      requestContext: new RequestContext(),
+      abortSignal,
+      messages: [{ role: 'user', content: 'test' }],
+    } as any);
+
+    expect(captured.abortSignal).toBeUndefined();
+    expect(captured._detachObserverOnCancel).toBe(true);
+  });
+
   it('observes a plain Agent run from the agent stream bus', async () => {
     const pubsub = new EventEmitterPubSub();
     const agent = new Agent({

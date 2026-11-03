@@ -428,9 +428,11 @@ async function authorizeRunOwner({
 
 /** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
 function hasResumableStreams(agent: Agent): boolean {
+  // Durable wrappers always publish. Check them first: a proxy wrapper (Inngest) forwards
+  // hasResumableStreams() to its wrapped Agent, which may have streams off.
+  if (isDurableAgentLike(agent)) return true;
   const resumable = agent as unknown as ResumableStreamsAgent;
-  if (typeof resumable.hasResumableStreams === 'function') return resumable.hasResumableStreams();
-  return isDurableAgentLike(agent);
+  return typeof resumable.hasResumableStreams === 'function' && resumable.hasResumableStreams();
 }
 
 /** The bus a plain Agent with resumable streams publishes its runs on. */
