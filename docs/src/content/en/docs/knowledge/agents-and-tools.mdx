@@ -39,9 +39,18 @@ const knowledge = new Knowledge({
 
 `tools: { write: true }` turns on writing alone. To let agents pin pages, add `pinnedContext: true`. See [Pinned context](/docs/knowledge/pinned-context).
 
+## What an agent can reach
+
+An agent works only in the scopes its run is allowed into. Those are:
+
+- **Scopes it holds directly**: the scopes your server code passes for the run, such as `org:acme`, plus the `resource:` and `thread:` scopes Memory adds.
+- **Scopes reached through a rule**: scopes whose `access` rules give a role to a scope it holds. With `{ principal: 'org:$orgId', role: 'viewer' }` on `team:$orgId:$teamId`, a run holding `org:acme` can read `team:acme:support` without holding it.
+
+Its role in each of those scopes decides what it can do there. Anything else is invisible to it. See [Scopes and access](/docs/knowledge/scopes-and-access#rules-and-roles).
+
 ## What agents can read
 
-With the read tools, an agent finds and reads what its run can see. It can browse how a scope is organized, search pages and notes by keyword (and by meaning, with [semantic search](/docs/knowledge/search#add-search-by-meaning)), and read a page with its notes and the notes on other pages that mention it. A long page comes back in parts: the first read shows the page's headings, and the agent then reads the section it needs, reads on from a line, or reads only the lines that match a term. When nothing matches, the result says so, so the agent can tell the user it doesn't know instead of guessing.
+With the read tools, an agent finds and reads pages in the scopes it can read. It can browse how a scope is organized, search pages and notes by keyword (and by meaning, with [semantic search](/docs/knowledge/search#add-search-by-meaning)), and read a page with its notes and the notes on other pages that mention it. A long page comes back in parts: the first read shows the page's headings, and the agent then reads the section it needs, reads on from a line, or reads only the lines that match a term. When nothing matches, the result says so, so the agent can tell the user it doesn't know instead of guessing.
 
 One read returns at most 1,000 tokens of a page by default. Raise the cap for models with large context windows, or lower it for small models:
 
@@ -55,7 +64,7 @@ const knowledge = new Knowledge({
 
 ## What agents can write
 
-With the write tools, an agent creates pages in the scopes it can write to, and puts each one where its audience is: a fact for the whole team in the team's scope, one for this user only in the user's scope. It edits a page by changing only the lines it read, so it never overwrites parts of a long page it hasn't seen, and an edit is refused if someone changed the page since the agent read it. It can also move, merge and delete pages, and add notes: short attributed facts on a page, which can link to other pages and carry their own audience.
+With the write tools, an agent creates and changes pages in the scopes where its role allows it, and puts each one where its audience is: a fact for the whole team in the team's scope, one for this user only in the user's scope. It edits a page by changing only the lines it read, so it never overwrites parts of a long page it hasn't seen, and an edit is refused if someone changed the page since the agent read it. It can also move, merge and delete pages, and add notes: short attributed facts on a page, which can link to other pages and carry their own audience.
 
 ## What a call is allowed to do
 
