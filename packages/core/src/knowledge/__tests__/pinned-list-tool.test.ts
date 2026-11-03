@@ -177,22 +177,29 @@ describe('knowledge_pin listings', () => {
     ).toMatchObject({ error: true, validationErrors: { fields: { depth: { errors: ['must be <= 3'] } } } });
   });
 
-  it('works with a storage adapter from before pin kinds: page pins still deliver, a listing pin is refused', async () => {
+  it('works with a storage adapter from before pin kinds: page pins still deliver, a listing pin is refused before anything is stored', async () => {
     const { storage, handbook, call, delivered } = await seed({});
-    // An adapter from before kinds ignores kind and depth and returns pins without them.
+    // An adapter from before kinds doesn't report them, ignores kind and depth, and returns pins without them.
     const strip = <T extends { kind?: unknown; depth?: unknown }>({ kind: _k, depth: _d, ...rest }: T) => rest;
+    const capabilities = storage.getCapabilities.bind(storage);
     const add = storage.addPinAudience.bind(storage);
     const list = storage.listPins.bind(storage);
+    storage.getCapabilities = () => {
+      const { supportsPinKinds: _s, ...rest } = capabilities();
+      return rest;
+    };
     storage.addPinAudience = async ({ kind: _k, depth: _d, ...input }) => strip(await add(input)) as never;
     storage.listPins = async input => {
       const { kind: _k, ...rest } = input;
       const listed = await list(rest);
       return { ...listed, pins: listed.pins.map(pin => strip(pin) as never) };
     };
-    await call('knowledge_pin', { op: 'pin', page: 'org:acme#handbook', audience: ['org:acme'] });
-    expect((await delivered()).map(pin => pin.id)).toEqual([handbook.id]);
     await expect(
       call('knowledge_pin', { op: 'pin', kind: 'list', page: 'org:acme#handbook', audience: ['org:acme'] }),
     ).rejects.toThrow(/predates listing pins/);
+    expect((await list({ audience: 'all', read: 'all' })).pins).toEqual([]);
+
+    await call('knowledge_pin', { op: 'pin', page: 'org:acme#handbook', audience: ['org:acme'] });
+    expect((await delivered()).map(pin => pin.id)).toEqual([handbook.id]);
   });
 });

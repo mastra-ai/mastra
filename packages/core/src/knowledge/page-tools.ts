@@ -1461,6 +1461,11 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
       if (depth !== undefined && (kind !== 'list' || op !== 'pin')) {
         throw new Error('depth only goes with op "pin" and kind "list".');
       }
+      if (op === 'pin' && kind === 'list' && !(await host.getStorage()).getCapabilities().supportsPinKinds) {
+        throw new Error(
+          'This Knowledge storage adapter predates listing pins. Upgrade the storage package to pin a page listing.',
+        );
+      }
       const run = await start(host, context);
       const page = await run.page(ref, 'editor');
       const what = kind === 'list' ? 'a page listing' : 'a page';
@@ -1472,11 +1477,6 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
           ? await run.storage.addPinAudience({ pageId: page.id, kind, depth, audience, createdBy: author })
           : await run.storage.removePinAudience({ pageId: page.id, kind, audience, removedBy: author });
       onChange?.(context);
-      if (op === 'pin' && kind === 'list' && pin?.kind !== 'list') {
-        throw new Error(
-          'This Knowledge storage adapter predates listing pins and stored a page pin instead. Upgrade the storage package, then unpin the page and pin the listing again.',
-        );
-      }
       return {
         page: page.id,
         kind,

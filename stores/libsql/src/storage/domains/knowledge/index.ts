@@ -91,6 +91,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
+      supportsPinKinds: true,
     } as const;
   }
 
