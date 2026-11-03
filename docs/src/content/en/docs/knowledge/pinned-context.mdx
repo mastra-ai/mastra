@@ -112,11 +112,57 @@ Pinning for "role:acme:sales" needs holding it or editor on it; this run has nei
 
 `editor` on a role scope also lets the pinner create pages there, which nobody can read without a `self` rule. Keep pages in content scopes such as `policy:` and use role scopes only as audiences.
 
+## Pinned listings
+
+A pinned listing puts the pages under a scope or page into context, the way [`knowledge_list`](/reference/knowledge/knowledge-tools#knowledge_list) returns them: each page's ref, name and child count. Pin a listing when the agent needs to know what exists and where, such as the sections of a docs site, so it can go straight to the right page with `knowledge_read`. Pin a page when the agent needs its content on every turn.
+
+Add a listing to a scope's `pinnedContext` as `{ list, depth }`. `list` names a scope or a page path, and `depth` is how many levels below it to show, from 1 to 3 (default 1):
+
+```typescript title="src/mastra/knowledge.ts"
+const knowledge = new Knowledge({
+  id: 'docs',
+  storage,
+  tools: true,
+  pinnedContext: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'site:$siteId': {
+      description: 'A website',
+      access: [{ principal: 'self', role: 'viewer' }],
+      pinnedContext: [{ list: 'site:$siteId', depth: 1 }],
+    },
+  },
+})
+```
+
+Every run holding `site:mastra` gets the listing:
+
+```text
+Pages under site:mastra (site:mastra, depth 1):
+- site:mastra#docs — Docs (2 children)
+- site:mastra#blog — Blog
+- site:mastra#pricing — Pricing
+```
+
+A listing follows the same rules as a pinned page:
+
+- It shows only the pages the run can read, the same as `knowledge_list`. A run that can't read the listed scope or page gets nothing.
+- It updates on the next turn when a listed page is added, renamed or removed.
+- It takes one pin slot out of `maxPins` and shares the `maxTokens` budget with pinned pages. A listing that doesn't fit is cut at a whole line and ends with a pointer to the rest, such as `…and 2 more; knowledge_list from: "site:mastra"`.
+
+Agents pin listings at runtime with `knowledge_pin` and `kind: "list"`, which needs the same roles as pinning a page:
+
+```json
+{ "op": "pin", "kind": "list", "depth": 2, "page": "site:mastra#docs", "audience": ["site:mastra"] }
+```
+
+A page can have both a page pin and a listing pin. Each is pinned and unpinned separately, and pinning a listing again sets its new depth. A stored listing that repeats a listing from config is delivered once.
+
 ## What a run receives
 
 Each turn, Knowledge builds the run's pinned context in this order:
 
-1. `pinnedContext` pages for every scope the run holds. If they alone exceed `maxTokens`, each gets an equal share of the budget and is truncated, never dropped. Knowledge warns at startup when a scope declares more `pinnedContext` pages than the budget can hold.
+1. `pinnedContext` pages and listings for every scope the run holds. If they alone exceed `maxTokens`, each gets an equal share of the budget and is truncated, never dropped. Knowledge warns at startup when a scope declares more `pinnedContext` pages than the budget can hold.
 1. Stored pins aimed at any scope the run holds, highest `pinnedContextPriority` first, then newest first. A stored pin ranks by the highest `pinnedContextPriority` among the run's scopes in its audience. A page that's already in `pinnedContext` isn't repeated.
 1. Stored pins that don't fit within `maxPins` or `maxTokens` are listed by name in one line, `Also pinned (open with knowledge_read): ...`, so the agent can open them.
 

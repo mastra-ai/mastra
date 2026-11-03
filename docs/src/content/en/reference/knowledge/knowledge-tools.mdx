@@ -353,17 +353,33 @@ Knowledge note text exceeds the 250 token limit; split it into separate notes or
 
 ## `knowledge_pin`
 
-Pins a page into the context of every run holding one of the audience scopes, every turn, or unpins it. Requires Memory to deliver pins. See [Pinned context](/docs/knowledge/pinned-context).
+Pins a page, or a listing of the pages under it, into the context of every run holding one of the audience scopes, every turn, or unpins it. Requires Memory to deliver pins. See [Pinned context](/docs/knowledge/pinned-context).
 
 <PropertiesTable
   content={[
   { name: 'op', type: "'pin' | 'unpin'", description: 'What to do.' },
   { name: 'page', type: 'string', description: 'The page to pin or unpin.' },
   { name: 'audience', type: 'string[]', description: 'Scope addresses whose runs receive the pin.' },
+  {
+    name: 'kind',
+    type: "'page' | 'list'",
+    description:
+      '`page` pins the page. `list` pins a listing of the pages under it. A page can have one pin of each kind, pinned and unpinned separately.',
+    isOptional: true,
+    defaultValue: "'page'",
+  },
+  {
+    name: 'depth',
+    type: 'number',
+    description:
+      'Levels a `list` pin shows below the page, 1 to 3. Pinning a listing again sets its new depth. Only with `op: "pin"` and `kind: "list"`.',
+    isOptional: true,
+    defaultValue: '1',
+  },
 ]}
 />
 
-Pinning and unpinning need `editor` on the page's scope and, for each audience scope, holding it or `editor` on it. A pinned page reaches only runs that can read it.
+Pinning and unpinning need `editor` on the page's scope and, for each audience scope, holding it or `editor` on it. A pinned page reaches only runs that can read it, and a pinned listing shows only the pages the run can read. Pinning a listing needs a storage adapter version that stores pin kinds. With an older adapter, page pins still work and a listing pin is refused before anything is stored.
 
 ```text
 Pinning a page needs editor on "policy:acme"; this run has viewer there.

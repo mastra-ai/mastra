@@ -81,9 +81,9 @@ export const knowledge = new Knowledge({
   },
   {
     name: 'pinnedContext',
-    type: 'string[]',
+    type: 'Array<string | { list: string; depth?: number }>',
     description:
-      'Page paths every run holding a scope of this type gets pinned, such as `policy:$orgId#refund-policy`. See [Pinned context](/docs/knowledge/pinned-context).',
+      "What every run holding a scope of this type gets pinned. A string is a page path, such as `policy:$orgId#refund-policy`. `{ list, depth }` pins a listing of the pages under a scope or page path, `depth` 1 to 3 (default 1), such as `{ list: 'site:$siteId', depth: 1 }`. See [Pinned context](/docs/knowledge/pinned-context).",
     isOptional: true,
   },
   {
