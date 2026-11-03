@@ -131,6 +131,20 @@ describe('knowledge_list', () => {
     expect(returned.flatMap(result => result.pages).map(scope => scope.address)).toEqual(['team:acme:secret']);
   });
 
+  it('leaves out unreadable child scopes even when a store ignores read', async () => {
+    const { call, storage } = await site();
+    for (const team of ['team:acme:secret', 'team:acme:other']) {
+      await call([...ORG, 'docs:acme', team], 'knowledge_read', { page: team });
+    }
+    const store = (await storage.getStore('knowledge'))!;
+    const list = store.listChildScopes.bind(store);
+    vi.spyOn(store, 'listChildScopes').mockImplementation(({ read: _read, ...input }) => list(input));
+
+    const member = await call([...ORG, 'team:acme:secret'], 'knowledge_list', { from: 'docs:acme', depth: 2 });
+    const scopes = member.entries.filter((entry: any) => entry.scope).map((entry: any) => entry.ref);
+    expect(scopes).toEqual(['team:acme:secret']);
+  });
+
   it('pages through a wide level by cursor without repeats', async () => {
     const { call } = await site();
     const seen: string[] = [];

@@ -849,7 +849,10 @@ function listTool(host: KnowledgePageToolHost) {
       }
       const run = await start(host, context);
 
-      /** Readable scopes directly under a scope page, up to `max`; the store leaves out unreadable ones. */
+      /**
+       * Readable scopes directly under a scope page, up to `max`. The store leaves out unreadable
+       * ones; core checks again so a custom store that ignores `read` can't list private scopes.
+       */
       const childScopes = async (parentId: string, max = Infinity): Promise<KnowledgePage[]> => {
         const out: KnowledgePage[] = [];
         let next: string | undefined;
@@ -860,7 +863,7 @@ function listTool(host: KnowledgePageToolHost) {
             cursor: next,
             limit: Math.min(max - out.length, LIST_MAX_LIMIT),
           });
-          out.push(...pages);
+          out.push(...pages.filter(scope => knowledgeScopeReadable(scope, run.read)));
           next = nextCursor;
         } while (next && out.length < max);
         return out;
