@@ -308,8 +308,15 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     await expect(run('postChannelMessage', { channelId: 'slack:D-USAM', message: 'hi' })).rejects.toThrow(
       "someone else's direct message",
     );
-    const search = await run('searchMessages', { query: 'deploy', channelIds: ['slack:D-USAM'] });
-    expect(search.errors).toEqual([expect.objectContaining({ channelId: 'slack:D-USAM' })]);
+    await expect(run('fetchChannelMessages', { channelId: 'D-USAM', limit: 5 })).rejects.toThrow(
+      "someone else's direct message",
+    );
+    // Bare ids and thread ids must be checked as the channel actually read.
+    const search = await run('searchMessages', {
+      query: 'deploy',
+      channelIds: ['slack:D-USAM', 'D-USAM', 'slack:D-USAM:1700000000.000100'],
+    });
+    expect(search.errors).toHaveLength(3);
     expect(sent('conversations.history')).toEqual([]);
     expect(sent('chat.postMessage')).toEqual([]);
   });

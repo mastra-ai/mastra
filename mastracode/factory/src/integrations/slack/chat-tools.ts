@@ -21,6 +21,11 @@ const MAX_LOOKUP_PAGES = 10;
 /** Most messages searchMessages reads per channel. */
 const MAX_SEARCH_SCAN = 1000;
 
+/** Treats a bare Slack id (`C0123`, `D0123`) as `slack:C0123`. */
+function withPrefix(id: string): string {
+  return id.startsWith('slack:') ? id : `slack:${id}`;
+}
+
 /** Same resolution the Chat SDK's own scope guard uses. */
 function channelOf(chat: Chat, id: string): string {
   const prefix = id.split(':')[0];
@@ -78,7 +83,7 @@ export function createSlackChatTools({
   // Slack conversation being handled.
   const ownChannel = channelOf(chat, sessionThreadId);
   const guard = (id: string) => {
-    const channel = channelOf(chat, id);
+    const channel = channelOf(chat, withPrefix(id));
     // Other people's DMs with the app are theirs, even when every channel is granted.
     if (channel.startsWith('slack:D') && channel !== ownChannel) {
       throw new Error(`"${id}" is someone else's direct message with the app. Use sendDirectMessage to message a person.`);
@@ -179,11 +184,13 @@ export function createSlackChatTools({
         const errors: Array<{ channelId: string; error: string }> = [];
         let scanned = 0;
         for (const channelId of channels) {
-          const channel = channelId.replace(/^slack:/, '');
+          // Read the channel the guard checked, not whatever string was passed.
+          const id = withPrefix(channelId);
+          const channel = channelOf(chat, id).replace(/^slack:/, '');
           let cursor: string | undefined;
           let read = 0;
           try {
-            guard(channelId);
+            guard(id);
             while (read < scan) {
               const page = await slackClient(chat).conversations.history({
                 channel,
