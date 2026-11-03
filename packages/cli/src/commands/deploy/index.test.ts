@@ -106,6 +106,46 @@ describe('project resolution', () => {
       projectSlug: 'project-1',
     });
   });
+
+  describe('project picker default', () => {
+    const projects = [
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel', organizationId: 'org-1' },
+      { id: 'proj-b', name: 'Other', slug: 'shared', organizationId: 'org-1' },
+      { id: 'proj-c', name: 'shared', slug: 'proj-c', organizationId: 'org-1' },
+    ];
+
+    beforeEach(() => {
+      selectMock.mockReset();
+      fetchProjectsMock.mockResolvedValue(projects);
+    });
+
+    it('preselects "Create new project" when no project matches the name', async () => {
+      selectMock.mockResolvedValue('__create_new__');
+
+      await expect(resolveProject('token', 'org-1', null, undefined, 'nov-2-factory')).resolves.toEqual({
+        existing: false,
+        projectName: 'nov-2-factory',
+      });
+      expect(selectMock.mock.calls[0]![0].initialValue).toBe('__create_new__');
+    });
+
+    it('preselects "Create new project" when several projects match the name or slug', async () => {
+      selectMock.mockResolvedValue('__create_new__');
+
+      await resolveProject('token', 'org-1', null, undefined, 'shared');
+      expect(selectMock.mock.calls[0]![0].initialValue).toBe('__create_new__');
+    });
+
+    it('preselects the single project that matches the name', async () => {
+      selectMock.mockResolvedValue('proj-a');
+
+      await expect(resolveProject('token', 'org-1', null, undefined, 'Daniel')).resolves.toMatchObject({
+        existing: true,
+        projectId: 'proj-a',
+      });
+      expect(selectMock.mock.calls[0]![0].initialValue).toBe('proj-a');
+    });
+  });
 });
 
 describe('deploy option validation', () => {

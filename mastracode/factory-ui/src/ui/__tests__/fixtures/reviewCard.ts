@@ -24,7 +24,6 @@ export const reviewItem: WorkItemRow = {
     externalId: 'github-pr:42',
     url: reviewCandidate.url,
   },
-  claimKey: null,
   parentWorkItemId: null,
   title: reviewCandidate.title,
   stages: ['intake'],

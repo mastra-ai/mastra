@@ -85,6 +85,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -133,6 +134,7 @@ jobs:
       affected_memory_tests: ${{ steps.compute.outputs.affected_memory_tests }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -378,6 +380,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
@@ -395,6 +398,7 @@ jobs:
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       experiment_worker_e2e_changed: ${{ needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' }}
@@ -409,6 +413,7 @@ jobs:
     uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
@@ -422,6 +427,7 @@ jobs:
     uses: ./.github/workflows/test-combined-stores.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
@@ -440,6 +446,7 @@ jobs:
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       workspace_packages: ${{ needs.affected-tests.outputs.workspace_packages }}
@@ -455,6 +462,7 @@ jobs:
     runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
+      id-token: write
     timeout-minutes: 15
     services:
       postgres:

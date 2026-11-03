@@ -22,7 +22,7 @@ export const reply = `The composer now keeps attachments beside the draft and se
 - **Streaming:** Stop keeps the partial reply, and the next message starts a new turn.
 
 \`\`\`tsx
-<ComposerInput aria-label="Message" placeholder="Ask a follow-up…" />
+<ComposerInput aria-label="Message" placeholder="Ask a follow-up" />
 \`\`\`
 
 The conversation is ready for another review.`;

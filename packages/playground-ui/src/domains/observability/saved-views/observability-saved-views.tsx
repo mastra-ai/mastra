@@ -51,6 +51,7 @@ function HostedSavedViewsBar({
   source,
   queryKeyScope,
   canEdit,
+  canCreate = true,
 }: ObservabilitySavedViewsProps & SavedViewsContextValue) {
   const headerSlot = useObservabilityHeaderSlot();
   const views = useHostedSavedViews({
@@ -58,6 +59,7 @@ function HostedSavedViewsBar({
     source,
     queryKeyScope,
     canEdit,
+    canCreate,
     searchParams,
     setSearchParams,
     columns,
@@ -72,6 +74,7 @@ function HostedSavedViewsBar({
       newViewSettings={{ state: { schemaVersion: 1, page, filters: [] } }}
       describeView={view => (view.settings.record?.scope === 'org' ? 'Shared' : undefined)}
       canEdit={view => !canEdit || !view.settings.record || canEdit(view.settings.record)}
+      canCreate={canCreate}
       className={className}
     />
   );

@@ -356,6 +356,9 @@ export class AgentChannels {
           streamOptions: {
             requestContext,
             memory,
+            // Background results are posted to the chat by this run, which carries the
+            // channel's render context, so keep it open until they finish.
+            untilIdle: true,
             // Without approval-button rendering, auto-approve tools to
             // avoid getting stuck waiting for input we can't ask for.
             ...(autoResumeSuspendedTools ? { autoResumeSuspendedTools } : {}),

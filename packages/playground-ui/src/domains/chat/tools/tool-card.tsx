@@ -2,6 +2,7 @@ import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
+import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
@@ -224,6 +225,23 @@ export const ToolCardInner = ({
             toolApprovalMetadata={toolApprovalMetadata}
             isNetwork={isNetwork}
             toolCalled={toolCalled}
+          />
+        );
+      }
+      break;
+    }
+    case 'knowledge': {
+      const card = knowledgeCard(toolName, input, output);
+      if (card) {
+        return (
+          <KnowledgeToolBadge
+            card={card}
+            toolName={toolName}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            isNetwork={isNetwork}
+            status={status}
           />
         );
       }

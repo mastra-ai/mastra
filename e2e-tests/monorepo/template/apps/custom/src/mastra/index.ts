@@ -12,6 +12,7 @@ import { shutdownDrainWorkflowRoute } from '@/api/route/shutdown-drain-workflow'
 import { shutdownDrainWorkflow } from '@/workflows/shutdown-drain';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
 import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
+import { excelSubpathRoute } from '@/api/route/excel-subpath';
 import { modelUsageRoute } from '@/api/route/model-usage';
 import { stackRoute } from '@/api/route/stack';
 import { myAgent } from '@inner/hello-world/agent';
@@ -37,6 +38,7 @@ export const mastra = new Mastra({
       shutdownDrainWorkflowRoute,
       transitiveWorkspaceRoute,
       protobufSubpathRoute,
+      excelSubpathRoute,
       modelUsageRoute,
       stackRoute,
     ],
