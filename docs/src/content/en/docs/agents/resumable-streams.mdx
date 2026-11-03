@@ -78,7 +78,7 @@ The cache bounds everything else:
 
 - Run logs and ownership records ask the cache for a 24-hour TTL. The in-memory cache uses at least this TTL for indexed run logs, unless cache expiry is disabled. Cache entry limits can evict data sooner.
 - The in-memory cache holds 1,000 entries by default. Entries are cache keys, not runs: each run uses several (its event log, a counter and its ownership record), so heavy traffic evicts older runs sooner.
-- Once a run's log or record is evicted or expires, observing or aborting it returns 404, as for an unknown run.
+- The server's observe and abort routes return 404 when a run's ownership record is evicted or expires. Evicted run events can't be replayed.
 
 Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
 
