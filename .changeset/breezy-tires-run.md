@@ -10,4 +10,4 @@ await client.replaceFeedback({
 });
 ```
 
-Preserve the original timestamp when replacing feedback. Each accepted PUT retry is a new replacement. OSS server does not implement this PUT endpoint.
+Preserve the original timestamp when replacing feedback. Each accepted PUT retry is a new replacement. OSS server does not yet implement this PUT endpoint.
