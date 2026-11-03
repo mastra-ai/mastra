@@ -1,8 +1,8 @@
 import type { NodePath, PluginObject } from '@babel/core';
 import * as babel from '@babel/core';
-import type { NewExpression } from '@babel/types';
 
-export type PostgresStoreInstance = { path: NodePath<NewExpression>; location: string };
+// Typed with `@babel/core` only: the published declarations can't reference `@babel/types` (a devDependency).
+export type PostgresStoreInstance = { path: NodePath; location: string };
 
 /**
  * Babel plugin that enforces singleton PostgresStore instances in Cloudflare Workers.
