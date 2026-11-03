@@ -1,7 +1,7 @@
 import * as coreDurable from '@mastra/core/agent/durable';
 import { coreFeatures } from '@mastra/core/features';
 import * as coreObservability from '@mastra/core/observability';
-import type { SpanOutcomeFields } from '@mastra/core/observability';
+import type { ResumeTracingContext, SpanOutcomeFields } from '@mastra/core/observability';
 import type { LanguageModelUsage } from '@mastra/core/stream';
 import * as coreWorkflows from '@mastra/core/workflows';
 
@@ -28,4 +28,16 @@ export function generationUsage(usage: LanguageModelUsage, steps: Array<{ usage?
     usageIncomplete,
     usage: usageIncomplete ? (coreObservability.calculateObservedUsage?.(steps) ?? usage) : usage,
   };
+}
+
+/**
+ * The context a suspending workflow run saves for its resume. A core without the helper saves the
+ * lineage it knows: `getResumeTracingContext` from core 1.81, the span's own ids before that.
+ */
+export function workflowResumeTracingContext(
+  span: Parameters<typeof coreObservability.getWorkflowResumeTracingContext>[0],
+): ResumeTracingContext | undefined {
+  if (coreFeatures.has('workflow-resume-sampling')) return coreObservability.getWorkflowResumeTracingContext?.(span);
+  if (coreObservability.getResumeTracingContext) return coreObservability.getResumeTracingContext(span);
+  return span ? { traceId: span.traceId, spanId: span.id } : undefined;
 }

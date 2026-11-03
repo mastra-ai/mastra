@@ -5,7 +5,7 @@ import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType, getOrCreateSpan, getWorkflowResumeTracingContext } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
@@ -26,7 +26,7 @@ import {
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
-import { workflowTermination } from './observability-compat';
+import { workflowResumeTracingContext, workflowTermination } from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -756,7 +756,7 @@ export class InngestWorkflow<
                   result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                   error: result.status === 'failed' ? result.error : undefined,
                   requestContext: requestContext.toJSON(),
-                  tracingContext: getWorkflowResumeTracingContext(workflowSpanData),
+                  tracingContext: workflowResumeTracingContext(workflowSpanData),
                   timestamp: Date.now(),
                 };
 
