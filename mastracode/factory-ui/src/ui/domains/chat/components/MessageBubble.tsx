@@ -12,6 +12,7 @@ import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachmen
 import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/split-message-attachments';
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
+import { PinnedKnowledgeActivity } from '@mastra/playground-ui/domains/chat/knowledge';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
@@ -280,6 +281,7 @@ export function MessageBubble({
       );
     case 'signal': {
       const { row } = view;
+      if (row.kind === 'pinned') return <PinnedKnowledgeActivity pinned={row.pinned} />;
       if (row.kind === 'state') {
         return (
           <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
@@ -287,7 +289,15 @@ export function MessageBubble({
       }
       if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
       if (row.kind === 'reminder') {
-        return <SignalActivity kind="reminder" label="System reminder" message={row.text} appearance="inline" />;
+        return (
+          <SignalActivity
+            kind="reminder"
+            label={row.loadedFile ? 'Project instructions' : 'System reminder'}
+            detail={row.loadedFile}
+            message={row.text}
+            appearance="inline"
+          />
+        );
       }
       return <SignalActivity kind="reactive" label={row.tagName} message={row.text} appearance="inline" />;
     }

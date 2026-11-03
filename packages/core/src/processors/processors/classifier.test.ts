@@ -4,12 +4,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { TripWireOptions } from '../../agent/trip-wire';
 import { Classifier } from '../../classifier';
 import { Mastra } from '../../mastra';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream';
 import { ClassifierProcessor } from './classifier';
 import type { ClassifierOnResult } from './classifier';
+import type { ClassifierProcessorDecision } from './classifier-decision';
 
 const safetyQuestions = {
   unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
@@ -55,9 +58,9 @@ function textDelta(text: string, id = 'text-1'): ChunkType {
 }
 
 function abortThatThrows() {
-  return vi.fn((reason?: string) => {
-    throw new TripWire(reason ?? 'aborted');
-  }) as unknown as (reason?: string) => never;
+  return vi.fn((reason?: string, options?: TripWireOptions) => {
+    throw new TripWire(reason ?? 'aborted', options);
+  }) as unknown as (reason?: string, options?: TripWireOptions) => never;
 }
 
 const blockUnsafeAbove =
@@ -274,7 +277,10 @@ describe('ClassifierProcessor', () => {
       const abort = abortThatThrows();
 
       await expect(processor.processInput({ messages: [message('1', 'text')], abort })).rejects.toThrow(TripWire);
-      expect(abort).toHaveBeenCalledWith('Classification failed because the classifier call failed');
+      // The metadata lets the caller tell a failed check from a policy block.
+      expect(abort).toHaveBeenCalledWith('Classification failed because the classifier call failed', {
+        metadata: { processorId: 'classifier', classifierId: 'safety', code: 'CLASSIFIER_FAILED' },
+      });
     });
 
     it('rethrows TripWire errors thrown by abort', async () => {
@@ -407,7 +413,153 @@ describe('ClassifierProcessor', () => {
       await expect(processor.processOutputStream({ part, streamParts: [part], state: {}, abort })).rejects.toThrow(
         TripWire,
       );
-      expect(abort).toHaveBeenCalledWith('Classification failed because the classifier call failed');
+      expect(abort).toHaveBeenCalledWith('Classification failed because the classifier call failed', {
+        metadata: { processorId: 'classifier', classifierId: 'safety', code: 'CLASSIFIER_FAILED' },
+      });
+    });
+  });
+
+  describe('onDecision', () => {
+    function recordDecisions() {
+      const decisions: ClassifierProcessorDecision<typeof safetyQuestions>[] = [];
+      return {
+        decisions,
+        onDecision: (d: ClassifierProcessorDecision<typeof safetyQuestions>) => void decisions.push(d),
+      };
+    }
+
+    // #28985: each verdict gets an audit record with its outcome and the policy that blocked it.
+    it('records allowed, filtered and aborted outcomes', async () => {
+      const doEvaluate = vi
+        .fn()
+        .mockResolvedValueOnce(unsafeResult(0.1))
+        .mockResolvedValueOnce(unsafeResult(0.6))
+        .mockResolvedValueOnce(unsafeResult(0.95));
+      const { decisions, onDecision } = recordDecisions();
+      const processor = new ClassifierProcessor({
+        classifier: safetyClassifier(createModel(doEvaluate)),
+        onResult: (answers, { abort, filter }) => {
+          if (answers.unsafe.probability > 0.9) abort('Blocked', { metadata: { policy: 'unsafe' } });
+          if (answers.unsafe.probability > 0.5) filter();
+        },
+        onDecision,
+      });
+      const messages = [
+        { ...message('m1', 'fine'), threadId: 'thread-1', resourceId: 'customer-1' },
+        { ...message('m2', 'borderline'), threadId: 'thread-1', resourceId: 'customer-1' },
+        { ...message('m3', 'bad'), threadId: 'thread-1', resourceId: 'customer-1' },
+      ];
+
+      await expect(processor.processInput({ messages, abort: abortThatThrows() })).rejects.toThrow(TripWire);
+
+      expect(decisions.map(d => [d.ids.messageId, d.outcome])).toEqual([
+        ['m1', 'allowed'],
+        ['m2', 'filtered'],
+        ['m3', 'aborted'],
+      ]);
+      expect(decisions[2]).toMatchObject({
+        result: { answers: { unsafe: { type: 'boolean', probability: 0.95 } } },
+        tripwire: { reason: 'Blocked', metadata: { policy: 'unsafe' } },
+      });
+    });
+
+    // Under 'warn' the caller never sees the failure, so the record is the only trace of an unchecked message.
+    it('records a failed classifier call under warn as allowed, with the error', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const failure = new Error('provider down');
+      const { decisions, onDecision } = recordDecisions();
+      const processor = new ClassifierProcessor({
+        classifier: safetyClassifier(createModel(vi.fn().mockRejectedValue(failure))),
+        onResult: noop,
+        onDecision,
+        errorStrategy: 'warn',
+      });
+
+      await processor.processInput({ messages: [message('1', 'text')], abort: abortThatThrows() });
+
+      expect(decisions).toEqual([expect.objectContaining({ outcome: 'allowed', error: failure })]);
+    });
+
+    // The memory context of the run wins: with resource-scoped recall, a message from another thread
+    // keeps that thread's id. Without memory, the reserved request context keys are used.
+    it.each([
+      {
+        source: 'the run memory over a recalled message',
+        context: { MastraMemory: { thread: { id: 'thread-current' }, resourceId: 'customer-1' } },
+        messageIds: { threadId: 'thread-old', resourceId: 'customer-1' },
+        expected: { threadId: 'thread-current', resourceId: 'customer-1' },
+      },
+      {
+        source: 'the reserved request context keys',
+        context: { [MASTRA_THREAD_ID_KEY]: 'thread-rc', [MASTRA_RESOURCE_ID_KEY]: 'customer-rc' },
+        messageIds: {},
+        expected: { threadId: 'thread-rc', resourceId: 'customer-rc' },
+      },
+    ])('records the thread and resource from $source', async ({ context, messageIds, expected }) => {
+      const { decisions, onDecision } = recordDecisions();
+      const processor = new ClassifierProcessor({
+        classifier: safetyClassifier(unsafeModel(0.1)),
+        onResult: noop,
+        onDecision,
+      });
+      const requestContext = new RequestContext(Object.entries(context));
+
+      await processor.processInput({
+        messages: [{ ...message('1', 'hello'), ...messageIds }],
+        abort: abortThatThrows(),
+        requestContext,
+      });
+
+      expect(decisions[0]!.ids).toMatchObject(expected);
+    });
+
+    // An audit store outage must not change what the guardrail decided.
+    it('keeps the policy block when onDecision throws', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const processor = new ClassifierProcessor({
+        classifier: safetyClassifier(unsafeModel(0.95)),
+        onResult: blockUnsafeAbove(0.5, 'Content blocked by policy'),
+        onDecision: async () => {
+          throw new Error('audit store down');
+        },
+      });
+
+      await expect(
+        processor.processInput({ messages: [message('1', 'bad')], abort: abortThatThrows() }),
+      ).rejects.toThrow(new TripWire('Content blocked by policy'));
+    });
+  });
+
+  describe('cancellation', () => {
+    // When a user stops a streaming reply, the classifier call stops too and isn't treated as a failure.
+    // The runner passes the run's abort signal to stream processors only.
+    it('stops the classifier call when a stream is cancelled, without a tripwire', async () => {
+      const doEvaluate = vi.fn(
+        ({ abortSignal }: { abortSignal?: AbortSignal }) =>
+          new Promise<never>((_, reject) => {
+            abortSignal?.addEventListener('abort', () => reject(abortSignal.reason));
+          }),
+      );
+      const processor = new ClassifierProcessor({
+        classifier: safetyClassifier(createModel(doEvaluate as EvaluationModelV4['doEvaluate'])),
+        onResult: noop,
+      });
+      const controller = new AbortController();
+      const abort = abortThatThrows();
+      const part = textDelta('hello');
+
+      const pending = processor.processOutputStream({
+        part,
+        streamParts: [part],
+        state: {},
+        abort,
+        abortSignal: controller.signal,
+      });
+      controller.abort(new Error('user cancelled'));
+
+      // The chunk is dropped and the stream keeps going.
+      await expect(pending).resolves.toBeNull();
+      expect(abort).not.toHaveBeenCalled();
     });
   });
 

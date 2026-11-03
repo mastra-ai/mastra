@@ -45,6 +45,7 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
+import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import {
   SessionBranchHeldError,
   SessionOwnershipMismatchError,
@@ -64,6 +65,7 @@ import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -126,6 +128,7 @@ export interface FactoryApiRoutesDeps {
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
+    skillOverrides: SkillOverridesStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -798,6 +801,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
       ...(deps.skills ? { skills: deps.skills } : {}),
+      overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
@@ -824,10 +828,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
           defaultKnowledgeKey: deps.knowledgeKey,
-          threadTitle: async threadId => {
-            const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
-            return (await memory?.getThreadById({ threadId }))?.title;
-          },
         }).routes()
       : []),
     ...(deps.factoryReady
@@ -837,6 +837,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          intakeRoutes: deps.storedBoards?.storage,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
@@ -850,6 +851,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new IntakeRouteRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
         }).routes()

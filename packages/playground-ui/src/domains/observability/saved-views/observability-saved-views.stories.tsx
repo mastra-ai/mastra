@@ -36,7 +36,7 @@ function PageUrl({ page }: { page: SavedViewPage }) {
   );
 }
 
-function HostedSavedViews({ page }: { page: SavedViewPage }) {
+function HostedSavedViews({ page, readOnly = false }: { page: SavedViewPage; readOnly?: boolean }) {
   const [queryClient] = useState(() => new QueryClient());
   const [source] = useState(() =>
     createInMemorySavedViewsSource([
@@ -46,7 +46,12 @@ function HostedSavedViews({ page }: { page: SavedViewPage }) {
   );
   return (
     <QueryClientProvider client={queryClient}>
-      <SavedViewsProvider source={source} queryKeyScope={['story', page]}>
+      <SavedViewsProvider
+        source={source}
+        queryKeyScope={['story', page]}
+        canEdit={readOnly ? () => false : undefined}
+        canCreate={!readOnly}
+      >
         <MemoryRouter>
           <PageUrl page={page} />
         </MemoryRouter>
@@ -79,3 +84,6 @@ export const Traces: Story = { args: { page: 'traces' } };
 export const Spans: Story = { args: { page: 'spans' } };
 export const Threads: Story = { args: { page: 'threads' } };
 export const Logs: Story = { args: { page: 'logs' } };
+
+/** A user who may only read views (`canCreate={false}`, `canEdit={() => false}`) can apply them, nothing else. */
+export const ReadOnly: Story = { args: { page: 'traces', readOnly: true } };

@@ -79,7 +79,6 @@ export const comboboxStyles = {
   root: 'flex flex-col gap-1.5',
 
   /** Chevron icon in trigger — decorative icon token shared by every field. */
-  chevron: 'ml-2 h-4 w-4 shrink-0 text-muted-foreground',
 
   /** Placeholder text color */
   placeholder: 'text-muted-foreground',

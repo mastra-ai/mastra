@@ -120,9 +120,18 @@ export function toolFromInvocationPart(
     toolName: invocation.toolName,
     argsText: runtime?.argsText ?? '',
     args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
-    status: terminalStatus ?? runtime?.status ?? 'running',
+    status: exitedWithFailure(invocation.toolName, runtime)
+      ? 'error'
+      : (terminalStatus ?? runtime?.status ?? 'running'),
     result,
     output: runtime?.output ?? '',
     createdAt: part.createdAt ?? runtime?.createdAt ?? fallbackCreatedAt,
   };
+}
+
+const COMMAND_TOOLS = new Set(['execute_command', 'mastra_workspace_execute_command']);
+
+/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
+function exitedWithFailure(toolName: string, runtime: ToolCall | undefined): boolean {
+  return COMMAND_TOOLS.has(toolName) && runtime?.exitCode !== undefined && runtime.exitCode !== 0;
 }

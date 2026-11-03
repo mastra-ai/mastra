@@ -293,7 +293,7 @@ export function PropertyFilterCreator({
                   setError(undefined);
                 }}
                 placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
-                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
+                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}`}
                 emptyText={selectedField.emptyText ?? 'No option found.'}
                 size="md"
                 aria-label={selectedField.label}

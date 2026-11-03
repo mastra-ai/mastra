@@ -17,10 +17,10 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "glm5.3-754b": [
+    "qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "gemma4-26b": [
@@ -29,22 +29,22 @@
         "values": ["none", "high"]
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "mistral4-119b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "qwen3.8-27b": [
+    "glm5.3-754b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "deepseek-v4.1-flash-552b": [

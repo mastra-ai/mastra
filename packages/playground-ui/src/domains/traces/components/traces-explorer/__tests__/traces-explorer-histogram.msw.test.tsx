@@ -334,12 +334,12 @@ describe('TracesExplorer.Histogram', () => {
       });
       await dragAcross(12, 23);
       await settle(queryClient);
-      expect(screen.queryByRole('button', { name: 'Value: Last 14 days' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Last 14 days' })).toBeNull();
 
       resetTimeRange();
       await settle(queryClient);
 
-      expect(screen.getByRole('button', { name: 'Value: Last 14 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 14 days' })).toBeTruthy();
       const from = lastBody(onTraceQuery)?.timeRange?.from ?? '';
       expect(Math.round((Date.now() - Date.parse(from)) / (24 * 60 * 60 * 1000))).toBe(14);
     });
@@ -355,13 +355,12 @@ describe('TracesExplorer.Histogram', () => {
       resetTimeRange();
       await settle(queryClient);
 
-      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
 
     describe('when the user picked a range by hand after zooming', () => {
-      const openRangeEditor = () =>
-        fireEvent.click(screen.getByRole('button', { name: /^Value: Oct 21/, hidden: true }));
+      const openRangeEditor = () => fireEvent.click(screen.getByRole('button', { name: /^Oct 21/, hidden: true }));
       const pickTimePart = async (time: string, part: string, value: string) => {
         const group = screen.getByRole('group', { name: time, hidden: true });
         const select = within(group).getByRole('combobox', { name: part, hidden: true });
@@ -399,7 +398,7 @@ describe('TracesExplorer.Histogram', () => {
         resetTimeRange();
         await settle(queryClient);
 
-        expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       });
     });
   });
