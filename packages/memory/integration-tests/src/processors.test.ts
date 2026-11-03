@@ -12,7 +12,7 @@ import { getInputProcessorsTests } from './shared/input-processors';
 import { getOutputProcessorMemoryTests } from './shared/output-processor-memory';
 
 // V5 Processor Tests
-describe('V5 Processor Tests', { sequential: true }, () => {
+describe('V5 Processor Tests', { concurrent: false }, () => {
   const v5Config = {
     version: 'v5' as const,
     MockLanguageModel: MockLanguageModelV5,
@@ -24,7 +24,7 @@ describe('V5 Processor Tests', { sequential: true }, () => {
 });
 
 // V6 Processor Tests
-describe('V6 Processor Tests', { sequential: true }, () => {
+describe('V6 Processor Tests', { concurrent: false }, () => {
   const v6Config = {
     version: 'v6' as const,
     MockLanguageModel: MockLanguageModelV6,

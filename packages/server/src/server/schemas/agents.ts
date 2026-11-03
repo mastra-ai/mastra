@@ -257,6 +257,7 @@ const agentEditorConfigSchema = z.union([
   z.object({
     instructions: z.boolean().optional(),
     tools: z.union([z.boolean(), z.object({ description: z.boolean().optional() })]).optional(),
+    model: z.boolean().optional(),
   }),
 ]);
 

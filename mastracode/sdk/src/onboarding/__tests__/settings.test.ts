@@ -215,9 +215,14 @@ describe('explicit OM configuration', () => {
 function withTempSettingsFile(run: (filePath: string) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'mastracode-settings-'));
   const filePath = join(dir, 'settings.json');
+  // Keep settings migrations away from the real app-data auth.json.
+  const previousAppDataDir = process.env.MASTRA_APP_DATA_DIR;
+  process.env.MASTRA_APP_DATA_DIR = dir;
   try {
     run(filePath);
   } finally {
+    if (previousAppDataDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+    else process.env.MASTRA_APP_DATA_DIR = previousAppDataDir;
     rmSync(dir, { recursive: true, force: true });
   }
 }

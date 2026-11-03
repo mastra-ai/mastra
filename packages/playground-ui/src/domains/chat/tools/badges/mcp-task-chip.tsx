@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { backgroundTaskQueryKey } from './use-deferred-input-request';
 import { isTerminalMcpTaskStatus } from './use-mcp-task-progress';
 import type { McpTaskStatus, McpTaskView } from './use-mcp-task-progress';
 import { Badge } from '@/ds/components/Badge';
@@ -74,18 +75,26 @@ export function BackgroundMcpTaskChip({ task, backgroundTaskId }: { task: McpTas
   const client = useMastraClient();
   const ended = isTerminalMcpTaskStatus(task.status);
   const { data, dataUpdatedAt } = useQuery({
-    queryKey: ['background-task', backgroundTaskId],
+    queryKey: backgroundTaskQueryKey(backgroundTaskId),
     queryFn: () => client.getBackgroundTask(backgroundTaskId),
     enabled: !ended,
     refetchInterval: query => (BACKGROUND_END[query.state.data?.status ?? ''] ? false : BACKGROUND_POLL_MS),
   });
   const backgroundEnd = ended ? undefined : BACKGROUND_END[data?.status ?? ''];
   const completedAt = data?.completedAt ? new Date(data.completedAt).getTime() : undefined;
+  // The call's progress stops reaching the chat with the turn, so a question answered later still
+  // reads `input_required` there; the background task says whether it is waiting or working.
+  const waiting =
+    data?.status === 'suspended' ? 'input_required' : data?.status === 'running' ? 'working' : task.status;
 
   return (
     <McpTaskChip
       task={
-        backgroundEnd ? { ...task, status: backgroundEnd, endedAt: completedAt ?? task.endedAt ?? dataUpdatedAt } : task
+        backgroundEnd
+          ? { ...task, status: backgroundEnd, endedAt: completedAt ?? task.endedAt ?? dataUpdatedAt }
+          : ended
+            ? task
+            : { ...task, status: waiting }
       }
     />
   );

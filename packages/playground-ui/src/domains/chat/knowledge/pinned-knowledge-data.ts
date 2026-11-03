@@ -9,12 +9,16 @@ const PINNED_STATE_ID = 'knowledge';
 const PINNED_TAGS = new Set(['pinned-knowledge', 'pinned-knowledge-update']);
 /** The entry listing stored pins that didn't fit the budget (`PIN_OVERFLOW_ID`). */
 const OVERFLOW_ID = 'overflow';
+/** A pinned listing's entry id is this prefix plus the id of the page it lists (`PIN_LIST_ID_PREFIX`). */
+const LIST_ID_PREFIX = 'list:';
 
 export interface PinnedPage {
   id: string;
   /** From the pin itself on newer cores; read off the delivered text's `<name> (<id>): ` prefix on older ones. */
   name?: string;
   scope?: string;
+  /** For a pinned listing, the id of the page whose subtree it lists; the row links there. */
+  listOf?: string;
   /** What the agent was given for this pin, verbatim. */
   text?: string;
 }
@@ -36,11 +40,16 @@ function toPage(value: unknown): PinnedPage | undefined {
   if (!id) return undefined;
   const text = str(value.text);
   let name = str(value.name);
+  const listOf =
+    id.startsWith(LIST_ID_PREFIX) && id.length > LIST_ID_PREFIX.length ? id.slice(LIST_ID_PREFIX.length) : undefined;
   if (!name && text) {
-    const at = text.indexOf(` (${id}): `);
-    if (at > 0) name = text.slice(0, at);
+    if (listOf) name = /^Pages under (.+?) \(/.exec(text)?.[1];
+    else {
+      const at = text.indexOf(` (${id}): `);
+      if (at > 0) name = text.slice(0, at);
+    }
   }
-  return { id, name, scope: str(value.scope), text };
+  return { id, name, scope: str(value.scope), text, ...(listOf ? { listOf } : {}) };
 }
 
 /** A signal's pinned Knowledge, or undefined when it is some other signal or a shape we don't know. */
