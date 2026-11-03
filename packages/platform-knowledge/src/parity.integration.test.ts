@@ -8,6 +8,7 @@ import { PlatformKnowledge } from './index';
 
 const apiUrl = process.env.KNOWLEDGE_TEST_API_URL;
 const databaseUrl = process.env.KNOWLEDGE_TEST_DATABASE_URL;
+const projectId = process.env.MASTRA_PROJECT_ID;
 const instanceId = process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
 const token = process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
 
@@ -26,13 +27,13 @@ function searchModel() {
   });
 }
 
-describe.runIf(apiUrl && databaseUrl && instanceId && token)('Postgres and PlatformKnowledge public API parity', () => {
+describe.runIf(apiUrl && databaseUrl && projectId && instanceId && token)('Postgres and PlatformKnowledge public API parity', () => {
   const runId = randomUUID();
   const scope = `resource:${runId}`;
   const scopes = { ...knowledgeMemoryScopes(), 'docs:$instanceId': { access: [] } };
   const directStore = new PostgresStore({ id: `direct-knowledge-${runId}`, connectionString: databaseUrl! });
   const direct = new Knowledge({ scopes, storage: directStore, tools: true });
-  const remote = new PlatformKnowledge({ scopes, tools: true, apiUrl, instanceId, accessToken: token });
+  const remote = new PlatformKnowledge({ scopes, tools: true, apiUrl, projectId, instanceId, accessToken: token });
 
   it('matches host writes, discovery, search, reads, and agent scope denial', async () => {
     try {
@@ -64,8 +65,8 @@ describe.runIf(apiUrl && databaseUrl && instanceId && token)('Postgres and Platf
   });
 
   it('rejects invalid project credentials and foreign instances before storage access', async () => {
-    for (const options of [{ accessToken: 'wrong', instanceId }, { accessToken: token, instanceId: 'foreign-instance' }]) {
-      const knowledge = new PlatformKnowledge({ apiUrl, ...options });
+    for (const options of [{ accessToken: 'wrong', instanceId }, { accessToken: token, instanceId: 'foreign-instance' }, { accessToken: token, instanceId, projectId: 'foreign-project' }]) {
+      const knowledge = new PlatformKnowledge({ apiUrl, projectId, ...options });
       await expect(knowledge.getStorage().then(store => store.listPages({ read: 'all' }))).rejects.toThrow();
     }
   });

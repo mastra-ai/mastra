@@ -4,11 +4,11 @@
 
 ## Transport contract
 
-- `POST {apiUrl}/v1/knowledge/{instanceId}/operations/{operation}` with `Authorization: Bearer {accessToken}` and JSON body `{ input }`; returns `{ result }`.
-- `instanceId` is selected by option or `MASTRA_KNOWLEDGE_INSTANCE_ID`; `apiUrl` by option or `MASTRA_PLATFORM_API_URL`.
+- `POST {apiUrl}/v1/knowledge/{projectId}/{instanceId}/operations/{operation}` with `Authorization: Bearer {accessToken}` and JSON body `{ input }`; returns `{ result }`.
+- `projectId`, `instanceId`, and `apiUrl` come from the respective options or `MASTRA_PROJECT_ID`, `MASTRA_KNOWLEDGE_INSTANCE_ID`, and `MASTRA_PLATFORM_API_URL`.
 - Credential priority: option `accessToken`, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PLATFORM_SECRET_KEY`.
-- The server resolves organization and project from the credential, validates instance ownership and readiness, and allowlists page-store operations. It never accepts a connection string from the caller.
-- Platform's Knowledge storage contract and schema version must both be 4; the currently published Platform `@mastra/core` and `@mastra/pg` dependencies do not yet implement this contract. Upgrade both to a release with schema-v4 Knowledge before deploying.
+- The server verifies that the credential authorizes the project path and that the instance belongs to that project and is ready; it allowlists page-store operations and never accepts a connection string from the caller.
+- The hosted service uses published schema-v4 alphas `@mastra/core@1.82.0-alpha.2` and `@mastra/pg@1.35.0-alpha.2`; production release alignment remains pending.
 
 ## Verification matrix
 
