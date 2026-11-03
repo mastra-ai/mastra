@@ -186,6 +186,7 @@ function pullRequestComment(
 async function createLinkedIssue(
   workItems: Awaited<ReturnType<typeof createFactoryStorageForTests>>['workItems'],
   projectId: string,
+  stages: string[] = ['planning'],
 ) {
   return (
     await workItems.upsert({
@@ -200,13 +201,46 @@ async function createLinkedIssue(
           url: 'https://github.com/acme/repo/issues/42',
         },
         title: 'Issue 42',
-        stages: ['planning'],
+        stages,
         sessions: {},
         metadata: {},
       },
     })
   ).item;
 }
+
+function issueEdited(deliveryId: string) {
+  return {
+    event: 'issues',
+    deliveryId,
+    payload: {
+      action: 'edited',
+      installation: { id: 7 },
+      repository: { id: 10, full_name: 'acme/repo' },
+      sender: { login: 'contributor' },
+      changes: { body: { from: 'Old details' } },
+      issue: {
+        number: 42,
+        title: 'Issue 42',
+        body: 'New details',
+        html_url: 'https://github.com/acme/repo/issues/42',
+      },
+    },
+  };
+}
+
+/** A deployment that opts back into starting triage on issue comments. */
+const triageOnComment: GithubRuleOverrides = {
+  issueCommentCreated: context =>
+    context.item
+      ? {
+          type: 'invokeSkill',
+          idempotencyKey: `${context.ingress.id}:factory-triage`,
+          role: 'triage',
+          skillName: 'factory-triage',
+        }
+      : undefined,
+};
 
 function pullRequest(
   event: 'opened' | 'closed' | 'synchronize',
@@ -652,39 +686,77 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
   });
 
-  it('retriages a human comment containing the handoff marker', async () => {
+  it.each([['intake'], ['triage'], ['planning']])(
+    'does not re-run triage when a person edits or comments on the issue of a card in %s',
+    async stage => {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+      const card = await createLinkedIssue(workItems, project.id, [stage]);
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+
+      await service.ingest(issueEdited('delivery-edited'));
+      await service.ingest(issueComment('created', 'delivery-comment-created'));
+      await service.ingest(
+        issueComment('created', 'delivery-human-marker', {
+          body: '<!-- mastra-factory-triage -->\nNew investigation lead',
+        }),
+      );
+      await service.ingest(issueComment('edited', 'delivery-comment-edited'));
+      await service.ingest(issueComment('deleted', 'delivery-comment-deleted'));
+
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+      expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+        stages: [stage],
+        revision: card.revision,
+      });
+    },
+  );
+
+  it('runs triage again when a person moves the card back into Triage', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
-    await createLinkedIssue(workItems, project.id);
+    const card = await createLinkedIssue(workItems, project.id);
+    const configVersion = 'factory-config-v1';
+    const boards = createBoardRegistry();
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      boards: createBoardRegistry(),
-      configVersion: 'factory-config-v1',
+      boards,
+      configVersion,
+    });
+    await service.ingest(issueComment('created', 'delivery-before-move'));
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+
+    const moved = await new FactoryTransitionService({ storage: workItems, configVersion, boards }).transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: card.id,
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: card.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-into-triage' },
+      cause: 'board_drag',
     });
 
-    await expect(
-      service.ingest(
-        issueComment('created', 'delivery-human-marker', {
-          body: '<!-- mastra-factory-triage -->\nNew investigation lead',
-        }),
-      ),
-    ).resolves.toEqual({ status: 'committed' });
-
+    expect(moved).toMatchObject({ status: 'accepted', stage: 'triage' });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions).toHaveLength(1);
-    const [decision] = decisions;
-    expect(decision?.decision).toMatchObject({
-      type: 'invokeSkill',
-      skillName: 'factory-triage',
-      idempotencyKey: '7:delivery-human-marker:factory-triage',
-    });
+    expect(decisions.map(record => record.decision)).toEqual([
+      expect.objectContaining({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' }),
+    ]);
   });
 
   it('re-evaluates against the fresh revision when a concurrent write makes the commit stale', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', triageOnComment);
     await createLinkedIssue(workItems, project.id);
     const original = workItems.commitRuleEvaluation.bind(workItems);
     const commit = vi
@@ -714,7 +786,7 @@ describe('GithubRules', () => {
   });
 
   it('fails the delivery after repeated stale commits so a redelivery can process it', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', triageOnComment);
     await createLinkedIssue(workItems, project.id);
     const commit = vi.spyOn(workItems, 'commitRuleEvaluation').mockResolvedValue({ status: 'stale' });
     const service = new GithubRules({
@@ -736,7 +808,7 @@ describe('GithubRules', () => {
   });
 
   it('ignores a marked handoff comment authored by the configured GitHub App', async () => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', triageOnComment);
     await createLinkedIssue(workItems, project.id);
     const service = new GithubRules({
       github,
@@ -766,7 +838,7 @@ describe('GithubRules', () => {
     // slug names a *different*, self-hosted App. Recognition therefore has to
     // come from the resolved identity. Without it Factory's own handoff woke
     // triage and cancelled the run that had just written it.
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', triageOnComment);
     await createLinkedIssue(workItems, project.id);
     const service = new GithubRules({
       github: {
@@ -795,10 +867,10 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
-  it('still retriages a human handoff comment when the identity is resolved', async () => {
+  it('still lets a comment rule see a human handoff comment when the identity is resolved', async () => {
     // The guard must key on authorship, not on the marker: a human quoting the
-    // marker to add a lead has to keep retriggering triage.
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // marker to add a lead still reaches a deployment's comment rule.
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', triageOnComment);
     await createLinkedIssue(workItems, project.id);
     const service = new GithubRules({
       github: {
@@ -3870,15 +3942,12 @@ describe('GithubRules with outside work in Intake', () => {
       expect(item?.stages).toEqual(['review']);
     });
 
-    it(`re-triages ${author}'s issue a person moved to Triage when someone comments`, async () => {
+    // Triage runs once: a comment on a card a person moved to Triage starts nothing, whoever wrote it.
+    it(`does not re-triage ${author}'s issue a person moved to Triage when someone comments`, async () => {
       const { deliver } = await setupCard({ permission: 'read', source: 'issue', stage: 'triage', metadata });
-      const { decisions } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
-      expect(decisions).toHaveLength(1);
-      expect(decisions[0]).toMatchObject({
-        decision: { type: 'invokeSkill', skillName: 'factory-triage' },
-        // Not parked for a person: the dispatcher tries to start it (and retries, as this harness has no sessions).
-        status: 'retry',
-      });
+      const { decisions, item } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
+      expect(decisions).toEqual([]);
+      expect(item?.stages).toEqual(['triage']);
     });
   }
 });

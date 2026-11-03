@@ -41,7 +41,6 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     metadata: null,
     triageType: null,
     autonomyArmedAt: null,
-    plansPreapprovedAt: null,
     acceptedAt: null,
     commentCount: 0,
     feedActivityAt: null,
@@ -364,14 +363,37 @@ describe('factory_inspect_work_item', () => {
   });
 });
 
+const TRIAGED = { triage: { sessionId: 's', threadId: 't', branch: 'factory/item', startedBy: 'factory' } };
+
 describe('factory_list_attention', () => {
   it('groups failed decisions by failure, lists proposals and held items', async () => {
     const items = [
       item({ id: 'x', metadata: { number: 1 } }),
       item({ id: 'y' }),
-      item({ id: 'held', stages: ['triage'], triageType: 'feature' }),
-      item({ id: 'bug', stages: ['triage'], triageType: 'bug' }),
-      item({ id: 'accepted', stages: ['triage'], triageType: 'feature', acceptedAt: new Date() }),
+      item({ id: 'held', stages: ['intake'], sessions: TRIAGED }),
+      item({ id: 'labeled', stages: ['intake'], metadata: { labels: ['Status: Needs Approval'] } }),
+      item({ id: 'untriaged', stages: ['intake'] }),
+      item({ id: 'triaging', stages: ['triage'], sessions: TRIAGED }),
+      item({ id: 'moved-on', stages: ['planning'], sessions: TRIAGED }),
+      // Self-review parked this card after it was built: it resumes, it is not waiting on triage.
+      item({
+        id: 'parked',
+        stages: ['intake'],
+        sessions: TRIAGED,
+        stageHistory: ['intake', 'triage', 'planning', 'execute', 'review', 'intake'].map(stage => ({
+          stage,
+          enteredAt: '2026-10-01T00:00:00Z',
+          by: 'agent:binding-1',
+        })),
+      }),
+      item({
+        id: 'review-board',
+        board: 'review',
+        stages: ['intake'],
+        sessions: TRIAGED,
+      }),
+      // A classification and acceptance stamped under the old model no longer decide anything.
+      item({ id: 'legacy', stages: ['triage'], triageType: 'feature request' }),
     ];
     const { run } = setup({
       items,
@@ -396,7 +418,8 @@ describe('factory_list_attention', () => {
     expect(result.incidents[0]!.decisions.map(row => row.canRetry)).toEqual([true, true]);
     expect(result.incidents[1]!.decisions[0]!.canRetry).toBe(false);
     expect(result.proposals).toMatchObject([{ id: 'p1', number: 1 }]);
-    expect(result.held.map(row => row.workItemId)).toEqual(['held']);
+    expect(result.held.map(row => row.workItemId)).toEqual(['held', 'labeled']);
+    expect(result.held[0]).not.toHaveProperty('triageType');
     expect(result.truncated).toBe(false);
   });
 

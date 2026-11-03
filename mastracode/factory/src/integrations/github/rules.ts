@@ -677,10 +677,10 @@ export class GithubRules {
       factoryAuthored: (!senderIsResponder && provenance !== null) || this.#isFactoryLogin(login),
     });
     // A marked handoff comment is ignored only when Factory authored it: a
-    // human may quote the marker to add an investigation lead, and that must
-    // still retrigger triage. Recognising the author is therefore the whole
-    // guard — when identity cannot be resolved this fails open and Factory's
-    // own handoff cancels the run that wrote it.
+    // human may quote the marker to add an investigation lead, and a custom
+    // comment rule must still see it. Recognising the author is therefore the
+    // whole guard — when identity cannot be resolved this fails open, and a
+    // rule that starts triage on comments would cancel the run that wrote it.
     if (
       actor.type === 'github' &&
       actor.factoryAuthored &&
