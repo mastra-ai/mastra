@@ -221,21 +221,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       body: { error: 'code_board' },
     });
     const catalog = await replicaA.send('GET', base);
-    expect(catalog.body.problems).toEqual(['Stored board "release" is hidden by the code board with the same key.']);
+    expect(catalog.body.problems).toEqual([
+      'Stored board "release" was created before release could be edited; edit or reset it to use it.',
+    ]);
     expect((await a.boards.get(scope, 'release'))?.name).toBe('Old release');
     expect(await a.boards.readVersion(scope)).toBe(version);
   });
 
-  it('lists code boards as read-only and boards the project created as editable', async () => {
+  it('lists the Work and app boards as editable, the legacy Review board as read-only, and boards the project created as editable', async () => {
     const { base, replicaA } = await setup();
     expect((await replicaA.send('POST', base, bugsBoard)).status).toBe(201);
     const catalog = await replicaA.send('GET', base);
     expect(
       (catalog.body.boards as Array<Record<string, unknown>>).map(board => [board.id, board.source, board.editable]),
     ).toEqual([
-      ['work', 'builtin', false],
+      ['work', 'builtin', true],
       ['review', 'builtin', false],
-      ['release', 'app', false],
+      ['release', 'app', true],
       ['bugs', 'stored', true],
     ]);
   });

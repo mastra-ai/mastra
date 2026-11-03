@@ -186,7 +186,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       });
     }
 
-    it('lists the stored board next to the read-only code boards and moves cards through its phases', async () => {
+    it('lists the stored board next to the code boards and moves cards through its phases', async () => {
       stubModel();
       const orgId = `org-${randomUUID()}`;
       const replica = await boot(database(), orgId);
@@ -204,7 +204,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       );
       const boards = await catalog(replica, projectId);
       expect(boards.map(board => [board.id, board.source, board.editable])).toEqual([
-        ['work', 'builtin', false],
+        ['work', 'builtin', true],
         ['review', 'builtin', false],
         ['bugs', 'stored', true],
       ]);

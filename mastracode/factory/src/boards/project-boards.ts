@@ -1,10 +1,17 @@
 import type { InlineSkill } from '@mastra/core/skills';
 
 import { findBoardSkillProblems } from '../skills/app-skills.js';
-import type { StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type {
+  CodeBoardSeed,
+  StoredBoardRecord,
+  StoredBoardScope,
+  StoredBoardsStorage,
+} from '../storage/domains/boards/base.js';
+import { codeBoardOf } from './define-board.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { compileStoredBoard } from './stored-board.js';
+import { reviewBoard } from './review.js';
+import { boardDefinitionOf, codeBehaviourConflicts, codeBoardHash, compileStoredBoard } from './stored-board.js';
 
 const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
@@ -15,9 +22,24 @@ export type BoardSourceKind = 'builtin' | 'app' | 'stored';
 
 export interface StoredBoardDetails {
   source: BoardSourceKind;
-  /** Only boards the project stored can be edited; code boards are read-only. */
+  /**
+   * Stored boards, the built-in Work board and app boards can be edited; the legacy Review board,
+   * which is being retired, stays read-only.
+   */
   editable: boolean;
+  /** A code board the project edited; it no longer follows its code definition. */
+  customized?: boolean;
+  /** A customized code board whose code definition changed since the project last copied it. */
+  defaultChanged?: boolean;
   problems: string[];
+}
+
+/**
+ * Code boards each project gets an editable stored copy of: every code board except the legacy
+ * Review board, which is being retired and is never copied.
+ */
+export function isEditableCodeBoard(board: InstalledBoard): boolean {
+  return codeBoardOf(board) !== reviewBoard;
 }
 
 /** A project's boards: the code boards plus its stored boards, and what to report about each board. */
@@ -82,8 +104,10 @@ function scopeKey(scope: StoredBoardScope): string {
 }
 
 /**
- * The per-project board cache. A project's boards are the code boards, served as code built them
- * and winning on their key, followed by the boards the project stored. Loads recheck the
+ * The per-project board cache. A project's boards are the code boards, followed by the boards the
+ * project stored. A code board the project edited (a customized stored copy under its key) is
+ * served as the stored fields plus the code behaviour of its board and phase keys; an unedited copy
+ * serves the code board itself. The legacy Review board is always served from code. Loads recheck the
  * project's board version at most every `recheckMs` and recompile when it changed, so stored
  * edits on other replicas arrive within that delay. The cache never writes.
  */
@@ -101,6 +125,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #generations = new Map<string, number>();
   readonly #warned = new Set<string>();
   readonly #codeSkills: readonly InlineSkill[];
+  readonly #seeds: ReadonlyMap<string, CodeBoardSeed>;
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
@@ -115,11 +140,27 @@ export class ProjectBoardCache implements ProjectBoardSource {
         board.id,
         {
           source: defaultBoards.includes(board) ? 'builtin' : 'app',
-          editable: false,
+          editable: isEditableCodeBoard(board),
+          ...(isEditableCodeBoard(board) ? { customized: false, defaultChanged: false } : {}),
           problems: this.#skillProblems(board),
         },
       ]),
     );
+    this.#seeds = new Map(
+      [...this.codeRegistry.values()]
+        .filter(isEditableCodeBoard)
+        .map(board => [board.id, { definition: boardDefinitionOf(board), hash: codeBoardHash(board) }]),
+    );
+  }
+
+  /** The stored copy each editable code board starts from, for the boards API to seed and reset. */
+  seeds(): CodeBoardSeed[] {
+    return [...this.#seeds.values()];
+  }
+
+  /** The seed for one editable code board, or undefined when `key` isn't one. */
+  seedFor(key: string): CodeBoardSeed | undefined {
+    return this.#seeds.get(key);
   }
 
   async load(scope: StoredBoardScope): Promise<BoardRegistry> {
@@ -220,12 +261,49 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[]): ProjectBoards {
-    const boards: InstalledBoard[] = [...this.codeRegistry.values()];
+    const byKey = new Map(rows.map(row => [row.key, row]));
     const details = new Map(this.#codeDetails);
     const problems: string[] = [];
-    for (const row of rows) {
-      if (this.codeRegistry.has(row.key)) {
+    // Code boards keep their code order. Unedited copies serve the code board itself, so a newer
+    // Factory release's defaults reach them on every replica without a write.
+    const boards: InstalledBoard[] = [...this.codeRegistry.values()].map(code => {
+      const row = byKey.get(code.id);
+      if (!row) return code;
+      if (!this.#seeds.has(code.id)) {
         problems.push(`Stored board "${row.key}" is hidden by the code board with the same key.`);
+        return code;
+      }
+      if (row.seedHash === null) {
+        problems.push(
+          `Stored board "${row.key}" was created before ${row.key} could be edited; edit or reset it to use it.`,
+        );
+        return code;
+      }
+      if (!row.customized) return code;
+      const defaultChanged = row.seedHash !== this.#seeds.get(code.id)!.hash;
+      const reason = this.#mergeProblem(row, code);
+      if (typeof reason === 'string') {
+        const message = `Board "${row.key}" keeps its built-in definition: ${reason}; edit or reset it.`;
+        details.set(code.id, { ...details.get(code.id)!, customized: true, defaultChanged, problems: [message] });
+        problems.push(message);
+        this.#warnOnce(
+          `merge:${scopeKey(scope)}:${row.key}:${row.revision}`,
+          `${message} (project ${scope.factoryProjectId})`,
+        );
+        return code;
+      }
+      details.set(code.id, {
+        ...details.get(code.id)!,
+        customized: true,
+        defaultChanged,
+        problems: this.#skillProblems(reason),
+      });
+      return reason;
+    });
+    for (const row of rows) {
+      if (this.codeRegistry.has(row.key)) continue;
+      if (row.seedHash !== null) {
+        problems.push(`Stored board "${row.key}" was copied from a code board this Factory no longer defines.`);
         continue;
       }
       let board: InstalledBoard;
@@ -248,6 +326,17 @@ export class ProjectBoardCache implements ProjectBoardSource {
       details,
       problems,
     };
+  }
+
+  /** The edited code board, or why it can't be served. */
+  #mergeProblem(row: StoredBoardRecord, code: InstalledBoard): InstalledBoard | string {
+    const conflicts = codeBehaviourConflicts(row, code);
+    if (conflicts.length > 0) return conflicts.join(' ');
+    try {
+      return compileStoredBoard(row, code);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   }
 
   #skillProblems(board: InstalledBoard): string[] {
