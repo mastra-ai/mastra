@@ -1124,6 +1124,8 @@ describe('AgentChannels', () => {
             streamOptions: expect.objectContaining({
               requestContext: expect.any(Object),
               memory: expect.objectContaining({ resource: 'discord:user-1' }),
+              // The channel posts background results from this run, so it waits for them.
+              untilIdle: true,
             }),
           }),
         }),

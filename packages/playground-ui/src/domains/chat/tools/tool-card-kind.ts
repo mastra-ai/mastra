@@ -1,8 +1,10 @@
 import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '../messages/message-metadata';
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
+import { KNOWLEDGE_TOOLS, knowledgeCard } from './badges/knowledge-tool-badge';
 import { getCodeModeCall } from './code-mode';
 import { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
+import { suspendedMcpInputRequest } from './mcp-input-request';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
 import { isConnectPromptPayload } from '@/domains/connect/types';
@@ -16,6 +18,7 @@ export type ToolCardKind =
   | 'ask_user'
   | 'connect_prompt'
   | 'submit_plan'
+  | 'mcp_input_request'
   | 'background'
   | 'agent'
   | 'workflow'
@@ -23,6 +26,7 @@ export type ToolCardKind =
   | 'sandbox'
   | 'code_mode'
   | 'mcp_app'
+  | 'knowledge'
   | 'plain';
 
 export interface ToolCardContext {
@@ -54,6 +58,10 @@ export const isWorkflowCall = (metadata: MessageMetadata | undefined, toolName: 
 
 export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
+
+/** A call running as a Mastra background task. An awaited call's part also names its task, but holds the final result. */
+export const isDeferredCall = (backgroundTaskId: string | undefined, backgroundTaskStatus: string | undefined) =>
+  backgroundTaskId !== undefined && backgroundTaskStatus !== 'completed' && backgroundTaskStatus !== 'failed';
 
 /** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
 export function badgeStatus(state: string | undefined, chatRunning: boolean): ActivityStatus {
@@ -92,7 +100,7 @@ export function isHiddenTool(toolName: string): boolean {
 }
 
 export function toolCardKind(
-  { toolName, toolCallId, input, output }: ToolPartFields,
+  { toolName, toolCallId, input, output, state, backgroundTaskId, backgroundTaskStatus }: ToolPartFields,
   { metadata, mcpAppTools }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
@@ -110,6 +118,11 @@ export function toolCardKind(
   ) {
     return 'submit_plan';
   }
+  // A foreground call parked on an MCP task's question: the run waits for the answer. A deferred
+  // call's question lives on its background task instead, which the background card reads.
+  if (!isDeferredCall(backgroundTaskId, backgroundTaskStatus) && suspendedMcpInputRequest(metadata, toolCallId)) {
+    return 'mcp_input_request';
+  }
   if (typeof output === 'string' && output.toLowerCase().includes('background task')) return 'background';
   if (isAgentCall(metadata, toolName)) return 'agent';
   if (isWorkflowCall(metadata, toolName)) return 'workflow';
@@ -117,5 +130,12 @@ export function toolCardKind(
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
   if (mcpAppTools?.[toolName]) return 'mcp_app';
+  // A settled or failed Knowledge call draws as a readable card; while running it stays a plain badge.
+  if (
+    KNOWLEDGE_TOOLS.has(toolName) &&
+    (state === 'output-error' || (isSettledState(state) && knowledgeCard(toolName, input, output)))
+  ) {
+    return 'knowledge';
+  }
   return 'plain';
 }

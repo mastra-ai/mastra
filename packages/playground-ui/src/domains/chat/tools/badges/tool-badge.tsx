@@ -1,3 +1,5 @@
+import type { McpInputRequestPayload } from '../mcp-input-request';
+import { isDeferredCall } from '../tool-card-kind';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BackgroundMcpTaskChip, McpTaskChip } from './mcp-task-chip';
 import { useMcpTaskProgress } from './use-mcp-task-progress';
@@ -41,6 +43,8 @@ export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> 
   backgroundTaskId?: string;
   /** `running` while the part holds a deferred call's placeholder; `completed`/`failed` once it holds the result. */
   backgroundTaskStatus?: string;
+  /** The MCP task question the call is waiting on, if it is. */
+  mcpInputRequest?: McpInputRequestPayload;
 }
 
 export const ToolBadge = ({
@@ -58,6 +62,7 @@ export const ToolBadge = ({
   status = 'idle',
   backgroundTaskId,
   backgroundTaskStatus,
+  mcpInputRequest,
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
@@ -78,10 +83,8 @@ export const ToolBadge = ({
     toolOutput.length > 0 ||
     needsApproval;
 
-  // An awaited call's part also names its background task, but holds the call's final result.
-  const deferred =
-    backgroundTaskId !== undefined && backgroundTaskStatus !== 'completed' && backgroundTaskStatus !== 'failed';
-  const mcpTask = useMcpTaskProgress(result, status, { deferred });
+  const deferred = isDeferredCall(backgroundTaskId, backgroundTaskStatus);
+  const mcpTask = useMcpTaskProgress(result, status, { deferred, request: mcpInputRequest });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks

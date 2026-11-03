@@ -2,6 +2,7 @@ name: Workspace Tests
 
 permissions:
   contents: read
+  id-token: write
 
 on:
   workflow_call:

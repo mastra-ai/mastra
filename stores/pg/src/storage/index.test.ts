@@ -28,6 +28,54 @@ createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }));
 // Schema names that are only valid when quoted, e.g. one schema per tenant (#24790)
 createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my-tenant' }));
 
+describe('agent persistence', () => {
+  it('persists a sparse model-only agent override', async () => {
+    const store = new PostgresStore(TEST_CONFIG);
+    const agentId = `model-owned-agent-${Date.now()}`;
+
+    try {
+      await store.init();
+      const agents = await store.getStore('agents');
+      if (!agents) throw new Error('Agents storage is unavailable');
+
+      await agents.create({
+        // @ts-expect-error Sparse Editor-owned overrides intentionally omit code-owned instructions and model.
+        agent: {
+          id: agentId,
+          name: 'Model Owned Agent',
+          modelList: [
+            {
+              id: 'primary',
+              provider: 'openai',
+              modelId: 'gpt-5.1',
+              enabled: true,
+              maxRetries: 0,
+            },
+          ],
+        },
+      });
+
+      const version = await agents.getVersionByNumber(agentId, 1);
+      expect(version).toMatchObject({
+        name: 'Model Owned Agent',
+        instructions: '',
+        model: {},
+        modelList: [
+          {
+            id: 'primary',
+            provider: 'openai',
+            modelId: 'gpt-5.1',
+            enabled: true,
+            maxRetries: 0,
+          },
+        ],
+      });
+    } finally {
+      await store.close();
+    }
+  });
+});
+
 // Helper to create a pre-configured pg.Pool
 const createTestPool = () => {
   return new Pool({ connectionString });

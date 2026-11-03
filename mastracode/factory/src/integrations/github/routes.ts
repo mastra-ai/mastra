@@ -381,6 +381,55 @@ async function ingestPolledEvents(
   }
 }
 
+// Under the board's 30 s pull request poll: a lone board still runs the rules on every poll while passes take under 10 s.
+const POLLED_PAGE_INGEST_REST_MS = 20_000;
+// A stuck pass keeps its page so no other pass piles onto it, but stops holding the boards' lists after this.
+const POLLED_PAGE_INGEST_WAIT_MS = 10_000;
+// Past this a pass is presumed stuck, and the next poll runs the rules again as if it were not there.
+const POLLED_PAGE_INGEST_ABANDON_MS = 120_000;
+
+function waitAtMost(pass: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const waited = new Promise<void>(resolve => {
+    timer = setTimeout(resolve, POLLED_PAGE_INGEST_WAIT_MS);
+  });
+  return Promise.race([pass, waited]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * One rules pass per listed page at a time, whichever board asked, then a rest: each pass reads the
+ * whole project, and every open board polls the same pages. A board joins a running pass unless it
+ * looks stuck, and a resting page still ingests the pull requests its last pass did not list.
+ */
+function createPolledPageIngest() {
+  const running = new Map<string, { startedAt: number; done: Promise<void> }>();
+  const resting = new Map<string, { finishedAt: number; ingested: Set<number> }>();
+  return <T extends { number: number }>(
+    key: string,
+    pullRequests: readonly T[],
+    ingest: (pullRequests: readonly T[]) => Promise<void>,
+  ): Promise<void> => {
+    const pending = running.get(key);
+    if (pending && Date.now() - pending.startedAt < POLLED_PAGE_INGEST_ABANDON_MS) return waitAtMost(pending.done);
+    // Finish order: a key is only set again after it was pruned, so the oldest entries come first.
+    for (const [rested, { finishedAt }] of resting) {
+      if (Date.now() - finishedAt < POLLED_PAGE_INGEST_REST_MS) break;
+      resting.delete(rested);
+    }
+    const rest = resting.get(key);
+    const due = rest ? pullRequests.filter(pullRequest => !rest.ingested.has(pullRequest.number)) : pullRequests;
+    if (due.length === 0) return Promise.resolve();
+    const done = ingest(due).finally(() => {
+      if (running.get(key)?.done !== done) return;
+      running.delete(key);
+      if (rest) for (const pullRequest of due) rest.ingested.add(pullRequest.number);
+      else resting.set(key, { finishedAt: Date.now(), ingested: new Set(due.map(pullRequest => pullRequest.number)) });
+    });
+    running.set(key, { startedAt: Date.now(), done });
+    return waitAtMost(done);
+  };
+}
+
 const LINKED_BACKLOG_MAX_PAGES = 5;
 
 function listedIssueOf(issue: Awaited<ReturnType<GithubIntegration['intake']['listIssues']>>['issues'][number]) {
@@ -479,6 +528,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, sandbox });
+  const ingestPolledPage = createPolledPageIngest();
 
   // The status route is always registered so the SPA can detect the disabled state.
   routes.push(
@@ -909,9 +959,14 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
-          await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
-            options.ingestFactoryEvent,
+          await ingestPolledPage(
+            `${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
+            responsePullRequests,
+            listed =>
+              ingestPolledEvents(
+                listed.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
+                options.ingestFactoryEvent,
+              ),
           );
           return c.json({
             pullRequests: responsePullRequests,

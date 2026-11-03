@@ -90,7 +90,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     <>
       <CommandPaletteInput
         autoFocus
-        placeholder="Search sessions, reviews, #issues, pages, and Factories…"
+        placeholder="Search sessions, reviews, #issues, pages, and Factories"
         rightSlot={<Kbd>Esc</Kbd>}
       />
 

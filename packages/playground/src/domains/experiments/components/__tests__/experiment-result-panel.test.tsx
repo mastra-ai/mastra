@@ -178,7 +178,7 @@ describe('ExperimentResultPanel metadata', () => {
       const { onTagsChange } = renderPanel(result);
 
       fireEvent.click(screen.getByRole('combobox'));
-      const search = await screen.findByPlaceholderText('Search or create tag...');
+      const search = await screen.findByPlaceholderText('Search or create tag');
       fireEvent.input(search, { target: { value: 'fresh' }, inputType: 'insertText' });
       selectOption(await screen.findByRole('option', { name: 'Create "fresh"' }));
 

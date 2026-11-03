@@ -48,6 +48,8 @@ export interface SourcePickerProps {
   onRetry?: () => void;
   onToggleItem: (id: string) => Promise<void>;
   itemDescription?: (id: string) => string | undefined;
+  /** Label for a saved source that is no longer listed; defaults to its ID. */
+  fallbackLabel?: (id: string) => string;
   itemActions?: (item: SourcePickerItem) => ReactNode;
   /** Full-width content under a selected item's row, for routing that doesn't fit beside it. */
   itemDetails?: (item: SourcePickerItem) => ReactNode;
@@ -67,6 +69,7 @@ export function SourcePicker(props: SourcePickerProps) {
     onRetry,
     onToggleItem,
     itemDescription,
+    fallbackLabel,
     itemActions,
     itemDetails,
   } = props;
@@ -91,7 +94,10 @@ export function SourcePicker(props: SourcePickerProps) {
           <ul className="divide-border border-border divide-y border-b">
             {selected.map(id => {
               const group = groups.find(candidate => candidate.items.some(item => item.id === id));
-              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? { id, label: id };
+              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? {
+                id,
+                label: fallbackLabel?.(id) ?? id,
+              };
               const context = [groups.length > 1 ? group?.label : undefined, item.hint].filter(Boolean).join(' · ');
               const description = itemDescription?.(id);
               const details = itemDetails?.(item);
@@ -216,7 +222,7 @@ function SourcePickerDrawer({
           <SearchInput
             ref={searchInput}
             label={`Search ${label}`}
-            placeholder="Search…"
+            placeholder="Search"
             value={query}
             onValueChange={setQuery}
             className="w-full"

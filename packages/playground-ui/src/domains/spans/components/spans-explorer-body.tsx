@@ -135,7 +135,6 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
             {urlState && <ObservabilitySavedViews page="spans" {...urlState} columns={columns} />}
             <ActionRow>
               <ActionRow.Start>
-                <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
                 <SpansFilterBar
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
@@ -151,6 +150,9 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
                   disabled={isLoading}
                 />
               </ActionRow.Start>
+              <ActionRow.End>
+                <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
+              </ActionRow.End>
             </ActionRow>
           </>
         }
