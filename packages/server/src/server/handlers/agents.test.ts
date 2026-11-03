@@ -5114,7 +5114,8 @@ describe('plain Agent resumable streams', () => {
       }),
     ]).finally(() => clearTimeout(timer));
 
-    expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK, AgentStreamEventTypes.SUSPENDED]);
+    // The route sends public chunk frames; the suspended envelope ends the stream without a frame of its own.
+    expect(events.map(event => event.type)).toEqual(['tool-call-approval']);
   });
 
   describe('observe authorization', () => {

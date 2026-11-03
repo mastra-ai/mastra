@@ -1,4 +1,3 @@
-import type { Mastra } from '@mastra/core';
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type {
   AgentEditorConfig,
