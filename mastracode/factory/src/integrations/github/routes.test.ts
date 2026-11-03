@@ -1688,14 +1688,20 @@ describe('prs route', () => {
     expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
   });
 
-  it('runs the rules again for a page once the window has passed', async () => {
+  it('rests a page for the whole window after a slow rules pass finishes, then runs the rules again', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       seedMaterializedProject();
-      const ingestFactoryEvent = vi.fn(async () => undefined);
+      const pass = Promise.withResolvers<void>();
+      const ingestFactoryEvent = vi.fn(() => pass.promise);
       const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
-      await app.request('/web/github/projects/p1/prs');
+      const first = app.request('/web/github/projects/p1/prs');
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
+      vi.setSystemTime(Date.now() + 25_000);
+      pass.resolve();
+      await first;
+
       vi.setSystemTime(Date.now() + 19_000);
       await app.request('/web/github/projects/p1/prs');
       expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);

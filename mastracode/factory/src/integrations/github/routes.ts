@@ -381,23 +381,29 @@ async function ingestPolledEvents(
   }
 }
 
-// Under the board's 30 s pull request poll, so a lone open board still reaches the rules on every poll.
-const POLLED_PAGE_INGEST_WINDOW_MS = 20_000;
+// Under the board's 30 s pull request poll: a lone board still runs the rules on every poll while passes take under 10 s.
+const POLLED_PAGE_INGEST_REST_MS = 20_000;
 
 /**
- * One rules pass per listed page per window, whichever board asked: each pass reads the whole
- * project, and every open board polls the same pages. A board joins a running pass, however old.
+ * One rules pass per listed page at a time, whichever board asked, then a rest: each pass reads the
+ * whole project, and every open board polls the same pages. A board joins a running pass, however old.
  */
 function createPolledPageIngest() {
   const running = new Map<string, Promise<void>>();
-  const startedAt = new Map<string, number>();
+  const finishedAt = new Map<string, number>();
   return (key: string, run: () => Promise<void>): Promise<void> => {
     const pending = running.get(key);
     if (pending) return pending;
-    const last = startedAt.get(key);
-    if (last !== undefined && Date.now() - last < POLLED_PAGE_INGEST_WINDOW_MS) return Promise.resolve();
-    startedAt.set(key, Date.now());
-    const done = run().finally(() => running.delete(key));
+    // Finish order: a key is only set again after it was pruned, so the oldest entries come first.
+    for (const [rested, at] of finishedAt) {
+      if (Date.now() - at < POLLED_PAGE_INGEST_REST_MS) break;
+      finishedAt.delete(rested);
+    }
+    if (finishedAt.has(key)) return Promise.resolve();
+    const done = run().finally(() => {
+      running.delete(key);
+      finishedAt.set(key, Date.now());
+    });
     running.set(key, done);
     return done;
   };
