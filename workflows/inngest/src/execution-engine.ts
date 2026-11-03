@@ -7,6 +7,7 @@ import type { PubSub } from '@mastra/core/events';
 import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
+import type { WorkflowsStorage } from '@mastra/core/storage';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -305,21 +306,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   /**
-   * Whether the caller deleted this run at its budget deadline (see createInngestAgent
-   * `armTotalTimeout`). A write after that must not bring the run back. A run that suspended or
-   * finished before the deadline keeps its snapshot, so its write still lands when it reaches
-   * storage late.
+   * After the deadline the caller may have deleted the run (see createInngestAgent
+   * `armTotalTimeout`). An update lands only on a row that is still there, so a late write never
+   * brings a deleted run back, while a run that parked or finished before the deadline keeps its
+   * late write. The store applies `expectedStatus` inside the update and reports no rejection, as
+   * adapters without guarded snapshot writes do.
    */
-  async deletedAtDeadline(workflowId: string, runId: string): Promise<boolean> {
-    if (!this.executionDeadlinePassed()) return false;
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    if (!workflowsStore) return false;
-    return !(await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId }));
-  }
-
-  override async persistStepUpdate(params: Parameters<DefaultExecutionEngine['persistStepUpdate']>[0]): Promise<void> {
-    if (await this.deletedAtDeadline(params.workflowId, params.runId)) return;
-    return super.persistStepUpdate(params);
+  override async writeWorkflowSnapshot(
+    store: WorkflowsStorage,
+    params: Parameters<WorkflowsStorage['persistWorkflowSnapshot']>[0],
+  ): Promise<boolean | void> {
+    if (!this.executionDeadlinePassed()) return store.persistWorkflowSnapshot(params);
+    const { workflowName, runId, snapshot, fence, expectedStatus } = params;
+    await store.updateWorkflowState({ workflowName, runId, fence, opts: { ...snapshot, expectedStatus } });
   }
 
   /**

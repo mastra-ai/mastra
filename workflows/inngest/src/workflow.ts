@@ -719,13 +719,10 @@ export class InngestWorkflow<
 
             // Ensure final snapshot is persisted BEFORE publishing workflow-finish
             // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
-            // A run the caller deleted at its budget deadline stays deleted.
-            const shouldPersistFinalSnapshot =
-              !(await engine.deletedAtDeadline(this.id, runId)) &&
-              this.options.shouldPersistSnapshot({
-                workflowStatus: result.status,
-                stepResults: result.steps,
-              });
+            const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
+              workflowStatus: result.status,
+              stepResults: result.steps,
+            });
             if (shouldPersistFinalSnapshot) {
               const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
               if (workflowsStore) {
@@ -760,7 +757,8 @@ export class InngestWorkflow<
                   timestamp: Date.now(),
                 };
 
-                await workflowsStore.persistWorkflowSnapshot({
+                // A run the caller deleted at its budget deadline stays deleted.
+                await engine.writeWorkflowSnapshot(workflowsStore, {
                   workflowName: this.id,
                   runId,
                   resourceId,
