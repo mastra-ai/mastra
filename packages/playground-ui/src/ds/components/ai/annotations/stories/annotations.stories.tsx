@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUp } from 'lucide-react';
 import { useRef, useState } from 'react';
 
-import { AnnotationSelectionToolbar } from '../annotation-selection-toolbar';
 import { ChatAnnotationsProvider, useChatAnnotations } from '../chat-annotations';
 import { ComposerAnnotationList } from '../composer-annotation-list';
 import { ComposerAnnotations } from '../composer-annotations';
@@ -28,14 +27,14 @@ const FOLLOW_UP = `Opened the pull request with the approved styling for Factory
 function AnnotatingChat() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { takeAnnotations } = useChatAnnotations();
+  const { annotations, takeAnnotations } = useChatAnnotations();
   const [draft, setDraft] = useState('');
   const [sent, setSent] = useState<string>();
+  const empty = !draft.trim() && annotations.length === 0;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-      {/* The marks are placed in the scrolled content, so they travel with the text. */}
-      <div className="h-96 overflow-y-auto rounded-xl" data-testid="story-transcript">
+      <div className="h-96 overflow-y-auto rounded-xl">
         <div ref={transcriptRef} className="relative flex flex-col gap-4 py-4">
           <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={inputRef} />
           <Message from="user">Can we make the tables look more like a DataList without its container?</Message>
@@ -56,7 +55,7 @@ function AnnotatingChat() {
         aria-label="Message composer"
         onSubmit={event => {
           event.preventDefault();
-          if (!draft.trim()) return;
+          if (empty) return;
           setSent(formatAnnotatedMessage(draft, takeAnnotations()));
           setDraft('');
         }}
@@ -72,7 +71,7 @@ function AnnotatingChat() {
               onChange={event => setDraft(event.target.value)}
             />
             <ComposerActions className="justify-end">
-              <Button type="submit" size="icon-md" tooltip="Send" disabled={!draft.trim()}>
+              <Button type="submit" size="icon-md" tooltip="Send" disabled={empty}>
                 <ArrowUp />
               </Button>
             </ComposerActions>
@@ -99,7 +98,7 @@ const meta: Meta<typeof TranscriptAnnotations> = {
     docs: {
       description: {
         component:
-          'Annotate parts of the transcript for the next message, the same way in Studio and Factory. Mount `ChatAnnotationsProvider` once per conversation, below whatever remounts when the thread changes. Render `TranscriptAnnotations` inside the scrolled transcript, below a positioned ancestor, and `ComposerAnnotations` at the top of `ComposerBox`; when sending, `takeAnnotations()` hands the waiting annotations to `formatAnnotatedMessage`, and `restoreAnnotations` puts them back if the message fails. In the transcript, Add to chat floats over text selected inside one message: a drag that runs past the message is trimmed back to it, and a selection that reaches a second message offers nothing. Each annotation gets a numbered comment bubble at the end of its passage and tints it; hovering a bubble deepens the tint, and clicking it opens a card to comment on the passage or remove it. The composer chip opens the numbered list, to find or remove each one. The agent receives a numbered Markdown list, each passage quoted with its comment, then the typed text. For another layout, compose `AnnotationSelectionToolbar`, `AnnotationMarkers` and `ComposerAnnotationList` with `useChatAnnotations`.',
+          'Annotate parts of the transcript for the next message, the same way in Studio and Factory. Mount `ChatAnnotationsProvider` once per conversation, below whatever remounts when the thread changes. Render `TranscriptAnnotations` inside the scrolled transcript, below a positioned ancestor, and `ComposerAnnotations` at the top of `ComposerBox`; when sending, `takeAnnotations()` hands the waiting annotations to `formatAnnotatedMessage`, and `restoreAnnotations` puts them back if the message fails. In the transcript, Add to chat floats over text selected inside one message: a drag that runs past the message is trimmed back to it, and a selection that reaches a second message offers nothing. Each annotation gets a numbered comment bubble at the end of its passage and tints it; hovering a bubble deepens the tint, and clicking it opens a card to comment on the passage or remove it. The composer chip opens the numbered list, to find or remove each one. The agent receives a numbered Markdown list, each passage quoted with its comment, then the typed text.',
       },
     },
   },
@@ -117,28 +116,33 @@ export const SelectAndAdd: Story = {
 };
 
 export const WaitingAnnotations: Story = {
-  render: () => (
-    <Composer aria-label="Message composer" className="mx-auto w-full max-w-3xl">
-      <ComposerRing>
-        <ComposerBox>
-          <ComposerAnnotationList
-            annotations={[
-              {
-                id: 'open',
-                text: 'Open rows: no frame or lines; subtle rounded hover and selection.',
-                comment: 'Make this the default for chat tables.',
-              },
-              {
-                id: 'soft',
-                text: 'Soft rows: faint rounded backgrounds with small gaps, a quieter surface that still separates each record from the next one when the list grows long.\n\nA second paragraph that stays hidden behind the clamp.',
-              },
-            ]}
-            onRemove={() => {}}
-          />
-          <ComposerInput aria-label="Message" placeholder="Ask about the annotations" />
-          <ComposerActions />
-        </ComposerBox>
-      </ComposerRing>
-    </Composer>
-  ),
+  render: () => {
+    const offPage = { element: document.createElement('p'), start: 0, end: 0, text: '', textBefore: '', textAfter: '' };
+    return (
+      <Composer aria-label="Message composer" className="mx-auto w-full max-w-3xl">
+        <ComposerRing>
+          <ComposerBox>
+            <ComposerAnnotationList
+              annotations={[
+                {
+                  id: 'open',
+                  text: 'Open rows: no frame or lines; subtle rounded hover and selection.',
+                  source: offPage,
+                  comment: 'Make this the default for chat tables.',
+                },
+                {
+                  id: 'soft',
+                  text: 'Soft rows: faint rounded backgrounds with small gaps, a quieter surface that still separates each record from the next one when the list grows long.\n\nA second paragraph that stays hidden behind the clamp.',
+                  source: offPage,
+                },
+              ]}
+              onRemove={() => {}}
+            />
+            <ComposerInput aria-label="Message" placeholder="Ask about the annotations" />
+            <ComposerActions />
+          </ComposerBox>
+        </ComposerRing>
+      </Composer>
+    );
+  },
 };

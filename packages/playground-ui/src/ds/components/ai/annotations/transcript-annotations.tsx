@@ -21,7 +21,12 @@ export function TranscriptAnnotations({ containerRef, composerInputRef }: Transc
 
   return (
     <>
-      <AnnotationMarkers annotations={annotations} onRemove={removeAnnotation} onCommentChange={setAnnotationComment} />
+      <AnnotationMarkers
+        containerRef={containerRef}
+        annotations={annotations}
+        onRemove={removeAnnotation}
+        onCommentChange={setAnnotationComment}
+      />
       <AnnotationSelectionToolbar
         containerRef={containerRef}
         onAnnotate={annotation => {

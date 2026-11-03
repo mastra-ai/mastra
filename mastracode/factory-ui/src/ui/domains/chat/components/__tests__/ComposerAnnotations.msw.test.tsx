@@ -36,7 +36,6 @@ function stubReply() {
   );
 }
 
-/** Drags a selection over the start of a paragraph with the mouse: press, select, release. */
 async function selectFrom(paragraphText: string, length: number) {
   const paragraph = await screen.findByText(paragraphText);
   const text = paragraph.firstChild;
@@ -92,6 +91,19 @@ describe('Composer annotations', () => {
     });
   });
 
+  describe('when the person sends an annotation without typing', () => {
+    it('sends the quoted passage on its own', async () => {
+      const user = userEvent.setup();
+      const session = await renderSessionWithReply();
+
+      await annotate(user, REPLY, 'Open rows'.length);
+      await user.click(screen.getByRole('button', { name: 'Send message' }));
+
+      await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows']));
+      expect(markers()).toEqual([]);
+    });
+  });
+
   describe('when two passages are added and one is removed', () => {
     it('lists them by number and sends only the one left', async () => {
       const user = userEvent.setup();
@@ -130,6 +142,41 @@ describe('Composer annotations', () => {
       await waitFor(() => expect(session.posted).toEqual(['1. > Open rows\n\nWhy this one?']));
       expect(await screen.findByRole('button', { name: '1 annotation' })).toBeInTheDocument();
       expect(markers()).toEqual(['1']);
+    });
+  });
+
+  describe('when the person answers a plan with feedback that starts with a slash', () => {
+    it('sends the annotation with the feedback instead of keeping it for a command', async () => {
+      const resumed: unknown[] = [];
+      server.use(
+        http.post(`${API}/sessions/:resourceId/tool-suspension`, async ({ request }) => {
+          resumed.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+      const session = await renderSessionWithReply({ materialized: true, autoAgentEnd: false });
+      await session.emit({
+        type: 'tool_suspended',
+        toolCallId: 'plan-call-1',
+        toolName: 'submit_plan',
+        args: { path: '.artifacts/plans/ship.md' },
+        suspendPayload: { toolId: 'submit_plan', path: '.artifacts/plans/ship.md', title: 'Ship it', plan: 'Add it.' },
+      });
+      const composer = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(composer).toHaveAttribute('placeholder', 'Give feedback on this plan'));
+
+      await annotate(user, REPLY, 'Open rows'.length);
+      await user.type(composer, '/tmp is the wrong place{enter}');
+
+      await waitFor(() =>
+        expect(resumed).toEqual([
+          expect.objectContaining({
+            resumeData: expect.objectContaining({ feedback: '1. > Open rows\n\n/tmp is the wrong place' }),
+          }),
+        ]),
+      );
+      expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument();
     });
   });
 });

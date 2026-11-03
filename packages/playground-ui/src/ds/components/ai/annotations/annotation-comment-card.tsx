@@ -16,7 +16,6 @@ export interface AnnotationCommentCardProps {
   onDone: () => void;
 }
 
-/** What opens from an annotation's mark: its passage, a comment that goes out with it, and removal. */
 export function AnnotationCommentCard({
   annotation,
   number,

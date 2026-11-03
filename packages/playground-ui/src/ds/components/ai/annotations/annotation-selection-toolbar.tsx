@@ -1,5 +1,6 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import { TextQuote } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
 import type { NewChatAnnotation } from './chat-annotations';
@@ -11,19 +12,28 @@ import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 export interface AnnotationSelectionToolbarProps {
-  /** The transcript. Text selected inside one message's content within it can be annotated. */
   containerRef: RefObject<HTMLElement | null>;
-  /** Receives the selected text, already trimmed, and where it sits, when the person picks Add to chat. */
   onAnnotate: (annotation: NewChatAnnotation) => void;
 }
 
-/**
- * Floats Add to chat above text selected in a message. It renders nothing until there is such a
- * selection, so mount it once next to the transcript.
- */
 export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: AnnotationSelectionToolbarProps) {
-  const { open, selection, dismiss } = useAnnotationSelection(containerRef);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const { open, selection, dismiss } = useAnnotationSelection(containerRef, toolbarRef);
   const container = usePortalContainer();
+  const addRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const tabsForward = event.key === 'Tab' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
+      const focusInToolbar = Boolean(toolbarRef.current?.contains(document.activeElement));
+      if (!tabsForward || event.defaultPrevented || focusInToolbar) return;
+      event.preventDefault();
+      addRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
 
   const addToChat = () => {
     if (!selection) return;
@@ -52,6 +62,7 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
           className="z-50 outline-none data-[anchor-hidden]:invisible"
         >
           <PopoverPrimitive.Popup
+            ref={toolbarRef}
             role="toolbar"
             aria-label="Selected text"
             initialFocus={false}
@@ -66,7 +77,7 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
               'motion-safe:data-[open]:animate-in motion-safe:data-[open]:fade-in-0 motion-safe:data-[open]:zoom-in-95',
             )}
           >
-            <Button type="button" variant="ghost" size="sm" icon={<TextQuote />} onClick={addToChat}>
+            <Button ref={addRef} type="button" variant="ghost" size="sm" icon={<TextQuote />} onClick={addToChat}>
               Add to chat
             </Button>
           </PopoverPrimitive.Popup>

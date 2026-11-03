@@ -6,45 +6,34 @@ import type { ReactNode } from 'react';
 import type { AnnotationSource } from './annotatable-selection';
 import { normalizeAnnotationText } from './format-annotated-message';
 
-export type { AnnotationSource } from './annotatable-selection';
-
-/** A passage waiting to go out with the next message. People see it as a numbered annotation. */
 export interface ChatAnnotation {
   id: string;
   text: string;
-  /** Where it was selected, so the transcript can mark it. */
-  source?: AnnotationSource;
-  /** What the person said about the passage; it goes out with it. */
+  source: AnnotationSource;
   comment?: string;
 }
 
 export type NewChatAnnotation = Pick<ChatAnnotation, 'text' | 'source'>;
 
 export interface ChatAnnotationsApi {
-  /** Annotations waiting for the next message, in the order they were added. Their number is their position. */
+  /** In the order they were added: an annotation's number is its position. */
   annotations: ChatAnnotation[];
-  /** Adds an annotation. Blank text, and a passage already waiting, are ignored. */
+  /** Ignores blank text and a passage already waiting. */
   addAnnotation: (annotation: NewChatAnnotation) => void;
   removeAnnotation: (id: string) => void;
   setAnnotationComment: (id: string, comment: string) => void;
   /** Hands every waiting annotation to the message being sent and clears them from the chat. */
   takeAnnotations: () => ChatAnnotation[];
-  /** Puts annotations from a message that failed to send back, ahead of any added since. */
+  /** Puts the annotations of a message that failed to send back, ahead of any added since. */
   restoreAnnotations: (annotations: readonly ChatAnnotation[]) => void;
 }
 
 const ChatAnnotationsContext = createContext<ChatAnnotationsApi | undefined>(undefined);
 
-const samePassage = (a: NewChatAnnotation, b: NewChatAnnotation) =>
-  a.source && b.source
-    ? a.source.element === b.source.element && a.source.start === b.source.start && a.source.end === b.source.end
-    : a.text === b.text;
+const samePassage = (a: AnnotationSource, b: AnnotationSource) =>
+  a.element === b.element && a.start === b.start && a.end === b.end;
 
-/**
- * Shares annotations between the transcript that adds them and the composer that sends them. Mount it
- * once per conversation, below whatever remounts when the thread changes, so annotations stay with
- * their thread.
- */
+/** Mount it below whatever remounts when the thread changes, so annotations stay with their thread. */
 export function ChatAnnotationsProvider({ children }: { children: ReactNode }) {
   const [annotations, setAnnotations] = useState<ChatAnnotation[]>([]);
 
@@ -54,7 +43,7 @@ export function ChatAnnotationsProvider({ children }: { children: ReactNode }) {
       const annotation = { text: normalizeAnnotationText(text), source };
       if (!annotation.text) return;
       setAnnotations(current =>
-        current.some(waiting => samePassage(waiting, annotation))
+        current.some(waiting => samePassage(waiting.source, source))
           ? current
           : [...current, { id: nanoid(), ...annotation }],
       );
@@ -65,15 +54,15 @@ export function ChatAnnotationsProvider({ children }: { children: ReactNode }) {
         current.map(annotation => (annotation.id === id ? { ...annotation, comment } : annotation)),
       ),
     takeAnnotations: () => {
-      const taken = annotations;
-      setAnnotations(current => current.filter(annotation => !taken.includes(annotation)));
-      return taken;
+      const taken = new Set(annotations.map(annotation => annotation.id));
+      setAnnotations(current => current.filter(annotation => !taken.has(annotation.id)));
+      return annotations;
     },
     restoreAnnotations: restored =>
-      setAnnotations(current => [
-        ...restored.filter(annotation => !current.some(kept => kept.id === annotation.id)),
-        ...current,
-      ]),
+      setAnnotations(current => {
+        const kept = new Set(current.map(annotation => annotation.id));
+        return [...restored.filter(annotation => !kept.has(annotation.id)), ...current];
+      }),
   };
 
   return <ChatAnnotationsContext.Provider value={value}>{children}</ChatAnnotationsContext.Provider>;

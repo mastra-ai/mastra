@@ -1336,7 +1336,6 @@ describe('Thread annotations', () => {
     document.getSelection()?.removeAllRanges();
   });
 
-  /** Drags a selection over the start of the reply with the mouse: press, select, release. */
   const selectFromReply = async (length: number) => {
     const paragraph = await screen.findByText(REPLY);
     const text = paragraph.firstChild;
@@ -1389,6 +1388,30 @@ describe('Thread annotations', () => {
     });
   });
 
+  describe('when the person sends an annotation without typing', () => {
+    it('sends the quoted passage on its own', async () => {
+      const captured: Captured[] = [];
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+      );
+      await act(async () => {
+        renderThread(history());
+      });
+
+      await selectFromReply('Open rows'.length);
+      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+      await waitFor(() => expect(captured).toHaveLength(1));
+      expect(JSON.stringify(captured[0].body.messages)).toContain(JSON.stringify('1. > Open rows'));
+      expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull();
+    });
+  });
+
   describe('when the server rejects the message with the annotation', () => {
     it('puts the annotation back in the composer with the typed text', async () => {
       let requests = 0;
@@ -1418,7 +1441,6 @@ describe('Thread annotations', () => {
   });
 
   describe('when the person opens another thread before sending the annotation', () => {
-    // The agent pages remount the chat per thread, as `renderThreadTree` does by keying `ChatProvider`.
     it('starts the other thread without annotations', async () => {
       server.use(...baseHandlers());
       let rendered: ReturnType<typeof render> | undefined;

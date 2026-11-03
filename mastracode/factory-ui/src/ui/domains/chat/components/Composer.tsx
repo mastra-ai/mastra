@@ -82,7 +82,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
-  const { takeAnnotations, restoreAnnotations } = useChatAnnotations();
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
@@ -104,7 +104,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
   const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
   const shownText = preview?.text ?? draft;
-  const hasSubmittableDraft = shownText.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
+  const hasSubmittableDraft =
+    shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -189,8 +190,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       setHeldDraftText(text);
       return;
     }
-    // A command is not a message, so annotations wait for the next one.
-    const sentAnnotations = text.startsWith('/') ? [] : takeAnnotations();
+    const runsCommand = !planFeedback.pending && text.startsWith('/');
+    const sentAnnotations = runsCommand ? [] : takeAnnotations();
     updateDraft('');
     void handleInput(text, sentAnnotations).catch(error => {
       restoreAnnotations(sentAnnotations);
@@ -236,7 +237,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
-    // What the agent reads; the draft keeps only what was typed, since failed annotations come back on their own.
     const message = formatAnnotatedMessage(text, sentAnnotations);
     if (planFeedback.pending) {
       await planFeedback.submitFeedback(message);

@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
+import type { Ref, RefObject } from 'react';
 
 import { passageEndRect, rangeFromSource } from './annotatable-selection';
 import { AnnotationCommentCard } from './annotation-comment-card';
@@ -10,86 +11,98 @@ import { cn } from '@/lib/utils';
 
 import './annotation-markers.css';
 
-/** Named in `annotation-markers.css`. One transcript per page, so one registry entry each is enough. */
+/** Named in `annotation-markers.css`. */
 const HIGHLIGHT = 'chat-annotation';
 const ACTIVE_HIGHLIGHT = 'chat-annotation-active';
 
-function paintHighlights(ranges: Range[], active: Range | undefined) {
+const paintedByTranscript = new Map<string, { ranges: Range[]; active: Range | undefined }>();
+
+function paintHighlights(transcript: string, ranges: Range[], active: Range | undefined) {
   if (typeof CSS === 'undefined' || !('highlights' in CSS)) return;
-  if (ranges.length === 0) CSS.highlights.delete(HIGHLIGHT);
-  else CSS.highlights.set(HIGHLIGHT, new Highlight(...ranges));
-  if (!active) {
+  if (ranges.length === 0) paintedByTranscript.delete(transcript);
+  else paintedByTranscript.set(transcript, { ranges, active });
+  const painted = Array.from(paintedByTranscript.values());
+  const allRanges = painted.flatMap(entry => entry.ranges);
+  const activeRanges = painted.flatMap(entry => (entry.active ? [entry.active] : []));
+  if (allRanges.length === 0) CSS.highlights.delete(HIGHLIGHT);
+  else CSS.highlights.set(HIGHLIGHT, new Highlight(...allRanges));
+  if (activeRanges.length === 0) {
     CSS.highlights.delete(ACTIVE_HIGHLIGHT);
     return;
   }
-  const emphasis = new Highlight(active);
+  const emphasis = new Highlight(...activeRanges);
   emphasis.priority = 1;
   CSS.highlights.set(ACTIVE_HIGHLIGHT, emphasis);
 }
 
 export interface AnnotationMarkersProps {
+  containerRef: RefObject<Element | null>;
   annotations: readonly ChatAnnotation[];
   onCommentChange: (id: string, comment: string) => void;
   onRemove: (id: string) => void;
 }
 
-/**
- * Marks each waiting annotation with a numbered comment bubble at the end of its passage, and
- * tints the passage. Hovering a bubble deepens its passage's tint; clicking it opens a card to
- * comment on the passage or remove it. Render it inside the scrolling transcript, below a
- * positioned ancestor that scrolls with it: the bubbles are placed in that content's coordinates,
- * so they move with the text without listening to scroll.
- */
-export function AnnotationMarkers({ annotations, onCommentChange, onRemove }: AnnotationMarkersProps) {
+export function AnnotationMarkers({ containerRef, annotations, onCommentChange, onRemove }: AnnotationMarkersProps) {
+  const transcript = useId();
   const layerRef = useRef<HTMLDivElement>(null);
+  const markersRef = useRef(new Map<string, HTMLButtonElement>());
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const [hovered, setHovered] = useState<string>();
   const [open, setOpen] = useState<{ id: string; anchor: HTMLElement }>();
   const openIndex = open ? annotations.findIndex(annotation => annotation.id === open.id) : -1;
   const openAnnotation = annotations[openIndex];
   const emphasized = openAnnotation?.id ?? hovered;
+  const tracking = annotations.length > 0;
 
-  // Written straight to the marks: layout is read after commit, and nothing else renders from it.
+  // Written straight to the bubbles: layout is read after commit, and nothing renders from it.
   const place = useEffectEvent(() => {
     const layer = layerRef.current;
     if (!layer) return;
     const origin = layer.getBoundingClientRect();
     const ranges: Range[] = [];
     let active: Range | undefined;
-    layer.querySelectorAll<HTMLElement>('[data-slot="annotation-marker"]').forEach((marker, index) => {
-      const annotation = annotations[index];
-      const range = annotation?.source && rangeFromSource(annotation.source);
+    for (const annotation of annotations) {
+      const marker = markersRef.current.get(annotation.id);
+      if (!marker) continue;
+      const range = rangeFromSource(annotation.source);
       const end = range && passageEndRect(range);
       marker.hidden = !end;
-      if (!annotation || !range || !end) return;
+      if (!range || !end) continue;
       ranges.push(range);
       if (annotation.id === emphasized) active = range;
-      // The bubble's tail (its square corner) sits just inside the top of the passage's last letter,
-      // low enough to leave the line above mostly clear.
-      marker.style.left = `${end.right - origin.left - 1}px`;
+      // The bubble's tail (its square corner) sits just inside the top of the passage's last letter.
+      const left = end.right - origin.left - 1;
+      marker.style.left = `${left}px`;
       marker.style.top = `${end.top - origin.top + 7}px`;
-    });
-    paintHighlights(ranges, active);
+      marker.style.setProperty('--room-right', `${origin.width - left}px`);
+    }
+    paintHighlights(transcript, ranges, active);
   });
 
-  // After every commit: the transcript renders with this layer, so a message that changed or left
-  // the page is placed again without waiting for a resize.
   useEffect(() => {
     place();
-  });
+  }, [annotations, emphasized]);
 
-  // Text above a annotation growing, older messages loading, or the column reflowing all resize the
-  // content the marks are placed in.
   useEffect(() => {
     const layer = layerRef.current;
-    const space = layer?.offsetParent ?? layer?.parentElement;
-    const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => place());
-    if (space) resize?.observe(space);
-    return () => {
-      resize?.disconnect();
-      paintHighlights([], undefined);
+    const container = containerRef.current;
+    if (!tracking || !layer || !container) return;
+    let frame = 0;
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => place());
     };
-  }, []);
+    const resizes = new ResizeObserver(schedule);
+    resizes.observe(layer);
+    const mutations = new MutationObserver(schedule);
+    mutations.observe(container, { childList: true, characterData: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      resizes.disconnect();
+      mutations.disconnect();
+      paintHighlights(transcript, [], undefined);
+    };
+  }, [tracking, containerRef, transcript]);
 
   const close = () => setOpen(undefined);
 
@@ -103,13 +116,19 @@ export function AnnotationMarkers({ annotations, onCommentChange, onRemove }: An
       {annotations.map((annotation, index) => (
         <AnnotationMarker
           key={annotation.id}
+          ref={marker => {
+            if (!marker) return;
+            markersRef.current.set(annotation.id, marker);
+            return () => {
+              markersRef.current.delete(annotation.id);
+            };
+          }}
           annotation={annotation}
           number={index + 1}
           active={annotation.id === emphasized}
           expanded={openAnnotation?.id === annotation.id}
-          onHoverChange={hovering =>
-            setHovered(current => (hovering ? annotation.id : current === annotation.id ? undefined : current))
-          }
+          onHoverStart={() => setHovered(annotation.id)}
+          onHoverEnd={() => setHovered(current => (current === annotation.id ? undefined : current))}
           onToggle={anchor =>
             setOpen(current => (current?.id === annotation.id ? undefined : { id: annotation.id, anchor }))
           }
@@ -150,20 +169,31 @@ export function AnnotationMarkers({ annotations, onCommentChange, onRemove }: An
 }
 
 interface AnnotationMarkerProps {
+  ref: Ref<HTMLButtonElement>;
   annotation: ChatAnnotation;
   number: number;
-  /** Hovered, focused or open: the bubble lifts and its passage's tint deepens. */
   active: boolean;
   expanded: boolean;
-  onHoverChange: (hovering: boolean) => void;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
   onToggle: (anchor: HTMLElement) => void;
 }
 
-/** One annotation's bubble. Placed by `AnnotationMarkers` after layout, so it starts hidden. */
-function AnnotationMarker({ annotation, number, active, expanded, onHoverChange, onToggle }: AnnotationMarkerProps) {
+/** Starts hidden: `AnnotationMarkers` shows it once the passage is laid out. */
+function AnnotationMarker({
+  ref,
+  annotation,
+  number,
+  active,
+  expanded,
+  onHoverStart,
+  onHoverEnd,
+  onToggle,
+}: AnnotationMarkerProps) {
   const commented = Boolean(annotation.comment?.trim());
   return (
     <button
+      ref={ref}
       type="button"
       data-slot="annotation-marker"
       data-active={active || undefined}
@@ -175,18 +205,18 @@ function AnnotationMarker({ annotation, number, active, expanded, onHoverChange,
       className={cn(
         annotationBubbleStyle,
         'pointer-events-auto absolute origin-bottom-left -translate-y-full cursor-pointer shadow-raised',
+        'translate-x-[min(0px,calc(var(--room-right)_-_100%))]',
         'motion-safe:transition-[scale,background-color] motion-safe:duration-fast motion-safe:ease-out-custom',
         'hover:scale-115 hover:bg-info-bright data-[active]:scale-115 data-[active]:bg-info-bright',
         focusRing,
       )}
-      onPointerEnter={() => onHoverChange(true)}
-      onPointerLeave={() => onHoverChange(false)}
-      // Keyboard focus only: a click also focuses the bubble, and focus returns to it when its card
-      // closes, which must not leave the passage looking hovered.
+      onPointerEnter={onHoverStart}
+      onPointerLeave={onHoverEnd}
+      // Keyboard focus only: focus returns here when the card closes, which must not look hovered.
       onFocus={event => {
-        if (event.currentTarget.matches(':focus-visible')) onHoverChange(true);
+        if (event.currentTarget.matches(':focus-visible')) onHoverStart();
       }}
-      onBlur={() => onHoverChange(false)}
+      onBlur={onHoverEnd}
       onClick={event => onToggle(event.currentTarget)}
     >
       {number}

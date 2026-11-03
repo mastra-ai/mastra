@@ -19,19 +19,21 @@ interface AnnotationSelectionState {
 
 const CLOSED: AnnotationSelectionState = { open: false };
 
+const closing = (state: AnnotationSelectionState) => (state.open ? { ...state, open: false } : state);
+
 /**
  * Follows the document selection and reports it once it rests on text in one message inside
  * `containerRef`. A drag reports when the pointer is released, not while it moves; a keyboard
- * selection reports as it changes.
+ * selection reports as it changes. Selection changes are ignored while focus is in `toolbarRef`.
  */
-export function useAnnotationSelection(containerRef: RefObject<Element | null>) {
+export function useAnnotationSelection(containerRef: RefObject<Element | null>, toolbarRef: RefObject<Element | null>) {
   const [state, setState] = useState<AnnotationSelectionState>(CLOSED);
-  const dismiss = () => setState(current => (current.open ? { ...current, open: false } : current));
+  const dismiss = () => setState(closing);
 
   useEffect(() => {
     let pressing = false;
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
-    const close = () => setState(current => (current.open ? { ...current, open: false } : current));
+    const close = () => setState(closing);
 
     // `settled`: the pointer was released, so a drag that ran past the message can be trimmed back to it.
     const read = (settled: boolean) => {
@@ -59,6 +61,8 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>) 
       settleTimer = setTimeout(() => read(true));
     };
     const onSelectionChange = () => {
+      // Focus moving into the toolbar can collapse the selection it acts on.
+      if (toolbarRef.current?.contains(document.activeElement)) return;
       if (pressing) close();
       else read(false);
     };
@@ -74,7 +78,7 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>) 
       document.removeEventListener('pointercancel', onPointerCancel, true);
       document.removeEventListener('selectionchange', onSelectionChange);
     };
-  }, [containerRef]);
+  }, [containerRef, toolbarRef]);
 
   return { open: state.open, selection: state.selection, dismiss };
 }

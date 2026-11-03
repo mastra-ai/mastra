@@ -5,7 +5,7 @@ import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScr
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { groupTurns, startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 
 import { useChatCommands } from '../context/ChatCommandsProvider';
@@ -80,7 +80,6 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
   );
 
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const { composerInputRef } = useChatCommands();
 
   return (
     // `contents`: only bounds what can be annotated, so the turns stay direct items of the chat column.
@@ -98,9 +97,15 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
           tail={tail}
         />
       </ArrivalScope>
-      <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={composerInputRef} />
+      <ComposerFocusingAnnotations containerRef={transcriptRef} />
     </div>
   );
+}
+
+/** Reads the composer context here, not in `Transcript`: its value changes on every keystroke. */
+function ComposerFocusingAnnotations({ containerRef }: { containerRef: RefObject<HTMLDivElement | null> }) {
+  const { composerInputRef } = useChatCommands();
+  return <TranscriptAnnotations containerRef={containerRef} composerInputRef={composerInputRef} />;
 }
 
 export function TranscriptEntries({

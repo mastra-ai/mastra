@@ -139,7 +139,6 @@ export interface ThreadProps {
   isLoadingPrevious?: boolean;
 }
 
-/** The thread body; `Thread` mounts it inside the annotations its transcript and composer share. */
 const ThreadContent = ({
   agentName,
   agentId,
@@ -311,7 +310,7 @@ const ThreadContent = ({
                 )}
                 <div className={landingShown ? 'starter-prompt' : undefined}>
                   <AgentComposer
-                    inputRef={composerInputRef}
+                    textareaRef={composerInputRef}
                     agentId={agentId}
                     threadId={threadId}
                     hasModelList={hasModelList}
@@ -355,8 +354,7 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
 };
 
 interface AgentComposerProps {
-  /** Owned by the thread, so adding an annotation from the transcript can focus the composer. */
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   agentId?: string;
   threadId?: string;
   hasModelList?: boolean;
@@ -366,7 +364,7 @@ interface AgentComposerProps {
 }
 
 const AgentComposer = ({
-  inputRef: textareaRef,
+  textareaRef,
   agentId,
   threadId,
   hasModelList,
@@ -375,7 +373,7 @@ const AgentComposer = ({
   refreshThreadList,
 }: AgentComposerProps) => {
   const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
-  const { takeAnnotations, restoreAnnotations } = useChatAnnotations();
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const preparing = useRef(false);
   const lifetime = useRef(0);
   useEffect(
@@ -397,8 +395,10 @@ const AgentComposer = ({
   // new-thread state (same as the first text send) or the chat never loads messages.
   const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
 
-  const isEmpty = text.trim().length === 0 && attachments.length === 0;
+  const isEmpty = text.trim().length === 0 && attachments.length === 0 && annotations.length === 0;
   const sendBlocked = isRunning && !canSendWhileStreaming;
+  const showModelSwitcher = Boolean(agentId && !hasModelList && !hideModelSwitcher);
+  const shownError = submitError || draftStatus?.error;
 
   const submit = async () => {
     if (
@@ -415,7 +415,7 @@ const AgentComposer = ({
     const submittedAttachments = attachments;
     const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
     // A message the server can't have stored goes back in the composer, before anything typed since.
-    const withSubmittedText = (typed: string) => (typed ? `${text}\n\n${typed}` : text);
+    const withSubmittedText = (typed: string) => [text, typed].filter(Boolean).join('\n\n');
     const restoreSubmission = (sentAnnotations: readonly ChatAnnotation[]) => {
       if (lifetime.current !== currentLifetime) return;
       restoreAnnotations(sentAnnotations);
@@ -463,9 +463,9 @@ const AgentComposer = ({
     // the bottom edge independently of the root crossfade.
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
-      {(submitError || draftStatus?.error) && (
+      {shownError && (
         <Txt variant="caption" role="alert">
-          {submitError || draftStatus?.error}
+          {shownError}
         </Txt>
       )}
       {draftStatus?.restoring && (
@@ -506,13 +506,13 @@ const AgentComposer = ({
                 }}
                 disabled={inputDisabled}
               />
-              {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+              {showModelSwitcher && <ComposerModelWarning />}
               <ComposerActions>
                 <ComposerActionRow
                   canExecute={canExecuteAgent}
                   agentId={agentId}
                   runOptionsSlot={runOptionsSlot}
-                  showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                  showModelSwitcher={showModelSwitcher}
                   isEmpty={isEmpty}
                   isRunning={isRunning}
                   canSendWhileStreaming={canSendWhileStreaming}

@@ -4,7 +4,6 @@
   background-color: color-mix(in oklab, var(--info-indicator) 20%, transparent);
 }
 
-/* The passage whose bubble is hovered, focused or open. */
 ::highlight(chat-annotation-active) {
   background-color: color-mix(in oklab, var(--info-indicator) 42%, transparent);
 }

@@ -1,7 +1,6 @@
 /** Every `Message` marks its content with this slot, in Studio and Factory alike. */
 const ANNOTATABLE_SELECTOR = '[data-slot="message-content"]';
 
-/** The selected part of one message's content. */
 export interface AnnotatablePart {
   element: Element;
   range: Range;
@@ -9,7 +8,6 @@ export interface AnnotatablePart {
   spills: boolean;
 }
 
-/** A point the toolbar is placed against: the first selected line, read live so it follows scrolling. */
 export interface SelectionAnchor {
   getBoundingClientRect: () => DOMRect;
   /** Lets the positioner find the scroll containers it has to follow. */
@@ -18,7 +16,6 @@ export interface SelectionAnchor {
 
 const visibleText = (value: string) => value.replace(/\s+/g, '');
 
-/** The part of `range` inside `element`. */
 function rangeWithin(range: Range, element: Element): Range {
   const within = element.ownerDocument.createRange();
   within.selectNodeContents(element);
@@ -31,21 +28,15 @@ function rangeWithin(range: Range, element: Element): Range {
   return within;
 }
 
-/**
- * The one message content inside `container` that holds the selected text. A selection with text in
- * two messages annotations neither, so it returns `undefined`.
- */
+/** A selection with text in two messages annotates neither, so it returns `undefined`. */
 export function findAnnotatablePart(container: Element, range: Range): AnnotatablePart | undefined {
   if (!range.intersectsNode(container)) return undefined;
   const selected = visibleText(range.toString());
   if (!selected) return undefined;
 
-  const touched = Array.from(container.querySelectorAll(ANNOTATABLE_SELECTOR)).filter(element =>
-    range.intersectsNode(element),
-  );
   // A message nested in another one's content (a subagent transcript) belongs to the outer annotation.
-  const outermost = touched.filter(element => !touched.some(other => other !== element && other.contains(element)));
-  const withText = outermost
+  const withText = Array.from(container.querySelectorAll(ANNOTATABLE_SELECTOR))
+    .filter(element => range.intersectsNode(element) && !element.parentElement?.closest(ANNOTATABLE_SELECTOR))
     .map(element => ({ element, range: rangeWithin(range, element) }))
     .filter(part => visibleText(part.range.toString()));
   const [part, other] = withText;
@@ -81,13 +72,31 @@ export function selectionAnchor(part: AnnotatablePart): SelectionAnchor {
 }
 
 /**
- * Where a annotation sits: the message content it came from and the character span of its text there.
- * Offsets rather than a `Range`, so the mark survives the message re-rendering its text nodes.
+ * Where an annotation sits: the message content it came from and the character span of its text there.
+ * Offsets rather than a `Range`, so the mark survives the message re-rendering its text nodes; `text`
+ * finds the passage again once text before it changes.
  */
 export interface AnnotationSource {
   element: Element;
   start: number;
   end: number;
+  text: string;
+  textBefore: string;
+  textAfter: string;
+}
+
+interface Span {
+  start: number;
+  end: number;
+}
+
+const SURROUNDING_LENGTH = 16;
+
+function surroundings(content: string, { start, end }: Span) {
+  return {
+    textBefore: visibleText(content.slice(0, start)).slice(-SURROUNDING_LENGTH),
+    textAfter: visibleText(content.slice(end)).slice(0, SURROUNDING_LENGTH),
+  };
 }
 
 function textOffset(element: Element, node: Node, offset: number): number {
@@ -98,16 +107,40 @@ function textOffset(element: Element, node: Node, offset: number): number {
 }
 
 export function annotationSource({ element, range }: AnnotatablePart): AnnotationSource {
-  return {
-    element,
+  const span = {
     start: textOffset(element, range.startContainer, range.startOffset),
     end: textOffset(element, range.endContainer, range.endOffset),
   };
+  return { element, ...span, text: visibleText(range.toString()), ...surroundings(element.textContent ?? '', span) };
 }
 
-/** The quoted text as it is laid out now, or `undefined` once its message left the page or lost that text. */
-export function rangeFromSource({ element, start, end }: AnnotationSource): Range | undefined {
+function passagePattern(text: string): RegExp {
+  return new RegExp(Array.from(text, char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'), 'g');
+}
+
+function locate(element: Element, source: AnnotationSource): Span | undefined {
+  const content = element.textContent ?? '';
+  const surroundingsAgree = (span: Span) => {
+    const now = surroundings(content, span);
+    return now.textBefore === source.textBefore || now.textAfter === source.textAfter;
+  };
+  const saved = { start: source.start, end: source.end };
+  if (visibleText(content.slice(saved.start, saved.end)) === source.text && surroundingsAgree(saved)) return saved;
+  const copies = Array.from(content.matchAll(passagePattern(source.text)), match => ({
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+  if (copies.length <= 1) return copies[0];
+  const distance = (copy: Span) => Math.abs(copy.start - source.start);
+  return copies.filter(surroundingsAgree).toSorted((a, b) => distance(a) - distance(b))[0];
+}
+
+/** The passage as it is laid out now, or `undefined` once its message left the page or no longer holds it for sure. */
+export function rangeFromSource(source: AnnotationSource): Range | undefined {
+  const { element } = source;
   if (!element.isConnected) return undefined;
+  const span = locate(element, source);
+  if (!span) return undefined;
   const document = element.ownerDocument;
   const range = document.createRange();
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -115,12 +148,12 @@ export function rangeFromSource({ element, start, end }: AnnotationSource): Rang
   let started = false;
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const length = node.textContent?.length ?? 0;
-    if (!started && start <= seen + length) {
-      range.setStart(node, start - seen);
+    if (!started && span.start <= seen + length) {
+      range.setStart(node, span.start - seen);
       started = true;
     }
-    if (started && end <= seen + length) {
-      range.setEnd(node, end - seen);
+    if (started && span.end <= seen + length) {
+      range.setEnd(node, span.end - seen);
       return range;
     }
     seen += length;
@@ -128,7 +161,6 @@ export function rangeFromSource({ element, start, end }: AnnotationSource): Rang
   return undefined;
 }
 
-/** The end of the annotation's last line, where its number sits like a footnote mark. */
 export function passageEndRect(range: Range): DOMRect | undefined {
   return lineRects(range).at(-1);
 }

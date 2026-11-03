@@ -7,5 +7,6 @@ import { ComposerAnnotationList } from './composer-annotation-list';
  */
 export function ComposerAnnotations() {
   const { annotations, removeAnnotation } = useChatAnnotations();
+  if (annotations.length === 0) return null;
   return <ComposerAnnotationList annotations={annotations} onRemove={removeAnnotation} />;
 }
