@@ -1,0 +1,171 @@
+// @vitest-environment jsdom
+import { screen } from '@testing-library/react';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+import { renderWithProviders } from '../../../../test/render';
+import type { KnowledgeNotePayload, KnowledgePagePayload } from '../../pageTypes';
+import type {
+  KnowledgeExplorerGraph,
+  KnowledgeExplorerPageDetail,
+  KnowledgeExplorerQueryState,
+  KnowledgeExplorerSource,
+} from '../KnowledgePageExplorer';
+import { FOCUS_LINK_CAP, KnowledgePageExplorer } from '../KnowledgePageExplorer';
+
+function page(id: string, parentId: string | null, extra: Partial<KnowledgePagePayload> = {}): KnowledgePagePayload {
+  return {
+    id,
+    scopeId: 'site',
+    parentId,
+    isScope: false,
+    position: id,
+    name: id,
+    version: 1,
+    createdBy: { author: 'a' },
+    updatedBy: { author: 'a' },
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+    ...extra,
+  };
+}
+
+function note(id: string, pageId: string, mentions: string[]): KnowledgeNotePayload {
+  return {
+    id,
+    pageId,
+    text: 'note',
+    stampScopeIds: [],
+    mentions,
+    provenance: { author: 'a' },
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+  };
+}
+
+const site = page('site', null, { isScope: true, name: 'Site', address: 'site:mastra' });
+const authors = page('authors', 'site');
+const ward = page('ward', 'authors', {
+  body: 'Wrote [[site:mastra#blog/far-out-post]] and mentions [[site:mastra#blog/other-post]].',
+});
+const abhi = page('abhi', 'authors');
+// None of these are in the graph: they sit under a blog the graph has not loaded.
+const farOut = page('far-out', 'blog', { key: 'far-out-post' });
+const otherOut = page('other-out', 'blog', { key: 'other-post' });
+const noteTarget = page('note-target', 'blog');
+const noteSource = page('note-source', 'blog');
+const loaded = [site, authors, ward, abhi];
+
+const ok = <T,>(data: T): KnowledgeExplorerQueryState<T> => ({ data, isPending: false, isError: false, error: null });
+const idle: KnowledgeExplorerQueryState<never> = { isPending: false, isError: false, error: null };
+const missing: KnowledgeExplorerQueryState<never> = { isPending: false, isError: true, error: new Error('404') };
+
+function render(options: {
+  wardPage?: KnowledgePagePayload;
+  notes?: KnowledgeNotePayload[];
+  mentionedBy?: KnowledgeNotePayload[];
+  reachable: Record<string, KnowledgePagePayload>;
+  requested?: string[][];
+}) {
+  const focus = options.wardPage ?? ward;
+  const detail: KnowledgeExplorerPageDetail = {
+    page: focus,
+    notes: options.notes ?? [],
+    ancestors: [site, authors],
+    related: [],
+    mentionedBy: options.mentionedBy ?? [],
+  };
+  const source: KnowledgeExplorerSource = {
+    usePage: pageId => (pageId === focus.id ? ok(detail) : idle),
+    useSearch: () => ({ data: { results: [] } }),
+    useLinkedPages: keys => {
+      options.requested?.push(keys);
+      return keys.map(key => {
+        const found = options.reachable[key];
+        return found ? ok({ page: found, notes: [], ancestors: [], related: [] }) : missing;
+      });
+    },
+  };
+  const graph: KnowledgeExplorerGraph = { pages: loaded, edges: [], pinnedIds: [], truncated: false };
+  return renderWithProviders(
+    <KnowledgePageExplorer
+      graph={graph}
+      source={source}
+      selectedPageId={focus.id}
+      onSelect={() => {}}
+      view="graph"
+      onViewChange={() => {}}
+    />,
+  );
+}
+
+const edgeIds = (container: HTMLElement) =>
+  [...container.querySelectorAll('.react-flow__edge')].map(edge => edge.getAttribute('data-id') ?? '');
+const drawnIds = (container: HTMLElement) =>
+  [...container.querySelectorAll('.react-flow__node [data-page-id]')].map(node => node.getAttribute('data-page-id'));
+
+beforeAll(() => {
+  window.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+});
+
+describe('KnowledgePageExplorer focused page links to pages the graph has not loaded', () => {
+  const reachable = {
+    'site:mastra#blog/far-out-post': farOut,
+    'site:mastra#blog/other-post': otherOut,
+    'note-target': noteTarget,
+    'note-source': noteSource,
+  };
+
+  it('fetches each unloaded link end by its ref or id', () => {
+    const requested: string[][] = [];
+    render({
+      notes: [note('n1', 'ward', ['note-target'])],
+      mentionedBy: [note('m1', 'note-source', ['ward'])],
+      reachable,
+      requested,
+    });
+    const last = requested[requested.length - 1] ?? [];
+    expect(last.sort()).toEqual(
+      ['note-source', 'note-target', 'site:mastra#blog/far-out-post', 'site:mastra#blog/other-post'].sort(),
+    );
+  });
+
+  it('draws the pages it links to and the pages that link to it, with their edges', () => {
+    const { container } = render({
+      notes: [note('n1', 'ward', ['note-target'])],
+      mentionedBy: [note('m1', 'note-source', ['ward'])],
+      reachable,
+    });
+    expect(drawnIds(container)).toEqual(expect.arrayContaining(['far-out', 'other-out', 'note-target', 'note-source']));
+    const edges = edgeIds(container);
+    expect(edges).toContain('link:ward->far-out');
+    expect(edges).toContain('link:ward->other-out');
+    expect(edges.some(id => id.includes('ward') && id.includes('note-target'))).toBe(true);
+    expect(edges.some(id => id.includes('note-source') && id.includes('ward'))).toBe(true);
+  });
+
+  it('says nothing is left out when every link end is drawn', () => {
+    renderWithProviders(<div />);
+    const { container } = render({ reachable });
+    expect(container.textContent ?? '').not.toMatch(/not drawn/);
+  });
+
+  it('draws what it can when one end cannot be fetched', () => {
+    const { container } = render({ reachable: { 'site:mastra#blog/far-out-post': farOut } });
+    expect(drawnIds(container)).toContain('far-out');
+    expect(drawnIds(container)).not.toContain('other-out');
+  });
+
+  it(`fetches at most ${FOCUS_LINK_CAP} ends each way and counts the rest as more`, () => {
+    const many = Array.from({ length: FOCUS_LINK_CAP + 5 }, (_, index) => `ref-${index}`);
+    const heavy = page('ward', 'authors', { body: many.map(ref => `[[${ref}]]`).join(' ') });
+    const requested: string[][] = [];
+    const reachableMany = Object.fromEntries(many.map(ref => [ref, page(`id-${ref}`, 'blog')]));
+    render({ wardPage: heavy, reachable: reachableMany, requested });
+    expect((requested[requested.length - 1] ?? []).length).toBe(FOCUS_LINK_CAP);
+    expect(screen.getByText(/\+5 more links of this page not drawn \(0 in, 5 out\)/)).toBeTruthy();
+  });
+});

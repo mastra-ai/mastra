@@ -226,6 +226,27 @@ describe('radialLayout', () => {
     expect(Math.abs(angle('draft') - angle('post-1'))).toBeLessThan(Math.abs(angle('draft') - angle('post-2')));
   });
 
+  describe('when the focus links to pages the hierarchy does not reach', () => {
+    const stray = [page('stray-a', 'elsewhere'), page('stray-b', 'elsewhere'), page('stray-c', 'elsewhere')];
+    const all = [...pages, ...stray];
+    const distance = (positions: ReturnType<typeof radialLayout>, id: string) =>
+      Math.hypot(positions.get(id)?.x ?? 0, positions.get(id)?.y ?? 0);
+
+    it("draws them on a ring inside the focus's first ring, not past every other dot", () => {
+      const shape = graphShape(all, 'blog');
+      const near = new Set(['stray-a', 'stray-b']);
+      const positions = radialLayout(all, shape, size, near);
+      expect(distance(positions, 'stray-a')).toBeLessThan(distance(positions, 'site'));
+      expect(distance(positions, 'stray-b')).toBeLessThan(distance(positions, 'site'));
+      expect(distance(positions, 'stray-c')).toBeGreaterThan(distance(positions, 'draft'));
+    });
+
+    it('leaves them on the outer ring when they are not links of the focus', () => {
+      const positions = radialLayout(all, graphShape(all, 'blog'), size);
+      expect(distance(positions, 'stray-a')).toBeGreaterThan(distance(positions, 'draft'));
+    });
+  });
+
   it('lays the same pages out the same way every time', () => {
     const shape = graphShape(pages, 'blog');
     expect(radialLayout(pages, shape, size)).toEqual(radialLayout([...pages].reverse(), shape, size));

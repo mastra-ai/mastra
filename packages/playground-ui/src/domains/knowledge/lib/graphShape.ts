@@ -179,17 +179,23 @@ const FIRST_DOT_RING_GAP = 150;
 const DOT_RING_GAP = 70;
 /** Space a dot needs along its ring before the next one staggers outward. */
 const DOT_SPACING = 28;
+/** The ring close around the focus that its link ends sit on, between the focus and its first ring. */
+const LINK_RING_MIN = 120;
+const LINK_RING_MAX = 175;
+const noPages: ReadonlySet<string> = new Set();
 
 /**
  * Places the focus at the centre and every other page on the ring for its depth, each page's children in
  * a slice of the circle taken out of its parent's slice, sized by how much hangs under each one (a full
  * circle counts for more than a dot). The focus's parent gets the slice at the top. Dots that don't fit
- * along their ring stagger outward in rows. Pages the walk never reached go on one outer ring.
+ * along their ring stagger outward in rows. Pages the walk never reached go on one outer ring, except
+ * those in `near` (the focus's links), which sit on a ring close around the focus so they stay in view.
  */
 export function radialLayout(
   pages: readonly KnowledgePagePayload[],
   shape: GraphShape,
   sizeOf: (page: KnowledgePagePayload) => number,
+  near: ReadonlySet<string> = noPages,
 ): Map<string, Point> {
   const live = liveOnly(pages);
   const byId = new Map(live.map(page => [page.id, page]));
@@ -271,10 +277,18 @@ export function radialLayout(
   place(firstRing, 1, -Math.PI / 2 - firstShare / 2, 2 * Math.PI);
 
   const unreached = live.filter(page => !positions.has(page.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
-  if (unreached.length) {
+  const close = unreached.filter(page => near.has(page.id));
+  const closeRing = Math.min(LINK_RING_MAX, Math.max(LINK_RING_MIN, (close.length * DOT_SPACING) / (2 * Math.PI)));
+  close.forEach((page, index) => {
+    // Half a step off the top, where the focus's parent sits.
+    const angle = Math.PI / 2 + (index / close.length) * 2 * Math.PI;
+    positions.set(page.id, { x: Math.cos(angle) * closeRing, y: Math.sin(angle) * closeRing });
+  });
+  const far = unreached.filter(page => !near.has(page.id));
+  if (far.length) {
     const outer = radius(radii.length) + DOT_RING_GAP;
-    unreached.forEach((page, index) => {
-      const angle = -Math.PI / 2 + (index / unreached.length) * 2 * Math.PI;
+    far.forEach((page, index) => {
+      const angle = -Math.PI / 2 + (index / far.length) * 2 * Math.PI;
       positions.set(page.id, { x: Math.cos(angle) * outer, y: Math.sin(angle) * outer });
     });
   }

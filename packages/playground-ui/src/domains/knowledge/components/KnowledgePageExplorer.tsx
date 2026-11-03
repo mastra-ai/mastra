@@ -85,6 +85,12 @@ export interface KnowledgeExplorerSource {
   useTreeLevels?: (
     requests: KnowledgeExplorerTreeRequest[],
   ) => Array<KnowledgeExplorerQueryState<KnowledgeExplorerTreeLevel>>;
+  /**
+   * Pages a link reaches, by id or `[[ref]]` (`scope#path`), one result per entry in order (e.g.
+   * `useQueries`). Lets the focused page draw links to pages the graph hasn't loaded; without it only
+   * links to loaded pages are drawn. A key the host can't resolve should come back as an error.
+   */
+  useLinkedPages?: (keys: string[]) => Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>>;
   /** A page's recent activity, newest first. */
   useActivity?: (pageId: string) => KnowledgeExplorerQueryState<KnowledgeExplorerActivity>;
 }
@@ -168,6 +174,8 @@ function visibleLinks(
 /** How many earlier focuses Back remembers. */
 const FOCUS_HISTORY_CAP = 50;
 const noTreeLevels = () => [];
+const noKeys: string[] = [];
+const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
 const noActivity = (): KnowledgeExplorerQueryState<KnowledgeExplorerActivity> => ({
   isPending: false,
   isError: false,
@@ -660,26 +668,81 @@ export function KnowledgePageExplorer({
     );
   }, [lazyMode, view, drawnGraph.wanted, previewed]);
 
-  // The selected page's own links, from its notes' mentions, notes elsewhere that mention it, and
-  // `[[links]]` in its body. Pages they reach that the graph doesn't hold join it, as dots.
-  const focusLinks = useMemo(() => {
+  // The selected page's own links: its notes' mentions and `[[links]]` in its body going out, notes
+  // elsewhere that mention it coming in. Each end is a page id or a ref; the ends the explorer holds
+  // resolve at once, the rest are fetched (up to FOCUS_LINK_CAP each way, outranking sibling dots).
+  const linkEnds = useMemo(() => {
     const detail = selected.data;
-    if (!detail || detail.page.id !== selectedPageId) return { edges: [], pages: [] };
+    if (!detail || detail.page.id !== selectedPageId) return null;
     const known = new Map([...lazy.pages, ...detail.ancestors, ...detail.related].map(page => [page.id, page]));
     const index = knowledgePageRefIndex(known.values());
-    const id = detail.page.id;
-    const edges: KnowledgePageEdge[] = [
-      ...detail.notes.flatMap(note => note.mentions.map(target => ({ source: id, target, kind: 'mention' as const }))),
-      ...(detail.mentionedBy ?? []).map(note => ({ source: note.pageId, target: id, kind: 'mention' as const })),
-      ...bodyLinkRefs(detail.page.body ?? '').flatMap(ref => {
-        const target = index.resolve(ref);
-        return target ? [{ source: id, target: target.id, kind: 'link' as const }] : [];
-      }),
-    ].filter(edge => edge.source !== edge.target);
-    const ends = new Set(edges.flatMap(edge => [edge.source, edge.target]));
-    return { edges, pages: [...ends].flatMap(end => known.get(end) ?? []) };
+    const own = detail.page.id;
+    const mentions = detail.notes.flatMap(note => note.mentions).filter(key => key && key !== own);
+    const refs = bodyLinkRefs(detail.page.body ?? '')
+      .map(ref => ref.trim())
+      .filter(key => key && key !== own);
+    const out = [...mentions, ...refs];
+    const into = (detail.mentionedBy ?? []).map(note => note.pageId).filter(id => id !== own);
+    const lookup = (key: string) => known.get(key) ?? index.resolve(key);
+    const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key)))];
+    const resolvedCount = (keys: string[]) => new Set(keys.flatMap(key => lookup(key)?.id ?? [])).size;
+    const room = (keys: string[]) => Math.max(0, FOCUS_LINK_CAP - resolvedCount(keys));
+    const wantOut = missing(out);
+    const wantIn = missing(into);
+    return {
+      detail,
+      known,
+      mentions,
+      refs,
+      into,
+      lookup,
+      fetchKeys: [...wantOut.slice(0, room(out)), ...wantIn.slice(0, room(into))],
+      unfetched: {
+        out: Math.max(0, wantOut.length - room(out)),
+        in: Math.max(0, wantIn.length - room(into)),
+      },
+    };
   }, [selected.data, selectedPageId, lazy.pages]);
+  const fetchKeys = linkEnds?.fetchKeys ?? noKeys;
+  const fetchedStates = (source.useLinkedPages ?? noLinkedPages)(fetchKeys);
+  const fetchedPages = useMemo(() => {
+    const byKey = new Map<string, KnowledgePagePayload>();
+    fetchKeys.forEach((key, index) => {
+      const page = fetchedStates[index]?.data?.page;
+      if (page) byKey.set(key, page);
+    });
+    return byKey;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- states are new arrays each render; their pages are what matters
+  }, [fetchKeys, ...fetchedStates.map(state => state.data?.page)]);
+  const focusLinks = useMemo(() => {
+    if (!linkEnds) return { edges: [], pages: [], unfetched: { in: 0, out: 0 } };
+    const { detail, lookup, mentions, refs, into } = linkEnds;
+    const resolve = (key: string) => lookup(key) ?? fetchedPages.get(key);
+    const own = detail.page.id;
+    const edges: KnowledgePageEdge[] = [];
+    const pages = new Map<string, KnowledgePagePayload>();
+    const reach = (key: string, kind: 'mention' | 'link', side: 'out' | 'in') => {
+      const target = resolve(key);
+      if (!target || target.id === own) {
+        // An unfetched id still draws its edge, counted as not shown until its page arrives.
+        if (!target && kind === 'mention' && side === 'out') edges.push({ source: own, target: key, kind });
+        if (!target && side === 'in') edges.push({ source: key, target: own, kind: 'mention' });
+        return;
+      }
+      pages.set(target.id, target);
+      edges.push(side === 'out' ? { source: own, target: target.id, kind } : { source: target.id, target: own, kind });
+    };
+    for (const key of mentions) reach(key, 'mention', 'out');
+    for (const key of refs) reach(key, 'link', 'out');
+    for (const key of into) reach(key, 'mention', 'in');
+    return {
+      edges: edges.filter(edge => edge.source !== edge.target),
+      pages: [...pages.values()],
+      unfetched: linkEnds.unfetched,
+    };
+  }, [linkEnds, fetchedPages]);
 
+  const focusLinkIds = useMemo(() => new Set(focusLinks.pages.map(page => page.id)), [focusLinks.pages]);
   const drawn = useMemo(() => {
     const ids = new Set(drawnGraph.pages.map(page => page.id));
     const extra = focusLinks.pages.filter(page => !ids.has(page.id));
@@ -702,6 +765,10 @@ export function KnowledgePageExplorer({
     [knownLinks, pagesById, selectedPageId, allLinks],
   );
   const linkEdges = linkView.edges;
+  const moreLinks = {
+    in: linkView.more.in + focusLinks.unfetched.in,
+    out: linkView.more.out + focusLinks.unfetched.out,
+  };
   // A clicked mention line shows the notes that make the mention; opening the page from there marks them.
   const [mention, setMention] = useState<MentionSelection | null>(null);
   const [marked, setMarked] = useState<{ source: string; target: string } | null>(null);
@@ -823,10 +890,9 @@ export function KnowledgePageExplorer({
           The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
         </p>
       ) : null}
-      {!showPage && (linkView.more.in > 0 || linkView.more.out > 0) ? (
+      {!showPage && (moreLinks.in > 0 || moreLinks.out > 0) ? (
         <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-links">
-          +{linkView.more.in + linkView.more.out} more links of this page not drawn ({linkView.more.in} in,{' '}
-          {linkView.more.out} out).
+          +{moreLinks.in + moreLinks.out} more links of this page not drawn ({moreLinks.in} in, {moreLinks.out} out).
         </p>
       ) : null}
       {focusedInGraph && children && (children.hidden > 0 || focusedInGraph.childCountCapped) ? (
@@ -931,6 +997,7 @@ export function KnowledgePageExplorer({
                 centerId={drawn.hub}
                 hiddenLinks={linkView.hidden}
                 knownLinks={knownLinks}
+                nearIds={focusLinkIds}
                 settled={graphSettled}
                 showCounts={dotCounts}
                 onPreview={page => {

@@ -874,6 +874,8 @@ export interface KnowledgePageGraphProps {
   hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
   /** Every link between pages, drawn or not: hovering a page draws its own, and tooltips count them. */
   knownLinks?: readonly KnowledgePageEdge[];
+  /** Pages the focus links to or from that the hierarchy doesn't reach: drawn close around the focus. */
+  nearIds?: ReadonlySet<string>;
   /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
   settled?: boolean;
   /** Write each dot's total of links in and out inside it. */
@@ -922,6 +924,7 @@ export function KnowledgePageGraph(props: KnowledgePageGraphProps) {
         centerId: held.current.centerId,
         hiddenLinks: held.current.hiddenLinks,
         knownLinks: held.current.knownLinks,
+        nearIds: held.current.nearIds,
       };
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -962,6 +965,7 @@ function KnowledgePageGraphInner({
   centerId,
   hiddenLinks,
   knownLinks,
+  nearIds,
   showCounts,
   onPreview,
   onSelect,
@@ -1023,7 +1027,7 @@ function KnowledgePageGraphInner({
     const crowd = crowdScale(ring.length);
     if (crowd < 1) for (const node of ring) node.data.size = Math.round(node.data.size * crowd);
     const sizes = new Map(flow.nodes.map(node => [node.id, node.data.size]));
-    const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? KNOWLEDGE_DOT_SIZE);
+    const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? KNOWLEDGE_DOT_SIZE, nearIds);
     const positions = runLayout(
       flow.nodes.map(node => ({
         id: node.id,
@@ -1035,7 +1039,7 @@ function KnowledgePageGraphInner({
       { ticks: 0 },
     );
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
-  }, [graphPages, allEdges, selectedPageId, centerId, linkCounts, showCounts]);
+  }, [graphPages, allEdges, selectedPageId, centerId, linkCounts, showCounts, nearIds]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
   // The page above whatever the graph is centred on, if it is drawn.
   const focusParentId = useMemo(() => {

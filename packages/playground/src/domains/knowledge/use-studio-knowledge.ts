@@ -140,6 +140,21 @@ export function useKnowledgePage(
   });
 }
 
+/** Pages a link reaches, by id or `[[ref]]`, sharing the page query's cache. A 404 is not retried. */
+export function useKnowledgeLinkedPages(knowledgeKey: string | undefined, keys: string[]) {
+  const client = useMastraClient();
+  return useQueries({
+    queries: keys.map(key => ({
+      queryKey: ['knowledge', knowledgeKey, 'page', key, null],
+      queryFn: knowledgeKey
+        ? async (): Promise<KnowledgePageResponse> => client.getKnowledge(knowledgeKey).page(key)
+        : skipToken,
+      retry: (failures: number, error: Error) => !(error && 'status' in error && error.status === 404) && failures < 2,
+      staleTime: 30_000,
+    })),
+  });
+}
+
 /** Tree levels for the explorer's lazily loaded sidebar, one query per request, in order. */
 export function useKnowledgeTreeLevels(
   knowledgeKey: string | undefined,
