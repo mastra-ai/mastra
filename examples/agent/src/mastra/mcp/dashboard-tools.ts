@@ -6,7 +6,7 @@ import type {
   DashboardRow,
   DashboardWidget,
 } from '@mastra/core/storage/dashboards';
-import { dashboardRendererInputSchema } from '@mastra/mcp-apps-components';
+import { dashboardRendererInputSchema } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { timeseriesOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
 import type { TimeseriesOptions } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
 import { z } from 'zod';

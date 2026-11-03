@@ -4,17 +4,25 @@
   "description": "Prebuilt MCP Apps that render Mastra UI components, ready to register as MCP server app resources",
   "license": "Apache-2.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
   "exports": {
-    ".": {
+    "./dashboard-renderer": {
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+        "types": "./dist/dashboard-renderer.d.ts",
+        "default": "./dist/dashboard-renderer.js"
       },
       "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.cjs"
+        "types": "./dist/dashboard-renderer.d.ts",
+        "default": "./dist/dashboard-renderer.cjs"
+      }
+    },
+    "./mastra-api": {
+      "import": {
+        "types": "./dist/mastra-api.d.ts",
+        "default": "./dist/mastra-api.js"
+      },
+      "require": {
+        "types": "./dist/mastra-api.d.ts",
+        "default": "./dist/mastra-api.cjs"
       }
     },
     "./*.html": "./dist/*.html",

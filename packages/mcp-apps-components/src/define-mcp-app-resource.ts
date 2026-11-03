@@ -12,7 +12,7 @@ export type McpAppResourceOptions = {
  * through the `mastraApi` tool, never the network, so the resource keeps hosts' default CSP.
  */
 export function defineMcpAppResource(app: string, defaults: Required<McpAppResourceOptions>) {
-  // Bundled into dist/index.{js,cjs}, next to the built dist/<app>.html.
+  // Bundled into dist/<app>.{js,cjs}, next to the built dist/<app>.html.
   const htmlPath = fileURLToPath(new URL(`./${app}.html`, import.meta.url));
 
   return ({

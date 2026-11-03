@@ -5,7 +5,7 @@ import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextproto
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { MASTRA_API_TOOL, mastraApiRequestSchema } from '../mastra-api';
+import { MASTRA_API_TOOL, mastraApiRequestSchema } from '../mastra-api-protocol';
 import type { McpAppDefinition } from '../runtime/define-mcp-app';
 
 /** Where the test host's server answers `mastraApi` calls; MSW handlers mock its routes. */

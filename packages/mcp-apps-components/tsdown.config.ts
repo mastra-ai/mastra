@@ -4,7 +4,7 @@ import { defineConfig } from 'tsdown';
 // Builds the server-side helpers. The iframe apps are built afterwards by `scripts/build-apps.ts`
 // into the same `dist/`, so this step owns cleaning it.
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/dashboard-renderer.ts', 'src/mastra-api.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',

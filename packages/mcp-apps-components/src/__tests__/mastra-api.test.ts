@@ -7,7 +7,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { MastraServer } from '@mastra/hono';
 import { MCPServer } from '@mastra/mcp';
 // The built package, as consumers install it.
-import { MASTRA_API_TOOL, mastraApiTool } from '@mastra/mcp-apps-components';
+import { MASTRA_API_TOOL, mastraApiTool } from '@mastra/mcp-apps-components/mastra-api';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { Hono } from 'hono';
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest';

@@ -1,5 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import { MASTRA_API_TOOL, mastraApiResponseSchema } from '../mastra-api';
+import { MASTRA_API_TOOL, mastraApiResponseSchema } from '../mastra-api-protocol';
 import { firstText, structuredOutput } from './tool-result';
 
 // MastraClient builds absolute URLs; only their path and query reach the tool.

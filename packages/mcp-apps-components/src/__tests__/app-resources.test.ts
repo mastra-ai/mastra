@@ -2,7 +2,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import { MCPServer } from '@mastra/mcp';
 // The built package, as consumers install it: the HTML artifacts only exist in dist/.
-import { dashboardRendererApp } from '@mastra/mcp-apps-components';
+import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -97,7 +97,7 @@ describe('dashboardRendererApp', () => {
   describe('when loaded from CommonJS', () => {
     it('points at the same built HTML as the ESM entry', () => {
       const require = createRequire(import.meta.url);
-      const cjs: typeof import('@mastra/mcp-apps-components') = require('@mastra/mcp-apps-components');
+      const cjs: typeof import('@mastra/mcp-apps-components/dashboard-renderer') = require('@mastra/mcp-apps-components/dashboard-renderer');
 
       expect(cjs.dashboardRendererApp().htmlPath).toBe(dashboardRendererApp().htmlPath);
     });

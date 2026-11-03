@@ -2,7 +2,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
-import { MASTRA_API_TOOL } from '../../../mastra-api';
+import { MASTRA_API_TOOL } from '../../../mastra-api-protocol';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';

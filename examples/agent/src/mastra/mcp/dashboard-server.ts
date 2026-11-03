@@ -1,7 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { MCPClient, MCPServer } from '@mastra/mcp';
 import { Memory } from '@mastra/memory';
-import { dashboardRendererApp, MASTRA_API_TOOL, mastraApiTool } from '@mastra/mcp-apps-components';
+import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
+import { MASTRA_API_TOOL, mastraApiTool } from '@mastra/mcp-apps-components/mastra-api';
 import { DASHBOARD_APP_URI, showObservabilityDashboard } from './dashboard-tools';
 
 const DASHBOARD_SERVER_ID = 'dashboard-mcp-server';
