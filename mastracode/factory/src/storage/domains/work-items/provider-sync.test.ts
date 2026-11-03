@@ -122,6 +122,37 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     }
   });
 
+  it('rolls back provider facts when the matching trust-stamp write fails, then permits a revision-checked retry', async () => {
+    const { storage, workItems, scope, item } = await setup();
+    const database = storage.authDatabase?.();
+    if (!database) throw new Error('Expected a real test database');
+    const before = await workItems.get({ ...scope, id: item.id });
+    if (database.dialect === 'postgres') {
+      await database.pool.query(`CREATE FUNCTION reject_trust_update() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'trust write rejected'; END; $$`);
+      await database.pool.query(`CREATE TRIGGER reject_trust_update BEFORE UPDATE ON factory_board_items
+        FOR EACH ROW EXECUTE FUNCTION reject_trust_update()`);
+    } else {
+      await database.client.execute(`CREATE TRIGGER reject_trust_update BEFORE UPDATE ON factory_board_items
+        BEGIN SELECT RAISE(ABORT, 'trust write rejected'); END`);
+    }
+    const refresh = () =>
+      workItems.syncCard({
+        ...scope,
+        id: item.id,
+        expectedSourceRevision: item.workItem.sources[0]!.revision,
+        patch: { metadata: { author: 'maintainer', authorTrusted: true } },
+      });
+    await expect(refresh()).rejects.toThrow('trust write rejected');
+    if (database.dialect === 'postgres')
+      await database.pool.query('DROP TRIGGER reject_trust_update ON factory_board_items');
+    else await database.client.execute('DROP TRIGGER reject_trust_update');
+    expect(await workItems.get({ ...scope, id: item.id })).toEqual(before);
+    const retried = await refresh();
+    expect(retried?.item).toMatchObject({ metadata: { authorTrusted: true }, workItem: { author: 'maintainer' } });
+    expect(retried?.item.workItem.sources[0]?.revision).toBe(item.workItem.sources[0]!.revision + 1);
+  });
+
   it('refreshes Factory-native work without manufacturing an external source', async () => {
     const { storage, workItems, scope } = await setup();
     const { item } = await workItems.upsert({ ...scope, input: { title: 'Manual task', stages: ['intake'] } });
