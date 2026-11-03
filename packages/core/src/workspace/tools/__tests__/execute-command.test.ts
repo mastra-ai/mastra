@@ -708,7 +708,9 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
-  describe.skipIf(process.platform === 'win32')('shell pipelines', () => {
+  // Real child processes: bound each command and test so a stuck process fails fast
+  // instead of waiting out the suite's 120s test timeout.
+  describe.skipIf(process.platform === 'win32')('shell pipelines', { timeout: 20_000 }, () => {
     const resources: { sandbox: LocalSandbox; directory: string }[] = [];
 
     afterEach(async () => {
@@ -724,7 +726,7 @@ describe('executeCommandTool data chunks', () => {
       resources.push({ sandbox, directory });
       const chunks: { type: string; data: any }[] = [];
       const result = await execute(
-        { command, tail },
+        { command, tail, timeout: 10 },
         {
           workspace: new Workspace({ sandbox }),
           writer: {
