@@ -976,6 +976,7 @@ function KnowledgePageGraphInner({
     return { graphPages: withPlaceholders, allEdges: [...pageGraphEdges(pages, edges), ...granted.edges] };
   }, [pages, edges, grants]);
   const linkSource = knownLinks ?? edges;
+  // `hoverLinks` maps a page id to its links, built once when links load: a hover is a lookup, not a scan.
   const { linkCounts, hoverLinks } = useMemo(() => {
     const counts = new Map<string, { in: number; out: number }>();
     const touching = new Map<string, KnowledgePageEdge[]>();
@@ -993,7 +994,11 @@ function KnowledgePageGraphInner({
     }
     for (const edge of linkSource) {
       if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
-      for (const id of [edge.source, edge.target]) touching.set(id, [...(touching.get(id) ?? []), edge]);
+      for (const id of edge.source === edge.target ? [edge.source] : [edge.source, edge.target]) {
+        const list = touching.get(id);
+        if (list) list.push(edge);
+        else touching.set(id, [edge]);
+      }
     }
     return { linkCounts: counts, hoverLinks: touching };
   }, [linkSource]);

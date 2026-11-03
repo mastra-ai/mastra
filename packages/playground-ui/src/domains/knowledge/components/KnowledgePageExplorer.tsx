@@ -505,6 +505,7 @@ type LevelResult = {
   nextCursor: ReadonlyMap<string, string>;
 };
 
+// Compares pages by identity, so a host must not mutate a page payload in place: a new page is a new object.
 function sameLevels(a: LevelResult, b: LevelResult) {
   const sameSet = (x: ReadonlySet<string>, y: ReadonlySet<string>) =>
     x.size === y.size && [...x].every(id => y.has(id));
