@@ -71,7 +71,10 @@ describe('observational memory retrieval on a store that embeds server-side', ()
 
     await memory.indexObservation(observation);
 
-    expect(vector.createIndex).toHaveBeenCalledWith({ indexName: 'memory_observations_selfembed' });
+    expect(vector.createIndex).toHaveBeenCalledWith({
+      indexName: 'memory_observations_selfembed',
+      metadataIndexes: ['resource_id', 'thread_id'],
+    });
     expect(vector.upsert).toHaveBeenCalledTimes(1);
     const params = vi.mocked(vector.upsert).mock.calls[0]![0] as any;
     expect(params.indexName).toBe('memory_observations_selfembed');
@@ -159,7 +162,10 @@ describe('observational memory retrieval on a store that embeds server-side', ()
 
     await memory.searchMessages({ query: 'deadline', resourceId: 'resource-1' });
 
-    expect(vector.createIndex).toHaveBeenCalledWith({ indexName: 'memory_observations_selfembed' });
+    expect(vector.createIndex).toHaveBeenCalledWith({
+      indexName: 'memory_observations_selfembed',
+      metadataIndexes: ['resource_id', 'thread_id'],
+    });
   });
 });
 
@@ -181,7 +187,11 @@ describe('observational memory retrieval with a client-side embedder', () => {
 
     await memory.indexObservation(observation);
 
-    expect(vector.createIndex).toHaveBeenCalledWith({ indexName: 'memory_observations_2', dimension: 2 });
+    expect(vector.createIndex).toHaveBeenCalledWith({
+      indexName: 'memory_observations_2',
+      dimension: 2,
+      metadataIndexes: ['resource_id', 'thread_id'],
+    });
     const params = vi.mocked(vector.upsert).mock.calls[0]![0] as any;
     expect(params.vectors).toEqual([[0.1, 0.2]]);
     expect(params.documents).toBeUndefined();

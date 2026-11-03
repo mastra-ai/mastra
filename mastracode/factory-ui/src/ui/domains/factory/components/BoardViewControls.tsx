@@ -83,7 +83,7 @@ export function BoardViewControls({
       search={
         <SearchInput
           label="Search cards"
-          placeholder={savedViews.applied ? 'Search this view…' : 'Search cards…'}
+          placeholder={savedViews.applied ? 'Search this view' : 'Search cards'}
           value={view.search}
           onValueChange={view.setSearch}
           size="sm"

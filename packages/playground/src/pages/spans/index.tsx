@@ -12,7 +12,7 @@ import { SpanDetailSidePanel } from './span-detail-side-panel';
 export default function SpansPage() {
   const { enabled, isLoading } = useSpanQueryAvailable();
   const navigate = useNavigate();
-  // The open span lives in the URL, so it survives a reload and can be shared.
+  // The open span, time range, filters and sort live in the URL, so they survive a reload and can be shared.
   const [searchParams, setSearchParams] = useSearchParams();
 
   return (
@@ -24,6 +24,7 @@ export default function SpansPage() {
       description="Your observability storage does not support span queries. Switch to a store that declares the span-query capability to list spans."
     >
       <SpansExplorerBody
+        urlState={{ searchParams, setSearchParams }}
         selection={readSpanSelection(searchParams)}
         onSelectionChange={selection =>
           setSearchParams(current => withSpanSelection(current, selection), { replace: true })

@@ -1,6 +1,10 @@
 import type { FactoryRuleDecision, FactoryRuleHandler, FactoryStageRuleContext } from '../rules/types.js';
 
-/** Starts the phase's skill in its context, for sources the phase gives no `onEnter` handler. */
+/**
+ * Starts the phase's skill in its context, for sources the phase gives no `onEnter` handler.
+ * Entering from another phase starts it even when that phase's agent shares the context and
+ * made the move: the skill is queued onto its run.
+ */
 export function startSkill(skill: string, context: string): FactoryRuleHandler<FactoryStageRuleContext> {
   return rule => ({
     type: 'invokeSkill',
@@ -8,6 +12,7 @@ export function startSkill(skill: string, context: string): FactoryRuleHandler<F
     role: context,
     skillName: skill,
     arguments: rule.item.url ? `Work item (${rule.item.url})` : rule.item.title,
+    ...(rule.fromStage !== rule.stage ? { startsAfterOwnMove: true } : {}),
   });
 }
 

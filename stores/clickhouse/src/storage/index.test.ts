@@ -611,3 +611,54 @@ describe('ClickHouse legacy observability listTraces', () => {
     expect(result.spans.map(s => s.traceId)).toEqual([expected]);
   });
 });
+
+// ClickHouse 26.8+ reads bare JSONEachRow numbers in DateTime64 columns as Unix
+// seconds, so epoch-millisecond writes landed at 9999-12-31.
+describe('ClickHouse legacy observability timestamps', () => {
+  const observability = new ObservabilityStorageClickhouse({
+    url: TEST_CONFIG.url,
+    username: TEST_CONFIG.username || 'default',
+    password: TEST_CONFIG.password || '',
+  });
+  const traceId = `trace-timestamps-${Date.now()}`;
+  const startedAt = new Date('2024-01-01T00:00:00.000Z');
+  const span = (spanId: string) => ({
+    traceId,
+    spanId,
+    parentSpanId: null,
+    name: spanId,
+    spanType: SpanType.GENERIC,
+    isEvent: false,
+    attributes: null,
+    metadata: null,
+    links: null,
+    input: null,
+    output: null,
+    error: null,
+    startedAt,
+    endedAt: null,
+  });
+
+  beforeAll(async () => {
+    await observability.init();
+  });
+
+  afterAll(async () => {
+    await observability.batchDeleteTraces({ traceIds: [traceId] });
+  });
+
+  it('round-trips startedAt and endedAt through create and update', async () => {
+    await observability.createSpan({ span: span('single') as never });
+    await observability.batchCreateSpans({ records: [span('batch') as never] });
+    const endedAt = new Date('2024-01-01T00:00:05.000Z');
+    await observability.updateSpan({ traceId, spanId: 'single', updates: { endedAt } });
+    await observability.batchUpdateSpans({ records: [{ traceId, spanId: 'batch', updates: { endedAt } }] });
+
+    const trace = await observability.getTrace({ traceId });
+    const byId = new Map(trace!.spans.map(s => [s.spanId, s]));
+    for (const spanId of ['single', 'batch']) {
+      expect(byId.get(spanId)!.startedAt).toEqual(startedAt);
+      expect(byId.get(spanId)!.endedAt).toEqual(endedAt);
+    }
+  });
+});

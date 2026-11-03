@@ -25,6 +25,7 @@ import {
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
+import { workflowTermination } from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -541,6 +542,7 @@ export class InngestWorkflow<
 
           const span = observability.startSpan({
             type: SpanType.WORKFLOW_RUN,
+            outcome: null,
             name: `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
@@ -677,11 +679,13 @@ export class InngestWorkflow<
 
                 if (result.status === 'failed') {
                   workflowSpan.error({
+                    ...workflowTermination(result),
                     error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
                     attributes: { status: 'failed' },
                   });
                 } else {
                   workflowSpan.end({
+                    ...workflowTermination(result),
                     output: result.status === 'success' ? result.result : undefined,
                     attributes: { status: result.status },
                   });

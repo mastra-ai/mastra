@@ -242,7 +242,7 @@ export const CustomStyling: Story = {
                 </div>
                 <JSONSchemaForm.FieldDescription
                   label="Description"
-                  placeholder="Describe this field..."
+                  placeholder="Describe this field"
                   className="mb-3"
                 />
                 <div className="flex items-center justify-between">

@@ -50,7 +50,7 @@ const namedResults = await vectorStore.query({
 
 ## Documentation
 
-- [@mastra/qdrant documentation](https://mastra.ai/reference/vectors/qdrant)
+- [@mastra/qdrant documentation](https://mastra.ai/integrations/vectors/qdrant)
 
 ## Changelog
 

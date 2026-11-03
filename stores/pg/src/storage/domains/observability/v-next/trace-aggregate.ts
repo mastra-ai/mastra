@@ -37,6 +37,8 @@ const DIMENSION_SQL: Record<string, string> = {
   entityId: 'r."entityId"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  outcome: 'r."outcome"',
+  stopReason: 'r."stopReason"',
   serviceName: 'r."serviceName"',
   executionSource: 'r."executionSource"',
   threadId: 'r."threadId"',
@@ -61,6 +63,8 @@ const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
     'rootEntityName',
     'environment',
     'status',
+    'outcome',
+    'stopReason',
     'serviceName',
     'executionSource',
     'threadId',
@@ -69,6 +73,8 @@ const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
     'sessionId',
     'organizationId',
     'experimentId',
+    'model',
+    'provider',
   ].map(field => [field, `r."${field}"`]),
 );
 
@@ -103,6 +109,21 @@ const PERCENTILES: Record<string, number> = {
   'duration.p95': 0.95,
   'duration.p99': 0.99,
 };
+
+/** Quantile for each percentile statistic of a time-to-first measure. */
+const STATISTIC_PERCENTILES: Partial<Record<coreStorage.TraceAggregateMeasureStatistic, number>> = {
+  p50: 0.5,
+  p90: 0.9,
+  p95: 0.95,
+  p99: 0.99,
+};
+
+/**
+ * Store features this compiler supports beyond `trace-aggregate` / `span-aggregate`. Core before
+ * the time-to-first measures rejects them, so they are only declared when core plans them.
+ */
+export const aggregateTimeToFirstFeatures: readonly 'aggregate-time-to-first-measures'[] =
+  'timeToFirstToken.p50' in coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY ? ['aggregate-time-to-first-measures'] : [];
 
 const COMPARISON_SQL = { eq: '=', ne: '<>', lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
 
@@ -182,6 +203,10 @@ function compilePostgresAggregate(
     `(${durationMsSql('r."startedAt"', 'r."endedAt"')})::float8 AS "durationMs"`,
     `r."error" IS NOT NULL AS "isError"`,
   );
+  const timeToFirstFields = new Set(plan.measures.map(measure => measureRule(measure.name)?.field));
+  for (const field of timeToFirstFields) {
+    if (field) factColumns.push(`r."${field}"::float8 AS "${field}"`);
+  }
   if (plan.interval !== undefined) {
     const intervalMs = coreStorage.TRACE_AGGREGATE_INTERVAL_MS[plan.interval];
     if (intervalMs === undefined) throw new Error(`Unsupported trusted trace-aggregate interval: ${plan.interval}`);
@@ -230,6 +255,17 @@ function compilePostgresAggregate(
     if (rule?.kind === 'cost') {
       const aggregate = rule.statistic === 'avg' ? 'AVG' : 'SUM';
       return `(CASE WHEN ${mixedUnitsSql(alias)} THEN NULL ELSE ${aggregate}(${column('traceCost')}) END)::float8`;
+    }
+    // NULL values (no first token/chunk) are skipped, never read as 0; a group without any
+    // value gets NULL, and `.count` counts the rows that have one.
+    if (rule?.field) {
+      const value = column(rule.field);
+      if (rule.statistic === 'count') return `COUNT(${value})::float8`;
+      if (rule.statistic === 'avg') return `AVG(${value})`;
+      if (rule.statistic === 'min') return `MIN(${value})`;
+      if (rule.statistic === 'max') return `MAX(${value})`;
+      const quantile = rule.statistic && STATISTIC_PERCENTILES[rule.statistic];
+      if (quantile !== undefined) return `percentile_cont(${quantile}) WITHIN GROUP (ORDER BY ${value})`;
     }
     if (name === 'errorCount') return `(COUNT(*) FILTER (WHERE ${column('isError')}))::float8`;
     if (name === 'errorRate') return `(COUNT(*) FILTER (WHERE ${column('isError')}))::float8 / COUNT(*)`;

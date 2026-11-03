@@ -141,9 +141,9 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
   },
   {
     name: 'deployer',
-    type: 'MastraDeployer',
+    type: 'IDeployer',
     isOptional: true,
-    description: 'An instance of a MastraDeployer for managing deployments.',
+    description: 'A deployer for managing deployments, such as `VercelDeployer` from `@mastra/deployer-vercel`.',
   },
   {
     name: 'server',
@@ -335,6 +335,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '5',
             description: 'Max concurrent tasks per agent.',
+          },
+          {
+            name: 'perOwnerConcurrency',
+            type: 'Record<string, number>',
+            isOptional: true,
+            description:
+              'Per-owner overrides of `perAgentConcurrency`, keyed by `agentId`. Overridden owners still count toward `globalConcurrency`.',
           },
           {
             name: 'backpressure',

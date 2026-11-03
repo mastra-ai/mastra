@@ -41,7 +41,7 @@ describe('resolvePhaseSemantics', () => {
     expect(resolvePhaseSemantics(boards, 'release', 'queued')).toEqual({ kind: 'resting' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipping')).toEqual({ kind: 'working', role: 'release' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipped')).toEqual({ kind: 'terminal' });
-    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'plan' });
+    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'work' });
     expect(resolvePhaseSemantics(boards, 'work', 'done')).toEqual({ kind: 'terminal' });
   });
 

@@ -32,6 +32,7 @@ describeAutoEmbed('Observational Memory retrieval on a server-embedding store (l
   const resourceId = 'resource-1';
 
   let memory: Memory;
+  let store: MongoDBStore;
   let vector: MongoDBVector;
 
   const observations = [
@@ -116,8 +117,9 @@ describeAutoEmbed('Observational Memory retrieval on a server-embedding store (l
 
     // No embedder: the store reports that it produces embeddings itself.
     expect(vector.isSelfEmbedding).toBe(true);
+    store = new MongoDBStore({ id: 'om-autoembed-storage', uri: memoryUri, dbName });
     memory = new Memory({
-      storage: new MongoDBStore({ id: 'om-autoembed-storage', uri: memoryUri, dbName }),
+      storage: store,
       vector,
       options: { observationalMemory: { retrieval: { vector: true } }, generateTitle: false },
     });
@@ -133,11 +135,14 @@ describeAutoEmbed('Observational Memory retrieval on a server-embedding store (l
   }, 420000);
 
   afterAll(async () => {
+    // Background cleanup can still be writing through the store, so let it finish first.
+    await memory?.settled().catch(() => {});
     // Drop the whole database, not just the index. MongoDBStore creates a collection per
     // storage domain, so leaving the database behind consumes ~40 of a cluster's collection
     // budget per run.
     await (vector as any).db?.dropDatabase().catch(() => {});
     await vector.disconnect().catch(() => {});
+    await store?.close().catch(() => {});
   });
 
   it('reports retrieval search as available without an embedder', () => {
@@ -200,6 +205,44 @@ describeAutoEmbed('Observational Memory retrieval on a server-embedding store (l
 
     const stats = await vector.describeIndex({ indexName: INDEX_NAME });
     expect(stats.count).toBe(observations.length);
+  }, 420000);
+
+  it('keeps the observations of a transferred thread searchable under the new resource', async () => {
+    const moved = {
+      groupId: 'group-offsite',
+      threadId: 'thread-c',
+      observedAt: new Date('2026-07-01T09:00:00.000Z'),
+      text: 'The offsite is booked for the second week of June in Lisbon.',
+    };
+    await memory.saveThread({
+      thread: { id: moved.threadId, resourceId, title: 'Offsite', createdAt: new Date(), updatedAt: new Date() },
+    });
+    await index(moved);
+    await waitForEveryDocumentEmbedded(observations.length + 1);
+
+    // Observation rows carry the owning resource, and the store cannot return stored vectors
+    // for an autoEmbed index, so moving a thread has to re-tag the rows without reading them back.
+    await memory.updateThreadResourceId({ threadId: moved.threadId, resourceId: 'resource-2' });
+
+    const stored = await (vector as any).db
+      .collection(INDEX_NAME)
+      .find({ 'metadata.thread_id': moved.threadId })
+      .toArray();
+    expect(stored.map((row: any) => row.metadata.resource_id)).toEqual(['resource-2']);
+
+    const results = await searchUntilPopulated({
+      query: 'where is the offsite?',
+      resourceId: 'resource-2',
+      filter: { threadId: moved.threadId },
+    });
+    expect(results.map(r => r.groupId)).toEqual([moved.groupId]);
+
+    const previousOwner = await memory.searchMessages({
+      query: 'where is the offsite?',
+      resourceId,
+      filter: { threadId: moved.threadId },
+    });
+    expect(previousOwner.results).toEqual([]);
   }, 420000);
 
   it('removes the observations of a deleted thread', async () => {

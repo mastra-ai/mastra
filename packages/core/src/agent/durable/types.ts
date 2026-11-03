@@ -7,8 +7,8 @@ import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs 
 import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
-
 import type { MastraFGAPermissionInput } from '../../auth/ee';
+
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
@@ -44,10 +44,11 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
+import type { ResponseRecord } from './workflows/shared/schemas';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -307,6 +308,8 @@ export interface SerializableDurableOptions {
    * observability and cross-process engines.
    */
   isTaskComplete?: {
+    fromAgentDefaults?: boolean;
+    scorerIds?: string[];
     scorerNames?: string[];
     strategy?: 'all' | 'any';
     timeout?: number;
@@ -406,6 +409,8 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     request?: LanguageModelRequestMetadata;
   };
+  /** Provider id and serving model of this step's response; absent when the provider sent none */
+  response?: ResponseRecord;
   /** Processor retry count */
   processorRetryCount?: number;
   /** Processor retry feedback message */
@@ -491,6 +496,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  tripwire?: StepTripwireData;
   /**
    * Set when an output processor dropped the tool-result chunk without a
    * tripwire. The model still gets the result, but callbacks leave it out of
@@ -589,6 +595,8 @@ export interface DurableAgenticExecutionOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this iteration's first chunk */
   timeToFirstTokenMs?: number;
+  /** Provider id and model of this iteration's response */
+  response?: ResponseRecord;
 }
 
 /**
@@ -763,6 +771,10 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Transient tracing fact; not part of the iteration state or finish payload. */
+  tracingTermination?: import('../../observability').SpanTermination;
+  tracingDelegationFailure?: import('../../observability').SpanTermination;
+  tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
   /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
   agentId?: string;
   /**
@@ -947,7 +959,7 @@ export interface RunRegistryEntry {
   /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
   pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
-  subscribePendingSignals?: (listener: () => void) => () => void;
+  subscribePendingSignals?: (listener: PendingSignalListener) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
   stopStepSignalListener?: () => void;
   /**

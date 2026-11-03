@@ -546,8 +546,10 @@ describe('serverDeployAction', () => {
     expect(prompts.select).toHaveBeenCalledTimes(1);
     const selectArgs = vi.mocked(prompts.select).mock.calls[0]![0] as {
       options: Array<{ value: string; label: string }>;
+      initialValue?: string;
     };
     expect(selectArgs.options.map(o => o.value)).toEqual(['proj-a', 'proj-b', '__create_new__']);
+    expect(selectArgs.initialValue).toBe('__create_new__');
     expect(platform.createServerProject).not.toHaveBeenCalled();
 
     exitSpy.mockRestore();

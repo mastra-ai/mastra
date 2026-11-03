@@ -14,6 +14,12 @@ export const MODEL_ROUTES: Record<FactoryModelScope, Record<ModelLane, ModelDefa
   factory: { chats: 'factory', runs: 'factory' },
 };
 
+export const MODEL_SCOPE_LABELS: Record<FactoryModelScope, string> = {
+  user: 'Personal',
+  hybrid: 'Hybrid',
+  factory: 'Factory',
+};
+
 export const MODEL_DEFAULTS_LABELS: Record<ModelDefaults, string> = {
   personal: 'Personal defaults',
   factory: 'Factory defaults',
