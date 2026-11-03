@@ -229,6 +229,7 @@ const sidebars = {
           },
           customProps: {
             contextualSidebar: true,
+            tags: ['alpha'],
           },
           items: [
             {

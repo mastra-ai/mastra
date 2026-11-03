@@ -7,12 +7,6 @@ packages:
 
 # Limits
 
-:::alpha
-
-Knowledge is in alpha. Its API may change between releases.
-
-:::
-
 Text limits are counted in tokens. Counts are estimates, so treat the numbers as approximate.
 
 | Item | Limit |
@@ -35,7 +29,8 @@ Page bodies have no token limit. `knowledge_read` returns a long body in parts, 
 
 Change the read cap with `tools: { read: { maxTokens } }`. See [`tools`](/reference/knowledge/knowledge-class#constructor-options). Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`.
 
-## Related
+:::alpha
 
-- [Knowledge tools](/reference/knowledge/knowledge-tools)
-- [Knowledge class](/reference/knowledge/knowledge-class)
+Knowledge is in alpha. Its API may change between releases.
+
+:::

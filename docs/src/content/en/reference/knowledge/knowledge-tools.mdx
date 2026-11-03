@@ -7,12 +7,6 @@ packages:
 
 # Knowledge tools
 
-:::alpha
-
-Knowledge is in alpha. Its API may change between releases.
-
-:::
-
 Knowledge gives agents six tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Agents and tools](/docs/knowledge/agents-and-tools) for how agents use them.
 
 | Group | Tools | Enabled by |
@@ -28,6 +22,12 @@ Knowledge tools need run scopes: give the agent or the call `scopes`, or run it 
 ```
 
 Tool errors come back to the model as the tool result, not as exceptions. A page or note the run can't read looks absent: the error says it wasn't found, never that access was denied.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
 
 ## Page references
 

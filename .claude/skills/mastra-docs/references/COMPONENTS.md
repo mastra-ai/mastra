@@ -104,4 +104,4 @@ Use admonitions for information that deserves visual separation:
 - `beta`: A feature explicitly presented as Beta.
 - `alpha`: A feature explicitly released as alpha, such as Knowledge.
 
-Do not place routine instructions in admonitions. Use the `beta` and `alpha` admonitions only for features presented as Beta or alpha.
+Do not place routine instructions in admonitions. Use the `beta` and `alpha` admonitions only for features presented as Beta or Alpha.

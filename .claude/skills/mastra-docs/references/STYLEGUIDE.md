@@ -61,7 +61,7 @@ Vary prose naturally:
 - Separate required actions from opinionated choices used in examples
 - Use `Ensure`, not `make sure`
 - Use exclamation points rarely
-- Use "Beta" when an early-stage feature needs a label. Use "Alpha" only for a feature released as alpha, such as Knowledge
+- Use "Beta" when an early-stage feature needs a label. Use "Alpha" only for a feature released as alpha
 
 ## Openings and endings
 

@@ -7,12 +7,6 @@ packages:
 
 # Tool instructions
 
-:::alpha
-
-Knowledge is in alpha. Its API may change between releases.
-
-:::
-
 When Knowledge attaches tools to an agent, it also adds a short instruction block that explains how to use them. Each part is included only when its tools are on:
 
 - **Read:** search with `knowledge_search` before answering, read a page with `knowledge_read` before relying on it, list a scope or section with `knowledge_list` to see how it's organized, read a long page whole first and then the section needed from the headings it shows, follow `more` instead of assuming a result was complete, cite the page or note used, say so when nothing is found, and show both notes with their dates when they disagree.
@@ -20,6 +14,12 @@ When Knowledge attaches tools to an agent, it also adds a short instruction bloc
 - **Pins:** pin only standing instructions, durable preferences and firm constraints that apply without being asked for, keep pinned pages short, and unpin a page once it stops being true.
 
 The text depends only on which tools are on and on your override, never on the run's scopes, its pinned pages or search results, so it doesn't break prompt caching.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
 
 ## Override the instructions
 
