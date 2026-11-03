@@ -14,6 +14,8 @@ import {
   openSegment,
   segmentEndedBeforeCrash,
   segmentFromSnapshot,
+  withCarriedSegments,
+  withoutDurableEngineKeys,
 } from './segment-spans';
 
 const SEGMENTS_KEY = 'mastra__durableSegments';
@@ -334,5 +336,42 @@ describe('openSegment', () => {
       'run-2': carriedSecond,
       [RUN_ID]: { v: 1, agent: null, model: null },
     });
+  });
+});
+
+describe('engine-private request context keys', () => {
+  it('hands the engine a copy carrying the opened segment and leaves the caller instance without it', () => {
+    const caller = new RequestContext();
+    caller.set('tenant', 'acme');
+    caller.setRaw(SEGMENTS_KEY, { 'run-2': carriedSecond });
+    const carrier: Record<string, unknown> = {};
+    openSegment({
+      mastra: new Mastra({ logger: false }),
+      kind: 'resumed',
+      runId: RUN_ID,
+      agent: new Agent({ id: 'a', name: 'a', instructions: 'x', model: 'openai/gpt-4o-mini' }),
+      model: undefined,
+      previous: first.agentSpanData,
+      requestContext: caller,
+      carryInto: carrier,
+    });
+    const forwarded = withCarriedSegments(caller, carrier);
+    expect(forwarded.get('tenant')).toBe('acme');
+    expect(forwarded.getRaw(SEGMENTS_KEY)).toEqual({
+      'run-2': carriedSecond,
+      [RUN_ID]: { v: 1, agent: null, model: null },
+    });
+    expect(caller.getRaw(SEGMENTS_KEY)).toEqual({ 'run-2': carriedSecond });
+  });
+
+  it('gives user code the run values without the claim and the segment carrier', () => {
+    const step = new RequestContext();
+    step.set('tenant', 'acme');
+    step.setRaw('mastra__authToken', 'token');
+    step.setRaw('mastra__durableExecutions', { [RUN_ID]: { executionId: 'exec-1' } });
+    step.setRaw(SEGMENTS_KEY, { [RUN_ID]: carriedSecond });
+    const forUser = withoutDurableEngineKeys(step);
+    expect([...forUser.keys()]).toEqual(['tenant', 'mastra__authToken']);
+    expect(step.hasRaw(SEGMENTS_KEY)).toBe(true);
   });
 });

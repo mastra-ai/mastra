@@ -88,7 +88,7 @@ import {
   globalRunRegistry,
   markResumeInFlight,
 } from './run-registry';
-import { openSegment, segmentEndedBeforeCrash, segmentFromSnapshot } from './segment-spans';
+import { openSegment, segmentEndedBeforeCrash, segmentFromSnapshot, withCarriedSegments } from './segment-spans';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
@@ -227,6 +227,8 @@ function shouldReportRecoveryFailure(error: unknown): boolean {
 
 interface RehydratedRecoveryState {
   requestContext: RequestContext;
+  /** The recovered segment's carrier, forwarded to the engine on restart (see `withCarriedSegments`). */
+  carriedSegments: Record<string, unknown>;
   threadId?: string;
   resourceId?: string;
   messageList: MessageList;
@@ -1650,6 +1652,7 @@ export class DurableAgent<
     // first, as the live model rebound to that id, or rebuilt from the serialized config when
     // the resolver no longer returns it.
     const persistedHead = persistedModelList?.find(entry => entry.enabled);
+    const carriedSegments: Record<string, unknown> = {};
     const recovered = openSegment({
       mastra: this.#mastra,
       kind: 'recovered',
@@ -1660,8 +1663,9 @@ export class DurableAgent<
       // The step the crashed segment was executing is still open: the recovered segment ends it.
       adoptsStepsOf: crashedMidStep ? crashed.modelSpanData?.id : undefined,
       requestContext,
-      // `run.restart()` forwards this context to the workers, which end the recovered pair.
-      carryInto: requestContext,
+      // `run.restart()` forwards the carrier to the workers, which end the recovered pair; the
+      // tools and processors built above keep closing over a context without it.
+      carryInto: carriedSegments,
     });
     const recoverAgentSpan = recovered?.agentSpan;
     const recoverModelSpan = recovered?.modelSpan;
@@ -1732,6 +1736,7 @@ export class DurableAgent<
 
     return {
       requestContext,
+      carriedSegments,
       threadId,
       resourceId,
       messageList,
@@ -3951,6 +3956,9 @@ export class DurableAgent<
       reg.agentSpan = undefined;
       reg.modelSpan = undefined;
     }
+    // What `run.resume()` forwards to the steps, kept off the caller's instance that this segment's
+    // tools and processors close over.
+    const carriedSegments: Record<string, unknown> = {};
     const opened = openSegment({
       mastra: this.#mastra,
       kind: 'resumed',
@@ -3959,8 +3967,7 @@ export class DurableAgent<
       model: resumeModel,
       previous,
       requestContext: resumeRequestContext,
-      // The object `run.resume()` forwards to the steps.
-      carryInto: resumeRequestContext,
+      carryInto: carriedSegments,
     });
     for (const reg of [entry, globalEntry]) {
       if (!reg) continue;
@@ -4035,8 +4042,9 @@ export class DurableAgent<
     });
     streamCleanup = createdStreamCleanup;
 
-    // Wait for subscription to be ready, then resume workflow
-    const requestContext = resolvedOptions.requestContext;
+    // Wait for subscription to be ready, then resume workflow. The engine gets the caller's values
+    // plus the resumed segment's carrier, which the steps and the persisted snapshot need.
+    const requestContext = withCarriedSegments(resumeRequestContext, carriedSegments);
 
     const workflowExecution = executionFence.run(() =>
       ready
@@ -4382,8 +4390,16 @@ export class DurableAgent<
       releaseLocalRecovery();
       throw error;
     }
-    const { requestContext, threadId, resourceId, messageList, recoverAgentSpan, recoverModelSpan, registryEntry } =
-      recoveryState;
+    const {
+      requestContext,
+      carriedSegments,
+      threadId,
+      resourceId,
+      messageList,
+      recoverAgentSpan,
+      recoverModelSpan,
+      registryEntry,
+    } = recoveryState;
     if (executionFence.generation !== undefined) {
       // Readers of the run's stream, including the superseded execution's own
       // caller, drop what that execution still publishes from here on.
@@ -4494,7 +4510,7 @@ export class DurableAgent<
           this.#assertRecoveryActive();
           const result = await this.#raceFenceLoss(
             run.restart({
-              requestContext,
+              requestContext: withCarriedSegments(requestContext, carriedSegments),
               ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
             } as any),
             executionFence,

@@ -16,7 +16,7 @@ import { Observability } from './default';
 import { TestExporter } from './exporters';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-const DURABLE_KEYS = ['mastra__durableSegments', 'mastra__durableExecutions'];
+const CARRIER_KEY = 'mastra__durableSegments';
 
 function observability(exporter: TestExporter) {
   return new Observability({ configs: { test: { serviceName: 'resumed-segment', exporters: [exporter] } } });
@@ -24,7 +24,7 @@ function observability(exporter: TestExporter) {
 
 describe('a resumed segment keeps its span pair private to the engine', () => {
   for (const engine of ['durable', 'evented'] as const) {
-    it(`${engine}: a tool run by the resumed segment sees no durable engine keys in its request context`, async () => {
+    it(`${engine}: a tool run by the resumed segment sees no segment carrier in its request context`, async () => {
       let calls = 0;
       const model = new MockLanguageModelV2({
         doStream: async () => ({
@@ -41,7 +41,7 @@ describe('a resumed segment keeps its span pair private to the engine', () => {
           ] as any[]),
         }),
       });
-      const seen: Array<{ get: unknown[]; entries: string[]; json: string[] }> = [];
+      const seen: Array<{ get: unknown; entries: string[]; json: string[] }> = [];
       const agent = new Agent({
         id: `inspect-${engine}`,
         name: 'inspect',
@@ -56,7 +56,7 @@ describe('a resumed segment keeps its span pair private to the engine', () => {
             execute: async (_input, context) => {
               const requestContext = context!.requestContext!;
               seen.push({
-                get: DURABLE_KEYS.map(key => requestContext.get(key)),
+                get: requestContext.get(CARRIER_KEY),
                 entries: [...requestContext.entries()].map(([key]) => key),
                 json: Object.keys(requestContext.toJSON()),
               });
@@ -93,9 +93,9 @@ describe('a resumed segment keeps its span pair private to the engine', () => {
           true,
         ]);
         expect(seen).toHaveLength(1);
-        expect(seen[0]!.get).toEqual([undefined, undefined]);
-        expect(seen[0]!.entries.filter(key => DURABLE_KEYS.includes(key))).toEqual([]);
-        expect(seen[0]!.json.filter(key => DURABLE_KEYS.includes(key))).toEqual([]);
+        expect(seen[0]!.get).toBeUndefined();
+        expect(seen[0]!.entries).not.toContain(CARRIER_KEY);
+        expect(seen[0]!.json).not.toContain(CARRIER_KEY);
       } finally {
         await mastra.shutdown();
       }

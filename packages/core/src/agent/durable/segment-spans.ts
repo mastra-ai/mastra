@@ -48,7 +48,25 @@ const DURABLE_ENGINE_KEYS: ReadonlySet<string> = new Set([MASTRA_DURABLE_EXECUTI
  * so the step's own context keeps them for the engine.
  */
 export function withoutDurableEngineKeys(requestContext: RequestContext): RequestContext {
-  return new RequestContext([...requestContext.entries()].filter(([key]) => !DURABLE_ENGINE_KEYS.has(key)));
+  return new RequestContext<unknown>(
+    [...requestContext.entries()].filter(([key]) => !DURABLE_ENGINE_KEYS.has(key)) as [string, unknown][],
+  );
+}
+
+/**
+ * The request context a resume or recovery hands the workflow engine: a copy of the caller's
+ * context carrying the segments `openSegment` wrote into `carrier`. The caller's own instance,
+ * which this segment's tools and processors close over, never holds the carrier.
+ */
+export function withCarriedSegments(requestContext: RequestContext, carrier: Record<string, unknown>): RequestContext {
+  const forwarded = new RequestContext<unknown>([...requestContext.entries()] as [string, unknown][]);
+  const segments = carrier[MASTRA_DURABLE_SEGMENTS_KEY];
+  if (segments && typeof segments === 'object') {
+    for (const [runId, carried] of Object.entries(segments)) {
+      writeCarriedSegment(forwarded, runId, carried as CarriedSegment);
+    }
+  }
+  return forwarded;
 }
 
 /**
