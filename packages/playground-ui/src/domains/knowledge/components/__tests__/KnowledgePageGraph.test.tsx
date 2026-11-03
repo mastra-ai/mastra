@@ -497,6 +497,31 @@ describe('KnowledgePageGraph', () => {
         expect(legend.getByTestId('knowledge-legend-dot').textContent).toBe('Page in another branch');
       });
 
+      it('draws links both ways between two pages side by side, not on one path', () => {
+        renderGraph({
+          pages: linked,
+          knownLinks: [
+            { kind: 'link', source: 'ticket', target: 'faq', count: 1 },
+            { kind: 'link', source: 'faq', target: 'ticket', count: 1 },
+            { kind: 'link', source: 'faq', target: 'other', count: 1 },
+          ],
+        });
+        fireEvent.mouseEnter(dot('ticket'));
+        const paths = [...document.querySelectorAll('.react-flow__edge-path')].map(el => el.getAttribute('d'));
+        const ids = [...document.querySelectorAll('[data-id^="link:"]')].map(el => el.getAttribute('data-id'));
+        expect(ids).toEqual(expect.arrayContaining(['link:ticket->faq', 'link:faq->ticket']));
+        const pathOf = (id: string) =>
+          document.querySelector(`[data-id="${id}"] .react-flow__edge-path`)?.getAttribute('d');
+        const coords = (id: string) => (pathOf(id)?.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+        const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = coords('link:ticket->faq');
+        const [bx = 0, by = 0] = coords('link:faq->ticket');
+        // How far the way back starts from the way out's line: apart, not on it.
+        const apart = Math.abs((x2 - x1) * (y1 - by) - (x1 - bx) * (y2 - y1)) / Math.hypot(x2 - x1, y2 - y1);
+        expect(apart).toBeGreaterThanOrEqual(8);
+        expect(apart).toBeLessThanOrEqual(12);
+        expect(new Set(paths).size).toBe(paths.length);
+      });
+
       it('explains the line styles drawn while hovering it, and only those', () => {
         renderGraph({ pages: linked, knownLinks: known });
         const legend = within(screen.getByRole('list', { name: 'Legend' }));
