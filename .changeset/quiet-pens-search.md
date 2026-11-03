@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Workspace search now works with a vector store that generates embeddings itself, so no `embedder` is needed.
+Added vector and hybrid workspace search for vector stores that generate embeddings themselves, so no `embedder` is needed.
 
 With MongoDB Automated Embedding, MongoDB embeds each file when it is indexed and the search string when you query:
 

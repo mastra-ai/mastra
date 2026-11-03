@@ -119,10 +119,15 @@ describeAutoEmbed('Workspace search on a server-embedding store (live)', () => {
   }, 420000);
 
   afterAll(async () => {
-    // Drop the whole database, not just the index, so a run leaves nothing behind on the cluster.
-    await (vector as any).db?.dropDatabase().catch(() => {});
-    await vector.disconnect().catch(() => {});
-    await rm(basePath, { recursive: true, force: true });
+    // A setup that failed early leaves `vector` or `basePath` unset, so each resource is released
+    // only if it was created, and the directory is removed whatever happens to the store.
+    try {
+      // Drop the whole database, not just the index, so a run leaves nothing behind on the cluster.
+      await (vector as any)?.db?.dropDatabase().catch(() => {});
+      await vector?.disconnect().catch(() => {});
+    } finally {
+      if (basePath) await rm(basePath, { recursive: true, force: true });
+    }
   });
 
   it('offers vector search without an embedder', () => {
