@@ -1753,17 +1753,20 @@ describe('prs route', () => {
     const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
     await app.request('/web/github/projects/p1/prs');
-    for (let poll = 0; poll < 2; poll++) {
+    const listBoth = () => {
       listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [pullRequest34, pullRequest35], nextPage: null });
-      await app.request('/web/github/projects/p1/prs');
-    }
+      return app.request('/web/github/projects/p1/prs');
+    };
 
+    await listBoth();
     expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
     expect(ingestFactoryEvent).toHaveBeenLastCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({ pull_request: expect.objectContaining({ number: 35 }) }),
       }),
     );
+    await listBoth();
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
   });
 
   it('answers every board within the wait when a rules pass never ends, without starting another', async () => {
