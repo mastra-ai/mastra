@@ -548,9 +548,13 @@ function readTool(host: KnowledgePageToolHost) {
         from: {
           ...linePositionSchema,
           description:
-            'Where to start reading: a line (counted from 1) and, inside a very long line, a column (counted from 0). In a section, reads on within it; with `match`, searches from there. `more` gives it when a read stops early.',
+            "Where to start reading: a line (counted from 1) and, inside a very long line, a column (counted from 0). The read runs from there to the page's end or the read's token cap, whichever comes first; there is no line count to set. In a section, reads on within it; with `match`, searches from there. `more` gives it when a read stops early.",
         },
-        limit: { ...limitSchema, description: 'Maximum notes, children and mentioning notes. Defaults to 10.' },
+        limit: {
+          ...limitSchema,
+          description:
+            'Maximum notes, children and mentioning notes. Defaults to 10. Not a line count: how much of the body comes back is set by the token cap.',
+        },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
