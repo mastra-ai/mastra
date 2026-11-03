@@ -383,29 +383,47 @@ async function ingestPolledEvents(
 
 // Under the board's 30 s pull request poll: a lone board still runs the rules on every poll while passes take under 10 s.
 const POLLED_PAGE_INGEST_REST_MS = 20_000;
+// A stuck pass keeps its page so no other pass piles onto it, but stops holding the boards' lists after this.
+const POLLED_PAGE_INGEST_WAIT_MS = 10_000;
+
+function waitAtMost(pass: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const waited = new Promise<void>(resolve => {
+    timer = setTimeout(resolve, POLLED_PAGE_INGEST_WAIT_MS);
+  });
+  return Promise.race([pass, waited]).finally(() => clearTimeout(timer));
+}
 
 /**
  * One rules pass per listed page at a time, whichever board asked, then a rest: each pass reads the
- * whole project, and every open board polls the same pages. A board joins a running pass, however old.
+ * whole project, and every open board polls the same pages. A board joins a running pass, however old,
+ * and a resting page still ingests the pull requests its last pass did not list.
  */
 function createPolledPageIngest() {
   const running = new Map<string, Promise<void>>();
-  const finishedAt = new Map<string, number>();
-  return (key: string, run: () => Promise<void>): Promise<void> => {
+  const resting = new Map<string, { finishedAt: number; ingested: Set<number> }>();
+  return <T extends { number: number }>(
+    key: string,
+    pullRequests: readonly T[],
+    ingest: (pullRequests: readonly T[]) => Promise<void>,
+  ): Promise<void> => {
     const pending = running.get(key);
-    if (pending) return pending;
+    if (pending) return waitAtMost(pending);
     // Finish order: a key is only set again after it was pruned, so the oldest entries come first.
-    for (const [rested, at] of finishedAt) {
-      if (Date.now() - at < POLLED_PAGE_INGEST_REST_MS) break;
-      finishedAt.delete(rested);
+    for (const [rested, { finishedAt }] of resting) {
+      if (Date.now() - finishedAt < POLLED_PAGE_INGEST_REST_MS) break;
+      resting.delete(rested);
     }
-    if (finishedAt.has(key)) return Promise.resolve();
-    const done = run().finally(() => {
+    const rest = resting.get(key);
+    const due = rest ? pullRequests.filter(pullRequest => !rest.ingested.has(pullRequest.number)) : pullRequests;
+    if (due.length === 0) return Promise.resolve();
+    const done = ingest(due).finally(() => {
       running.delete(key);
-      finishedAt.set(key, Date.now());
+      if (rest) for (const pullRequest of due) rest.ingested.add(pullRequest.number);
+      else resting.set(key, { finishedAt: Date.now(), ingested: new Set(due.map(pullRequest => pullRequest.number)) });
     });
     running.set(key, done);
-    return done;
+    return waitAtMost(done);
   };
 }
 
@@ -940,9 +958,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           }));
           await ingestPolledPage(
             `${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
-            () =>
+            responsePullRequests,
+            listed =>
               ingestPolledEvents(
-                responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
+                listed.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
                 options.ingestFactoryEvent,
               ),
           );

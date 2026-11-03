@@ -1746,6 +1746,54 @@ describe('prs route', () => {
     }
   });
 
+  it('rules a pull request that shows up on a resting page on the first poll that lists it', async () => {
+    seedMaterializedProject();
+    const pullRequest35 = { ...pullRequest34, number: 35, url: 'https://github.com/octo/hello/pull/35' };
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+    await app.request('/web/github/projects/p1/prs');
+    for (let poll = 0; poll < 2; poll++) {
+      listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [pullRequest34, pullRequest35], nextPage: null });
+      await app.request('/web/github/projects/p1/prs');
+    }
+
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    expect(ingestFactoryEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ pull_request: expect.objectContaining({ number: 35 }) }),
+      }),
+    );
+  });
+
+  it('answers every board within the wait when a rules pass never ends, without starting another', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    try {
+      seedMaterializedProject();
+      const ingestFactoryEvent = vi.fn(() => new Promise<void>(() => {}));
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+      const answered: number[] = [];
+      const poll = (board: number) =>
+        Promise.resolve(app.request('/web/github/projects/p1/prs')).then(res => {
+          answered.push(board);
+          return res;
+        });
+
+      const first = poll(1);
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
+      vi.setSystemTime(Date.now() + 60_000);
+      const second = poll(2);
+      await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(answered.sort()).toEqual([1, 2]);
+      expect([(await first).status, (await second).status]).toEqual([200, 200]);
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
     seedMaterializedProject();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
