@@ -741,13 +741,19 @@ export function KnowledgePageExplorer({
       .map(ref => ref.trim())
       .filter(key => key && key !== own);
     const out = [...mentions, ...refs];
-    // Notes that mention this page, and (when the host lists links) bodies that link to it.
-    const into = [
+    // Notes that mention this page, and (when the host lists links) bodies that link to it: a note edge is a
+    // mention, a body edge a link, so a page that both links and mentions draws each once.
+    const listed = (focusLinkList?.edges ?? []).filter(edge => edge.toPageId === own);
+    const noteInto = [
       ...new Set([
         ...(detail.mentionedBy ?? []).map(note => note.pageId),
-        ...(focusLinkList?.edges ?? []).filter(edge => edge.toPageId === own).map(edge => edge.fromPageId),
+        ...listed.filter(edge => edge.kind === 'note').map(edge => edge.fromPageId),
       ]),
     ].filter(id => id !== own);
+    const bodyInto = [...new Set(listed.filter(edge => edge.kind === 'body').map(edge => edge.fromPageId))].filter(
+      id => id !== own,
+    );
+    const into = [...new Set([...noteInto, ...bodyInto])];
     const lookup = (key: string) => known.get(key) ?? index.resolve(key);
     const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key)))];
     const resolvedCount = (keys: string[]) => new Set(keys.flatMap(key => lookup(key)?.id ?? [])).size;
@@ -760,6 +766,8 @@ export function KnowledgePageExplorer({
       mentions,
       refs,
       into,
+      noteInto,
+      bodyInto,
       lookup,
       fetchKeys: [...wantOut.slice(0, room(out)), ...wantIn.slice(0, room(into))],
       unfetched: {
@@ -784,7 +792,7 @@ export function KnowledgePageExplorer({
   }, [fetchedSignature]);
   const focusLinks = useMemo(() => {
     if (!linkEnds) return { edges: [], pages: [], unfetched: { in: 0, out: 0 } };
-    const { detail, lookup, mentions, refs, into } = linkEnds;
+    const { detail, lookup, mentions, refs, noteInto, bodyInto } = linkEnds;
     const resolve = (key: string) => lookup(key) ?? fetchedPages.get(key);
     const own = detail.page.id;
     const edges: KnowledgePageEdge[] = [];
@@ -794,7 +802,7 @@ export function KnowledgePageExplorer({
       if (!target || target.id === own) {
         // An unfetched id still draws its edge, counted as not shown until its page arrives.
         if (!target && kind === 'mention' && side === 'out') edges.push({ source: own, target: key, kind });
-        if (!target && side === 'in') edges.push({ source: key, target: own, kind: 'mention' });
+        if (!target && side === 'in') edges.push({ source: key, target: own, kind });
         return;
       }
       pages.set(target.id, target);
@@ -802,7 +810,8 @@ export function KnowledgePageExplorer({
     };
     for (const key of mentions) reach(key, 'mention', 'out');
     for (const key of refs) reach(key, 'link', 'out');
-    for (const key of into) reach(key, 'mention', 'in');
+    for (const key of noteInto) reach(key, 'mention', 'in');
+    for (const key of bodyInto) reach(key, 'link', 'in');
     return {
       edges: edges.filter(edge => edge.source !== edge.target),
       pages: [...pages.values()],
@@ -824,10 +833,18 @@ export function KnowledgePageExplorer({
   const [focusScopeId, setFocusScopeId] = useState<string | null>(null);
   // Every link the explorer knows of: mentions the host's graph found, `[[links]]` in loaded bodies,
   // and the selected page's own. Only the selected page's are drawn (capped) unless all links are on.
-  const knownLinks = useMemo(
-    () => [...graph.edges.filter(edge => edge.kind === 'mention'), ...bodyLinkEdges(drawn.pages), ...focusLinks.edges],
-    [graph.edges, drawn.pages, focusLinks.edges],
-  );
+  const knownLinks = useMemo(() => {
+    // A body link the loaded page shows and the link index lists is one line, not two.
+    const seen = new Set<string>();
+    return [
+      ...graph.edges.filter(edge => edge.kind === 'mention'),
+      ...bodyLinkEdges(drawn.pages),
+      ...focusLinks.edges,
+    ].filter(edge => {
+      const key = `${edge.kind}:${edge.source}>${edge.target}`;
+      return seen.has(key) ? false : (seen.add(key), true);
+    });
+  }, [graph.edges, drawn.pages, focusLinks.edges]);
   const linkView = useMemo(
     () => visibleLinks(knownLinks, pagesById, selectedPageId, allLinks),
     [knownLinks, pagesById, selectedPageId, allLinks],

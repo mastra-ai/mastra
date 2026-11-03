@@ -281,4 +281,12 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     expect(drawnIds(container)).toContain('body-author');
     expect(edgeIds(container).some(id => id.includes('body-author') && id.includes('ward'))).toBe(true);
   });
+  it('draws a body that links in as one link line, not a mention as well', () => {
+    const { container } = render({
+      reachable: { 'body-author': page('body-author', 'blog') },
+      linksIn: ['body-author'],
+    });
+    const lines = edgeIds(container).filter(id => id.includes('body-author') && id.includes('ward'));
+    expect(lines).toEqual(['link:body-author->ward']);
+  });
 });
