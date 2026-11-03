@@ -5982,7 +5982,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       };
       const cards = () => seeded.workItems.list({ orgId: 'org-1', factoryProjectId: seeded.project.id });
       const decisions = () => seeded.workItems.listDeferredDecisions('org-1', seeded.project.id);
-      const issueCard = async (issueNumber: number, stage: string) =>
+      const issueCard = async (issueNumber: number, stage: string, sessions: Record<string, unknown> = {}) =>
         (
           await seeded.workItems.upsert({
             orgId: 'org-1',
@@ -5998,7 +5998,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               },
               title: `Issue ${issueNumber}`,
               stages: [stage],
-              sessions: {},
+              sessions: sessions as never,
               metadata: { authorTrusted: true, state: 'open' },
             },
           })
@@ -6012,6 +6012,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       deliveryId = `delivery-open-${number}`,
       action: 'opened' | 'closed' | 'edited' = 'opened',
       merged = false,
+      headBranch = `feature-${number}`,
     ) {
       return {
         event: 'pull_request',
@@ -6030,7 +6031,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             created_at: '2030-01-01T00:00:00Z',
             state: action === 'closed' ? 'closed' : 'open',
             merged,
-            head: { ref: `feature-${number}` },
+            head: { ref: headBranch },
             base: { ref: 'main' },
           },
         },
@@ -6190,6 +6191,57 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const [card] = await h.cards();
       expect(card).toMatchObject({ id: issue.id, stages: ['intake'] });
       expect(card!.workItem.state).toBe('open');
+    });
+
+    const builderSession = { threadId: 'thread-work', sessionId: 'session-work', branch: 'factory/issue-42-build', startedBy: 'user-1' };
+
+    it("gives someone else's \"Fixes #42\" pull request its own card once the issue's builder has started", async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'execute', { work: builderSession });
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      const issueAfter = cards.find(card => card.id === issue.id)!;
+      expect(issueAfter).toMatchObject({ stages: ['execute'], revision: issue.revision });
+      expect(sourceTypes(issueAfter)).toEqual(['issue']);
+      expect(sourceTypes(cards.find(card => card.id !== issue.id)!)).toEqual(['pull-request']);
+    });
+
+    it("files the builder's own pull request on its card and tracks it", async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'execute', { work: builderSession });
+
+      await h.ingest(openedPullRequest(18, 'Implements #42.', undefined, 'opened', false, builderSession.branch));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, metadata: { openPullRequestNumber: 18 } });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+    });
+
+    it("never tracks someone else's pull request when the builder's own closes", async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'intake');
+      // Filed before anyone started building, so it joins the card.
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      const attached = (await h.cards())[0]!;
+      await h.workItems.update({
+        orgId: 'org-1',
+        id: issue.id,
+        userId: 'user-1',
+        patch: { stages: ['execute'], sessions: { work: builderSession } as never },
+      });
+      await h.ingest(openedPullRequest(18, 'Implements #42.', undefined, 'opened', false, builderSession.branch));
+      expect((await h.cards())[0]!.metadata.openPullRequestNumber).toBe(18);
+
+      await h.ingest(openedPullRequest(18, '', 'delivery-close-18', 'closed', false, builderSession.branch));
+
+      const [card] = await h.cards();
+      expect(card!.id).toBe(attached.id);
+      expect(card!.workItem.sources.map(source => source.state)).toEqual(['open', 'open', 'closed']);
+      expect(card!.metadata.openPullRequestNumber ?? null).toBeNull();
     });
   },
 );
