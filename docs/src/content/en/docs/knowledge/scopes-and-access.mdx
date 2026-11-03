@@ -151,6 +151,8 @@ Knowledge works out a run's reach each time a tool runs:
 1. Find every rule whose principal matches one of them, and give the run that rule's role on the scopes it covers.
 1. Stop there. A scope reached through a rule doesn't act as a principal itself, so access never chains through a second hop.
 
+For a run holding `org:acme` and `team:acme:support`:
+
 ```mermaid
 flowchart LR
   A["Run scopes<br/>org:acme, team:acme:support"] --> B["Rules<br/>self → editor<br/>org:$orgId → viewer"]

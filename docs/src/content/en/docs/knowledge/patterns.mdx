@@ -13,7 +13,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-Each pattern below says who the agents are, which scopes hold what, and the config or tool calls that make it work. Scope kinds such as `tenant:`, `repo:` or `handbook:` are names each config chooses. Knowledge has no built-in kinds. Only `resource:` and `thread:` come from Memory, and [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares them plus a tenant scope.
+These ten patterns show what you can build with Knowledge. Each one says who the agents are, which scopes hold what, and the config or tool calls that make it work. Scope kinds such as `tenant:`, `repo:` or `handbook:` are names each config chooses. Knowledge has no built-in kinds. Only `resource:` and `thread:` come from Memory, and [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares them plus a tenant scope.
 
 :::warning
 
@@ -39,6 +39,8 @@ const knowledge = new Knowledge({
   },
 })
 ```
+
+To answer a question about one region, the agent asks for the matching lines and one line around each:
 
 ```json
 { "page": "product-docs:initech#billing/refunds", "match": "region 42", "context": 1 }
@@ -85,6 +87,8 @@ Developers' coding agents share one scope per repo. The conventions page is pinn
 },
 ```
 
+An agent records a decision as a note on the conventions page:
+
 ```json
 {
   "op": "add",
@@ -121,6 +125,8 @@ Pages nest inside a scope. A handbook declares `refunds` with `damaged-items` un
 ```json
 { "from": "handbook:acme", "depth": 2 }
 ```
+
+It gets back the tree:
 
 ```text
 handbook:acme#refunds                Refund policy        (1 child)

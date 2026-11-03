@@ -101,7 +101,7 @@ Pinning and unpinning need two things:
 - `editor` on the page's scope.
 - Authority over every audience entry: the run holds that scope, or has `editor` or higher on it through a declared rule.
 
-In the example above, `role:$orgId:support` gives `role:$orgId:policy-admin` the `editor` role, so a policy admin can pin pages for support. The rule binds `$orgId`, so an Acme policy admin can pin for `role:acme:support` but never for `role:globex:support`. Audience authority only decides whose context a page goes into. The audience must still be able to read the page to receive it.
+In the config under [Pinned context in config](#pinned-context-in-config), `role:$orgId:support` gives `role:$orgId:policy-admin` the `editor` role, so a policy admin can pin pages for support. The rule binds `$orgId`, so an Acme policy admin can pin for `role:acme:support` but never for `role:globex:support`. Audience authority only decides whose context a page goes into. The audience must still be able to read the page to receive it.
 
 Refusals come back to the model as tool errors:
 

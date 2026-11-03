@@ -21,7 +21,7 @@ Tools are off by default. `tools` turns them on in two groups, and `pinnedContex
 
 | Option | Tools | Use |
 | - | - | - |
-| `tools: true` | All five below | Agents that read and write |
+| `tools: true` | All five read and write tools | Agents that read and write |
 | `tools: { read: true }` | `knowledge_list`, `knowledge_search`, `knowledge_read` | Agents that only answer from Knowledge |
 | `tools: { write: true }` | `knowledge_page`, `knowledge_note` | Agents that only add content |
 | `pinnedContext: true` | `knowledge_pin` | See [Pinned context](/docs/knowledge/pinned-context) |
@@ -76,7 +76,7 @@ Reading needs `viewer`. See [`knowledge_read`](/reference/knowledge/knowledge-to
 
 ## Write pages
 
-`knowledge_page` with `op: "write"` creates a page when there's no `page`, and edits one when there is. `scope` is where a new page goes. The model picks the scope by audience. A fact for the whole team goes in `team:acme:support`, and one only for this user in `resource:dana`.
+`knowledge_page` with `op: "write"` creates a page when there's no `page`, and edits one when there is. `scope` is where a new page goes. The model picks the scope by audience. A fact for the whole team goes in `team:acme:support`, and one only for this user in `resource:dana`. To create a team page, the model sends:
 
 ```json
 {

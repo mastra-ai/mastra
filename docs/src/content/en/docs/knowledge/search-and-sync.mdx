@@ -14,20 +14,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-## How search ranks results
-
-`knowledge_search` splits the query into words and matches each one case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description or body contains at least one of the words, and a note when its own text does. Quotes and operators have no special meaning.
-
-Pages come before notes, in this order:
-
-1. A page whose name contains the whole query.
-1. Pages that contain more of the query's words, so a long question still finds the page that holds most of it.
-1. Among pages with as many words, a word in the name counts for more than one in the description, and one in the description for more than one in the body.
-1. Then the most recently updated page.
-
-Notes follow, ranked by how many of the words they contain, then newest first. A one-word query therefore favors pages with that word in their name. `limit` defaults to 10 (at most 50), and results are ranked before the limit is applied. The limit keeps the best matches. A search only returns what the run can read.
-
-With `MongoDBStore`, reads that span many scopes, such as a search without `scope`, slow down as the number of scopes a run can read grows, because the store first collects every readable scope. Reads within one scope stay fast.
+Agents find pages with `knowledge_search`, which matches words out of the box. This page shows how to add search by meaning, how to sync content from your own systems into Knowledge, and how search ranks what it returns.
 
 ## Add search by meaning
 
@@ -61,6 +48,8 @@ Run `reindex()` to re-embed every page and note. It returns how many it indexed.
 - Content written straight to the store, outside the tools.
 - An upgrade from a release that didn't chunk long pages. Pages that were too long to embed then become searchable by meaning.
 - A write that logged `Knowledge semantic index update failed; run knowledge.reindex() to repair`. The write itself succeeded. Only search by meaning misses it until you reindex.
+
+To reindex:
 
 ```typescript
 const indexed = await knowledge.reindex()
@@ -153,6 +142,21 @@ Keep in mind:
 - With a `vector` store and `embedder`, written pages and notes are embedded. If embedding fails, the write still succeeds and Mastra logs a warning. Run `knowledge.reindex()` to repair.
 - `removePage()` returns `null` when no page is at that path. It refuses a page that still has child pages and a page declared in the scope's `pages`. If another write changes the page while it's being removed, the call throws, so run removals from one worker or retry them.
 - Track which paths you synced last time in your app, so you know which ones to remove. That includes pages created along a path, such as `releases` for `releases/2026-12`, which stay until you remove them.
+
+## How search ranks results
+
+`knowledge_search` splits the query into words and matches each one case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description or body contains at least one of the words, and a note when its own text does. Quotes and operators have no special meaning.
+
+Pages come before notes, in this order:
+
+1. A page whose name contains the whole query.
+1. Pages that contain more of the query's words, so a long question still finds the page that holds most of it.
+1. Among pages with as many words, a word in the name counts for more than one in the description, and one in the description for more than one in the body.
+1. Then the most recently updated page.
+
+Notes follow, ranked by how many of the words they contain, then newest first. A one-word query therefore favors pages with that word in their name. `limit` defaults to 10 (at most 50), and results are ranked before the limit is applied. The limit keeps the best matches. A search only returns what the run can read.
+
+With `MongoDBStore`, reads that span many scopes, such as a search without `scope`, slow down as the number of scopes a run can read grows, because the store first collects every readable scope. Reads within one scope stay fast.
 
 ## Related
 

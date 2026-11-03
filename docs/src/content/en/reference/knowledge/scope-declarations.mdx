@@ -167,7 +167,7 @@ Every principal must also be a declared type:
 Knowledge rule principal "org:$orgId" on "policy:$orgId" is not a declared scope type; declare it or fix the typo.
 ```
 
-Rules reach one hop. A run holding `org:acme` reads `team:acme:support` through the rule above, but `team:acme:support` doesn't then pass its own grants on to that run. There's no inheritance either: a role on `org:acme` gives nothing on scopes placed under it unless a rule says so.
+Rules reach one hop. A run holding `org:acme` reads `team:acme:support` through its `org:$orgId` viewer rule, but `team:acme:support` doesn't then pass its own grants on to that run. There's no inheritance either: a role on `org:acme` gives nothing on scopes placed under it unless a rule says so.
 
 ## Place scopes with `belongsTo`
 

@@ -163,7 +163,7 @@ explainAccess(
 ): Promise<KnowledgeAccessExplanation>
 ```
 
-Says why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are raw run scopes, as you'd pass to an agent. `target.page` takes a page ID or a page path such as `org:acme#policies/refund`. A run scope with no declaration throws, as it does at run start:
+Explains why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are raw run scopes, as you'd pass to an agent. `target.page` takes a page ID or a page path such as `org:acme#policies/refund`. A run scope with no declaration throws, as it does at run start:
 
 ```text
 Knowledge run scope "project:x" does not match a declared scope type. Declare it in Knowledge `scopes` (for Memory's resource:/thread: scopes, spread `...knowledgeMemoryScopes()`).
@@ -240,7 +240,7 @@ Moves stored scopes created from declaration key `from`, and its child scopes (`
 getStorage(): Promise<KnowledgeStorage>
 ```
 
-Host code such as admin pages, deletes and your own import scripts uses the returned Knowledge store directly. Its methods skip role checks, so pass the `read` value from `readScopeFor()` whenever a read should be limited to what a user can see.
+Returns the Knowledge store, for host code such as admin pages, deletes and your own import scripts. Its methods skip role checks, so pass the `read` value from `readScopeFor()` whenever a read should be limited to what a user can see.
 
 ```typescript
 const store = await knowledge.getStorage()
@@ -264,7 +264,7 @@ upsertPage(input: {
 
 Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [sync content into Knowledge](/docs/knowledge/search-and-sync#sync-your-content).
 
-This method and the four below are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
+`upsertPage()`, `removePage()`, `addNote()`, `updateNote()` and `removeNote()` are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
 
 ### `removePage()`
 
@@ -348,7 +348,7 @@ Returns the `displayLabel` for a scope address with its `$params` filled in: `'$
 
 ### `pinnedContextEnabled`
 
-`true` when `pinnedContext` is on, so attached agents get pinned pages every turn.
+True if `pinnedContext` is on, so attached agents get pinned pages every turn; false otherwise.
 
 ## Related
 
