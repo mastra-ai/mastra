@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../channels/output-processor';
+import { getErrorFromUnknown } from '../error';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
@@ -443,7 +444,10 @@ Use this tool when:
                   toolCallId,
                   agentType,
                   subToolName: chunk.payload.toolName,
-                  subToolResult: chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result,
+                  subToolResult:
+                    chunk.type === 'tool-error'
+                      ? getErrorFromUnknown(chunk.payload.error).message
+                      : chunk.payload.result,
                   isError: isErr,
                 });
               }

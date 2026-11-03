@@ -79,6 +79,7 @@ const cases = [
       },
     }),
     isError: true,
+    errorMessage: 'lookup failed',
   },
 ];
 
@@ -91,7 +92,7 @@ describeForAllEngines('Controller tool status matches the tool outcome', engine 
     // Durable/evented delegations currently emit no subagent_tool_end.
     // Reproduced before and after the classification fix; not yet investigated.
     const test = route === 'delegated' && (engine === 'durable' || engine === 'evented') ? it.fails : it;
-    test.each(cases)(`${route}: $name`, async ({ tool, args, isError }) => {
+    test.each(cases)(`${route}: $name`, async ({ tool, args, isError, errorMessage }) => {
       const llm = getMock();
       const tools = { lookup: tool };
       const worker =
@@ -164,6 +165,8 @@ describeForAllEngines('Controller tool status matches the tool outcome', engine 
           expect(ended).toHaveLength(1);
           expect(ended[0]).toMatchObject({ isError });
           if (!isError) expect(ended[0]).toMatchObject({ subToolResult: { count: 1 } });
+          // Built-in subagent events carry the thrown error's message, not an Error that serializes to {}.
+          if (builtIn && errorMessage) expect(ended[0]).toMatchObject({ subToolResult: errorMessage });
         } else {
           const ended = events.filter(event => event.type === 'tool_end' && event.toolCallId === 'lookup-call');
           expect(ended).toHaveLength(1);
