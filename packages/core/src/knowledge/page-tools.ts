@@ -1175,7 +1175,8 @@ function pageTool(host: KnowledgePageToolHost) {
           await embed(host, index => index.indexPage(updated));
           await updateKnowledgeLinks(host.warn, async () => {
             if (args.body !== undefined) await syncKnowledgePageBodyLinks(storage, updated);
-            if (args.name !== undefined) await refreshKnowledgeLinksTo(storage, [updated]);
+            // Only the name can change a page's ref keys here; its id, path and address stay.
+            if (updated.name !== page.name) await refreshKnowledgeLinksTo(storage, [updated]);
           });
           return done(updated);
         }

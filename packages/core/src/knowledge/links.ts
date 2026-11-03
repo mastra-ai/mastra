@@ -29,36 +29,88 @@ export function knowledgeBodyLinkRefs(body: string | undefined): Map<string, num
 }
 
 /**
- * Resolves a body `[[ref]]` the way `run.page(ref)` does (id, `scope#key/key` path, scope address,
+ * Resolves body `[[ref]]`s the way `run.page(ref)` does (id, `scope#key/key` path, scope address,
  * unique name), but over the whole store: the index must not depend on who wrote the body, and reads
  * gate every link by the reader's scopes. A name resolves to the one live page with that name in the
  * source page's home scope, else to the one in the whole store; an ambiguous name stays unresolved.
+ * Ids and scope addresses are looked up in one batch per call, and answers are kept for the
+ * resolver's life, so pages re-synced together share their lookups.
  */
-async function resolveBodyLinkRef(storage: KnowledgeStorage, ref: string, homeScopeId: string) {
-  const byId = await storage.getPage({ id: ref, read: 'all' });
-  if (byId && !byId.deletedAt) return byId.id;
+class BodyLinkResolver {
+  readonly #storage: KnowledgeStorage;
+  readonly #answers = new Map<string, string | null>();
+  /** Refs looked up in the store so far (answers reused from earlier calls don't count). */
+  looked = 0;
 
-  if (ref.indexOf('#') > 0) {
-    const parsed = parseKnowledgePageRef(ref);
-    if (!parsed) return null;
-    const [scope] = await storage.getScopesByAddress([parsed.scope]);
-    if (!scope || scope.deletedAt) return null;
-    const page = await storage.getPageByPath({ scopeId: scope.id, path: parsed.path, read: 'all' });
-    return page?.id ?? null;
+  constructor(storage: KnowledgeStorage) {
+    this.#storage = storage;
   }
 
-  const [scope] = await storage.getScopesByAddress([ref]);
-  if (scope && !scope.deletedAt) return scope.id;
+  async resolve(refs: string[], homeScopeId: string): Promise<Map<string, string | null>> {
+    const keyOf = (ref: string) => `${homeScopeId}\u0000${ref}`;
+    const pending = [...new Set(refs)].filter(ref => !this.#answers.has(keyOf(ref)));
+    this.looked += pending.length;
+    const answer = (ref: string, id: string | null) => this.#answers.set(keyOf(ref), id);
 
-  const inHome = await storage.findPagesByName({ name: ref, read: 'all', scopeId: homeScopeId, limit: 2 });
-  if (inHome.length === 1) return inHome[0]!.id;
-  if (inHome.length > 1) return null;
-  const anywhere = await storage.findPagesByName({ name: ref, read: 'all', limit: 2 });
-  return anywhere.length === 1 ? anywhere[0]!.id : null;
+    const remaining: string[] = [];
+    if (pending.length) {
+      const byId = new Set((await this.#storage.getPages({ ids: pending, read: 'all' })).map(page => page.id));
+      for (const ref of pending) {
+        if (byId.has(ref)) answer(ref, ref);
+        else remaining.push(ref);
+      }
+    }
+
+    const paths = new Map<string, ReturnType<typeof parseKnowledgePageRef>>();
+    const addresses = new Set<string>();
+    for (const ref of remaining) {
+      if (ref.indexOf('#') > 0) {
+        const parsed = parseKnowledgePageRef(ref);
+        paths.set(ref, parsed);
+        if (parsed) addresses.add(parsed.scope);
+      } else {
+        addresses.add(ref);
+      }
+    }
+    const scopes = new Map<string, string>();
+    if (addresses.size) {
+      for (const scope of await this.#storage.getScopesByAddress([...addresses])) {
+        if (!scope.deletedAt && scope.address) scopes.set(scope.address, scope.id);
+      }
+    }
+
+    for (const ref of remaining) {
+      if (paths.has(ref)) {
+        const parsed = paths.get(ref);
+        const scopeId = parsed && scopes.get(parsed.scope);
+        const page = scopeId ? await this.#storage.getPageByPath({ scopeId, path: parsed.path, read: 'all' }) : null;
+        answer(ref, page?.id ?? null);
+        continue;
+      }
+      const scopeId = scopes.get(ref);
+      if (scopeId) {
+        answer(ref, scopeId);
+        continue;
+      }
+      const inHome = await this.#storage.findPagesByName({ name: ref, read: 'all', scopeId: homeScopeId, limit: 2 });
+      if (inHome.length) {
+        answer(ref, inHome.length === 1 ? inHome[0]!.id : null);
+        continue;
+      }
+      const anywhere = await this.#storage.findPagesByName({ name: ref, read: 'all', limit: 2 });
+      answer(ref, anywhere.length === 1 ? anywhere[0]!.id : null);
+    }
+
+    return new Map(refs.map(ref => [ref, this.#answers.get(keyOf(ref)) ?? null]));
+  }
 }
 
 /** Rewrites a page's body-link rows from its current body; a deleted page keeps none. */
-export async function syncKnowledgePageBodyLinks(storage: KnowledgeStorage, page: KnowledgePage): Promise<void> {
+export async function syncKnowledgePageBodyLinks(
+  storage: KnowledgeStorage,
+  page: KnowledgePage,
+  resolver = new BodyLinkResolver(storage),
+): Promise<void> {
   // Refs that share a match key (differ only in case or spacing) share one row, resolved as first written.
   const byKey = new Map<string, { ref: string; count: number }>();
   if (!page.deletedAt) {
@@ -70,10 +122,16 @@ export async function syncKnowledgePageBodyLinks(storage: KnowledgeStorage, page
       else byKey.set(key, { ref, count });
     }
   }
-  const links: KnowledgePageBodyLink[] = [];
-  for (const [key, { ref, count }] of byKey) {
-    links.push({ ref: key, toPageId: await resolveBodyLinkRef(storage, ref, page.scopeId), count });
-  }
+  const entries = [...byKey];
+  const resolved = await resolver.resolve(
+    entries.map(([, { ref }]) => ref),
+    page.scopeId,
+  );
+  const links: KnowledgePageBodyLink[] = entries.map(([key, { ref, count }]) => ({
+    ref: key,
+    toPageId: resolved.get(ref) ?? null,
+    count,
+  }));
   await storage.replacePageBodyLinks({ pageId: page.id, links });
 }
 
@@ -115,9 +173,18 @@ async function subtree(storage: KnowledgeStorage, root: KnowledgePage): Promise<
 }
 
 /**
- * Re-resolves every page whose body links one of `pages` or names a ref one of them answers to now,
- * after they were created, renamed, moved, merged or deleted. With `withDescendants`, the pages'
- * subtrees count too (their paths changed with them).
+ * Most linking pages one write re-resolves. Past it, or once a write has looked up
+ * {@link MAX_KNOWLEDGE_PAGE_BODY_LINKS} refs, the rest keep their links as they were until they are
+ * next written or `knowledge.reindexLinks()` runs; the write reports how many it left.
+ */
+export const MAX_KNOWLEDGE_LINK_REFRESH_SOURCES = 100;
+
+/**
+ * Re-resolves the pages whose body links one of `pages` or names a ref one of them answers to now,
+ * after they were created, renamed, moved, merged or deleted, in page id order up to
+ * {@link MAX_KNOWLEDGE_LINK_REFRESH_SOURCES}. With `withDescendants`, the pages' subtrees count too
+ * (their paths changed with them). Throws after the update when it left linking pages out, so the
+ * caller's {@link updateKnowledgeLinks} reports it.
  */
 export async function refreshKnowledgeLinksTo(
   storage: KnowledgeStorage,
@@ -132,13 +199,29 @@ export async function refreshKnowledgeLinksTo(
     if (page.deletedAt) continue;
     for (const key of await pageRefKeys(storage, page)) refs.add(key);
   }
-  const sources = await storage.listPageBodyLinkSources({
-    refs: [...refs],
-    toPageIds: affected.map(page => page.id),
-  });
-  for (const id of sources) {
-    const source = await storage.getPage({ id, read: 'all' });
-    if (source) await syncKnowledgePageBodyLinks(storage, source);
+  const sources = (
+    await storage.listPageBodyLinkSources({
+      refs: [...refs],
+      toPageIds: affected.map(page => page.id),
+    })
+  ).sort();
+  if (!sources.length) return;
+  const batch = sources.slice(0, MAX_KNOWLEDGE_LINK_REFRESH_SOURCES);
+  const live = new Map((await storage.getPages({ ids: batch, read: 'all' })).map(page => [page.id, page]));
+  const resolver = new BodyLinkResolver(storage);
+  let done = 0;
+  for (const id of batch) {
+    if (resolver.looked >= MAX_KNOWLEDGE_PAGE_BODY_LINKS) break;
+    const source = live.get(id);
+    // A source that is gone keeps no links.
+    if (source) await syncKnowledgePageBodyLinks(storage, source, resolver);
+    else await storage.replacePageBodyLinks({ pageId: id, links: [] });
+    done++;
+  }
+  const left = sources.length - done;
+  if (left > 0) {
+    const names = pages.map(page => `"${page.name}"`).join(', ');
+    throw new Error(`${left} more pages link to ${names}; their links were left as they were`);
   }
 }
 

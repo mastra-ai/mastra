@@ -118,7 +118,7 @@ async function upsertAt(
   fields: { name: string; description?: string; body?: string },
   provenance: KnowledgeProvenance,
   overwrite: boolean,
-): Promise<KnowledgeUpsertPageResult> {
+): Promise<KnowledgeUpsertPageResult & { renamed?: boolean }> {
   for (let attempt = 1; ; attempt++) {
     const existing = await storage.getPageByPath({ scopeId, path, read: 'all' });
     try {
@@ -140,7 +140,7 @@ async function upsertAt(
         ...fields,
         provenance,
       });
-      return { page, status: 'updated' };
+      return { page, status: 'updated', renamed: page.name !== existing.name };
     } catch (error) {
       // By name: an adapter may load its own copy of core, where instanceof fails.
       const name = (error as Error | undefined)?.name;
@@ -170,7 +170,7 @@ export async function upsertKnowledgePage(
     }
     parentId = parent.page.id;
   }
-  const result = await upsertAt(
+  const { renamed, ...result } = await upsertAt(
     storage,
     scope.id,
     parentId,
@@ -183,7 +183,8 @@ export async function upsertKnowledgePage(
     await embed(host, index => index.indexPage(result.page));
     await updateKnowledgeLinks(host.warn, async () => {
       await syncKnowledgePageBodyLinks(storage, result.page);
-      await refreshKnowledgeLinksTo(storage, [result.page]);
+      // An update keeps the page's id and path, so only a new name changes what links can reach it.
+      if (result.status === 'created' || renamed) await refreshKnowledgeLinksTo(storage, [result.page]);
     });
   }
   return result;

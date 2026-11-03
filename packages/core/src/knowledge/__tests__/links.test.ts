@@ -16,6 +16,8 @@ function setup(storage = new InMemoryStore()) {
       'org:$orgId': { ...memory['org:$orgId'], access: [{ principal: 'self', role: 'owner' }] },
     },
   });
+  const warnings: string[] = [];
+  (knowledge as any).logger = { warn: (m: string) => warnings.push(m), debug() {}, info() {}, error() {} };
   const tools = knowledge.createTools();
   const requestContext = new RequestContext();
   setRunAgentScopes(requestContext, ['org:acme']);
@@ -31,7 +33,32 @@ function setup(storage = new InMemoryStore()) {
     (await (await store()).listPageLinks({ pageIds: [pageId], read: 'all', direction: 'out' })).map(
       link => link.toPageId,
     );
-  return { knowledge, storage, call, write, edit, store, out };
+  /** Counts every knowledge store call made while `work` runs, by method. */
+  const countCalls = async (work: () => Promise<unknown>) => {
+    const target = (await store()) as unknown as Record<string, unknown>;
+    const calls: Record<string, number> = {};
+    const originals = new Map<string, unknown>();
+    let proto = Object.getPrototypeOf(target);
+    while (proto && proto !== Object.prototype) {
+      for (const name of Object.getOwnPropertyNames(proto)) {
+        const fn = target[name];
+        if (name === 'constructor' || typeof fn !== 'function' || originals.has(name)) continue;
+        originals.set(name, fn);
+        target[name] = (...args: unknown[]) => {
+          calls[name] = (calls[name] ?? 0) + 1;
+          return (fn as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      }
+      proto = Object.getPrototypeOf(proto);
+    }
+    try {
+      await work();
+    } finally {
+      for (const name of originals.keys()) delete target[name];
+    }
+    return { calls, total: Object.values(calls).reduce((sum, n) => sum + n, 0) };
+  };
+  return { knowledge, storage, call, write, edit, store, out, warnings, countCalls };
 }
 
 describe('Knowledge page link index', () => {
@@ -142,5 +169,51 @@ describe('Knowledge page link index', () => {
     await knowledge.removePage({ scope: 'org:acme', path: 'docs/guide' });
     expect(await out(hub.page.id)).toEqual([]);
     expect(await (await store()).listPageBodyLinkSources({ toPageIds: [guide.page.id] })).toEqual([]);
+  });
+
+  it('re-resolves at most 100 linking pages per write, in id order, and leaves the rest to reindexLinks', async () => {
+    const { knowledge, out, warnings, countCalls } = setup();
+    const sources: string[] = [];
+    for (let i = 0; i < 150; i++) {
+      const { page } = await knowledge.upsertPage({
+        scope: 'org:acme',
+        path: `docs/s${i}`,
+        name: `Source ${i}`,
+        body: `See [[Target]], [[Missing ${i} a]] and [[Missing ${i} b]].`,
+      });
+      sources.push(page.id);
+    }
+    sources.sort();
+    let target!: { id: string };
+    const { calls, total } = await countCalls(async () => {
+      target = (await knowledge.upsertPage({ scope: 'org:acme', path: 'docs/target', name: 'Target', body: 't' })).page;
+    });
+    // 100 sources, each a few batched lookups plus one row replace; one source used to cost ~14 calls.
+    expect(total).toBeLessThan(800);
+    expect(calls.replacePageBodyLinks).toBe(101);
+    for (const id of sources.slice(0, 100)) expect(await out(id)).toEqual([target.id]);
+    for (const id of sources.slice(100)) expect(await out(id)).toEqual([]);
+    expect(warnings.some(w => w.includes('50 more pages') && w.includes('knowledge.reindexLinks()'))).toBe(true);
+
+    await knowledge.reindexLinks();
+    for (const id of sources) expect(await out(id)).toEqual([target.id]);
+  });
+
+  it('skips the link refresh when a write keeps the name it had', async () => {
+    const { knowledge, write, edit, countCalls } = setup();
+    const page = await write('Policy', 'v1');
+    const sameName = await countCalls(() => edit(page, { name: 'Policy', body: 'v2' }));
+    expect(sameName.calls.listPageBodyLinkSources ?? 0).toBe(0);
+
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'docs/guide', name: 'Guide', body: 'g1' });
+    const bodyOnly = await countCalls(() =>
+      knowledge.upsertPage({ scope: 'org:acme', path: 'docs/guide', name: 'Guide', body: 'g2' }),
+    );
+    expect(bodyOnly.calls.listPageBodyLinkSources ?? 0).toBe(0);
+
+    const renamed = await countCalls(() =>
+      knowledge.upsertPage({ scope: 'org:acme', path: 'docs/guide', name: 'Handbook', body: 'g2' }),
+    );
+    expect(renamed.calls.listPageBodyLinkSources).toBe(1);
   });
 });
