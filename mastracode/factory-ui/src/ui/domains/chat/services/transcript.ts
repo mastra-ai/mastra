@@ -295,7 +295,10 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         },
       );
     case 'shell_output':
-      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
+      return withTool(state, event.toolCallId, t => ({
+        ...t,
+        output: appendShellOutput(t.output, stripAnsi(event.output)),
+      }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -1041,6 +1044,15 @@ function answeredLatestUser(entries: TimelineEntry[], stored: Set<number>): bool
     if (entry.message.role === 'user') return false;
   }
   return false;
+}
+
+/** Live shell output kept per tool call, in string code units. Matches the controller's display state. */
+const MAX_SHELL_OUTPUT = 1024 * 1024;
+
+/** Appends shell output, keeping only the latest `MAX_SHELL_OUTPUT` code units. */
+function appendShellOutput(existing: string, chunk: string): string {
+  if (chunk.length >= MAX_SHELL_OUTPUT) return chunk.slice(-MAX_SHELL_OUTPUT);
+  return existing.slice(-(MAX_SHELL_OUTPUT - chunk.length)) + chunk;
 }
 
 function withTool(

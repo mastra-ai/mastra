@@ -751,8 +751,19 @@ describe('executeCommandTool data chunks', () => {
       expect(result).toBe(expected);
     });
 
-    it('preserves the pipeline exit status when an upstream command fails', async () => {
-      const { result, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | tail -20`);
+    it('reports an upstream failure in a pipeline ending in tail', async () => {
+      const { result, stdout, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | tail -20`);
+      expect(stdout).toBe('kept\n');
+      expect(result).toContain('kept');
+      expect(result).toContain('Exit code: 7');
+      expect(chunks.find(chunk => chunk.type === 'data-sandbox-exit')?.data).toMatchObject({
+        exitCode: 7,
+        success: false,
+      });
+    });
+
+    it('keeps shell exit status for pipelines that do not end in tail', async () => {
+      const { result, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | cat`);
       expect(result).toBe('kept\n');
       expect(chunks.find(chunk => chunk.type === 'data-sandbox-exit')?.data).toMatchObject({
         exitCode: 0,

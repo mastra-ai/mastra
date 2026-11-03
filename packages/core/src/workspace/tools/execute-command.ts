@@ -64,6 +64,22 @@ export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
   ...executeCommandWithBackgroundSchema.shape,
 });
 
+/** A command whose final pipeline stage is `tail`, e.g. `make test 2>&1 | tail -20`. */
+const TRAILING_TAIL_PIPE = /(?:^|[^|])\|\s*tail(?:\s[^|;&]*)?$/;
+
+/**
+ * POSIX shells report a pipeline's status from its last command, so `cmd | tail -N` exits 0 even
+ * when `cmd` fails. Enable `pipefail` (where the shell supports it) for pipelines ending in `tail`
+ * so the upstream failure is reported. `tail` reads all of its input, so upstream commands are
+ * not cut off by SIGPIPE. LocalSandbox on Windows runs commands through cmd.exe, which has no
+ * `set -o`.
+ */
+function reportUpstreamPipelineFailure(command: string, sandboxProvider: string): string {
+  if (sandboxProvider === 'local' && process.platform === 'win32') return command;
+  if (!TRAILING_TAIL_PIPE.test(command.trim())) return command;
+  return `(set -o pipefail) 2>/dev/null && set -o pipefail; ${command}`;
+}
+
 const ABORTED_COMMAND_NOTE =
   'Command aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.';
 const CANCELLED_RUN_NOTE = 'The run was cancelled (by the user or system) while this command was running.';
@@ -253,7 +269,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
   let abortedWhenSettled = false;
   try {
     const result = await sandbox
-      .executeCommand(command, [], {
+      .executeCommand(reportUpstreamPipelineFailure(command, sandbox.provider), [], {
         timeout: timeout ?? undefined,
         cwd: cwd ?? undefined,
         abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
