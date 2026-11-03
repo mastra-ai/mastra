@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import getPort from 'get-port';
@@ -2377,7 +2377,7 @@ assert.equal(subpathOnlyValue, 'c');`,
 
   describe('pnpm patched dependencies', { concurrent: false }, () => {
     it(
-      'keeps source workspace patches applied in the built output',
+      'keeps source workspace patches and overrides applied in the built output',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-patch-test-${pkgManager}-`));
         try {
@@ -2402,9 +2402,10 @@ assert.equal(subpathOnlyValue, 'c');`,
           const workspace = await readFile(workspacePath, 'utf8');
           await writeFile(
             workspacePath,
-            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
+            // read-excel-file asks for fflate ^0.8.3, so only the override can install 0.8.2 (#29192).
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n\noverrides:\n  fflate: 0.8.2\n`,
           );
-          // The new patch entry changes the lockfile config, which CI's default frozen install rejects.
+          // The new patch and override entries change the lockfile config, which CI's default frozen install rejects.
           await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
             cwd: isolatedFixturePath,
             env: process.env,
@@ -2427,6 +2428,10 @@ assert.equal(subpathOnlyValue, 'c');`,
           expect(
             await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
           ).toContain('patched-by-mastra-e2e');
+
+          const readExcelFileDir = await realpath(join(outputDir, 'node_modules', 'read-excel-file'));
+          const fflate = JSON.parse(await readFile(join(readExcelFileDir, '..', 'fflate', 'package.json'), 'utf8'));
+          expect(fflate.version).toBe('0.8.2');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }

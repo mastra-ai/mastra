@@ -52,6 +52,13 @@ catalog:
   tsx: ^4.23.15
   oxfmt: 0.59.0
   sonner: 2.0.7
+  # Each @chat-adapter/* release depends on the exact `chat` release with the same
+  # version. Keep all of them on one range so apps install a single copy of `chat`.
+  chat: ^4.44.0
+  '@chat-adapter/discord': ^4.44.0
+  '@chat-adapter/slack': ^4.44.0
+  '@chat-adapter/teams': ^4.44.0
+  '@chat-adapter/telegram': ^4.44.0
 
 catalogs:
   ts6:
@@ -383,7 +390,7 @@ overrides:
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<2.4.0: 2.4.0
-  inngest: ^4.2.2
+  inngest: ^4.26.1
   fast-xml-parser@<5.5.7: ^5.10.1
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0

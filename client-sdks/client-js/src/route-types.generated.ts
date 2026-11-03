@@ -182,7 +182,7 @@ type InputShared_Auxiliary_278 =
           };
     };
 
-type InputShared_Auxiliary_729 =
+type InputShared_Auxiliary_731 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_729 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_729[];
+      args: InputShared_Auxiliary_731[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_729;
+      arg: InputShared_Auxiliary_731;
     };
 
-type InputShared_Auxiliary_803 = {
+type InputShared_Auxiliary_805 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_803[] | undefined;
+  children?: InputShared_Auxiliary_805[] | undefined;
 };
 
-type Shared_Auxiliary_786 = {
+type Shared_Auxiliary_790 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_786[] | undefined;
+  children?: Shared_Auxiliary_790[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1849,7 +1849,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_729[];
+  predicates: InputShared_Auxiliary_731[];
 };
 
 type InputShared_Type_90 = {
@@ -1863,7 +1863,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_729;
+  predicate: InputShared_Auxiliary_731;
 };
 
 type InputShared_Type_91 =
@@ -4431,7 +4431,7 @@ type Shared_Type_87 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_786[] | undefined;
+  files?: Shared_Auxiliary_790[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4783,6 +4783,7 @@ type Shared_Type_99 = {
   maxRetries: number;
   timeoutMs: number;
   suspendPayload?: unknown | undefined;
+  suspendedAt?: Date | undefined;
 };
 
 type Shared_Type_100 =
@@ -13402,6 +13403,90 @@ export interface GetKnowledgeKnowledgeKeyGraph_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /knowledge/:knowledgeKey/link-counts
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyLinkCounts_PathParams = GetKnowledgeKnowledgeKeyTree_PathParams;
+
+export type GetKnowledgeKnowledgeKeyLinkCounts_QueryParams = {
+  /** Pages to count links for; repeat the param for each, at most 200 */
+  pageId: string | string[];
+};
+
+export type GetKnowledgeKnowledgeKeyLinkCounts_Response = {
+  counts: {
+    [key: string]: {
+      in: number;
+      out: number;
+    };
+  };
+};
+
+export type GetKnowledgeKnowledgeKeyLinkCounts_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyLinkCounts_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeyLinkCounts_PathParams }) &
+    (GetKnowledgeKnowledgeKeyLinkCounts_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeyLinkCounts_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyLinkCounts_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyLinkCounts_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyLinkCounts_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyLinkCounts_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyLinkCounts_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyLinkCounts_Request;
+  response: GetKnowledgeKnowledgeKeyLinkCounts_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:knowledgeKey/pages/:pageId/links
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyPagesPageIdLinks_PathParams = GetKnowledgeKnowledgeKeyPagesPageId_PathParams;
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdLinks_QueryParams = {
+  /** Links into the page, out of it, or both (default) */
+  direction?: ('in' | 'out' | 'both') | undefined;
+};
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdLinks_Response = {
+  edges: {
+    fromPageId: string;
+    toPageId: string;
+    kind: 'body' | 'note';
+    count: number;
+  }[];
+  pages: {
+    [key: string]: unknown;
+  }[];
+  truncated: boolean;
+};
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdLinks_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyPagesPageIdLinks_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeyPagesPageIdLinks_PathParams }) &
+    (GetKnowledgeKnowledgeKeyPagesPageIdLinks_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeyPagesPageIdLinks_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyPagesPageIdLinks_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyPagesPageIdLinks_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyPagesPageIdLinks_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyPagesPageIdLinks_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyPagesPageIdLinks_Request;
+  response: GetKnowledgeKnowledgeKeyPagesPageIdLinks_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /knowledge/:knowledgeKey/search
 // ============================================================================
 export type GetKnowledgeKnowledgeKeySearch_PathParams = GetKnowledgeKnowledgeKeyTree_PathParams;
@@ -19605,7 +19690,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_803[] | undefined;
+  files?: InputShared_Auxiliary_805[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19663,7 +19748,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_803[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_805[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22193,6 +22278,39 @@ export interface GetBackgroundTasksBackgroundTaskId_RouteContract {
   body: never;
   request: GetBackgroundTasksBackgroundTaskId_Request;
   response: GetBackgroundTasksBackgroundTaskId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /background-tasks/:backgroundTaskId/resume
+// ============================================================================
+export type PostBackgroundTasksBackgroundTaskIdResume_PathParams = GetBackgroundTasksBackgroundTaskId_PathParams;
+
+export type PostBackgroundTasksBackgroundTaskIdResume_Body = {
+  resumeData: unknown;
+  suspendedAt?: (string | number) | undefined;
+};
+
+export type PostBackgroundTasksBackgroundTaskIdResume_Response = GetBackgroundTasksBackgroundTaskId_Response;
+
+export type PostBackgroundTasksBackgroundTaskIdResume_Request = Simplify<
+  (PostBackgroundTasksBackgroundTaskIdResume_PathParams extends never
+    ? {}
+    : { params: PostBackgroundTasksBackgroundTaskIdResume_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostBackgroundTasksBackgroundTaskIdResume_Body extends never
+      ? {}
+      : {} extends PostBackgroundTasksBackgroundTaskIdResume_Body
+        ? { body?: PostBackgroundTasksBackgroundTaskIdResume_Body }
+        : { body: PostBackgroundTasksBackgroundTaskIdResume_Body })
+>;
+
+export interface PostBackgroundTasksBackgroundTaskIdResume_RouteContract {
+  pathParams: PostBackgroundTasksBackgroundTaskIdResume_PathParams;
+  queryParams: never;
+  body: PostBackgroundTasksBackgroundTaskIdResume_Body;
+  request: PostBackgroundTasksBackgroundTaskIdResume_Request;
+  response: PostBackgroundTasksBackgroundTaskIdResume_Response;
   responseType: 'json';
 }
 
@@ -25377,6 +25495,8 @@ export interface RouteTypes {
   'GET /knowledge/:knowledgeKey/tree': GetKnowledgeKnowledgeKeyTree_RouteContract;
   'GET /knowledge/:knowledgeKey/pages/:pageId': GetKnowledgeKnowledgeKeyPagesPageId_RouteContract;
   'GET /knowledge/:knowledgeKey/graph': GetKnowledgeKnowledgeKeyGraph_RouteContract;
+  'GET /knowledge/:knowledgeKey/link-counts': GetKnowledgeKnowledgeKeyLinkCounts_RouteContract;
+  'GET /knowledge/:knowledgeKey/pages/:pageId/links': GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
   'GET /knowledge/:knowledgeKey/search': GetKnowledgeKnowledgeKeySearch_RouteContract;
   'GET /knowledge/:knowledgeKey/activity': GetKnowledgeKnowledgeKeyActivity_RouteContract;
   'GET /knowledge/:knowledgeKey/events': GetKnowledgeKnowledgeKeyEvents_RouteContract;
@@ -25549,6 +25669,7 @@ export interface RouteTypes {
   'GET /background-tasks/stream': GetBackgroundTasksStream_RouteContract;
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
+  'POST /background-tasks/:backgroundTaskId/resume': PostBackgroundTasksBackgroundTaskIdResume_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
   'GET /editor/workflow-builder/settings': GetEditorWorkflowBuilderSettings_RouteContract;
   'POST /editor/workflow-builder/stream': PostEditorWorkflowBuilderStream_RouteContract;
@@ -25980,6 +26101,9 @@ export interface Client {
   '/background-tasks/:backgroundTaskId': {
     GET: GetBackgroundTasksBackgroundTaskId_RouteContract;
   };
+  '/background-tasks/:backgroundTaskId/resume': {
+    POST: PostBackgroundTasksBackgroundTaskIdResume_RouteContract;
+  };
   '/background-tasks/stream': {
     GET: GetBackgroundTasksStream_RouteContract;
   };
@@ -26118,8 +26242,14 @@ export interface Client {
   '/knowledge/:knowledgeKey/graph': {
     GET: GetKnowledgeKnowledgeKeyGraph_RouteContract;
   };
+  '/knowledge/:knowledgeKey/link-counts': {
+    GET: GetKnowledgeKnowledgeKeyLinkCounts_RouteContract;
+  };
   '/knowledge/:knowledgeKey/pages/:pageId': {
     GET: GetKnowledgeKnowledgeKeyPagesPageId_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/pages/:pageId/links': {
+    GET: GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
   };
   '/knowledge/:knowledgeKey/search': {
     GET: GetKnowledgeKnowledgeKeySearch_RouteContract;

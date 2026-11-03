@@ -254,10 +254,20 @@ describe('defineBoard', () => {
 
   it('defines the built-in Work lifecycle and phase behavior', () => {
     expect(workBoard.initialPhase).toBe('intake');
-    const phases = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-    for (const from of phases) {
-      for (const to of phases) {
-        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(true);
+    const flow: Record<string, string[]> = {
+      intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
+      triage: ['intake', 'planning', 'done', 'canceled'],
+      planning: ['execute', 'intake', 'done', 'canceled'],
+      execute: ['review', 'planning', 'done', 'canceled'],
+      review: ['execute', 'intake', 'done', 'canceled'],
+      'pr-review': ['intake', 'done', 'canceled'],
+      done: ['pr-review'],
+      canceled: ['intake', 'pr-review'],
+    };
+    for (const from of Object.keys(flow)) {
+      for (const to of Object.keys(flow)) {
+        // Staying put is always allowed.
+        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(from === to || flow[from]!.includes(to));
       }
     }
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();

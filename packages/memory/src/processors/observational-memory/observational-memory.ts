@@ -2118,7 +2118,7 @@ export class ObservationalMemory {
 
     const observationChunks = this.splitObservationContextChunks(optimized);
     if (observationChunks.length > 0) {
-      messages.push('<observations>', ...observationChunks);
+      messages.push('<observations>', ...observationChunks, '</observations>');
     }
 
     // Dynamically inject current-task from thread metadata (not stored in observations)
