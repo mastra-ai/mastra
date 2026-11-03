@@ -28,11 +28,12 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
+import { primarySource } from '../../storage/domains/work-items/work-item-schema.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
@@ -175,7 +176,7 @@ function editedRequestChangesVerdict(payload: Record<string, unknown>, post: unk
  */
 const MAX_STALE_RULE_ATTEMPTS = 3;
 
-export function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
+export function cardBelongsToRepository(item: Card, repositoryId: number, repositoryFullName: string): boolean {
   const url = item.externalSource?.url;
   if (url) {
     const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
@@ -183,7 +184,7 @@ export function cardBelongsToRepository(item: WorkItemRow, repositoryId: number,
   }
   // A renamed repository leaves the old owner/name in the card URL, so a URL
   // mismatch still defers to the stable intake-stamped repository id.
-  return item.metadata?.githubRepositoryId === repositoryId;
+  return item.workItem.metadata?.githubRepositoryId === repositoryId;
 }
 
 function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
@@ -198,12 +199,12 @@ function provenanceTarget(repositoryId: number, pullRequestNumber: number): stri
   return `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
 }
 
-function workItemSource(item: WorkItemRow) {
+function workItemSource(item: Card) {
   if (!item.externalSource) return 'manual' as const;
   return item.externalSource.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 
-function workItemSourceKey(item: WorkItemRow): string | null {
+function workItemSourceKey(item: Card): string | null {
   return item.externalSource?.externalId ?? null;
 }
 
@@ -223,8 +224,8 @@ export async function trustedCollaborator(
 
 // Terminal cards leave the reconcile loop below, so the ones that got there before author
 // trust was recorded have no other path to an answer.
-function authorAwaitingTrust(item: WorkItemRow, repository: ReconcileRepository): string | undefined {
-  const metadata = item.metadata ?? {};
+function authorAwaitingTrust(item: Card, repository: ReconcileRepository): string | undefined {
+  const metadata = { ...item.workItem.metadata, ...item.metadata };
   if (typeof metadata.author !== 'string' || metadata.authorTrusted !== undefined) return undefined;
   const tracked = reconcilablePullRequestNumber(item, repository) ?? reconcilableIssueNumber(item, repository);
   if (tracked === undefined) return undefined;
@@ -424,12 +425,12 @@ export class GithubRules {
     if (!sameLabels(cardLabels(item), labels)) {
       let updated;
       try {
-        updated = await this.options.storage.update({
+        updated = await this.options.storage.syncCard({
           orgId: item.orgId,
           id: item.id,
           userId: LABEL_ROUTE_USER_ID,
-          patch: { metadata: { ...(item.metadata ?? {}), labels } },
-          expectedRevision: item.revision,
+          patch: { metadata: { labels } },
+          expectedSourceRevision: primarySource(item)?.revision,
         });
       } catch (error) {
         // The card changed under us (a run wrote it, or a concurrent delivery won). The next
@@ -483,27 +484,26 @@ export class GithubRules {
     // Timestamps have one-second resolution, so equal timestamps still apply.
     const updatedAt = string(issue?.updated_at);
     const payloadTime = timestamp(updatedAt);
-    const storedTime = timestamp(item.metadata?.githubAssigneesUpdatedAt);
+    const storedTime = timestamp(item.workItem.metadata?.githubAssigneesUpdatedAt);
     if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
       return { status: 'ignored' };
     }
     // A newer payload with unchanged assignees still advances the stored time, so a delayed older
     // payload cannot slip in behind it.
     const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
-    if (sameStrings(item.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
+    if (sameStrings(item.workItem.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
     try {
-      const updated = await this.options.storage.update({
+      const updated = await this.options.storage.syncCard({
         orgId: item.orgId,
         id: item.id,
         userId: LABEL_ROUTE_USER_ID,
         patch: {
           metadata: {
-            ...(item.metadata ?? {}),
             assignees,
             ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
           },
         },
-        expectedRevision: item.revision,
+        expectedSourceRevision: primarySource(item)?.revision,
       });
       return { status: updated ? 'committed' : 'ignored' };
     } catch (error) {
@@ -677,10 +677,10 @@ export class GithubRules {
       factoryAuthored: (!senderIsResponder && provenance !== null) || this.#isFactoryLogin(login),
     });
     // A marked handoff comment is ignored only when Factory authored it: a
-    // human may quote the marker to add an investigation lead, and that must
-    // still retrigger triage. Recognising the author is therefore the whole
-    // guard — when identity cannot be resolved this fails open and Factory's
-    // own handoff cancels the run that wrote it.
+    // human may quote the marker to add an investigation lead, and a custom
+    // comment rule must still see it. Recognising the author is therefore the
+    // whole guard — when identity cannot be resolved this fails open, and a
+    // rule that starts triage on comments would cancel the run that wrote it.
     if (
       actor.type === 'github' &&
       actor.factoryAuthored &&
@@ -695,7 +695,7 @@ export class GithubRules {
     // item's revision. So the evaluation, not the decision, is what fans out:
     // the rule runs once per bound item, each with its own ingress identity.
     const evaluate = async (
-      item: WorkItemRow | undefined,
+      item: Card | undefined,
       ingressIdentity: string,
       /** Set on the evaluation that files the pull request's own Review card. */
       pullRequestIntake = false,
@@ -718,6 +718,7 @@ export class GithubRules {
                 title: item.title,
                 url: item.externalSource?.url ?? null,
                 stages: item.stages,
+                workItem: item.workItem,
                 acceptedAt: item.acceptedAt,
                 metadata: item.metadata,
               },
@@ -743,6 +744,7 @@ export class GithubRules {
                 ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
                 assignees: actorLogins(issue?.assignees),
                 labels: labelNames(issue?.labels),
+                ...(string(object(issue?.user)?.login) ? { author: string(object(issue?.user)?.login) } : {}),
                 ...(string(issue?.state) === 'closed' || string(issue?.state) === 'open'
                   ? { state: string(issue?.state) as 'open' | 'closed' }
                   : {}),
@@ -966,8 +968,8 @@ export class GithubRules {
             : undefined;
         const stillOpen =
           companionStatus === 'replayed'
-            ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
-            : reviewCard?.metadata?.state !== 'closed';
+            ? reviewCard !== undefined && !['closed', 'merged'].includes(reviewCard.workItem.state ?? '')
+            : !['closed', 'merged'].includes(reviewCard?.workItem.state ?? '');
         if (authoringItem && trusted && stillOpen) {
           // The head comes along so a head recorded for an earlier pull
           // request cannot mark this one's verdict outdated. A replayed opening
@@ -1014,7 +1016,7 @@ export class GithubRules {
           }
           continue;
         }
-        await this.options.storage.update({
+        await this.options.storage.syncCard({
           orgId: card.orgId,
           id: card.id,
           userId: 'factory-rule-dispatcher',
@@ -1055,8 +1057,8 @@ export class GithubRules {
     repositoryId: number,
     repositoryFullName: string,
     pullRequestNumber: number,
-    resolved: WorkItemRow,
-  ): Promise<WorkItemRow | undefined> {
+    resolved: Card,
+  ): Promise<Card | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const linked =
       resolved.externalSource?.type === 'pull-request'
@@ -1086,7 +1088,7 @@ export class GithubRules {
     pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
     preferAuthoringItem = false,
-  ): Promise<WorkItemRow | undefined> {
+  ): Promise<Card | undefined> {
     const items = await this.options.storage.list({ orgId, factoryProjectId: projectId });
     const resolved = this.#resolveItem(
       items,
@@ -1111,14 +1113,14 @@ export class GithubRules {
   }
 
   #resolveItem(
-    items: WorkItemRow[],
+    items: Card[],
     repositoryId: number,
     repositoryFullName: string,
     issueNumber: number | undefined,
     pullRequestNumber: number | undefined,
     pullRequestHeadBranch: string | undefined,
     provenance: FactoryPullRequestProvenanceData | null,
-  ): WorkItemRow | undefined {
+  ): Card | undefined {
     if (provenance) return items.find(item => item.id === provenance.workItemId);
     if (issueNumber) {
       return (
@@ -1249,7 +1251,7 @@ export function sameStrings(left: unknown, right: string[] | undefined): boolean
  * a project mapped to multiple repositories must not reconcile one repo's
  * card against another repo's PR number.
  */
-function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+function reconcilablePullRequestNumber(item: Card, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'pull-request') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -1271,7 +1273,7 @@ function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileR
  * trusted when the intake-stamped `githubRepositoryId` confirms the
  * repository, because the sweep initiates closes on its own.
  */
-export function reconcilableIssueNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+export function reconcilableIssueNumber(item: Card, repository: ReconcileRepository): number | undefined {
   if (item.externalSource?.type !== 'issue') return undefined;
   const url = item.externalSource.url;
   if (url) {
@@ -1279,7 +1281,7 @@ export function reconcilableIssueNumber(item: WorkItemRow, repository: Reconcile
     if (!match) return undefined;
     // A renamed repository leaves the old owner/name in the card URL, so a
     // URL mismatch still defers to the stable intake-stamped repository id.
-    const belongs = match[1] === repository.fullName || item.metadata?.githubRepositoryId === repository.id;
+    const belongs = match[1] === repository.fullName || item.workItem.metadata?.githubRepositoryId === repository.id;
     return belongs ? Number(match[2]) : undefined;
   }
   const externalId = item.externalSource.externalId;
@@ -1290,7 +1292,7 @@ export function reconcilableIssueNumber(item: WorkItemRow, repository: Reconcile
   // Canonical keys carry no repository; only the intake-stamped repository id
   // can attribute a URL-less card, and guessing would let a multi-repo
   // project close repo B's card because repo A's same-numbered issue closed.
-  return item.metadata?.githubRepositoryId === repository.id ? Number(canonical[1]) : undefined;
+  return item.workItem.metadata?.githubRepositoryId === repository.id ? Number(canonical[1]) : undefined;
 }
 
 export function reconciledIssueClosedEvent(
@@ -1453,7 +1455,7 @@ function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
 
 function reconciledPullRequestMetadata(
   state: ReconcilePullRequestState,
-  reconciliation: 'clear' | 'settled',
+  reconciliation: 'clear' | 'settled' | undefined,
   authorTrusted?: boolean,
 ): Record<string, unknown> {
   return {
@@ -1465,8 +1467,12 @@ function reconciledPullRequestMetadata(
     ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
     ...(state.labels ? { labels: state.labels } : {}),
     ...(authorTrusted === undefined ? {} : { authorTrusted }),
-    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
-      reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
+    ...(reconciliation === undefined
+      ? {}
+      : {
+          [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
+            reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
+        }),
   };
 }
 
@@ -1544,15 +1550,15 @@ export function createGithubPullRequestReconciler(
     for (const repository of scoped) {
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
-      let cardsByNumber: Map<number, WorkItemRow[]>;
-      let unanswered: Array<{ item: WorkItemRow; author: string }>;
+      let cardsByNumber: Map<number, Card[]>;
+      let unanswered: Array<{ item: Card; author: string }>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
           installationExternalId: String(repository.installationId),
           repositoryExternalId: String(repository.id),
         });
         if (projects.length === 0) continue;
-        cardsByNumber = new Map<number, WorkItemRow[]>();
+        cardsByNumber = new Map<number, Card[]>();
         unanswered = [];
         for (const project of projects) {
           const items = await options.storage.list({
@@ -1564,7 +1570,7 @@ export function createGithubPullRequestReconciler(
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
-            const metadata = item.metadata ?? {};
+            const metadata = { ...item.workItem.metadata, ...item.metadata };
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             const reconciledOutcome = reconciledPullRequestOutcome(metadata);
             if (
@@ -1586,7 +1592,7 @@ export function createGithubPullRequestReconciler(
       const authorTrust = sweepTrustLookup(options.github, repository);
       for (const { item, author } of unanswered) {
         try {
-          await options.storage.update({
+          await options.storage.syncCard({
             orgId: item.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',
@@ -1617,7 +1623,7 @@ export function createGithubPullRequestReconciler(
           }
           for (const card of cards) {
             if (state.state === 'closed') continue;
-            const metadata = card.metadata ?? {};
+            const metadata = { ...card.workItem.metadata, ...card.metadata };
             const statusChanged =
               metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
             const authorChanged = state.author !== undefined && metadata.author !== state.author;
@@ -1630,12 +1636,16 @@ export function createGithubPullRequestReconciler(
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             if (!metadataChanged && reconciliation !== 'merged' && reconciliation !== 'closed') continue;
             try {
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
                 patch: {
-                  metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined),
+                  metadata: reconciledPullRequestMetadata(
+                    state,
+                    reconciliation === 'merged' || reconciliation === 'closed' ? 'clear' : undefined,
+                    trustStale ? authorTrusted : undefined,
+                  ),
                 },
               });
             } catch (error) {
@@ -1664,7 +1674,7 @@ export function createGithubPullRequestReconciler(
             if (cleanupFailures.has(card.id)) continue;
             const trustStale = authorTrusted !== undefined && (card.metadata ?? {}).authorTrusted !== authorTrusted;
             try {
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',

@@ -11,6 +11,7 @@ import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
+import { linearIdentifierForItem } from '../boardItems';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
@@ -39,7 +40,7 @@ function externalWorkItemLabel(item: WorkItem): string {
   if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {
-    return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
+    return linearIdentifierForItem(item) ?? number ?? 'Linear issue';
   }
   return 'Work item';
 }

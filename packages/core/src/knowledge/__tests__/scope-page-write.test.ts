@@ -28,6 +28,8 @@ function setup() {
 describe('writing a scope page', () => {
   it('refuses a name or description change by address, id and name, and leaves the page unchanged', async () => {
     const { call } = setup();
+    // The first writing run creates the scope.
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Seed' });
     const { page: scope } = await call('knowledge_read', { page: 'org:acme' });
     for (const page of ['org:acme', scope.id, scope.name]) {
       for (const change of [{ name: 'Renamed' }, { description: 'Replaced' }, { name: 'Renamed', body: 'b' }]) {
@@ -50,6 +52,8 @@ describe('writing a scope page', () => {
 
   it('treats a null name or description as no change', async () => {
     const { call } = setup();
+    // The first writing run creates the scope.
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Seed' });
     const { page: scope } = await call('knowledge_read', { page: 'org:acme' });
     await call('knowledge_page', { op: 'write', page: 'org:acme', name: null, description: null, body: 'b' });
     const { page: after } = await call('knowledge_read', { page: scope.id });
