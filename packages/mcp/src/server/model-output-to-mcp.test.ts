@@ -1,0 +1,139 @@
+import { describe, expect, it } from 'vitest';
+import { modelOutputToMcpContent } from './model-output-to-mcp';
+
+const PNG = 'iVBORw0KGgo=';
+
+describe('modelOutputToMcpContent', () => {
+  it('maps text and json outputs to text blocks', () => {
+    expect(modelOutputToMcpContent({ type: 'text', value: 'hello' }, 't')).toEqual({
+      isError: false,
+      content: [{ type: 'text', text: 'hello' }],
+    });
+    expect(modelOutputToMcpContent({ type: 'json', value: { a: 1 } }, 't')).toEqual({
+      isError: false,
+      content: [{ type: 'text', text: '{"a":1}' }],
+    });
+  });
+
+  it('maps error outputs to isError results', () => {
+    expect(modelOutputToMcpContent({ type: 'error-text', value: 'boom' }, 't')).toEqual({
+      isError: true,
+      content: [{ type: 'text', text: 'boom' }],
+    });
+    expect(modelOutputToMcpContent({ type: 'error-json', value: { code: 'X' } }, 't')).toEqual({
+      isError: true,
+      content: [{ type: 'text', text: '{"code":"X"}' }],
+    });
+  });
+
+  it('maps content parts to text, image, audio and resource blocks', () => {
+    const result = modelOutputToMcpContent(
+      {
+        type: 'content',
+        value: [
+          { type: 'text', text: 'Read a.png' },
+          { type: 'media', data: PNG, mediaType: 'image/png' },
+          { type: 'media', data: 'UklGRg==', mediaType: 'audio/wav' },
+          { type: 'media', data: 'JVBERi0=', mediaType: 'application/pdf' },
+        ],
+      },
+      'read file',
+    );
+    expect(result).toEqual({
+      isError: false,
+      content: [
+        { type: 'text', text: 'Read a.png' },
+        { type: 'image', data: PNG, mimeType: 'image/png' },
+        { type: 'audio', data: 'UklGRg==', mimeType: 'audio/wav' },
+        {
+          type: 'resource',
+          resource: { uri: 'mastra://tool-output/read%20file/3', mimeType: 'application/pdf', blob: 'JVBERi0=' },
+        },
+      ],
+    });
+  });
+
+  it('applies the default media types of image-data and file-data parts', () => {
+    expect(
+      modelOutputToMcpContent(
+        {
+          type: 'content',
+          value: [
+            { type: 'image-data', data: PNG },
+            { type: 'file-data', data: 'AAAA', filename: 'x.bin' },
+          ],
+        },
+        't',
+      )?.content,
+    ).toEqual([
+      { type: 'image', data: PNG, mimeType: 'image/jpeg' },
+      {
+        type: 'resource',
+        resource: { uri: 'mastra://tool-output/t/1', mimeType: 'application/octet-stream', blob: 'AAAA' },
+      },
+    ]);
+  });
+
+  it('strips data: URI prefixes from media data and decodes data: URLs', () => {
+    expect(
+      modelOutputToMcpContent(
+        {
+          type: 'content',
+          value: [
+            { type: 'media', data: `data:image/png;base64,${PNG}`, mediaType: 'image/png' },
+            { type: 'image-url', url: `data:image/gif;base64,R0lG` },
+            { type: 'file-url', url: 'data:text/plain,hi%20there' },
+          ],
+        },
+        't',
+      )?.content,
+    ).toEqual([
+      { type: 'image', data: PNG, mimeType: 'image/png' },
+      { type: 'image', data: 'R0lG', mimeType: 'image/gif' },
+      {
+        type: 'resource',
+        resource: {
+          uri: 'mastra://tool-output/t/2',
+          mimeType: 'text/plain',
+          blob: Buffer.from('hi there').toString('base64'),
+        },
+      },
+    ]);
+  });
+
+  it('turns remote URLs into text blocks', () => {
+    expect(
+      modelOutputToMcpContent({ type: 'content', value: [{ type: 'image-url', url: 'https://x.dev/a.png' }] }, 't')
+        ?.content,
+    ).toEqual([{ type: 'text', text: 'https://x.dev/a.png' }]);
+  });
+
+  it('encodes Uint8Array media data as Base64', () => {
+    expect(
+      modelOutputToMcpContent(
+        { type: 'content', value: [{ type: 'media', data: new Uint8Array([1, 2, 3]), mediaType: 'image/png' }] },
+        't',
+      )?.content,
+    ).toEqual([{ type: 'image', data: 'AQID', mimeType: 'image/png' }]);
+  });
+
+  it('serializes unknown parts as JSON text', () => {
+    expect(
+      modelOutputToMcpContent({ type: 'content', value: [{ type: 'file-id', fileId: 'f1' }, 42] }, 't')?.content,
+    ).toEqual([
+      { type: 'text', text: '{"type":"file-id","fileId":"f1"}' },
+      { type: 'text', text: '42' },
+    ]);
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['a raw string', 'plain'],
+    ['an array', [1]],
+    ['an object without a known type', { stdout: 'x', exitCode: 0 }],
+    ['text with a non-string value', { type: 'text', value: 1 }],
+    ['content with a non-array value', { type: 'content', value: 'x' }],
+  ])('returns undefined for %s', (_label, value) => {
+    expect(modelOutputToMcpContent(value, 't')).toBeUndefined();
+  });
+});
