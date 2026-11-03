@@ -3577,17 +3577,26 @@ export class Workflow<
       }
       // Restarting a nested run standalone while its parent drives it runs the item twice, and
       // after the parent finished nothing collects the result, so the item runs a second time.
-      const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
-      const recovery = nestedRunRecoveryAction(parentStatus);
-      if (recovery === 'restart') {
-        runs.push(runSnapshot);
-      } else if (recovery === 'cancel' && workflowsStore) {
-        await cancelNestedRun({
-          store: workflowsStore,
-          workflowName: this.id,
+      try {
+        const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(runSnapshot);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: this.id,
+            runId: runSnapshot.runId,
+            expectedStatus: nestedRunStatusOf(runSnapshot.snapshot),
+            logger: this.logger,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.logger.error('Failed to recover nested workflow run', {
+          workflowId: this.id,
           runId: runSnapshot.runId,
-          expectedStatus: nestedRunStatusOf(runSnapshot.snapshot),
-          logger: this.logger,
+          error,
         });
       }
     }

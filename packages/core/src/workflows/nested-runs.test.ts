@@ -206,6 +206,99 @@ describe('restarting a nested run whose process died', () => {
     expect(await innerStatuses()).toContain('canceled');
   });
 
+  /** A foreach over `inner` whose item 1 hangs the first time `work` runs, so a restart can finish it. */
+  const buildForeach = (calls: number[], died?: () => void) => {
+    const work = createStep({
+      id: 'work',
+      inputSchema: num,
+      outputSchema: num,
+      execute: async ({ inputData }) => {
+        calls.push(inputData.n);
+        if (inputData.n === 1 && calls.filter(n => n === 1).length === 1) {
+          died?.();
+          return new Promise(() => {});
+        }
+        return inputData;
+      },
+    });
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num }).then(work).commit();
+    const outer = createWorkflow({ id: 'outer', inputSchema: z.array(num), outputSchema: z.array(num) })
+      .foreach(inner, { concurrency: 1 })
+      .commit();
+    return { outer, inner };
+  };
+
+  /** Crashes item 1 of `buildForeach`, then rewrites the parent's stored status. */
+  async function crashForeachWithParentStatus(parentStatus: 'suspended' | 'paused') {
+    const calls: number[] = [];
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    store.persistWorkflowSnapshot = args => persist({ ...args, snapshot: cloneRunData(args.snapshot) });
+    let died = false;
+    const first = buildForeach(calls, () => (died = true));
+    new Mastra({ logger: false, storage, workflows: first });
+    void (await first.outer.createRun({ runId: 'run-1' })).start({ inputData: [{ n: 0 }, { n: 1 }, { n: 2 }] });
+    await vi.waitFor(() => expect(died).toBe(true));
+    await store.updateWorkflowState({ workflowName: 'outer', runId: 'run-1', opts: { status: parentStatus } });
+    await expireRunLeases(storage);
+    const innerStatuses = async () =>
+      Object.entries(await storedStates(storage))
+        .filter(([key]) => key.startsWith('inner/'))
+        .map(([, value]) => (value as { status?: string }).status);
+    return { calls, storage, innerStatuses, build: buildForeach };
+  }
+
+  it('restarts a nested run on its own while its parent is suspended', async () => {
+    const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('suspended');
+
+    // A suspended parent waits for its child, so the child is the only way forward (#25979).
+    await new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns();
+
+    expect(calls.length).toBeGreaterThan(2);
+    expect(await innerStatuses()).not.toContain('canceled');
+  });
+
+  it('leaves a nested run alone while its parent is paused', async () => {
+    const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
+
+    await new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns();
+
+    // The sweep never restarts a paused parent, so restarting the child here would run the item
+    // again while the parent can still drive it after a resume.
+    expect(calls).toEqual([0, 1]);
+    expect(await innerStatuses()).toContain('running');
+    expect(await innerStatuses()).not.toContain('canceled');
+  });
+
+  it('restarts a nested run on its own when its parent run is gone', async () => {
+    const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
+    await storage.stores.workflows!.deleteWorkflowRunById({ workflowName: 'outer', runId: 'run-1' });
+
+    await new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns();
+
+    // Nothing is left that could collect the run, so the sweep is its only way forward.
+    expect(calls.length).toBeGreaterThan(2);
+    expect(await innerStatuses()).not.toContain('canceled');
+  });
+
+  it('keeps sweeping when a nested run parent lookup fails', async () => {
+    const { calls, storage, build } = await crashForeachWithParentStatus('paused');
+    const store = storage.stores.workflows!;
+    const loadStatus = store.loadWorkflowRunStatus.bind(store);
+    store.loadWorkflowRunStatus = async args => {
+      if (args.workflowName === 'outer') throw new Error('storage unavailable');
+      return loadStatus(args);
+    };
+
+    // The failure belongs to one nested run's lookup. It must not reject the sweep, or every other
+    // run the sweep was going to restart goes unrecovered.
+    await expect(
+      new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns(),
+    ).resolves.toBeUndefined();
+    expect(calls).toEqual([0, 1]);
+  });
+
   describe('a re-driven nested step whose nested run already finished', () => {
     /** A foreach over `inner`, which suspends, then appends twice once resumed. */
     const build = () => {

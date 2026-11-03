@@ -29,6 +29,8 @@ export function nestedRunRecoveryAction(parentStatus: WorkflowRunStatus | null):
   // A suspended parent waits for its child and resumes it when the child finishes (#25979).
   if (parentStatus === 'suspended') return 'restart';
   if (FINISHED_STATUSES.has(parentStatus)) return 'cancel';
+  // Running, waiting, pending, paused: the parent can still drive its step, and the sweeps do not
+  // restart those parents themselves, so the child waits for the parent rather than racing it.
   return 'skip';
 }
 

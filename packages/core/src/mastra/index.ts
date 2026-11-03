@@ -4340,17 +4340,26 @@ export class Mastra<
       // A nested run is collected by its parent's step, so the parent's stored status decides what
       // restarting it standalone would do: run it twice while the parent drives it, or re-run the
       // item after the parent already finished it.
-      const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
-      const recovery = nestedRunRecoveryAction(parentStatus);
-      if (recovery === 'restart') {
-        runs.push(run);
-      } else if (recovery === 'cancel' && workflowsStore) {
-        await cancelNestedRun({
-          store: workflowsStore,
-          workflowName: run.workflowName,
+      try {
+        const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(run);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: run.workflowName,
+            runId: run.runId,
+            expectedStatus: nestedRunStatusOf(run.snapshot),
+            logger: this.#logger,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.#logger.error('Failed to recover nested workflow run', {
+          workflow: run.workflowName,
           runId: run.runId,
-          expectedStatus: nestedRunStatusOf(run.snapshot),
-          logger: this.#logger,
+          error,
         });
       }
     }
