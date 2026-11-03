@@ -1597,5 +1597,45 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card).toMatchObject({ id: issue.id, stages: ['done'] });
       expect(card!.workItem.sources[2]).toMatchObject({ state: 'merged' });
     });
+
+    it("leaves the builder's own merge request to the builder when someone else's closes the issue", async () => {
+      const h = await harness();
+      const issue = await h.issueCard('execute');
+      await h.seeded.workItems.update({
+        orgId: 'org-1',
+        factoryProjectId: h.project.id,
+        userId: 'user-1',
+        id: issue.id,
+        patch: {
+          sessions: {
+            work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/gitlab-issue-42', startedBy: 'user-1' },
+          },
+        },
+      });
+
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+      let [card] = await h.cards();
+      expect(sourceTypes(card!)).toEqual(['issue', 'pull-request']);
+      // Recording it as the card's own would switch off the builder's self-review and merge request.
+      expect(card!.metadata.openPullRequestNumber ?? null).toBeNull();
+
+      await h.ingest(mergeRequest(18, 'Implements the fix.', { sourceBranch: 'factory/gitlab-issue-42' }));
+      [card] = await h.cards();
+      expect(card!.metadata).toMatchObject({ openPullRequestNumber: 18 });
+    });
+
+    it('opens an attached merge request again when it is reopened', async () => {
+      const h = await harness();
+      await h.issueCard('intake');
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+      await h.ingest(mergeRequest(17, 'Closes #42', { deliveryId: 'd-close-17', action: 'close' }));
+      let [card] = await h.cards();
+      expect(card!.workItem.sources[1]).toMatchObject({ state: 'closed' });
+
+      await h.ingest(mergeRequest(17, 'Closes #42', { deliveryId: 'd-reopen-17', action: 'reopen' }));
+      [card] = await h.cards();
+      expect(card!.workItem.sources.map(source => source.state)).toEqual(['opened', 'open']);
+      expect(card!.workItem.sources).toHaveLength(2);
+    });
   },
 );

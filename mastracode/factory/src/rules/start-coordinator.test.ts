@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -561,11 +562,13 @@ describe('FactoryStartCoordinator', () => {
   });
 
   it.each([
-    ['pr-review', true],
-    ['review', false],
+    ['pr-review', 'pr-review', true],
+    ['review', 'review', false],
+    // Started from Intake: the card reaches PR review only after the session is ready.
+    ['intake', 'pr-review', true],
   ] as const)(
-    "treats an issue card's checkout in %s as untrusted only when it reviews an attached pull request",
-    async (stage, untrusted) => {
+    "treats an issue card's checkout from %s into %s as untrusted only when it reviews an attached pull request",
+    async (stage, destinationStage, untrusted) => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item } = await storage.upsert({
         orgId: 'org-1',
@@ -590,11 +593,11 @@ describe('FactoryStartCoordinator', () => {
       const coordinator = new FactoryStartCoordinator(
         controller as never,
         storage,
-        undefined,
+        new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards: createBoardRegistry() }),
         makeSourceControl() as never,
       );
 
-      await coordinator.prepare({ ...startRequest({ role: 'review', id: item.id }), destinationStage: stage });
+      await coordinator.prepare({ ...startRequest({ role: 'review', id: item.id }), destinationStage });
 
       const flagged = session.state.set.mock.calls.some(
         ([state]) => (state as { untrustedCheckout?: boolean }).untrustedCheckout === true,

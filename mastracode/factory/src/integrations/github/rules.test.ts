@@ -6269,6 +6269,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect.objectContaining({ type: 'sendMessage', role: 'work' }),
       );
       expect(await reviewsStarted(h, issue.id)).toEqual([]);
+      // Someone else's pull request: recording it as the card's own would switch off the
+      // builder's self-review and its own pull request.
+      expect(cards[0]!.metadata.openPullRequestNumber ?? null).toBeNull();
     });
 
     it('files a pull request that fixes two issues on the first one named only', async () => {

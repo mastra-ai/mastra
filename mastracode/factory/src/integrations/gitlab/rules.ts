@@ -594,6 +594,14 @@ export class GitLabRules {
         eventAt: timestamp(mergeRequest?.updated_at),
         opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
         headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
+        // Only a merge request the card wrote is the one it has out. One filed there because it
+        // closes the issue is someone else's work: recording it would stop the builder's own
+        // self-review and merge request.
+        ownedByCard:
+          home?.reason !== 'closes' &&
+          (trackedItem !== attachedItem ||
+            (headBranch !== '' &&
+              Object.values(trackedItem.sessions).some(session => session.branch === headBranch))),
       });
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
@@ -615,6 +623,7 @@ export class GitLabRules {
     eventAt: number | undefined;
     opened: boolean;
     headSha: string | undefined;
+    ownedByCard: boolean;
   }): Promise<void> {
     const settling = input.event === 'mergeRequestMerged' || input.event === 'mergeRequestClosed';
     if (input.event !== 'mergeRequestOpened' && !settling) return;
@@ -633,7 +642,7 @@ export class GitLabRules {
       const patch: Record<string, unknown> = {
         mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
       };
-      if (!settling) {
+      if (!settling && input.ownedByCard) {
         // A head recorded for an earlier merge request must not mark this one's
         // verdict outdated. A replayed opening of the merge request already
         // recorded keeps the head its pushes left.
