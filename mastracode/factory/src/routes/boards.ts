@@ -23,6 +23,7 @@ import {
   codeBehaviourConflicts,
   codeBehaviourOf,
   compileStoredBoard,
+  sameBoardDefinition,
   storedBoardInputSchema,
 } from '../boards/stored-board.js';
 import { findBoardSkillProblems } from '../skills/app-skills.js';
@@ -333,6 +334,12 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         if (seed) await this.#seed(scope);
         const row = await this.#existing(scope, key);
         const input = this.#validate({ key, ...definition });
+        // Saving a board unchanged writes nothing, so an unedited code board keeps following its code default.
+        // A row that would change hands (a legacy row adopted, an orphaned copy forgotten) still writes.
+        const keepsSeed = seed ? row.seedHash !== null : row.seedHash === null;
+        if (row.revision === expectedRevision && keepsSeed && sameBoardDefinition(row, input)) {
+          return this.#respond(c, scope, key);
+        }
         await this.#checkPhasesFree(scope, row, input.phases);
         const { key: _key, ...replacement } = input;
         await storage.replace(scope, key, replacement, {
