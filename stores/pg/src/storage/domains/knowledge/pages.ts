@@ -1394,7 +1394,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async removeNote(input: { id: string; deletedBy: string; provenance: KnowledgeProvenance }): Promise<KnowledgeNote> {
     return this.#tx(async tx => {
       const note = await this.#noteById(tx, input.id, true);
-      if (note.deletedAt) return note;
+      if (note.deletedAt) throw new KnowledgeNotFoundError('note', input.id);
       const now = new Date();
       await tx.query(
         `UPDATE ${this.#notes} SET "deletedAt" = $2, "deletedBy" = $3, "version" = "version" + 1, "updatedAt" = $2 WHERE "id" = $1`,

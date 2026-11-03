@@ -1455,7 +1455,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   async removeNote(input: { id: string; deletedBy: string; provenance: KnowledgeProvenance }): Promise<KnowledgeNote> {
     return this.#tx(async session => {
       const note = await this.#requireNote(input.id, session);
-      if (note.deletedAt) return toNote(note);
+      if (note.deletedAt) throw new KnowledgeNotFoundError('note', input.id);
       const now = new Date();
       const updated = await (
         await this.#c('notes')

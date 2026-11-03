@@ -968,6 +968,11 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(ids((await store.listNotes({ pageId: p.id, read: 'all', includeDeleted: true })).notes)).toEqual([
           note.id,
         ]);
+        // Removing it again is refused, as if it weren't there, and changes nothing.
+        await expect(
+          store.removeNote({ id: note.id, deletedBy: 'agent:alex', provenance: alex }),
+        ).rejects.toMatchObject({ name: 'KnowledgeNotFoundError' });
+        expect((await store.getNote({ id: note.id, read: 'all', includeDeleted: true }))?.version).toBe(2);
 
         const restored = await store.restoreNote({ id: note.id, provenance: host });
         expect(restored.version).toBe(3);
