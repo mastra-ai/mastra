@@ -101,6 +101,35 @@ describe('modelOutputToMcpContent', () => {
     ]);
   });
 
+  it('decodes percent-escapes in data: URIs as raw bytes', () => {
+    expect(
+      modelOutputToMcpContent(
+        {
+          type: 'content',
+          value: [
+            { type: 'image-url', url: 'data:image/png,%89PNG%0D%0A' },
+            { type: 'file-url', url: 'data:text/plain,caf%C3%A9 ok' },
+          ],
+        },
+        't',
+      )?.content,
+    ).toEqual([
+      {
+        type: 'image',
+        data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]).toString('base64'),
+        mimeType: 'image/png',
+      },
+      {
+        type: 'resource',
+        resource: {
+          uri: 'mastra://tool-output/t/1',
+          mimeType: 'text/plain',
+          blob: Buffer.from('café ok').toString('base64'),
+        },
+      },
+    ]);
+  });
+
   it('falls back to text for data: URIs that cannot be decoded', () => {
     expect(
       modelOutputToMcpContent(

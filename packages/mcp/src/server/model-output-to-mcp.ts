@@ -90,13 +90,23 @@ function parseDataUri(value: string): { mediaType: string; data: string } | unde
   const base64 = params.split(';').some(param => param.toLowerCase() === 'base64');
   let data = payload;
   if (!base64) {
-    try {
-      data = Buffer.from(decodeURIComponent(payload), 'utf8').toString('base64');
-    } catch {
-      return undefined;
-    }
+    const bytes = decodePercentEncoded(payload);
+    if (!bytes) return undefined;
+    data = bytes.toString('base64');
   }
   return { mediaType: mediaType.trim().toLowerCase(), data };
+}
+
+/** Decodes `%XX` escapes as raw octets (RFC 2397), not UTF-8 text. Returns `undefined` for a malformed escape. */
+function decodePercentEncoded(payload: string): Buffer | undefined {
+  if (/%(?![0-9a-f]{2})/i.test(payload)) return undefined;
+  return Buffer.concat(
+    payload
+      .split(/(%[0-9a-f]{2})/i)
+      .map(part =>
+        part.startsWith('%') ? Buffer.from([Number.parseInt(part.slice(1), 16)]) : Buffer.from(part, 'utf8'),
+      ),
+  );
 }
 
 function success(content: ContentBlock[]): McpToolContent {
