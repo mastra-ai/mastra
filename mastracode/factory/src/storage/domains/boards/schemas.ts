@@ -17,9 +17,15 @@ export const FACTORY_BOARDS_SCHEMA: CollectionSchema = {
     created_at: { type: 'timestamp' },
     updated_by: { type: 'text' },
     updated_at: { type: 'timestamp' },
-    // On a project's edited copy of a code board (built-in or app): the fingerprint of the code
-    // definition it was copied from. Null on a board created through the API.
+    // On a copy of a code board (built-in or app): the fingerprint of the code definition it was
+    // seeded or last reset from. Null on a board created through the API.
     seed_hash: { type: 'text', nullable: true },
+    // Whether an admin edited the board since it was seeded or reset. Only an unedited seed
+    // follows a changed code definition.
+    customized: { type: 'boolean', default: false },
+    // The numbered code default this copy was written from; only a higher one replaces an
+    // unedited copy. Null on app-board copies, which have no numbered default.
+    seed_version: { type: 'integer', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_boards_project_key', columns: ['org_id', 'factory_project_id', 'board_key'] }],
   indexes: [{ name: 'factory_boards_project', columns: ['org_id', 'factory_project_id'] }],
