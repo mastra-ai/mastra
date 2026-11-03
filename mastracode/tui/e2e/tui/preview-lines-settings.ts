@@ -35,7 +35,7 @@ async function choosePreviewLines(
   option: RegExp,
 ): Promise<void> {
   terminal.submit('/settings');
-  await runtime.waitForScreenText(/Enter\/Space to change/i, terminal);
+  await runtime.waitForScreenText(/Preview lines\s+\S/i, terminal);
   await selectMenuRow(terminal, /Preview lines/i);
   // Wait for the submenu so option navigation doesn't read the main list's highlight.
   await runtime.waitForScreenText(/Show up to 1 preview line\b/i, terminal);

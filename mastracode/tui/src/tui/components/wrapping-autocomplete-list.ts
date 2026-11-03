@@ -17,6 +17,8 @@
 import { getKeybindings, truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
+import { ListWindow } from './list-window.js';
+
 const DEFAULT_PRIMARY_COLUMN_WIDTH = 32;
 const PRIMARY_COLUMN_GAP = 2;
 const MIN_DESCRIPTION_WIDTH = 10;
@@ -33,6 +35,7 @@ const clamp = (value: number, min: number, max: number): number => Math.max(min,
 export class WrappingAutocompleteList implements Component {
   private filteredItems: SelectItem[];
   private selectedIndex = 0;
+  private readonly window = new ListWindow();
   private maxVisible: number;
   private theme: SelectListTheme;
   private layout: WrappingAutocompleteListLayout;
@@ -72,11 +75,7 @@ export class WrappingAutocompleteList implements Component {
     }
 
     const primaryColumnWidth = this.getPrimaryColumnWidth();
-    const startIndex = Math.max(
-      0,
-      Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
-    );
-    const endIndex = Math.min(startIndex + this.maxVisible, this.filteredItems.length);
+    const { startIndex, endIndex } = this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
 
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i];

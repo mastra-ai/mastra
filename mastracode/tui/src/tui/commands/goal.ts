@@ -10,12 +10,13 @@
  *   /goal clear       Drop the goal
  *   /goal judge       Set the goal judge model and max-attempt defaults
  */
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { createGoalReminderSignal } from '@mastra/code-sdk/goal-signal';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
+import { MenuList } from '../components/menu-list.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
@@ -24,7 +25,7 @@ import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { requireLocal } from '../runtime.js';
 import { stripControlChars } from '../sanitize-ansi.js';
-import { getSelectListTheme, theme } from '../theme.js';
+import { theme } from '../theme.js';
 
 import type { SlashCommandContext } from './types.js';
 
@@ -163,31 +164,29 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
   const items: SelectItem[] = [
     {
       value: 'status',
-      label: `  Status  ${theme.fg('dim', goal ? formatGoalStatusRow(goal) : 'No goal set')}`,
+      label: 'Status',
+      description: goal ? formatGoalStatusRow(goal) : 'No goal set',
     },
   ];
 
   if (goal?.status === 'active') {
-    items.push({ value: 'pause', label: `  Pause  ${theme.fg('dim', 'Pause the continuation loop')}` });
+    items.push({ value: 'pause', label: 'Pause', description: 'Pause the continuation loop' });
   } else if (goal?.status === 'paused') {
-    items.push({ value: 'resume', label: `  Resume  ${theme.fg('dim', 'Resume and send a continuation')}` });
+    items.push({ value: 'resume', label: 'Resume', description: 'Resume and send a continuation' });
   }
 
   if (goal) {
-    items.push({ value: 'clear', label: `  Clear  ${theme.fg('dim', 'Drop the current goal')}` });
+    items.push({ value: 'clear', label: 'Clear', description: 'Drop the current goal' });
   }
 
   items.push(
-    { value: 'judge', label: `  Judge settings  ${theme.fg('dim', 'Set judge model and max attempts')}` },
-    { value: 'new-hint', label: `  New goal  ${theme.fg('dim', 'Type /goal <objective> to start')}` },
+    { value: 'judge', label: 'Judge settings', description: 'Set judge model and max attempts' },
+    { value: 'new-hint', label: 'New goal', description: 'Type /goal <objective> to start' },
   );
 
   return new Promise<void>(resolve => {
-    const container = new Box(4, 2, (text: string) => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'Goal Actions')), 0, 0));
-    container.addChild(new Spacer(1));
-
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const container = new Container();
+    const selectList = new MenuList(items, items.length);
     selectList.onSelect = async (item: SelectItem) => {
       ctx.state.ui.hideOverlay();
       try {
@@ -208,12 +207,10 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
     };
 
     container.addChild(selectList);
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
 
-    const modal = container as Box & { handleInput: (data: string) => void };
+    const modal = container as Container & { handleInput: (data: string) => void };
     modal.handleInput = (data: string) => selectList.handleInput(data);
-    showModalOverlay(ctx.state.ui, modal, { maxHeight: '60%' });
+    showModalOverlay(ctx.state.ui, modal, { title: 'Goal actions' });
   });
 }
 
@@ -296,7 +293,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
       tui: state.ui,
       models: availableModels,
       currentModelId: preselectedId,
-      title: 'Select Goal Judge Model',
+      title: 'Select goal judge model',
       onSelect: async (model: ModelItem) => {
         state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(state.ui, model, ctx.authStorage);
@@ -318,11 +315,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
           },
         });
 
-        state.ui.showOverlay(cyclesDialog, {
-          width: '50%',
-          maxHeight: '40%',
-          anchor: 'center',
-        });
+        showModalOverlay(state.ui, cyclesDialog, { widthPercent: 0.5, maxHeight: '40%' });
         cyclesDialog.focused = true;
       },
       onCancel: () => {
@@ -332,11 +325,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
       },
     });
 
-    state.ui.showOverlay(selector, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
     selector.focused = true;
   });
 }

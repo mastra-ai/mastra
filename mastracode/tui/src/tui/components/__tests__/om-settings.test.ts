@@ -1,6 +1,7 @@
 import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
+import { MenuFrame } from '../../prompt-slot.js';
 import type { ModelItem } from '../model-selector.js';
 import { ModelSelectorComponent } from '../model-selector.js';
 import { OMSettingsComponent, ThresholdSubmenu } from '../om-settings.js';
@@ -137,10 +138,11 @@ describe('OM settings auto selection', () => {
       .render(WIDTH)
       .map(line => stripAnsi(line))
       .join('\n');
-    expect(rendered).toContain('Type to search');
     expect(rendered).toContain('Auto (claude-haiku-4-5)');
 
-    for (const ch of 'codex') component.handleInput(ch);
+    const frame = new MenuFrame(component);
+
+    for (const ch of 'codex') frame.handleInput(ch);
     rendered = component
       .render(WIDTH)
       .map(line => stripAnsi(line))
@@ -168,8 +170,9 @@ describe('OM model picker (ModelSelectorComponent)', () => {
       onCancel,
     });
 
+    const frame = new MenuFrame(selector);
     for (const ch of 'codex') {
-      selector.handleInput(ch);
+      frame.handleInput(ch);
     }
 
     const lines = renderPlain(selector).join('\n');
@@ -201,8 +204,9 @@ describe('OM model picker (ModelSelectorComponent)', () => {
       onCancel,
     });
 
+    const frame = new MenuFrame(selector);
     for (const ch of 'codex') {
-      selector.handleInput(kittyPrintable(ch));
+      frame.handleInput(kittyPrintable(ch));
     }
 
     const lines = renderPlain(selector).join('\n');
@@ -234,8 +238,9 @@ describe('OM model picker (ModelSelectorComponent)', () => {
       onCancel,
     });
 
+    const frame = new MenuFrame(selector);
     for (const ch of 'deepseek/deepseek-v4-flash') {
-      selector.handleInput(ch);
+      frame.handleInput(ch);
     }
 
     const lines = renderPlain(selector).join('\n');

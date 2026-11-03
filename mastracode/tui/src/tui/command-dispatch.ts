@@ -87,6 +87,36 @@ const TRACKED_COMMANDS = new Set([
   'new',
 ]);
 
+/** Commands that open a menu when run without arguments. */
+const MENU_COMMANDS = new Set([
+  'settings',
+  'models',
+  'packs',
+  'threads',
+  'resume',
+  'think',
+  'login',
+  'logout',
+  'connect',
+  'goal',
+  'om',
+  'memory',
+  'subagents',
+  'theme',
+  'api-keys',
+  'mcp',
+  'plugins',
+  'browser',
+  'github',
+  'knowledge',
+]);
+
+/** The menu a slash command opens ("models" for "/models"), for the slot's loading row; else undefined. */
+export function menuCommandName(input: string): string | undefined {
+  const match = input.trim().match(/^\/([\w-]+)$/);
+  return match && MENU_COMMANDS.has(match[1]!) ? match[1] : undefined;
+}
+
 /**
  * Dispatch a slash command input to the appropriate handler.
  * Returns true if the command was handled (or was unknown), false if not a command.

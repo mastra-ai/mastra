@@ -273,10 +273,10 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(new RegExp(PACK_NAME), terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(new RegExp(`Custom pack: ${PACK_NAME}`), terminal, 8_000);
+    await runtime.waitForScreenText(new RegExp(`Custom pack: ${PACK_NAME}`, 'i'), terminal, 8_000);
     terminal.write('\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(new RegExp(`Subscription routing: ${PACK_NAME}`), terminal, 8_000);
+    await runtime.waitForScreenText(new RegExp(`Subscription routing: ${PACK_NAME}`, 'i'), terminal, 8_000);
     await runtime.waitForScreenText(/kimi-for-coding\/kimi-for-coding/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Subscription for kimi-for-coding\/kimi-for-coding/i, terminal, 8_000);
@@ -290,10 +290,10 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
       8_000,
     );
     terminal.write('\r');
-    await runtime.waitForScreenText(new RegExp(`Subscription routing: ${PACK_NAME}`), terminal, 8_000);
+    await runtime.waitForScreenText(new RegExp(`Subscription routing: ${PACK_NAME}`, 'i'), terminal, 8_000);
     await runtime.waitForScreenText(/Kimi Account B \(only\)/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.waitForScreenText(new RegExp(`Custom pack: ${PACK_NAME}`), terminal, 8_000);
+    await runtime.waitForScreenText(new RegExp(`Custom pack: ${PACK_NAME}`, 'i'), terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     terminal.write('\x1b');

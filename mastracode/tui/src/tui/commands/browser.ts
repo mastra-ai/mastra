@@ -24,6 +24,7 @@ import { activeBrowserGeneration, discardBrowser, replaceActiveBrowser } from '.
 import type { ModelItem } from '../components/model-selector.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
+import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -235,7 +236,7 @@ async function promptForStagehandModel(
         resolve();
       },
     });
-    ctx.state.ui.showOverlay(selector, { width: '60%' });
+    showModalOverlay(ctx.state.ui, selector);
   });
 }
 

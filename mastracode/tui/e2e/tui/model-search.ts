@@ -49,7 +49,6 @@ export const modelSearchScenario = {
 
     terminal.submit('/model');
     await runtime.waitForScreenText(/Select Model/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
     terminal.write('new-model');
     await runtime.waitForScreenText(/model-search-e2e\/new-model/i, terminal, 8_000);
     terminal.write('\r');

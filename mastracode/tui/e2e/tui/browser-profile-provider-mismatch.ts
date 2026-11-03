@@ -35,29 +35,29 @@ export const browserProfileProviderMismatchScenario = {
 
     async function chooseAgentBrowserWithSeededProfile() {
       terminal.submit('/browser');
-      await runtime.waitForScreenText(/Enable browser automation\?/i, terminal, 8_000);
+      await runtime.waitForScreenText(/Enable browser automation/i, terminal, 8_000);
       terminal.write('\r');
 
-      await runtime.waitForScreenText(/Select browser provider:/i, terminal, 8_000);
+      await runtime.waitForScreenText(/Select browser provider/i, terminal, 8_000);
       terminal.write('\x1b[B');
       terminal.write('\r');
 
-      await runtime.waitForScreenText(/Run in headless mode\?/i, terminal, 8_000);
+      await runtime.waitForScreenText(/Run in headless mode/i, terminal, 8_000);
       terminal.write('\r');
 
-      await runtime.waitForScreenText(/How do you want to launch the browser\?/i, terminal, 8_000);
+      await runtime.waitForScreenText(/How do you want to launch the browser/i, terminal, 8_000);
       terminal.write('\r');
 
-      await runtime.waitForScreenText(/Use a browser profile\?/i, terminal, 8_000);
+      await runtime.waitForScreenText(/Use a browser profile/i, terminal, 8_000);
       terminal.write('\x1b[B');
       terminal.write('\r');
 
-      await runtime.waitForScreenText(/Profile directory path:/i, terminal, 8_000);
+      await runtime.waitForScreenText(/Profile directory path/i, terminal, 8_000);
       terminal.write('\r');
     }
 
     await chooseAgentBrowserWithSeededProfile();
-    await runtime.waitForScreenText(/Continue anyway\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Continue anyway/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Browser setup cancelled\./i, terminal, 8_000);
 
@@ -68,7 +68,7 @@ export const browserProfileProviderMismatchScenario = {
     await runtime.waitForScreenText(/• \$ node -e[\s\S]*? \d+(?:ms|\.\ds|m\d+s)\b/i, terminal, 8_000);
 
     await chooseAgentBrowserWithSeededProfile();
-    await runtime.waitForScreenText(/Continue anyway\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Continue anyway/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\r');
 

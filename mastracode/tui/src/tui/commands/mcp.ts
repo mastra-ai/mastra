@@ -132,7 +132,7 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
     },
   });
 
-  showModalOverlay(ctx.state.ui, selector, { widthPercent: 0.8, maxHeight: '70%' });
+  showModalOverlay(ctx.state.ui, selector, { title: 'Manage MCP servers' });
   selector.focused = true;
 }
 

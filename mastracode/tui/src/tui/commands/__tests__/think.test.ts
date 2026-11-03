@@ -135,7 +135,10 @@ describe('handleThinkCommand', () => {
 
     const closed = handleThinkCommand(ctx);
     const modal: Component & { handleInput: (data: string) => void } = mockShowModalOverlay.mock.lastCall![1];
-    const currentRows = modal.render(160).filter(line => line.includes('(current)'));
+    const currentRows = modal
+      .render(160)
+      .map(line => line.replace(/\x1b\[[0-9;]*m/g, ''))
+      .filter(line => line.includes('(current)'));
     modal.handleInput('\x1b');
     await closed;
 

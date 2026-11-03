@@ -8,6 +8,8 @@
 import { getKeybindings, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
+import { ListWindow } from './list-window.js';
+
 const SELECTED_PREFIX = '→ ';
 const UNSELECTED_PREFIX = '  ';
 const CONTINUATION_PREFIX = '↳ ';
@@ -28,6 +30,7 @@ export class WrappingSelectList implements Component {
   private items: SelectItem[];
   private filteredItems: SelectItem[];
   private selectedIndex = 0;
+  private readonly window = new ListWindow();
   private maxVisible: number;
   private theme: SelectListTheme;
   /** When true, items are toggled (space) and confirmed together (enter) instead of selected one at a time. */
@@ -85,11 +88,7 @@ export class WrappingSelectList implements Component {
       return lines;
     }
 
-    const startIndex = Math.max(
-      0,
-      Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
-    );
-    const endIndex = Math.min(startIndex + this.maxVisible, this.filteredItems.length);
+    const { startIndex, endIndex } = this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
 
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i];

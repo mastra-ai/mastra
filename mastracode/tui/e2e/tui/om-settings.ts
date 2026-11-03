@@ -20,7 +20,7 @@ export const omSettingsScenario: McE2eScenario = {
     runtime.printScreen('after /memory', terminal);
 
     terminal.write('\r');
-    await runtime.waitForScreenText(/Type to search .* navigate .* Enter select .* Esc cancel/i, terminal);
+    await runtime.waitForScreenText(/observational memory › observer model/i, terminal);
     await runtime.waitForScreenText(/Auto \(.+\)/i, terminal);
     runtime.printScreen('after observer model picker', terminal);
     terminal.write('\x1b');

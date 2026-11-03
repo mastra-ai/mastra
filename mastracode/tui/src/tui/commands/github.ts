@@ -328,7 +328,7 @@ function pickGithubPullRequests(
         resolve(null);
       },
     });
-    showModalOverlay(ctx.state.ui, picker, { maxHeight: '80%' });
+    showModalOverlay(ctx.state.ui, picker);
     picker.focused = true;
   });
 }
@@ -362,7 +362,7 @@ function pickGithubPullRequestsWhileLoading(
         resolve(null);
       },
     });
-    showModalOverlay(ctx.state.ui, picker, { maxHeight: '80%' });
+    showModalOverlay(ctx.state.ui, picker);
     picker.focused = true;
 
     input.loadPullRequests

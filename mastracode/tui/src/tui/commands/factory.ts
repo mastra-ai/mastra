@@ -115,7 +115,7 @@ async function connect(ctx: SlashCommandContext): Promise<void> {
         'Select organization:',
         orgs.map(org => ({
           value: org.id,
-          label: `  ${org.name}`,
+          label: `${org.name}`,
           description: org.id === session!.orgId ? 'current' : undefined,
         })),
       );
@@ -130,7 +130,7 @@ async function connect(ctx: SlashCommandContext): Promise<void> {
     const projectId = await promptSelect(
       ui,
       'Select project:',
-      projects.map(project => ({ value: project.id, label: `  ${project.name}` })),
+      projects.map(project => ({ value: project.id, label: `${project.name}` })),
     );
     const project = projects.find(p => p.id === projectId);
     if (!project) return;
@@ -145,7 +145,7 @@ async function connect(ctx: SlashCommandContext): Promise<void> {
         : await promptSelect(
             ui,
             'Select environment:',
-            environments.map(env => ({ value: env.id, label: `  ${env.name}`, description: resolveFactoryUrl(env)! })),
+            environments.map(env => ({ value: env.id, label: `${env.name}`, description: resolveFactoryUrl(env)! })),
           );
     const environment = environments.find(env => env.id === environmentId);
     if (!environment) return;
@@ -161,7 +161,7 @@ async function connect(ctx: SlashCommandContext): Promise<void> {
         : await promptSelect(
             ui,
             'Select Factory project:',
-            factoryProjects.map(p => ({ value: p.id, label: `  ${p.name}` })),
+            factoryProjects.map(p => ({ value: p.id, label: `${p.name}` })),
           );
     const factoryProject = factoryProjects.find(p => p.id === factoryProjectId);
     if (!factoryProject) return;
@@ -173,7 +173,7 @@ async function connect(ctx: SlashCommandContext): Promise<void> {
         : await promptSelect(
             ui,
             'Select repository:',
-            repositories.map(r => ({ value: r.projectRepositoryId, label: `  ${r.slug}`, description: r.branch })),
+            repositories.map(r => ({ value: r.projectRepositoryId, label: `${r.slug}`, description: r.branch })),
           );
     const repository = repositories.find(r => r.projectRepositoryId === projectRepositoryId);
     if (!repository) return;

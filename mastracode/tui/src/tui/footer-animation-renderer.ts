@@ -15,6 +15,7 @@ interface PiTuiInternals {
   renderRequested: boolean;
   stopped: boolean;
   hasOverlay(): boolean;
+  hasPopup?(): boolean;
   applyLineResets(lines: string[]): string[];
 }
 
@@ -45,7 +46,8 @@ export class FooterAnimationRenderer {
       this.disposed ||
       ui.stopped ||
       ui.renderRequested ||
-      ui.hasOverlay() ||
+      // Menus in the prompt slot leave the chat visible; only pop-ups cover it.
+      (ui.hasPopup?.() ?? ui.hasOverlay()) ||
       ui.children.at(-1) !== this.footer ||
       ui.previousWidth !== width ||
       ui.previousHeight !== height ||

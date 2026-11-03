@@ -1,17 +1,18 @@
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, Spacer } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import { loadSettings, resolveDefaultThinkingLevel } from '@mastra/code-sdk/onboarding/settings';
 import { isThinkingLevelSetting, parseThinkCommand } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
 import { runCatalogThinkingLevel } from '@mastra/code-sdk/thinking-catalog';
+import { MenuList, menuNote } from '../components/menu-list.js';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,
   getThinkingLevelsForModel,
 } from '../components/thinking-settings.js';
 import { showModalOverlay } from '../overlay.js';
-import { theme, getSelectListTheme } from '../theme.js';
+import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 /** Sentinel value used by the selector for "clear the session override". */
@@ -104,31 +105,25 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
 
   // No argument: show inline selector
   const defaultDescription = `${levelLabel(configuredDefault.level)} · ${sourceLabel(configuredDefault.source, configuredDefault.modeId)}`;
+  const current = theme.fg('dim', ' (current)');
   const items: SelectItem[] = [
     {
       value: DEFAULT_ITEM_VALUE,
-      label: `  Default  ${theme.fg('dim', defaultDescription)}${override === undefined ? theme.fg('dim', ' (current)') : ''}`,
+      label: 'Default',
+      description: defaultDescription + (override === undefined ? current : ''),
     },
     ...thinkingLevels.map(l => ({
       value: l.id,
-      label: `  ${l.label}  ${theme.fg('dim', l.description)}${l.id === runningOverride ? theme.fg('dim', ' (current)') : ''}`,
+      label: l.label,
+      description: l.description + (l.id === runningOverride ? current : ''),
     })),
   ];
 
   const modelNote = getModelNote(ctx);
 
   return new Promise<void>(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'Thinking Level')), 0, 0));
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', 'Session override — "Default" inherits mode/global defaults.'), 0, 0));
-    container.addChild(new Spacer(1));
-    if (modelNote) {
-      container.addChild(new Text(theme.fg('warning', modelNote), 0, 0));
-      container.addChild(new Spacer(1));
-    }
-
-    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const container = new Container();
+    const selectList = new MenuList(items, items.length);
 
     selectList.onSelect = async (item: SelectItem) => {
       ctx.state.ui.hideOverlay();
@@ -161,14 +156,15 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
 
     container.addChild(selectList);
     container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    container.addChild(menuNote('Session override — "Default" inherits mode/global defaults.'));
+    if (modelNote) container.addChild(menuNote(modelNote, 'warning'));
 
     // Pre-select current entry (after adding to container, matching models-pack pattern)
     const currentIdx = override === undefined ? 0 : thinkingLevels.findIndex(l => l.id === runningOverride) + 1;
     if (currentIdx > 0) selectList.setSelectedIndex(currentIdx);
 
-    const modal = container as Box & { handleInput: (data: string) => void };
+    const modal = container as Container & { handleInput: (data: string) => void };
     modal.handleInput = (data: string) => selectList.handleInput(data);
-    showModalOverlay(ctx.state.ui, modal, { maxHeight: '60%' });
+    showModalOverlay(ctx.state.ui, modal, { title: 'thinking level' });
   });
 }

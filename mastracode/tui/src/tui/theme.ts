@@ -3,7 +3,7 @@
  * Simplified from pi-mono's theme system.
  */
 
-import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } from '@earendil-works/pi-tui';
+import type { MarkdownTheme, EditorTheme, SelectListTheme } from '@earendil-works/pi-tui';
 import { mastraBrand } from '@mastra/code-sdk/theme-palette';
 import chalk from 'chalk';
 
@@ -776,7 +776,7 @@ export function getEditorTheme(): EditorTheme {
     borderColor: (text: string) => chalk.hex(getContrastBg())(text),
     selectList: {
       selectedPrefix: (text: string) => chalk.hex(t.accent)(text),
-      selectedText: (text: string) => chalk.bgHex(t.selectedBg)(text),
+      selectedText: menuSelectedRow,
       description: (text: string) => chalk.hex(t.muted)(text),
       scrollInfo: (text: string) => chalk.hex(t.dim)(text),
       noMatch: (text: string) => chalk.hex(t.muted)(text),
@@ -785,25 +785,36 @@ export function getEditorTheme(): EditorTheme {
 }
 
 // =============================================================================
-// Settings List Theme (for pi-tui SettingsList component)
+// Menu selection (pickers, settings, autocomplete, inline question cards)
 // =============================================================================
 
-export function getSettingsListTheme(): SettingsListTheme {
-  const t = getTheme();
-  return {
-    label: (text: string, selected: boolean) => (selected ? chalk.hex(t.text).bold(text) : chalk.hex(t.muted)(text)),
-    value: (text: string, selected: boolean) => (selected ? chalk.hex(t.accent)(text) : chalk.hex(t.dim)(text)),
-    description: (text: string) => chalk.hex(t.muted).italic(text),
-    cursor: chalk.hex(t.accent)('→ '),
-    hint: (text: string) => chalk.hex(t.dim)(text),
-  };
+/** The selected row's cursor in every list: an accent arrow, two columns wide. */
+export function menuCursor(): string {
+  return chalk.hex(getTheme().accent)('→ ');
+}
+
+/** The selected row's label in every list: bold, in the text color (no highlight band). */
+export function menuSelected(text: string): string {
+  return chalk.hex(getTheme().text).bold(text);
+}
+
+/**
+ * A selected row from pi-tui lists and the autocomplete, which pass the whole row (cursor, label and
+ * an inline description): accent cursor, bold label, muted description. A row without the cursor is a
+ * wrapped description line, muted.
+ */
+function menuSelectedRow(text: string): string {
+  const muted = chalk.hex(getTheme().muted);
+  if (!text.startsWith('→ ')) return muted(text);
+  const match = text.slice(2).match(/^(\s*)(.*?)((?: {2,}|\x1b\[).*)?$/s);
+  return `${menuCursor()}${match?.[1] ?? ''}${menuSelected(match?.[2] ?? text.slice(2))}${match?.[3] ? muted(match[3]) : ''}`;
 }
 
 export function getSelectListTheme(): SelectListTheme {
   const t = getTheme();
   return {
     selectedPrefix: (text: string) => chalk.hex(t.accent)(text),
-    selectedText: (text: string) => chalk.bgHex(t.selectedBg)(text),
+    selectedText: menuSelectedRow,
     description: (text: string) => chalk.hex(t.muted)(text),
     scrollInfo: (text: string) => chalk.hex(t.dim)(text),
     noMatch: (text: string) => chalk.hex(t.muted)(text),

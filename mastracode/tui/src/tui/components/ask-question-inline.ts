@@ -21,7 +21,15 @@ import {
   wrapTextWithAnsi,
 } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
-import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme, getThemeGeneration } from '../theme.js';
+import {
+  BOX_INDENT_STR,
+  theme,
+  getSelectListTheme,
+  getEditorTheme,
+  getThemeGeneration,
+  menuCursor,
+  menuSelected,
+} from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { MultilineInput } from './multiline-input.js';
 import { card } from './surface.js';
@@ -243,10 +251,10 @@ export class AskQuestionBorderedBox {
   }
 }
 
-/** Option list styling shared by inline prompts: accent ❯ cursor, bold selected label, ●/○ toggles. */
+/** Option list styling shared by inline prompts: the menus' accent → cursor and bold label, ●/○ toggles. */
 export const INLINE_CARD_LIST_STYLE = {
   get cursor() {
-    return theme.fg('accent', '❯ ');
+    return menuCursor();
   },
   get checked() {
     return theme.fg('accent', '●') + '   ';
@@ -254,7 +262,7 @@ export const INLINE_CARD_LIST_STYLE = {
   get unchecked() {
     return theme.fg('dim', '○') + '   ';
   },
-  selectedLabel: (label: string) => theme.bold(label),
+  selectedLabel: (label: string) => menuSelected(label),
 };
 
 export class AskQuestionInlineComponent extends Container implements Focusable {

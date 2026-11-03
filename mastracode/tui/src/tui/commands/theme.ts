@@ -1,13 +1,14 @@
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, Spacer } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { BUNDLED_THEME_PAIRS } from '../bundled-themes.js';
+import { MenuList, menuNote } from '../components/menu-list.js';
 import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import { getThemesDir, listBundledThemes, listCustomThemes, loadCustomTheme } from '../custom-themes.js';
 import { detectTerminalTheme } from '../detect-theme.js';
 import type { ThemeDetectionResult } from '../detect-theme.js';
 import { showModalOverlay } from '../overlay.js';
-import { applyThemeMode, getSelectListTheme, getThemeMode, theme } from '../theme.js';
+import { applyThemeMode, getThemeMode, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
@@ -141,22 +142,26 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
     const value = `${light}/${dark}`;
     return {
       value,
-      label: `  ${value}${value === currentPref ? theme.fg('accent', ' ●') : ''}  ${theme.fg('dim', 'follow terminal')}`,
+      label: `${value}${value === currentPref ? theme.fg('accent', ' ●') : ''}`,
+      description: 'follow terminal',
     };
   });
   const items: SelectItem[] = [
     ...builtins.map(b => ({
       value: b.value,
-      label: `  ${b.label}${b.value === currentPref ? theme.fg('accent', ' ●') : ''}  ${theme.fg('dim', b.description)}`,
+      label: `${b.label}${b.value === currentPref ? theme.fg('accent', ' ●') : ''}`,
+      description: b.description,
     })),
     ...pairItems,
     ...bundledNames.map(name => ({
       value: name,
-      label: `  ${name}${name === currentPref ? theme.fg('accent', ' ●') : ''}  ${theme.fg('dim', 'bundled')}`,
+      label: `${name}${name === currentPref ? theme.fg('accent', ' ●') : ''}`,
+      description: 'bundled',
     })),
     ...customNames.map(name => ({
       value: name,
-      label: `  ${name}${name === currentPref ? theme.fg('accent', ' ●') : ''}  ${theme.fg('dim', 'custom theme')}`,
+      label: `${name}${name === currentPref ? theme.fg('accent', ' ●') : ''}`,
+      description: 'custom theme',
     })),
   ];
 
@@ -169,11 +174,8 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
   const restore = () => preview(currentPref);
 
   await new Promise<void>(resolve => {
-    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
-    container.addChild(new Text(theme.bold(theme.fg('accent', 'Theme')), 0, 0));
-    container.addChild(new Spacer(1));
-
-    const selectList = new SelectList(items, Math.min(items.length, 12), getSelectListTheme());
+    const container = new Container();
+    const selectList = new MenuList(items, Math.min(items.length, 12));
 
     const closeOverlay = () => {
       ctx.state.ui.hideOverlay();
@@ -207,13 +209,11 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
 
     container.addChild(selectList);
     container.addChild(new Spacer(1));
-    container.addChild(
-      new Text(theme.fg('dim', `↑↓ preview · Enter select · Esc cancel · custom themes: ${getThemesDir()}`), 0, 0),
-    );
-    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+    container.addChild(menuNote(`Custom themes: ${getThemesDir()}`));
+    (container as Container & { handleInput: (data: string) => void }).handleInput = (data: string) =>
       selectList.handleInput(data);
 
-    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+    showModalOverlay(ctx.state.ui, container, { title: 'Theme' });
   });
 }
 

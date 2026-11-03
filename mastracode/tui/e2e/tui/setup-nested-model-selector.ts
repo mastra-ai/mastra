@@ -40,7 +40,6 @@ export const setupNestedModelSelectorScenario: McE2eScenario = {
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Select model for plan mode/i, terminal);
-    await runtime.waitForScreenText(/Type to search.*Esc cancel/i, terminal);
     runtime.printScreen('nested model selector', terminal);
 
     terminal.write('\x1b');

@@ -9,7 +9,6 @@ const fastModel = 'selector-e2e/fast-select-e2e';
 
 async function selectModel(terminal: McE2eTerminal, runtime: McE2eScenarioRuntime, title: RegExp, modelId: string) {
   await runtime.waitForScreenText(title, terminal, 8_000);
-  await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
   terminal.write(modelId);
   await runtime.waitForScreenText(new RegExp(modelId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), terminal, 8_000);
   const screen = terminal.serialize().view;
