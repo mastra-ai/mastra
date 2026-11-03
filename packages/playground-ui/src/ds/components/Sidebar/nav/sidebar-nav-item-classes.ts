@@ -49,7 +49,13 @@ const nestedExpandedItemClasses = (level: number) => {
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
 // current (`foreground`). Icons inherit that colour — lucide strokes with
 // `currentColor` — so there is nothing to restate per state.
-const idleSurface = cn('rounded-lg text-muted-foreground hover:text-foreground', surfaceStateLayerStyle);
+// Rows in a list switch instantly, like menu rows: neither the fill nor the label fades.
+// This sits on the surface because that is the element carrying `state-layer` — the
+// outer wrapper on rows with a trailing action, the link itself otherwise.
+const idleSurface = cn(
+  'rounded-lg text-muted-foreground transition-none before:transition-none hover:text-foreground',
+  surfaceStateLayerStyle,
+);
 
 const activeSurface = 'bg-fill text-foreground';
 
@@ -64,8 +70,6 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
   cn(
     navItemVariants({ size }),
     'w-full justify-start',
-    // Rows in a list switch instantly, like menu rows: neither the fill nor the label fades.
-    'transition-none before:transition-none',
     '[&_svg]:size-4 [&_svg]:shrink-0',
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
