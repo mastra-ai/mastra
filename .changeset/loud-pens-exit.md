@@ -3,7 +3,7 @@
 'mastra': patch
 ---
 
-Tool calls in Factory chats now look the same as in Studio, so failures read clearly:
+Factory chats now show how a tool call failed and what it reported:
 
 - A failed command's row shows how it ended, `exit N` or `killed`. Its output keeps everything it printed and ends with the exit code, plus the error when the command could not run. Before, a command that printed something before failing showed only that output.
 - Failed results are shown in red, and results are no longer cut off at 800 characters.
