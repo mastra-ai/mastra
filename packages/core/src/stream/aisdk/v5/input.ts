@@ -4,6 +4,7 @@ import { generateId as defaultGenerateId } from '@internal/ai-sdk-v5';
 import type { RegisteredLogger } from '../../../logger';
 import { safeEnqueue, MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';
+import { CitationMarkupStreamSanitizer, stripCitationMarkupFromToolInput } from './citation-markup';
 import { convertFullStreamChunkToMastra } from './transform';
 import type { StreamPart } from './transform';
 
@@ -47,14 +48,21 @@ export class AISDKV5InputStream extends MastraModelInput {
     // See: https://github.com/mastra-ai/mastra/issues/9909
     const idMap = new Map<string, string>();
 
-    for await (const chunk of stream) {
-      const rawChunk = chunk as StreamPart;
+    // OpenAI citation markers (\uE200cite\uE202turn0search0\uE201) are stripped
+    // from text, reasoning and tool inputs before anything downstream sees them.
+    // Each delta kind gets its own sanitizer because providers reuse ids across kinds.
+    const citationSanitizers = {
+      'text-delta': new CitationMarkupStreamSanitizer(),
+      'reasoning-delta': new CitationMarkupStreamSanitizer(),
+      'tool-input-delta': new CitationMarkupStreamSanitizer(),
+    } as const;
+    const endChunkDeltaTypes = {
+      'text-end': 'text-delta',
+      'reasoning-end': 'reasoning-delta',
+      'tool-input-end': 'tool-input-delta',
+    } as const;
 
-      // Clear ID map on new step so each step gets fresh UUIDs
-      if ((rawChunk as { type: string }).type === 'stream-start') {
-        idMap.clear();
-      }
-
+    const emit = (rawChunk: StreamPart) => {
       const transformedChunk = convertFullStreamChunkToMastra(rawChunk, { runId });
 
       if (transformedChunk) {
@@ -75,6 +83,58 @@ export class AISDKV5InputStream extends MastraModelInput {
 
         safeEnqueue(controller, transformedChunk);
       }
+    };
+
+    // Text held back by a sanitizer waiting for a marker to close is released
+    // as a trailing delta before the part ends, or before the step finishes.
+    const flushHeldDeltas = (type: keyof typeof citationSanitizers, id?: string) => {
+      const held = id === undefined ? citationSanitizers[type].flushAll() : [[id, citationSanitizers[type].flush(id)]];
+      for (const [heldId, delta] of held) {
+        if (delta) emit({ type, id: heldId, delta } as StreamPart);
+      }
+    };
+    const flushAllHeldDeltas = () => {
+      for (const type of Object.keys(citationSanitizers) as Array<keyof typeof citationSanitizers>) {
+        flushHeldDeltas(type);
+      }
+    };
+
+    for await (const chunk of stream) {
+      let rawChunk = chunk as StreamPart;
+
+      // Clear ID map on new step so each step gets fresh UUIDs
+      if ((rawChunk as { type: string }).type === 'stream-start') {
+        idMap.clear();
+      }
+
+      switch (rawChunk.type) {
+        case 'text-delta':
+        case 'reasoning-delta':
+        case 'tool-input-delta':
+          rawChunk = { ...rawChunk, delta: citationSanitizers[rawChunk.type].push(rawChunk.id, rawChunk.delta) };
+          break;
+        case 'text-end':
+        case 'reasoning-end':
+        case 'tool-input-end':
+          flushHeldDeltas(endChunkDeltaTypes[rawChunk.type], rawChunk.id);
+          break;
+        case 'tool-call':
+          rawChunk = { ...rawChunk, input: stripCitationMarkupFromToolInput(rawChunk.input) };
+          break;
+        case 'finish':
+        case 'error':
+          flushAllHeldDeltas();
+          break;
+      }
+
+      // A tool-input delta made empty by the sanitizer carries nothing; text and
+      // reasoning deltas are left to the converter, which keeps empty deltas
+      // that still carry provider metadata.
+      if (rawChunk.type === 'tool-input-delta' && !rawChunk.delta) continue;
+
+      emit(rawChunk);
     }
+
+    flushAllHeldDeltas();
   }
 }
