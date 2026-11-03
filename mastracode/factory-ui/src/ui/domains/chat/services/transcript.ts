@@ -312,7 +312,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         ? state
         : withTool(state, event.toolCallId, t => ({
             ...t,
-            exit: { exitCode: event.exitCode, killed: event.killed },
+            exit: { exitCode: event.exitCode, killed: event.killed ?? false },
           }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
@@ -464,7 +464,7 @@ function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
 const sandboxExitSchema = z.object({
   toolCallId: z.string(),
   exitCode: z.number(),
-  killed: z.boolean().optional(),
+  killed: z.boolean().default(false),
 });
 
 /** The exit shares its call's message, unless a sealed message pushed it into a later one. */
