@@ -178,6 +178,13 @@
     font-weight: var(--text-column--font-weight);
   }
 
+  /* Keep the first row's rounded hover fill clear of the highlighted header. */
+  .mastra-markdown thead::after {
+    content: '';
+    display: table-row;
+    height: var(--spacing);
+  }
+
   .mastra-markdown :is(th, td):first-child {
     border-top-left-radius: var(--radius-md);
     border-bottom-left-radius: var(--radius-md);
@@ -188,8 +195,8 @@
     border-bottom-right-radius: var(--radius-md);
   }
 
-  /* The divider has its own box so it stays straight beneath rounded hover fills.
-   * Cell segments join across the row, inset only at the two outside edges. */
+  /* Cell segments join into a straight divider. Only its outside ends fade,
+   * matching MetricsTable without introducing seams between columns. */
   .mastra-markdown tbody tr:not(:last-child) td {
     position: relative;
   }
@@ -201,24 +208,41 @@
     bottom: 0;
     border-bottom: 1px solid var(--border);
     pointer-events: none;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--markdown-table-divider-start, 0px),
+      black calc(100% - var(--markdown-table-divider-end, 0px)),
+      transparent
+    );
   }
 
   .mastra-markdown tbody tr:not(:last-child) td:first-child::after {
-    inset-inline-start: calc(var(--spacing) * 3);
+    --markdown-table-divider-start: calc(var(--spacing) * 1.5);
   }
 
   .mastra-markdown tbody tr:not(:last-child) td:last-child::after {
-    inset-inline-end: calc(var(--spacing) * 3);
+    --markdown-table-divider-end: calc(var(--spacing) * 1.5);
   }
 
   @media (hover: hover) {
     .mastra-markdown tbody tr:hover td {
       background: var(--fill-subtle);
     }
+
+    .mastra-markdown tbody tr:hover td::after,
+    .mastra-markdown tbody tr:has(+ tr:hover) td::after {
+      opacity: 0;
+    }
   }
 
   .mastra-markdown tbody tr:focus-within td {
     background: var(--fill-subtle);
+  }
+
+  .mastra-markdown tbody tr:focus-within td::after,
+  .mastra-markdown tbody tr:has(+ tr:focus-within) td::after {
+    opacity: 0;
   }
 
   .mastra-markdown img {
