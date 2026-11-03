@@ -19,4 +19,10 @@ const agent = new Agent({
 
 For durable agents, `streams` keys override the matching `durable` keys. `durable: true` with `streams: false` keeps publishing but turns off the replay cache. A durable agent on the default engine now publishes on `mastra.pubsub` once registered, instead of a private in-process bus, so other `Mastra` instances sharing that PubSub and cache can observe its runs. An agent-level `pubsub` still takes precedence.
 
-Behaviour change: with streams on, closing the HTTP stream no longer aborts a plain agent run on the server. The server detaches the reader so the client can reconnect. Stop a run with `POST /agents/:agentId/runs/:runId/abort`, which now also works for plain agents with resumable streams, or the thread abort route. Set `streams: false` to keep the old disconnect-aborts behaviour.
+Observing a run follows it across tool-approval suspensions until it finishes, errors or is aborted, for plain and durable agents alike. Reconnecting is not crash recovery: if the process running a plain agent stops, the run stops.
+
+Behaviour change: with streams on, closing the HTTP stream no longer aborts a plain agent run on the server. The server detaches the reader and the run keeps generating tokens, calling tools and running `onFinish`, so the client can reconnect. Stop a run with `POST /agents/:agentId/runs/:runId/abort`, which now also works for plain agents with resumable streams, or the thread abort route. Set `streams: false` to keep the old disconnect-aborts behaviour.
+
+Servers that share a PubSub and cache (for example Redis) can observe and abort a plain agent run started on any of them. Each run writes an ownership record (agent, run, resource, thread) to the cache before its first event, and the observe and abort routes check the caller against it, including Studio auth mode. Unknown, expired or evicted runs return 404, and an unreadable cache returns 503. The abort route returns `{ aborted: true }` only when the executing process confirms the stop. Finished runs, runs parked on an approval, and unanswered requests return `{ aborted: false }`.
+
+Run logs and ownership records ask the cache for a 24-hour TTL. `cleanupTimeoutMs: 0` turns off only the post-finish cleanup timer. Cache TTL and eviction still apply, and the in-memory cache's default limit of 1,000 counts cache entries, not runs.

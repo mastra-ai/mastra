@@ -10,7 +10,7 @@ packages:
 
 A resumable stream publishes every chunk of an agent run to a PubSub topic and keeps a replay cache of those events. A client that drops its connection can reconnect and catch up, another reader can follow the same run with `observe()`, and any reader can stop it.
 
-Resumable streams don't make the run itself durable. If the process running the agent stops, the run stops. For runs that survive process restarts, use [durable agents](/docs/harness/durable-agents), which publish through the same stream layer.
+Resumable streams don't make the run itself durable. Reconnecting isn't crash recovery: if the process running the agent stops, the run stops, and observers see an error or nothing more. For runs that survive process restarts, use [durable agents](/docs/harness/durable-agents), which publish through the same stream layer.
 
 ## Defaults
 
@@ -46,7 +46,7 @@ export const supportAgent = new Agent({
 | `pubsub` | `mastra.pubsub` | Bus the run is published on. Use a shared bus to follow runs across processes. |
 | `cache` | `mastra.serverCache`, else an in-memory cache | Replay cache. Pass `false` to publish live events without replay. |
 | `shouldCache` | Every topic | Return `false` for a topic to skip caching it. |
-| `cleanupTimeoutMs` | `30000` | How long a finished run stays replayable. `0` never clears it. |
+| `cleanupTimeoutMs` | `30000` | How long after it finishes a run is cleared. `0` turns off this timer only. The cache's own expiry and eviction still apply. |
 
 `streams: true` turns streams on with these defaults, including for standalone agents.
 
@@ -70,9 +70,21 @@ export const batchAgent = new Agent({
 
 To keep live observation but skip the replay cache, pass `streams: { cache: false }`.
 
+### How long runs stay available
+
+A run's events and its ownership record are cleared `cleanupTimeoutMs` after it finishes. A run parked on a tool approval or suspension isn't cleared by that timer, because resuming it continues on the same topic.
+
+The cache bounds everything else:
+
+- Run logs and ownership records ask the cache for a 24-hour TTL. A cache can apply its own limits: the in-memory cache's list writes keep its default TTL (5 minutes unless configured).
+- The in-memory cache holds 1,000 entries by default. Entries are cache keys, not runs: each run uses several (its event log, a counter and its ownership record), so heavy traffic evicts older runs sooner.
+- Once a run's log or record is evicted or expires, observing or aborting it returns 404, as for an unknown run.
+
+Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
+
 ## Follow a run
 
-Call `observe()` with the run's ID to follow it from any agent instance that shares the bus. Without an offset, `observe()` replays the cached events and then delivers live ones:
+Call `observe()` with the run's ID to follow it from any agent instance that shares the bus. Without an offset, `observe()` replays the cached events and then delivers live ones. The observation spans suspensions: a run waiting on a tool approval emits the approval request, and the observation stays open until the approved run finishes, errors or is aborted. Call `detach()` to stop following a parked run:
 
 ```typescript title="src/server/reconnect.ts"
 const { output, detach } = await supportAgent.observe(runId)
@@ -88,15 +100,24 @@ The [`observe()` reference](/reference/agents/durable-agent#observerunid-options
 
 ## Stop a run
 
-With streams on, a closed reader doesn't stop the run. When a client disconnects from the server's stream route, the server detaches that reader and the run keeps going, so the client can reconnect.
+With streams on, a closed reader doesn't stop the run. When a client disconnects from the server's stream route, the server detaches that reader and the run keeps going: it keeps generating tokens, calling tools and running `onFinish`, so the client can reconnect. Stop it explicitly, or set `streams: false` for agents whose runs should end with the request.
 
 Stop a run explicitly with one of these:
 
 - `observe(runId)` returns an `abort()` function that stops the run wherever it executes.
-- `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it.
-- The server's `POST /agents/:agentId/runs/:runId/abort` route stops a run executing on that server, after checking the caller owns it. Runs in a memory thread can also be stopped with `POST /agents/:agentId/threads/abort`.
+- `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it. It returns `true` only for a run stopped in this process. For a run elsewhere the request is best effort.
+- The server's `POST /agents/:agentId/runs/:runId/abort` route stops a run on any server that shares the PubSub and cache, after checking the caller owns it. It returns `{ aborted: true }` only once the process executing the run confirms it stopped. It returns `{ aborted: false }` for a finished run, for a run parked on an approval (nothing is executing it), and when no process answers in time. Runs in a memory thread can also be stopped with `POST /agents/:agentId/threads/abort`.
 
 With `streams: false`, closing the HTTP request aborts the run, as before.
+
+## Across servers
+
+When several servers share a PubSub and cache, such as Redis, a run started on one server can be observed and stopped through any of them:
+
+- Each run writes an ownership record (agent, run, resource and thread) to the cache before its first event. The server's observe and abort routes check the caller against that record, so tenant and thread checks hold on every server.
+- An unknown, expired or evicted record returns 404. If the cache can't be read, the routes return 503 rather than skipping the check.
+- With `streams: { cache: false }` the record is kept in `mastra.serverCache`, so ownership still works across servers. Replay then depends on the PubSub: one that keeps history, like Redis Streams, replays it, and an in-process bus delivers only live events.
+- With the default in-memory cache and PubSub, nothing is shared, so only the server running the agent can observe or stop its runs.
 
 ## Related
 
