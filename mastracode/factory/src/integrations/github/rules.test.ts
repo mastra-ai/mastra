@@ -721,7 +721,7 @@ describe('GithubRules', () => {
 
   it('runs triage again when a person moves the card back into Triage', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
-    const card = await createLinkedIssue(workItems, project.id);
+    const card = await createLinkedIssue(workItems, project.id, ['intake']);
     const configVersion = 'factory-config-v1';
     const boards = createBoardRegistry();
     const service = new GithubRules({
