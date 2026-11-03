@@ -125,6 +125,42 @@ describeForAllEngines('Support agent final-answer processors', engine => {
     expect(await savedText(memory)).toBe('');
   });
 
+  // Technical: writer.custom() in processOutputResult must stream its chunk before `finish`, and a
+  // non-transient chunk is saved as a data part of the reply. Durable engines passed no writer. (#29213)
+  it('follow-up suggestions written by a final-answer processor are streamed and the card is saved (#29213)', async () => {
+    const memory = new MockMemory();
+    const suggester: Processor = {
+      id: 'suggester',
+      processOutputResult: async ({ messages, writer }) => {
+        await writer?.custom({ type: 'data-suggestions', data: { prompts: ['Track it'] }, transient: true });
+        await writer?.custom({ type: 'data-order-card', data: { orderId: 'A-1' } });
+        return messages;
+      },
+    };
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: QUESTION,
+      collectChunks: true,
+      memory,
+      ...THREAD,
+      outputProcessors: [suggester],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Your order ships today.' });
+      },
+    });
+
+    const types = chunks!.map(c => c.type);
+    expect(types.filter(t => t.startsWith('data-'))).toEqual(['data-suggestions', 'data-order-card']);
+    expect(types.indexOf('data-order-card')).toBeLessThan(types.indexOf('finish'));
+
+    const saved = (await memory.recall(THREAD)).messages.filter(m => m.role === 'assistant');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]!.content.parts.map(p => p.type)).toEqual(expect.arrayContaining(['text', 'data-order-card']));
+    expect(saved[0]!.content.parts.some(p => p.type === 'data-suggestions')).toBe(false);
+  });
+
   // Technical: when the provider call fails, processOutputResult still runs and sees
   // finishReason 'error', so audit processors can record failed turns.
   it('an audit processor still runs when the provider fails, and sees the error finish', async () => {

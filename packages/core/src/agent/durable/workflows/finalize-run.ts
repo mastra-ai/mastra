@@ -10,6 +10,7 @@ import { StructuredOutputProcessor } from '../../../processors/processors/struct
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
+import { persistProcessorDataChunk } from '../../../stream/base/output';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
 import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
@@ -52,6 +53,11 @@ export interface DurableFinishSideEffectsResult {
   titleForStream?: Promise<string | undefined>;
   /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
   structuredOutputChunks?: ChunkType[];
+  /**
+   * Chunks output processors wrote with `writer.custom()` in processOutputResult. Publish them
+   * after `structuredOutputChunks` and before the tripwire or FINISH, matching the in-process loop.
+   */
+  outputResultChunks?: ChunkType[];
   /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
   tripwire?: {
     reason: string;
@@ -244,6 +250,19 @@ export async function runDurableFinishSideEffects({
   const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
   await assertOwned();
 
+  // This step has no pubsub (remote engines call it too), so chunks are buffered for the
+  // caller. Non-transient ones go into the MessageList now so the flush below saves them.
+  const outputResultChunks: ChunkType[] = [];
+  const outputResultWriter = {
+    custom: async (
+      data: { type: string; data?: unknown; transient?: boolean },
+      writerOptions?: { messageId?: string },
+    ) => {
+      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? initData.messageId, data);
+      outputResultChunks.push(data as ChunkType);
+    },
+  };
+
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
@@ -272,7 +291,7 @@ export async function runDurableFinishSideEffects({
         createObservabilityContext(tracingContext),
         effectiveRequestContext,
         0,
-        undefined,
+        outputResultWriter,
         outputResult,
       );
     } catch (error) {
@@ -291,6 +310,7 @@ export async function runDurableFinishSideEffects({
         return {
           messageListState: messageList.serialize(),
           outputText: resolveOutputText(messageList),
+          outputResultChunks,
           tripwire: {
             reason: error.message,
             processorId: error.processorId,
@@ -419,6 +439,7 @@ export async function runDurableFinishSideEffects({
     titleGeneration,
     titleForStream,
     structuredOutputChunks,
+    outputResultChunks,
   };
 }
 
