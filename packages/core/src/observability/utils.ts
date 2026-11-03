@@ -224,7 +224,22 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
 
   // Otherwise, try to create a new root span
   const instance = options.mastra?.observability?.getSelectedInstance({ requestContext });
-  const rootTracingOptions = resumed ? { ...tracingOptions, traceId: resumed.traceId } : tracingOptions;
+  // The resume call's own tracing options win field by field; the saved trace state fills what it left unset.
+  const savedState = saved?.traceState;
+  const rootTracingOptions: TracingOptions | undefined =
+    resumed || savedState
+      ? {
+          ...tracingOptions,
+          ...(resumed ? { traceId: resumed.traceId } : {}),
+          ...(savedState
+            ? {
+                hideInput: tracingOptions?.hideInput ?? savedState.hideInput,
+                hideOutput: tracingOptions?.hideOutput ?? savedState.hideOutput,
+                requestContextKeys: tracingOptions?.requestContextKeys ?? savedState.requestContextKeys,
+              }
+            : {}),
+        }
+      : tracingOptions;
 
   return instance?.startSpan<T>({
     type,
@@ -235,7 +250,7 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     tracingOptions: rootTracingOptions,
     traceId: rootTracingOptions?.traceId,
     samplingDecision: samplingDecision ?? saved?.sampled,
-    traceState: traceState ?? saved?.traceState,
+    traceState,
     // A resumed run's parent is the suspended span, a Mastra span in the trace.
     parentSpanId: resumed ? resumed.parentSpanId : resumedFromSpanId,
     resumedFromSpanId: resumed?.resumedFromSpanId,

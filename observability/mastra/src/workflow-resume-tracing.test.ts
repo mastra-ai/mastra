@@ -403,7 +403,7 @@ describe('workflow resume span linkage', () => {
     },
   );
 
-  it("default resume keeps the original run's request context keys without repeating them", async () => {
+  it("default resume keeps the original run's request context keys once and adds its own", async () => {
     const approve = (id: string) =>
       createStep({
         id,
@@ -429,22 +429,68 @@ describe('workflow resume span linkage', () => {
       }),
     });
     try {
-      const requestContext = new RequestContext([['userId', 'u1']]);
+      const requestContext = new RequestContext([
+        ['userId', 'u1'],
+        ['tenant', 'acme'],
+      ]);
       const run = await workflow.createRun();
       expect(
         (await run.start({ inputData: {}, requestContext, tracingOptions: { requestContextKeys: ['userId'] } })).status,
       ).toBe('suspended');
 
-      const resumed = await workflow.createRun({ runId: run.runId });
-      expect((await resumed.resume({ step: 'first', resumeData: { approved: true }, requestContext })).status).toBe(
+      const first = await workflow.createRun({ runId: run.runId });
+      expect((await first.resume({ step: 'first', resumeData: { approved: true }, requestContext })).status).toBe(
         'suspended',
       );
       const saved = (await readTracingContext(storage, run.runId)) as { traceState?: { requestContextKeys: string[] } };
       expect(saved.traceState?.requestContextKeys).toEqual(['userId']);
 
+      const second = await workflow.createRun({ runId: run.runId });
+      expect(
+        (
+          await second.resume({
+            step: 'second',
+            resumeData: { approved: true },
+            requestContext,
+            tracingOptions: { requestContextKeys: ['tenant'] },
+          })
+        ).status,
+      ).toBe('success');
+
       const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
-      expect(roots).toHaveLength(2);
-      expect(roots[1]!.metadata?.userId).toBe('u1');
+      expect(roots.map(span => [span.metadata?.userId, span.metadata?.tenant])).toEqual([
+        ['u1', undefined],
+        ['u1', undefined],
+        [undefined, 'acme'],
+      ]);
+    } finally {
+      await host.shutdown();
+    }
+  });
+
+  it('default resume hides the input its call hides when only configured keys were saved', async () => {
+    const workflow = makeWorkflow();
+    const host = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { [workflow.id]: workflow },
+      observability: new Observability({
+        configs: {
+          default: { serviceName: 'workflow-resume-keys', exporters: [exporter], requestContextKeys: ['userId'] },
+        },
+      }),
+    });
+    try {
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      expect(
+        (await resumed.resume({ resumeData: { approved: true }, tracingOptions: { hideInput: true } })).status,
+      ).toBe('success');
+
+      const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(roots.map(span => span.input)).toEqual([{}, undefined]);
     } finally {
       await host.shutdown();
     }
