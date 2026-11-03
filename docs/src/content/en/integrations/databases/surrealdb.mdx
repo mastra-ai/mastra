@@ -85,7 +85,7 @@ const storage = new SurrealDBStore({
     name: 'db',
     type: 'Surreal',
     description:
-      'An existing, connected and authenticated `Surreal` client from the `surrealdb` SDK. Mastra does not close a client it did not create.',
+      'An existing, connected and authenticated `Surreal` client from the `surrealdb` SDK. Mastra uses the namespace and database the client already selected, unless you set `namespace` or `database`. Mastra does not close a client it did not create.',
     isOptional: true,
   },
   {

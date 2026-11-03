@@ -87,6 +87,36 @@ createClientAcceptanceTests({
     new SurrealDBStore({ id: 'surrealdb-client-test', db: sharedClient, disableInit: true }),
 });
 
+describe('SurrealDBStore with a caller-managed client', () => {
+  it('keeps the client on the namespace and database it selected', async () => {
+    const client = await connectedClient('own_selection');
+    // A separate connection, so the check does not go through the store's client.
+    const reader = await connectedClient('own_selection');
+    const store = new SurrealDBStore({ id: 'surrealdb-own-selection', db: client });
+    try {
+      await store.init();
+      const memory = (await store.getStore('memory'))!;
+      const threadId = `own-selection-${Date.now()}`;
+      const now = new Date();
+      await memory.saveThread({
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Thread', createdAt: now, updatedAt: now },
+      });
+
+      const [selection] = await client.query('RETURN [session::ns(), session::db()]').collect<[string[]]>();
+      expect(selection).toEqual(['mastra_test', 'own_selection']);
+
+      const [row] = await reader
+        .query(`SELECT VALUE resourceId FROM ONLY type::record('mastra_threads', $id)`, { id: threadId })
+        .collect<[string | undefined]>();
+      expect(row).toBe('resource-1');
+    } finally {
+      await store.close();
+      await reader.close();
+      await client.close();
+    }
+  });
+});
+
 const domainConnector = new SurrealDBConnector(testConfig('domain_direct'));
 createDomainDirectTests({
   storeName: 'SurrealDB',

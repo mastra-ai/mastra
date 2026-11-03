@@ -101,6 +101,12 @@ export class SurrealDBConnector {
   ensureDatabase(): Promise<void> {
     this.#bootstrapped ??= (async () => {
       await this.connect();
+      const config = this.#config;
+      // A caller-managed client with no configured namespace or database keeps the
+      // selection its owner made; switching it would move the owner's own queries too.
+      if (isInstanceConfig(config) && config.namespace === undefined && config.database === undefined) {
+        return;
+      }
       try {
         await this.db
           .query(
