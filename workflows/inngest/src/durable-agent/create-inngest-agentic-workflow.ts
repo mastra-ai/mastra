@@ -486,6 +486,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             requestContext,
             tracingContext,
             logger: mastra?.getLogger?.(),
+            messageId: state.messageId,
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
@@ -506,7 +507,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           }
           if (pubsub) {
             for (const chunk of finishResult.outputResultChunks ?? []) {
-              await emitChunkEvent(pubsub, state.runId, chunk);
+              await emitChunkEvent(pubsub, state.runId, chunk, true);
             }
           }
           if (tripwire && pubsub) {

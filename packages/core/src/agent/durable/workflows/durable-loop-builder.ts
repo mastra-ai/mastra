@@ -1051,6 +1051,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               requestContext,
               tracingContext,
               logger,
+              messageId: state.messageId,
               outputResult: {
                 text: finalText ?? '',
                 usage: state.accumulatedUsage,
@@ -1073,7 +1074,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
             if (pubsub) {
               for (const chunk of finishResult.outputResultChunks ?? []) {
-                await emitChunkEvent(pubsub, state.runId, chunk);
+                await emitChunkEvent(pubsub, state.runId, chunk, true);
               }
             }
 

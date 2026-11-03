@@ -39,6 +39,11 @@ export interface DurableFinishSideEffectsOptions {
   tracingContext?: TracingContext;
   logger?: IMastraLogger;
   outputResult?: OutputResult;
+  /**
+   * The current response message id. Signals, goals and isTaskComplete rotate it during
+   * the run, so `initData.messageId` can name an earlier reply. Defaults to that id.
+   */
+  messageId?: string;
 }
 
 export interface DurableFinishSideEffectsResult {
@@ -55,7 +60,8 @@ export interface DurableFinishSideEffectsResult {
   structuredOutputChunks?: ChunkType[];
   /**
    * Chunks output processors wrote with `writer.custom()` in processOutputResult. Publish them
-   * after `structuredOutputChunks` and before the tripwire or FINISH, matching the in-process loop.
+   * marked output-processed, after `structuredOutputChunks` and before the tripwire or FINISH,
+   * matching the in-process loop.
    */
   outputResultChunks?: ChunkType[];
   /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
@@ -113,6 +119,7 @@ export async function runDurableFinishSideEffects({
   tracingContext,
   logger,
   outputResult,
+  messageId = initData.messageId,
 }: DurableFinishSideEffectsOptions): Promise<DurableFinishSideEffectsResult> {
   const effectiveLogger = logger ?? mastra?.getLogger?.() ?? noopLogger;
   const durableState = initData.state;
@@ -258,7 +265,7 @@ export async function runDurableFinishSideEffects({
       data: { type: string; data?: unknown; transient?: boolean },
       writerOptions?: { messageId?: string },
     ) => {
-      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? initData.messageId, data);
+      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? messageId, data);
       outputResultChunks.push(data as ChunkType);
     },
   };
