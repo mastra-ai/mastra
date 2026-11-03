@@ -27,6 +27,7 @@ import {
   createStorageErrorId,
   isRunFenceConflictError,
   materializeState,
+  latestStepResults,
   materializeWorkflowRun,
   mergeWorkflowStepResult,
   normalizePerPage,
@@ -34,6 +35,7 @@ import {
   RUN_FENCING_TABLE_SCHEMAS,
   stateBaseOf,
   STEP_RESULT_SUMMARY_FIELDS,
+  summarizeStepResult,
   TABLE_WORKFLOW_RUN_ENTRIES,
   TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_RUNS,
@@ -62,7 +64,7 @@ interface EntryInput {
   payload: unknown;
 }
 
-/** A storage v2 entry as read back by `entriesSql` or `stateEntriesSql`. */
+/** A storage v2 entry as read back by `entriesSql`, `stateEntriesSql` or `loadWorkflowRunSteps`. */
 interface EntryRow {
   seq: number;
   /**
@@ -96,20 +98,24 @@ interface StateWrite {
 }
 
 /**
- * The entries a storage v2 write adds: one per step, in order, then the state or state base (a
- * checkpoint with neither starts the state over at `{}`), then the state patch unless a full state
- * was given.
+ * The entries a storage v2 write adds: one per step, in order, then one per step patch, then the
+ * state or state base (a checkpoint with neither starts the state over at `{}`), then the state
+ * patch unless a full state was given.
  */
 function journalEntries(
   steps: Record<string, StepResult<any, any, any, any>>,
   { state, stateBase, statePatch }: StateWrite,
   checkpoint: boolean,
+  stepPatches: Record<string, StatePatchOp[]> = {},
 ) {
   const entries: EntryInput[] = Object.entries(steps).map(([stepId, result]) => ({
     kind: 'step',
     step_id: stepId,
     payload: result,
   }));
+  for (const [stepId, ops] of Object.entries(stepPatches)) {
+    entries.push({ kind: 'step-patch', step_id: stepId, payload: ops });
+  }
   if (state !== undefined) entries.push({ kind: 'state', step_id: null, payload: state });
   else if (stateBase !== undefined) entries.push({ kind: 'state-base', step_id: null, payload: stateBase });
   else if (checkpoint) entries.push({ kind: 'state', step_id: null, payload: {} });
@@ -190,18 +196,21 @@ const STATE_BASE_RUN_EXPR = `payload ->> '$.runId'`;
 
 /**
  * A JSON array of {@link EntryRow} for the storage v2 run `alias` refers to: each step's
- * latest entry, and the entries `materializeState` uses for the latest state: the latest full
- * state or state base and every state patch after it. Drafts are left out.
+ * latest entry, the step patches after it (for `latestStepResults`), and the entries
+ * `materializeState` uses for the latest state: the latest full state or state base and every
+ * state patch after it. Drafts are left out.
  *
  * With `summary`, successful steps other than `input` come back as their summary, built here
- * so their data is never sent. Like `summarizeStepResult`, it keeps a field that is JSON null
+ * so their data is never sent, unless step patches follow it (the caller summarizes the patched
+ * result instead). Like `summarizeStepResult`, it keeps a field that is JSON null
  * and leaves out one that is absent. It then takes one arg, `STEP_RESULT_SUMMARY_FIELDS` as
  * JSON, bound where this SQL sits in the statement.
  */
 function entriesSql(alias: string, { summary }: { summary?: boolean } = {}): string {
   let payload = 'json(x.payload)';
   if (summary) {
-    const summarized = `(x.kind = 'step' AND x.step_id <> 'input' AND x.payload ->> '$.status' = 'success')`;
+    const summarized = `(x.kind = 'step' AND x.step_id <> 'input' AND x.payload ->> '$.status' = 'success'
+      AND (x.patch_seq IS NULL OR x.patch_seq < x.seq))`;
     payload = `json(CASE WHEN ${summarized} THEN (
           SELECT json_group_object(f.key, json(x.payload -> f.fullkey))
           FROM json_each(x.payload) f WHERE f.key IN (SELECT value FROM json_each(?))
@@ -215,11 +224,17 @@ function entriesSql(alias: string, { summary }: { summary?: boolean } = {}): str
       SELECT e.seq, e.kind, e.step_id, e.payload,
         ROW_NUMBER() OVER (PARTITION BY e.kind, e.step_id ORDER BY e.seq DESC) AS rn,
         MIN(e.seq) OVER (PARTITION BY e.kind, e.step_id) AS first_seq,
+        MAX(CASE WHEN e.kind = 'step' THEN e.seq END) OVER (PARTITION BY e.step_id) AS step_seq,
+        MAX(CASE WHEN e.kind = 'step-patch' THEN e.seq END) OVER (PARTITION BY e.step_id) AS patch_seq,
         MAX(CASE WHEN e.kind IN ('state', 'state-base') THEN e.seq END) OVER () AS base_seq
       FROM ${TABLE_WORKFLOW_RUN_ENTRIES} e
       WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id AND e.kind <> 'state-draft'
     ) x
-    WHERE CASE WHEN x.kind = 'step' THEN x.rn = 1 ELSE x.base_seq IS NULL OR x.seq >= x.base_seq END)`;
+    WHERE CASE x.kind
+      WHEN 'step' THEN x.rn = 1
+      WHEN 'step-patch' THEN x.seq > x.step_seq
+      ELSE x.base_seq IS NULL OR x.seq >= x.base_seq
+    END)`;
 }
 
 /**
@@ -238,7 +253,7 @@ function stateEntriesSql(alias: string): string {
         MAX(CASE WHEN e.kind IN ('state', 'state-base') THEN e.seq END) OVER () AS base_seq
       FROM ${TABLE_WORKFLOW_RUN_ENTRIES} e
       WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id
-        AND e.kind <> 'step' AND e.seq <= ?
+        AND e.kind NOT IN ('step', 'step-patch') AND e.seq <= ?
     ) x
     WHERE ? OR (x.kind <> 'state-draft' AND (x.base_seq IS NULL OR x.seq >= x.base_seq)))`;
 }
@@ -255,6 +270,8 @@ function toEntries(rows: EntryRow[]): WorkflowRunEntry[] {
     switch (row.kind) {
       case 'step':
         return { seq: row.seq, kind: 'step', stepId: row.step_id!, result: payload };
+      case 'step-patch':
+        return { seq: row.seq, kind: 'step-patch', stepId: row.step_id!, ops: payload as StatePatchOp[] };
       case 'state':
         return { seq: row.seq, kind: 'state', state: payload as Record<string, any> };
       case 'state-patch':
@@ -584,13 +601,17 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       const header: WorkflowRunHeader = JSON.parse(run.header as string);
       const rows = entryRows(run.entries as string);
       const entries = toEntries(rows);
+      const summarizedInQuery = new Set(rows.filter(row => row.summarized).map(row => row.step_id));
       const steps: StoredWorkflowRun['steps'] = {};
       const summarizedStepIds: string[] = [];
-      entries.forEach((entry, i) => {
-        if (entry.kind !== 'step') return;
-        steps[entry.stepId] = entry.result as StoredWorkflowRun['steps'][string];
-        if (rows[i]!.summarized) summarizedStepIds.push(entry.stepId);
-      });
+      for (const [stepId, result] of latestStepResults(entries) as Map<string, StoredWorkflowRun['steps'][string]>) {
+        steps[stepId] = result;
+        if (summary && stepId !== 'input' && result?.status === 'success') {
+          // The query leaves a step with patches after its latest entry in full.
+          if (!summarizedInQuery.has(stepId)) steps[stepId] = summarizeStepResult(result);
+          summarizedStepIds.push(stepId);
+        }
+      }
       const base = await this.#stateBase(this.#client, entries);
       const { state, statePatchBytes } = materializeState(entries, { base });
       return {
@@ -618,20 +639,28 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     if (!stepIds.length) return {};
     try {
+      // Each step's latest entry and the step patches after it.
       const result = await this.#client.execute({
-        sql: `SELECT step_id, json(payload) AS payload FROM (
-            SELECT step_id, payload, ROW_NUMBER() OVER (PARTITION BY step_id ORDER BY seq DESC) AS rn
+        sql: `SELECT seq, kind, step_id, json(payload) AS payload FROM (
+            SELECT seq, kind, step_id, payload,
+              MAX(CASE WHEN kind = 'step' THEN seq END) OVER (PARTITION BY step_id) AS step_seq
             FROM ${TABLE_WORKFLOW_RUN_ENTRIES}
-            WHERE workflow_name = ? AND run_id = ? AND kind = 'step' AND step_id IN (SELECT value FROM json_each(?))
-          ) WHERE rn = 1`,
+            WHERE workflow_name = ? AND run_id = ? AND kind IN ('step', 'step-patch')
+              AND step_id IN (SELECT value FROM json_each(?))
+          ) WHERE seq >= step_seq ORDER BY seq`,
         args: [workflowName, runId, JSON.stringify(stepIds)],
       });
-      return Object.fromEntries(
-        result.rows.map(row => [
-          row.step_id as string,
-          row.payload == null ? undefined : JSON.parse(row.payload as string),
-        ]),
+      const rows = result.rows.map(
+        (row): EntryRow => ({
+          seq: Number(row.seq),
+          ord: Number(row.seq),
+          kind: row.kind as WorkflowRunEntry['kind'],
+          step_id: row.step_id as string,
+          payload: row.payload == null ? null : JSON.parse(row.payload as string),
+          absent: row.payload == null ? 1 : 0,
+        }),
       );
+      return Object.fromEntries(latestStepResults(toEntries(rows))) as Record<string, StepResult<any, any, any, any>>;
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN_STEPS', workflowName, runId, error);
     }
@@ -711,7 +740,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         upsertHeader(run, entries.length, { checkpoint: true }),
         {
           sql: `DELETE FROM ${TABLE_WORKFLOW_RUN_ENTRIES} WHERE workflow_name = ? AND run_id = ?
-            AND (kind = 'step' OR NOT (SELECT stateShared FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?))`,
+            AND (kind IN ('step', 'step-patch') OR NOT (SELECT stateShared FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?))`,
           args: [run.workflowName, run.runId, run.workflowName, run.runId],
         },
         insertEntries(run, entries),
@@ -734,18 +763,20 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   async appendWorkflowRunEntries({
     fence,
     steps,
+    stepPatches,
     state,
     statePatch,
     startStateSeq,
     ...run
   }: RunWrite & {
     steps: Record<string, StepResult<any, any, any, any>>;
+    stepPatches?: Record<string, StatePatchOp[]>;
     state?: Record<string, any>;
     statePatch?: StatePatchOp[];
     startStateSeq?: number;
     fence?: RunFence;
   }): Promise<{ lastSeq: number }> {
-    const entries = journalEntries(steps, { state, statePatch }, false);
+    const entries = journalEntries(steps, { state, statePatch }, false, stepPatches);
     const check = this.#runFenceCheck(fence, run.runId, 'appendWorkflowRunEntries');
     try {
       const [header] = await this.executeWithRetry(

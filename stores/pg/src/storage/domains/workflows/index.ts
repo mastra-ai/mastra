@@ -5,9 +5,11 @@ import {
   mergeWorkflowStepResult,
   assertWorkflowStepGuard,
   isWorkflowStepConflictError,
+  latestStepResults,
   normalizePerPage,
   stateBaseOf,
   STEP_RESULT_SUMMARY_FIELDS,
+  summarizeStepResult,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_RUNS,
@@ -193,7 +195,7 @@ interface EntryInput {
   payload: unknown;
 }
 
-/** A storage v2 entry as read back by `#entriesSql` or `#stateEntriesSql`. */
+/** A storage v2 entry as read back by `#entriesSql`, `#stateEntriesSql` or `loadWorkflowRunSteps`. */
 interface EntryRow {
   seq: number;
   kind: WorkflowRunEntry['kind'];
@@ -222,20 +224,24 @@ interface StateWrite {
 }
 
 /**
- * The entries a storage v2 write adds: one per step, in order, then the state or state base (a
- * checkpoint with neither starts the state over at `{}`), then the state patch unless a full state
- * was given.
+ * The entries a storage v2 write adds: one per step, in order, then one per step patch, then the
+ * state or state base (a checkpoint with neither starts the state over at `{}`), then the state
+ * patch unless a full state was given.
  */
 function journalEntries(
   steps: Record<string, StepResult<any, any, any, any>>,
   { state, stateBase, statePatch }: StateWrite,
   checkpoint: boolean,
+  stepPatches: Record<string, StatePatchOp[]> = {},
 ) {
   const entries: EntryInput[] = Object.entries(steps).map(([stepId, result]) => ({
     kind: 'step',
     step_id: stepId,
     payload: result,
   }));
+  for (const [stepId, ops] of Object.entries(stepPatches)) {
+    entries.push({ kind: 'step-patch', step_id: stepId, payload: ops });
+  }
   if (state !== undefined) entries.push({ kind: 'state', step_id: null, payload: state });
   else if (stateBase !== undefined) entries.push({ kind: 'state-base', step_id: null, payload: stateBase });
   else if (checkpoint) entries.push({ kind: 'state', step_id: null, payload: {} });
@@ -256,13 +262,15 @@ type DraftPayload = { state: Record<string, any> } | { on: StateVersion; ops: St
 const entryRows = (param: string) => `jsonb_array_elements(${param}::jsonb) WITH ORDINALITY AS e(elem, ord)`;
 const ENTRY_VALUES = `e.elem ->> 'kind', e.elem ->> 'step_id', e.elem -> 'payload'`;
 
-/** The entries of `#entriesSql` rows; an undefined payload reads back as undefined, as in v1. */
+/** The entries of {@link EntryRow} rows; an undefined payload reads back as undefined, as in v1. */
 function toEntries(rows: EntryRow[]): WorkflowRunEntry[] {
   return rows.map((row): WorkflowRunEntry => {
     const payload = row.absent ? undefined : row.payload;
     switch (row.kind) {
       case 'step':
         return { seq: row.seq, kind: 'step', stepId: row.step_id!, result: payload };
+      case 'step-patch':
+        return { seq: row.seq, kind: 'step-patch', stepId: row.step_id!, ops: payload as StatePatchOp[] };
       case 'state':
         return { seq: row.seq, kind: 'state', state: payload as Record<string, any> };
       case 'state-patch':
@@ -648,17 +656,20 @@ export class WorkflowsPG extends WorkflowsStorage {
   /**
    * A jsonb array of {@link EntryRow} for the storage v2 run `alias` refers to: each step's
    * latest entry, ordered by when each step was first written so `context` keys keep their write
-   * order, and the entries `materializeState` uses for the latest state: the latest full state or
-   * state base and every state patch after it, in `seq` order. Drafts are left out.
+   * order, the step patches after it (in `seq` order, for `latestStepResults`), and the entries
+   * `materializeState` uses for the latest state: the latest full state or state base and every
+   * state patch after it, in `seq` order. Drafts are left out.
    *
    * With `summaryFieldsParam` (the parameter holding `STEP_RESULT_SUMMARY_FIELDS`), successful
-   * steps other than `input` come back as their summary, built here so their data is never sent.
+   * steps other than `input` come back as their summary, built here so their data is never sent,
+   * unless step patches follow it (the caller summarizes the patched result instead).
    * Like `summarizeStepResult`, it keeps a field that is JSON null and leaves out one that is absent.
    */
   #entriesSql(alias: string, { summaryFieldsParam }: { summaryFieldsParam?: string } = {}): string {
     let payload = 'x.payload';
     if (summaryFieldsParam) {
-      const summarized = `(x.kind = 'step' AND x.step_id <> 'input' AND x.payload ->> 'status' = 'success')`;
+      const summarized = `(x.kind = 'step' AND x.step_id <> 'input' AND x.payload ->> 'status' = 'success'
+        AND (x.patch_seq IS NULL OR x.patch_seq < x.seq))`;
       payload = `CASE WHEN ${summarized} THEN (
           SELECT COALESCE(jsonb_object_agg(f.key, f.value), '{}'::jsonb)
           FROM jsonb_each(x.payload) f WHERE f.key = ANY(${summaryFieldsParam}::text[])
@@ -671,11 +682,17 @@ export class WorkflowsPG extends WorkflowsStorage {
         SELECT e.seq, e.kind, e.step_id, e.payload,
           ROW_NUMBER() OVER (PARTITION BY e.kind, e.step_id ORDER BY e.seq DESC) AS rn,
           MIN(e.seq) OVER (PARTITION BY e.kind, e.step_id) AS first_seq,
+          MAX(CASE WHEN e.kind = 'step' THEN e.seq END) OVER (PARTITION BY e.step_id) AS step_seq,
+          MAX(CASE WHEN e.kind = 'step-patch' THEN e.seq END) OVER (PARTITION BY e.step_id) AS patch_seq,
           MAX(CASE WHEN e.kind IN ('state', 'state-base') THEN e.seq END) OVER () AS base_seq
         FROM ${this.#entriesTable()} e
         WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id AND e.kind <> 'state-draft'
       ) x
-      WHERE CASE WHEN x.kind = 'step' THEN x.rn = 1 ELSE x.base_seq IS NULL OR x.seq >= x.base_seq END)`;
+      WHERE CASE x.kind
+        WHEN 'step' THEN x.rn = 1
+        WHEN 'step-patch' THEN x.seq > x.step_seq
+        ELSE x.base_seq IS NULL OR x.seq >= x.base_seq
+      END)`;
   }
 
   /**
@@ -694,7 +711,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           MAX(CASE WHEN e.kind IN ('state', 'state-base') THEN e.seq END) OVER () AS base_seq
         FROM ${this.#entriesTable()} e
         WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id
-          AND e.kind <> 'step' AND e.seq <= ${seqParam}::int
+          AND e.kind NOT IN ('step', 'step-patch') AND e.seq <= ${seqParam}::int
       ) x
       WHERE ${draftParam}::boolean OR (x.kind <> 'state-draft' AND (x.base_seq IS NULL OR x.seq >= x.base_seq)))`;
   }
@@ -868,13 +885,17 @@ export class WorkflowsPG extends WorkflowsStorage {
       if (!run) return null;
 
       const entries = toEntries(run.entries);
+      const summarizedInQuery = new Set(run.entries.filter(row => row.summarized).map(row => row.step_id));
       const steps: StoredWorkflowRun['steps'] = {};
       const summarizedStepIds: string[] = [];
-      entries.forEach((entry, i) => {
-        if (entry.kind !== 'step') return;
-        steps[entry.stepId] = entry.result as StoredWorkflowRun['steps'][string];
-        if (run.entries[i]!.summarized) summarizedStepIds.push(entry.stepId);
-      });
+      for (const [stepId, result] of latestStepResults(entries) as Map<string, StoredWorkflowRun['steps'][string]>) {
+        steps[stepId] = result;
+        if (summary && stepId !== 'input' && result?.status === 'success') {
+          // The query leaves a step with patches after its latest entry in full.
+          if (!summarizedInQuery.has(stepId)) steps[stepId] = summarizeStepResult(result);
+          summarizedStepIds.push(stepId);
+        }
+      }
       const base = await this.#stateBase(this.#db.client, entries);
       const { state, statePatchBytes } = materializeState(entries, { base });
       return {
@@ -902,14 +923,20 @@ export class WorkflowsPG extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     if (!stepIds.length) return {};
     try {
-      const rows = await this.#db.client.any<{ step_id: string; payload: StepResult<any, any, any, any> }>(
-        `SELECT DISTINCT ON (step_id) step_id, payload
-         FROM ${this.#entriesTable()}
-         WHERE workflow_name = $1 AND run_id = $2 AND kind = 'step' AND step_id = ANY($3::text[])
-         ORDER BY step_id, seq DESC`,
+      // Each step's latest entry and the step patches after it.
+      const rows = await this.#db.client.any<EntryRow>(
+        `SELECT x.seq, x.kind, x.step_id, x.payload, x.payload IS NULL AS absent
+         FROM (
+           SELECT seq, kind, step_id, payload,
+             MAX(CASE WHEN kind = 'step' THEN seq END) OVER (PARTITION BY step_id) AS step_seq
+           FROM ${this.#entriesTable()}
+           WHERE workflow_name = $1 AND run_id = $2 AND kind IN ('step', 'step-patch') AND step_id = ANY($3::text[])
+         ) x
+         WHERE x.seq >= x.step_seq
+         ORDER BY x.seq`,
         [workflowName, runId, stepIds],
       );
-      return Object.fromEntries(rows.map(row => [row.step_id, row.payload]));
+      return Object.fromEntries(latestStepResults(toEntries(rows))) as Record<string, StepResult<any, any, any, any>>;
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN_STEPS', workflowName, runId, error);
     }
@@ -1031,7 +1058,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         // an earlier version.
         await t.none(
           `DELETE FROM ${this.#entriesTable()}
-           WHERE workflow_name = $1 AND run_id = $2${stateShared ? ` AND kind = 'step'` : ''}`,
+           WHERE workflow_name = $1 AND run_id = $2${stateShared ? ` AND kind IN ('step', 'step-patch')` : ''}`,
           [run.workflowName, run.runId],
         );
         await t.none(
@@ -1052,18 +1079,20 @@ export class WorkflowsPG extends WorkflowsStorage {
   async appendWorkflowRunEntries({
     fence,
     steps,
+    stepPatches,
     state,
     statePatch,
     startStateSeq,
     ...run
   }: RunWrite & {
     steps: Record<string, StepResult<any, any, any, any>>;
+    stepPatches?: Record<string, StatePatchOp[]>;
     state?: Record<string, any>;
     statePatch?: StatePatchOp[];
     startStateSeq?: number;
     fence?: RunFence;
   }): Promise<{ lastSeq: number }> {
-    const entries = journalEntries(steps, { state, statePatch }, false);
+    const entries = journalEntries(steps, { state, statePatch }, false, stepPatches);
     try {
       return await withRunFence(
         this.#db.client,

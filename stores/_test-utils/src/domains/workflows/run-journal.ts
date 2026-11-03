@@ -427,6 +427,90 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
       });
     });
 
+    describe('step patches', () => {
+      const progress = (k: number, output: unknown) => ({
+        op: 'set' as const,
+        path: ['metadata', 'foreachProgress', String(k)],
+        value: { output },
+      });
+      const running = (done: Record<number, { output: unknown }>) =>
+        ({ status: 'running', payload: [1, 2, 3], startedAt: 1, metadata: { foreachProgress: done } }) as any;
+      const patch = (id: string, stepPatches: Record<string, unknown[]>) =>
+        append(id, makeSnapshot(id), [], false, { stepPatches });
+
+      /** The steps every reader returns for a run, which must agree. */
+      async function stepsOf(id: string) {
+        const { steps } = (await loadRun(id))!;
+        const byId = await store.getWorkflowRunById({ workflowName, runId: id });
+        const listed = (await store.listWorkflowRuns({ workflowName })).runs.find(run => run.runId === id);
+        for (const context of [(await load(id))!.context, parsed(byId!).context, parsed(listed!).context]) {
+          expect(context).toEqual(steps);
+        }
+        return steps;
+      }
+
+      it('rebuilds a step from its latest full entry and the patches after it, on every reader', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { context: { a: ok(1), each: running({}) } }));
+        await patch(id, { each: [progress(0, 10)] });
+        await patch(id, { each: [progress(1, 20)] });
+        const each = running({ 0: { output: 10 }, 1: { output: 20 } });
+
+        expect(await stepsOf(id)).toEqual({ a: ok(1), each });
+        expect(await store.loadWorkflowRunSteps({ workflowName, runId: id, stepIds: ['each'] })).toEqual({ each });
+        const summary = await loadRun(id, 'summary');
+        expect(summary!.steps).toEqual({ a: summarizeStepResult(ok(1) as any), each });
+        expect(summary!.summarizedStepIds).toEqual(['a']);
+        // A patched result is a copy: editing it doesn't reach the store.
+        const edited: any = (await loadRun(id))!.steps;
+        edited.each.metadata.foreachProgress[2] = { output: 30 };
+        expect((await loadRun(id))!.steps).toEqual({ a: ok(1), each });
+      });
+
+      it('summarizes a step that is successful once patched, from its patched result', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { context: { a: ok(1), each: running({}) } }));
+        await patch(id, {
+          a: [{ op: 'set', path: ['output'], value: 2 }],
+          each: [
+            { op: 'set', path: ['status'], value: 'success' },
+            { op: 'set', path: ['output'], value: [10] },
+          ],
+        });
+
+        const summary = await loadRun(id, 'summary');
+        expect(summary!.steps).toEqual({
+          a: summarizeStepResult(ok(2) as any),
+          each: summarizeStepResult({ ...running({}), status: 'success', output: [10] }),
+        });
+        expect(summary!.summarizedStepIds).toEqual(['a', 'each']);
+        expect((await loadRun(id))!.steps).toEqual({
+          a: ok(2),
+          each: { ...running({}), status: 'success', output: [10] },
+        });
+      });
+
+      it('applies only the patches after the latest full entry, and a checkpoint drops them', async () => {
+        const id = runId();
+        await patch(id, { stray: [progress(0, 1)] });
+        await append(id, makeSnapshot(id, { context: { each: running({}) } }), ['each']);
+        await patch(id, { each: [progress(0, 10)] });
+        await append(id, makeSnapshot(id, { context: { each: running({ 5: { output: 50 } }) } }), ['each']);
+        await patch(id, { each: [progress(6, 60)] });
+        const each = running({ 5: { output: 50 }, 6: { output: 60 } });
+
+        expect(await stepsOf(id)).toEqual({ each });
+        expect(await store.loadWorkflowRunSteps({ workflowName, runId: id, stepIds: ['each', 'stray'] })).toEqual({
+          each,
+        });
+
+        await checkpoint(id, makeSnapshot(id, { context: { each: running({}) } }));
+        expect(await stepsOf(id)).toEqual({ each: running({}) });
+        await patch(id, { each: [progress(1, 20)] });
+        expect(await stepsOf(id)).toEqual({ each: running({ 1: { output: 20 } }) });
+      });
+    });
+
     describe('state patches', () => {
       const set = (path: (string | number)[], value: unknown) => ({ op: 'set' as const, path, value });
       const bytes = (...ops: unknown[][]) => ops.reduce((sum: number, o) => sum + JSON.stringify(o).length, 0);
