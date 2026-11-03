@@ -2584,6 +2584,7 @@ export class MastraClient extends BaseResource {
     if (options?.page !== undefined) searchParams.set('page', String(options.page));
     if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
     for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
+    if (options?.status) searchParams.set('status', options.status);
     if (options?.orderBy) {
       searchParams.set('orderBy[field]', options.orderBy.field);
       searchParams.set('orderBy[direction]', options.orderBy.direction);
