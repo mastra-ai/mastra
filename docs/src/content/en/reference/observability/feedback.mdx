@@ -89,7 +89,9 @@ await observability.createFeedback({
 })
 ```
 
-The HTTP and client SDK create route accepts `CreateFeedbackBody` and sets `timestamp` server-side. It generates `feedbackId` when omitted:
+The HTTP and client SDK create route accepts `CreateFeedbackBody` and requires a nonblank `feedback.traceId`. `spanId` is optional. Unlike storage-level creation, HTTP requests with an omitted, null, empty, or whitespace-only `traceId` now return `400`, including span-only requests. Supply the trace ID if your caller previously omitted it. This requirement doesn't add a trace-existence lookup or change reads of historical records.
+
+The server sets `timestamp` on receipt and generates `feedbackId` when omitted:
 
 ```typescript
 await mastraClient.createFeedback({
