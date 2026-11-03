@@ -20,8 +20,7 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { CSSProperties } from 'react';
 
 import { fitWords } from '../lib/circleText';
-import { fitTargets } from '../lib/fitTargets';
-import { fitDuration, fitViewport, nudgeAxis } from '../lib/fitViewport';
+import { fitAllViewport, fitDuration, fitViewport, nudgeAxis } from '../lib/fitViewport';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -1288,35 +1287,53 @@ function KnowledgePageGraphInner({
   // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
   const drawnNodes = useLeavingNodes(emphasisedNodes, prefersMotion());
   const linkedIds = laidOut.shape.linked;
-  const fitState = useRef({ nodes, allEdges, selectedPageId, centerId, reactFlow, linkedIds });
-  fitState.current = { nodes, allEdges, selectedPageId, centerId, reactFlow, linkedIds };
+  const fitState = useRef({ nodes, selectedPageId, centerId, reactFlow, linkedIds });
+  fitState.current = { nodes, selectedPageId, centerId, reactFlow, linkedIds };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
   const fitPending = useRef(false);
-  const fit = useCallback((focusSelection: boolean, duration?: number, wholeRing = false) => {
+  // The pane and what is drawn, or null while the pane has no size (the next non-zero size fits).
+  const paneAndNodes = () => {
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
     const height = container?.clientHeight ?? 0;
     if (width === 0 || height === 0) {
       fitPending.current = true;
-      return;
+      return null;
     }
     fitPending.current = false;
-    const {
-      nodes: current,
-      allEdges: edgesNow,
-      selectedPageId: selected,
-      centerId: centre,
-      reactFlow: flow,
-      linkedIds: linked,
-    } = fitState.current;
-    const focus = focusSelection && selected ? pageNeighbourIds(selected, edgesNow) : null;
-    const targets = fitTargets(current, focus, linked);
-    const bounds = graphBounds(targets);
-    if (!bounds) return;
-    const anchor = current.find(node => node.id === (selected ?? centre));
-    const ring = wholeRing && !!selected && targets.some(node => linked.has(node.id));
-    const viewport = fitViewport({ bounds, width, height, focus: !!focus, ring, anchor });
-    void flow.setViewport(viewport, duration ? { duration } : undefined);
+    const { nodes: current, reactFlow: flow } = fitState.current;
+    const bounds = graphBounds(current);
+    return bounds ? { container, width, height, current, flow, bounds } : null;
+  };
+  // Fit view: every drawn node; with an outer ring of linked pages, below the readable floor so it all shows.
+  const fit = useCallback((duration?: number) => {
+    const view = paneAndNodes();
+    if (!view) return;
+    const { selectedPageId: selected, centerId: centre, linkedIds: linked } = fitState.current;
+    const anchor = view.current.find(node => node.id === (selected ?? centre));
+    const ring = !!selected && view.current.some(node => linked.has(node.id));
+    const viewport = fitViewport({ bounds: view.bounds, width: view.width, height: view.height, ring, anchor });
+    void view.flow.setViewport(viewport, duration ? { duration } : undefined);
+  }, []);
+  // The first view, once the graph has a size: everything drawn, with a margin, clear of the legend.
+  const fitInitial = useCallback(() => {
+    const view = paneAndNodes();
+    if (!view) return;
+    const box = view.container?.getBoundingClientRect();
+    const legend = view.container?.querySelector('[aria-label="Legend"]')?.getBoundingClientRect();
+    const viewport = fitAllViewport({
+      bounds: view.bounds,
+      nodes: view.current.map(node => ({
+        x: node.position.x,
+        y: node.position.y,
+        width: node.width ?? 0,
+        height: node.height ?? 0,
+      })),
+      width: view.width,
+      height: view.height,
+      legend: box && legend ? { right: legend.right - box.left + 8, bottom: legend.bottom - box.top + 8 } : undefined,
+    });
+    void view.flow.setViewport(viewport);
   }, []);
 
   // A refocus leaves the view exactly where the user put it, pan and zoom. Only when the newly focused page
@@ -1361,7 +1378,7 @@ function KnowledgePageGraphInner({
         frame = undefined;
         if (needsFit || fitPending.current) {
           needsFit = false;
-          fit(true);
+          fitInitial();
         } else nudgeToSelection();
       });
     });
@@ -1370,7 +1387,7 @@ function KnowledgePageGraphInner({
       observer.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
     };
-  }, [hasNodes, fit, nudgeToSelection]);
+  }, [hasNodes, fitInitial, nudgeToSelection]);
 
   // A selection made outside the graph (tree, search, a link) pans to that page at the current zoom. A
   // click on the graph itself leaves the view where the user put it.
@@ -1478,7 +1495,7 @@ function KnowledgePageGraphInner({
         edgeTypes={edgeTypes}
         onInit={() => {
           initialized.current = true;
-          fit(true);
+          fitInitial();
         }}
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
@@ -1492,11 +1509,7 @@ function KnowledgePageGraphInner({
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
         <Controls showInteractive={false} showFitView={false}>
-          <ControlButton
-            onClick={() => fit(false, fitDuration(prefersMotion()), true)}
-            title="Fit view"
-            aria-label="Fit view"
-          >
+          <ControlButton onClick={() => fit(fitDuration(prefersMotion()))} title="Fit view" aria-label="Fit view">
             <Maximize aria-hidden />
           </ControlButton>
         </Controls>

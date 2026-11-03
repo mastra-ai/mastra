@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { fitDuration, fitViewport, NUDGE_PADDING, nudgeAxis, RING_MIN_ZOOM } from './fitViewport';
+import {
+  fitAllViewport,
+  fitDuration,
+  fitViewport,
+  INITIAL_FIT_MAX_ZOOM,
+  INITIAL_FIT_PADDING,
+  NUDGE_PADDING,
+  nudgeAxis,
+  RING_MIN_ZOOM,
+} from './fitViewport';
 import { READABLE_MIN_ZOOM } from './graphShape';
 import { KNOWLEDGE_GRAPH_TRANSITION_MS } from './useLeavingNodes';
 
@@ -12,7 +21,7 @@ describe('fitViewport', () => {
   const ring = { x: -1200, y: -1200, width: 2400, height: 2400 };
 
   it('goes below the readable floor only when asked to frame a ring, so the whole ring is in view', () => {
-    const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, focus: false, ring: true, anchor });
+    const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, ring: true, anchor });
     expect(view.zoom).toBeLessThan(READABLE_MIN_ZOOM);
     expect(view.zoom).toBeGreaterThanOrEqual(RING_MIN_ZOOM);
     expect(ring.x * view.zoom + view.x).toBeGreaterThanOrEqual(0);
@@ -21,7 +30,7 @@ describe('fitViewport', () => {
   });
 
   it('keeps the readable floor for a focus without a ring, and centres on the focus when it bites', () => {
-    const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, focus: true, anchor });
+    const view = fitViewport({ bounds: ring, width: WIDTH, height: HEIGHT, anchor });
     expect(view.zoom).toBe(READABLE_MIN_ZOOM);
     expect(view.x).toBeCloseTo(WIDTH / 2, 5);
     expect(view.y).toBeCloseTo(HEIGHT / 2, 5);
@@ -52,5 +61,69 @@ describe('nudgeAxis', () => {
 
   it('centres a page too big to fit with its padding', () => {
     expect(nudgeAxis(-100, 760, 800)).toBe(400 - (-100 + 380));
+  });
+});
+
+describe('fitAllViewport', () => {
+  const rect = (x: number, y: number, size = 100) => ({ x, y, width: size, height: size });
+  const topLeft = rect(-1000, -500);
+  const bottomRight = rect(900, 400);
+  const nodes = [topLeft, rect(900, -500), rect(-1000, 400), bottomRight, rect(-50, -50)];
+  const bounds = { x: -1000, y: -500, width: 2000, height: 1000 };
+  const screen = (view: { x: number; y: number; zoom: number }, n: ReturnType<typeof rect>) => ({
+    left: n.x * view.zoom + view.x,
+    top: n.y * view.zoom + view.y,
+    right: (n.x + n.width) * view.zoom + view.x,
+    bottom: (n.y + n.height) * view.zoom + view.y,
+  });
+
+  it('frames every node inside the pane with a margin', () => {
+    const view = fitAllViewport({ bounds, nodes, width: WIDTH, height: HEIGHT });
+    for (const n of nodes) {
+      const at = screen(view, n);
+      expect(at.left).toBeGreaterThanOrEqual(0);
+      expect(at.right).toBeLessThanOrEqual(WIDTH);
+      expect(at.top).toBeGreaterThanOrEqual(0);
+      expect(at.bottom).toBeLessThanOrEqual(HEIGHT);
+    }
+    const first = screen(view, topLeft);
+    const last = screen(view, bottomRight);
+    const marginX = Math.min(first.left, WIDTH - last.right);
+    const marginY = Math.min(first.top, HEIGHT - last.bottom);
+    expect(Math.min(marginX, marginY)).toBeGreaterThan(INITIAL_FIT_PADDING * Math.min(WIDTH, HEIGHT) * 0.5);
+  });
+
+  it('goes below the readable floor when the graph is too big for it', () => {
+    const wide = { x: -3000, y: -3000, width: 6000, height: 6000 };
+    expect(fitAllViewport({ bounds: wide, nodes: [], width: WIDTH, height: HEIGHT }).zoom).toBeLessThan(
+      READABLE_MIN_ZOOM,
+    );
+  });
+
+  it('does not zoom in past the pages own size for a small graph', () => {
+    const small = { x: 0, y: 0, width: 200, height: 100 };
+    expect(fitAllViewport({ bounds: small, nodes: [], width: WIDTH, height: HEIGHT }).zoom).toBe(INITIAL_FIT_MAX_ZOOM);
+  });
+
+  it('keeps every node clear of the legend in the top left', () => {
+    const legend = { right: 220, bottom: 330 };
+    const plain = fitAllViewport({ bounds, nodes, width: WIDTH, height: HEIGHT });
+    expect(screen(plain, topLeft).left).toBeLessThan(legend.right);
+    expect(screen(plain, topLeft).top).toBeLessThan(legend.bottom);
+
+    const view = fitAllViewport({ bounds, nodes, width: WIDTH, height: HEIGHT, legend });
+    for (const n of nodes) {
+      const at = screen(view, n);
+      expect(at.left >= legend.right || at.top >= legend.bottom).toBe(true);
+      expect(at.right).toBeLessThanOrEqual(WIDTH);
+      expect(at.bottom).toBeLessThanOrEqual(HEIGHT);
+    }
+  });
+
+  it('leaves the fit alone when nothing is under the legend', () => {
+    const legend = { right: 10, bottom: 10 };
+    expect(fitAllViewport({ bounds, nodes, width: WIDTH, height: HEIGHT, legend })).toEqual(
+      fitAllViewport({ bounds, nodes, width: WIDTH, height: HEIGHT }),
+    );
   });
 });

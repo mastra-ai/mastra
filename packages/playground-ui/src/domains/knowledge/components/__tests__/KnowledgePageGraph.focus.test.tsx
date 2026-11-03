@@ -171,7 +171,7 @@ describe('KnowledgePageGraph focus on the selected page', () => {
     });
   });
 
-  describe('when the graph is too big to fit at a readable zoom', () => {
+  describe('the first view of a graph too big to fit at a readable zoom', () => {
     const crowd = [
       page('hub', null),
       ...Array.from({ length: 45 }, (_, index) => ({
@@ -180,16 +180,18 @@ describe('KnowledgePageGraph focus on the selected page', () => {
       })),
     ];
 
-    it('stops at the readable zoom and centres the page it is built around, cropping the edge instead', async () => {
+    it('zooms out until every circle is in the pane, with a margin, instead of cropping the edge', async () => {
       renderWithProviders(
         <KnowledgePageGraph pages={crowd} edges={[]} selectedPageId={null} centerId="hub" onSelect={() => {}} />,
       );
       await screen.findAllByTestId('knowledge-page-node');
       const viewport = setViewport.mock.calls.at(-1)?.[0];
-      expect(viewport?.zoom).toBe(0.7);
-      const box = screenBox(['hub']);
-      expect((box.left + box.right) / 2).toBeCloseTo(WIDTH / 2, 0);
-      expect((box.top + box.bottom) / 2).toBeCloseTo(HEIGHT / 2, 0);
+      expect(viewport?.zoom).toBeLessThan(0.7);
+      const box = screenBox(crowd.map(p => p.id));
+      expect(box.left).toBeGreaterThanOrEqual(WIDTH * 0.05 - 1);
+      expect(box.right).toBeLessThanOrEqual(WIDTH * 0.95 + 1);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(HEIGHT);
     });
   });
 
