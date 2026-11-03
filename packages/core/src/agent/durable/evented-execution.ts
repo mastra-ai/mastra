@@ -137,6 +137,15 @@ export async function participateInDurableExecution<T>(
   }
 }
 
+/** Stop renewing the claim of a root terminal delivery the processor abandoned, so another worker can recover the run. */
+export async function stopAbandonedDurableExecution(mastra: Mastra, event: Event): Promise<void> {
+  if (!isRootTerminal(event)) return;
+  const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
+  const claim = getExecutionClaim(context, event.runId);
+  if (!claim) return;
+  await mastra.__getRunScope(event.runId)?.get(PARTICIPANTS)?.get(claim.executionId)?.stop();
+}
+
 /** Retry only conditional cleanup after a terminal delivery released its claim before broker acknowledgement. */
 export async function retrySettledDurableExecution(mastra: Mastra, event: Event): Promise<boolean> {
   if (!isRootTerminal(event)) return false;

@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import {
   participateInDurableExecution,
   retrySettledDurableExecution,
+  stopAbandonedDurableExecution,
   settleEventedDurableExecution,
 } from '../../../agent/durable/evented-execution';
 import {
@@ -4565,6 +4566,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       const execute = async () => {
         const result = await this.#handleDelivery(event);
         if (result.ok) await settleEventedDurableExecution(this.mastra, event);
+        // No delivery is left to settle an abandoned root terminal, so stop renewing its claim.
+        else if (!result.retry) await stopAbandonedDurableExecution(this.mastra, event);
         return result;
       };
       return await participateInDurableExecution(this.mastra, event, execute);
@@ -4754,16 +4757,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Transport-level retries are exhausted. Surface as a terminal workflow
       // failure so any caller awaiting workflows-finish (e.g. agent.generate())
       // sees an error instead of hanging forever.
-      const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
-      // Never republish workflow.fail for an event that IS workflow.fail.
-      // Each publish gets a fresh event id (fresh retry bucket), so with a
-      // persistently-broken dependency (e.g. missing workflows table) the
-      // fail event would exhaust its own budget and publish another
-      // workflow.fail forever.
-      if (event.type === 'workflow.fail' || !failWorkflowData?.workflowId || !failWorkflowData.runId) {
-        this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
-        return { ok: false, retry: false };
-      }
       return this.#publishPendingFailure(event, eventKey, { error: getErrorFromUnknown(err), publishAttempts: 0 });
     }
   }
@@ -4780,6 +4773,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     eventKey: string,
     pending: { error: Error; publishAttempts: number },
   ): Promise<{ ok: false; retry: boolean }> {
+    const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
+    // Never republish workflow.fail for an event that IS workflow.fail.
+    // Each publish gets a fresh event id (fresh retry bucket), so with a
+    // persistently-broken dependency (e.g. missing workflows table) the
+    // fail event would exhaust its own budget and publish another
+    // workflow.fail forever.
+    if (event.type === 'workflow.fail' || !failWorkflowData?.workflowId || !failWorkflowData.runId) {
+      this.pendingFailures.delete(eventKey);
+      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+      return { ok: false, retry: false };
+    }
     const publishAttempts = pending.publishAttempts + 1;
     try {
       await this.errorWorkflow(event.data as Omit<ProcessorArgs, 'workflow'>, pending.error);

@@ -1277,3 +1277,53 @@ it('detaches worker participants on shutdown without invalidating a surviving pa
     generation: coordinator.generation,
   });
 });
+
+it('stops renewing the claim when the processor abandons a root terminal delivery', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  coordinator.stopHeartbeat();
+  const terminal: Event = {
+    id: 'abandoned-terminal',
+    type: 'workflow.end',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: 'durable-agentic-loop',
+      runId: 'run',
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+    },
+  };
+  const processor = new WorkflowEventProcessor({ mastra });
+  vi.spyOn(processor, 'loadData').mockRejectedValue(
+    Object.assign(new Error('SQLITE_BUSY: database is locked (test)'), { code: 'SQLITE_BUSY' }),
+  );
+  const renewals = vi.spyOn(workflowsStore, 'renewRunOwnership');
+  try {
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    await vi.waitFor(() => expect(renewals).toHaveBeenCalled(), { timeout: EXECUTION_LEASE_TTL_MS * 2 });
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: false });
+    const renewed = renewals.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, EXECUTION_LEASE_TTL_MS * 1.5));
+    expect(renewals).toHaveBeenCalledTimes(renewed);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+      ownerId: coordinator.executionId,
+      live: false,
+    });
+  } finally {
+    renewals.mockRestore();
+    await stopDurableExecutionParticipants(mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
