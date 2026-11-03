@@ -2,7 +2,10 @@ import { AppRenderer } from '@mcp-ui/client';
 import type { AppRendererHandle, SandboxConfig } from '@mcp-ui/client';
 import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import type { ComponentProps } from 'react';
 import { useTheme } from '@/ds/components/ThemeProvider';
+
+type HostCapabilities = NonNullable<ComponentProps<typeof AppRenderer>['hostCapabilities']>;
 
 const SANDBOX_PROXY_HTML = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>html,body{margin:0;padding:0;width:100%;height:100%}</style></head>
@@ -36,7 +39,7 @@ export interface McpAppViewerProps {
   toolInput?: Record<string, unknown>;
   /** Tool execution result (delivered via tool-result notification) */
   toolResult?: unknown;
-  /** Callback when the app sends a tool call request via callServerTool */
+  /** Callback when the app sends a tool call request via callServerTool. Resolves with the tool's output. */
   onToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Callback when the app sends a message via sendMessage (drives new chat turns) */
   onSendMessage?: (content: string) => void;
@@ -71,6 +74,18 @@ export function McpAppViewer({
   // in AppRenderer. A new object reference triggers bridge recreation → sandbox
   // timeout → toolInput never delivered.
   const hostInfo = useMemo(() => ({ name: 'Mastra Studio', version: '1.0.0' }), []);
+  // Advertise only what this viewer handles; apps feature-detect these before calling.
+  // Memoized for the same reason as hostInfo.
+  const canCallTools = Boolean(onToolCall);
+  const canSendMessages = Boolean(onSendMessage);
+  const hostCapabilities: HostCapabilities = useMemo(
+    () => ({
+      openLinks: {},
+      ...(canCallTools && { serverTools: {} }),
+      ...(canSendMessages && { message: {} }),
+    }),
+    [canCallTools, canSendMessages],
+  );
   const { resolvedTheme } = useTheme();
   const hostContext = useMemo(() => ({ theme: resolvedTheme }), [resolvedTheme]);
 
@@ -97,7 +112,6 @@ export function McpAppViewer({
       const raw = await onToolCall(params.name, params.arguments ?? {});
 
       // Detect if the result is already a CallToolResult (has content array with typed items)
-      // or wrapped in an API envelope { result: CallToolResult }
       const isCtResult = (obj: unknown): boolean =>
         !!obj &&
         typeof obj === 'object' &&
@@ -105,9 +119,6 @@ export function McpAppViewer({
         ((obj as Record<string, unknown>).content as unknown[]).length > 0 &&
         typeof ((obj as Record<string, unknown>).content as Record<string, unknown>[])[0]?.type === 'string';
 
-      if (raw && typeof raw === 'object' && 'result' in raw && isCtResult((raw as Record<string, unknown>).result)) {
-        return (raw as { result: CallToolResult }).result;
-      }
       if (isCtResult(raw)) {
         return raw as CallToolResult;
       }
@@ -169,6 +180,7 @@ export function McpAppViewer({
         toolInput={toolInput}
         toolResult={normalizedToolResult}
         hostInfo={hostInfo}
+        hostCapabilities={hostCapabilities}
         hostContext={hostContext}
         onCallTool={handleCallTool}
         onMessage={handleMessage}

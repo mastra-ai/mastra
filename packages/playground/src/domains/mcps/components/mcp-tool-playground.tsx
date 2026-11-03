@@ -2,6 +2,7 @@ import type { McpToolInfo } from '@mastra/client-js';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
+import { useMastraClient } from '@mastra/react';
 import { useExecuteMCPTool, useMcpAppHtml } from '@mastra/react/hooks/mcps';
 import { getAppResourceUri, isSuspendedResult } from '../utils/mcp-tool-result';
 import { ToolPlayground } from '@/domains/tools/components/tool-playground';
@@ -15,6 +16,7 @@ export interface McpToolPlaygroundProps {
 
 /** The Playground for an MCP tool, with its app UI (when it ships one) and a note for suspended results. */
 export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
+  const client = useMastraClient();
   const { mutateAsync, status, data: result, error } = useExecuteMCPTool({ serverId, toolId: tool.name });
   const { data: appHtml } = useMcpAppHtml({ serverId, appResourceUri: getAppResourceUri(tool._meta) });
   const zodInputSchema = toZodInputSchema(tool.inputSchema);
@@ -31,7 +33,11 @@ export function McpToolPlayground({ serverId, tool }: McpToolPlaygroundProps) {
         <McpAppViewer
           html={appHtml}
           toolName={tool.name}
-          onToolCall={(_toolName, args) => mutateAsync({ data: args })}
+          onToolCall={async (toolName, args) => {
+            // The app may call any tool on its server, not only the one this page runs.
+            const response = await client.getMcpServerTool(serverId, toolName).execute({ data: args });
+            return 'result' in response ? response.result : response;
+          }}
         />
       )}
       {isSuspendedResult(result) && (
