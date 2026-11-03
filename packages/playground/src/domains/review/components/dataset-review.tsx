@@ -406,7 +406,7 @@ export function DatasetReview({
   // Tag filters and deep links only see loaded pages, so keep loading until something shows.
   const needsMoreItems = displayItems.length === 0 || Boolean(featuredItemId && !featuredItem);
   useEffect(() => {
-    if (needsMoreItems && displayQuery.hasNextPage && !displayQuery.isFetchingNextPage) {
+    if (needsMoreItems && displayQuery.hasNextPage && !displayQuery.isFetching) {
       void displayQuery.fetchNextPage();
     }
   }, [needsMoreItems, displayQuery]);

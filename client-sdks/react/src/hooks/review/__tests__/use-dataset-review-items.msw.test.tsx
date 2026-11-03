@@ -2,7 +2,7 @@
 import type { DatasetExperimentResult, UpdateExperimentResultParams } from '@mastra/client-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraReactProvider } from '../../../mastra-react-provider';
@@ -38,7 +38,10 @@ const makeWrapper = () => {
   );
 };
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const servePagedResults = (
   resultsByExperiment: Record<string, DatasetExperimentResult[]>,
@@ -300,6 +303,71 @@ describe('useReviewItems', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data?.map(item => item.id)).toEqual(['exp-1-result-120']);
       expect(result.current.hasNextPage).toBe(false);
+    });
+
+    it('keeps every pending result when a review is completed while the next page loads', async () => {
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(private readonly callback: IntersectionObserverCallback) {}
+          observe(target: Element) {
+            this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+          }
+          disconnect() {}
+        },
+      );
+      let stored = manyResults(250, flaggedIndexes.concat(Array.from({ length: 100 }, (_, index) => 150 + index)));
+      let nextPageStarted = false;
+      server.use(
+        http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, async ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          if (page > 0) nextPageStarted = true;
+          await delay(page > 0 || nextPageStarted ? 100 : 0);
+          const list = stored.filter(r => r.status === query.get('status'));
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+        http.patch(
+          `${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
+          ({ params }) => {
+            stored = stored.map(r => (r.id === params.resultId ? { ...r, status: 'complete' } : r));
+            return HttpResponse.json(stored.find(r => r.id === params.resultId));
+          },
+        ),
+      );
+
+      const { result } = renderHook(
+        () => ({
+          queue: useInfiniteReviewItems({ experiments: [experiment] }),
+          mutations: useDatasetMutations(),
+        }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.queue.data).toHaveLength(100));
+      act(() => result.current.queue.setEndOfListElement(document.createElement('div')));
+      await waitFor(() => expect(nextPageStarted).toBe(true));
+
+      await act(() =>
+        result.current.mutations.updateExperimentResult.mutateAsync({
+          datasetId: DATASET_ID,
+          experimentId: EXPERIMENT_ID,
+          resultId: 'exp-1-result-0',
+          status: 'complete',
+        }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.queue.hasNextPage).toBe(false);
+        expect(result.current.queue.isFetching).toBe(false);
+      });
+      const ids = result.current.queue.data?.map(item => item.id) ?? [];
+      expect(ids).not.toContain('exp-1-result-0');
+      expect(ids).toContain('exp-1-result-100');
+      expect(ids).toHaveLength(249);
     });
 
     it('loads completed results the same way', async () => {
