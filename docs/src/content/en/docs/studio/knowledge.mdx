@@ -112,7 +112,7 @@ Set the value to an array of scopes, or `'all'` for someone who should see the w
 ### Deployment notes
 
 - **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user with a principal mapping can read the pages those principals cover, in every instance.
-- **With an FGA provider:** each Knowledge instance is checked as resource type `knowledge`, by its registered key (`main` in `knowledge: { main }`), with `knowledge:read`. `GET /knowledge` lists only the instances the user can read. The other routes return `403` for any other instance. With `requireForProtectedRoutes`, `GET /knowledge` is refused, because like the other list routes it has no FGA metadata.
+- **With an FGA provider:** each Knowledge instance is checked as resource type `knowledge`, by its registered key (`main` in `knowledge: { main }`), with `knowledge:read`. `GET /knowledge` lists only the instances the user can read. The other routes return `404` for any other instance, the same as for one that doesn't exist. With `requireForProtectedRoutes`, `GET /knowledge` is refused, because like the other list routes it has no FGA metadata.
 - **NestJS:** the NestJS adapter doesn't serve the Knowledge routes yet.
 
 ## Build your own view
