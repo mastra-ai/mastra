@@ -83,7 +83,7 @@ export const knowledge = new Knowledge({
     name: 'pinnedContext',
     type: 'Array<string | { list: string; depth?: number }>',
     description:
-      "What every run holding a scope of this type gets pinned. A string is a page path, such as `policy:$orgId#refund-policy`. `{ list, depth }` pins a listing of the pages under a scope or page path, `depth` 1 to 3 (default 1), such as `{ list: 'site:$siteId', depth: 1 }`. Each path is a [page path](/reference/knowledge/knowledge-tools#page-references) whose `$params` bind from the holding scope. A malformed path, an undeclared scope type, or a `$param` the holding scope lacks fails at startup. See [Pinned context](/docs/knowledge/pinned-context).",
+      "What every run holding a scope of this type gets pinned. A string is a page path, such as `policy:$orgId#refund-policy`. `{ list, depth }` pins a listing of the pages under a scope or page path, `depth` 1 to 3 (default 1), such as `{ list: 'site:$siteId', depth: 1 }`. Each path is a [page path](/reference/knowledge/knowledge-tools#page-references) whose `$params` bind from the holding scope. A malformed path, an undeclared scope type, or a `$param` the holding scope lacks fails at startup. Pins are delivered only when the `Knowledge` instance sets `pinnedContext` and the agent has Memory. See [Pinned context](/docs/knowledge/pinned-context).",
     isOptional: true,
   },
   {
