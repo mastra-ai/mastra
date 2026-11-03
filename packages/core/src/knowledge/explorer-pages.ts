@@ -9,7 +9,12 @@ import type {
   KnowledgePin,
   KnowledgeReadScope,
 } from '../storage';
-import { knowledgeScopeReadable, MAX_KNOWLEDGE_PAGE_LIST_LIMIT, parseKnowledgePageRef } from '../storage';
+import {
+  KnowledgeUnsupportedCapabilityError,
+  knowledgeScopeReadable,
+  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
+  parseKnowledgePageRef,
+} from '../storage';
 import type { KnowledgeRole } from './declarations';
 
 /**
