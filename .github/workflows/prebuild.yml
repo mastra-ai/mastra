@@ -1,23 +1,31 @@
 name: Prebuild
 
 on:
+  # Every base branch, so stacked PRs (base = the parent PR's branch) get the required checks.
+  # `edited` reruns the workflow when a PR's base changes, e.g. when GitHub retargets a
+  # stacked PR to main after its parent merges. Title and body edits also send `edited`;
+  # those runs skip every job (see the `changes` guard) and rename their jobs, because a
+  # skipped job counts as passing and would otherwise replace the real result of the
+  # check with the same name on the same commit.
   pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [main, 0.x]
+    types: [opened, synchronize, reopened, edited]
   # Lets other workflows (e.g. the alpha cron, which publishes without a PR) gate on the
   # full suite without duplicating these jobs. A call always runs the full suite on the
   # caller's commit.
   workflow_call:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  # A title or body edit runs nothing, so it gets its own group and never cancels a real run.
+  group: ${{ github.workflow }}-${{ (github.event.action == 'edited' && !github.event.changes.base) && github.run_id || github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 permissions: {}
 
 jobs:
   changes:
-    name: Detect code changes
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Detect code changes (PR edit, not run)' || 'Detect code changes' }}
+    # A PR edit that keeps the base runs nothing; every other job needs this one.
+    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: starsling-ubuntu-26.04-2
     permissions:
       contents: read
@@ -73,7 +81,7 @@ jobs:
           fi
 
   prebuild:
-    name: Build
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Build (PR edit, not run)' || 'Build' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
@@ -111,7 +119,7 @@ jobs:
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
   affected-tests:
-    name: Detect affected tests
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Detect affected tests (PR edit, not run)' || 'Detect affected tests' }}
     needs: changes
     if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
     runs-on: starsling-ubuntu-26.04
@@ -441,7 +449,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
   memory-test:
-    name: Memory Tests
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Memory Tests (PR edit, not run)' || 'Memory Tests' }}
     needs: [changes, affected-tests, prebuild]
     if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success'
     runs-on: starsling-ubuntu-26.04
@@ -512,7 +520,7 @@ jobs:
   # someone to open the PR. It alerts once when the suite goes red and once when it is green
   # again, not on every push in between. Calls (e.g. the alpha cron) send their own alert.
   notify-release-pr-status:
-    name: Notify Slack of release PR status
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Notify Slack of release PR status (PR edit, not run)' || 'Notify Slack of release PR status' }}
     needs:
       [
         changes,
@@ -525,7 +533,7 @@ jobs:
         workspace-tests,
         memory-test,
       ]
-    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')
+    if: always() && needs.changes.result != 'skipped' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')
     runs-on: starsling-ubuntu-26.04
     permissions:
       actions: read
@@ -554,14 +562,15 @@ jobs:
           # conclusion is not usable: a newer push marks a run cancelled even when every job
           # already passed, so a green run would be skipped and each later green push would
           # alert "green again" against the last red one.
-          # Prints failure, success, or nothing when the run was cancelled or unreadable.
+          # Prints failure, success, or nothing when the run was cancelled or unreadable, or
+          # skipped every job (a PR title or body edit, which tested nothing).
           job_state() {
             local conclusions
             conclusions=$(gh api --paginate "$1?per_page=100" \
               --jq '.jobs[] | select(.name | startswith("Notify Slack") | not) | .conclusion' 2>/dev/null) || return 0
             if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
               echo failure
-            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
+            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions" && grep -qvx skipped <<< "$conclusions"; then
               echo success
             fi
           }

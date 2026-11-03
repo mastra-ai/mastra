@@ -1,19 +1,28 @@
 name: Quality assurance
 
 on:
+  # Every base branch, so stacked PRs (base = the parent PR's branch) get the required checks.
+  # `edited` reruns the workflow when a PR's base changes, e.g. when GitHub retargets a
+  # stacked PR to main after its parent merges. Title and body edits also send `edited`;
+  # those runs skip every job (see the guards on `changes`, `changeset-check` and
+  # `new-package-npm-check`) and rename their jobs, because a
+  # skipped job counts as passing and would otherwise replace the real result of the
+  # check with the same name on the same commit.
   pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [main, 0.x]
+    types: [opened, synchronize, reopened, edited]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  # A title or body edit runs nothing, so it gets its own group and never cancels a real run.
+  group: ${{ github.workflow }}-${{ (github.event.action == 'edited' && !github.event.changes.base) && github.run_id || github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 permissions: {}
 
 jobs:
   changes:
-    name: Detect code changes
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Detect code changes (PR edit, not run)' || 'Detect code changes' }}
+    # A PR edit that keeps the base runs nothing.
+    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: starsling-ubuntu-26.04-2
     permissions:
       contents: read
@@ -67,7 +76,8 @@ jobs:
           '
 
   changeset-check:
-    name: Validate changeset packages
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Validate changeset packages (PR edit, not run)' || 'Validate changeset packages' }}
+    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: starsling-ubuntu-26.04-2
     timeout-minutes: 10
     permissions:
@@ -117,7 +127,8 @@ jobs:
         run: pnpm changeset-cli status --since origin/main
 
   new-package-npm-check:
-    name: New packages exist on npm
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'New packages exist on npm (PR edit, not run)' || 'New packages exist on npm' }}
+    if: github.event.action != 'edited' || github.event.changes.base
     runs-on: starsling-ubuntu-24.04-2
     timeout-minutes: 10
     permissions:
@@ -171,7 +182,7 @@ jobs:
         run: node .github/scripts/check-npm-packages-exist.mjs --since "origin/$BASE_REF"
 
   lint:
-    name: Lint
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Lint (PR edit, not run)' || 'Lint' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
@@ -196,7 +207,7 @@ jobs:
         run: pnpm lint
 
   check-bundle:
-    name: Validate build outputs
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Validate build outputs (PR edit, not run)' || 'Validate build outputs' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
@@ -240,7 +251,7 @@ jobs:
         run: pnpm test
 
   validator:
-    name: Validate examples packages.json
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Validate examples packages.json (PR edit, not run)' || 'Validate examples packages.json' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
@@ -268,7 +279,7 @@ jobs:
         run: node .github/scripts/validate-examples.js
 
   agents-md-check:
-    name: Validate AGENTS.md files
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Validate AGENTS.md files (PR edit, not run)' || 'Validate AGENTS.md files' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
@@ -292,7 +303,7 @@ jobs:
         run: node .github/scripts/validate-agents-md.mjs
 
   readme-check:
-    name: Validate package READMEs
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Validate package READMEs (PR edit, not run)' || 'Validate package READMEs' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
@@ -318,7 +329,7 @@ jobs:
         run: node .github/scripts/check-package-readmes.mjs
 
   peerdeps-check:
-    name: Validate peer dependencies
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Validate peer dependencies (PR edit, not run)' || 'Validate peer dependencies' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
@@ -372,7 +383,7 @@ jobs:
           fi
 
   validate-pkg-json:
-    name: Validate package.json files
+    name: ${{ github.event.action == 'edited' && !github.event.changes.base && 'Validate package.json files (PR edit, not run)' || 'Validate package.json files' }}
     needs: changes
     runs-on: starsling-ubuntu-26.04-2
     timeout-minutes: 10
