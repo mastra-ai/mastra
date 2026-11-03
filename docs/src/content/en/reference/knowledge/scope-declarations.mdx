@@ -121,7 +121,7 @@ A pattern ending in a param overlaps a longer one with the same start, so `kb:$o
 
 ## Rules
 
-`access` lists rules. Each rule names a principal and a role:
+`access` lists rules. Each rule names a principal, the run scope a run must hold for the rule to apply, and the role that run gets. The principal is a declared scope pattern or `self`, the scope being accessed:
 
 ```typescript oxfmt:false
 scopes: {

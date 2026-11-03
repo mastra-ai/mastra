@@ -57,7 +57,7 @@ export const knowledge = new Knowledge({
 
 ## Rules and roles
 
-Each declaration lists `access` **rules**. A rule names a principal, `self` or another declared pattern, and the role runs holding it get on scopes of this type:
+Each declaration lists `access` **rules**. A rule gives a role on scopes of this type to a **principal**: the run scope that has to be in a run for the rule to apply. A principal is written as a declared scope pattern, such as `org:$orgId`, or as `self`, which stands for the scope being accessed. Any run holding a scope that matches the principal gets the role:
 
 - `self` means the same scope: a run holding `team:acme:support` is an editor there.
 - `org:$orgId` binds `$orgId` from the team's address, so a run holding `org:acme` can read `team:acme:support` but never `team:globex:support`.
