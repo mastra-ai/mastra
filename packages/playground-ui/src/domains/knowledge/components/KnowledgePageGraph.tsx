@@ -1220,7 +1220,7 @@ function KnowledgePageGraphInner({
                     : PARENT_ARROW,
       };
     });
-    return { flowEdges, drawnEdgeStyles: drawn as ReadonlySet<EdgeStyleKey> };
+    return { flowEdges, drawnEdgeStyles: drawn };
   }, [laidOut, hoverExtra, onMentionSelect, emphasisId, focusParentId]);
   const flowEdges = useStableEdges(builtEdges);
   // Dimming is CSS: the container says something is emphasised, and only the page's neighbourhood is

@@ -361,7 +361,7 @@ describe('lazyGraph', () => {
     expect(groups.map(p => p.name)).toEqual(['5 thread scopes']);
     expect(collapsed.pages.some(p => p.id === 't0')).toBe(false);
 
-    const opened = lazyGraph({ ...input, openGroups: new Set([groups[0]?.id as string]) });
+    const opened = lazyGraph({ ...input, openGroups: new Set([groups[0]?.id]) });
     expect(opened.pages.filter(p => p.id.startsWith('t'))).toHaveLength(5);
 
     const focused = lazyGraph({ ...input, focusId: 'resource' });
