@@ -31,7 +31,7 @@ Text limits are counted in tokens. Counts are estimates, so treat the numbers as
 
 A write over a limit fails, and the model gets the error as the tool result. Tool schemas don't show the token limits, because a schema can't count tokens.
 
-Page bodies have no token limit. `knowledge_read` returns a long body in parts, and an agent [edits it one part at a time](/docs/knowledge/agents-and-tools#edit-a-long-page) by line `range`. Pinned page bodies are cut to fit the pinned-context budget. See [what a run receives](/docs/knowledge/pinned-context#what-a-run-receives).
+Page bodies have no token limit. `knowledge_read` returns a long body in parts, and an agent [edits it one part at a time](/reference/knowledge/knowledge-tools#knowledge_page) by line `range`. Pinned page bodies are cut to fit the pinned-context budget. See [what a run receives](/docs/knowledge/pinned-context#what-a-run-receives).
 
 Change the read cap with `tools: { read: { maxTokens } }`. See [`tools`](/reference/knowledge/knowledge-class#constructor-options). Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`. A `maxTokens` above 2000 throws when you construct it.
 

@@ -1,6 +1,6 @@
 ---
 title: "Agents and tools"
-description: "Turn on the Knowledge tools for an agent, and how agents browse, read, write and annotate pages with them."
+description: "Turn on the Knowledge tools for an agent, and what agents can do with them."
 packages:
   - "@mastra/core"
 ---
@@ -13,56 +13,37 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-An agent with Knowledge attached gets up to six tools. The model calls them, and your [scope declarations](/docs/knowledge/scopes-and-access) decide what each call may do. The tool inputs on this page are what the model sends, for a run that holds `org:acme` and `team:acme:support`.
+An agent with Knowledge attached works with it through tools. You choose which tools it gets, and your [scope declarations](/docs/knowledge/scopes-and-access) decide what each call may do.
 
 ## Turn on the tools
 
-Tools are off by default. `tools` turns them on in two groups, and `pinnedContext` adds the pin tool:
+Tools are off by default. Turn on reading and writing:
 
-| Option | Tools | Use |
-| - | - | - |
-| `tools: true` | All five read and write tools | Agents that read and write |
-| `tools: { read: true }` | `knowledge_list`, `knowledge_search`, `knowledge_read` | Agents that only answer from Knowledge |
-| `tools: { write: true }` | `knowledge_page`, `knowledge_note` | Agents that only add content |
-| `pinnedContext: true` | `knowledge_pin` | See [Pinned context](/docs/knowledge/pinned-context) |
-
-The tools only do what a run's roles allow at call time. Turning on `write` doesn't let a run write anywhere it has no role. Tool errors come back to the model as the tool result, not as exceptions in your code.
-
-Knowledge also adds short usage instructions for the tools it turns on. See [Tool instructions](/reference/knowledge/tool-instructions) to change them. To give the tools to an agent without attaching the instance, use [`createTools()`](/reference/knowledge/knowledge-class#createtools).
-
-## Browse and search
-
-Called with no `page`, `knowledge_read` lists the scopes the run holds, which is where the model starts. `knowledge_list` shows how a scope or section is organized, up to three levels deep, with each entry's `ref` and number of children:
-
-```json
-{ "from": "org:acme#policies", "depth": 2 }
+```typescript title="src/mastra/knowledge.ts"
+const knowledge = new Knowledge({
+  id: 'company',
+  scopes,
+  tools: true,
+})
 ```
 
-`knowledge_search` finds pages and notes that contain any word of the query, best matches first. `scope` narrows it to some scopes:
+For an agent that only answers from Knowledge, such as a docs or support agent, turn on reading alone:
 
-```json
-{ "query": "on-call rota", "scope": ["team:acme:support"] }
+```typescript
+const knowledge = new Knowledge({
+  id: 'docs',
+  scopes,
+  tools: { read: true },
+})
 ```
 
-When nothing matches, the result says so and suggests other key words or `knowledge_list`, so an agent can tell the user it doesn't know instead of guessing. See [Search and sync](/docs/knowledge/search-and-sync) for how results are ranked and how to add search by meaning.
+`tools: { write: true }` turns on writing alone. To let agents pin pages, add `pinnedContext: true`. See [Pinned context](/docs/knowledge/pinned-context).
 
-Results name every page by its `ref`, which every tool accepts back: a path such as `org:acme#policies/refund` when the page has a key on every level, otherwise its ID. Tools also accept a page's exact name. A name that matches more than one page is refused with the candidates' refs.
+## What agents can read
 
-## Read a page
+With the read tools, an agent finds and reads what its run can see. It can browse how a scope is organized, search pages and notes by keyword (and by meaning, with [semantic search](/docs/knowledge/search-and-sync#add-search-by-meaning)), and read a page with its notes and the notes on other pages that mention it. A long page comes back in parts: the first read shows the page's headings, and the agent then reads the section it needs, reads on from a line, or reads only the lines that match a term. When nothing matches, the result says so, so the agent can tell the user it doesn't know instead of guessing.
 
-`knowledge_read` returns a page's body, its notes, its child pages and the notes on other pages that mention it:
-
-```json
-{ "page": "org:acme#policies/refund" }
-```
-
-A long page doesn't come back whole. A read returns at most 1,000 tokens of body by default, as numbered lines (`12│text`) with the `range` they cover, and `more` says how to read on. The first read of a long page shows every heading with its line number and the first lines under it. The agent then reads one `section`, reads on `from` a line, or asks for the lines that `match` a term with a few lines of `context` around each, like `grep -C`:
-
-```json
-{ "page": "org:acme#policies/refund", "match": "damaged", "context": 2 }
-```
-
-Raise or lower the cap with `tools: { read: { maxTokens } }`, at least 100. Raise it for models with large context windows, and lower it for small models:
+One read returns at most 1,000 tokens of a page by default. Raise the cap for models with large context windows, or lower it for small models:
 
 ```typescript
 const knowledge = new Knowledge({
@@ -72,82 +53,18 @@ const knowledge = new Knowledge({
 })
 ```
 
-Reading needs `viewer`. See [`knowledge_read`](/reference/knowledge/knowledge-tools#knowledge_read) for every option.
+## What agents can write
 
-## Write pages
+With the write tools, an agent creates pages in the scopes it can write to, and puts each one where its audience is: a fact for the whole team in the team's scope, one for this user only in the user's scope. It edits a page by changing only the lines it read, so it never overwrites parts of a long page it hasn't seen, and an edit is refused if someone changed the page since the agent read it. It can also move, merge and delete pages, and add notes: short attributed facts on a page, which can link to other pages and carry their own audience.
 
-`knowledge_page` with `op: "write"` creates a page when there's no `page`, and edits one when there is. `scope` is where a new page goes. The model picks the scope by audience. A fact for the whole team goes in `team:acme:support`, and one only for this user in `resource:dana`. To create a team page, the model sends:
+## What a call is allowed to do
 
-```json
-{
-  "op": "write",
-  "scope": "team:acme:support",
-  "key": "chargebacks",
-  "name": "Chargeback Playbook",
-  "description": "How support handles chargebacks.",
-  "body": "## Steps\n\n1. Freeze the card.\n2. Open a dispute in the billing console."
-}
-```
+Turning on a tool doesn't grant access. Each call is checked against the roles the run holds in the scopes it touches: reading needs `viewer`, creating pages and adding notes needs `contributor`, editing needs `editor`, and deleting needs `owner`. A refused call comes back to the model as the tool result, not as an exception in your code. See [what each operation needs](/reference/knowledge/knowledge-tools#what-each-operation-needs).
 
-Creating needs `contributor` on `scope`. `key` gives the page a path, here `team:acme:support#chargebacks`, and `parent` creates it under another page in the same scope.
-
-Editing needs `editor` on the page's scope. Pass the `version` from the last read as `expectedVersion`, and the write is refused if someone changed the page since:
-
-```json
-{
-  "op": "write",
-  "page": "team:acme:support#chargebacks",
-  "body": "Freeze the card, open a dispute, and email the customer.",
-  "expectedVersion": 1
-}
-```
-
-### Edit a long page
-
-A `body` on its own replaces the whole body, so it only works on a page short enough to come back in one read. On a longer page, the agent edits a few lines at a time: it passes a `range` from a read, or a smaller one inside it, with the new text, and only those lines change. An empty `body` removes them:
-
-```json
-{
-  "op": "write",
-  "page": "org:acme#policies/refund",
-  "body": "## Damaged items\n\nDamaged items always get a full refund and a prepaid return label.\n",
-  "range": { "start": { "line": 5 }, "end": { "line": 8 } },
-  "expectedVersion": 1
-}
-```
-
-Send the text without the `5│` line numbers. Writing a whole `body` to a long page is refused, because the writer can only have seen part of it:
-
-```text
-This page's body is 12892 characters, more than one knowledge_read returns, and a body write without a range replaces all of it. Write back only the lines you read, with the range that read returned and its expectedVersion; read other parts with from, section or match and write each back with its own range.
-```
-
-### Move, merge and delete
-
-`op: "move"` moves a page under `parent` or to the top of `scope`. `op: "merge"` merges a page into another and keeps both pages' notes. `op: "delete"` removes a page with no child pages. Moving within a scope needs `editor`. Moving across scopes, merging a page away and deleting need `owner`. Pages declared in config can be edited but not moved, merged away or deleted. See [what each operation needs](/reference/knowledge/knowledge-tools#what-each-operation-needs).
-
-## Add notes
-
-A note is a short attributed fact on a page, up to about 250 tokens. Contributors can add notes to pages whose body they can't edit:
-
-```json
-{
-  "op": "add",
-  "page": "team:acme:support#chargebacks",
-  "scope": ["team:acme:support"],
-  "text": "Disputes over $500 go to [[org:acme#policies/escalation]].",
-  "when": "2026-10-29"
-}
-```
-
-- `scope` lists the note's stamps. A run sees the note when it can read the page and holds at least one stamp.
-- `[[...]]` links another page by path or name. Reading that page lists this note under `mentionedIn`.
-- `when` records when the fact was true, as an ISO 8601 date or date-time.
-
-Adding a note needs `contributor` on the page's scope and on every stamp. Each note records its author as `agent:<agentId>` and the thread it came from. `op: "restamp"` replaces a note's stamps and `op: "remove"` removes it. Both need `editor` on the page's scope.
+Knowledge also adds short usage instructions for the tools it turns on, so you don't need to explain them in your agent's instructions. See [Tool instructions](/reference/knowledge/tool-instructions) to change them. To give the tools to an agent without attaching the instance, use [`createTools()`](/reference/knowledge/knowledge-class#createtools).
 
 ## Related
 
-- [Knowledge tools reference](/reference/knowledge/knowledge-tools)
+- [Knowledge tools reference](/reference/knowledge/knowledge-tools): every tool's inputs, results and errors.
 - [Limits](/reference/knowledge/limits)
 - [Pinned context](/docs/knowledge/pinned-context)
