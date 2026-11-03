@@ -15,7 +15,9 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
+import { cloneRunData } from '../storage/domains/workflows/inmemory';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import type { WorkflowRunState } from './types';
@@ -469,5 +471,163 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     const stored = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
     expect(JSON.stringify(stored)).not.toContain('foreachProgress');
     expect((stored!.context.item as any).output).toEqual(items.map(index => ({ index, payload })));
+  });
+});
+
+const RUN_TABLES = ['workflows', 'workflowRunHeaders', 'workflowRunEntries'] as const;
+const WRITE_METHODS = [
+  'persistWorkflowSnapshot',
+  'updateWorkflowResults',
+  'updateWorkflowState',
+  'updateWorkflowRunHeader',
+  'writeWorkflowRunCheckpoint',
+  'appendWorkflowRunEntries',
+  'appendWorkflowRunStateDraft',
+  'deleteWorkflowRunById',
+] as const;
+
+type RunTables = Record<(typeof RUN_TABLES)[number], Map<string, any>>;
+
+async function runTablesOf(storage: InstanceType<typeof MockStore>): Promise<RunTables> {
+  return ((await storage.getStore('workflows')) as any).db;
+}
+
+function seeded(seed: number) {
+  return () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Publishes foreach progress events only once storage has been asked for another write (or
+ * after a while), like a pubsub slower than storage. Checkpoints then get taken while items
+ * that already finished wait on their progress event.
+ */
+class SlowProgressPubSub extends EventEmitterPubSub {
+  constructor(private readonly nextWrite: () => Promise<void>) {
+    super();
+  }
+
+  override async publish(...args: Parameters<EventEmitterPubSub['publish']>) {
+    if ((args[1] as any).data?.type === 'workflow-step-progress') await this.nextWrite();
+    return super.publish(...args);
+  }
+}
+
+/**
+ * Runs the workflow to the end against a store whose writes are copied when called and land
+ * after a random delay. When write number `crashAt` is called, keeps a copy of what storage
+ * holds: what a process that died right then leaves behind. Then restores that copy into fresh
+ * storage and restarts the run there with a freshly built workflow. Works for both storage
+ * versions, since it copies the store's tables rather than a snapshot. Returns undefined when
+ * the run made fewer writes, or none had landed yet.
+ */
+async function crashAtWrite(
+  build: () => Built,
+  {
+    inputData,
+    initialState,
+    crashAt,
+    seed,
+  }: { inputData: unknown; initialState?: unknown; crashAt: number; seed: number },
+) {
+  const random = seeded(seed);
+  let writeWaiters: Array<() => void> = [];
+  const nextWrite = () =>
+    new Promise<void>(resolve => {
+      writeWaiters.push(resolve);
+      setTimeout(resolve, 20);
+    });
+  const storage = new MockStore();
+  const first = build();
+  new Mastra({ logger: false, storage, workflows: { wf: first.workflow } });
+  const store = (await storage.getStore('workflows'))! as any;
+  const tables = await runTablesOf(storage);
+  let writes = 0;
+  let crashTables: RunTables | undefined;
+  for (const method of WRITE_METHODS) {
+    const write = store[method].bind(store);
+    vi.spyOn(store, method).mockImplementation(async (args: any) => {
+      if (writes++ === crashAt) {
+        crashTables = Object.fromEntries(RUN_TABLES.map(table => [table, cloneRunData(tables[table])])) as RunTables;
+      }
+      const copy = cloneRunData(args);
+      const waiters = writeWaiters;
+      writeWaiters = [];
+      waiters.forEach(release => release());
+      await sleep(Math.floor(random() * 4));
+      return write(copy);
+    });
+  }
+
+  const run = await first.workflow.createRun({ pubsub: new SlowProgressPubSub(nextWrite) });
+  const original = await run.start({ inputData, initialState });
+  expect(original.status).toBe('success');
+  if (!crashTables) return undefined;
+
+  const second = build();
+  const freshStorage = new MockStore();
+  new Mastra({ logger: false, storage: freshStorage, workflows: { wf: second.workflow } });
+  const freshTables = await runTablesOf(freshStorage);
+  for (const table of RUN_TABLES) {
+    for (const [key, value] of crashTables[table]) freshTables[table].set(key, value);
+  }
+  const freshStore = (await freshStorage.getStore('workflows'))!;
+  const stored = await freshStore.loadWorkflowSnapshot({ workflowName: second.workflow.id, runId: run.runId });
+  if (stored?.status !== 'running') return undefined;
+
+  const restarted = await (await second.workflow.createRun({ runId: run.runId })).restart();
+  return { original, restarted, fns: second.fns };
+}
+
+describe.each([1, 2] as const)('restart after a crash at any write inside a foreach (storage v%s)', storageVersion => {
+  it("applies every item's state changes once, wherever the crash lands", async () => {
+    // Items finish while progress checkpoints are in flight. A checkpoint that recorded an
+    // item's state changes without recording the item as finished would make the restart run
+    // it again on top of its own changes.
+    const items = Array.from({ length: 12 }, (_, i) => i);
+    const stateSchema = z.record(z.string(), z.number());
+    const build = (): Built => {
+      const random = seeded(7);
+      const execute = vi.fn(async ({ inputData, state, setState }: any) => {
+        await sleep(Math.floor(random() * 4));
+        await setState({ ...state, [`n${inputData}`]: (state[`n${inputData}`] ?? 0) + 1 });
+        return inputData;
+      });
+      const item = createStep({ id: 'item', inputSchema: z.number(), outputSchema: z.number(), stateSchema, execute });
+      const report = createStep({
+        id: 'report',
+        inputSchema: anySchema,
+        outputSchema: anySchema,
+        stateSchema,
+        execute: async ({ state }) => state,
+      });
+      const workflow = createWorkflow({
+        id: 'foreach-state-once',
+        inputSchema: z.array(z.number()),
+        outputSchema: anySchema,
+        stateSchema,
+        options: { storageVersion },
+      })
+        .foreach(item, { concurrency: 4 })
+        .then(report)
+        .commit();
+      return { workflow, fns: { item: execute } };
+    };
+    const expected = Object.fromEntries(items.map(i => [`n${i}`, 1]));
+
+    let restarts = 0;
+    for (let crashAt = 0; crashAt < 200; crashAt++) {
+      const outcome = await crashAtWrite(build, { inputData: items, initialState: {}, crashAt, seed: crashAt });
+      if (!outcome) {
+        if (restarts > 0) break;
+        continue;
+      }
+      restarts++;
+      expect(outcome.original.result).toEqual(expected);
+      expect(outcome.restarted.status, `crash at write ${crashAt}`).toBe('success');
+      expect(outcome.restarted.result, `crash at write ${crashAt}`).toEqual(expected);
+    }
+    expect(restarts).toBeGreaterThan(3);
   });
 });

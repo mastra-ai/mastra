@@ -1352,17 +1352,13 @@ export async function executeForeach(
       }
 
       const stepExecResult = await executeForeachIteration(item, k, resumeToUse);
-
-      engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-      Object.assign(stepResults, stepExecResult.stepResults);
-
       const result = stepExecResult.result as ForeachStepResult;
 
-      if (result.status !== 'success') {
-        await handleNonSuccessResult(result, k);
-      } else {
-        await handleSuccessResult(result, k);
-      }
+      // No await until the item is recorded: a write that carries the item's state
+      // changes then also carries its progress, so a restart doesn't run it again on
+      // top of its own changes.
+      engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
+      Object.assign(stepResults, stepExecResult.stepResults);
 
       if (result.status === 'success' && result.output !== undefined) {
         results[k] = result.output;
@@ -1388,6 +1384,12 @@ export async function executeForeach(
         // Not awaited: holding the queue slot for the write would change which
         // items start before a sibling suspends and stops the queue.
         scheduleCheckpoint();
+      }
+
+      if (result.status !== 'success') {
+        await handleNonSuccessResult(result, k);
+      } else {
+        await handleSuccessResult(result, k);
       }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
