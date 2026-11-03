@@ -1765,6 +1765,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  // Used when the host passes no `workspace`. Its plan-mode write guard must
+  // allow the same plans directory the prompts tell the agent to write to.
+  const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
+    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1814,9 +1818,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ? modelId
         : resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, googleVertexGateway, githubCopilotGateway, mastraCodeGateway],
-    workspace:
-      config?.workspace ??
-      (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir })),
+    workspace: config?.workspace ?? defaultWorkspace,
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
