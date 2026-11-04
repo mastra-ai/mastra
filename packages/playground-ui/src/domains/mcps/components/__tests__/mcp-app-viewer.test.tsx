@@ -144,6 +144,32 @@ describe('McpAppViewer', () => {
     expect(onUpdateModelContext).toHaveBeenLastCalledWith(undefined);
   });
 
+  it('opens web links the app asks for in a new tab, without giving the page a handle on Studio', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const app = await renderApp();
+
+    await app.openLink({ url: 'https://mastra.ai/docs' });
+
+    expect(open).toHaveBeenCalledWith('https://mastra.ai/docs', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
+  });
+
+  it('refuses links that would run code or read local files instead of opening a web page', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const app = await renderApp();
+
+    for (const url of [
+      'javascript:alert(document.cookie)',
+      'data:text/html,<script>alert(1)</script>',
+      'file:///etc/passwd',
+      'not a url',
+    ]) {
+      await expect(app.openLink({ url })).rejects.toThrow(/only opens http/);
+    }
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
   it('refuses model context when the chat has nowhere to put it', async () => {
     const app = await renderApp({ onSendMessage: vi.fn() });
 

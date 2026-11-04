@@ -9,4 +9,5 @@ Fixed MCP Apps in Studio:
 - An app can call any tool on its own server from the MCP tool playground (previously every call ran the tool being viewed).
 - Apps can no longer call tools their server keeps for the model only (`_meta.ui.visibility: ['model']`); those calls are refused without running the tool.
 - Apps now receive object tool outputs as `structuredContent`, with the JSON text kept alongside it, so apps that render from structured data work in Studio.
+- Links an app asks Studio to open must be `http` or `https`; others (such as `javascript:` or `file:`) are refused.
 - Apps follow Studio's light or dark theme.

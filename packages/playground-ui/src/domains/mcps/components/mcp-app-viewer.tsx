@@ -185,9 +185,12 @@ export function McpAppViewer({
   );
 
   const handleOpenLink = useCallback(async (params: { url: string }) => {
-    if (typeof params.url === 'string') {
-      window.open(params.url, '_blank', 'noopener,noreferrer');
+    const protocol = URL.canParse(params.url) ? new URL(params.url).protocol : undefined;
+    // Anything else (javascript:, data:, file:, ...) would run code or read local files, not open a page.
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      throw new McpError(ErrorCode.InvalidParams, 'Studio only opens http and https links from MCP Apps');
     }
+    window.open(params.url, '_blank', 'noopener,noreferrer');
     return {};
   }, []);
 
