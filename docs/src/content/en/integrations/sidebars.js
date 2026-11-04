@@ -1108,7 +1108,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'providers/fireflies',
+          id: 'productivity/fireflies',
           label: 'Fireflies.ai',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/fireflies.svg',
@@ -1116,7 +1116,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/google-mail',
+          id: 'productivity/google-mail',
           label: 'Gmail',
           customProps: {
             icon: 'https://cdn.simpleicons.org/gmail?viewbox=auto&size=28',
@@ -1124,7 +1124,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/google-calendar',
+          id: 'productivity/google-calendar',
           label: 'Google Calendar',
           customProps: {
             icon: 'https://cdn.simpleicons.org/googlecalendar?viewbox=auto&size=28',
@@ -1132,7 +1132,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/google-docs',
+          id: 'productivity/google-docs',
           label: 'Google Docs',
           customProps: {
             icon: 'https://cdn.simpleicons.org/googledocs?viewbox=auto&size=28',
@@ -1140,7 +1140,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/google-sheet',
+          id: 'productivity/google-sheet',
           label: 'Google Sheets',
           customProps: {
             icon: 'https://cdn.simpleicons.org/googlesheets?viewbox=auto&size=28',
@@ -1148,7 +1148,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/microsoft-excel',
+          id: 'productivity/microsoft-excel',
           label: 'Microsoft Excel',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/microsoft-excel.svg',
@@ -1156,7 +1156,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/outlook',
+          id: 'productivity/outlook',
           label: 'Microsoft Outlook',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/outlook.svg',
@@ -1164,7 +1164,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/microsoft-powerpoint',
+          id: 'productivity/microsoft-powerpoint',
           label: 'Microsoft PowerPoint',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg',
@@ -1172,7 +1172,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/microsoft-word',
+          id: 'productivity/microsoft-word',
           label: 'Microsoft Word',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/microsoft-word.svg',
@@ -1180,7 +1180,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/notion',
+          id: 'productivity/notion',
           label: 'Notion',
           customProps: {
             icon: 'https://cdn.simpleicons.org/notion/black?viewbox=auto&size=28',
@@ -1189,7 +1189,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/one-drive',
+          id: 'productivity/one-drive',
           label: 'OneDrive',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/one-drive.svg',
@@ -1197,7 +1197,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/sharepoint-online',
+          id: 'productivity/sharepoint-online',
           label: 'SharePoint Online',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/sharepoint-online.svg',
@@ -1212,7 +1212,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'providers/incident-io',
+          id: 'project-management/incident-io',
           label: 'incident.io',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/incident-io.svg',
@@ -1220,7 +1220,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/jira',
+          id: 'project-management/jira',
           label: 'Jira',
           customProps: {
             icon: 'https://cdn.simpleicons.org/jira?viewbox=auto&size=28',
@@ -1228,7 +1228,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/linear',
+          id: 'project-management/linear',
           label: 'Linear',
           customProps: {
             icon: 'https://cdn.simpleicons.org/linear?viewbox=auto&size=28',
@@ -1243,7 +1243,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'providers/attio',
+          id: 'crm/attio',
           label: 'Attio',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/attio.svg',
@@ -1251,7 +1251,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/clay',
+          id: 'crm/clay',
           label: 'Clay',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/clay-mcp.svg',
@@ -1259,7 +1259,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/hubspot',
+          id: 'crm/hubspot',
           label: 'HubSpot',
           customProps: {
             icon: 'https://cdn.simpleicons.org/hubspot?viewbox=auto&size=28',
@@ -1274,7 +1274,7 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'providers/canva',
+          id: 'other/canva',
           label: 'Canva',
           customProps: {
             icon: 'https://svgl.app/library/canva.svg',
@@ -1282,7 +1282,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/resend',
+          id: 'other/resend',
           label: 'Resend',
           customProps: {
             icon: 'https://cdn.simpleicons.org/resend/black?viewbox=auto&size=28',
@@ -1291,7 +1291,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/robinhood',
+          id: 'other/robinhood',
           label: 'Robinhood',
           customProps: {
             icon: 'https://cdn.simpleicons.org/robinhood?viewbox=auto&size=28',
@@ -1299,7 +1299,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/sanity',
+          id: 'other/sanity',
           label: 'Sanity',
           customProps: {
             icon: 'https://cdn.simpleicons.org/sanity/black?viewbox=auto&size=28',
@@ -1308,7 +1308,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/snowflake',
+          id: 'other/snowflake',
           label: 'Snowflake',
           customProps: {
             icon: 'https://cdn.simpleicons.org/snowflake?viewbox=auto&size=28',
