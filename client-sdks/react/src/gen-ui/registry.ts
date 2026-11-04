@@ -1,5 +1,11 @@
 import { isStandardSchema } from '@mastra/client-js/gen-ui';
-import type { GenUILimits, InferSchemaOutput, JSONObject, StandardSchemaV1 } from '@mastra/client-js/gen-ui';
+import type {
+  GenUILimits,
+  GenUIPlacement,
+  InferSchemaOutput,
+  JSONObject,
+  StandardSchemaV1,
+} from '@mastra/client-js/gen-ui';
 import type { ComponentType, ReactNode } from 'react';
 
 /** Props every registered GenUI component receives. `props` has passed the component's schema. */
@@ -151,6 +157,11 @@ export interface GenUISurfaceToolOptions {
   name?: string;
   /** Extra guidance appended to the generated tool description. */
   instructions?: string;
+  /**
+   * Placements the model may choose. List only those your app renders: `inline` renders in the
+   * message, every other placement needs a `GenUISurfaceOutlet`. Defaults to `['inline']`.
+   */
+  placements?: GenUIPlacement[];
 }
 
 export interface CreateGenUIOptions {
@@ -197,7 +208,7 @@ export interface GenUIRegistry {
   readonly tools: Readonly<Record<string, GenUIToolRendererDefinition<any, any>>>;
   readonly fallbacks: GenUIFallbacks;
   readonly catalog?: GenUICatalog;
-  readonly surfaceTool?: { name: string; instructions?: string };
+  readonly surfaceTool?: { name: string; instructions?: string; placements: readonly GenUIPlacement[] };
   readonly limits?: Partial<GenUILimits>;
   /** Serializable description of every declarative component. Safe to send to a server. */
   manifest(): GenUIManifestComponent[];
@@ -222,7 +233,8 @@ function resolveModelSchema(name: string, definition: AnyGenUIComponentDefinitio
   const standardJSON = schema['~standard'].jsonSchema?.input;
   if (typeof standardJSON === 'function') {
     const result = standardJSON({ target: 'draft-07' });
-    if (isRecord(result)) return result as JSONObject;
+    // zod's output carries a non-enumerable `~standard`; copy it so it isn't mistaken for a schema object.
+    if (isRecord(result)) return { ...result } as JSONObject;
   }
   if (schema['~standard'].vendor === 'zod') return schema;
   throw new Error(
@@ -273,14 +285,17 @@ export function createGenUI(options: CreateGenUIOptions = {}): GenUIRegistry {
     components[name] = entry;
   }
 
-  const surfaceTool = options.surfaceTool
+  const surfaceToolOptions = options.surfaceTool === true ? {} : options.surfaceTool || undefined;
+  const surfaceTool = surfaceToolOptions
     ? {
-        name: (options.surfaceTool === true ? undefined : options.surfaceTool.name) ?? 'ui_surface',
-        instructions: options.surfaceTool === true ? undefined : options.surfaceTool.instructions,
+        name: surfaceToolOptions.name ?? 'ui_surface',
+        instructions: surfaceToolOptions.instructions,
+        placements: Object.freeze([...new Set<GenUIPlacement>(surfaceToolOptions.placements ?? ['inline'])]),
       }
     : undefined;
   if (surfaceTool) {
     if (!TOOL_NAME.test(surfaceTool.name)) throw new Error(`GenUI tool name "${surfaceTool.name}" is invalid`);
+    if (surfaceTool.placements.length === 0) throw new Error('GenUI surface tool needs at least one placement');
     if (componentTools[surfaceTool.name]) {
       throw new Error(`GenUI surface tool name "${surfaceTool.name}" collides with a component tool`);
     }

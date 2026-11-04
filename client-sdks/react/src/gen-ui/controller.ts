@@ -8,8 +8,9 @@ import {
   createGenUIStateStore,
   parseGenUIOperations,
   resolveGenUILimits,
+  validateModelInput,
+  validateModelInputSync,
   validateSchema,
-  validateSchemaSync,
 } from '@mastra/client-js/gen-ui';
 import type {
   GenUIActionContext,
@@ -19,6 +20,7 @@ import type {
   GenUIEnvelope,
   GenUINode,
   GenUIOperation,
+  GenUIPlacement,
   GenUISession,
   GenUIState,
   GenUIStateScope,
@@ -32,7 +34,7 @@ import type {
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
-import type { GenUIRegistry, GenUIToolApproval } from './registry';
+import type { GenUIManifestComponent, GenUIRegistry, GenUIToolApproval } from './registry';
 import { collectToolCallMeta, normalizeToolPart } from './tool-parts';
 import type { ToolCallMeta } from './tool-parts';
 
@@ -122,17 +124,99 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
-const OPERATION_HELP = [
-  'createSurface {rootId?, placement?: "inline"|"panel"|"standalone"|"overlay", title?, data?, nodes?} — must be the first operation for a new surfaceId',
-  'upsertNodes {nodes: [{id, component, props?, children?: [nodeId]}]} — insert or replace nodes',
-  'updateProps {nodeId, set?, unset?: [key]} — shallow-merge props',
-  'removeNodes {nodeIds} — removes nodes and their descendants',
-  'setChildren {nodeId, children: [nodeId]} — reorder, insert, or delete children',
-  'setRoot {rootId}',
-  'replaceData {data} / patchData {set?, unset?}',
-  'setStatus {status: "streaming"|"ready"|"suspended"|"failed"|"aborted", error?}',
-  'deleteSurface {}',
-].join('\n');
+const operationHelp = (placements: readonly GenUIPlacement[]) =>
+  [
+    `createSurface {rootId?, placement?: ${placements.map(p => `"${p}"`).join('|')}, title?} — must be the first operation for a new surfaceId; placement defaults to "inline"`,
+    'upsertNodes {nodes: [{id, component, props, children?: [nodeId]}]} — insert or replace whole nodes',
+    'removeNodes {nodeIds} — removes nodes and their descendants',
+    'setChildren {nodeId, children: [nodeId]} — reorder, insert, or delete children',
+    'setRoot {rootId}',
+    'setStatus {status: "streaming"|"ready"|"suspended"|"failed"|"aborted", error?}',
+    'deleteSurface {}',
+  ].join('\n');
+
+const stringList = { type: 'array', items: { type: 'string' } };
+
+const operationSchema = (op: string, properties: Record<string, unknown> = {}, required: string[] = []) => ({
+  type: 'object',
+  properties: { op: { type: 'string', enum: [op] }, ...properties },
+  required: ['op', ...required],
+});
+
+/**
+ * Fully describe every operation and node so strict structured-output providers, which close every
+ * object and drop undeclared keys, still let the model send node ids, components, and props.
+ * Free-form operations (`updateProps`, data ops) can't be expressed that way and stay protocol-only.
+ */
+function surfaceToolInputSchema(manifest: GenUIManifestComponent[], placements: readonly GenUIPlacement[]) {
+  const node = {
+    anyOf: manifest.map(({ name, propsSchema }) => {
+      const { $schema: _dialect, ...props } = propsSchema ?? { type: 'object' };
+      return {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          component: { type: 'string', enum: [name] },
+          props,
+          children: { ...stringList, description: 'Ordered child node ids' },
+        },
+        required: ['id', 'component', 'props'],
+      };
+    }),
+  };
+  return {
+    type: 'object',
+    properties: {
+      surfaceId: { type: 'string', description: 'Stable id of the surface to create or update' },
+      operations: {
+        type: 'array',
+        items: {
+          anyOf: [
+            operationSchema('createSurface', {
+              rootId: { type: 'string' },
+              placement: { type: 'string', enum: [...placements] },
+              title: { type: 'string' },
+            }),
+            operationSchema('upsertNodes', { nodes: { type: 'array', items: node } }, ['nodes']),
+            operationSchema('removeNodes', { nodeIds: stringList }, ['nodeIds']),
+            operationSchema('setChildren', { nodeId: { type: 'string' }, children: stringList }, [
+              'nodeId',
+              'children',
+            ]),
+            operationSchema('setRoot', { rootId: { type: 'string' } }, ['rootId']),
+            operationSchema(
+              'setStatus',
+              {
+                status: { type: 'string', enum: ['streaming', 'ready', 'suspended', 'failed', 'aborted'] },
+                error: { type: 'string' },
+              },
+              ['status'],
+            ),
+            operationSchema('deleteSurface'),
+          ],
+        },
+      },
+    },
+    required: ['surfaceId', 'operations'],
+  };
+}
+
+const withoutNulls = (value: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(value).filter(([, item]) => item !== null));
+
+/**
+ * Strict-mode models send `null` for optional fields they leave out. Drop those on operations and
+ * nodes (`setRoot {rootId: null}` keeps its meaning); props keep theirs for schema validation.
+ */
+const dropOptionalNulls = (operations: unknown[]): unknown[] =>
+  operations.map(operation => {
+    if (!isRecord(operation) || operation.op === 'setRoot') return operation;
+    const cleaned = withoutNulls(operation);
+    if (Array.isArray(cleaned.nodes)) {
+      cleaned.nodes = cleaned.nodes.map(node => (isRecord(node) ? withoutNulls(node) : node));
+    }
+    return cleaned;
+  });
 
 export function createGenUIController(options: GenUIControllerOptions): GenUIController {
   const { registry } = options;
@@ -302,7 +386,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       description: tool.description,
       inputSchema: tool.inputSchema as never,
       execute: async (input: unknown, executeContext: unknown) => {
-        const validated = await validateSchema(entry.definition.schema, input);
+        const validated = await validateModelInput(entry.definition.schema, input);
         if (!validated.ok) throw new Error(`Invalid arguments for ${tool.name}: ${validated.error}`);
         const toolCallId = toolCallIdFrom(executeContext);
         if (!toolCallId) throw new Error(`${tool.name} was called without a tool call id`);
@@ -319,7 +403,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
 
   const toSurfaceToolEnvelope = (toolCallId: string, args: unknown): GenUIEnvelope | undefined => {
     if (!isRecord(args) || typeof args.surfaceId !== 'string' || !Array.isArray(args.operations)) return undefined;
-    const operations = args.operations as GenUIOperation[];
+    const operations = dropOptionalNulls(args.operations) as GenUIOperation[];
     // A surface tool call is a complete batch: mark the surface ready unless the model set a status itself.
     const setsStatus = operations.some(op => isRecord(op) && op.op === 'setStatus');
     const deletes = operations.some(op => isRecord(op) && op.op === 'deleteSurface');
@@ -348,11 +432,12 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   };
 
   if (registry.surfaceTool) {
+    const { placements } = registry.surfaceTool;
     const manifest = registry.manifest();
     const description = [
       'Render or update a user interface surface built only from the registered components below.',
       'Each call applies a batch of operations atomically. Reuse the same surfaceId to update a surface later.',
-      `Operations:\n${OPERATION_HELP}`,
+      `Operations:\n${operationHelp(placements)}`,
       `Components (props must match propsSchema):\n${JSON.stringify(manifest)}`,
       registry.surfaceTool.instructions,
     ]
@@ -361,21 +446,23 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     clientTools[registry.surfaceTool.name] = {
       id: registry.surfaceTool.name,
       description,
-      inputSchema: {
-        type: 'object',
-        properties: {
-          surfaceId: { type: 'string', description: 'Stable id of the surface to create or update' },
-          operations: {
-            type: 'array',
-            items: { type: 'object', properties: { op: { type: 'string' } }, required: ['op'] },
-          },
-        },
-        required: ['surfaceId', 'operations'],
-      } as never,
+      inputSchema: surfaceToolInputSchema(manifest, placements) as never,
       execute: async (input: unknown, executeContext: unknown) => {
         const toolCallId = toolCallIdFrom(executeContext) ?? `call_${Date.now().toString(36)}`;
-        const parsed = parseGenUIOperations(isRecord(input) ? input.operations : undefined, resolvedLimits);
+        const operations =
+          isRecord(input) && Array.isArray(input.operations) ? dropOptionalNulls(input.operations) : undefined;
+        const parsed = parseGenUIOperations(operations, resolvedLimits);
         if (!parsed.ok) return { ok: false, error: parsed.error };
+        // Anything outside the declared placements has no outlet and would be accepted but never shown.
+        const misplaced = parsed.value.find(
+          op => op.op === 'createSurface' && op.placement !== undefined && !placements.includes(op.placement),
+        );
+        if (misplaced?.op === 'createSurface') {
+          return {
+            ok: false,
+            error: `placement "${misplaced.placement}" is not available in this app; use one of: ${placements.join(', ')}`,
+          };
+        }
         const envelope = toSurfaceToolEnvelope(toolCallId, { ...(input as object), operations: parsed.value });
         if (!envelope) return { ok: false, error: 'surfaceId and operations are required' };
         const current = session.getState();
@@ -435,7 +522,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     if (!entry || entry.definition.declarative === false) return undefined;
     let result = nodeValidation.get(node);
     if (!result) {
-      result = validateSchemaSync(entry.definition.schema, node.props);
+      result = validateModelInputSync(entry.definition.schema, node.props);
       nodeValidation.set(node, result);
     }
     return result;

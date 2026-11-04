@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { accumulateGenUI, createGenUIState } from './accumulator';
 import { createGenUIActionDispatcher, defineGenUIAction } from './actions';
 import { createGenUIEmitter } from './emitter';
 import type { GenUIChunk } from './emitter';
 import { parsePartialJSON } from './partial-json';
 import { createGenUISession } from './session';
+import { validateModelInput, validateModelInputSync } from './standard-schema';
 import type { StandardSchemaV1 } from './standard-schema';
 import {
   createGenUIContextStore,
@@ -37,6 +39,29 @@ const schema = <T>(check: (value: unknown) => value is T, message: string): Stan
 
 const assistant = (id: string, parts: unknown[]) => ({ id, role: 'assistant', content: { format: 2, parts } });
 const part = (data: GenUIEnvelope) => ({ type: 'data-gen-ui', data });
+
+describe('validateModelInput', () => {
+  const product = z.object({
+    name: z.string(),
+    tagline: z.string().optional(),
+    note: z.string().nullable(),
+    specs: z.object({ color: z.string().optional() }),
+    tags: z.array(z.string().nullable()),
+  });
+
+  it('accepts the nulls a strict-mode model sends for optional fields', () => {
+    const input = { name: 'Lamp', tagline: null, note: null, specs: { color: null }, tags: ['oak', null] };
+    const result = validateModelInputSync(product, input);
+    expect(result).toEqual({ ok: true, value: { name: 'Lamp', note: null, specs: {}, tags: ['oak', null] } });
+    expect(input.tagline).toBeNull();
+  });
+
+  it('still rejects nulls for required fields and reports the original error', async () => {
+    const result = await validateModelInput(product, { name: null, note: null, specs: {}, tags: [] });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toMatch(/^name: /);
+  });
+});
 
 describe('createGenUIEmitter', () => {
   it('writes validated, versioned data-gen-ui chunks that the client reducer accepts', async () => {

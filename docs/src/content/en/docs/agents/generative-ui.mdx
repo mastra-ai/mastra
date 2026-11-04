@@ -223,6 +223,17 @@ The tool runs in the browser. It checks the model's operations against the curre
 
 Set `declarative: false` on a component to keep it out of the surface tool.
 
+By default the model can only place surfaces `inline`, in the message. If your app renders a `GenUISurfaceOutlet` for other placements, list them in `placements` so the model can use them:
+
+```tsx title="src/gen-ui/registry.tsx"
+export const genUI = createGenUI({
+  components: { WeatherCard, Chart, Filters },
+  surfaceTool: { placements: ['inline', 'panel'] },
+})
+```
+
+The tool rejects any other placement and tells the model which ones it can use.
+
 ## Handle actions
 
 Components inside a surface can dispatch named actions with `useGenUIAction`. Define the handlers in `useGenUIChat`:

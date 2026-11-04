@@ -1,4 +1,9 @@
-import { GENUI_DATA_PART_TYPE, parsePartialJSON, validateSchemaSync } from '@mastra/client-js/gen-ui';
+import {
+  GENUI_DATA_PART_TYPE,
+  parsePartialJSON,
+  validateModelInputSync,
+  validateSchemaSync,
+} from '@mastra/client-js/gen-ui';
 import type { JSONObject, StandardSchemaV1 } from '@mastra/client-js/gen-ui';
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
@@ -61,10 +66,10 @@ function resolvePhase(call: NormalizedToolCall, approvalKind: 'approval' | 'susp
   return call.phase;
 }
 
-function validateOptional(schema: StandardSchemaV1 | undefined, value: unknown) {
+function validateOptional(schema: StandardSchemaV1 | undefined, value: unknown, fromModel = false) {
   if (value === undefined) return { value: undefined };
   if (!schema) return { value };
-  const result = validateSchemaSync(schema, value);
+  const result = fromModel ? validateModelInputSync(schema, value) : validateSchemaSync(schema, value);
   return result.ok ? { value: result.value } : { value: undefined, error: result.error };
 }
 
@@ -76,7 +81,8 @@ function BackendToolView({ call }: { call: NormalizedToolCall }) {
   const phase = resolvePhase(call, approval?.kind);
   const partialArgs = useMemo(() => partialArgsOf(call), [call.phase, call.argsText, call.args]);
   const args = useMemo(
-    () => (phase === 'input-streaming' ? { value: undefined } : validateOptional(definition.argsSchema, call.args)),
+    () =>
+      phase === 'input-streaming' ? { value: undefined } : validateOptional(definition.argsSchema, call.args, true),
     [phase, definition.argsSchema, call.args],
   );
   const output = useMemo(
@@ -113,7 +119,7 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
   const { Fallback, Loading } = resolveFallbacks(controller.registry.fallbacks);
   const partialArgs = useMemo(() => partialArgsOf(call), [call.phase, call.argsText, call.args]);
   const validation = useMemo(
-    () => (call.phase === 'input-streaming' ? undefined : validateSchemaSync(entry.definition.schema, call.args)),
+    () => (call.phase === 'input-streaming' ? undefined : validateModelInputSync(entry.definition.schema, call.args)),
     [call.phase, call.args, entry.definition.schema],
   );
 
