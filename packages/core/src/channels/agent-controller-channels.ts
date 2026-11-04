@@ -412,8 +412,14 @@ export class AgentControllerChannels extends AgentChannels {
     // The action's requestContext flows in so a `resolveSession` host revalidates
     // the execution principal on every continuation, not just on the message
     // that opened the session.
-    const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource }, requestContext);
-    if (!session.approval.isArmed({ toolCallId })) {
+    // Don't bind the thread yet: when several threads share one session, switching
+    // threads aborts whatever run is live on the other one. A gate can only be armed
+    // for the thread the session is on, so a click from any other thread is stale.
+    const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource }, requestContext, {
+      bindThread: false,
+    });
+    const onThread = session.thread.getId() === memory.thread;
+    if (!onThread || !session.approval.isArmed({ toolCallId })) {
       this.log(
         'info',
         `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval)`,
@@ -453,6 +459,7 @@ export class AgentControllerChannels extends AgentChannels {
   protected async getSessionForThread(
     thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
     requestContext?: RequestContext,
+    { bindThread = true }: { bindThread?: boolean } = {},
   ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
@@ -474,6 +481,12 @@ export class AgentControllerChannels extends AgentChannels {
     // owner of outbound delivery for whatever session it returns. A throw is
     // tagged as a refusal so the channel error boundary keeps it out of the
     // chat thread instead of posting the host's authorization message there.
+    // createSession rebinds an existing session to the requested thread, which is
+    // exactly what a caller that doesn't want to bind is avoiding.
+    if (!bindThread && !this.resolveSession) {
+      const existing = await controller.getSession(channelResourceId, requestContext);
+      if (existing) return existing;
+    }
     const session = this.resolveSession
       ? await this.resolveChannelSession({ controller, thread, requestContext })
       : await controller.createSession({
@@ -499,6 +512,7 @@ export class AgentControllerChannels extends AgentChannels {
     // run, so never re-switch when the session is already on this thread. The
     // inbound context flows in so the bind's history load resolves memory as
     // the stamped tenant.
+    if (!bindThread) return session;
     if (session.thread.getId() !== thread.id) {
       await session.thread.switch({ threadId: thread.id, requestContext });
     }
