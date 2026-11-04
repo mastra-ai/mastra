@@ -52,6 +52,7 @@ const MEMORY_PATH = /^\/api\/memory(\/|$)/;
 const ACTIVE_RUNS_PATH = /\/agent-controller\/[^/]+\/active-runs\/?$/;
 const SWITCH_MODEL_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/model\/?$/;
 const SET_STATE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/state\/?$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A form field as the server adapter reads it: JSON when it parses, else the raw text. */
 function parseFormField(value: string): unknown {
@@ -173,7 +174,9 @@ export function createSessionAccessGuard({
     if (resourceId === viewer.userId) return true;
     const session = await sessions.getBySessionId(resourceId);
     if (session) return canViewSourceControlSession(session, viewer);
-    if (!viewer.orgId) return false;
+    // Project ids are uuids; a person's or a channel's resource (`user_…`, `channel:…`) is no project,
+    // and the uuid column would reject it outright.
+    if (!viewer.orgId || !UUID_RE.test(resourceId)) return false;
     return (await projects.get({ orgId: viewer.orgId, id: resourceId })) !== null;
   };
 
