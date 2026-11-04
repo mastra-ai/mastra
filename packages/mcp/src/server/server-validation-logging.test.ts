@@ -153,7 +153,7 @@ describe('MCPServer validation failure logging (Issue #29318)', () => {
     }
   });
 
-  it('keeps arbitrary error codes out of MCPClient failure logs', async () => {
+  it('keeps arbitrary error names and codes out of MCPClient failure logs', async () => {
     const mcpClient = new InternalMastraMCPClient({ name: 'error-code', server: { url: served.url } });
     mcpClient.__setLogger(new ConsoleLogger({ level: 'silent' }));
     const clientLogger = mcpClient['logger'];
@@ -162,7 +162,7 @@ describe('MCPServer validation failure logging (Issue #29318)', () => {
       await mcpClient.connect();
       const tools = await mcpClient.tools();
       vi.spyOn(mcpClient['client'], 'callTool').mockRejectedValueOnce(
-        Object.assign(new Error('failed'), { code: SECRET }),
+        Object.assign(new Error('failed'), { name: SECRET, code: SECRET }),
       );
 
       await expect(tools.explode!.execute!({ email: 'x' }, {} as never)).rejects.toThrow('failed');

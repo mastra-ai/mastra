@@ -375,23 +375,25 @@ function runOutsideDatadogTraceScope<T>(callback: () => T): T {
 }
 
 /**
- * Convert an MCP LoggingLevel to a logger method name that exists in our logger
- */
-/**
  * Names a tool-call failure for logs without its message: server error text can echo the submitted
  * arguments back (Issue #29318). The full error still reaches the caller.
  */
 function errorKind(error: unknown): string {
   if (error instanceof MastraError) return error.id;
   if (error instanceof Error) {
+    // `name` and `code` can be set to anything, so only log class-style names and fixed codes
+    // (JSON-RPC numbers, Node-style constants like ECONNRESET).
+    const name = /^[A-Z][A-Za-z0-9]{0,63}$/.test(error.name) ? error.name : 'Error';
     const code = (error as { code?: unknown }).code;
-    // Only fixed codes (JSON-RPC numbers, Node-style constants like ECONNRESET) are safe to log.
     const isFixedCode = typeof code === 'number' || (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/.test(code));
-    return isFixedCode ? `${error.name} (${code})` : error.name;
+    return isFixedCode ? `${name} (${code})` : name;
   }
   return typeof error;
 }
 
+/**
+ * Convert an MCP LoggingLevel to a logger method name that exists in our logger
+ */
 function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 'warn' | 'error' {
   switch (level) {
     case 'debug':
