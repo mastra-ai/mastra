@@ -385,6 +385,9 @@ function dryRunNote(text: string): KnowledgeNote {
   return { id: `dry-run:${randomUUID()}`, text } as KnowledgeNote;
 }
 
+/** @internal Not exported from the package, so only `runKnowledgeImporter` reaches the host writer. */
+export const knowledgeImporterHost = Symbol('knowledgeImporterHost');
+
 const running = new WeakMap<Knowledge, Set<string>>();
 
 /**
@@ -411,7 +414,7 @@ export async function runKnowledgeImporter<TOptions>(
   if (ids.has(importer.id)) throw new KnowledgeImporterBusyError(importer.id);
   ids.add(importer.id);
   try {
-    return await executeKnowledgeImporter(knowledge.importerHost(), importer, options);
+    return await executeKnowledgeImporter(knowledge[knowledgeImporterHost](), importer, options);
   } finally {
     ids.delete(importer.id);
   }

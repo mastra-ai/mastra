@@ -91,7 +91,7 @@ A document you delete from your source stays in Knowledge. Remove it with [`remo
 
 ## Sync with an importer
 
-An importer is a seed that Knowledge runs for you. It records each run, keeps a cursor between runs, and removes the pages its source no longer has. Write one with `id` and `run()`, and write pages through `ctx.pages`:
+An importer is a seed you run with `runKnowledgeImporter()`. It records each run, keeps a cursor between runs, and removes the pages its source no longer has. Write one with `id` and `run()`, and write pages through `ctx.pages`:
 
 ```typescript title="src/mastra/docs-importer.ts"
 import type { KnowledgeImporter } from '@mastra/core/knowledge'

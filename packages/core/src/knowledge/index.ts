@@ -30,6 +30,7 @@ import type {
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,
 } from './host-writes';
+import { knowledgeImporterHost } from './importers';
 import type { KnowledgeImporterHost } from './importers';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
@@ -287,8 +288,8 @@ export class Knowledge extends MastraBase {
     return removeKnowledgeNote(this.#hostWriter(), input);
   }
 
-  /** @internal Host writes plus logging, for {@link runKnowledgeImporter}. */
-  importerHost(): KnowledgeImporterHost {
+  /** Host writes plus logging for `runKnowledgeImporter`; keyed by a symbol that isn't exported. */
+  [knowledgeImporterHost](): KnowledgeImporterHost {
     return {
       ...this.#hostWriter(),
       log: (level, message, data) =>
