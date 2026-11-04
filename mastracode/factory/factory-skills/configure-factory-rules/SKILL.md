@@ -18,7 +18,7 @@ Do not guess a file path. Factory deployments can assemble `MastraFactory` from 
 
 ## Preserve the public shape
 
-Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Work and Review install automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
+Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Work installs automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
 
 Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` phases as the starting point. The Review board is retired: its pull requests live in Work's PR review phase, and `review` can't be used as a board ID. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, and custom boards inherit nothing.
 
@@ -62,7 +62,7 @@ A working phase whose `exitTool` has a board tool rule (`tools[exitTool.id]`) le
 
 ## Configure board phase semantics
 
-Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work and Review declarations live in `src/boards/work.ts` and `src/boards/review.ts`.
+Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work's declaration lives in `src/boards/work.ts`; its PR review handler is in `src/boards/pull-request-review.ts`.
 
 Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and sweeps; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
 
@@ -86,7 +86,7 @@ Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace 
 
 Before changing a built-in handler:
 
-1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, Work's tool-result handler in `src/boards/work-tool-rules.ts`, and Work and Review lifecycle/policy defaults in `src/boards/work.ts` and `src/boards/review.ts`. Custom handlers live in their installed definitions.
+1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, Work's tool-result handler in `src/boards/work-tool-rules.ts`, and Work lifecycle/policy defaults in `src/boards/work.ts` and `src/boards/pull-request-review.ts`. Custom handlers live in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.
