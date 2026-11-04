@@ -837,9 +837,25 @@ The `execute_command` tool accepts these options:
               "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
             isOptional: true,
           },
+          {
+            name: 'notifyOnExit',
+            type: 'boolean',
+            description:
+              'Sends the agent that started a background process a notification when the process exits, with its exit code and the last lines of its output. An idle thread is woken by it. Needs the `notifications` storage domain. Processes that were killed send nothing.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
         ],
       },
     ],
+  },
+  {
+    name: 'foregroundDetachMs',
+    type: 'number | false',
+    description:
+      'How long, in milliseconds, a foreground command can run before it moves to the background. The tool returns the output so far and the PID, the command keeps running, and the agent is notified when it exits. Applies to sandboxes with a process manager. Set to `false` to wait for every foreground command to finish.',
+    isOptional: true,
+    defaultValue: '300000',
   },
   {
     name: 'requireDescription',
