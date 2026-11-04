@@ -1485,15 +1485,26 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   async deleteWorkflowRunById({
     runId,
     workflowName,
+    storageVersion,
     fence,
   }: {
     runId: string;
     workflowName: string;
+    storageVersion?: 1 | 2;
     fence?: RunFence;
   }): Promise<void> {
     const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     return this.executeWithRetry(async () => {
       try {
+        if (storageVersion === 1) {
+          await withRunFence(this.#client, check, writer =>
+            writer.execute({
+              sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+              args: [workflowName, runId],
+            }),
+          );
+          return;
+        }
         // Detaches the runs built on its state first, while its entries are still there to read.
         await inWriteTransaction(this.#client, async tx => {
           if (check) await assertRunFence(tx, check);
@@ -1502,7 +1513,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             args: [workflowName, runId],
           });
           if (Number(run.rows[0]?.stateShared)) await this.#detachStateChildren(tx, workflowName, runId);
-          for (const table of [TABLE_WORKFLOW_RUNS, TABLE_WORKFLOW_RUN_ENTRIES, TABLE_WORKFLOW_SNAPSHOT]) {
+          for (const table of [
+            TABLE_WORKFLOW_RUNS,
+            TABLE_WORKFLOW_RUN_ENTRIES,
+            ...(storageVersion === 2 ? [] : [TABLE_WORKFLOW_SNAPSHOT]),
+          ]) {
             await tx.execute({
               sql: `DELETE FROM ${table} WHERE workflow_name = ? AND run_id = ?`,
               args: [workflowName, runId],

@@ -1050,7 +1050,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         await expect(store.appendWorkflowRunStateDraft({ ...parent, state: {} })).rejects.toThrow();
       });
 
-      it('keeps the state of the runs built on a deleted run', async () => {
+      it.each([undefined, 2] as const)('keeps descendant state when deleting with version %s', async storageVersion => {
         const { run, parent, child, grandchild, header, childOf } = family();
         const sibling = run('sibling');
         const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
@@ -1085,7 +1085,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
           stateBase: { ...sibling, seq: siblingSeq },
         });
 
-        await store.deleteWorkflowRunById(parent);
+        await store.deleteWorkflowRunById({ ...parent, storageVersion });
         expect(await store.loadWorkflowRun({ ...parent, successfulSteps: 'full' })).toBeNull();
         const loadedChild = await statesOf(child);
         expect(loadedChild.state).toEqual({ list: ['a'], c: 1 });
@@ -1287,6 +1287,50 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(total).toBe(1);
         expect(runs[0]).toMatchObject({ runId: id, storageVersion: 2 });
         expect(parsed(runs[0]!)).toMatchObject({ status: 'success', timestamp: 1234 });
+      });
+
+      it('deletes only the hinted storage version when both formats exist', async () => {
+        const run = { workflowName, runId: 'both-versions' };
+        const snapshot = makeSnapshot(run.runId);
+        await store.persistWorkflowSnapshot({ ...run, snapshot });
+        await checkpoint(run.runId, snapshot);
+
+        await store.deleteWorkflowRunById({ ...run, storageVersion: 1 });
+        expect(await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 })).toBeNull();
+        expect(await loadRun(run.runId)).not.toBeNull();
+
+        await store.persistWorkflowSnapshot({ ...run, snapshot });
+        await store.deleteWorkflowRunById({ ...run, storageVersion: 2 });
+        expect(await loadRun(run.runId)).toBeNull();
+        expect(await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 })).toEqual(snapshot);
+      });
+
+      it('rejects a stale fence when deleting a v1 snapshot', async ctx => {
+        if (!(await store.supportsRunFencing())) ctx.skip();
+        const run = { workflowName, runId: 'fenced-v1-delete' };
+        const snapshot = makeSnapshot(run.runId);
+        await store.persistWorkflowSnapshot({ ...run, snapshot });
+        const claim = await store.claimRunOwnership({ runId: run.runId, ownerId: 'old', leaseMs: 60_000 });
+        const takeover = await store.claimRunOwnership({
+          runId: run.runId,
+          ownerId: 'new',
+          leaseMs: 60_000,
+          force: true,
+        });
+        await expect(
+          store.deleteWorkflowRunById({
+            ...run,
+            storageVersion: 1,
+            fence: { runId: run.runId, ownerId: 'old', generation: claim.record!.generation },
+          }),
+        ).rejects.toSatisfy(isRunFenceConflictError);
+        expect(await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 })).toEqual(snapshot);
+        await store.deleteWorkflowRunById({
+          ...run,
+          storageVersion: 1,
+          fence: { runId: run.runId, ownerId: 'new', generation: takeover.record!.generation },
+        });
+        expect(await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 })).toBeNull();
       });
 
       it('deletes runs of either version', async () => {
