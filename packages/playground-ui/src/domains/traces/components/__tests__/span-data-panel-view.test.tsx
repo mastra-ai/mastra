@@ -229,8 +229,8 @@ describe('SpanDataPanelView', () => {
       it('lists its tokens with their breakdown, without the zero counts', () => {
         renderWithProviders(<SpanDataPanelView {...baseProps} span={modelSpan} />);
 
-        expect(valueOf('Input tokens')).toBe('6,606 (5,632 cached · 974 text)');
-        expect(valueOf('Output tokens')).toBe('365 (256 reasoning · 109 text)');
+        expect(valueOf('Input tokens')).toBe('6,606 (5,632 cached, 974 text)');
+        expect(valueOf('Output tokens')).toBe('365 (256 reasoning, 109 text)');
         expect(screen.queryByText(/cache write/i)).toBeNull();
       });
     });

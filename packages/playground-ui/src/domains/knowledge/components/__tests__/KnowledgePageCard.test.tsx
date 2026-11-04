@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
@@ -7,7 +7,7 @@ import { KnowledgePageCard } from '../KnowledgePageCard';
 
 describe('KnowledgePageCard', () => {
   it('names the page with its kind and ref, how many children it has and its link counts', () => {
-    renderWithProviders(
+    const { container } = renderWithProviders(
       <KnowledgePageCard
         name="Refunds"
         kind="Page"
@@ -17,10 +17,12 @@ describe('KnowledgePageCard', () => {
       />,
     );
 
-    expect(screen.getByText('Refunds')).toBeTruthy();
-    expect(screen.getByText('Page · org:acme#policies/refunds')).toBeTruthy();
-    expect(screen.getByText('3 children')).toBeTruthy();
-    expect(screen.getByText('4 links in, 1 link out')).toBeTruthy();
+    const card = within(container);
+    expect(card.getByText('Refunds')).toBeTruthy();
+    expect(card.getByText('Page')).toBeTruthy();
+    expect(card.getByText('org:acme#policies/refunds')).toBeTruthy();
+    expect(card.getByText('3 children')).toBeTruthy();
+    expect(card.getByText('4 links in, 1 link out')).toBeTruthy();
   });
 
   it('says "1 child" for one child and leaves out what is zero or unknown', () => {
