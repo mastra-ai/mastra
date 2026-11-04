@@ -6,8 +6,6 @@ import { ToolCallOutput } from './tool-call-output';
 import { toolCallResultText } from './tool-call-view';
 import type { ToolCallView } from './tool-call-view';
 
-const FOLLOW_TAIL = 'flex flex-col-reverse';
-
 export interface ToolCallBodyProps extends ToolCallView {
   showFullArguments?: boolean;
 }
@@ -26,10 +24,12 @@ function exitText({ exitCode, error }: ToolCallExit, result: string | undefined)
 }
 
 function commandOutput(view: ToolCallView, result: string | undefined): string | undefined {
-  if (view.status !== 'error' || !view.output) return view.output || result;
+  if (!view.output) return result;
+  if (view.status !== 'error') return view.output;
   // The result is a truncated copy of the stream, so only how the command ended is new.
   const ending = view.exit ? exitText(view.exit, result) : result;
-  return ending ? `${view.output.trimEnd()}\n\n${ending}` : view.output;
+  if (!ending) return view.output;
+  return `${view.output.trimEnd()}\n\n${ending}`;
 }
 
 function CommandBody({ command, output }: { command: string; output?: string }) {
@@ -37,7 +37,8 @@ function CommandBody({ command, output }: { command: string; output?: string }) 
     <>
       <ToolCallCommand command={command} />
       {output && (
-        <ToolCallMono copyText={output} className={`${FOLLOW_TAIL} text-muted-foreground`}>
+        // Reversed, the block starts at its end and stays on the latest line as output streams in.
+        <ToolCallMono copyText={output} className="flex flex-col-reverse text-muted-foreground">
           {output}
         </ToolCallMono>
       )}

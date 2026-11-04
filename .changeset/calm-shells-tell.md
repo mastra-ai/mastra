@@ -25,6 +25,6 @@ const view = {
   exit, // { exitCode, killed, timedOut, error }
 };
 
-<ToolCallExitStatus exit={exit} />;
+{exit && <ToolCallExitStatus exit={exit} />}
 {toolCallHasBody(view) && <ToolCallBody {...view} />}
 ```

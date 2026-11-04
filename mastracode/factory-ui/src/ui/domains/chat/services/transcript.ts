@@ -472,7 +472,7 @@ const sandboxExitSchema = z.object({
 
 /** One shape for an exit, whether it streamed as `command_exit` or was saved as `data-sandbox-exit`. */
 function commandExit({ exitCode, killed = false, timedOut = false, error }: ToolCallExit): ToolCallExit {
-  return error === undefined ? { exitCode, killed, timedOut } : { exitCode, killed, timedOut, error };
+  return { exitCode, killed, timedOut, error };
 }
 
 function sameExit(a: ToolCallExit, b: ToolCallExit | undefined): boolean {

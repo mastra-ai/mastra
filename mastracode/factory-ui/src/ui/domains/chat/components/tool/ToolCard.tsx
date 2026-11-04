@@ -41,7 +41,7 @@ export function ToolCard({
         <ActivityTrigger className="min-w-0 flex-1">
           <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
         </ActivityTrigger>
-        <ToolCallExitStatus exit={tool.exit} />
+        {tool.exit && <ToolCallExitStatus exit={tool.exit} />}
       </div>
       <ActivityContent>
         <ToolBody tool={tool} command={command} />

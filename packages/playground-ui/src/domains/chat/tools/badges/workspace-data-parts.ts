@@ -50,12 +50,18 @@ export interface SandboxExit extends ToolCallExit {
   executionTimeMs?: number;
 }
 
+/** A command's `sandbox-exit` part, read field by field since any tool can write one. */
 export function sandboxExit(
   dataParts: ReadonlyArray<DataMessagePart> | undefined,
   toolCallId: string,
 ): SandboxExit | undefined {
-  const exit = toolDataParts(dataParts, 'sandbox-exit', toolCallId)[0]?.data;
-  if (typeof exit?.exitCode !== 'number') return undefined;
-  // Any tool can write this part, so an error that is not text is left out rather than drawn.
-  return typeof exit.error === 'string' || exit.error === undefined ? exit : { ...exit, error: undefined };
+  const data: unknown = toolDataParts(dataParts, 'sandbox-exit', toolCallId)[0]?.data;
+  if (!isRecord(data) || typeof data.exitCode !== 'number') return undefined;
+  return {
+    exitCode: data.exitCode,
+    killed: data.killed === true,
+    timedOut: data.timedOut === true,
+    error: typeof data.error === 'string' ? data.error : undefined,
+    executionTimeMs: typeof data.executionTimeMs === 'number' ? data.executionTimeMs : undefined,
+  };
 }

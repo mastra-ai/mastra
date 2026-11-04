@@ -9,6 +9,7 @@ export interface ToolCallExit {
   error?: string;
 }
 
+/** What the chip says; a process killed on purpose was stopped, so it warns rather than reads as a failure. */
 function exitLabel(exit: ToolCallExit): { text: string; stopped: boolean } {
   if (exit.error !== undefined) return { text: 'error', stopped: false };
   if (exit.timedOut) return { text: 'timed out', stopped: false };
@@ -17,8 +18,8 @@ function exitLabel(exit: ToolCallExit): { text: string; stopped: boolean } {
 }
 
 /** How a process ended, shown only when it did not exit cleanly. */
-export function ToolCallExitStatus({ exit }: { exit: ToolCallExit | undefined }) {
-  if (!exit || exit.exitCode === 0) return null;
+export function ToolCallExitStatus({ exit }: { exit: ToolCallExit }) {
+  if (exit.exitCode === 0) return null;
   const { text, stopped } = exitLabel(exit);
   return (
     <Txt

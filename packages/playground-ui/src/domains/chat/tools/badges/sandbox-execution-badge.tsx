@@ -108,7 +108,7 @@ export const SandboxExecutionBadge = ({
               {workspace.sandbox.name || workspace.sandbox.provider}
             </WorkspaceLink>
           )}
-          <ToolCallExitStatus exit={exit} />
+          {exit && <ToolCallExitStatus exit={exit} />}
           {(isRunning || exit?.executionTimeMs !== undefined) && (
             <Txt as="span" variant="meta" tone="muted" className="px-1 tabular-nums">
               {isRunning ? formatElapsed(elapsedTime) : formatDuration(exit?.executionTimeMs ?? 0)}

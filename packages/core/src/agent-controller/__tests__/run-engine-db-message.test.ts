@@ -414,8 +414,7 @@ describe('SessionRunEngine command exits', () => {
     expect(exits).toEqual([
       expect.objectContaining({ toolCallId: 'unreachable', exitCode: -1, error: 'sandbox disconnected' }),
       expect.objectContaining({ toolCallId: 'slow', exitCode: 124, killed: true, timedOut: true }),
-      expect.objectContaining({ toolCallId: 'grep', exitCode: 1, killed: false, timedOut: false }),
+      expect.objectContaining({ toolCallId: 'grep', exitCode: 1, killed: false, timedOut: false, error: undefined }),
     ]);
-    expect(exits[2]).not.toHaveProperty('error');
   });
 });

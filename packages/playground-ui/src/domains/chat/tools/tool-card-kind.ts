@@ -65,20 +65,23 @@ export const isSettledState = (state: string | undefined): boolean =>
 export const isDeferredCall = (backgroundTaskId: string | undefined, backgroundTaskStatus: string | undefined) =>
   backgroundTaskId !== undefined && backgroundTaskStatus !== 'completed' && backgroundTaskStatus !== 'failed';
 
-export interface StatusCall {
+interface StatusCall {
   toolName: string;
   toolCallId: string;
   state?: string;
 }
 
-/** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
+/**
+ * A call that threw, or a command that exited non-zero, failed. A call neither settled nor carried by a
+ * live run reads as idle, so stale history never shimmers.
+ */
 export function badgeStatus(
   call: StatusCall,
   dataParts: ReadonlyArray<DataMessagePart> | undefined,
   chatRunning: boolean,
 ): ActivityStatus {
-  const exitCode = sandboxExit(dataParts, call.toolCallId)?.exitCode;
-  if (call.state === 'output-error' || exitedWithFailure(call.toolName, exitCode)) return 'error';
+  if (call.state === 'output-error') return 'error';
+  if (exitedWithFailure(call.toolName, sandboxExit(dataParts, call.toolCallId)?.exitCode)) return 'error';
   if (isSettledState(call.state) || !chatRunning) return 'idle';
   return 'running';
 }
