@@ -1027,7 +1027,7 @@ describe('CoreToolBuilder execution failures', () => {
     }
   });
 
-  it.each(['MCP_CLIENT_TOOL_TASK_FAILED', 'MCP_CLIENT_TOOL_TASK_CANCELLED'])(
+  it.each(['MCP_CLIENT_TOOL_TASK_FAILED', 'MCP_CLIENT_TOOL_TASK_CANCELLED', 'MCP_CLIENT_TOOL_TASK_POLL_FAILED'])(
     'keeps remote task failure text out of tracked exceptions (%s)',
     async id => {
       const secret = 'person@example.com';

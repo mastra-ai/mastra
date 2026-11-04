@@ -1935,7 +1935,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
               if (!isToolExecutionError && isReconnectableMCPError(e)) {
                 this.log('debug', `Transport error detected for tool ${tool.name}, attempting reconnection...`, {
-                  error: e instanceof Error ? e.message : String(e),
+                  error: errorKind(e),
                 });
 
                 try {

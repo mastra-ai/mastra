@@ -175,6 +175,26 @@ describe('MCPServer validation failure logging (Issue #29318)', () => {
     }
   });
 
+  it('keeps transport error text out of the MCPClient reconnect log', async () => {
+    const mcpClient = new InternalMastraMCPClient({ name: 'reconnect', server: { url: served.url } });
+    mcpClient.__setLogger(new ConsoleLogger({ level: 'silent' }));
+    const clientLogger = mcpClient['logger'];
+    const clientSpies = (['debug', 'info', 'warn', 'error'] as const).map(level => vi.spyOn(clientLogger, level));
+    try {
+      await mcpClient.connect();
+      const tools = await mcpClient.tools();
+      vi.spyOn(mcpClient['client'], 'callTool').mockRejectedValueOnce(new Error(`Not connected: ${SECRET}`));
+
+      await tools.contact!.execute!({ email: 'ok@x.dev', age: 1 }, {} as never).catch(() => undefined);
+
+      const clientLogs = JSON.stringify(clientSpies.flatMap(spy => spy.mock.calls));
+      expect(clientLogs).toContain('Transport error detected for tool contact');
+      expect(clientLogs).not.toContain(SECRET);
+    } finally {
+      await mcpClient.disconnect();
+    }
+  });
+
   it('keeps the server error text out of the exception an agent tracks for an MCPClient tool', async () => {
     const mcpClient = new InternalMastraMCPClient({ name: 'tracked-failure', server: { url: served.url } });
     mcpClient.__setLogger(new ConsoleLogger({ level: 'silent' }));
