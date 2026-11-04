@@ -154,8 +154,8 @@ export function copySources(context, check) {
       if (node.operator !== '&&') visit(node.left, separator);
       visit(node.right, node.operator === '??' ? false : separator);
     } else if (node.type === 'BinaryExpression' && node.operator === '+') {
-      visit(node.left, separator);
-      visit(node.right, separator);
+      visit(node.left, true);
+      visit(node.right, true);
     } else if (node.type === 'ArrayExpression') {
       node.elements.forEach(element => visit(element, separator));
     } else if (node.type === 'CallExpression') {

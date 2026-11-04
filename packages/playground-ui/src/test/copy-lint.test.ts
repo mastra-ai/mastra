@@ -19,6 +19,11 @@ tester.run('no-text-separators', noTextSeparators, {
     { name: 'allows entity notation in plain strings', code: 'const label = "Use &mdash; in HTML";' },
     { name: 'allows missing values', code: '<span>{value ?? "—"}</span>;' },
     { name: 'allows a bare placeholder', code: '<span>—</span>;' },
+    { name: 'allows a literal missing-value expression', code: '<span>{"—"}</span>;' },
+    {
+      name: 'allows a nullish fallback inside concatenated copy',
+      code: '<span>{name + (value ?? "—") + status}</span>;',
+    },
     { name: 'allows a template containing only a placeholder', code: '<span>{`${"—"}`}</span>;' },
     { name: 'allows comments around a bare placeholder', code: '<span>{/* before */}—{/* after */}</span>;' },
     {
@@ -62,6 +67,21 @@ tester.run('no-text-separators', noTextSeparators, {
     { name: 'reports a prose em dash', code: '<p>Refresh failed — try again.</p>;', errors: 1 },
     { name: 'reports an em dash between rendered values', code: '<p>{label} — {description}</p>;', errors: 1 },
     { name: 'reports a literal separator expression', code: '<p>{name}{"—"}{status}</p>;', errors: 1 },
+    {
+      name: 'reports a separator in concatenated copy',
+      code: '<span>{name + "—" + status}</span>;',
+      errors: 1,
+    },
+    {
+      name: 'reports a separator in concatenated literal copy',
+      code: '<span>{"Name" + "—" + "status"}</span>;',
+      errors: 1,
+    },
+    {
+      name: 'reports a separator between consecutive concatenated literals',
+      code: '<span>{name + " " + "—" + " " + status}</span>;',
+      errors: 1,
+    },
     {
       name: 'reports a locally bound separator expression',
       code: 'const separator = "—"; <p>{name}{separator}{status}</p>;',
