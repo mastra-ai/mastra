@@ -29,7 +29,9 @@ type ViewProps = Props & {
 };
 
 export function TimeseriesWidget(props: Props) {
-  const { view, heading } = useViewMenu(props.widget, props.views, 0, props.expand);
+  const menu = useViewMenu(props.widget, props.views, 0, props.expand);
+  const { view } = menu;
+  const heading = { ...menu.heading, dragHandle: props.dragHandle };
   return (
     <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
       {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}

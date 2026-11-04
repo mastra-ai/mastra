@@ -45,7 +45,7 @@ describe('incidentioCandidate', () => {
     expect(incidentioCandidate(followUp)).toMatchObject({
       source: 'incidentio-follow-up',
       sourceKey: followUp.id,
-      meta: 'INC-42 · outstanding · Grace Hopper',
+      meta: ['INC-42', 'outstanding', 'Grace Hopper'],
       metadata: {
         identifier: 'INC-42',
         issueRef: followUp.id,

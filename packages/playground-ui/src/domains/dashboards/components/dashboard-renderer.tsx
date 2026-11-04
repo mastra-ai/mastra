@@ -15,6 +15,7 @@ import type { DashboardSpan } from './dashboard-grid';
 import { WidgetError } from './widget-error';
 import { ErrorBoundary } from '@/ds/components/ErrorBoundary';
 import { MetricsCard } from '@/ds/components/MetricsCard';
+import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
 
 export type DashboardRendererProps = {
   definition: DashboardDefinition;
@@ -26,6 +27,11 @@ export type DashboardRendererProps = {
   expand?: DashboardExpand;
   /** Kinds beyond the built-in ones; a kind of the same name replaces the built-in. */
   kinds?: AnyWidgetKind[];
+  /**
+   * The grip each widget is dragged by, by widget id, e.g. from a layout editor; shown left of the
+   * widget's title. No grips without it.
+   */
+  dragHandle?: (widgetId: string) => MetricsCardDragHandleProps | undefined;
   className?: string;
 };
 
@@ -48,6 +54,7 @@ export function DashboardRenderer({
   onDrilldown,
   expand,
   kinds = [],
+  dragHandle,
   className,
 }: DashboardRendererProps) {
   // A widget that threw renders again once the page's range or filters change, or the widget does.
@@ -79,12 +86,13 @@ export function DashboardRenderer({
           {widgets.map(({ widget, prepared }) => {
             // Unparsed, the title may be anything; the error card shows it only when it's text.
             const heading = { id: widget.id, title: typeof widget.title === 'string' ? widget.title : undefined };
+            const handle = dragHandle?.(widget.id);
             return (
               <DashboardGridCell key={widget.id} id={widget.id} span={spanOf(widget)}>
                 <ErrorBoundary
                   resetKeys={[pageKey, JSON.stringify(widget)]}
                   variant="inline"
-                  fallback={({ error }) => <WidgetError widget={heading} message={error.message} />}
+                  fallback={({ error }) => <WidgetError widget={heading} message={error.message} dragHandle={handle} />}
                 >
                   {prepared.ok ? (
                     <prepared.kind.component
@@ -93,9 +101,10 @@ export function DashboardRenderer({
                       scope={scope}
                       onDrilldown={onDrilldown}
                       expand={expand}
+                      dragHandle={handle}
                     />
                   ) : (
-                    <WidgetError widget={heading} message={prepared.message} />
+                    <WidgetError widget={heading} message={prepared.message} dragHandle={handle} />
                   )}
                 </ErrorBoundary>
               </DashboardGridCell>

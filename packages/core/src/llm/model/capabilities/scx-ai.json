@@ -9,12 +9,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "Qwen3.8-Max": [
       {
         "type": "effort",
@@ -25,6 +19,12 @@
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

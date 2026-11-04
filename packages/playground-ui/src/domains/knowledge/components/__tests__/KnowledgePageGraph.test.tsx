@@ -419,7 +419,7 @@ describe('KnowledgePageGraph', () => {
       const dot = document.querySelector<HTMLElement>(`[data-testid="knowledge-page-dot"][data-page-id="${id}"]`);
       if (!dot) throw new Error(`no ${id} dot`);
       fireEvent.pointerEnter(dot);
-      return within(dot).getByRole('tooltip').textContent;
+      return within(dot).getByRole('tooltip');
     };
 
     it('draws its tooltip on a solid background with a tail pointing down at the dot', () => {
@@ -499,12 +499,16 @@ describe('KnowledgePageGraph', () => {
 
     it('names a farther page, its path and how many children it has on hover', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('ticket')).toBe('TicketPageAcme › Support4 children');
+      expect(hoverDot('ticket').textContent).toBe('TicketPageAcme › Support4 children');
     });
 
     it('tells how to open a collapsed group of scopes rather than counting it twice', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('group:support:thread')).toBe('3 thread scopesAcme › Support · Click to show them');
+      const tooltip = within(hoverDot('group:support:thread'));
+      expect(tooltip.getByText('3 thread scopes')).toBeTruthy();
+      expect(tooltip.getByText('Acme › Support')).toBeTruthy();
+      expect(tooltip.getByText('Click to show them')).toBeTruthy();
+      expect(tooltip.queryByText('3 children')).toBeNull();
     });
 
     describe('when a dot has links', () => {
@@ -526,7 +530,12 @@ describe('KnowledgePageGraph', () => {
 
       it('shows its kind, address and how many links go in and out', () => {
         renderGraph({ pages: linked, knownLinks: known });
-        expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in, 1 link out');
+        const tooltip = within(hoverDot('ticket'));
+        expect(tooltip.getByText('Ticket')).toBeTruthy();
+        expect(tooltip.getByText('Page')).toBeTruthy();
+        expect(tooltip.getByText('team:support#ticket')).toBeTruthy();
+        expect(tooltip.getByText('org:acme › team:support')).toBeTruthy();
+        expect(tooltip.getByText('1 link in, 1 link out')).toBeTruthy();
       });
 
       it('uses the store counts over the loaded ones, and says how many links lead to pages not drawn', () => {

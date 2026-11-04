@@ -30,6 +30,8 @@ import {
   trackBoardWrites,
 } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
+import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
+import type { FactoryClaimableWorkScope } from './claimable-work.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
   WorkItemDbRecord,
@@ -45,6 +47,8 @@ import {
   FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   WORK_ITEMS_SCHEMA,
 } from './work-item-schema.js';
+
+export type { FactoryClaimableWorkScope } from './claimable-work.js';
 
 export type WorkItemStage = string;
 
@@ -1308,6 +1312,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
   // Storage does not know boards. Until the host says which phases are terminal,
   // no card counts as finished, so the boot sweep never supersedes on a guess.
   #isTerminal: (item: Card) => boolean = () => false;
@@ -1329,6 +1334,54 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
     this.#attentionChanged = listener;
+  }
+
+  /**
+   * Fires after any committed write leaves a pending start or deferred decision
+   * `pending` or `retry`, so an idle dispatcher can wake instead of polling.
+   * Listeners run after the write has committed, so a listener that throws is
+   * logged and skipped rather than failing the write or the other listeners.
+   * Returns a function that removes the listener.
+   */
+  onClaimableWork(listener: (scope: FactoryClaimableWorkScope) => void): () => void {
+    this.#claimableWorkListeners.add(listener);
+    return () => this.#claimableWorkListeners.delete(listener);
+  }
+
+  #claimableWork(scope: FactoryClaimableWorkScope): void {
+    for (const listener of this.#claimableWorkListeners) {
+      try {
+        listener(scope);
+      } catch (error) {
+        console.error('[factory] claimable-work listener failed', error instanceof Error ? error.message : error);
+      }
+    }
+  }
+
+  /**
+   * When the next pending start or deferred decision becomes claimable: the earliest
+   * `available_at` of a queued row, or `lease_expires_at` of a leased one (a crashed
+   * dispatcher's lease is reclaimed once it lapses). `null` when nothing is queued or leased.
+   * May be in the past when work is already due.
+   */
+  async nextClaimableAt(): Promise<Date | null> {
+    const earliest = async (table: string, status: string | { in: string[] }, column: string) => {
+      const [row] = await this.#db.findMany<GovernanceDbRow>(
+        table,
+        { status },
+        { orderBy: [[column, 'asc']], limit: 1 },
+      );
+      const value = row?.[column];
+      return value ? new Date(value as Date | string).getTime() : undefined;
+    };
+    const times = await Promise.all(
+      LEASE_TABLES.flatMap(table => [
+        earliest(table, { in: ['pending', 'retry'] }, 'available_at'),
+        earliest(table, 'leased', 'lease_expires_at'),
+      ]),
+    );
+    const due = times.filter((time): time is number => time !== undefined);
+    return due.length ? new Date(Math.min(...due)) : null;
   }
 
   /**
@@ -1526,7 +1579,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
-    return trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope]));
+    // Outside a transaction a resolved write has committed, so its wake can go out at once.
+    return trackClaimableWrites(
+      trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope])),
+      scope => this.#claimableWork(scope),
+    );
   }
 
   /** `storage.withTransaction`, bumping the board version of every project it wrote once it commits. */
@@ -1535,7 +1592,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
     const changed = new BoardScopes();
-    const run = () => this.storage.withTransaction(ops => fn(trackBoardWrites(ops, changed.add)), options);
+    let queued = new Map<string, FactoryClaimableWorkScope>();
+    const run = () => {
+      // A retried transaction starts over: wakes queued by the rolled-back attempt never committed.
+      queued = new Map();
+      return this.storage.withTransaction(
+        ops =>
+          fn(
+            trackClaimableWrites(trackBoardWrites(ops, changed.add), scope =>
+              queued.set(`${scope.orgId}\u0000${scope.factoryProjectId}`, scope),
+            ),
+          ),
+        options,
+      );
+    };
     let result: T;
     try {
       result = await run();
@@ -1546,7 +1616,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         throw error;
       result = await run();
     }
-    await bumpBoardVersions(super.ops, changed.values());
+    try {
+      await bumpBoardVersions(super.ops, changed.values());
+    } finally {
+      // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
+      for (const scope of queued.values()) this.#claimableWork(scope);
+    }
     return result;
   }
 

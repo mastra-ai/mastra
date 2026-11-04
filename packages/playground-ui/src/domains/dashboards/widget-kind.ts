@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import type { z } from 'zod/v4';
 import type { ChartCardProps } from '../metrics/components/chart-card';
 import type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
+import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
 
 /** A view whose options passed its kind's schema. */
 export type ResolvedView<Options> = DashboardWidgetView & { options: Options };
@@ -15,6 +16,8 @@ export type WidgetKindProps<Options> = {
   onDrilldown?: OnDashboardDrilldown;
   /** Where a chart card expands to; see `DashboardExpand`. */
   expand?: DashboardExpand;
+  /** A grip to drag the widget by, shown left of its title: the host is arranging the dashboard. */
+  dragHandle?: MetricsCardDragHandleProps;
 };
 
 /**
