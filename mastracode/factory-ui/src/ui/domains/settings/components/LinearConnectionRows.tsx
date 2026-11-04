@@ -54,10 +54,9 @@ export function LinearConnectionRows({ showAvailable }: { showAvailable: boolean
             key={workspace.id}
             label={label}
             description={
-              <span className="flex flex-wrap gap-x-1">
+              <span className="flex flex-wrap gap-x-2">
                 <span>{workspace.name}</span>
-                <span aria-hidden>·</span>
-                <span>{workspace.connected ? 'Connected' : 'Disconnected · Intake paused'}</span>
+                <span>{workspace.connected ? 'Connected' : 'Disconnected, intake paused'}</span>
               </span>
             }
             errorMsg={error}

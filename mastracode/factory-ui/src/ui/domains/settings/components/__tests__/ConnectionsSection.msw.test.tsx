@@ -115,7 +115,7 @@ describe('Connections settings', () => {
     renderConnections();
     expect(await screen.findByText('Mastra')).toBeInTheDocument();
     expect(screen.getByText('Mastra Labs')).toBeInTheDocument();
-    expect(screen.getByText('Disconnected · Intake paused')).toBeInTheDocument();
+    expect(screen.getByText('Disconnected, intake paused')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: 'Reconnect Mastra Labs' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Manage Mastra Labs' }));
