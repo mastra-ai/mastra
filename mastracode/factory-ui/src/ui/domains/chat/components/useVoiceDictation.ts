@@ -49,8 +49,7 @@ export function useVoiceDictation({
   onTranscript,
   onError,
 }: {
-  /** Factory whose model scope and voice model apply; omitted outside a Factory. */
-  factoryId?: string;
+  factoryId: string;
   onTranscript: (text: string) => void;
   onError: (message: string) => void;
 }) {
@@ -65,7 +64,7 @@ export function useVoiceDictation({
       client.post<TranscribeResponse>('/web/voice/transcribe', {
         audio: await blobToBase64(clip),
         mimeType: clip.type || 'audio/webm',
-        ...(factoryId ? { factoryId } : {}),
+        factoryId,
       }),
     onSuccess: ({ text }) => {
       if (text) onTranscript(text);
