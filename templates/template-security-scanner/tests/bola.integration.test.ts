@@ -1281,13 +1281,20 @@ async function journey(
       });
     for (const path of [settings.databasePath, settings.mastraDatabasePath])
       for (const suffix of ['', '-wal', '-shm', '-journal']) await rm(`${path}${suffix}`, { force: true });
-    expect((await inventory()).containers).toEqual(before.containers);
-    expect((await inventory()).networks).toEqual(before.networks);
-    expect((await inventory()).images).toEqual(before.images);
-    if (serverClose[0]?.status === 'rejected') {
-      if (bodyError)
-        throw new AggregateError([bodyError, serverClose[0].reason], 'Test body and server cleanup failed');
-      throw serverClose[0].reason;
+    const cleanupErrors: unknown[] = [];
+    try {
+      const residual = await inventory();
+      expect(residual.containers).toEqual(before.containers);
+      expect(residual.networks).toEqual(before.networks);
+      expect(residual.images).toEqual(before.images);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    if (serverClose[0]?.status === 'rejected') cleanupErrors.push(serverClose[0].reason);
+    if (cleanupErrors.length) {
+      if (bodyError) throw new AggregateError([bodyError, ...cleanupErrors], 'Test body and cleanup failed');
+      if (cleanupErrors.length === 1) throw cleanupErrors[0];
+      throw new AggregateError(cleanupErrors, 'Test cleanup failed');
     }
   }
 }

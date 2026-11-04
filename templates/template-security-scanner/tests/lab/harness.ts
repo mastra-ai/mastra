@@ -22,14 +22,14 @@ import type { AdvisorySource } from '../../src/advisory/source.js';
 const root = resolve(import.meta.dirname, '../..');
 const cleanup: Array<() => Promise<void>> = [];
 export async function closeDiscoveryLabs() {
-  const failures = [];
+  const failures: unknown[] = [];
   for (const close of cleanup.splice(0).reverse())
     try {
       await close();
-    } catch {
-      failures.push(true);
+    } catch (error) {
+      failures.push(error);
     }
-  expect(failures.length).toBe(0);
+  if (failures.length) throw new AggregateError(failures, 'DISCOVERY_LAB_CLEANUP_FAILED');
 }
 export function registerLabCleanup(close: () => Promise<void>) {
   cleanup.push(close);

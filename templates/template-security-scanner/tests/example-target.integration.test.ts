@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadSettings } from '../src/config/settings.js';
@@ -113,7 +114,7 @@ async function closeChild(exit: Promise<void>) {
 describe('local Hono example target', () => {
   it('publishes one stable private seed when first initialization overlaps', async () => {
     for (let attempt = 0; attempt < 20; attempt++) {
-      const root = await mkdtemp('/private/tmp/scanner-example-seed-');
+      const root = await mkdtemp(join(tmpdir(), 'scanner-example-seed-'));
       try {
         const [left, right] = await Promise.all([initializeExampleData(root), initializeExampleData(root)]);
         expect(JSON.stringify(left) === JSON.stringify(right)).toBe(true);

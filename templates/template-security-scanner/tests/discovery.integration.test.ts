@@ -466,16 +466,6 @@ describe('Confined discovery through the protected API', () => {
     const complete = await api.wait(scan.id);
     if (complete.state !== 'COMPLETED')
       throw new Error(`SCAN_PHASE_HTTP_STAGE_${complete.diagnostic ?? 'NONE'}_REASON_${complete.reason}`);
-    if (complete.state !== 'COMPLETED')
-      console.error(
-        JSON.stringify({
-          state: complete.state,
-          reason: complete.reason,
-          diagnostic: complete.diagnostic,
-          cleanup: complete.cleanup,
-          roles: complete.roles.length,
-        }),
-      );
     expect(complete.state).toBe('COMPLETED');
     expect(complete.cleanup).toBe('COMPLETE');
     const inventory = await api.request(`/api/scans/${scan.id}/inventory?limit=100`);
@@ -592,19 +582,6 @@ describe('Confined discovery through the protected API', () => {
       }
       if (run.state !== 'COMPLETED_WITH_ERRORS')
         throw new Error(`SCAN_PHASE_${mode.toUpperCase()}_STAGE_${run.diagnostic ?? 'NONE'}_REASON_${run.reason}`);
-      if (!['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(run.state))
-        console.error(
-          JSON.stringify({
-            mode,
-            elapsedMs: Date.parse(run.updatedAt) - Date.parse(run.createdAt),
-            maxDurationSeconds: limits.maxDurationSeconds,
-            state: run.state,
-            reason: run.reason,
-            diagnostic: run.diagnostic,
-            network: run.networkCounters,
-            roles: run.roles.map(role => ({ role: role.role, identity: role.identity, counters: role.counters })),
-          }),
-        );
       expect(run.state).toBe('COMPLETED_WITH_ERRORS');
       expect(run.cleanup).toBe('COMPLETE');
       expect(run.roles).toHaveLength(4);
