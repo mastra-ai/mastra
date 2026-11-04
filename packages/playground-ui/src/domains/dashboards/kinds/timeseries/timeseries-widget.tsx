@@ -5,7 +5,7 @@ import { BUCKET_AXIS, EDGE_BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { bucketPlan, bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { ViewGate } from '../../components/view-gate';
 import { PendingChartCard } from '../../components/widget-chrome';
-import { DrilldownAction } from '../../components/widget-controls';
+import { DrilldownAction, PinAction } from '../../components/widget-controls';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
 import type { ViewHeading } from '../../lib/chrome';
@@ -31,7 +31,7 @@ type ViewProps = Props & {
 export function TimeseriesWidget(props: Props) {
   const menu = useViewMenu(props.widget, props.views, 0, props.expand);
   const { view } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle };
+  const heading = { ...menu.heading, dragHandle: props.dragHandle, actions: props.pin && <PinAction {...props.pin} /> };
   return (
     <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
       {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}
@@ -80,8 +80,13 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
   const layout = {
     ...heading,
     actions: hasDrilldownAction(widget, view, onDrilldown) ? (
-      <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
-    ) : undefined,
+      <>
+        <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
+        {heading.actions}
+      </>
+    ) : (
+      heading.actions
+    ),
     total: withRangeTotals ? rangeTotals : undefined,
     isLoading,
     toolbar: lines.length > 0 && (

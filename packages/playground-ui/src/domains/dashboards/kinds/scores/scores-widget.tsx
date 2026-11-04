@@ -6,6 +6,7 @@ import { BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { CHART_COLORS } from '../../../metrics/lib/chart-colors';
 import { bucketPlan, intervalHours } from '../../../metrics/lib/metrics-buckets';
 import { ViewGate } from '../../components/view-gate';
+import { PinAction } from '../../components/widget-controls';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { useScorers } from '../../hooks/use-scorers';
 import { viewTitle } from '../../lib/chrome';
@@ -28,10 +29,14 @@ const SCORER_COLORS = [
   CHART_COLORS.indigo,
 ];
 
-export function ScoresWidget({ widget, views, expand, dragHandle }: WidgetKindProps<ScoresOptions>) {
+export function ScoresWidget({ widget, views, expand, dragHandle, pin }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
   // Scores show their first view only, so the title is plain or, with somewhere to expand to, a link.
-  const heading = { ...viewTitle(widget, [view], 0, () => {}, expand), dragHandle };
+  const heading = {
+    ...viewTitle(widget, [view], 0, () => {}, expand),
+    dragHandle,
+    actions: pin && <PinAction {...pin} />,
+  };
   return (
     <ViewGate queries={view.queries} pending={() => null}>
       {page => <ScoresView heading={heading} view={view} page={page} />}

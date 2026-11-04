@@ -1,15 +1,38 @@
 import { DashboardRenderer, dashboardDefaults } from '@mastra/playground-ui/domains/dashboards';
-import type { OnDashboardDrilldown } from '@mastra/playground-ui/domains/dashboards';
+import type { DashboardRendererProps, OnDashboardDrilldown } from '@mastra/playground-ui/domains/dashboards';
 import { MetricsProvider } from '@mastra/playground-ui/domains/metrics';
 import type { DatePreset } from '@mastra/playground-ui/domains/metrics';
-import { useState } from 'react';
+import type { App } from '@modelcontextprotocol/ext-apps';
+import { useState, useSyncExternalStore } from 'react';
 import { defineMcpApp } from '../../runtime/define-mcp-app';
 import { MastraServerProvider } from '../../runtime/mastra-server-provider';
 import { useMcpApp } from '../../runtime/mcp-app-context';
 import { drilldownContext, drilldownMessage, drilldownPrompt } from './drilldown';
 import { dashboardRendererInputSchema } from './input';
 import type { DashboardRendererInput } from './input';
+import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, DASHBOARD_WIDGET_PIN_NOTIFICATION } from './pin';
+import type { DashboardWidgetPinNotificationParams } from './pin';
 import './dashboard.css';
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every(item => typeof item === 'string');
+
+/**
+ * The ids of the widgets the host has pinned, from its context; `undefined` when it can't pin.
+ * The snapshot is the context's own array, so it only changes when the host sends a new one.
+ */
+function useHostPinnedWidgets(app: App): readonly string[] | undefined {
+  return useSyncExternalStore(
+    onChange => {
+      app.addEventListener('hostcontextchanged', onChange);
+      return () => app.removeEventListener('hostcontextchanged', onChange);
+    },
+    () => {
+      const pinned = app.getHostContext()?.[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY];
+      return isStringArray(pinned) ? pinned : undefined;
+    },
+  );
+}
 
 function Dashboard({ input }: { input: DashboardRendererInput }) {
   const app = useMcpApp();
@@ -35,6 +58,17 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
       }
     : undefined;
 
+  // The host owns the pinned widgets: the app asks it to change, and shows what it sends back.
+  const pinnedWidgets = useHostPinnedWidgets(app);
+  const onPin: DashboardRendererProps['onPin'] = pinnedWidgets
+    ? (widget, next) => {
+        const params: DashboardWidgetPinNotificationParams = { widget, scope: input.scope, isPinned: next };
+        app
+          .notification({ method: DASHBOARD_WIDGET_PIN_NOTIFICATION, params })
+          .catch(error => console.error('[Mastra dashboard] Pin failed', error));
+      }
+    : undefined;
+
   return (
     <MastraServerProvider>
       <MetricsProvider
@@ -43,7 +77,13 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
         filterTokens={filterTokens}
         onFilterTokensChange={setFilterTokens}
       >
-        <DashboardRenderer definition={input.definition} scope={input.scope} onDrilldown={onDrilldown} />
+        <DashboardRenderer
+          definition={input.definition}
+          scope={input.scope}
+          onDrilldown={onDrilldown}
+          onPin={onPin}
+          isPinned={widgetId => pinnedWidgets?.includes(widgetId) ?? false}
+        />
       </MetricsProvider>
     </MastraServerProvider>
   );

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, screen } from '@testing-library/react';
+import type { DashboardDefinition } from '@mastra/client-js';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
+import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, DASHBOARD_WIDGET_PIN_NOTIFICATION } from '../pin';
 import { agentRunsAggregate, agentRunsDashboard, emptyTimeSeries, supportRunsChart } from './fixtures/dashboard';
 
 const AGGREGATE_API = `${MASTRA_SERVER}/observability/metrics/aggregate`;
@@ -194,6 +196,100 @@ describe('dashboard renderer app', () => {
       await host.setHostContext({ theme: 'dark' });
 
       await expect.poll(() => document.documentElement.classList.contains('light')).toBe(false);
+    });
+  });
+
+  describe('when the host can pin widgets', () => {
+    // A KPI group and a chart, so each pin has to name the widget it was clicked on.
+    const pinnableDashboard: DashboardDefinition = {
+      schemaVersion: 1,
+      rows: [...agentRunsDashboard.rows, ...supportRunsChart.rows],
+    };
+
+    const widgetCell = (id: string) => {
+      const found = document.querySelector<HTMLElement>(`[data-widget-id="${id}"]`);
+      if (!found) throw new Error(`No widget ${id}`);
+      return found;
+    };
+
+    async function showDashboard(pinnedWidgets: string[]) {
+      server.use(
+        http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)),
+        http.post(TIME_SERIES_API, () => HttpResponse.json(emptyTimeSeries)),
+      );
+      const host = await renderWithHost(app, {
+        hostContext: { [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: pinnedWidgets },
+      });
+      await host.sendToolResult({ content: [], structuredContent: { definition: pinnableDashboard, scope: 'org' } });
+      expect(await screen.findByText('Agent runs')).toBeTruthy();
+      expect(await screen.findByText('Support runs')).toBeTruthy();
+      return host;
+    }
+
+    it('asks the host to pin the clicked widget, and shows it pinned once the host says so', async () => {
+      const host = await showDashboard([]);
+
+      fireEvent.click(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin widget' }));
+
+      await expect.poll(() => host.notifications).toHaveLength(1);
+      expect(host.notifications[0]).toEqual({
+        method: DASHBOARD_WIDGET_PIN_NOTIFICATION,
+        params: {
+          widget: expect.objectContaining({ id: 'support-runs', kind: 'timeseries', title: 'Support runs' }),
+          scope: 'org',
+          isPinned: true,
+        },
+      });
+      // The host owns the state: until it answers, the widget still shows unpinned.
+      expect(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin widget' })).toBeTruthy();
+
+      await host.setHostContext({ [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ['support-runs'] });
+
+      expect(await within(widgetCell('support-runs')).findByRole('button', { name: 'Unpin widget' })).toBeTruthy();
+      expect(within(widgetCell('kpis')).getByRole('button', { name: 'Pin widget' })).toBeTruthy();
+    });
+
+    it('asks the host to unpin a widget it has pinned', async () => {
+      const host = await showDashboard(['kpis']);
+
+      fireEvent.click(within(widgetCell('kpis')).getByRole('button', { name: 'Unpin widget' }));
+
+      await expect.poll(() => host.notifications).toHaveLength(1);
+      expect(host.notifications[0]).toEqual({
+        method: DASHBOARD_WIDGET_PIN_NOTIFICATION,
+        params: { widget: expect.objectContaining({ id: 'kpis', kind: 'kpis' }), scope: 'org', isPinned: false },
+      });
+    });
+
+    it('follows the host when it unpins a widget itself', async () => {
+      const host = await showDashboard(['kpis', 'support-runs']);
+
+      await host.setHostContext({ [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ['support-runs'] });
+
+      expect(await within(widgetCell('kpis')).findByRole('button', { name: 'Pin widget' })).toBeTruthy();
+      expect(within(widgetCell('support-runs')).getByRole('button', { name: 'Unpin widget' })).toBeTruthy();
+      expect(host.notifications).toEqual([]);
+    });
+
+    it('keeps the pinned widgets through context changes that leave them out', async () => {
+      const host = await showDashboard(['kpis']);
+
+      await host.setHostContext({ theme: 'light' });
+      await expect.poll(() => document.documentElement.classList.contains('light')).toBe(true);
+
+      expect(within(widgetCell('kpis')).getByRole('button', { name: 'Unpin widget' })).toBeTruthy();
+    });
+  });
+
+  describe("when the host can't pin widgets", () => {
+    it('shows no pin buttons', async () => {
+      server.use(http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)));
+      const host = await renderWithHost(app);
+
+      await host.sendToolResult({ content: [], structuredContent: { definition: agentRunsDashboard } });
+
+      expect(await screen.findByText('Agent runs')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /pin widget/i })).toBeNull();
     });
   });
 });

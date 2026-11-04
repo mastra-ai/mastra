@@ -1,4 +1,5 @@
 import type { BlockedFields } from '../../components/view-gate';
+import { PinAction } from '../../components/widget-controls';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { useViewMenu } from '../../hooks/use-widget-views';
 import { unsupportedMessage } from '../../lib/chrome';
@@ -52,7 +53,7 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
     : 'uncountable';
   const menu = useViewMenu(props.widget, props.views, openingView(props.views, rows));
   const { view, index } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle };
+  const heading = { ...menu.heading, dragHandle: props.dragHandle, actions: props.pin && <PinAction {...props.pin} /> };
 
   const unsupported = blocked(view.queries);
   if (unsupported) {

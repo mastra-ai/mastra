@@ -74,6 +74,34 @@ export const dashboardServer = new MCPServer({
 
 Each tool runs its read-only observability route in-process as the caller, with the route's own validation, authentication, permission and FGA checks, so the app sees the same data the signed-in user can.
 
+### Pinning widgets
+
+Each widget shows a pin button when the host says it can pin. The host owns the pinned widgets; the app only asks it to change them.
+
+1. The host sets `mastra.ai/dashboard-pinned-widgets` in its host context to the ids of the widgets it has pinned (`[]` for none). Without it, no pin buttons show.
+2. When the user clicks a widget's button, the app sends a `mastra.ai/dashboard-widget-pin` notification with `{ widget, scope, isPinned }`: the widget definition, the dashboard's scope, and the state the user wants. The host can render the pinned widget on its own from `widget` and `scope`.
+3. The host stores the change and sends the new list of ids back in its host context. Each button follows the host, not the click.
+
+```typescript
+import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
+import {
+  DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
+  DASHBOARD_WIDGET_PIN_NOTIFICATION,
+} from '@mastra/mcp-apps-components/dashboard-renderer';
+import type { DashboardWidgetPinNotificationParams } from '@mastra/mcp-apps-components/dashboard-renderer';
+
+const bridge = new AppBridge(client, hostInfo, capabilities, {
+  hostContext: { [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: pinnedWidgetIds },
+});
+
+bridge.fallbackNotificationHandler = async ({ method, params }) => {
+  if (method !== DASHBOARD_WIDGET_PIN_NOTIFICATION) return;
+  const { widget, scope, isPinned } = params as DashboardWidgetPinNotificationParams;
+  const ids = isPinned ? await pinWidget(widget, scope) : await unpinWidget(widget.id);
+  bridge.setHostContext({ [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ids });
+};
+```
+
 ## Documentation
 
 - [Build MCP Apps](https://mastra.ai/docs/connections/mcp)

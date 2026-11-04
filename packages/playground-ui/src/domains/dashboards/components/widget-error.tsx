@@ -1,5 +1,7 @@
 import type { DashboardWidget } from '@mastra/client-js';
 import { ChartCard } from '../../metrics/components/chart-card';
+import type { WidgetPin } from '../widget-kind';
+import { PinAction } from './widget-controls';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
 
@@ -8,13 +10,16 @@ export function WidgetError({
   widget,
   message,
   dragHandle,
+  pin,
 }: {
   widget: Pick<DashboardWidget, 'id' | 'title'>;
   message: string;
   dragHandle?: MetricsCardDragHandleProps;
+  /** So a widget that broke after it was pinned can still be unpinned. */
+  pin?: WidgetPin;
 }) {
   return (
-    <ChartCard title={widget.title ?? widget.id} dragHandle={dragHandle}>
+    <ChartCard title={widget.title ?? widget.id} dragHandle={dragHandle} actions={pin && <PinAction {...pin} />}>
       <MetricsCard.Error message={message} className="h-full" />
     </ChartCard>
   );

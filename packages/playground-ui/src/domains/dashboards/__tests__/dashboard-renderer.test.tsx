@@ -2,6 +2,7 @@
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -103,11 +104,15 @@ function renderDashboard(
     onDrilldown,
     expand,
     dragHandle,
+    onPin,
+    isPinned,
   }: {
     kinds?: AnyWidgetKind[];
     onDrilldown?: OnDashboardDrilldown;
     expand?: DashboardExpand;
     dragHandle?: DashboardRendererProps['dragHandle'];
+    onPin?: DashboardRendererProps['onPin'];
+    isPinned?: DashboardRendererProps['isPinned'];
     scope?: { metrics: MetricsScope; dashboard: DashboardScope };
     environment?: string;
     filterTokens?: { fieldId: string; value: string }[];
@@ -133,6 +138,8 @@ function renderDashboard(
         onDrilldown={onDrilldown}
         expand={expand}
         dragHandle={dragHandle}
+        onPin={onPin}
+        isPinned={isPinned}
       />,
     ),
   );
@@ -482,6 +489,91 @@ describe('DashboardRenderer', () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
       expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
       expect(screen.queryByRole('button', { name: /^Move / })).toBeNull();
+    });
+  });
+
+  describe('when the host can pin widgets', () => {
+    /** A host that owns which widgets are pinned and passes that back down, as the MCP app's host does. */
+    function PinningHost({ widgets, onPin }: { widgets: DashboardWidget[]; onPin: DashboardRendererProps['onPin'] }) {
+      const [pinned, setPinned] = useState<string[]>([]);
+      return (
+        <MetricsProvider preset="24h" filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+          <DashboardRenderer
+            definition={definition(...widgets)}
+            kinds={[noteKind, brokenKind]}
+            scope="project"
+            isPinned={id => pinned.includes(id)}
+            onPin={(widget, next) => {
+              onPin?.(widget, next);
+              setPinned(ids => (next ? [...ids, widget.id] : ids.filter(id => id !== widget.id)));
+            }}
+          />
+        </MetricsProvider>
+      );
+    }
+
+    it.each([
+      ['a timeseries card', metricsWidget('agent-runs')],
+      ['a table card', models()],
+      ['a scores card', scoresWidget],
+      ['a KPI group', kpisWidget],
+    ])('pins and unpins %s, sending the host the widget itself', async (_, widget) => {
+      const onPin = vi.fn();
+      const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={onPin} />);
+      const card = cell(container, widget.id);
+
+      fireEvent.click(await within(card).findByRole('button', { name: 'Pin widget' }, { timeout: 5000 }));
+      expect(onPin).toHaveBeenLastCalledWith(expect.objectContaining({ id: widget.id, kind: widget.kind }), true);
+
+      fireEvent.click(within(card).getByRole('button', { name: 'Unpin widget' }));
+      expect(onPin).toHaveBeenLastCalledWith(expect.objectContaining({ id: widget.id }), false);
+      expect(within(card).getByRole('button', { name: 'Pin widget' })).toBeDefined();
+    });
+
+    it('pins only the widget clicked', async () => {
+      const { container } = renderWithProviders(
+        <PinningHost widgets={[metricsWidget('agent-runs'), metricsWidget('token-usage')]} onPin={() => {}} />,
+      );
+      fireEvent.click(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Pin widget' }));
+      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Unpin widget' })).toBeDefined();
+      expect(within(cell(container, 'token-usage')).getByRole('button', { name: 'Pin widget' })).toBeDefined();
+    });
+
+    it("shows the host's pinned widgets without a click", async () => {
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), metricsWidget('token-usage')), {
+        onPin: () => {},
+        isPinned: id => id === 'token-usage',
+      });
+      expect(await within(cell(container, 'token-usage')).findByRole('button', { name: 'Unpin widget' })).toBeDefined();
+      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Pin widget' })).toBeDefined();
+    });
+
+    it('keeps the pin on a widget that breaks while rendering, so it can still be unpinned', () => {
+      const onPin = vi.fn();
+      const { container } = renderDashboard(definition({ ...note('boom', 'x'), kind: 'broken' }), {
+        onPin,
+        isPinned: () => true,
+      });
+      const card = cell(container, 'boom');
+      expect(within(card).getByText('Render failed.')).toBeDefined();
+      fireEvent.click(within(card).getByRole('button', { name: 'Unpin widget' }));
+      expect(onPin).toHaveBeenCalledWith(expect.objectContaining({ id: 'boom' }), false);
+    });
+
+    it("offers no pin on a widget that can't be read", () => {
+      const { container } = renderDashboard(definition({ ...note('gone', 'x'), kind: 'heatmap' }), {
+        onPin: () => {},
+      });
+      expect(within(cell(container, 'gone')).getByText('This widget needs a newer version.')).toBeDefined();
+      expect(screen.queryByRole('button', { name: /pin widget/i })).toBeNull();
+    });
+
+    it('shows no pin buttons without onPin, even for pinned widgets', async () => {
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget), {
+        isPinned: () => true,
+      });
+      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /pin widget/i })).toBeNull();
     });
   });
 
