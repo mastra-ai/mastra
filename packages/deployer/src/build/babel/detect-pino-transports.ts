@@ -159,7 +159,7 @@ function extractTransportsFromArg(arg: t.Node): string[] {
 // Also matches `x[transport](`: the detector does not check `computed` on the member expression.
 const TRANSPORT_CALL_RE = /[.[]\s*transport\s*\]?\s*[(<]/;
 const PINO_SOURCE_RE = /['"]pino['"]/;
-const GLOBAL_PINO_TRANSPORT_RE = /\bpino\s*\.\s*(?:default\s*\.\s*)?transport\b/;
+const GLOBAL_PINO_TRANSPORT_RE = /\bpino\s*(?:\.\s*default\s*)?(?:\.\s*transport\b|\[\s*transport\s*\])/;
 
 /**
  * Cheap text pre-check so callers can skip a full Babel parse of large bundles.
