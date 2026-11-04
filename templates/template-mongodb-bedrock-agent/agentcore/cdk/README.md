@@ -11,10 +11,14 @@ This CDK project is managed by the AgentCore CLI. It deploys your agent infrastr
 ## Useful commands
 
 - `npm run build` compile TypeScript to JavaScript
-- `npm run test` run unit tests
+- `npm run test` run the Vitest synthesis test without AWS credentials or deployment
 - `npx cdk synth` emit the synthesized CloudFormation template
 - `npx cdk deploy` deploy this stack to your default AWS account/region
 - `npx cdk diff` compare deployed stack with current state
+
+The local `vitest.config.mts` also lets the monorepo's Changed Test Gate discover this suite. The test synthesizes the
+template's runtime configuration and checks MongoDB settings, HTTP access, and Bedrock permissions using a temporary
+source asset. It does not build a container or contact AWS.
 
 ## Usage
 

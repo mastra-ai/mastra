@@ -1,31 +1,60 @@
-import * as cdk from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { AgentCoreProjectSpecSchema, getSessionProjectRoot, setSessionProjectRoot } from '@aws/agentcore-cdk';
+import { App } from 'aws-cdk-lib';
+import { Match, Template } from 'aws-cdk-lib/assertions';
+import { CloudAssembly } from 'aws-cdk-lib/cx-api';
+import { afterAll, expect, test } from 'vitest';
 import { AgentCoreStack } from '../lib/cdk-stack';
 
-test('AgentCoreStack synthesizes with empty spec', () => {
-  const app = new cdk.App();
-  const stack = new AgentCoreStack(app, 'TestStack', {
-    spec: {
-      name: 'testproject',
-      version: 1,
-      managedBy: 'CDK' as const,
-      runtimes: [],
-      memories: [],
-      credentials: [],
-      evaluators: [],
-      onlineEvalConfigs: [],
-      configBundles: [],
-      policyEngines: [],
-      payments: [],
-      agentCoreGateways: [],
-      mcpRuntimeTools: [],
-      unassignedTargets: [],
-      datasets: [],
-      knowledgeBases: [],
-    },
+const sourceDir = mkdtempSync(join(tmpdir(), 'mongodb-bedrock-cdk-'));
+const previousProjectRoot = getSessionProjectRoot() ?? '';
+
+afterAll(() => {
+  CloudAssembly.cleanupTemporaryDirectories();
+  setSessionProjectRoot(previousProjectRoot);
+  rmSync(sourceDir, { recursive: true, force: true });
+});
+
+test('deploys the documentation agent with MongoDB settings, HTTP access, and Bedrock permissions', () => {
+  // Synthesis stages source files but never builds an image or contacts AWS.
+  writeFileSync(join(sourceDir, 'Dockerfile'), 'FROM scratch\n');
+  const config = JSON.parse(readFileSync(resolve(__dirname, '../../agentcore.json'), 'utf8'));
+  const spec = AgentCoreProjectSpecSchema.parse({
+    ...config,
+    runtimes: config.runtimes.map((runtime: Record<string, unknown>) => ({ ...runtime, codeLocation: sourceDir })),
+  });
+  setSessionProjectRoot(resolve(__dirname, '../../..'));
+
+  const app = new App();
+  const stack = new AgentCoreStack(app, 'DocumentationAgent', {
+    env: { account: '123456789012', region: 'us-east-1' },
+    spec,
   });
   const template = Template.fromStack(stack);
-  template.hasOutput('StackNameOutput', {
-    Description: 'Name of the CloudFormation Stack',
+
+  template.resourceCountIs('AWS::BedrockAgentCore::Runtime', 1);
+  template.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
+    AgentRuntimeName: 'mastramongoaws_MastraAgent',
+    NetworkConfiguration: { NetworkMode: 'PUBLIC' },
+    EnvironmentVariables: Match.objectLike({
+      MONGODB_DATABASE: 'mastra_docs',
+      MONGODB_URI: 'SET_BEFORE_DEPLOY',
+      AWS_REGION: 'us-east-1',
+      EMBED_DIMENSION: '1024',
+    }),
+  });
+  const [runtime] = Object.values(template.findResources('AWS::BedrockAgentCore::Runtime'));
+  expect(runtime.Properties.ProtocolConfiguration ?? 'HTTP').toBe('HTTP');
+  template.hasResourceProperties('AWS::IAM::Policy', {
+    PolicyDocument: {
+      Statement: Match.arrayWith([
+        Match.objectLike({
+          Effect: 'Allow',
+          Action: Match.arrayWith(['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream']),
+        }),
+      ]),
+    },
   });
 });
