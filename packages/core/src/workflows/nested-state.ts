@@ -139,19 +139,18 @@ function stripStartStateOnce(value: unknown): unknown {
   // An item that parks is stripped here even when the step's own metadata carries no base: a sibling
   // item that fails leaves the step metadata without one while the parked item keeps its own.
   const { startState: _startState, foreachOutput, ...restMeta } = meta;
-  const nextForeachOutput = Array.isArray(foreachOutput) ? foreachOutput.map(stripStartStateOnce) : foreachOutput;
-  const foreachChanged =
-    Array.isArray(nextForeachOutput) &&
-    Array.isArray(foreachOutput) &&
-    nextForeachOutput.some((item, index) => item !== foreachOutput[index]);
+  const isList = Array.isArray(foreachOutput);
+  const nextForeachOutput = isList ? (foreachOutput as unknown[]).map(stripStartStateOnce) : foreachOutput;
+  const listChanged = isList && (nextForeachOutput as unknown[]).some((item, index) => item !== foreachOutput[index]);
+  const hasBase = Object.hasOwn(meta, 'startState');
 
-  if (!Object.hasOwn(meta, 'startState') && !foreachChanged) return value;
+  if (!hasBase && !listChanged) return value;
 
-  return {
-    ...result,
-    suspendPayload: {
-      ...suspendPayload,
-      __workflow_meta: foreachChanged ? { ...restMeta, foreachOutput: nextForeachOutput } : restMeta,
-    },
-  };
+  // The list itself is part of the step result; only the bases inside it are internal.
+  const nextMeta: Record<string, unknown> = { ...restMeta };
+  if (Object.hasOwn(meta, 'foreachOutput')) {
+    nextMeta.foreachOutput = isList ? nextForeachOutput : foreachOutput;
+  }
+
+  return { ...result, suspendPayload: { ...suspendPayload, __workflow_meta: nextMeta } };
 }

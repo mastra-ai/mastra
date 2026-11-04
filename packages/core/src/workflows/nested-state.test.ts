@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { copyState, rebaseNestedState } from './nested-state';
+import { copyState, rebaseNestedState, withoutNestedRunStartState } from './nested-state';
 
 describe('rebaseNestedState', () => {
   it('keeps the parent value of a key the nested run did not change', () => {
@@ -95,5 +95,63 @@ describe('copyState', () => {
     const copy = copyState(JSON.parse('{"__proto__": {"polluted": true}}'));
     expect(Object.hasOwn(copy, '__proto__')).toBe(true);
     expect(({} as any).polluted).toBeUndefined();
+  });
+});
+
+describe('withoutNestedRunStartState', () => {
+  const completedItem = { status: 'success', output: { n: 1 } };
+
+  it('strips the base and keeps the per-item list as it was', () => {
+    const stepResult = {
+      status: 'suspended',
+      suspendPayload: {
+        __workflow_meta: { runId: 'r', startState: { s: 1 }, foreachIndex: 0, foreachOutput: [completedItem] },
+      },
+    };
+
+    const stripped: any = withoutNestedRunStartState(stepResult);
+
+    expect(stripped.suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+    expect(stripped.suspendPayload.__workflow_meta.foreachOutput).toEqual([completedItem]);
+    expect(stripped.suspendPayload.__workflow_meta).toMatchObject({ runId: 'r', foreachIndex: 0 });
+  });
+
+  it('keeps a list that is not an array', () => {
+    const stepResult = {
+      suspendPayload: { __workflow_meta: { runId: 'r', startState: { s: 1 }, foreachOutput: 'pending' } },
+    };
+
+    const stripped: any = withoutNestedRunStartState(stepResult);
+
+    expect(stripped.suspendPayload.__workflow_meta.foreachOutput).toBe('pending');
+    expect(stripped.suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+  });
+
+  it('strips the bases inside the items and leaves the rest untouched', () => {
+    const stepResult = {
+      suspendPayload: {
+        __workflow_meta: {
+          runId: 'r',
+          foreachOutput: [
+            { status: 'suspended', suspendPayload: { __workflow_meta: { runId: 'r1', startState: { s: 1 } } } },
+            completedItem,
+          ],
+        },
+      },
+    };
+
+    const stripped: any = withoutNestedRunStartState(stepResult);
+
+    expect(stripped.suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+    expect(stripped.suspendPayload.__workflow_meta.foreachOutput[0].suspendPayload.__workflow_meta).toEqual({
+      runId: 'r1',
+    });
+    expect(stripped.suspendPayload.__workflow_meta.foreachOutput[1]).toBe(completedItem);
+  });
+
+  it('returns the step result itself when there is nothing to strip', () => {
+    const stepResult = { status: 'success', suspendPayload: { __workflow_meta: { runId: 'r', foreachOutput: [] } } };
+
+    expect(withoutNestedRunStartState(stepResult)).toBe(stepResult);
   });
 });
