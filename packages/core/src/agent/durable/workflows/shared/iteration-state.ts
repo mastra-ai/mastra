@@ -200,7 +200,10 @@ export function createBaseIterationStateUpdate(
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
     accumulatedSteps: signalPreempted
       ? previousSteps
-      : [...withReleasedToolResults(previousSteps, executionOutput.releasedToolResultIds), buildStepRecord(executionOutput)],
+      : [
+          ...withReleasedToolResults(previousSteps, executionOutput.releasedToolResultIds),
+          buildStepRecord(executionOutput),
+        ],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     lastStepResult,
