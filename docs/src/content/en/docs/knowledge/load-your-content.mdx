@@ -128,7 +128,7 @@ const run = await knowledge.runImporter('docs', { options: { orgId: 'acme' } })
 console.log(run.status, run.counts) // succeeded { created: 12, updated: 0, unchanged: 0, removed: 0, notes: 0 }
 ```
 
-Every write is recorded with the author `importer:docs`. After a run succeeds, Knowledge removes pages this importer created in earlier runs and didn't write this time, so a doc you delete from the source leaves Knowledge on the next run. A page someone else created is never removed, even if the importer writes to it. A run that throws or is aborted is recorded as `failed` or `canceled`: it keeps the writes it already made, but removes no stale pages and saves no state.
+Every write is recorded with the author `importer:docs`. After a run succeeds, Knowledge removes pages this importer created in earlier runs and didn't write this time, so a doc you delete from the source leaves Knowledge on the next run. A page someone else created is never removed, even if the importer writes to it. A run that throws or is aborted is recorded as `failed` or `canceled`: it keeps the writes it already made, but removes no stale pages and saves no state. State is saved one key at a time, so if storage fails while saving it, some keys can be saved.
 
 An importer that fetches only what changed since its last run should run with `incremental: true`, which removes nothing, and save its cursor with `ctx.state`:
 
