@@ -25,6 +25,16 @@
         "default": "./dist/observability-tools.cjs"
       }
     },
+    "./host": {
+      "import": {
+        "types": "./dist/host.d.ts",
+        "default": "./dist/host.js"
+      },
+      "require": {
+        "types": "./dist/host.d.ts",
+        "default": "./dist/host.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -50,7 +60,13 @@
     "@mastra/core": ">=1.81.0-0 <2.0.0-0",
     "@mastra/mcp": ">=2.9.0-0 <3.0.0-0",
     "@mastra/server": ">=1.83.0-0 <2.0.0-0",
+    "react": ">=19.0.0",
     "zod": "^4.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@hono/node-server": "^2.1.3",

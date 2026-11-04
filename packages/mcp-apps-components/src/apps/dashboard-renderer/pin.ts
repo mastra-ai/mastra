@@ -2,30 +2,34 @@ import { DASHBOARD_SCOPES, dashboardDefaultsSchema, dashboardWidgetSchema } from
 import { z } from 'zod';
 
 /**
- * The host context key a host sets to the ids of the widgets it has pinned from this dashboard
- * (`[]` for none). The app shows a pin button on each widget only while it holds an array, and
- * follows its value. Set it to `null` to turn pinning off: deleting the key leaves the app with
- * the last ids it got.
+ * The key both sides of dashboard pinning use, as MCP Apps extension keys:
+ *
+ * - **Host → app**, in host context: the ids of the widgets the host has pinned from this
+ *   dashboard (`[]` for none). The app shows a pin button on each widget only while it holds an
+ *   array and the host takes structured model context, and follows its value. Set it to `null` to
+ *   turn pinning off: deleting the key leaves the app with the last ids it got.
+ * - **App → host**, in the `structuredContent` of `ui/update-model-context`: every widget the
+ *   user wants pinned after a click, parsed by `dashboardPinnedWidgetsSchema`. It is the full list,
+ *   not a change, because each model context update replaces the last one. The host updates its
+ *   host context ids to match. An update without the key carries no pin state; it doesn't unpin.
  */
 export const DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY = 'mastra.ai/dashboard-pinned-widgets';
 
 /**
- * The notification the app sends when the user pins or unpins a widget, with the state they
- * asked for. The host updates `DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY` to match.
+ * One pinned widget: the widget as the dashboard renders it, the dashboard's scope, and the range
+ * and filters the user had on when they pinned it, as dashboard `defaults`. Together they render
+ * the widget on its own as the user saw it.
  */
-export const DASHBOARD_WIDGET_PIN_NOTIFICATION = 'mastra.ai/dashboard-widget-pin';
-
-/**
- * The params of `DASHBOARD_WIDGET_PIN_NOTIFICATION`: the widget as the dashboard renders it, the
- * dashboard's scope, and the range and filters the user had on when they pinned it, as dashboard
- * `defaults`. Together they render the widget on its own as the user saw it. They come from the
- * app's iframe, so hosts parse them before storing or rendering anything.
- */
-export const dashboardWidgetPinNotificationParamsSchema = z.object({
+export const dashboardPinnedWidgetSchema = z.object({
   widget: dashboardWidgetSchema,
   scope: z.enum(DASHBOARD_SCOPES),
   defaults: dashboardDefaultsSchema,
-  isPinned: z.boolean(),
 });
 
-export type DashboardWidgetPinNotificationParams = z.input<typeof dashboardWidgetPinNotificationParamsSchema>;
+/**
+ * The value the app sends under `DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY` in model context. It comes
+ * from the app's iframe, so hosts parse it before storing or rendering anything.
+ */
+export const dashboardPinnedWidgetsSchema = z.array(dashboardPinnedWidgetSchema);
+
+export type DashboardPinnedWidget = z.input<typeof dashboardPinnedWidgetSchema>;

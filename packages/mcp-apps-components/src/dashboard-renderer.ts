@@ -7,10 +7,10 @@ import { defineMcpAppResource } from './define-mcp-app-resource';
 export { dashboardRendererInputSchema };
 export {
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
-  DASHBOARD_WIDGET_PIN_NOTIFICATION,
-  dashboardWidgetPinNotificationParamsSchema,
+  dashboardPinnedWidgetSchema,
+  dashboardPinnedWidgetsSchema,
 } from './apps/dashboard-renderer/pin';
-export type { DashboardWidgetPinNotificationParams } from './apps/dashboard-renderer/pin';
+export type { DashboardPinnedWidget } from './apps/dashboard-renderer/pin';
 
 /** The `structuredContent` a tool returns to drive the dashboard app. */
 export type DashboardRendererStructuredContent = z.input<typeof dashboardRendererInputSchema>;

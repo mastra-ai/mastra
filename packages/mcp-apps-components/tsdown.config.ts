@@ -9,7 +9,7 @@ const RAW = '?raw';
 // `apps-dist/`. Each helper imports its app's page with `?raw`, which inlines the HTML as a string,
 // so the helpers carry no file reference that bundling could break.
 export default defineConfig({
-  entry: ['src/dashboard-renderer.ts', 'src/observability-tools.ts'],
+  entry: ['src/dashboard-renderer.ts', 'src/observability-tools.ts', 'src/host.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
