@@ -259,10 +259,13 @@ describe('Trace Intelligence page', () => {
       renderSignalsPage();
 
       const pending = await screen.findByRole('list', { name: 'Pending trace signals' });
-      expect(within(pending).getByText('Handoff Quality')).not.toBeNull();
-      expect(within(pending).getByText('0 generated · 0 embedded')).not.toBeNull();
-      expect(within(pending).getByText('Resolution Detail')).not.toBeNull();
-      expect(within(pending).getByText('31 generated · 19 embedded')).not.toBeNull();
+      const handoff = within(pending).getByText('Handoff Quality').closest('li');
+      const resolution = within(pending).getByText('Resolution Detail').closest('li');
+      if (!handoff || !resolution) throw new Error('Expected both pending signal rows');
+      expect(within(handoff).getByText('0 generated')).not.toBeNull();
+      expect(within(handoff).getByText('0 embedded')).not.toBeNull();
+      expect(within(resolution).getByText('31 generated')).not.toBeNull();
+      expect(within(resolution).getByText('19 embedded')).not.toBeNull();
       expect(within(pending).queryByText('Legacy Risk')).toBeNull();
     });
   });
@@ -607,7 +610,7 @@ describe('Trace Intelligence page', () => {
       );
       renderSignalsPageWithShell('billing-agent');
 
-      expect(await screen.findByText('Snapshot 1/2 · Jul 1 – 8, 2026 · 20 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 1/2. Jul 1 – 8, 2026. 20 traces')).not.toBeNull();
       expect(headerEntityCrumb().textContent).toContain('billing-agent');
     });
   });

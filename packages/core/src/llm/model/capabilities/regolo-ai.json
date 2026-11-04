@@ -36,11 +36,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gemma4-31b": [
       {
         "type": "toggle"
@@ -56,6 +51,11 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
       }
     ]
   }
