@@ -625,7 +625,7 @@ export class MastraFactory {
    *       { key: 'fixed', name: 'Fixed', kind: 'terminal' },
    *     ],
    *   },
-   *   { projects: 'all' },
+   *   { projects: [{ orgId, factoryProjectId }] },
    * );
    * ```
    */
