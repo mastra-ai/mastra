@@ -7,6 +7,7 @@ class TemporalExecutionEngine {
   activityHandle;
   resumePayloads = new Map();
   suspendedSteps = new Set();
+  resumeLabels = new Map();
   currentResult;
   initData;
   initialState;
@@ -19,7 +20,7 @@ class TemporalExecutionEngine {
       })
     });
     setHandler(resumeSignal, payload => {
-      const id = [...this.suspendedSteps].find(stepId => payload?.step === stepId || payload?.label === stepId);
+      const id = this.resumeTarget(payload);
       if (id !== undefined && !this.resumePayloads.has(id)) {
         this.resumePayloads.set(id, payload);
       }
@@ -64,6 +65,16 @@ class TemporalExecutionEngine {
     };
     return this.currentResult;
   }
+  resumeTarget(payload) {
+    if (payload?.step !== undefined) {
+      return this.suspendedSteps.has(payload.step) ? payload.step : undefined;
+    }
+    if (payload?.label !== undefined) {
+      const labeledStep = this.resumeLabels.get(payload.label);
+      return labeledStep !== undefined && this.suspendedSteps.has(labeledStep) ? labeledStep : undefined;
+    }
+    return this.suspendedSteps.size === 1 ? [...this.suspendedSteps][0] : undefined;
+  }
 
   // Record steps in the core StepResult shape ({ status, payload, output, startedAt, endedAt }).
   async recordStep(stepResults, id, payload, run) {
@@ -80,6 +91,11 @@ class TemporalExecutionEngine {
         suspendPayload,
         suspendedAt: Date.now()
       };
+      for (const [label, target] of Object.entries(output.resumeLabels ?? {})) {
+        if (target?.stepId === id) {
+          this.resumeLabels.set(label, id);
+        }
+      }
       this.currentResult = {
         status: 'suspended',
         input: this.initData,
@@ -88,7 +104,10 @@ class TemporalExecutionEngine {
         suspended: [[id]],
         suspendPayload: {
           [id]: suspendPayload
-        }
+        },
+        resumeLabels: Object.fromEntries([...this.resumeLabels].map(([label, stepId]) => [label, {
+          stepId
+        }]))
       };
       this.suspendedSteps.add(id);
       try {
@@ -97,6 +116,11 @@ class TemporalExecutionEngine {
         this.resumePayloads.delete(id);
       } finally {
         this.suspendedSteps.delete(id);
+        for (const [label, stepId] of this.resumeLabels.entries()) {
+          if (stepId === id) {
+            this.resumeLabels.delete(label);
+          }
+        }
       }
       this.currentResult = {
         status: 'running',

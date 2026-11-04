@@ -175,6 +175,37 @@ describe('temporal workflow runtime helper module', () => {
     expect(approval).toHaveBeenNthCalledWith(3, expect.objectContaining({ resumeData: { approved: true } }));
   });
 
+  it('routes resume signals by custom labels', async () => {
+    const approval = vi
+      .fn()
+      .mockResolvedValueOnce({
+        __temporalSuspension: true,
+        suspendPayload: { reason: 'approval' },
+        resumeLabels: { approveOrder: { stepId: 'approval' } },
+      })
+      .mockResolvedValueOnce({ approved: true });
+    proxyActivities.mockReturnValue({ approval });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow').then('approval').commit();
+    const run = workflow({ inputData: { orderId: 'order-1' }, runId: 'run-1' });
+
+    await vi.waitFor(() => expect(condition).toHaveBeenCalledOnce());
+    expect(signalHandlers.get('mastra.status')?.()).toMatchObject({
+      status: 'suspended',
+      resumeLabels: { approveOrder: { stepId: 'approval' } },
+    });
+    signalHandlers.get('mastra.resume')?.({ label: 'approveOrder', resumeData: { approved: true } });
+
+    await expect(run).resolves.toMatchObject({
+      status: 'success',
+      result: { approved: true },
+      steps: {
+        approval: expect.objectContaining({ resumeData: { approved: true } }),
+      },
+    });
+  });
+
   it('preserves resume signals per concurrently suspended step', async () => {
     const approval = vi
       .fn()
