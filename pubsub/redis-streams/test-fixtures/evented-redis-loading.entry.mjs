@@ -8,7 +8,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { PostgresStore } from '@mastra/pg';
 import { z } from 'zod';
-import { Memory } from '../../../packages/memory/dist/index.js';
+import { Memory } from '@mastra/memory';
 import { RedisStreamsPubSub } from '../src/index.ts';
 
 const role = process.env.LOADING_ROLE;
