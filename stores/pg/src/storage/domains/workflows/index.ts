@@ -1760,14 +1760,25 @@ export class WorkflowsPG extends WorkflowsStorage {
   async deleteWorkflowRunById({
     runId,
     workflowName,
+    storageVersion,
     fence,
   }: {
     runId: string;
     workflowName: string;
+    storageVersion?: 1 | 2;
     fence?: RunFence;
   }): Promise<void> {
     const resolvedFence = resolveRunFence(this, fence, runId);
     try {
+      if (storageVersion === 1) {
+        await withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'deleteWorkflowRunById', q =>
+          q.none(
+            `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`,
+            [runId, workflowName],
+          ),
+        );
+        return;
+      }
       await this.#db.client.tx(async t => {
         if (resolvedFence) await assertRunFence(t, this.#runOwnersTable(), resolvedFence, 'deleteWorkflowRunById');
         // The storage v2 header is locked first: its row lock waits out an in-flight append, and the
@@ -1781,7 +1792,9 @@ export class WorkflowsPG extends WorkflowsStorage {
         for (const table of [
           this.#runsTable(),
           this.#entriesTable(),
-          getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) }),
+          ...(storageVersion === 2
+            ? []
+            : [getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })]),
         ]) {
           await t.none(`DELETE FROM ${table} WHERE run_id = $1 AND workflow_name = $2`, [runId, workflowName]);
         }
