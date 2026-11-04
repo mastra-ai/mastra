@@ -156,7 +156,8 @@ function extractTransportsFromArg(arg: t.Node): string[] {
   return targets;
 }
 
-const TRANSPORT_CALL_RE = /\.\s*transport\s*[(<]/;
+// Also matches `x[transport](`: the detector does not check `computed` on the member expression.
+const TRANSPORT_CALL_RE = /[.[]\s*transport\s*\]?\s*[(<]/;
 const PINO_SOURCE_RE = /['"]pino['"]/;
 const GLOBAL_PINO_TRANSPORT_RE = /\bpino\s*\.\s*(?:default\s*\.\s*)?transport\b/;
 

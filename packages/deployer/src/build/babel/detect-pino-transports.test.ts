@@ -467,6 +467,7 @@ describe('detectPinoTransports', () => {
   it.each([
     ['a member chain split across lines', `import p from "pino";\np\n  .transport({ target: "x" })`],
     ['an unbound global pino', `pino.default\n  .transport({ target: "x" })`],
+    ['a computed member named transport', `import pino from 'pino';\npino[transport]({ target: "x" })`],
   ])('should detect %s', (_, code) => {
     expect(runDetection(code)).toEqual(new Set(['x']));
   });
