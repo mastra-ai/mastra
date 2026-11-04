@@ -7,33 +7,43 @@ import { z } from 'zod';
  */
 export const DASHBOARD_DATA_TOOL_NAME = 'mastraDashboardData';
 
-// Reads whose arguments are the JSON body `MastraClient` sends.
-const BODY_OPERATIONS = [
+/** Every read the dashboard makes, named after the `MastraClient` method that makes it. */
+export const DASHBOARD_DATA_OPERATIONS = [
   'aggregateTraces',
   'aggregateSpans',
   'getMetricAggregate',
   'getMetricBreakdown',
   'getMetricTimeSeries',
   'getMetricPercentiles',
+  'listScores',
   'getScoreAggregate',
   'getScoreBreakdown',
   'getScoreTimeSeries',
   'getScorePercentiles',
 ] as const;
 
-/** Every read the dashboard makes, named after the `MastraClient` method that makes it. */
-export const DASHBOARD_DATA_OPERATIONS = [...BODY_OPERATIONS, 'listScores'] as const;
-
 export type DashboardDataOperation = (typeof DASHBOARD_DATA_OPERATIONS)[number];
 
-export const dashboardDataInputSchema = z.discriminatedUnion('operation', [
-  z.object({ operation: z.enum(BODY_OPERATIONS), args: z.record(z.string(), z.unknown()) }),
-  // `listScores` sends its arguments as query parameters, flattened to strings.
-  z.object({
-    operation: z.literal('listScores'),
-    args: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
-  }),
-]);
+// MCP tools need an object input schema, so the operation's arguments sit in `query` or `body`
+// instead of a union, and the refinement keeps each operation to the one `MastraClient` sends.
+export const dashboardDataInputSchema = z
+  .object({
+    operation: z.enum(DASHBOARD_DATA_OPERATIONS),
+    /** Query parameters, flattened to strings. Only `listScores` sends them. */
+    query: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
+    /** The JSON body. Every operation but `listScores` sends one. */
+    body: z.record(z.string(), z.unknown()).optional(),
+  })
+  .superRefine(({ operation, query, body }, ctx) => {
+    const sendsQuery = operation === 'listScores';
+    if (sendsQuery ? body !== undefined : query !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [sendsQuery ? 'body' : 'query'],
+        message: `${operation} takes its arguments as ${sendsQuery ? 'query' : 'body'}.`,
+      });
+    }
+  });
 
 export type DashboardDataInput = z.output<typeof dashboardDataInputSchema>;
 

@@ -34,17 +34,12 @@ async function relayToServer(name: string, args: Record<string, unknown> = {}): 
   const call = dashboardDataInputSchema.parse(args);
   const [method, path] = DASHBOARD_DATA_REQUESTS[call.operation].split(' ');
   const url = new URL(`${MASTRA_SERVER}${path}`);
-  if (call.operation === 'listScores') {
-    for (const [key, value] of Object.entries(call.args)) {
-      for (const item of [value].flat()) url.searchParams.append(key, item);
-    }
+  for (const [key, value] of Object.entries(call.query ?? {})) {
+    for (const item of [value].flat()) url.searchParams.append(key, item);
   }
   const response = await fetch(url, {
     method,
-    ...(call.operation !== 'listScores' && {
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(call.args),
-    }),
+    ...(call.body && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(call.body) }),
   });
   const structuredContent = { status: response.status, body: await response.json() };
   return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent };

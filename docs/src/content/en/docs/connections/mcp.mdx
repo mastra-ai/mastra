@@ -425,7 +425,7 @@ The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps that render
 npm install @mastra/mcp-apps-components @mastra/server
 ```
 
-The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to one app-only data tool over the host's MCP connection, so register that tool on the same `MCPServer` as the app. `DASHBOARD_DATA_TOOL_NAME` names the tool, `DASHBOARD_DATA_OPERATIONS` lists the reads it answers, `dashboardDataInputSchema` describes the call it receives (an `operation` and its `args`), and `dashboardDataOutputSchema` describes the status and body it returns.
+The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to one app-only data tool over the host's MCP connection, so register that tool on the same `MCPServer` as the app. `DASHBOARD_DATA_TOOL_NAME` names the tool, `DASHBOARD_DATA_OPERATIONS` lists the reads it answers, `dashboardDataInputSchema` describes the call it receives (an `operation` with its `query` or `body`), and `dashboardDataOutputSchema` describes the status and body it returns.
 
 Each operation has the same name as the `MastraClient` method the dashboard calls. This example answers each one with its read-only observability route and runs it in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks:
 
@@ -472,14 +472,15 @@ export const dashboardDataTool = createTool({
     return invokeRoute(route, {
       mastra,
       requestContext: requestContext ?? new RequestContext(),
-      ...(call.operation === 'listScores' ? { query: call.args } : { body: call.args }),
+      ...(call.query && { query: call.query }),
+      ...(call.body && { body: call.body }),
       abortSignal,
     })
   },
 })
 ```
 
-The `satisfies` check fails to compile when the tool misses an operation. `listScores` sends its `args` as query parameters, and every other operation sends them as a JSON body. The tool only runs the routes in `ROUTES`, because app-only visibility keeps the tool away from the model but doesn't stop a direct call.
+The `satisfies` check fails to compile when the tool misses an operation. `listScores` sends its arguments as `query` parameters, and every other operation sends them as a JSON `body`. The tool only runs the routes in `ROUTES`, because app-only visibility keeps the tool away from the model but doesn't stop a direct call.
 
 Setting `visibility: ['app']` marks the tool app-only, so `MCPClient.listTools()` hides it from agents.
 
