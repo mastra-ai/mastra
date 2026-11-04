@@ -31,6 +31,6 @@ If replacement is interrupted, the next startup or maintenance command restores 
 
 ## Retention and key loss
 
-`GET /api/retention` shows evidence cleanup status. To retry a failed batch, POST `{}` to `/api/retention/cleanup` using the normal session, Origin, and CSRF headers. Expired proof is unavailable even if the historical finding remains visible.
+`GET /api/retention` shows evidence cleanup status. To retry a failed batch, POST `{}` to `/api/retention/cleanup` using `Content-Type: application/json` alongside the normal session, Origin, and CSRF headers. Expired proof is unavailable even if the historical finding remains visible.
 
 A missing or incorrect `SCANNER_ENCRYPTION_KEY` makes stored credentials unavailable. Restore the original key, or register credentials again under the current key and recheck identities. Previous scan and approval bindings don't authorize replacement credentials.
