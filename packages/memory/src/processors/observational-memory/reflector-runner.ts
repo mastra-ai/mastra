@@ -40,6 +40,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
+import { alignLineCutToObservationGroups } from './observation-groups';
 import { describeDegenerateOutput } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
@@ -848,8 +849,12 @@ export class ReflectorRunner {
 
     const avgTokensPerLine = totalLines > 0 ? observationTokens / totalLines : 0;
     const activationPointTokens = reflectThreshold * bufferActivation;
-    const linesToReflect =
-      avgTokensPerLine > 0 ? Math.min(Math.floor(activationPointTokens / avgTokensPerLine), totalLines) : totalLines;
+    // Activation keeps the lines after this cut verbatim, so a cut inside an <observation-group>
+    // would leave its bullets and closing tag without an opening tag (#28445).
+    const linesToReflect = alignLineCutToObservationGroups(
+      allLines,
+      avgTokensPerLine > 0 ? Math.min(Math.floor(activationPointTokens / avgTokensPerLine), totalLines) : totalLines,
+    );
 
     const hookContext = {
       threadId: currentRecord.threadId ?? undefined,
