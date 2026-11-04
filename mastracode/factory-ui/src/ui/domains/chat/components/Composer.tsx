@@ -42,7 +42,7 @@ import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFrom
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
-import { commandRequiresReadySession } from '../services/commands';
+import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
@@ -186,11 +186,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
-    if (onUserDraft && modelLoading && !text.startsWith('/')) {
+    if (onUserDraft && modelLoading && !isSlashCommand(text)) {
       setHeldDraftText(text);
       return;
     }
-    const runsCommand = !planFeedback.pending && text.startsWith('/');
+    const runsCommand = !planFeedback.pending && isSlashCommand(text);
     const sentAnnotations = runsCommand ? [] : takeAnnotations();
     updateDraft('');
     void handleInput(text, sentAnnotations).catch(error => {
@@ -243,7 +243,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       setImages([]);
       return;
     }
-    if (onUserDraft && text.startsWith('/')) {
+    if (onUserDraft && isSlashCommand(text)) {
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
@@ -261,7 +261,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
+    if (preparingThreadId && isSlashCommand(text) && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
