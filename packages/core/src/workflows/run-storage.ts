@@ -324,14 +324,16 @@ class RunStorageV2 implements RunStorage {
     { stateBase }: { stateBase?: StateRef } = {},
   ): Promise<void> {
     const store = await this.#getStore();
+    // The evented engine keeps its state in `context.__state`; on v2 that's the run's state, not a step.
     const { context, value, ...header } = snapshot;
+    const { __state: _state, ...steps } = context as Record<string, any>;
     await store?.writeWorkflowRunCheckpoint({
       workflowName: this.#workflowName,
       runId: this.#runId,
       resourceId,
       threadId: getSnapshotMemoryInfo(snapshot)?.threadId,
       header,
-      steps: context,
+      steps: steps as WorkflowRunState['context'],
       ...(stateBase ? { stateBase } : { state: value }),
     });
   }

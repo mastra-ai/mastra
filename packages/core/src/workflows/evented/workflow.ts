@@ -83,6 +83,7 @@ import type {
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { ClassifierStepOutput } from '../entry-executors';
+import { createRunStorage } from '../run-storage';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -1812,9 +1813,69 @@ export class EventedWorkflow<
       });
     }
 
+    // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
+    const optionVersion = this.options.storageVersion;
+    const unsupportedV2 = optionVersion === 2 && !!workflowsStore && !workflowsStore.supportsRunJournal();
+    const cachedRun = this.runs.get(runIdToUse);
+
+    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
+      workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
+      stepResults: {},
+    });
+
+    // A freshly-minted run for a workflow that never persists a snapshot cannot have
+    // a stored row, so this existence read would be a guaranteed miss. Skipping it
+    // avoids a storage round trip on every createRun for transient workflows (#19015).
+    const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
+    // A stored run keeps the version it was created with, whatever the workflow sets now; a new
+    // run takes the workflow's. Only a caller-given id can name a run stored in the other table.
+    let storageVersion: 1 | 2 = cachedRun?.storageVersion ?? (unsupportedV2 ? 1 : (optionVersion ?? 1));
+    const probeOtherVersion = !!options?.runId && !cachedRun;
+    const loadStoredHeader = (version: 1 | 2) =>
+      createRunStorage({
+        storageVersion: version,
+        workflowName: this.id,
+        runId: runIdToUse,
+        getStore: async () => workflowsStore,
+      }).loadHeader();
+    let storedStatus: WorkflowRunStatus | undefined;
+
+    if (storageVersion === 2) {
+      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
+      if (header) {
+        storedStatus = header.status;
+      } else if (probeOtherVersion) {
+        const v1Header = await loadStoredHeader(1);
+        if (v1Header) {
+          storedStatus = v1Header.status;
+          storageVersion = 1;
+        }
+      }
+    } else {
+      // Unlike the header reads, this finds the run in either version's table.
+      const existingRun = lookUpStoredRun
+        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+        : undefined;
+      if (existingRun && !existingRun.isFromInMemory) {
+        storedStatus = existingRun.status as WorkflowRunStatus;
+        if (probeOtherVersion && workflowsStore?.supportsRunJournal() && !(await loadStoredHeader(1))) {
+          if (await loadStoredHeader(2)) storageVersion = 2;
+        }
+      }
+    }
+    const existsInStorage = storedStatus !== undefined;
+    if (unsupportedV2 && !existsInStorage) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
+      });
+    }
+
     // Return a new Run instance with object parameters
     const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
-      this.runs.get(runIdToUse) ??
+      cachedRun ??
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
@@ -1832,29 +1893,14 @@ export class EventedWorkflow<
         stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
         tracingPolicy: this.options?.tracingPolicy,
+        storageVersion,
       });
 
     this.runs.set(runIdToUse, run);
 
-    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
-      workflowStatus: run.workflowRunStatus,
-      stepResults: {},
-    });
-
-    // A freshly-minted run for a workflow that never persists a snapshot cannot have
-    // a stored row, so this existence read would be a guaranteed miss. Skipping it
-    // avoids a storage round trip on every createRun for transient workflows (#19015).
-    const existingRun =
-      shouldPersistSnapshot || options?.runId
-        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
-        : undefined;
-
-    // Check if run exists in persistent storage (not just in-memory)
-    const existsInStorage = existingRun && !existingRun.isFromInMemory;
-
     // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
-    if (existsInStorage && existingRun.status) {
-      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+    if (storedStatus) {
+      run.workflowRunStatus = storedStatus;
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
@@ -1874,7 +1920,7 @@ export class EventedWorkflow<
         timestamp: Date.now(),
       };
       await run.runStorage.writeSnapshot(
-        this.options?.pruneSnapshot
+        this.options?.pruneSnapshot && run.storageVersion === 1
           ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
         options?.resourceId,
@@ -1912,6 +1958,7 @@ export class EventedRun<
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
     tracingPolicy?: TracingPolicy;
+    storageVersion?: 1 | 2;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
@@ -1930,6 +1977,7 @@ export class EventedRun<
           data: {
             workflowId: this.workflowId,
             runId: this.runId,
+            ...(this.storageVersion === 2 && { storageVersion: 2 }),
           },
         })
         .catch(err => {
@@ -2054,6 +2102,7 @@ export class EventedRun<
         abortController: this.abortController,
         perStep,
         outputOptions,
+        storageVersion: this.storageVersion,
       });
     } catch (error) {
       workflowSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
@@ -2160,6 +2209,7 @@ export class EventedRun<
         actor,
         initialState: initialStateToUse,
         perStep,
+        ...(this.storageVersion === 2 && { storageVersion: 2 }),
       },
     });
 
@@ -2578,6 +2628,7 @@ export class EventedRun<
         abortController: this.abortController,
         perStep: params.perStep,
         outputOptions: params.outputOptions,
+        storageVersion: this.storageVersion,
       })
       .then(result => {
         this.workflowRunStatus = result.status;

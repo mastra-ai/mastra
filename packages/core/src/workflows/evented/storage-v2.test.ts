@@ -1,0 +1,274 @@
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import { Mastra } from '../../mastra';
+import { MockStore } from '../../storage/mock';
+import { createStep, createWorkflow } from '.';
+
+// On storage v2 an evented run's step messages leave out what the processor loads from storage:
+// earlier steps' results and the state.
+
+const BIG = 'x'.repeat(10_000);
+const looseObject = z.looseObject({});
+
+function makeWorkflow(storageVersion: 1 | 2) {
+  const big = createStep({
+    id: 'big',
+    inputSchema: looseObject,
+    outputSchema: looseObject,
+    execute: async ({ setState }) => {
+      await setState({ log: [BIG] });
+      return { big: BIG };
+    },
+  });
+  const arm = (id: string) =>
+    createStep({
+      id,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ setState }) => {
+        await setState({ [id]: true });
+        return { [id]: true };
+      },
+    });
+  const last = createStep({
+    id: 'last',
+    inputSchema: looseObject,
+    outputSchema: looseObject,
+    execute: async ({ getState, getStepResultAsync }) => ({
+      state: await getState(),
+      big: ((await getStepResultAsync('big')) as { big: string }).big.length,
+    }),
+  });
+  return createWorkflow({
+    id: `messages-v${storageVersion}`,
+    inputSchema: looseObject,
+    outputSchema: looseObject,
+    stateSchema: looseObject,
+    options: { storageVersion },
+  })
+    .then(big)
+    .parallel([arm('left'), arm('right')])
+    .then(last)
+    .commit();
+}
+
+async function run(storageVersion: 1 | 2) {
+  return runWorkflow(makeWorkflow(storageVersion));
+}
+
+async function runWorkflow(workflow: { createRun: () => Promise<any> }, storage = new MockStore()) {
+  const pubsub = new EventEmitterPubSub();
+  const messages: { type: string; bytes: number; data: string }[] = [];
+  const publish = pubsub.publish.bind(pubsub);
+  pubsub.publish = async (topic, event) => {
+    if (topic === 'workflows') {
+      const data = JSON.stringify(event.data);
+      messages.push({ type: event.type, bytes: data.length, data });
+    }
+    return publish(topic, event);
+  };
+  const mastra = new Mastra({ logger: false, storage, workflows: { wf: workflow as any }, pubsub });
+  await mastra.startWorkers();
+  try {
+    const result = await (await workflow.createRun()).start({ inputData: {} });
+    return { result, messages };
+  } finally {
+    await mastra.stopWorkers();
+  }
+}
+
+describe('evented step messages on storage v2', () => {
+  it('leave out earlier step results and the state, which the steps still see', async () => {
+    const v1 = await run(1);
+    const v2 = await run(2);
+
+    const expected = { state: { log: [BIG], left: true, right: true }, big: BIG.length };
+    expect(v1.result.status).toBe('success');
+    expect(v2.result.status).toBe('success');
+    expect((v1.result as any).result).toEqual(expected);
+    expect((v2.result as any).result).toEqual(expected);
+
+    // Step messages carry only the run's input of the step results, and the state as a patch.
+    const isStep = (m: { type: string }) => m.type === 'workflow.step.run' || m.type === 'workflow.step.end';
+    for (const message of v2.messages.filter(isStep)) {
+      const data = JSON.parse(message.data);
+      expect(Object.keys(data.stepResults ?? {}).filter(id => id !== 'input')).toEqual([]);
+      expect(data).not.toHaveProperty('state');
+      expect(data.prevResult ?? {}).not.toHaveProperty('__state');
+    }
+
+    // `last` starts after the parallel join: on v1 its message still carries `big`'s result and the state.
+    const lastRun = (messages: { type: string; data: string }[]) =>
+      messages.find(m => m.type === 'workflow.step.run' && JSON.parse(m.data).executionPath[0] === 2)!;
+    expect(lastRun(v1.messages).data).toContain(BIG);
+    expect(lastRun(v2.messages).data).not.toContain(BIG);
+
+    const bytes = (messages: { bytes: number }[]) => messages.reduce((sum, m) => sum + m.bytes, 0);
+    expect(bytes(v2.messages)).toBeLessThan(bytes(v1.messages) / 2);
+  });
+
+  // A step's write returns only that step on v2; the dispatch that wrote it still hands every
+  // step result on: to shouldPersistSnapshot, and to the end of a run deleted before its
+  // workflow.end is dispatched (which then has no stored run to fill in from).
+  it.each([1, 2] as const)('keep every step result in the dispatch that writes one (v%i)', async storageVersion => {
+    const seen: Record<string, string[]> = {};
+    const shouldPersistSnapshot = ({
+      stepResults,
+      workflowStatus,
+    }: {
+      stepResults: object;
+      workflowStatus: string;
+    }) => {
+      seen[workflowStatus] = Object.keys(stepResults).filter(id => !id.startsWith('__'));
+      return workflowStatus !== 'success';
+    };
+    const first = createStep({
+      id: 'first',
+      inputSchema: looseObject,
+      outputSchema: z.array(z.number()),
+      execute: async () => [1, 2],
+    });
+    const second = createStep({
+      id: 'second',
+      inputSchema: z.array(z.number()),
+      outputSchema: looseObject,
+      execute: async () => ({ done: true }),
+    });
+    const ended = await runWorkflow(
+      createWorkflow({
+        id: `ended-v${storageVersion}`,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        options: { storageVersion, shouldPersistSnapshot },
+      })
+        .then(first)
+        .then(second)
+        .commit(),
+    );
+    expect(ended.result.status).toBe('success');
+    expect(Object.keys(ended.result.steps)).toEqual(['input', 'first', 'second']);
+    expect(seen.success).toEqual(['input', 'first', 'second']);
+
+    const suspends = createStep({
+      id: 'suspends',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData, suspend }) => suspend({ inputData }),
+    });
+    const suspended = await runWorkflow(
+      createWorkflow({
+        id: `suspended-v${storageVersion}`,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        options: { storageVersion, shouldPersistSnapshot },
+      })
+        .then(first)
+        .foreach(suspends)
+        .commit(),
+    );
+    expect(suspended.result.status).toBe('suspended');
+    expect(seen.suspended).toEqual(['input', 'first', 'suspends']);
+  });
+
+  // Steps of a v2 run load earlier results and the state from the stored run, so it is stored
+  // while it runs whatever its workflow's shouldPersistSnapshot says about pending and running.
+  it.each([1, 2] as const)('run workflows that decline pending and running snapshots (v%i)', async storageVersion => {
+    const options = {
+      storageVersion,
+      shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: string }) =>
+        workflowStatus !== 'pending' && workflowStatus !== 'running',
+    };
+    const sets = createStep({
+      id: 'sets',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ setState }) => {
+        await setState({ log: ['sets'] });
+        return { value: 1 };
+      },
+    });
+    const reads = createStep({
+      id: 'reads',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ getState, getStepResultAsync }) => ({
+        state: await getState(),
+        sets: await getStepResultAsync('sets'),
+      }),
+    });
+    const flow = (id: string) =>
+      createWorkflow({ id, inputSchema: looseObject, outputSchema: looseObject, stateSchema: looseObject, options })
+        .then(sets)
+        .then(reads);
+    const expected = { state: { log: ['sets'] }, sets: { value: 1 } };
+
+    const flat = await runWorkflow(flow(`declines-v${storageVersion}`).commit());
+    expect(flat.result.status).toBe('success');
+    expect(flat.result.result).toEqual(expected);
+
+    const nested = await runWorkflow(
+      createWorkflow({
+        id: `declines-outer-v${storageVersion}`,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        stateSchema: looseObject,
+        options,
+      })
+        .then(flow(`declines-inner-v${storageVersion}`).commit())
+        .commit(),
+    );
+    expect(nested.result.status).toBe('success');
+    expect(nested.result.result).toEqual(expected);
+  });
+
+  // A branch's write returns only its own result on v2, so it loads its siblings' as of its write:
+  // of two branches that both wrote before either loaded, only the later writer joins.
+  it('join parallel branches once when both write before either loads the other', async () => {
+    let joins = 0;
+    const arm = (id: string) =>
+      createStep({ id, inputSchema: looseObject, outputSchema: looseObject, execute: async () => ({ [id]: true }) });
+    const after = createStep({
+      id: 'after',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ inputData }) => {
+        joins++;
+        return inputData;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'join-once',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: 2 },
+    })
+      .parallel([arm('left'), arm('right')])
+      .then(after)
+      .commit();
+
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const written = new Set<string>();
+    let bothWritten!: () => void;
+    const both = new Promise<void>(resolve => (bothWritten = resolve));
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = async args => {
+      const appended = await append(args);
+      for (const [id, result] of Object.entries(args.steps)) if (result.status === 'success') written.add(id);
+      if (written.has('left') && written.has('right')) bothWritten();
+      return appended;
+    };
+    const loadSteps = store.loadWorkflowRunSteps.bind(store);
+    // Hold the branches' loads of each other until both have written.
+    store.loadWorkflowRunSteps = async args => {
+      if (args.stepIds.length > 1) await both;
+      return loadSteps(args);
+    };
+
+    const { result } = await runWorkflow(workflow, storage);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ left: { left: true }, right: { right: true } });
+    expect(joins).toBe(1);
+  });
+});

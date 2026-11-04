@@ -38,6 +38,17 @@ function host(storage: InstanceType<typeof MockStore>, workflow: ReturnType<type
   return new Mastra({ logger: false, storage, workflows: { gated: workflow } });
 }
 
+function eventedGateWorkflow(storageVersion?: 1 | 2) {
+  return createEventedWorkflow({
+    id: 'gated',
+    inputSchema: z.object({}),
+    outputSchema: z.object({ approved: z.boolean() }),
+    options: { storageVersion },
+  })
+    .then(gateStep())
+    .commit();
+}
+
 describe('storageVersion guards', () => {
   it('rejects storageVersion: 2 together with pruneSnapshot at construction', () => {
     expect(() =>
@@ -50,19 +61,52 @@ describe('storageVersion guards', () => {
     ).toThrow(/storageVersion: 2 and pruneSnapshot/);
   });
 
-  it('rejects storageVersion: 2 on the evented engine at registration', () => {
-    const workflow = createEventedWorkflow({
-      id: 'evented-v2',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-      options: { storageVersion: 2 },
-    })
-      .then(createStep({ id: 's', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) }))
-      .commit();
+  it('rejects storageVersion: 2 at registration on an engine without storage v2 support', () => {
+    const workflow = gateWorkflow(2);
+    workflow.engineType = 'other';
 
     expect(() => new Mastra({ logger: false, storage: new MockStore(), workflows: { workflow } })).toThrow(
-      /evented engine doesn't support yet/,
+      /other engine doesn't support yet/,
     );
+  });
+
+  it('accepts storageVersion: 2 on the evented engine', async () => {
+    const workflow = eventedGateWorkflow(2);
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+
+    const run = await workflow.createRun();
+
+    expect(run.storageVersion).toBe(2);
+    const store = (await storage.getStore('workflows'))!;
+    expect((await store.getWorkflowRunById({ runId: run.runId, workflowName: 'gated' }))?.storageVersion).toBe(2);
+  });
+
+  it('rejects storageVersion: 2 at evented createRun when the store has no journal support', async () => {
+    const workflow = eventedGateWorkflow(2);
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsRunJournal').mockReturnValue(false);
+
+    await expect(workflow.createRun()).rejects.toThrow(/storage adapter doesn't support yet/);
+  });
+
+  it('keeps a stored evented run on the version it was created with', async () => {
+    const storage = new MockStore();
+    const v1 = eventedGateWorkflow();
+    new Mastra({ logger: false, storage, workflows: { v1 } });
+    const v1RunId = (await v1.createRun()).runId;
+    const v2 = eventedGateWorkflow(2);
+    new Mastra({ logger: false, storage, workflows: { v2 } });
+    const v2RunId = (await v2.createRun()).runId;
+
+    const v2Definition = eventedGateWorkflow(2);
+    new Mastra({ logger: false, storage, workflows: { v2Definition } });
+    expect((await v2Definition.createRun({ runId: v1RunId })).storageVersion).toBe(1);
+    const v1Definition = eventedGateWorkflow();
+    new Mastra({ logger: false, storage, workflows: { v1Definition } });
+    expect((await v1Definition.createRun({ runId: v2RunId })).storageVersion).toBe(2);
   });
 
   it('rejects storageVersion: 2 at createRun when the store has no journal support', async () => {
