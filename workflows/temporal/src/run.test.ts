@@ -1,6 +1,6 @@
 import type { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
-import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
+import { CancelledFailure, WorkflowExecutionAlreadyStartedError, WorkflowFailedError } from '@temporalio/client';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -478,12 +478,11 @@ describe('TemporalRun', () => {
     it.each(['start', 'startAsync'] as const)(
       '%s reports canceled and does not run onError when the Temporal workflow is canceled',
       async method => {
-        const cancellation = Object.assign(new Error('Workflow canceled'), {
-          [Symbol.for('__temporal_isCancelledFailure')]: true,
-        });
-        const failure = Object.assign(new Error('Workflow execution cancelled', { cause: cancellation }), {
-          [Symbol.for('__temporal_isWorkflowFailedError')]: true,
-        });
+        const failure = new WorkflowFailedError(
+          'Workflow execution cancelled',
+          new CancelledFailure('Workflow canceled'),
+          'NON_RETRYABLE_FAILURE',
+        );
         const onFinish = vi.fn();
         const onError = vi.fn();
         const { workflow } = createHookedWorkflow({ onFinish, onError }, () => Promise.reject(failure));
