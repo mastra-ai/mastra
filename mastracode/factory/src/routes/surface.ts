@@ -806,6 +806,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       voiceSettings: deps.domains.voiceSettings,
+      factoryProjects: deps.domains.projects,
     }).routes(),
     ...new SkillRoutes({
       auth: deps.auth,

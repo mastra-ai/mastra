@@ -114,6 +114,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const [canDictate] = useState(voiceDictationSupported);
   const dictation = useVoiceDictation({
+    factoryId,
     onTranscript: text => {
       updateDraft(draft.trim() ? `${draft.trimEnd()} ${text}` : text);
       inputRef.current?.focus();

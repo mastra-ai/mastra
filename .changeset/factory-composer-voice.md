@@ -2,6 +2,12 @@
 '@mastra/factory': patch
 ---
 
-Added voice input to the Factory composer. Click the mic button to dictate. The clip is transcribed server-side through `POST /web/voice/transcribe` and the text is appended to your draft. Transcription uses your own speech-to-text API key, or the organization's if you don't have one (OpenAI, Mistral Voxtral, Deepgram, Groq, and the other `/voice` providers). OAuth subscriptions and deployment env keys are never used for transcription.
+Added voice input to the Factory composer. Click the mic button to dictate. The clip is transcribed server-side through `POST /web/voice/transcribe` and the text is appended to your draft. Supported speech-to-text providers are OpenAI, Mistral Voxtral, Groq, and Deepgram. OAuth subscriptions and deployment env keys are never used for transcription.
 
-Pick the transcription model in **Settings → Preferences → Voice input**. The choice is saved per user. Auto uses the first provider you have a key for.
+Configure it in **Settings → Models → Voice input**:
+
+- **Factory model**: the voice model for everyone in the Factory. Only organization admins can change it.
+- **Your model**: an optional personal override. Leave it empty to use the Factory's model.
+- **Speech-to-text keys**: add or replace a key for each provider, including Deepgram. Voice uses the same key store as chat models.
+
+The Factory's model scope decides which model and key apply. `factory` uses the Factory model with organization keys. `user` uses each member's choice and personal keys. `hybrid` tries the personal choice and key first, then falls back to the Factory model and organization key.

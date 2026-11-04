@@ -185,7 +185,23 @@ export interface UpdateOMResponse {
 }
 
 /** `GET`/`PUT /web/voice/settings`. `selected: null` means auto: the first provider with a key. */
+export interface VoiceChoice {
+  provider: string;
+  model: string;
+}
+
 export interface VoiceSettingsResponse {
-  selected: { provider: string; model: string } | null;
-  models: Array<{ provider: string; model: string; label: string; available: boolean }>;
+  /** The Factory's model scope; `null` when no Factory was named. */
+  modelScope: 'factory' | 'user' | 'hybrid' | null;
+  /** The caller's own saved choice (`null` follows the Factory, then auto). */
+  personal: VoiceChoice | null;
+  /** The Factory's saved choice (`null` is auto). */
+  factory: VoiceChoice | null;
+  canEditFactory: boolean;
+  /** The model voice input uses right now, or `null` when no usable key exists. */
+  effective: VoiceChoice | null;
+  /** Every registry model; `available` when the caller can use a key for it under the Factory's scope. */
+  models: Array<VoiceChoice & { label: string; available: boolean }>;
+  /** Which speech-to-text keys the caller holds personally and the org shares. */
+  keys: Array<{ provider: string; user: boolean; org: boolean }>;
 }

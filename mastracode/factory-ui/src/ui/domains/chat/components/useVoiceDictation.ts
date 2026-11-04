@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 
@@ -20,6 +20,12 @@ export function voiceDictationSupported(): boolean {
   );
 }
 
+function dictationState(recording: boolean, transcribing: boolean): VoiceDictationState {
+  if (recording) return 'recording';
+  if (transcribing) return 'transcribing';
+  return 'idle';
+}
+
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -38,29 +44,31 @@ function blobToBase64(blob: Blob): Promise<string> {
  * `onTranscript`; failures (mic denied, no key, provider error) go to `onError`.
  */
 export function useVoiceDictation({
+  factoryId,
   onTranscript,
   onError,
 }: {
+  /** Factory whose model scope and voice model apply; omitted outside a Factory. */
+  factoryId?: string;
   onTranscript: (text: string) => void;
   onError: (message: string) => void;
 }) {
   const { client } = useApiConfig();
   const [recording, setRecording] = useState(false);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const emitTranscript = useEffectEvent(onTranscript);
-  const emitError = useEffectEvent(onError);
+  const recorderRef = useRef<MediaRecorder>(undefined);
 
   const transcribe = useMutation({
     mutationFn: async (clip: Blob) =>
       client.post<TranscribeResponse>('/web/voice/transcribe', {
         audio: await blobToBase64(clip),
         mimeType: clip.type || 'audio/webm',
+        ...(factoryId ? { factoryId } : {}),
       }),
     onSuccess: ({ text }) => {
-      if (text) emitTranscript(text);
-      else emitError('No speech detected.');
+      if (text) onTranscript(text);
+      else onError('No speech detected.');
     },
-    onError: error => emitError(error.message),
+    onError: error => onError(error.message),
   });
 
   const stopTracks = (recorder: MediaRecorder) => recorder.stream.getTracks().forEach(track => track.stop());
@@ -82,7 +90,7 @@ export function useVoiceDictation({
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      emitError('Microphone access was blocked. Allow it in your browser to use voice input.');
+      onError('Microphone access was blocked. Allow it in your browser to use voice input.');
       return;
     }
     const recorder = new MediaRecorder(stream);
@@ -92,7 +100,7 @@ export function useVoiceDictation({
     };
     recorder.onstop = () => {
       stopTracks(recorder);
-      recorderRef.current = null;
+      recorderRef.current = undefined;
       setRecording(false);
       const clip = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type || 'audio/webm' });
       if (clip.size > 0) transcribe.mutate(clip);
@@ -107,6 +115,5 @@ export function useVoiceDictation({
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   };
 
-  const state: VoiceDictationState = recording ? 'recording' : transcribe.isPending ? 'transcribing' : 'idle';
-  return { state, start, stop };
+  return { state: dictationState(recording, transcribe.isPending), start, stop };
 }

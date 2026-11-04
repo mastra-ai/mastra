@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { renderThread, stubPreparingSession } from './composer-session-test-fixture';
+import { FACTORY_ID, renderThread, stubPreparingSession } from './composer-session-test-fixture';
+
+/** The slice of a mic stream the recorder touches: stopping its tracks releases the microphone. */
+interface FakeMicStream {
+  getTracks(): Array<{ stop(): void }>;
+}
 
 /** Browser recorder stand-in: emits one chunk of the clip when stopped, like a real MediaRecorder. */
 class FakeMediaRecorder {
@@ -13,7 +18,7 @@ class FakeMediaRecorder {
   mimeType = 'audio/webm;codecs=opus';
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onstop: (() => void) | null = null;
-  constructor(readonly stream: MediaStream) {}
+  constructor(readonly stream: FakeMicStream) {}
   start() {
     this.state = 'recording';
   }
@@ -27,8 +32,8 @@ class FakeMediaRecorder {
 const stopTrack = vi.fn();
 const getUserMedia = vi.fn();
 
-function micStream(): MediaStream {
-  return { getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream;
+function micStream(): FakeMicStream {
+  return { getTracks: () => [{ stop: stopTrack }] };
 }
 
 function acceptTranscribe(reply: () => Response): unknown[] {
@@ -76,7 +81,7 @@ describe('Composer voice dictation', () => {
     await user.click(await screen.findByRole('button', { name: 'Stop dictation' }));
 
     await waitFor(() => expect(message).toHaveValue('fix the login bug and add a test for it'));
-    expect(bodies).toEqual([{ audio: btoa('opus'), mimeType: 'audio/webm;codecs=opus' }]);
+    expect(bodies).toEqual([{ audio: btoa('opus'), mimeType: 'audio/webm;codecs=opus', factoryId: FACTORY_ID }]);
     expect(stopTrack).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });

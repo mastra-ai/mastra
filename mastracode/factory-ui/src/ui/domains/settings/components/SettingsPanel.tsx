@@ -20,7 +20,6 @@ import { RepositoriesSection } from './RepositoriesSection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
-import { VoiceInputSettings } from './VoiceInputSettings';
 
 function getSettingsUpdateErrorMessage(error: unknown): string {
   if (error instanceof SettingsUpdateVerificationError) return error.message;
@@ -56,12 +55,7 @@ export function SettingsPanel() {
   return (
     <section aria-label="Settings" className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
       {section === 'account' && <AccountSettingsSection />}
-      {section === 'preferences' && (
-        <div className="flex flex-col gap-8">
-          <GeneralSettings />
-          <VoiceInputSettings />
-        </div>
-      )}
+      {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}

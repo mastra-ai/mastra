@@ -5,8 +5,9 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { audioFiletype, MAX_TRANSCRIBE_AUDIO_BYTES } from '../voice/transcription.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
-import { audioFiletype, MAX_TRANSCRIBE_AUDIO_BYTES, VoiceRoutes } from './voice.js';
+import { VoiceRoutes } from './voice.js';
 import type { VoiceRoutesDeps } from './voice.js';
 
 const OPENAI_URL = 'https://api.openai.com/v1/audio/transcriptions';
@@ -235,10 +236,10 @@ describe('/web/voice/settings', () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      selected: unknown;
+      personal: unknown;
       models: Array<{ provider: string; model: string; available: boolean }>;
     };
-    expect(body.selected).toBeNull();
+    expect(body.personal).toBeNull();
     expect(body.models.find(m => m.model === 'voxtral-mini-latest')).toMatchObject({
       provider: 'mistral',
       available: true,
@@ -255,7 +256,7 @@ describe('/web/voice/settings', () => {
 
     const saved = await putSettings(app, { provider: 'mistral', model: 'voxtral-mini-latest' });
     expect(saved.status).toBe(200);
-    expect(((await saved.json()) as { selected: unknown }).selected).toEqual({
+    expect(((await saved.json()) as { personal: unknown }).personal).toEqual({
       provider: 'mistral',
       model: 'voxtral-mini-latest',
     });
@@ -276,7 +277,7 @@ describe('/web/voice/settings', () => {
     await putSettings(app, { provider: 'mistral', model: 'voxtral-mini-latest' });
 
     const cleared = await putSettings(app, { provider: null });
-    expect(((await cleared.json()) as { selected: unknown }).selected).toBeNull();
+    expect(((await cleared.json()) as { personal: unknown }).personal).toBeNull();
 
     const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
     expect(await res.json()).toMatchObject({ provider: 'openai', model: 'whisper-1' });
@@ -324,6 +325,135 @@ describe('/web/voice/settings', () => {
       model: 'voxtral-mini-latest',
     });
     expect(await seed.voiceSettings.get({ orgId: 'org1', userId: 'user-b' })).toBeNull();
+  });
+});
+
+describe('Factory voice model and model scope', () => {
+  async function tenantFactory(modelScope: 'factory' | 'user' | 'hybrid', isAdmin = true) {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Voice', modelScope },
+    });
+    const app = mount(
+      {
+        auth: fakeRouteAuth({ isOrganizationAdmin: async () => isAdmin }),
+        modelCredentials: seed.credentials,
+        voiceSettings: seed.voiceSettings,
+        factoryProjects: seed.projects,
+      },
+      { org: 'org1' },
+    );
+    return { seed, app, factoryId: project.id };
+  }
+
+  async function keys(seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>) {
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'org-openai' });
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'mistral', {
+      type: 'api_key',
+      key: 'personal-mistral',
+    });
+  }
+
+  it('factory scope uses the Factory model with the org key and ignores personal choices', async () => {
+    const { seed, app, factoryId } = await tenantFactory('factory');
+    await keys(seed);
+    await putSettings(app, { provider: 'mistral' });
+    const saved = await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
+    expect(saved.status).toBe(200);
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+
+    expect(await res.json()).toMatchObject({ provider: 'openai', model: 'whisper-1' });
+    expect(calls.openai[0]!.authorization).toBe('Bearer org-openai');
+    expect(calls.mistral).toEqual([]);
+  });
+
+  it('factory scope never falls back to a personal key', async () => {
+    const { seed, app, factoryId } = await tenantFactory('factory');
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'mistral', {
+      type: 'api_key',
+      key: 'personal-mistral',
+    });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+
+    expect(res.status).toBe(400);
+    expect(calls.mistral).toEqual([]);
+  });
+
+  it('user scope follows the Factory model without a personal choice but only uses personal keys', async () => {
+    const { seed, app, factoryId } = await tenantFactory('user');
+    await keys(seed);
+    await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
+
+    const missing = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+    expect(missing.status).toBe(400);
+    expect(((await missing.json()) as { error: string }).error).toContain('openai API key');
+    expect(calls.openai).toEqual([]);
+
+    await putSettings(app, { provider: 'mistral' });
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+    expect(await res.json()).toMatchObject({ provider: 'mistral' });
+    expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
+  });
+
+  it('hybrid scope prefers the personal choice and falls back to the Factory model with the org key', async () => {
+    const { seed, app, factoryId } = await tenantFactory('hybrid');
+    await keys(seed);
+    await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
+
+    const fallback = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+    expect(await fallback.json()).toMatchObject({ provider: 'openai' });
+    expect(calls.openai[0]!.authorization).toBe('Bearer org-openai');
+
+    await putSettings(app, { provider: 'mistral' });
+    const personal = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+    expect(await personal.json()).toMatchObject({ provider: 'mistral' });
+  });
+
+  it('reports both saved choices, the effective model, and which keys exist at each scope', async () => {
+    const { seed, app, factoryId } = await tenantFactory('hybrid');
+    await keys(seed);
+    await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
+
+    const res = await app.request(`/web/voice/settings?factoryId=${factoryId}`);
+
+    const body = (await res.json()) as Record<string, unknown> & { keys: Array<Record<string, unknown>> };
+    expect(body).toMatchObject({
+      modelScope: 'hybrid',
+      personal: null,
+      factory: { provider: 'openai', model: 'whisper-1' },
+      effective: { provider: 'openai', model: 'whisper-1' },
+      canEditFactory: true,
+    });
+    expect(body.keys.find(k => k.provider === 'openai')).toEqual({ provider: 'openai', user: false, org: true });
+    expect(body.keys.find(k => k.provider === 'mistral')).toEqual({ provider: 'mistral', user: true, org: false });
+  });
+
+  it('only lets org admins change the Factory voice model', async () => {
+    const { seed, app, factoryId } = await tenantFactory('hybrid', false);
+
+    const res = await putSettings(app, { target: 'factory', factoryId, provider: 'openai' });
+
+    expect(res.status).toBe(403);
+    expect(await seed.voiceSettings.get({ orgId: 'org1', userId: `factory-project:${factoryId}` })).toBeNull();
+    const settings = await app.request(`/web/voice/settings?factoryId=${factoryId}`);
+    expect(((await settings.json()) as { canEditFactory: boolean }).canEditFactory).toBe(false);
+  });
+
+  it("does not reveal another org's Factory", async () => {
+    const seed = await createFactoryStorageForTests();
+    const other = await seed.projects.create({ orgId: 'org2', userId: 'user-z', input: { name: 'Other' } });
+    const app = mount(
+      { auth: fakeRouteAuth(), modelCredentials: seed.credentials, factoryProjects: seed.projects },
+      { org: 'org1' },
+    );
+
+    const res = await app.request(`/web/voice/settings?factoryId=${other.id}`);
+
+    expect(res.status).toBe(404);
   });
 });
 

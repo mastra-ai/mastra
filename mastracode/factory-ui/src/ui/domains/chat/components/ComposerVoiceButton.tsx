@@ -9,6 +9,13 @@ const LABELS: Record<VoiceDictationState, string> = {
   transcribing: 'Transcribing…',
 };
 
+function VoiceIcon({ state }: { state: VoiceDictationState }) {
+  if (state === 'recording') return <Square size={14} />;
+  if (state === 'transcribing')
+    return <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />;
+  return <Mic size={14} />;
+}
+
 export function ComposerVoiceButton({
   state,
   disabled,
@@ -20,24 +27,21 @@ export function ComposerVoiceButton({
   onStart: () => void;
   onStop: () => void;
 }) {
+  const recording = state === 'recording';
+  // Stopping must always work, so a recording clip can be ended even after the composer locks.
+  const blocked = state === 'transcribing' || (disabled && !recording);
   return (
     <Button
       type="button"
       size="icon-sm"
-      disabled={state === 'transcribing' || (disabled && state !== 'recording')}
-      onClick={state === 'recording' ? onStop : onStart}
+      disabled={blocked}
+      onClick={recording ? onStop : onStart}
       aria-label={LABELS[state]}
-      aria-pressed={state === 'recording'}
+      aria-pressed={recording}
       tooltip={LABELS[state]}
-      className={state === 'recording' ? 'text-destructive' : undefined}
+      className={recording ? 'text-destructive' : undefined}
     >
-      {state === 'recording' ? (
-        <Square size={14} />
-      ) : state === 'transcribing' ? (
-        <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
-      ) : (
-        <Mic size={14} />
-      )}
+      <VoiceIcon state={state} />
     </Button>
   );
 }
