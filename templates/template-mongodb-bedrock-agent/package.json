@@ -11,7 +11,8 @@
     "ingest": "tsx scripts/ingest.ts",
     "dev": "mastra dev",
     "build": "tsc",
-    "start": "node --require @opentelemetry/auto-instrumentations-node/register dist/agent.js"
+    "start": "node --require @opentelemetry/auto-instrumentations-node/register dist/agent.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "3.0.105",
@@ -32,6 +33,8 @@
     "@types/node": "^24.0.0",
     "mastra": "^1.15.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "undici": "^7.30.1",
+    "vitest": "^5.1.0"
   }
 }

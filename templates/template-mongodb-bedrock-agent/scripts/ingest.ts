@@ -43,7 +43,7 @@ async function main() {
   if (!MONGODB_URI) throw new Error('MONGODB_URI is not set. Copy .env.example to .env first.');
 
   console.log(`Fetching docs index: ${LLMS_TXT}`);
-  const index = await fetch(LLMS_TXT).then(r => r.text());
+  const index = await fetch(LLMS_TXT).then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))));
   const allLinks = parseDocLinks(index);
   const links = allLinks.slice(0, DOCS_LIMIT);
   console.log(
