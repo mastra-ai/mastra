@@ -1,10 +1,14 @@
 import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
+import { factoryVoiceSettingsUserId } from '../../storage/domains/voice-settings/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import { NEW_CHANNEL_SESSION_KEY } from './channel-session-link-processor.js';
 
@@ -174,7 +178,7 @@ describe('resolveLinkedSender', () => {
 
 const linkKey = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-sender' };
 
-function makeProjects(factories: Array<{ id: string; name?: string; orgId?: string; modelScope?: string }>) {
+function makeProjects(factories: Array<{ id: string; name?: string }>) {
   const projects = factories.map(factory => ({ ...factory }));
   return {
     get: vi.fn(async ({ id }: { id: string }) => projects.find(f => f.id === id) ?? null),
@@ -462,15 +466,7 @@ describe('handler dispatch gating', () => {
     const sourceControl = {
       sessions: {
         getBySessionId: vi.fn(async (sessionId: string) =>
-          sessionId === 'session-1'
-            ? {
-                orgId: 'org-1',
-                userId: 'owner-1',
-                factoryProjectId: 'fp-1',
-                branch: 'slack/1700-42',
-                visibility: 'org',
-              }
-            : null,
+          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' } : null,
         ),
       },
     } as any;
@@ -500,15 +496,7 @@ describe('handler dispatch gating', () => {
     const sourceControl = {
       sessions: {
         getBySessionId: vi.fn(async (sessionId: string) =>
-          sessionId === 'session-1'
-            ? {
-                orgId: 'org-1',
-                userId: 'owner-1',
-                factoryProjectId: 'fp-1',
-                branch: 'slack/1700-42',
-                visibility: 'org',
-              }
-            : null,
+          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' } : null,
         ),
       },
     } as any;
@@ -542,18 +530,7 @@ describe('handler dispatch gating', () => {
     const sourceControl = {
       sessions: {
         getBySessionId: vi.fn(async (sessionId: string) =>
-          sessionId === 'session-1'
-            ? {
-                ...{
-                  orgId: 'org-1',
-                  userId: 'owner-1',
-                  factoryProjectId: 'fp-1',
-                  branch: 'slack/1700-42',
-                  visibility: 'org',
-                },
-                ...overrides,
-              }
-            : null,
+          sessionId === 'session-1' ? { ...{ orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' }, ...overrides } : null,
         ),
       },
     } as any;
@@ -773,35 +750,6 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(chatOnlyMastra()));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
-  });
-
-  describe('voice clips', () => {
-    const linked = () => ({
-      accountLinks: fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
-      projects: makeProjects([{ id: 'fp-1', orgId: 'org-1', modelScope: 'hybrid' }]),
-    });
-
-    it('tells the agent why a voice clip was not transcribed when the sender has no speech-to-text key', async () => {
-      const handlers = createHandlers({
-        ...linked(),
-        modelCredentials: { listCredentials: vi.fn().mockResolvedValue([]) } as any,
-      });
-      const message = makeMessage('T-1');
-      message.isMention = true;
-      message.text = '';
-      Object.assign(message, { formatted: { type: 'root', children: [] } });
-      message.attachments = [{ type: 'audio', mimeType: 'audio/mp4', name: 'audio_message.m4a' }];
-      const thread = makeThread();
-      thread.isSubscribed = vi.fn().mockResolvedValue(false);
-      const defaultHandler = vi.fn();
-
-      await handlers.onMention!(thread, message, defaultHandler, handlerCtx(chatOnlyMastra()));
-
-      expect(defaultHandler).toHaveBeenCalledTimes(1);
-      const dispatched = defaultHandler.mock.calls[0]![1];
-      expect(dispatched.attachments.map((a: { name?: string }) => a.name)).toEqual(['audio_message.m4a']);
-      expect(dispatched.text).toMatch(/^Voice clip not transcribed: .*API key/);
-    });
   });
 });
 
@@ -1331,11 +1279,7 @@ describe('channel session creation context (resolveSession)', () => {
         }),
       },
     };
-    const controller = {
-      id: 'code',
-      queryThreadById: vi.fn().mockResolvedValue(null),
-      createSession: vi.fn().mockResolvedValue({ identity: 'session' }),
-    };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
     const requestContext = new RequestContext();
 
     const session = await createChannelSessionResolver({ sourceControl } as any)({
@@ -1369,11 +1313,7 @@ describe('channel session creation context (resolveSession)', () => {
     const sourceControl = {
       sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? row : null)) },
     };
-    const controller = {
-      id: 'code',
-      queryThreadById: vi.fn().mockResolvedValue(null),
-      createSession: vi.fn().mockResolvedValue({}),
-    };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1405,8 +1345,8 @@ describe('channel session creation context (resolveSession)', () => {
 
     expect(controller.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'thread-9', resourceId: 'fp-1', threadId: 'thread-9' }),
-    );
-  });
+      );
+    });
 
   it('resolves a migrated legacy thread passed without metadata through its stored session stamp', async () => {
     const row = {
@@ -1450,11 +1390,7 @@ describe('channel session creation context (resolveSession)', () => {
       sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? dm : null)) },
     };
     const forged = { id: 'thread-atk', resourceId: 'fp-1', metadata: { factorySessionId: 'session-1' } };
-    const controller = {
-      id: 'code',
-      queryThreadById: vi.fn(async () => null),
-      createSession: vi.fn().mockResolvedValue({}),
-    };
+    const controller = { id: 'code', queryThreadById: vi.fn(async () => null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({ controller, thread: forged } as any);
 
@@ -1498,11 +1434,7 @@ describe('channel session creation context (resolveSession)', () => {
           .mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: null }),
       },
     };
-    const controller = {
-      id: 'code',
-      queryThreadById: vi.fn().mockResolvedValue(null),
-      createSession: vi.fn().mockResolvedValue({}),
-    };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1516,11 +1448,7 @@ describe('channel session creation context (resolveSession)', () => {
     const sourceControl = {
       sessions: { getBySessionId: vi.fn() },
     };
-    const controller = {
-      id: 'code',
-      queryThreadById: vi.fn().mockResolvedValue(null),
-      createSession: vi.fn().mockResolvedValue({}),
-    };
+    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -2558,5 +2486,178 @@ describe('@bot mute / unmute', () => {
     await f.send('@shipyard mute', { isMention: true, slot: 'onMention' });
     expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
     expect(f.defaultHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe('Slack voice clips', () => {
+  const OPENAI_URL = 'https://api.openai.com/v1/audio/transcriptions';
+  const MISTRAL_URL = 'https://api.mistral.ai/v1/audio/transcriptions';
+  const events: string[] = [];
+  const server = setupServer(
+    http.post(OPENAI_URL, ({ request }) => {
+      events.push(`openai ${request.headers.get('authorization')}`);
+      return HttpResponse.json({ text: 'hello from whisper' });
+    }),
+    http.post(MISTRAL_URL, ({ request }) => {
+      events.push(`mistral ${request.headers.get('authorization')}`);
+      return HttpResponse.json({ model: 'voxtral-mini-latest', text: 'ship the fix', language: 'en', usage: {} });
+    }),
+  );
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+  afterAll(() => server.close());
+  beforeEach(() => {
+    events.length = 0;
+  });
+
+  const SENDER = { orgId: 'org-1', userId: 'user-1' };
+
+  async function fixture() {
+    const seed = await createFactoryStorageForTests();
+    await seed.channelIdentity.saveAccountLink({ ...linkKey, ...SENDER });
+    const storage = new InMemoryStore();
+    const memory = (await storage.getStore('memory'))!;
+    const saveInternalThread = (id: string, resourceId: string) =>
+      memory.saveThread({
+        thread: {
+          id,
+          resourceId,
+          title: 'slack thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'slack',
+            channel_externalThreadId: 'slack:C-1:1700.42',
+            channel_externalChannelId: 'C-1',
+            channel_subscribed: 'true',
+          },
+        },
+      });
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
+    thread.startTyping = vi.fn(async () => {
+      events.push('typing');
+    });
+    thread.adapter.addReaction = vi.fn().mockResolvedValue(undefined);
+    const defaultHandler = vi.fn().mockResolvedValue(undefined);
+    const ctx = handlerCtx({ getStorage: () => storage, getLogger: () => ({ error: vi.fn() }) });
+    const deps = {
+      accountLinks: seed.channelIdentity,
+      projects: seed.projects,
+      modelCredentials: seed.credentials,
+      voiceSettings: seed.voiceSettings,
+    };
+    const defaultFactory = (factoryProjectId: string) =>
+      seed.channelIdentity.setDefaultFactory({ ...linkKey, userId: SENDER.userId, factoryProjectId });
+    return { seed, thread, ctx, deps, defaultHandler, defaultFactory, saveInternalThread };
+  }
+
+  function voiceMessage({ isMention = false, rawText }: { isMention?: boolean; rawText?: string } = {}) {
+    return {
+      ...makeMessage('T-1'),
+      id: '1700.43',
+      text: '',
+      isMention,
+      raw: { team_id: 'T-1', ...(rawText ? { text: rawText } : {}) },
+      formatted: { type: 'root', children: [] },
+      attachments: [
+        {
+          type: 'audio',
+          mimeType: 'audio/mp4',
+          name: 'audio_message.m4a',
+          size: 15,
+          fetchData: async () => Buffer.from('fake aac bytes'),
+        },
+      ],
+    };
+  }
+
+  it("answers a subscribed follow-up clip as its transcript on the sender's key, after showing typing", async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    const message = voiceMessage();
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(message.text).toBe('ship the fix');
+    expect(message.attachments).toEqual([]);
+    expect(events).toEqual(['typing', 'mistral Bearer sk-personal']);
+  });
+
+  it("transcribes under the thread's session Factory, not the sender's default Factory", async () => {
+    const f = await fixture();
+    const sessionFactory = await f.seed.projects.create({
+      ...SENDER,
+      input: { name: 'Shared', modelScope: 'factory' },
+    });
+    await f.saveInternalThread('session-1', sessionFactory.id);
+    const senderDefault = await f.seed.projects.create({ ...SENDER, input: { name: 'Mine', modelScope: 'user' } });
+    await f.defaultFactory(senderDefault.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    await f.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    await f.seed.voiceSettings.set({
+      orgId: 'org-1',
+      userId: factoryVoiceSettingsUserId(sessionFactory.id),
+      provider: 'openai',
+      model: 'whisper-1',
+    });
+    const sessionRow = {
+      orgId: 'org-1',
+      userId: 'owner-1',
+      factoryProjectId: sessionFactory.id,
+      branch: 'slack/1700-42',
+      visibility: 'org',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (id: string) => (id === 'session-1' ? sessionRow : null)) },
+    } as any;
+    const message = voiceMessage();
+
+    await createHandlers({ ...f.deps, sourceControl }).onSubscribedMessage!(
+      f.thread,
+      message,
+      f.defaultHandler,
+      f.ctx,
+    );
+
+    expect(message.text).toBe('hello from whisper');
+    expect(events).toEqual(['typing', 'openai Bearer sk-org']);
+  });
+
+  it('spends no key on a clip sent with `@bot mute`', async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+
+    await createHandlers(f.deps).onSubscribedMessage!(
+      f.thread,
+      voiceMessage({ isMention: true, rawText: '<@U-BOT> mute' }),
+      f.defaultHandler,
+      f.ctx,
+    );
+
+    expect(f.defaultHandler).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
+  });
+
+  it('tells the agent why a clip that starts a session was not transcribed when the sender has no key', async () => {
+    const f = await fixture();
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    f.thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const message = voiceMessage({ isMention: true });
+
+    await createHandlers(f.deps).onMention!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(message.attachments.map(clip => clip.name)).toEqual(['audio_message.m4a']);
+    expect(message.text).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*API key/);
+    expect(events).toEqual(['typing']);
   });
 });

@@ -2,11 +2,11 @@ import type { Attachment, Message } from 'chat';
 import { stringifyMarkdown } from 'chat';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { factoryVoiceSettingsUserId } from '../../storage/domains/voice-settings/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { transcribeVoiceClips } from './voice-clips.js';
+import { transcribeVoiceClips, VOICE_CLIP_TIMEOUT_MS } from './voice-clips.js';
 
 const OPENAI_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const MISTRAL_URL = 'https://api.mistral.ai/v1/audio/transcriptions';
@@ -92,21 +92,31 @@ describe('transcribeVoiceClips', () => {
     ]);
   });
 
-  it("falls back to the org's key when the sender has none", async () => {
+  it("doesn't bill the org key outside a factory-scope Factory", async () => {
+    // Only a `factory`-scope Factory spends the org's keys; user and hybrid scopes bill the sender, like chat.
     const seed = await createFactoryStorageForTests();
-    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
-    const msg = message('m1', [voiceClip()]);
-
-    await transcribeVoiceClips([msg], SENDER, {
-      modelCredentials: seed.credentials,
-      voiceSettings: seed.voiceSettings,
+    const project = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Voice', modelScope: 'hybrid' },
     });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    const clip = voiceClip();
+    const msg = message('m1', [clip]);
 
-    expect(agentReads(msg)).toBe('hello from whisper');
-    expect(calls.openai.map(c => c.authorization)).toEqual(['Bearer sk-org']);
+    await transcribeVoiceClips(
+      [msg],
+      SENDER,
+      { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings, projects: seed.projects },
+      project.id,
+    );
+
+    expect(msg.attachments).toEqual([clip]);
+    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*API key/);
+    expect(calls.openai).toEqual([]);
   });
 
-  it("follows the routed Factory's model scope: factory scope uses its model and the org key, ignoring personal ones", async () => {
+  it("follows the run's Factory model scope: factory scope uses its model and the org key, ignoring personal ones", async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({
       orgId: 'org1',
@@ -157,7 +167,7 @@ describe('transcribeVoiceClips', () => {
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
     expect(msg.attachments).toEqual([clip]);
-    expect(agentReads(msg)).toMatch(/^Voice clip not transcribed: .*API key/);
+    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*API key/);
     expect(calls.openai).toEqual([]);
     expect(calls.mistral).toEqual([]);
   });
@@ -194,6 +204,66 @@ describe('transcribeVoiceClips', () => {
     expect(calls.mistral).toEqual([]);
   });
 
+  it('notes a clip of unknown size whose download turns out over the cap, without calling a provider', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const msg = message('m1', [voiceClip({ size: undefined, fetchData: async () => Buffer.alloc(9 * 1024 * 1024) })]);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(agentReads(msg)).toBe('Voice clip "audio_message.m4a" not transcribed: the clip is too long');
+    expect(calls.mistral).toEqual([]);
+  });
+
+  it('notes a clip Slack offers no download for', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const msg = message('m1', [voiceClip({ fetchData: undefined })]);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(agentReads(msg)).toBe('Voice clip "audio_message.m4a" not transcribed: the clip could not be downloaded');
+  });
+
+  it('names each clip in its note so a message with several clips stays unambiguous', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const msg = message('m1', [
+      voiceClip({ name: 'standup.m4a' }),
+      voiceClip({ name: 'huge.m4a', size: 50 * 1024 * 1024 }),
+    ]);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(msg.attachments.map(clip => clip.name)).toEqual(['huge.m4a']);
+    expect(agentReads(msg)).toBe('ship the fix\n\nVoice clip "huge.m4a" not transcribed: the clip is too long');
+  });
+
+  it('gives up on a clip that never finishes and says it timed out', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const download = Promise.withResolvers<void>();
+    const msg = message('m1', [
+      voiceClip({
+        fetchData: () => {
+          download.resolve();
+          return new Promise<Buffer>(() => {});
+        },
+      }),
+    ]);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const done = transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+      await download.promise;
+      await vi.advanceTimersByTimeAsync(VOICE_CLIP_TIMEOUT_MS);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: transcription timed out/);
+  });
+
   it('surfaces a provider failure as a note on the clip', async () => {
     server.use(http.post(MISTRAL_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
     const seed = await createFactoryStorageForTests();
@@ -202,7 +272,7 @@ describe('transcribeVoiceClips', () => {
 
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toContain('Voice clip not transcribed');
+    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*Status 500/);
   });
 
   it('leaves messages without voice clips untouched', async () => {
