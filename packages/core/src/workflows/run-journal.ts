@@ -120,6 +120,7 @@ export class RunJournal {
   #closed = false;
   /** The highest `lastSeq` of the run known here: as loaded, or reported by a write or draft. */
   #lastSeq: number | undefined;
+  #runToken: string | undefined;
   /** Store calls (writes and drafts) sent and not yet settled. */
   #pending = new Set<Promise<unknown>>();
   #resolveSettledLastSeq!: (seq: number | undefined) => void;
@@ -129,6 +130,7 @@ export class RunJournal {
    * Undefined when the run wasn't loaded and nothing was stored.
    */
   readonly settledLastSeq: Promise<number | undefined>;
+  readonly settledRunToken: Promise<string | undefined>;
 
   /**
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
@@ -155,7 +157,7 @@ export class RunJournal {
     runId: string;
     seed?: Record<string, unknown>;
     state?: unknown;
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; runToken?: string };
     inherited?: StateBase;
     resumed?: boolean;
   }) {
@@ -175,9 +177,11 @@ export class RunJournal {
     this.#patchBytes = storedState?.patchBytes ?? 0;
     if (resumed && seed) this.#startStateSeq = storedState?.seq;
     this.#lastSeq = storedState?.seq;
+    this.#runToken = storedState?.runToken;
     this.settledLastSeq = new Promise(resolve => {
       this.#resolveSettledLastSeq = resolve;
     });
+    this.settledRunToken = this.settledLastSeq.then(() => this.#runToken);
   }
 
   /**
@@ -411,7 +415,10 @@ export class RunJournal {
         checkpoint
           ? store.writeWorkflowRunCheckpoint({ ...run, stateBase })
           : store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq }),
-        written => written?.lastSeq,
+        written => {
+          this.#runToken ??= written?.runToken;
+          return written?.lastSeq;
+        },
       );
       if (written === null) {
         if (checkpoint) this.#needsCheckpoint = true;
@@ -731,8 +738,12 @@ export function lazyStepResults(
 ): () => Promise<StepResults> {
   const results = { ...stepResults };
   evictOnceStored(journal, results);
-  const { store, workflowName, runId, settledLastSeq } = journal;
-  return storedStepResults({ store: store!, workflowName, runId, lastSeq: settledLastSeq }, results, format);
+  const { store, workflowName, runId, settledLastSeq, settledRunToken } = journal;
+  return storedStepResults(
+    { store: store!, workflowName, runId, lastSeq: settledLastSeq, runToken: settledRunToken },
+    results,
+    format,
+  );
 }
 
 // Kept apart from `lazyStepResults`, so the loader it returns doesn't hold on to the journal.
@@ -752,9 +763,8 @@ function evictOnceStored(journal: RunJournal, results: StepResults): void {
 }
 
 /**
- * The `steps()` of a storage v2 result whose step results were read already, as when `restart()`
- * returns a finished run's stored result: holds their stubs, and reads them again on the first call
- * while the run is still at `lastSeq`.
+ * The `steps()` of a storage v2 result reconstructed from stored state. Holds successful-step
+ * stubs and hydrates them on the first call while the stored run identity and `lastSeq` still match.
  *
  * @internal
  */
@@ -764,7 +774,8 @@ export function loadedStepResults(
     workflowName,
     runId,
     lastSeq,
-  }: { store: WorkflowsStorage; workflowName: string; runId: string; lastSeq: number },
+    runToken,
+  }: { store: WorkflowsStorage; workflowName: string; runId: string; lastSeq: number; runToken?: string },
   stepResults: StepResults,
   format: (stepResults: StepResults) => StepResults,
 ): () => Promise<StepResults> {
@@ -773,7 +784,11 @@ export function loadedStepResults(
     results[stepId] =
       stepId !== 'input' && result?.status === 'success' && !isStepResultStub(result) ? stubStepResult(result) : result;
   }
-  return storedStepResults({ store, workflowName, runId, lastSeq: Promise.resolve(lastSeq) }, results, format);
+  return storedStepResults(
+    { store, workflowName, runId, lastSeq: Promise.resolve(lastSeq), runToken: Promise.resolve(runToken) },
+    results,
+    format,
+  );
 }
 
 function storedStepResults(
@@ -782,7 +797,14 @@ function storedStepResults(
     workflowName,
     runId,
     lastSeq,
-  }: { store: WorkflowsStorage; workflowName: string; runId: string; lastSeq: Promise<number | undefined> },
+    runToken,
+  }: {
+    store: WorkflowsStorage;
+    workflowName: string;
+    runId: string;
+    lastSeq: Promise<number | undefined>;
+    runToken: Promise<string | undefined>;
+  },
   results: StepResults,
   format: (stepResults: StepResults) => StepResults,
 ): () => Promise<StepResults> {
@@ -790,6 +812,7 @@ function storedStepResults(
 
   const load = async (): Promise<StepResults> => {
     const expectedLastSeq = await lastSeq;
+    const expectedRunToken = await runToken;
     const stubbed = Object.keys(results).filter(stepId => isStepResultStub(results[stepId]));
     if (!stubbed.length) return format(results);
 
@@ -798,6 +821,7 @@ function storedStepResults(
       runId,
       stepIds: stubbed,
       expectedLastSeq,
+      expectedRunToken,
     });
     if (!stored) {
       throw new MastraError({

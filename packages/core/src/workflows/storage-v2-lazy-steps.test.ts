@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
+import { InMemoryStore } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { isStepResultStub, residentStepResults } from './run-journal';
@@ -175,6 +176,77 @@ describe('storage v2 result steps loader', () => {
     await expect((result.steps as unknown as () => Promise<unknown>)()).rejects.toMatchObject({
       id: 'WORKFLOW_STORAGE_V2_STEPS_STALE',
     });
+  });
+
+  it.each(['start', 'restart'] as const)(
+    'never exposes a recreated run’s results through an earlier %s result with the same sequence',
+    async operation => {
+      const workflow = createWorkflow({
+        id: 'reused-run',
+        inputSchema: num,
+        outputSchema: num,
+        options: { storageVersion: 2 },
+      })
+        .then(addOne('step'))
+        .commit();
+      const storage = new InMemoryStore();
+      new Mastra({ logger: false, storage, workflows: { workflow } });
+      const run = await workflow.createRun({ runId: 'reused' });
+      const initial = await run.start({ inputData: { n: 0 } });
+      const oldResult = operation === 'restart' ? await run.restart() : initial;
+      const store = (await storage.getStore('workflows'))!;
+      const oldHeader = await store.loadWorkflowRunHeader({ workflowName: workflow.id, runId: run.runId });
+
+      await workflow.deleteWorkflowRunById(run.runId);
+      const replacement = await workflow.createRun({ runId: run.runId });
+      const newResult = await replacement.start({ inputData: { n: 9 } });
+      const newHeader = await store.loadWorkflowRunHeader({ workflowName: workflow.id, runId: replacement.runId });
+
+      expect(newHeader!.lastSeq).toBe(oldHeader!.lastSeq);
+      await expect(oldResult.steps()).rejects.toMatchObject({ id: 'WORKFLOW_STORAGE_V2_STEPS_STALE' });
+      expect(await newResult.steps()).toMatchObject({ input: { n: 9 }, step: { output: { n: 10 } } });
+    },
+  );
+
+  it('never hydrates a nested run’s result from a replacement run with the same sequence', async () => {
+    let nestedRunId!: string;
+    let nestedSteps!: () => Promise<unknown>;
+    const inner = createWorkflow({
+      id: 'nested-reused-run',
+      inputSchema: num,
+      outputSchema: num,
+      options: {
+        storageVersion: 2,
+        onFinish: result => {
+          nestedRunId = result.runId;
+          nestedSteps = result.steps;
+        },
+      },
+    })
+      .then(addOne('step'))
+      .commit();
+    const outer = createWorkflow({ id: 'parent', inputSchema: num, outputSchema: num, options: { storageVersion: 2 } })
+      .then(inner)
+      .commit();
+    const storage = new InMemoryStore();
+    new Mastra({ logger: false, storage, workflows: { outer, inner } });
+    const parent = await outer.createRun({ runId: 'reused' });
+    await parent.start({ inputData: { n: 0 } });
+    const oldSteps = nestedSteps;
+    const oldRunId = nestedRunId;
+    const store = (await storage.getStore('workflows'))!;
+    const oldHeader = await store.loadWorkflowRunHeader({ workflowName: inner.id, runId: oldRunId });
+
+    await inner.deleteWorkflowRunById(oldRunId);
+    await outer.deleteWorkflowRunById(parent.runId);
+    const replacement = await outer.createRun({ runId: parent.runId });
+    await replacement.start({ inputData: { n: 9 } });
+    const newHeader = await store.loadWorkflowRunHeader({ workflowName: inner.id, runId: nestedRunId });
+
+    expect(nestedRunId).toBe(oldRunId);
+    expect(newHeader!.lastSeq).toBe(oldHeader!.lastSeq);
+    await expect(oldSteps()).rejects.toMatchObject({ id: 'WORKFLOW_STORAGE_V2_STEPS_STALE' });
+    expect(await nestedSteps()).toMatchObject({ input: { n: 9 }, step: { output: { n: 10 } } });
   });
 
   it('never exposes a later resume’s results through an earlier result', async () => {

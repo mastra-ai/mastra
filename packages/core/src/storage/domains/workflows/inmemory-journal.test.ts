@@ -192,6 +192,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     ]);
     expect(await store.loadWorkflowRun({ ...run, successfulSteps: 'full' })).toEqual({
       header: makeHeader('r1'),
+      runToken: expect.any(String),
       lastSeq: 4,
       startStateSeq: 4,
       state: { n: 1 },
@@ -284,11 +285,12 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     const { store } = setup();
     expect(
       await store.writeWorkflowRunCheckpoint({ ...run, header: makeHeader('r1'), steps: { a: ok(1) }, state: {} }),
-    ).toEqual({ lastSeq: 2 });
+    ).toEqual({ lastSeq: 2, runToken: expect.any(String) });
     expect(
       await store.appendWorkflowRunEntries({ ...run, header: makeHeader('r1'), steps: { b: ok(2) }, state: { n: 1 } }),
-    ).toEqual({ lastSeq: 4 });
+    ).toEqual({ lastSeq: 4, runToken: expect.any(String) });
     expect(await store.appendWorkflowRunEntries({ ...run, header: makeHeader('r1'), steps: {} })).toEqual({
+      runToken: expect.any(String),
       lastSeq: 4,
     });
   });
@@ -325,6 +327,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
 
     expect(await store.loadWorkflowRun({ ...run, successfulSteps: 'full' })).toEqual({
       header: makeHeader('r1'),
+      runToken: expect.any(String),
       lastSeq: 1,
       startStateSeq: 0,
       state: {},
@@ -423,7 +426,12 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     await store.writeWorkflowRunCheckpoint({ ...run, header: makeHeader('r1'), steps: { a: ok(1) }, state: {} });
     await store.persistWorkflowSnapshot({ workflowName: 'wf', runId: 'v1', snapshot: makeSnapshot('v1') });
 
-    expect(await store.loadWorkflowRunHeader(run)).toEqual({ header: makeHeader('r1'), lastSeq: 2, startStateSeq: 2 });
+    expect(await store.loadWorkflowRunHeader(run)).toEqual({
+      header: makeHeader('r1'),
+      runToken: expect.any(String),
+      lastSeq: 2,
+      startStateSeq: 2,
+    });
     expect(await store.loadWorkflowRunHeader({ workflowName: 'wf', runId: 'v1' })).toBeNull();
     expect(await store.loadWorkflowRunHeader({ workflowName: 'wf', runId: 'nope' })).toBeNull();
     expect(await store.loadWorkflowRun({ workflowName: 'wf', runId: 'v1', successfulSteps: 'full' })).toBeNull();
@@ -445,6 +453,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     });
     expect(updated).toEqual({
       header: makeHeader('r1', { status: 'canceled', suspendedPaths: { a: [0] } }),
+      runToken: expect.any(String),
       lastSeq: 2,
       startStateSeq: 2,
     });
@@ -468,7 +477,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
         state: { n: 1 },
         expectedStatus: [...notCanceled],
       }),
-    ).toEqual({ lastSeq: 2 });
+    ).toEqual({ lastSeq: 2, runToken: expect.any(String) });
     expect(
       await store.appendWorkflowRunEntries({
         ...run,
@@ -476,7 +485,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
         steps: { b: ok(2) },
         expectedStatus: [...notCanceled],
       }),
-    ).toEqual({ lastSeq: 3 });
+    ).toEqual({ lastSeq: 3, runToken: expect.any(String) });
 
     await store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' } });
     const stored = await store.loadWorkflowRun({ ...run, successfulSteps: 'full' });
@@ -509,7 +518,7 @@ describe('WorkflowsInMemory storage v2 methods', () => {
         header: makeHeader('r1', { status: 'canceled' }),
         steps: { c: ok(3) },
       }),
-    ).toEqual({ lastSeq: 4 });
+    ).toEqual({ lastSeq: 4, runToken: expect.any(String) });
   });
 
   it('clones on write and on read', async () => {

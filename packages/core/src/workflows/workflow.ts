@@ -5918,11 +5918,18 @@ export class Run<
         this.storageVersion === 2
           ? await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows')
           : undefined;
-      const lastSeq = this.runStorage.storedState(snapshot)?.seq;
+      const storedState = this.runStorage.storedState(snapshot);
+      const lastSeq = storedState?.seq;
       const base = {
         steps: (v2Store && lastSeq !== undefined
           ? loadedStepResults(
-              { store: v2Store, workflowName: this.workflowId, runId: this.runId, lastSeq },
+              {
+                store: v2Store,
+                workflowName: this.workflowId,
+                runId: this.runId,
+                lastSeq,
+                runToken: storedState?.runToken,
+              },
               snapshot.context ?? {},
               clean,
             )
