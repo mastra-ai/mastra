@@ -8,10 +8,9 @@
 set -euo pipefail
 
 prompt="${*:-How do I define a tool in Mastra?}"
-payload=$(jq -Rn --arg p "$prompt" '{prompt:$p}')
 
 echo "▶ Asking the deployed AgentCore runtime…" >&2
-answer=$(npx @aws/agentcore@0.31.1 invoke --json "$payload" 2>/dev/null | jq -r '.response | fromjson | .response')
+answer=$(npx @aws/agentcore@0.31.1 invoke --json --prompt "$prompt" 2>/dev/null | jq -r '.response | fromjson | .response')
 
 if command -v glow >/dev/null 2>&1; then
   printf '%s\n' "$answer" | glow -

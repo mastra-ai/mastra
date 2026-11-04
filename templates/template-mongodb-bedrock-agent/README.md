@@ -60,7 +60,7 @@ For related memory concepts, see the [Mastra semantic recall documentation](http
 
 ```bash
 npx @aws/agentcore@0.31.1 deploy
-npx @aws/agentcore@0.31.1 invoke '{"prompt":"How do I define a tool in Mastra?"}'
+npx @aws/agentcore@0.31.1 invoke --prompt "How do I define a tool in Mastra?"
 ```
 
 `scripts/ask.sh "your question"` wraps that invoke call and renders the answer as markdown in your terminal.
