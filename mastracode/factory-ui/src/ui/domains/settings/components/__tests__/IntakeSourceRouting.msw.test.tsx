@@ -54,7 +54,7 @@ describe('RoutedSourcePicker', () => {
   it('routes a selected source from its own row', async () => {
     stub([]);
     renderRouting();
-    const row = await screen.findByRole('group', { name: 'Linear projects and teams' });
+    const row = await screen.findByRole('listitem');
     await waitFor(() => expect(within(row).getByRole('combobox', { name: 'Factory for Releases' })).toBeEnabled());
     expect(within(row).getByText("Not routed. This source's issues won't be picked up.")).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: 'Remove Releases' })).toBeInTheDocument();

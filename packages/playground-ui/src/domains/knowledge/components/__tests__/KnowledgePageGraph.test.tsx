@@ -499,11 +499,7 @@ describe('KnowledgePageGraph', () => {
 
     it('names a farther page, its path and how many children it has on hover', () => {
       renderGraph({ pages: deep });
-      const tooltip = within(hoverDot('ticket'));
-      expect(tooltip.getByText('Ticket')).toBeTruthy();
-      expect(tooltip.getByText('Page')).toBeTruthy();
-      expect(tooltip.getByText('Acme › Support')).toBeTruthy();
-      expect(tooltip.getByText('4 children')).toBeTruthy();
+      expect(hoverDot('ticket').textContent).toBe('TicketPageAcme › Support4 children');
     });
 
     it('tells how to open a collapsed group of scopes rather than counting it twice', () => {

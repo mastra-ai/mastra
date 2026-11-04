@@ -85,7 +85,7 @@ describe('MCP task chip on a deferred tool call', () => {
       renderDeferredCall();
 
       await waitFor(() => expect(chipText()).toContain('task completed'));
-      expect(screen.getByTestId('mcp-task-chip').textContent).toContain('0:42');
+      expect(chipText()).toContain('0:42');
     });
   });
 
@@ -95,7 +95,7 @@ describe('MCP task chip on a deferred tool call', () => {
       renderDeferredCall();
 
       await waitFor(() => expect(chipText()).toContain('task cancelled'));
-      expect(screen.getByTestId('mcp-task-chip').textContent).toContain('0:10');
+      expect(chipText()).toContain('0:10');
     });
   });
 
@@ -105,7 +105,7 @@ describe('MCP task chip on a deferred tool call', () => {
       renderDeferredCall();
 
       await waitFor(() => expect(chipText()).toContain('task failed'));
-      expect(screen.getByTestId('mcp-task-chip').textContent).toContain('1:00');
+      expect(chipText()).toContain('1:00');
     });
   });
 

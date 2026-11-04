@@ -201,8 +201,7 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
     expect(review.getByText('team/backend')).toBeInTheDocument();
-    expect(review.getByText('GitLab')).toBeInTheDocument();
-    expect(review.getByText('develop')).toBeInTheDocument();
+    expect(review.getByText('GitLab').closest('[data-slot="metadata"]')).toHaveTextContent('develop');
     await user.click(screen.getByRole('button', { name: 'Edit model' }));
     expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     await user.click(screen.getByRole('button', { name: 'Change provider' }));
@@ -520,8 +519,9 @@ describe('Personal Factory model', () => {
     await user.click(await screen.findByRole('button', { name: 'Review setup' }));
     expect(writes).toEqual([]);
     const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('API key')).toBeInTheDocument();
-    expect(review.getByText('your default for work and sessions')).toBeInTheDocument();
+    expect(review.getByText('API key').closest('[data-slot="metadata"]')).toHaveTextContent(
+      'your default for work and sessions',
+    );
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'user' });

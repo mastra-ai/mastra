@@ -311,8 +311,9 @@ describe('Board work-item activity', () => {
 
     await expectActivity('Ada Lovelace', 'Moved the item');
     const activity = within(screen.getByLabelText('Work item activity'));
-    expect(activity.getByText('build agent')).toBeInTheDocument();
-    expect(activity.getByText('anthropic/claude-sonnet-4-5')).toBeInTheDocument();
+    expect(activity.getByText('build agent').closest('[data-slot="metadata"]')).toHaveTextContent(
+      'anthropic/claude-sonnet-4-5',
+    );
   });
 
   it('loads older audit pages so cards are not limited to the newest project events', async () => {

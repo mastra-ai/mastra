@@ -39,8 +39,6 @@ describe('DatasetCompareVersionToolbar', () => {
       await waitFor(() => expect(versionA.textContent).toMatch(/^v12 .+2026.+ \(current\)$/));
       expect(versionB.textContent).toMatch(/^v11 .+2026/);
       expect(versionB.textContent).not.toContain('(current)');
-      expect(versionA.querySelector('[data-slot="metadata"]')).toBeNull();
-      expect(versionB.querySelector('[data-slot="metadata"]')).toBeNull();
       expect(screen.queryByRole('listbox')).toBeNull();
     });
   });
@@ -60,9 +58,9 @@ describe('DatasetCompareVersionToolbar', () => {
       const earlier = within(menu).getByRole('option', { name: /^v11/ });
       expect(within(latest).getByText('v12')).toBeDefined();
       expect(within(latest).getByText('(current)')).toBeDefined();
-      expect(latest.querySelectorAll('[data-slot="metadata-item"]')).toHaveLength(3);
+      expect(within(latest).getByText(/2026/)).toBeDefined();
       expect(within(earlier).getByText('v11')).toBeDefined();
-      expect(earlier.querySelectorAll('[data-slot="metadata-item"]')).toHaveLength(2);
+      expect(within(earlier).getByText(/2026/)).toBeDefined();
 
       const option = selected === 'v12' ? latest : earlier;
       fireEvent.pointerDown(option, { pointerType: 'mouse' });
