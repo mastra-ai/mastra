@@ -584,7 +584,10 @@ describe.skipIf(!live || !!reflectionTokens)('what the agent model sees', () => 
 });
 
 describe.skipIf(!live || !reflectionTokens)('Observer and Reflector lifecycle', () => {
-  it.each([['Memory', localBackend], ['PlatformMemory', platformBackend]] as const)(
+  it.each([
+    ['Memory', localBackend],
+    ['PlatformMemory', platformBackend],
+  ] as const)(
     '%s persists reflected observations and replays them on a later Agent turn',
     async (_name, createBackend) => {
       const backend = createBackend();

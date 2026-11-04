@@ -12,7 +12,7 @@ export interface PlatformKnowledgeOptions extends Omit<
   projectId?: string;
   instanceId?: string;
   /**
-   * Knowledge API URL. Falls back to `MASTRA_KNOWLEDGE_API_URL`, then `https://knowledge-api.mastra.ai`.
+   * Knowledge API URL. Falls back to `MASTRA_KNOWLEDGE_API_URL`, then `MASTRA_KNOWLEDGE_SERVICE_URL`, then `https://knowledge-api.mastra.ai`.
    */
   apiUrl?: string;
 }
@@ -124,6 +124,7 @@ export class PlatformKnowledge extends Knowledge {
     const apiUrl =
       options.apiUrl ??
       (process.env.MASTRA_KNOWLEDGE_API_URL?.trim() || undefined) ??
+      (process.env.MASTRA_KNOWLEDGE_SERVICE_URL?.trim() || undefined) ??
       DEFAULT_API_URL;
     if (!token || !instanceId) {
       throw new Error('PlatformKnowledge requires a Platform access token and Knowledge instance ID');

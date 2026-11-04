@@ -375,43 +375,48 @@ describe.skipIf(!evalFile || !process.env.OPENAI_API_KEY)('memory quality eval (
   for (const s of selected) {
     for (const [name, make] of Object.entries(RUNNERS).filter(([n]) => !only || only.includes(n))) {
       for (let run = 1; run <= RUNS; run++) {
-        it.concurrent(
-          `${s.name} / ${name} #${run}`,
-          async () => {
-            const threadId = `eval-${s.name}-${name.replace(/\W/g, '')}-${run}-${Date.now()}`;
-            const runner = make(threadId, s);
-            for (const session of s.sessions) {
-              for (const turn of session) await runner.ask(turn);
-              await runner.settle();
-            }
-            const observations = await runner.observations();
-            // Recall must come from observations: the first session's raw turns are no longer sent.
-            const tail = runner.rawTail ? await runner.rawTail() : null;
-            const compressed = tail === null ? null : !tail.includes(s.sessions[0]![0]!.slice(0, 40));
-            // Each question gets its own copy of the thread so earlier answers can't influence later ones.
-            const fork = async (id: string) => {
-              if (runner.fork) return runner.fork(id);
-              await client().cloneThread(threadId, { newThreadId: id });
-              return make(id, s);
-            };
-            const graded: Graded[] = await Promise.all(
-              s.quiz.map(async ({ q, rubric, ability }, i) => {
-                const answer = await (await fork(`${threadId}-q${i}`)).ask(q);
-                const [first, second] = await Promise.all([
-                  judge(q, rubric, answer),
-                  SECOND_JUDGE ? judge(q, rubric, answer, anthropic(SECOND_JUDGE)) : undefined,
-                ]);
-                return { q, ability, answer, ...first, second: second?.score };
-              }),
-            );
-            const score = graded.reduce((a, g) => a + g.score, 0);
-            results.push({ scenario: s.name, framework: name, run, score, of: s.quiz.length, compressed, observations, graded });
-            summarize();
-            expect(observations.length).toBeGreaterThan(0);
-            if (compressed !== null) expect(compressed).toBe(true);
-          },
-          900_000,
-        );
+        it.concurrent(`${s.name} / ${name} #${run}`, async () => {
+          const threadId = `eval-${s.name}-${name.replace(/\W/g, '')}-${run}-${Date.now()}`;
+          const runner = make(threadId, s);
+          for (const session of s.sessions) {
+            for (const turn of session) await runner.ask(turn);
+            await runner.settle();
+          }
+          const observations = await runner.observations();
+          // Recall must come from observations: the first session's raw turns are no longer sent.
+          const tail = runner.rawTail ? await runner.rawTail() : null;
+          const compressed = tail === null ? null : !tail.includes(s.sessions[0]![0]!.slice(0, 40));
+          // Each question gets its own copy of the thread so earlier answers can't influence later ones.
+          const fork = async (id: string) => {
+            if (runner.fork) return runner.fork(id);
+            await client().cloneThread(threadId, { newThreadId: id });
+            return make(id, s);
+          };
+          const graded: Graded[] = await Promise.all(
+            s.quiz.map(async ({ q, rubric, ability }, i) => {
+              const answer = await (await fork(`${threadId}-q${i}`)).ask(q);
+              const [first, second] = await Promise.all([
+                judge(q, rubric, answer),
+                SECOND_JUDGE ? judge(q, rubric, answer, anthropic(SECOND_JUDGE)) : undefined,
+              ]);
+              return { q, ability, answer, ...first, second: second?.score };
+            }),
+          );
+          const score = graded.reduce((a, g) => a + g.score, 0);
+          results.push({
+            scenario: s.name,
+            framework: name,
+            run,
+            score,
+            of: s.quiz.length,
+            compressed,
+            observations,
+            graded,
+          });
+          summarize();
+          expect(observations.length).toBeGreaterThan(0);
+          if (compressed !== null) expect(compressed).toBe(true);
+        }, 900_000);
       }
     }
   }

@@ -51,7 +51,8 @@ export function createTurnMemory(client: PlatformMemoryClient, readOnly = false)
   function currentTurn(threadId: string, items: TurnItem[]) {
     const key = JSON.stringify(items.findLast(m => m.role === 'user') ?? null);
     let turn = turns.get(threadId);
-    if (turn?.key !== key) turns.set(threadId, (turn = { key, base: crypto.randomUUID(), from: 0, seq: 0, observedAt: null }));
+    if (turn?.key !== key)
+      turns.set(threadId, (turn = { key, base: crypto.randomUUID(), from: 0, seq: 0, observedAt: null }));
     return turn;
   }
 

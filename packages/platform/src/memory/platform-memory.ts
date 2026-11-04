@@ -140,7 +140,9 @@ export class PlatformMemory extends MastraMemory {
         id: 'update-working-memory',
         description:
           'Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.',
-        inputSchema: z.object({ memory: z.string().describe('The Markdown formatted working memory content to store.') }),
+        inputSchema: z.object({
+          memory: z.string().describe('The Markdown formatted working memory content to store.'),
+        }),
         execute: async ({ memory }, context) => {
           const resourceId = context?.agent?.resourceId ?? context?.agent?.threadId;
           if (!resourceId) throw new Error('updateWorkingMemory needs a thread or resource');
@@ -159,7 +161,15 @@ export class PlatformMemory extends MastraMemory {
       {
         id: 'platform-memory',
         name: 'Platform Memory',
-        async processInputStep({ messageList, requestContext, stepNumber, model, writer, abort, rotateResponseMessageId }: ProcessInputStepArgs) {
+        async processInputStep({
+          messageList,
+          requestContext,
+          stepNumber,
+          model,
+          writer,
+          abort,
+          rotateResponseMessageId,
+        }: ProcessInputStepArgs) {
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx || ctx.readOnly) return messageList;
           const result = await client.runProcessors(ctx.threadId, {

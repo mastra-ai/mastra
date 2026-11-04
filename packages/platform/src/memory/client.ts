@@ -141,11 +141,7 @@ export function resolvePlatformMemoryOptions(options: PlatformMemoryClientOption
     projectId: options.projectId ?? env('MASTRA_PROJECT_ID'),
     environmentId: options.environmentId ?? env('MASTRA_ENVIRONMENT_ID'),
     actingUserId: options.actingUserId,
-    apiUrl: (
-      options.apiUrl ??
-      env('MASTRA_MEMORY_API_URL') ??
-      DEFAULT_API_URL
-    ).replace(/\/$/, ''),
+    apiUrl: (options.apiUrl ?? env('MASTRA_MEMORY_API_URL') ?? DEFAULT_API_URL).replace(/\/$/, ''),
     fetch: options.fetch ?? fetch,
   };
 }
