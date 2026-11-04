@@ -24,6 +24,24 @@ export const DASHBOARD_DATA_OPERATIONS = [
 
 export type DashboardDataOperation = (typeof DASHBOARD_DATA_OPERATIONS)[number];
 
+/**
+ * The Mastra route behind each read: the request `MastraClient` makes for it, without the server's
+ * API prefix. A server that answers the data tool with its own routes can look them up here.
+ */
+export const DASHBOARD_DATA_REQUESTS = {
+  aggregateTraces: 'POST /observability/traces/aggregate',
+  aggregateSpans: 'POST /observability/spans/aggregate',
+  getMetricAggregate: 'POST /observability/metrics/aggregate',
+  getMetricBreakdown: 'POST /observability/metrics/breakdown',
+  getMetricTimeSeries: 'POST /observability/metrics/timeseries',
+  getMetricPercentiles: 'POST /observability/metrics/percentiles',
+  listScores: 'GET /observability/scores',
+  getScoreAggregate: 'POST /observability/scores/aggregate',
+  getScoreBreakdown: 'POST /observability/scores/breakdown',
+  getScoreTimeSeries: 'POST /observability/scores/timeseries',
+  getScorePercentiles: 'POST /observability/scores/percentiles',
+} satisfies Record<DashboardDataOperation, string>;
+
 // MCP tools need an object input schema, so the operation's arguments sit in `query` or `body`
 // instead of a union, and the refinement keeps each operation to the one `MastraClient` sends.
 export const dashboardDataInputSchema = z

@@ -79,9 +79,9 @@ The dashboard app sends each read its `MastraClient` makes, such as `getMetricAg
 - Take `dashboardDataInputSchema` as input: an `operation` from `DASHBOARD_DATA_OPERATIONS`, named after the `MastraClient` method, with its arguments. `listScores` carries them as `query` parameters; every other operation carries them as a JSON `body`.
 - Answer with a status and body, matching `dashboardDataOutputSchema`.
 - Mark it app-only with `mcp: { _meta: { ui: { visibility: ['app'] } } }`, so hosts keep it away from the model.
-- Type the handler map as `Record<DashboardDataOperation, ...>`, so TypeScript flags an operation you don't answer.
+- Type any handler map as `Record<DashboardDataOperation, ...>`, so TypeScript flags an operation you don't answer.
 
-For example, answer each operation with its observability route, run in-process as the caller with `invokeRoute()` from `@mastra/server/server-adapter`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. The [MCP Apps docs](https://mastra.ai/docs/connections/mcp) show a full implementation.
+For example, answer each operation with the observability route `DASHBOARD_DATA_REQUESTS` maps it to, run in-process as the caller with `invokeRoute()` from `@mastra/server/server-adapter`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. The [MCP Apps docs](https://mastra.ai/docs/connections/mcp) show a full implementation.
 
 ### Pinning widgets
 

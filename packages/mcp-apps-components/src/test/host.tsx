@@ -5,9 +5,12 @@ import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextproto
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { DASHBOARD_DATA_TOOL_NAME, dashboardDataInputSchema } from '../apps/dashboard-renderer/data';
+import {
+  DASHBOARD_DATA_REQUESTS,
+  DASHBOARD_DATA_TOOL_NAME,
+  dashboardDataInputSchema,
+} from '../apps/dashboard-renderer/data';
 import type { DashboardDataInput } from '../apps/dashboard-renderer/data';
-import { DASHBOARD_DATA_REQUESTS } from '../apps/dashboard-renderer/data-fetch';
 import type { McpAppDefinition } from '../runtime/define-mcp-app';
 
 /** Where the test host's Mastra server answers the dashboard's reads; MSW handlers mock its routes. */
