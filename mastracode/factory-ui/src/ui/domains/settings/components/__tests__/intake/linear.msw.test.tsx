@@ -5,9 +5,11 @@ import { describe, expect, it } from 'vitest';
 import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
+import { linearWorkspaceStatus } from '../fixtures/linearConnections';
 import {
   BINDINGS_URL,
   LINEAR_PROJECTS_URL,
+  LINEAR_STATUS_URL,
   LINEAR_TEAMS_URL,
   baseConfig,
   engTeam,
@@ -20,6 +22,102 @@ import {
 } from './fixtures';
 
 describe('IntakeSection linear', () => {
+  const sourceId = (workspaceId: string, projectId: string) =>
+    `linear-project:${Buffer.from(JSON.stringify({ workspaceId, projectId })).toString('base64url')}`;
+  const pausedProject = sourceId('mastra', 'docs-watch');
+  const liveProject = sourceId('labs', 'roadmap');
+
+  it.each([true, false])(
+    'keeps paused sources named and removable when another workspace is connected: %s',
+    async connected => {
+      const saved = useIntakeHandlers({
+        status: {
+          ...linearWorkspaceStatus,
+          connected,
+          workspaces: linearWorkspaceStatus.workspaces.filter(workspace => connected || !workspace.connected),
+        },
+        config: { ...baseConfig(), linear: { enabled: true, sourceIds: [pausedProject, liveProject] } },
+      });
+      server.use(
+        http.get(LINEAR_PROJECTS_URL, () =>
+          HttpResponse.json({ projects: [{ id: liveProject, name: 'Labs roadmap', state: 'started', teams: [] }] }),
+        ),
+        http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: [] })),
+      );
+      renderIntakeSection();
+      const paused = await screen.findByRole('button', { name: 'Remove sources from Mastra' });
+      expect(screen.getByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
+      expect(screen.getByText(/1 project or team paused/)).toBeInTheDocument();
+      expect(screen.queryByText(/linear-project:/)).not.toBeInTheDocument();
+      if (connected) expect(await screen.findByText('Labs roadmap')).toBeInTheDocument();
+      await userEvent.click(paused);
+      await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject]));
+    },
+  );
+
+  it.each([
+    ['not_connected', 'This workspace is still disconnected. Choose Mastra when authorizing in Linear.'],
+    ['unavailable', "Couldn't verify this connection. Retry to check its status."],
+  ])('explains a %s reconnect on the paused workspace it targeted', async (outcome, message) => {
+    let restored = false;
+    useIntakeHandlers({
+      config: { ...baseConfig(), linear: { enabled: true, sourceIds: [pausedProject, liveProject] } },
+    });
+    server.use(
+      http.get(LINEAR_STATUS_URL, () =>
+        HttpResponse.json({
+          ...linearWorkspaceStatus,
+          workspaces: linearWorkspaceStatus.workspaces.map(workspace => ({
+            ...workspace,
+            connected: workspace.connected || restored,
+          })),
+        }),
+      ),
+      http.get(LINEAR_PROJECTS_URL, () =>
+        HttpResponse.json({ projects: [{ id: liveProject, name: 'Labs roadmap', state: 'started', teams: [] }] }),
+      ),
+      http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: [] })),
+    );
+    renderIntakeSection(`/factories/fp-1/settings/intake?linear_reconnect=${outcome}&linear_workspace_id=mastra`);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
+    if (outcome !== 'unavailable') return;
+    restored = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Reconnect Mastra' })).not.toBeInTheDocument());
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
+
+  it('shows healthy sources and a retry for a workspace outage without calling it disconnected', async () => {
+    useIntakeHandlers({
+      status: {
+        ...linearWorkspaceStatus,
+        workspaces: linearWorkspaceStatus.workspaces.map(workspace => ({ ...workspace, connected: true })),
+      },
+      config: { ...baseConfig(), linear: { enabled: true, sourceIds: [pausedProject, liveProject] } },
+    });
+    let recovered = false;
+    server.use(
+      http.get(LINEAR_PROJECTS_URL, () =>
+        HttpResponse.json({
+          projects: [
+            { id: liveProject, name: 'Labs roadmap', state: 'started', teams: [] },
+            ...(recovered ? [{ id: pausedProject, name: 'DocsWatch', state: 'started', teams: [] }] : []),
+          ],
+          workspaceErrors: recovered ? [] : [{ workspaceId: 'mastra', name: 'Mastra' }],
+        }),
+      ),
+      http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: [] })),
+    );
+    renderIntakeSection();
+    expect(await screen.findByText("Couldn't load sources from Mastra.")).toBeInTheDocument();
+    expect(screen.getByText('Labs roadmap')).toBeInTheDocument();
+    expect(screen.queryByText('Disconnected')).not.toBeInTheDocument();
+    recovered = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('DocsWatch')).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load sources from Mastra.")).not.toBeInTheDocument();
+  });
   describe('given a config with the default sources enabled', () => {
     it('groups Linear projects by team, listing shared projects under each team', async () => {
       seedGithubProject();
