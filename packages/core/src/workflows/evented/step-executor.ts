@@ -166,7 +166,7 @@ export class StepExecutor extends MastraBase {
       stepInfo.metadata = metadata;
     }
 
-    if (params.resumeData) {
+    if (params.resumeData !== undefined) {
       stepInfo.resumePayload = params.resumeData;
       stepInfo.resumedAt = Date.now();
       // Strip __workflow_meta from suspendPayload when step is resumed
