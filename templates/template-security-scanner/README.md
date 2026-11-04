@@ -10,7 +10,7 @@ Determining whether a vulnerability affects an application requires context: its
 
 - **[Docker Desktop](https://docs.docker.com/desktop/)**: a native Linux ARM64 daemon and the Docker CLI for the sandboxed crawler and local demo. Set `DOCKER_SOCKET` if your socket differs from `/var/run/docker.sock`.
 - **[Morph API key](https://www.morphllm.com/dashboard/api-keys)**: set `MORPH_API_KEY` with access to the configured `EXPLORER_MODEL` and `JUDGE_MODEL`. The BOLA demo uses paid model calls; setup and ordinary discovery do not require a key.
-- Set `CONTROL_BOOTSTRAP_SECRET` for console sign-in and `SCANNER_ENCRYPTION_KEY` for stored credentials. Generate independent values using the [configuration guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/configuration.md#local-sign-in-and-credentials).
+- Set `CONTROL_BOOTSTRAP_SECRET` for console sign-in and `SCANNER_ENCRYPTION_KEY` for stored credentials. Generate independent values using the [configuration guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/configuration.md#local-access).
 - Enable the demo with `SCANNER_DISCOVERY_ENABLED=true` and `SCANNER_INVESTIGATION_ENABLED=true`. Assess only authorized targets; non-lab targets also require an explicit evidence-retention policy.
 
 ## Quickstart 🚀
@@ -32,14 +32,16 @@ Determining whether a vulnerability affects an application requires context: its
 
 Test broken object-level authorization (BOLA): whether one user can read another user's private order.
 
-- **Register the target:** create a GET/HEAD policy and a REST API target using the printed `scannerUrl` and `openApiUrl`. Mark orders as owner-only and products as public. Add both API-key profiles and check their identities using the [console walkthrough](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/console-scan.md).
+- **Register the target:** create a GET/HEAD policy and a REST API target using `/api/orders` appended to the printed `scannerUrl` and the printed `openApiUrl`. Mark orders as owner-only and products as public. Add both API-key profiles and check their identities using the [console walkthrough](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/bola-assessment.md).
 - **Run the assessment:** choose **Start REST assessment**. Inspect the cross-user comparison in **Scans** and any confirmed BOLA result in **Findings**.
 - **Compare protected behavior:** stop both processes, start `npm run example-target -- --mode=protected`, then restart `npm run dev`. Register the target using the new printed URLs and the same users, check both identities, and run another assessment. The cross-user read returns 403 and creates no new finding; the earlier result remains in history.
 
 ## Customization
 
-- Open the project in your coding agent: “Add a security check that compares administrator and regular-user access to restricted API routes, with vulnerable and protected test cases. Explore the code and propose a plan before making changes.” Use the [vulnerability category](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/contracts/vulnerability-categories.md) and [checker](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/contracts/checkers.md) contracts to define its evidence and execution requirements.
+- Open the project in your coding agent: “Add a security check that compares administrator and regular-user access to restricted API routes, with vulnerable and protected test cases. Explore the code and propose a plan before making changes.” Use the [vulnerability category](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/customization.md#route-rules-categories-and-checkers) and [checker](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/contracts/checkers.md) contracts to define its evidence and execution requirements.
 - Adapt the [playbooks](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/src/knowledge/playbooks.ts) and [agent instructions](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/src/mastra/agents/investigation-agents.ts) to your application's security policies. Keep checks within the target's approved scope and require verification evidence before confirming findings.
+
+The [customization guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/customization.md) maps drivers, authentication, models, and console changes to their source files.
 
 ## Testing and maintenance
 
@@ -49,7 +51,7 @@ See [testing](https://github.com/mastra-ai/mastra/blob/main/templates/template-s
 
 With the scanner running, run `npm run sync:advisories` in another terminal, then open **Vulnerabilities** to review imported cve.now advisories and their triage status. This contacts the feed and can make paid model calls when investigation is enabled. Advisories require further verification before becoming application findings.
 
-If the feed fails or returns inconsistent data, the cycle reports `SKIPPED`. Retry after the displayed backoff. See [advisory configuration](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/configuration.md#advisory-synchronization) for optional scheduled sync.
+If the feed fails or returns inconsistent data, the cycle reports `SKIPPED`. Retry after the displayed backoff. See [advisory configuration](https://github.com/mastra-ai/mastra/blob/main/templates/template-security-scanner/docs/configuration.md#advisories) for optional scheduled sync.
 
 ## About Mastra templates
 

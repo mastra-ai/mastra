@@ -1,40 +1,39 @@
 # Testing
 
-Install dependencies with `npm install --workspaces=false`. Use the Node version in `.nvmrc`. Run commands from the template directory. Start with static and local checks:
+Run commands from the template directory using the Node version in `.nvmrc`. Install with `npm install --workspaces=false`.
+
+## Start with local checks
 
 ```sh
 npm run format
-npm run typecheck
 npm run check:console
 npm run test:unit
 npm run test:console:unit
 ```
 
-`format` checks without writing. To format an edited file, use `npx oxfmt <path>`. Both TypeScript configurations reject unused locals and parameters.
+`format` checks without writing; use `npx oxfmt <path>` to format edited files. `check:console` checks backend and browser types and builds the console. For backend-only changes, `npm run typecheck` is the narrower option.
 
-## Integration suites
+## Choose an integration suite
 
-Run suites sequentially with the Docker daemon available and the normal listener stopped. They use temporary databases, project-owned targets, and local model/feed fixtures. They do not require `MORPH_API_KEY` or contact the real advisory feed. Use a clean shell without exported production credentials.
+Run Docker suites sequentially with the daemon available and the normal listener stopped. Tests use temporary databases, owned targets, and local model/feed fixtures. They need no Morph key and don't contact the real advisory feed. Use a shell without exported production credentials.
 
-| Command                            | Coverage                                                                            |
-| ---------------------------------- | ----------------------------------------------------------------------------------- |
-| `npm run test:integration`         | Runtime setup and Docker sandbox                                                    |
-| `npm run test:control-plane`       | Real Hono API, sessions, CSRF, revisions, and sealed profiles                       |
-| `npm run test:discovery`           | HTTP/headless inventory, interruption, and sanitized output                         |
-| `npm run test:gateway`             | Scope, TLS, DNS, and network confinement                                            |
-| `npm run test:intelligence`        | Offline catalog integrity, playbooks, and local advisory feed                       |
-| `npm run test:investigation`       | Storage, queue, approvals, model-wire cases, and advisory fanout                    |
-| `npm run test:console:integration` | Console API with persisted state                                                    |
-| `npm run test:console:browser`     | Real Chrome console interactions                                                    |
-| `npm run test:assessment`          | Orders API, REST BOLA admission/proof/lifecycle, and real Chrome assessment journey |
-| `npm run test:advisories`          | Owner-isolated advisory triage, persistence, and real Chrome advisory journey       |
-| `npm run test:operations`          | Eight-category lab matrix, crash/recovery, retention, and output audits             |
+| Area changed                               | Command                            |
+| ------------------------------------------ | ---------------------------------- |
+| Runtime setup and sandbox                  | `npm run test:integration`         |
+| Sessions, policies, revisions, credentials | `npm run test:control-plane`       |
+| HTTP/headless discovery and cancellation   | `npm run test:discovery`           |
+| Gateway scope, TLS, DNS, network isolation | `npm run test:gateway`             |
+| Offline knowledge and advisory import      | `npm run test:intelligence`        |
+| Queue, storage, approvals, model contracts | `npm run test:investigation`       |
+| Console API                                | `npm run test:console:integration` |
+| Console browser interactions               | `npm run test:console:browser`     |
+| Orders API and REST BOLA journey           | `npm run test:assessment`          |
+| Advisory triage and browser journey        | `npm run test:advisories`          |
+| Lab category matrix, recovery, retention   | `npm run test:operations`          |
 
-`test:unit` includes application/authentication/checker contracts, BOLA bindings, and source-digest coverage. `test:assessment` includes `test:example-target`; the latter remains available for a shorter example-only check. Run both new journey suites alongside the existing integration suites for a V1 regression. `test:intelligence` covers the local-feed sync CLI and material revision counters; `test:advisories` covers the operator-facing triage journey.
+`test:example-target` is a shorter example-only check and is already included in `test:assessment`. Browser suites require local Google Chrome. Discovery requires native Linux ARM64 Docker support.
 
-Browser tests launch a local Google Chrome installation through Playwright’s `chrome` channel. Discovery setup requires native Linux ARM64 Docker support. `test:operations` is the slowest suite and includes complete vulnerable/patched lab cases.
-
-Run gateway Python checks separately:
+For gateway Python changes, also run:
 
 ```sh
 npm run check:gateway -- format
@@ -42,8 +41,8 @@ npm run check:gateway -- style
 npm run check:gateway -- unit
 ```
 
-The validator prepares pinned inputs and runs in a network-disabled container. `format-write` is an explicit formatter, not a check. Discovery and operations runners accept a named test as an optional selector, enforce time/output bounds, and report cleanup and source stability. Keep the source unchanged while a runner is active.
+These checks use a network-disabled container after preparing pinned inputs. Discovery and operations runners accept a test name as an optional selector. Keep source unchanged while they run so their source-stability report remains meaningful.
 
-## Manual smoke test
+## Manual check
 
-After `npm run setup`, configure local sign-in and discovery as described in [configuration](configuration.md). Run `npm run lab`, open the printed URL, sign in, and start a public scan. Inspect inventory and cancellation, reload to check persistence, then stop with Ctrl+C. Optional real Morph evaluation incurs charges and is separate from these fixture-based suites.
+After setup, run `npm run lab`, open the printed console URL, sign in, and start a public scan. Inspect inventory, try cancellation, and reload to check persistence. Stop with Ctrl+C. Use the [REST assessment walkthrough](bola-assessment.md) for a model-backed manual check; real Morph calls are separate from the local fixture suites and incur charges.

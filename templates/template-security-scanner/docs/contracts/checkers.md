@@ -1,11 +1,21 @@
-# Executable checker contracts
+# REST BOLA checker
 
-`bola_rest_read` version 1 is the only newly available first-release checker. It applies to an authorized `rest_api` target with two distinct, ready `api_key_header` profiles and operator-confirmed `GET` rules marked `user + owner`. The legacy `idor` category keeps its prior owned-laboratory proof semantics and persisted identifier; an old IDOR finding is not reclassified as a REST BOLA result.
+`bola_rest_read` version 1 compares two accounts reading the same observed private resource. Its contract is defined in [`checker-contracts.ts`](../../src/investigation/checker-contracts.ts), with execution in [`bola-driver.ts`](../../src/investigation/bola-driver.ts).
 
-The scanner first observes account-specific collections and owner detail links through its constrained discovery gateway. Sherlock receives a bounded list of candidate IDs, route templates, prerequisite types and evidence IDs, then selects one candidate using the typed `bola_rest_read` contract. It cannot supply an object ID, URL, checker name or evidence outside that list. The trusted verifier sends exactly two bounded GETs for the same observed private path through the enforced gateway: one with the owner key and one with the alternate account key. The keys remain sealed in the control plane and private gateway files. The comparison keeps response digests only in trusted memory and persists status, equality, request count and minimized references.
+## Required input
 
-A confirmed result requires a completed owner 200 and alternate 200, both observed upstream, with equal private response bodies. An expected protected response such as 403 records `NOT_REPRODUCED` without a finding. An incomplete comparison records `INCONCLUSIVE`. Dupin interprets the fixed proof; Watson reviews a proposed positive. Either model can veto a deterministic positive, yielding `INCONCLUSIVE` without a finding. Scans records `INTERPRETATION_DISAGREEMENT`, `REVIEW_DISAGREEMENT` or `BOTH_DISAGREE` for that case; other completed comparisons retain `DETERMINISTIC_BOLA_COMPARISON`. These fixed reasons do not contain model text or votes. Model input/output token reservations and two gateway request reservations are persisted before use and are not refunded on failure. A confirmed finding and its assessment terminal state commit in one libSQL transaction and are available through the owner-scoped `/api/bola-findings` endpoints and Findings view.
+- An authorized `rest_api` target with a confirmed `GET` rule marked `user + owner`.
+- Two current, ready API-key profiles with scan-bound `DISTINCT` account evidence.
+- A resource observed through an account's own collection and detail links.
 
-The `tool`, `external_script` and `runbook` contract kinds have no executor registration in this release. Catalog metadata or a model suggestion cannot authorize them. Public products and `user + shared` routes do not enter the BOLA candidate set.
+Sherlock selects from the supplied candidate IDs. It cannot provide a new URL, object ID, or checker.
 
-See [the operator journey](../bola-assessment.md) for console setup and result views.
+## Execution and evidence
+
+The verifier reserves at most two GET requests: owner and alternate account, for the same private path. The gateway validates scope, peer, and budgets before inserting credentials. Keys stay outside the verifier and model inputs.
+
+Confirmation requires completed upstream HTTP 200 responses with equal private bodies, accepted by Dupin and Watson. An expected denial such as 403 yields `NOT_REPRODUCED`; incomplete proof or model disagreement yields `INCONCLUSIVE`. A model vote cannot turn a failed comparison into a confirmed finding.
+
+Response bodies and digests stay in private memory. Persisted results contain statuses, equality, request accounting, and minimized references. Request and token reservations aren't refunded on failure. A confirmed finding and terminal assessment state are stored together after cleanup.
+
+Use [the assessment walkthrough](../bola-assessment.md) to run this checker, or [the customization guide](../customization.md#route-rules-categories-and-checkers) to add another.

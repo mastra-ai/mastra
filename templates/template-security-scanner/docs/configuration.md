@@ -1,10 +1,8 @@
 # Configuration
 
-Copy `.env.example` to `.env` for a new installation. Commands load it automatically; exported shell variables take precedence. The listener uses `127.0.0.1:4111` by default. Use `PORT` to change the port.
+Commands load `.env` automatically; exported shell variables take precedence. See [`.env.example`](../.env.example) for defaults. Restart the server after changing settings.
 
-`DATABASE_URL` accepts a relative `file:./data/<name>.db` URL. Application storage and its derived `-mastra.db` sibling must stay separate from the operational fence `discovery-instance.db`; that reserved name is rejected regardless of letter case. For a new installation, choose a name such as `security-scanner`. If existing data uses the reserved name, stop the server and preserve the directory before arranging a reviewed migration or compatible restore; do not rename an open database.
-
-## Local sign-in and credentials
+## Local access
 
 Generate two independent values:
 
@@ -12,35 +10,51 @@ Generate two independent values:
 node --input-type=module -e "import { randomBytes } from 'node:crypto'; console.log(randomBytes(32).toString('base64url')); console.log(randomBytes(32).toString('hex'))"
 ```
 
-Set the first value as `CONTROL_BOOTSTRAP_SECRET` and the second as `SCANNER_ENCRYPTION_KEY`. Keep both private. `CONTROL_SESSION_TTL_SECONDS` defaults to 1800 and accepts 1–3600 seconds. Sessions expire at a fixed time and end when the server stops.
+Set the first as `CONTROL_BOOTSTRAP_SECRET` for sign-in and the second as `SCANNER_ENCRYPTION_KEY` for stored target credentials. Keep them private and retain the encryption key across restarts.
 
-The console supports public, bearer, and header profiles. Cookie sessions use a header profile with header name `cookie`. Supported header names are `authorization`, `cookie`, `x-api-key`, and `x-test-identity`. Credentials must be printable ASCII without line breaks. An authenticated profile needs an identity endpoint returning HTTP 200 with exactly `{ "identity": "<expected identity>", "role": "<registered role>" }` within 4096 bytes. Check the identity again after changing a credential or revision.
+The console listens on `127.0.0.1:4111`; change `PORT` to use another port. `CONTROL_SESSION_TTL_SECONDS` defaults to 1800 and accepts 1–3600 seconds. Sessions also end when the server stops.
 
-Identity states are `CHECK_REQUIRED`, `READY`, `AUTH_REQUIRED`, `CREDENTIAL_UNAVAILABLE`, and `UNAVAILABLE`. A rejected or expired identity cannot authorize discovery. If admission reports `CREDENTIAL_METADATA_CONFLICT`, use an isolated opaque credential value that does not collide with the required metadata.
+`DATABASE_URL` defaults to `file:./data/security-scanner.db`. Custom names must stay under `data/`. The name `discovery-instance.db` is reserved for the runtime. Use [backup and restore](operations.md#backup-and-restore) when moving existing data.
 
-## Targets and scans
+## Targets and identities
 
-Create a policy, then a target with explicit authorization evidence, approved origins, allowed/excluded paths, methods, and finite limits. Excluded paths take precedence. Target URLs must be canonical HTTP(S) URLs without credentials, query values, fragments, percent encoding, or traversal. Non-lab policies require `retention: { evidenceDays, approvedBy }`, with 1–365 days.
+Create a policy before its target. Set approved origins, allowed and excluded paths, methods, request limits, and authorization evidence. Excluded paths take precedence. Non-lab policies also require `retention: { evidenceDays, approvedBy }`, with 1–365 days.
 
-Discovery requires `SCANNER_DISCOVERY_ENABLED=true` and successful `npm run setup`. Select HTTP or headless mode in **New scan**. Private and loopback destinations remain blocked; marking a target `lab` does not grant access to them. `npm run lab` supplies its own verified Docker fixture boundary.
+Use canonical HTTP(S) target URLs without credentials, query values, fragments, percent encoding, or traversal. External REST API-key targets require HTTPS. Private addresses are accepted only through the verified project-owned Docker examples; selecting a lab label alone doesn't grant access.
 
-`COMPLETED` denotes a complete scan; `COMPLETED_WITH_ERRORS` retains partial inventory. `AUTH_REQUIRED`, `FAILED`, and `CANCELLED` are distinct outcomes. Inspect the reason, budget, role status, and cleanup together. Cleanup debt blocks conflicting admission until reconciliation succeeds. Discovery inventory never confirms a vulnerability on its own.
+Choose the profile type for your target:
 
-## Investigations
+- **REST API**: use separate `api_key_header` profiles and an existing account-specific access-check path. The [REST assessment guide](bola-assessment.md) covers the account identifier needed for cross-account checks.
+- **Website**: use public, bearer, or header profiles. Cookie sessions use a header profile named `cookie`. Supported header names are `authorization`, `cookie`, `x-api-key`, and `x-test-identity`. Authenticated profiles need an identity endpoint returning HTTP 200 with exactly `{ "identity": "<expected identity>", "role": "<registered role>" }` within 4096 bytes.
 
-Set `SCANNER_INVESTIGATION_ENABLED=true` and `MORPH_API_KEY` only after confirming access to `EXPLORER_MODEL` and `JUDGE_MODEL`. Defaults are `morph-dsv41flash-abliterated` and `morph/morph-glm53-744b`. Planning, recurrence, and advisory-triggered reassessment can make paid requests, including after restart.
+Check identities after the final target, policy, or credential edit. Authenticated profiles must be `READY` at the current revisions. `AUTH_REQUIRED` means access was rejected or expired; `CREDENTIAL_UNAVAILABLE` requires [key recovery or credential registration](operations.md#retention-and-key-loss).
 
-In Scans, choose **Investigate** on a complete scan, then **Plan investigation**. Verification is available only through the owned Docker lab adapter; other deployments fail closed. Authenticated tests require registered identities and owned resources. Active SSRF additionally requires the exact current approval and its owned callback. Review a pending request in Approvals before deciding.
+Discovery requires `SCANNER_DISCOVERY_ENABLED=true` and successful setup. A `COMPLETED_WITH_ERRORS` scan contains partial inventory: inspect its reason, role status, budgets, and cleanup before using it. Inventory alone doesn't confirm a vulnerability.
 
-After a completed scan, register or renew an owned resource with `POST /api/targets/<target-id>/verification-resources`. Repeat registration after target, policy, profile, or credential revisions change, including identity revisions recorded by a later scan. An identical current registration returns the same ID with HTTP 200; a renewal returns a new ID with HTTP 201. Historical hypotheses keep their original IDs and cannot reuse stale authorization. Changed metadata at the same lineage returns a conflict.
+## Models and investigations
 
-API investigation admission accepts `maxRequests` 1–100, `maxDurationSeconds` 1–3600, and `maxTokens` 1–24576. The console selects 16384 tokens. `usedTokens` records conservative shared reservations across planning and review, rather than provider billing. `TOKEN_BUDGET_EXCEEDED` stops further calls. A job can complete with a blocked or inconclusive outcome. Empty findings are valid.
+Enable `SCANNER_INVESTIGATION_ENABLED=true` and set `MORPH_API_KEY` for model-backed work. The supported configuration is:
 
-## Advisory synchronization
+| Setting          | Model                          | Role                  |
+| ---------------- | ------------------------------ | --------------------- |
+| `EXPLORER_MODEL` | `morph-dsv41flash-abliterated` | Nemo, Sherlock, Dupin |
+| `JUDGE_MODEL`    | `morph/morph-glm53-744b`       | Watson                |
 
-Use **Synchronize advisories** to contact cve.now manually. Local references and playbooks work offline. Imported advisory text is untrusted; version applicability remains unknown without verified version/range evidence. The inbox polls a bounded portion of the feed and displays stale status, incomplete coverage, and retry timing. A failed or inconsistent cve.now cycle reports `SKIPPED`, retains successfully imported pages as partial data, and does not plan hypotheses. The next opt-in scheduled cycle or manual attempt can retry after the persisted backoff; skipped cycles are never marked complete.
+Model IDs are validated in code; changing providers requires an [implementation change](customization.md#agents-and-models). Planning, recurring investigations, and advisory reassessment can make paid calls, including after restart.
 
-For scheduled sync, set all three values and restart:
+For REST targets, use **Start REST assessment**. For owned-lab checks, open a completed scan in **Scans**, select **Investigate**, then **Plan investigation**. General playbook verification runs only in the owned Docker lab; active SSRF also requires a current approval and owned callback.
+
+Lab checks use owned resources registered through `POST /api/targets/<target-id>/verification-resources`. Renew registration after target, policy, profile, or credential revisions change. Renewal creates a new ID while preserving historical bindings.
+
+Investigation limits accept `maxRequests` 1–100, `maxDurationSeconds` 1–3600, and `maxTokens` 1–24576. The console uses 16384 tokens. Reported `usedTokens` counts conservative reservations, not provider billing. A completed job can have an inconclusive outcome or no findings.
+
+## Advisories
+
+With the server running, use **Synchronize advisories** or `npm run sync:advisories`. This contacts cve.now. When investigations are enabled, eligible advisories can also trigger paid planning.
+
+An unsuccessful or inconsistent feed cycle returns `SKIPPED`. Imported pages remain visible as partial data, no hypotheses are planned for that cycle, and the next manual or scheduled attempt respects the displayed backoff.
+
+To schedule synchronization, set all three values:
 
 ```dotenv
 SCANNER_ADVISORY_SYNC_ENABLED=true
@@ -48,28 +62,17 @@ SCANNER_ADVISORY_SYNC_CRON=0 6 * * *
 SCANNER_ADVISORY_SYNC_TIMEZONE=America/Sao_Paulo
 ```
 
-Cron accepts five fields, each `*` or one integer. Use an IANA timezone. Read `/api/advisory-schedule` for its revision and next occurrence; POST `{ "paused": true, "revision": <current revision> }` to `/api/advisory-schedule/pause` to pause. Resume with `paused: false` and the new revision. If investigation is enabled, eligible new or revised advisories can trigger paid planning from existing completed scans.
+Cron accepts five fields, each `*` or one integer, and an IANA timezone. Read `/api/advisory-schedule` for the next occurrence and revision. POST `{ "paused": true, "revision": <current revision> }` to `/api/advisory-schedule/pause` to pause; resume with `paused: false` and the new revision.
 
-## API access
+In **Vulnerabilities**, **Ignore** records a reason and scope, **Investigate** creates a manual case, and **Search scanner/checker** searches the local catalog. Advisory severity doesn't establish target relevance or a confirmed finding. Local references and playbooks remain available offline.
 
-Mutations require the matching `Origin`, a session cookie, and `X-CSRF-Token`. PUT and DELETE for policies, targets, and profiles, plus PUT for advisory triage, require the current `If-Match: "<revision>"`. Other mutations use their route-specific revision contract. Creating a profile requires the target revision; re-read the target afterward. PUT replaces the full input. Collections use `?limit=25&offset=0`, with limit 1–100.
+## API clients
 
-This local example signs in and lists targets without contacting a target or model:
+Sign in with `POST /api/session` and `{ "secret": "<CONTROL_BOOTSTRAP_SECRET>" }`. Keep the returned session cookie and CSRF token in your client.
 
-```sh
-node --env-file-if-exists=.env --input-type=module <<'JS'
-const origin = `http://127.0.0.1:${process.env.PORT ?? 4111}`;
-const login = await fetch(`${origin}/api/session`, {
-  method: 'POST',
-  headers: { origin, 'content-type': 'application/json' },
-  body: JSON.stringify({ secret: process.env.CONTROL_BOOTSTRAP_SECRET }),
-});
-if (login.status !== 201) throw new Error(`Sign-in failed: ${login.status}`);
-const cookie = login.headers.get('set-cookie').split(';')[0];
-const response = await fetch(`${origin}/api/targets`, { headers: { origin, cookie } });
-if (!response.ok) throw new Error(`Read failed: ${response.status}`);
-console.log(await response.json());
-JS
-```
+- Send the matching `Origin`, cookie, and `X-CSRF-Token` on mutations.
+- Use `If-Match: "<revision>"` for policy, target, and profile updates/deletes, and advisory triage updates. Other routes declare their revision in the request body.
+- Re-read a target after adding a profile. PUT replaces the complete input.
+- Paginate collections with `?limit=25&offset=0`; the maximum limit is 100.
 
-See the schemas in [`core/contracts.ts`](../src/core/contracts.ts), [`discovery/contracts.ts`](../src/discovery/contracts.ts), and [`investigation/contracts.ts`](../src/investigation/contracts.ts) for request fields, and [`http/`](../src/http/) for routes. Native Mastra endpoints expose allowlisted metadata only; execution is disabled. Errors return a sanitized `{ code }`; 400 indicates invalid input, 403 denial, 404 missing data, 409 conflict, 413 oversized input, and 503 unavailable prerequisites.
+Request schemas live in [core](../src/core/contracts.ts), [discovery](../src/discovery/contracts.ts), and [investigation](../src/investigation/contracts.ts). Routes live in [`src/http/`](../src/http/). Native Mastra endpoints expose allowlisted metadata; execution uses the protected application routes. Errors return a sanitized `{ code }`.

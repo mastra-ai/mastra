@@ -1,13 +1,55 @@
-# One-button REST BOLA assessment
+# Assess the Orders API
 
-Create a read-only policy, register the authorized REST target, and confirm its `user + owner` collection, detail and receipt rules. Add two separate API-key profiles with an existing own-resource access check path and the same account identifier JSON pointer. For the Orders example, use `/api/orders` and `/principal`. The pointer must identify a stable account string in the existing successful JSON response; different keys or profile IDs alone do not prove different accounts. Missing, invalid or equal account evidence returns `INCONCLUSIVE` before models or verification. Check both identities **after** the last target or profile change: each profile registration updates the target revision and makes an earlier check stale. The target detail enables **Start REST assessment** when both profiles are current and ready. No object ID is entered by the operator.
+Broken object-level authorization (BOLA) lets one account access another account's private object. This walkthrough compares two accounts against the included [Orders API](example-target.md).
 
-The button starts revision-bound discovery. Sherlock sees a bounded candidate list of observed owner-only routes with different prerequisites and selects one typed `bola_rest_read` candidate, including a rationale code, fixed hypothesis, confidence and limitations. The verifier makes at most two GETs for the same observed private resource through the enforced gateway. It receives only URLs, proxy addresses and the gateway CA. The gateway holds both keys and injects each only after validating the request, numeric pin and connected peer. A supplied key is rejected. The verifier shares a network namespace whose verified default-drop firewall admits only the two gateway ports. Dupin interprets the fixed proof; Watson reviews a positive. The Scans view shows the candidates, selected route, Sherlock rationale, statuses, private-response equality, gateway request count and reserved model tokens. A confirmed result is a separate record in Findings. A protected 403 creates no finding. Public products and shared resources are excluded from BOLA candidates.
+Complete the [quickstart](../README.md#quickstart-) first, including Morph configuration. Keep `npm run example-target` and `npm run dev` running in separate terminals.
 
-The persisted assessment and finding contain sanitized references, status, equality and counters. Raw response bodies, response digests and keys are not persisted or sent to models. Model tokens and the two gateway requests are reserved before use and are not refunded on failure. An operator can cancel an active assessment from Scans; the request is revision-bound, stops subsequent model and gateway work, waits for cleanup and survives restart. Assessment candidate paths and proof expire under the policy's `evidenceDays` period. Expiry clears them while preserving the outcome, counters and a finding with only route template and Sherlock summary. A repeated assessment refreshes the inventory; it does not erase an earlier confirmed finding. The legacy `idor` category and its older records retain their distinct owned-laboratory proof semantics.
+## Register the target
 
-The verification Docker job ID and cleanup state are persisted before image building begins. Image tag acquisition and exact container and network ownership are recorded so startup can reconcile an interrupted job without rerunning models or GETs. Scans shows verifier cleanup as `PENDING`, `DEBT` or `COMPLETE`. A finding or successful cancellation requires `COMPLETE`; failed cleanup remains visible and is retried for the same owned job after restart.
+1. In **Policies**, create a policy permitting GET and HEAD. Set request and duration limits, evidence-retention days, and an approver.
+2. In **Targets**, create a **REST API** target with environment **Lab**. Append `/api/orders` to the printed `scannerUrl` for the entry URL and use `openApiUrl` for OpenAPI. Set the approved origin to `scannerUrl`. Allow `/api` and `/openapi.json` on separate lines, then confirm methods and authorization.
+3. Review the route table and confirm these rules:
 
-The real Morph path uses the existing Mastra model agents and pre-call reservation boundary. Automated tests use a deterministic local model and make no paid requests. The local Docker example verifies the owned Hono path; it does not certify an external public target or a live Morph response. See [REST discovery execution](rest-api-execution.md), [the local Orders API](example-target.md), and [the checker contract](contracts/checkers.md).
+| GET route                  | Audience | Object policy  |
+| -------------------------- | -------- | -------------- |
+| `/api/orders`              | User     | Owner only     |
+| `/api/orders/{id}`         | User     | Owner only     |
+| `/api/orders/{id}/receipt` | User     | Owner only     |
+| `/api/products`            | Public   | Not applicable |
 
-New confirmations require the scan-bound `DISTINCT` account comparison. Findings created before this receipt existed remain historical; this requirement does not recertify them. The comparison adds only a finite receipt, while authorized inventory paths keep their existing retention and may contain identifiers.
+OpenAPI suggests routes; your confirmation supplies the intended access policy.
+
+## Add the two accounts
+
+Add an **API key header** profile for each printed user, A and B. Use these settings for both:
+
+| Field                           | Value                       |
+| ------------------------------- | --------------------------- |
+| Header                          | `x-api-key`                 |
+| Credential                      | That user's printed API key |
+| Access-check path               | `/api/orders`               |
+| Account identifier JSON pointer | `/principal`                |
+
+Choose **Check identity** for both profiles after the last edit. Each must be `READY` at the current target revision.
+
+For your own API, the pointer must select a stable account ID string from the access-check response. Both profiles must use the same origin, path, and pointer. Different keys or profile names don't prove different accounts. Missing or equal account IDs produce `INCONCLUSIVE` before model calls or verification. The runtime stores only the comparison `SAME`, `DISTINCT`, or `UNKNOWN`, not the extracted account IDs.
+
+## Run and read the result
+
+Choose **Start REST assessment**. Discovery follows observed owner-only links. Sherlock selects a candidate, the verifier compares the owner's and alternate account's reads, Dupin interprets the proof, and Watson reviews a proposed positive.
+
+In **Scans**, inspect the selected route, response statuses, comparison, request/token reservations, and cleanup:
+
+| Outcome          | Meaning                                                                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONFIRMED`      | Both accounts received the same private response, and the model reviews accepted the proof. A REST BOLA record appears in **Findings**. |
+| `NOT_REPRODUCED` | The completed comparison found an expected protected response, such as 403. No new finding is created.                                  |
+| `INCONCLUSIVE`   | Account evidence or comparison is incomplete, or a model review disagreed. Inspect the reason before retrying.                          |
+
+Public and shared routes are excluded. You don't supply or guess an object ID. See the [checker contract](contracts/checkers.md) for the exact confirmation boundary.
+
+## Compare protected behavior
+
+Stop both processes with Ctrl+C. Start `npm run example-target -- --mode=protected`, then restart `npm run dev` so it reads the new Docker connection. Register the target using the newly printed URLs and the same seeded accounts, check both identities, and repeat the assessment. Cross-account detail reads now return 403. Earlier findings stay in history.
+
+You can cancel an active assessment from **Scans**. Cleanup must finish before cancellation is complete; `DEBT` indicates cleanup that will be retried after restart. Retention removes expired candidate paths and proof while preserving the outcome and a reduced finding. Raw bodies, keys, and response digests aren't stored or sent to models; retained inventory paths can contain identifiers.
