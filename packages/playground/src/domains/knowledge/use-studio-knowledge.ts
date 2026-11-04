@@ -185,7 +185,7 @@ const retryUnlessFinal = (failures: number, error: unknown) => !isFinal(error) &
 /** Exact link counts for the pages the graph holds, in batches. 501 (no link index) is an error the graph falls back from. */
 export function useKnowledgeLinkCounts(knowledgeKey: string | undefined, live: boolean, pageIds: string[]) {
   const client = useMastraClient();
-  return useQuery<KnowledgeLinkCountsResponse['counts'], Error>({
+  return useQuery<KnowledgeLinkCountsResponse['counts']>({
     queryKey: ['knowledge', knowledgeKey, 'link-counts', pageIds],
     queryFn:
       knowledgeKey && pageIds.length
@@ -208,7 +208,7 @@ export function useKnowledgeLinkCounts(knowledgeKey: string | undefined, live: b
 /** One page's links, for the page under the pointer. Cached per page, so returning to it asks nothing. */
 export function useKnowledgePageLinks(knowledgeKey: string | undefined, pageId: string | null) {
   const client = useMastraClient();
-  return useQuery<KnowledgePageLinksResponse, Error>({
+  return useQuery<KnowledgePageLinksResponse>({
     queryKey: ['knowledge', knowledgeKey, 'page-links', pageId],
     queryFn:
       knowledgeKey && pageId

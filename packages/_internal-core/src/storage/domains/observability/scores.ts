@@ -138,7 +138,9 @@ export type CreateScoreArgs = z.infer<typeof createScoreArgsSchema>;
 /** Schema for createScore operation body in client/server */
 export const createScoreBodySchema = z
   .object({
-    score: createScoreRecordSchema.omit({ timestamp: true }),
+    score: createScoreRecordSchema.omit({ timestamp: true }).extend({
+      traceId: traceIdField.regex(/\S/, 'traceId must not be empty or whitespace-only'),
+    }),
   })
   .describe('Arguments for creating a score');
 

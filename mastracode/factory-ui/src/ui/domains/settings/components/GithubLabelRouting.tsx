@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
@@ -45,7 +46,14 @@ export function GithubLabelRouting({
       )}
     </span>
   );
-  const summary = <Txt variant="body-sm">{routes.length ? 'Unmatched issues' : 'Issues'} → Work · PRs → Review</Txt>;
+  const summary = (
+    <Txt variant="body-sm">
+      <Metadata>
+        <Metadata.Item>{routes.length ? 'Unmatched issues' : 'Issues'} → Work</Metadata.Item>
+        <Metadata.Item>PRs → Review</Metadata.Item>
+      </Metadata>
+    </Txt>
+  );
 
   const route = (label: string, board: string | null, onDone?: () => void) => {
     save.mutate(
@@ -142,7 +150,7 @@ export function GithubLabelRouting({
       })}
       <SettingsFieldsetRow
         label="Add label route"
-        description={duplicate ? 'That label is already routed — change its board above.' : undefined}
+        description={duplicate ? 'That label is already routed. Change its board above.' : undefined}
       >
         <div className="flex items-center gap-2">
           <Input
