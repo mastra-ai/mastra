@@ -2,8 +2,8 @@
  * Slack voice clips reach the agent as an audio attachment the model can't
  * hear. Before dispatch, each clip is transcribed with the model and key the
  * routed Factory's model scope picks for the sender (Settings → Models →
- * Voice input) and the transcript rides along as a text attachment. The clip itself still goes to
- * the workspace like any other binary file.
+ * Voice input) and the transcript rides along as a text attachment. The clip
+ * itself still goes to the workspace like any other binary file.
  */
 
 import type { Attachment, Message } from 'chat';
@@ -84,19 +84,19 @@ export async function transcribeVoiceClips(
   const factory = await routedFactory(deps.projects, orgId, factoryProjectId);
   const caller = tenantVoiceCaller(records, orgId, sender.userId);
   const choice = await chooseSTTModel(voicePolicy(caller, factory), deps.voiceSettings);
+  if ('error' in choice) {
+    for (const { message, clip } of clips) note(message, clip, `Not transcribed: ${choice.error}`);
+    return;
+  }
 
   for (const { message, clip } of clips) {
-    if ('error' in choice) {
-      note(message, clip, `Not transcribed: ${choice.error}`);
-      continue;
-    }
     if (!clip.fetchData || (clip.size !== undefined && clip.size > MAX_TRANSCRIBE_AUDIO_BYTES)) {
       note(message, clip, 'Not transcribed: the clip is too long or could not be downloaded.');
       continue;
     }
     try {
       const data = await clip.fetchData();
-      const audio = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+      const audio = data instanceof ArrayBuffer ? Buffer.from(data) : data;
       if (audio.byteLength > MAX_TRANSCRIBE_AUDIO_BYTES) {
         note(message, clip, 'Not transcribed: the clip is too long.');
         continue;
