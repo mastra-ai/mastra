@@ -17,8 +17,6 @@ export const FACTORY_BOARDS_SCHEMA: CollectionSchema = {
     created_at: { type: 'timestamp' },
     updated_by: { type: 'text' },
     updated_at: { type: 'timestamp' },
-    // Unused. Earlier builds fingerprinted copies of code boards here.
-    seed_hash: { type: 'text', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_boards_project_key', columns: ['org_id', 'factory_project_id', 'board_key'] }],
   indexes: [{ name: 'factory_boards_project', columns: ['org_id', 'factory_project_id'] }],

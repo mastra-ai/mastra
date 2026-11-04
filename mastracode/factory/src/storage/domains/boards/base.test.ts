@@ -488,10 +488,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
         backend === 'postgres'
           ? new PgFactoryStorage({ connectionString: url })
           : new LibSQLFactoryStorage({ id: 'old', url });
-      const { seed_hash: _seedHash, ...oldBoardColumns } = FACTORY_BOARDS_SCHEMA.columns;
       const { seeded_boards: _seeded, ...oldVersionColumns } = FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA.columns;
       await old.ensureCollections([
-        { ...FACTORY_BOARDS_SCHEMA, columns: oldBoardColumns },
+        FACTORY_BOARDS_SCHEMA,
         FACTORY_BOARD_PHASES_SCHEMA,
         { ...FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA, columns: oldVersionColumns },
       ]);
