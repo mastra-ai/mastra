@@ -109,7 +109,7 @@ The [`observe()` reference](/reference/agents/durable-agent#observerunid-options
 
 ## Stop a run
 
-With streams on, a closed reader doesn't stop the run. When a client disconnects from the server's stream route, the server detaches that reader and the run keeps going: it keeps generating tokens, calling tools and running `onFinish`, so the client can reconnect. Stop it explicitly, or set `streams: false` on a non-durable agent whose runs should end with the request. A durable agent's run always continues after a disconnect.
+With streams on, a closed reader doesn't stop the run. When a client disconnects from the server's stream route, the server detaches that reader and the run keeps going: it keeps generating tokens, calling tools and running `onFinish`, so the client can reconnect. Stop it explicitly, or set `streams: false` on a non-durable agent whose runs should end with the request. A durable agent's run always continues after a disconnect. A detached run still ends when it finishes, when it's stopped, or when its step budget is spent. With neither `maxSteps` nor `stopWhen` set, each loop stops after five steps, excluding processor retries. The budget applies per loop invocation, with a fresh loop after an approval or background continuation.
 
 Stop a run explicitly with one of these:
 
