@@ -2046,6 +2046,17 @@ export class AgentThreadStreamRuntime {
         const lostStreamId = subscription.successorRunIds.get(data.runId);
         // The lost segment ended but the run goes on elsewhere: its forwards stay held so its admission settles them.
         if (lostStreamId !== undefined && data.streamId === lostStreamId) return;
+        // A superseded end hands the run to another execution this runtime never registered, so it has no successor
+        // id for it. The lease check requeues the forwards if that execution never admits them; without a lease
+        // check (no lease provider) requeue now.
+        if (
+          lostStreamId === undefined &&
+          data.type === 'run-completed' &&
+          data.superseded &&
+          state.forwardedIdleLeaseChecks.has(key)
+        ) {
+          return;
+        }
         const requeued = this.#requeueUnadmittedForwards(state, key, data.runId);
         if (lostStreamId === undefined) {
           // Like a remote completion drain, take the lease over from the ended run if it still holds it.

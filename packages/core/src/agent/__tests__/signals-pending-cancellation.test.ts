@@ -6,6 +6,7 @@ import { Agent } from '../agent';
 import { AGENT_LEASE_RENEW_INTERVAL_MS } from '../run-ownership';
 import { createSignal } from '../signals';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { agentThreadStreamTopicForKey } from '../thread-stream-topic';
 import {
   createTextStreamModel,
   createBlockingFirstTextStreamModel,
@@ -1810,6 +1811,7 @@ describe('Agent signals: pending cancellation', () => {
       class HeldForwardPubSub extends ControlledLeasePubSub {
         override async publish(topic: string, event: any): Promise<void> {
           if (isIdleBForward(event.data)) {
+            forwardedTo.push(event.data.runId);
             forwarding = true;
             forwarded();
             await deliverForward;
@@ -1826,6 +1828,7 @@ describe('Agent signals: pending cancellation', () => {
         }
       }
       let forwarding = false;
+      const forwardedTo: string[] = [];
       const pubsub = new HeldForwardPubSub();
       const memory = new MockMemory();
       const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
@@ -1879,7 +1882,19 @@ describe('Agent signals: pending cancellation', () => {
         cleanup();
         throw error;
       }
-      return { scope, pubsub, agent, model, subscription, follower, getStreamCount, deliver, releaseFollowUp, cleanup };
+      return {
+        scope,
+        pubsub,
+        agent,
+        model,
+        subscription,
+        follower,
+        forwardedTo,
+        getStreamCount,
+        deliver,
+        releaseFollowUp,
+        cleanup,
+      };
     }
 
     it('runs a message forwarded to a run that is then stopped exactly once', async () => {
@@ -1895,6 +1910,34 @@ describe('Agent signals: pending cancellation', () => {
         // It runs once: the stopped run admitted it while winding down, or it was queued again, never both.
         await vi.waitFor(() => expect(pubsub.owners.size).toBe(0));
         expect(getStreamCount()).toBe(3);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('keeps a forward held when its run ends here only because another execution took it over', async () => {
+      const { scope, pubsub, model, forwardedTo, getStreamCount, deliver, releaseFollowUp, cleanup } =
+        await forwardToFollowUpRun('superseded-owner');
+      try {
+        const runId = forwardedTo[0]!;
+        // The execution that lost the run says so; the run goes on under an execution this follower never registered.
+        await pubsub.publish(agentThreadStreamTopicForKey(`${scope.resourceId}\u0000${scope.threadId}`), {
+          type: 'agent.thread-stream',
+          runId,
+          data: { type: 'run-completed', runId, streamId: 'lost-execution-stream', superseded: true },
+        });
+        await nextTick();
+        await nextTick();
+        // Held, not queued again: requeueing would forward it a second time.
+        expect(forwardedTo).toHaveLength(1);
+        deliver();
+        releaseFollowUp();
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        await vi.waitFor(() => expect(pubsub.owners.size).toBe(0));
+        await nextTick();
+        expect(getStreamCount()).toBe(3);
+        expect(forwardedTo).toHaveLength(1);
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
       } finally {
         cleanup();
       }
