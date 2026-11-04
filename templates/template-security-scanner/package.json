@@ -18,7 +18,7 @@
     "format": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
     "build": "tsc --outDir dist",
-    "test:unit": "vitest run tests/settings.test.ts tests/control-plane.test.ts tests/discovery.test.ts tests/assessment-contracts.test.ts tests/bola-bindings.test.ts tests/source-digest.test.ts",
+    "test:unit": "vitest run tests/settings.test.ts tests/control-plane.test.ts tests/discovery.test.ts tests/assessment-contracts.test.ts tests/bola-bindings.test.ts tests/source-digest.test.ts tests/scripts.test.ts",
     "test:console:unit": "vitest run tests/console.component.test.ts --reporter=verbose",
     "test:console:integration": "vitest run tests/console.integration.test.ts --reporter=verbose",
     "test:console": "npm run test:console:integration && npm run test:console:browser",

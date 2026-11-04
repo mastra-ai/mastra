@@ -89,7 +89,7 @@ child.stderr.on('data', (bytes: Buffer) => {
   if (stderrBytes > 8 * 1024 * 1024) stop();
 });
 const exitCode = await new Promise<number | null>(resolve => {
-  child.once('exit', resolve);
+  child.once('close', code => resolve(code));
   child.once('error', () => resolve(null));
 });
 clearTimeout(timer);

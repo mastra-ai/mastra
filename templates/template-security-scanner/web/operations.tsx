@@ -24,6 +24,11 @@ const lines = (text: string) =>
     .split(/[\n,]/)
     .map(item => item.trim())
     .filter(Boolean);
+const unauthorizedStatuses = (text: string) =>
+  text
+    .split(',')
+    .map(value => Number(value.trim()))
+    .filter(value => Number.isInteger(value) && value >= 400 && value <= 499);
 
 export function PolicyForm({
   policy,
@@ -279,7 +284,11 @@ function TargetForm({
   const [selectedPolicy, setSelectedPolicy] = useState<Policy>();
   const [applicationKind, setApplicationKind] = useState<'legacy' | 'rest_api'>(target?.application?.kind ?? 'legacy');
   const [rules, setRules] = useState<
-    Array<Pick<RouteAccessRule, 'pathTemplate' | 'audience' | 'objectPolicy' | 'expectedUnauthorizedStatus'>>
+    Array<
+      Pick<RouteAccessRule, 'pathTemplate' | 'audience' | 'objectPolicy' | 'expectedUnauthorizedStatus'> & {
+        unauthorizedStatusText?: string;
+      }
+    >
   >(
     target?.routeAccessRules ?? [
       { pathTemplate: '/api/orders', audience: 'user', objectPolicy: 'owner', expectedUnauthorizedStatus: [401, 403] },
@@ -353,7 +362,10 @@ function TargetForm({
                 operatorRevision: (target?.revision ?? 0) + 1,
                 audience: rule.audience,
                 ...(rule.audience === 'user' ? { objectPolicy: rule.objectPolicy ?? 'owner' } : {}),
-                expectedUnauthorizedStatus: rule.audience === 'public' ? [] : rule.expectedUnauthorizedStatus,
+                expectedUnauthorizedStatus:
+                  rule.audience === 'public'
+                    ? []
+                    : unauthorizedStatuses(rule.unauthorizedStatusText ?? rule.expectedUnauthorizedStatus.join(',')),
               })),
           }
         : {}),
@@ -484,22 +496,29 @@ function TargetForm({
                         <input
                           aria-label={`Unauthorized status ${index + 1}`}
                           disabled={rule.audience === 'public'}
-                          value={rule.expectedUnauthorizedStatus.join(',')}
-                          onChange={event =>
+                          value={rule.unauthorizedStatusText ?? rule.expectedUnauthorizedStatus.join(',')}
+                          onChange={event => {
+                            const text = event.currentTarget.value;
+                            setRules(current =>
+                              current.map((item, i) =>
+                                i === index ? { ...item, unauthorizedStatusText: text } : item,
+                              ),
+                            );
+                          }}
+                          onBlur={event => {
+                            const parsed = unauthorizedStatuses(event.currentTarget.value);
                             setRules(current =>
                               current.map((item, i) =>
                                 i === index
                                   ? {
                                       ...item,
-                                      expectedUnauthorizedStatus: event.target.value
-                                        .split(',')
-                                        .map(value => Number(value.trim()))
-                                        .filter(value => value >= 400 && value <= 499),
+                                      expectedUnauthorizedStatus: parsed,
+                                      unauthorizedStatusText: parsed.join(','),
                                     }
                                   : item,
                               ),
-                            )
-                          }
+                            );
+                          }}
                         />
                       </td>
                     </tr>

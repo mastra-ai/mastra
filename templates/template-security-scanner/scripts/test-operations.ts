@@ -66,7 +66,7 @@ child.stderr.on('data', (chunk: Buffer) => {
   if (stderrBytes > 8388608) stop();
 });
 const exitCode = await new Promise<number | null>(resolve => {
-  child.once('exit', resolve);
+  child.once('close', code => resolve(code));
   child.once('error', () => resolve(null));
 });
 clearTimeout(timer);

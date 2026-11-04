@@ -102,7 +102,7 @@ try {
   );
 } catch (error) {
   if (!stopping) {
-    const code = error instanceof Error && /^OWNED_LAB_[A-Z_]+$/.test(error.message) ? error.message : null;
+    const code = error instanceof Error && /^(?:OWNED_)?LAB_[A-Z_]+$/.test(error.message) ? error.message : null;
     console.error(JSON.stringify(code ? { code } : diagnostic(error)));
     process.exitCode = 1;
   }

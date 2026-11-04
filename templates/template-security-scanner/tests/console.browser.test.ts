@@ -257,6 +257,88 @@ async function localConsole() {
 }
 
 describe('real security console browser journeys', () => {
+  it('edits unauthorized status codes character by character and persists submit without blur', async () => {
+    const { url, secret } = await localConsole();
+    const { page } = await browser(url);
+    page.setDefaultTimeout(5000);
+    await loginConsole(page, secret);
+    const { csrfToken } = z
+      .object({ csrfToken: z.string() })
+      .parse(await (await page.request.get(`${url}/api/session`)).json());
+    const policyResponse = await page.request.post(`${url}/api/policies`, {
+      headers: { origin: url, 'x-csrf-token': csrfToken },
+      data: {
+        name: 'Editable route policy',
+        permittedMethods: ['GET', 'HEAD'],
+        scanLimits: { maxRequests: 10, maxDurationSeconds: 30, maxResponseBytes: 65536, maxConcurrency: 1 },
+      },
+    });
+    expect(policyResponse.status()).toBe(201);
+    const policy = z.object({ id: z.string() }).parse(await policyResponse.json());
+    await navigate(page, 'Targets');
+    await page.getByRole('button', { name: 'New target' }).click();
+    const form = page.getByRole('dialog', { name: 'New target' });
+    await form.getByLabel('Name').fill('Editable route statuses');
+    await form.getByLabel('Entry URL').fill('http://allowed.lab:18080/api/orders');
+    await form.getByLabel('Application').selectOption('rest_api');
+    await form.locator('select[name="policy"]').selectOption(policy.id);
+    await form.getByLabel('Authorization evidence reference').fill('operator:owned-browser-fixture');
+    await form.getByLabel('I confirm authorization to scan this target.').check();
+    const first = form.getByLabel('Unauthorized status 1', { exact: true });
+    await first.focus();
+    await first.press('End');
+    await first.pressSequentially(',404');
+    expect(await first.inputValue()).toBe('401,403,404');
+    await first.press('Tab');
+    await form.getByRole('button', { name: 'Add route rule' }).click();
+    await form.getByLabel('Route 5', { exact: true }).fill('/api/extra/{id}');
+    const added = form.getByLabel('Unauthorized status 5', { exact: true });
+    await added.fill('');
+    await added.pressSequentially('4');
+    expect(await added.inputValue()).toBe('4');
+    await added.pressSequentially('04,403.5,399,500,,401');
+    expect(await added.inputValue()).toBe('404,403.5,399,500,,401');
+    await added.press('Tab');
+    expect(await added.inputValue()).toBe('404,401');
+    expect(await form.getByLabel('Unauthorized status 4', { exact: true }).isDisabled()).toBe(true);
+    const second = form.getByLabel('Unauthorized status 2', { exact: true });
+    await second.fill('');
+    await second.pressSequentially('418');
+    const saved = page.waitForResponse(
+      response => response.url() === `${url}/api/targets` && response.request().method() === 'POST',
+    );
+    await second.press('Enter');
+    const response = await saved;
+    expect(response.status()).toBe(201);
+    const targetSchema = z.object({
+      id: z.string(),
+      routeAccessRules: z.array(
+        z.object({ pathTemplate: z.string(), expectedUnauthorizedStatus: z.array(z.number()) }),
+      ),
+    });
+    const target = targetSchema.parse(await response.json());
+    expect(target.routeAccessRules.map(rule => rule.expectedUnauthorizedStatus)).toEqual([
+      [401, 403, 404],
+      [418],
+      [401, 403, 404],
+      [],
+      [404, 401],
+    ]);
+    await form.waitFor({ state: 'hidden' });
+    await page.reload();
+    const persisted = targetSchema.parse(await (await page.request.get(`${url}/api/targets/${target.id}`)).json());
+    expect(persisted.routeAccessRules).toEqual(target.routeAccessRules);
+    await navigate(page, 'Targets');
+    await page
+      .getByRole('row')
+      .filter({ hasText: 'Editable route statuses' })
+      .getByRole('button', { name: 'Edit', exact: true })
+      .click();
+    const edit = page.getByRole('dialog', { name: 'Edit target' });
+    expect(await edit.getByLabel('Unauthorized status 2', { exact: true }).inputValue()).toBe('418');
+    expect(await edit.getByLabel('Unauthorized status 5', { exact: true }).inputValue()).toBe('404,401');
+  }, 30000);
+
   it('explains a revoked session after reload without implying a first-time visitor signed in', async () => {
     const { url, secret } = await localConsole();
     const { page } = await browser(url);
