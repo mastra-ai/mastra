@@ -1063,15 +1063,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-            // Saving a key also exported it to its env var (see `setStoredApiKey`),
-            // where model auth keeps finding it. Unset it too, but only while it
-            // still holds this key: any other value came from the server's environment.
-            const storedKey = authStorage.getStoredApiKey(provider);
             const envVar = (await controller.listAvailableModels()).find(
               model => model.provider === provider,
             )?.apiKeyEnvVar;
-            authStorage.remove(`apikey:${provider}`);
-            if (storedKey && envVar && process.env[envVar] === storedKey) delete process.env[envVar];
+            authStorage.removeStoredApiKey(provider, envVar);
             controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });

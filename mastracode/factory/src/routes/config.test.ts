@@ -684,6 +684,22 @@ describe('provider key routes in local mode', () => {
     expect(await acme()).toMatchObject({ source: 'none' });
     expect(await modelIds()).not.toContain('acme-cloud/rocket-1');
   });
+
+  it('removing a saved key keeps the key the server was started with', async () => {
+    process.env.ACME_CLOUD_API_KEY = 'sk-server';
+    const saved = await app.request('/web/config/providers/acme-cloud/key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'sk-saved' }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await acme()).toMatchObject({ source: 'stored' });
+
+    const removed = await app.request('/web/config/providers/acme-cloud/key', { method: 'DELETE' });
+    expect(removed.status).toBe(200);
+    expect(await acme()).toMatchObject({ source: 'env' });
+    expect(await modelIds()).toContain('acme-cloud/rocket-1');
+  });
 });
 
 describe('GET /web/config/models', () => {
