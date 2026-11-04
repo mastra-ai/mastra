@@ -1,4 +1,4 @@
-import { CLOSE_REASONS, STATUS_EVENTS } from '../boards/board-events.js';
+import { ACTIVITY_EVENTS, CLOSE_REASONS, STATUS_EVENTS } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type {
@@ -29,6 +29,11 @@ const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
 export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
+/** A source reference such as `acme/app#12` or `group/sub/project#3`. */
+const SOURCE_REFERENCE_RE = /^[a-z0-9][a-z0-9_.\/-]*#\d+$/i;
+/** A provider login such as `octocat`, `dependabot[bot]` or `jane.doe`. */
+const LOGIN_RE = /^[a-z0-9][a-z0-9_.-]*(\[bot\])?$/i;
+const MAX_LOGIN_LENGTH = 100;
 export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
 export const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -250,6 +255,38 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'routeEvent': {
       assertExactKeys(value, ['type', 'idempotencyKey', 'event'], 'Factory routeEvent decision');
       return { type, ...commonCommitFields(value), event: boardEvent(value.event, 'Factory routeEvent') };
+    }
+    case 'signalActivity': {
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'event', 'reference', 'url', 'author', 'authorTrusted'],
+        'Factory signalActivity decision',
+      );
+      const url = value.url;
+      if (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\/\S+$/.test(url)) {
+        throw new FactoryRuleValidationError('Factory signalActivity url must be an http(s) URL.');
+      }
+      if (typeof value.authorTrusted !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory signalActivity authorTrusted must be a boolean.');
+      }
+      const author =
+        value.author === undefined
+          ? undefined
+          : boundedString(value.author, 'Factory signalActivity author', MAX_LOGIN_LENGTH, LOGIN_RE);
+      return {
+        type,
+        ...commonCommitFields(value),
+        event: enumValue(value.event, ACTIVITY_EVENTS, 'Factory signalActivity event'),
+        reference: boundedString(
+          value.reference,
+          'Factory signalActivity reference',
+          MAX_SOURCE_KEY_LENGTH,
+          SOURCE_REFERENCE_RE,
+        ),
+        url,
+        ...(author ? { author } : {}),
+        authorTrusted: value.authorTrusted,
+      };
     }
     case 'upsertLinkedWorkItem': {
       assertExactKeys(

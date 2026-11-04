@@ -1,4 +1,4 @@
-import type { BoardEventFacts } from '../boards/board-events.js';
+import type { ActivityEvent, BoardEventFacts } from '../boards/board-events.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow } from '../storage/domains/work-items/work-item-schema.js';
 
@@ -631,6 +631,22 @@ export interface FactoryRouteEventDecision extends FactoryCommitDecisionBase {
   event: BoardEventFacts;
 }
 
+/**
+ * Tells the card's live session that its source saw activity, such as a new
+ * comment or an edit. It carries pointers only: the dispatcher writes the
+ * message from these fields, so no provider text (a comment body, a title)
+ * ever reaches the session through it. Without a live session it is dropped.
+ */
+export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase {
+  type: 'signalActivity';
+  event: ActivityEvent;
+  /** The source's own reference, such as `acme/app#12`. */
+  reference: string;
+  url: string;
+  author?: string;
+  authorTrusted: boolean;
+}
+
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
   type: 'upsertLinkedWorkItem';
   board: FactoryRuleBoard;
@@ -726,6 +742,7 @@ export interface FactoryDismissStaleReviewsDecision extends FactoryCommitDecisio
 export type FactoryCommitDecision =
   | FactoryTransitionDecision
   | FactoryRouteEventDecision
+  | FactorySignalActivityDecision
   | FactoryDismissStaleReviewsDecision
   | FactoryUpsertLinkedWorkItemDecision
   | FactoryInvokeSkillDecision

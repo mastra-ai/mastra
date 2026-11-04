@@ -20,6 +20,7 @@ export type StatusEvent = (typeof STATUS_EVENTS)[number];
 
 /** Activity on a card: it never moves the card, it only tells the card's session. */
 export const ACTIVITY_EVENTS = ['work_item.commented', 'work_item.edited'] as const;
+export type ActivityEvent = (typeof ACTIVITY_EVENTS)[number];
 
 /** Why a work item closed: `canceled` covers "not planned" and duplicates. */
 export const CLOSE_REASONS = ['completed', 'canceled'] as const;

@@ -1518,6 +1518,10 @@ export class FactoryDecisionDispatcher {
         );
         return;
       }
+      case 'signalActivity': {
+        await this.#signalActivity(record, decision);
+        return;
+      }
       case 'dismissStaleReviews': {
         if (!this.#dismissStaleReviews) throw new Error('GitHub review dismissal is not configured.');
         await this.#dismissStaleReviews(decision);
@@ -1995,6 +1999,54 @@ export class FactoryDecisionDispatcher {
       );
     }
     return binding;
+  }
+
+  /**
+   * Points the card's live session at new activity on its source. The message
+   * is written here from the decision's pointers, never from provider text.
+   * Activity while the session is busy waits as one pending notification per
+   * card and kind of activity, counting how many arrived; an idle session is
+   * woken. A card nobody is working has nobody to tell, so it is dropped.
+   */
+  async #signalActivity(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'signalActivity' }>,
+  ): Promise<void> {
+    if (!record.workItemId) return;
+    const binding = await this.#findBinding(record);
+    if (!binding) return;
+    const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
+    const startedBy = item?.sessions[binding.role]?.startedBy;
+    if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+    await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+    const session = await this.#requireSession(binding);
+    const author = decision.author
+      ? `@${decision.author}${decision.authorTrusted ? '' : ' (untrusted author)'}`
+      : decision.authorTrusted
+        ? undefined
+        : 'an untrusted author';
+    const message =
+      decision.event === 'work_item.commented'
+        ? `New comment${author ? ` by ${author}` : ''} on ${decision.reference}: ${decision.url}`
+        : `${decision.reference} was edited${author ? ` by ${author}` : ''}: ${decision.url}`;
+    await awaitNotification(() =>
+      session.sendNotificationSignal(
+        {
+          source: 'factory',
+          kind: 'source-activity',
+          summary: message,
+          priority: 'medium',
+          payload: { message, event: decision.event, reference: decision.reference, url: decision.url },
+          sourceId: record.id,
+          coalesceKey: `${record.workItemId}:${decision.event}`,
+        },
+        {
+          ifActive: { behavior: 'persist' },
+          ifIdle: { behavior: 'wake' },
+          requestContext: factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId }),
+        },
+      ),
+    );
   }
 
   async #messageBinding(

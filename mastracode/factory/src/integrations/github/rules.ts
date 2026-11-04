@@ -20,6 +20,7 @@ import type {
   FactoryGithubRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
+  FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import { resolveIntakeLabelRoute } from '../../storage/domains/intake/base.js';
@@ -122,6 +123,33 @@ function parseFactoryReviewCommand(
 }
 
 /** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
+/**
+ * Points the card's session at a new comment or an edit on its issue. Only
+ * pointers travel (who, where, a link); Factory's own comments are skipped so
+ * a session is not woken by what it wrote.
+ */
+export function activitySignalFor(
+  context: Pick<FactoryGithubRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'issueComment'>,
+): FactorySignalActivityDecision | undefined {
+  const event =
+    context.event === 'issueCommentCreated'
+      ? ('work_item.commented' as const)
+      : context.event === 'issueEdited'
+        ? ('work_item.edited' as const)
+        : undefined;
+  if (!event || !context.item || !context.issue) return undefined;
+  if (context.actor.type !== 'github' || context.actor.factoryAuthored) return undefined;
+  return {
+    type: 'signalActivity',
+    idempotencyKey: `${context.ingress.id}:activity`,
+    event,
+    reference: `${context.repository.fullName}#${context.issue.number}`,
+    url: (event === 'work_item.commented' ? context.issueComment?.url : undefined) ?? context.issue.url,
+    ...(context.actor.login ? { author: context.actor.login } : {}),
+    authorTrusted: context.actor.trusted,
+  };
+}
+
 export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 'issue'>): BoardEventFacts | undefined {
   switch (context.event) {
     case 'issueOpened':
@@ -888,7 +916,7 @@ const rule = selectEventRule(
         };
       }
       if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
-        const routed = routeEventDecision(context);
+        const routed = routeEventDecision(context) ?? activitySignalFor(context);
         if (routed) decisions = [{ ...routed }];
       }
 

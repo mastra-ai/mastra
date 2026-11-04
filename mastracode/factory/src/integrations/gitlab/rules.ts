@@ -14,6 +14,7 @@ import type {
   FactoryGitLabRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
+  FactorySignalActivityDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -91,6 +92,33 @@ function labelColors(value: unknown): Record<string, string> {
 }
 
 /** The status change a GitLab delivery reports. GitLab gives no close reason, so every close is completed. */
+/**
+ * Points the card's session at a new comment on its issue, or at an edit to
+ * the issue's title or description. Only pointers travel (who, where, a link).
+ */
+export function activitySignalFor(
+  context: Pick<FactoryGitLabRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'note'>,
+  edited: boolean,
+): FactorySignalActivityDecision | undefined {
+  const event =
+    context.event === 'issueCommented'
+      ? ('work_item.commented' as const)
+      : context.event === 'issueUpdated' && edited
+        ? ('work_item.edited' as const)
+        : undefined;
+  if (!event || !context.item || !context.issue) return undefined;
+  if (context.actor.type !== 'gitlab' || context.actor.factoryAuthored) return undefined;
+  return {
+    type: 'signalActivity',
+    idempotencyKey: `${context.ingress.id}:activity`,
+    event,
+    reference: `${context.repository.fullName}#${context.issue.number}`,
+    url: (event === 'work_item.commented' ? context.note?.url : undefined) ?? context.issue.url,
+    ...(context.actor.username ? { author: context.actor.username } : {}),
+    authorTrusted: context.actor.trusted,
+  };
+}
+
 export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
   switch (context.event) {
     case 'issueOpened':
@@ -739,7 +767,10 @@ export class GitLabRules {
       };
     }
     if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
-      const routed = routeEventDecision(context);
+      const changes = object(input.parsed.payload.changes);
+      const routed =
+        routeEventDecision(context) ??
+        activitySignalFor(context, Boolean(object(changes?.title) || object(changes?.description)));
       if (routed) decisions = [{ ...routed }];
     }
 
