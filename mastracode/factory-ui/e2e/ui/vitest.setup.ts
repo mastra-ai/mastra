@@ -13,6 +13,7 @@ expect.extend(matchers);
 // Testing Library's default one-second DOM wait.
 configure({ asyncUtilTimeout: 3_000 });
 
+import { clearComposerDrafts } from '../../src/ui/domains/chat/services/composerDrafts';
 import { server } from './msw-server';
 
 // Start MSW once for the whole suite. Unhandled requests are an error so a
@@ -32,6 +33,7 @@ afterEach(async () => {
   // Remembered UI state (e.g. board filters) must not carry into the next case.
   localStorage.clear();
   sessionStorage.clear();
+  clearComposerDrafts();
 });
 
 afterAll(() => server.close());
