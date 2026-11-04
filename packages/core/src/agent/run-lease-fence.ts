@@ -22,9 +22,14 @@ export async function verifyRunLease(runId: string | undefined): Promise<void> {
   if (runId) await fences.get(runId)?.();
 }
 
+/**
+ * Steps register against the abort signal the loop was handed; the thread runtime asks about the signal it prepared.
+ * A published run has two, because its stream publisher derives a controller that can also be stopped from another
+ * process. Without this link the runtime sees no running step, so lease loss kills the step mid-flight instead of
+ * waiting for it. Chains collapse to the base signal. Durable runs key on a registry entry, so they never need this.
+ */
 const stepOwners = new WeakMap<object, object>();
 
-/** A derived abort signal belongs to the same run as the signal it wraps. */
 export function setRunStepOwner(owner: object, parent: object): void {
   stepOwners.set(owner, stepOwners.get(parent) ?? parent);
 }

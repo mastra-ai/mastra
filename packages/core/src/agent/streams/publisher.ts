@@ -77,6 +77,8 @@ export function createAgentStreamPublisher({
   onEnd,
   record,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
+  // A stop request from another process reaches the loop through this controller, not the caller's signal. Tell the
+  // step bookkeeping that both signals belong to the same run, so lease loss waits for a running step to settle.
   const controller = new AbortController();
   if (callerSignal) setRunStepOwner(controller.signal, callerSignal);
   const abort = (reason?: unknown) => {

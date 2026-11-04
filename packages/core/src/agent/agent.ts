@@ -9330,7 +9330,8 @@ export class Agent<
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
-      // A published run also stops on abort requests from other readers.
+      // The loop runs under the publisher's signal, not the caller's, so a stop request from another reader can reach
+      // it. The publisher keeps the caller's signal as a cause, and step bookkeeping ties the two to one run.
       options: {
         ...options,
         ...(streamPublisher ? { abortSignal: streamPublisher.abortSignal } : {}),
