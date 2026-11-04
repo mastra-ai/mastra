@@ -1,6 +1,7 @@
 import type { MastraCompositeStore } from '../storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { KnowledgeScopeDeclarations } from './declarations';
+import type { KnowledgeImporter } from './importers';
 import type { KnowledgeInstructionsOption } from './instructions';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -44,4 +45,9 @@ export interface KnowledgeConfig {
   pinnedContext?: boolean | { maxPins?: number; maxTokens?: number };
   /** Usage instructions added whenever Knowledge attaches tools. */
   instructions?: KnowledgeInstructionsOption;
+  /**
+   * Importers that bring content from outside sources into pages; run them with `runImporter`.
+   * Needs storage that stores importer runs (in-memory, LibSQL or PostgreSQL).
+   */
+  importers?: KnowledgeImporter<any>[];
 }

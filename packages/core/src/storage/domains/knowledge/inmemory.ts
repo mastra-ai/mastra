@@ -1,10 +1,38 @@
 import type { InMemoryDB } from '../inmemory-db';
 import { KNOWLEDGE_STORAGE_CONTRACT_VERSION, KNOWLEDGE_STORAGE_SCHEMA_VERSION, KnowledgeStorage } from './base';
 import type { KnowledgePageStore } from './pages';
+import { InMemoryKnowledgeImporterStore } from './importers';
+import type { KnowledgeImporterStore } from './importers';
 import { InMemoryKnowledgePageStore } from './pages-inmemory';
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   readonly #pageStore = new InMemoryKnowledgePageStore();
+  readonly #importerStore = new InMemoryKnowledgeImporterStore();
+
+  override getImportState(input: Parameters<KnowledgeImporterStore['getImportState']>[0]) {
+    return this.#importerStore.getImportState(input);
+  }
+  override setImportState(input: Parameters<KnowledgeImporterStore['setImportState']>[0]) {
+    return this.#importerStore.setImportState(input);
+  }
+  override createImportRun(input: Parameters<KnowledgeImporterStore['createImportRun']>[0]) {
+    return this.#importerStore.createImportRun(input);
+  }
+  override updateImportRun(input: Parameters<KnowledgeImporterStore['updateImportRun']>[0]) {
+    return this.#importerStore.updateImportRun(input);
+  }
+  override getImportRun(input: Parameters<KnowledgeImporterStore['getImportRun']>[0]) {
+    return this.#importerStore.getImportRun(input);
+  }
+  override listImportRuns(input: Parameters<KnowledgeImporterStore['listImportRuns']>[0]) {
+    return this.#importerStore.listImportRuns(input);
+  }
+  override listImportOwnedPages(input: Parameters<KnowledgeImporterStore['listImportOwnedPages']>[0]) {
+    return this.#importerStore.listImportOwnedPages(input);
+  }
+  override updateImportOwnedPages(input: Parameters<KnowledgeImporterStore['updateImportOwnedPages']>[0]) {
+    return this.#importerStore.updateImportOwnedPages(input);
+  }
 
   // Schema-4 page store.
   override materializeScope(
@@ -184,6 +212,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsImporters: true,
     } as const;
   }
 
@@ -197,5 +226,6 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     this.#pageStore.clear();
+    this.#importerStore.clear();
   }
 }

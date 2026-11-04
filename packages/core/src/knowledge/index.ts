@@ -3,6 +3,7 @@ import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeReadScope, KnowledgeStorage } from '../storage/domains/knowledge';
+import type { KnowledgeImportRun } from '../storage/domains/knowledge/importers';
 import type { KnowledgeNote, KnowledgePage } from '../storage/domains/knowledge/pages';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -30,6 +31,8 @@ import type {
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,
 } from './host-writes';
+import { assertKnowledgeImporter, KnowledgeImporterBusyError, runKnowledgeImporter } from './importers';
+import type { KnowledgeImporter, KnowledgeRunImporterOptions } from './importers';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { reindexKnowledgeLinks } from './links';
@@ -73,6 +76,8 @@ export class Knowledge extends MastraBase {
   #instructions?: KnowledgeInstructionsOption;
   #semantic?: KnowledgeSemanticIndex;
   #listeners = new Set<KnowledgeChangeListener>();
+  #importers = new Map<string, KnowledgeImporter<any>>();
+  #runningImporters = new Set<string>();
 
   /** Config pins are never dropped, so a scope with more of them than the budget holds is a setup mistake. */
   #warnOnPinOvercommit(budget: PinBudget) {
@@ -132,6 +137,7 @@ export class Knowledge extends MastraBase {
       message => this.logger.warn(message),
     );
     if (this.#pins) this.#warnOnPinOvercommit(this.#pins);
+    for (const importer of config.importers ?? []) this.registerImporter(importer);
     this.hasOwnStorage = config.storage !== undefined;
     if (config.storage) {
       this.#storageSource = getStorageSource(config.storage);
@@ -284,6 +290,66 @@ export class Knowledge extends MastraBase {
    */
   removeNote(input: { id: string; author?: string }): Promise<KnowledgeNote | null> {
     return removeKnowledgeNote(this.#hostWriter(), input);
+  }
+
+  /**
+   * Adds an importer; throws when one with the same id is registered.
+   *
+   * @experimental
+   */
+  registerImporter(importer: KnowledgeImporter<any>): void {
+    assertKnowledgeImporter(importer);
+    if (this.#importers.has(importer.id)) throw new Error(`Knowledge importer "${importer.id}" is already registered.`);
+    this.#importers.set(importer.id, importer);
+  }
+
+  /** @experimental */
+  getImporter(id: string): KnowledgeImporter<any> | undefined {
+    return this.#importers.get(id);
+  }
+
+  /** @experimental */
+  listImporters(): KnowledgeImporter<any>[] {
+    return [...this.#importers.values()];
+  }
+
+  /**
+   * Runs a registered importer and returns its finished run. A failing or canceled importer doesn't
+   * throw: the run says `failed` or `canceled` with the error, and removes none of its pages. Throws
+   * {@link KnowledgeImporterBusyError} when the importer is already running in this process; runs
+   * aren't locked across processes, so schedule each importer on one worker.
+   *
+   * Writes are host writes made as `importer:<id>`. **Host-only**, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  async runImporter<TOptions>(id: string, options: KnowledgeRunImporterOptions<TOptions> = {}): Promise<KnowledgeImportRun> {
+    const importer = this.#importers.get(id);
+    if (!importer) throw new Error(`No Knowledge importer "${id}" is registered.`);
+    if (this.#runningImporters.has(id)) throw new KnowledgeImporterBusyError(id);
+    this.#runningImporters.add(id);
+    try {
+      return await runKnowledgeImporter(
+        {
+          ...this.#hostWriter(),
+          log: (level, message, data) => (level === 'warn' ? this.logger.warn(message, data) : this.logger.info(message, data)),
+        },
+        importer,
+        options,
+      );
+    } finally {
+      this.#runningImporters.delete(id);
+    }
+  }
+
+  /** @experimental */
+  async getImportRun(runId: string): Promise<KnowledgeImportRun | null> {
+    return (await this.getStorage()).getImportRun({ id: runId });
+  }
+
+  /** Newest first; 20 by default. @experimental */
+  async listImportRuns(input: { importerId?: string; limit?: number } = {}): Promise<KnowledgeImportRun[]> {
+    return (await this.getStorage()).listImportRuns(input);
   }
 
   #hostWriter() {
@@ -517,3 +583,10 @@ export type {
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,
 } from './host-writes';
+export { KnowledgeImporterBusyError } from './importers';
+export type {
+  KnowledgeImporter,
+  KnowledgeImporterContext,
+  KnowledgeImporterPages,
+  KnowledgeRunImporterOptions,
+} from './importers';

@@ -1,4 +1,5 @@
 import { StorageDomain } from '../base';
+import type { KnowledgeImporterStore } from './importers';
 import type { KnowledgePageStore } from './pages';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -17,6 +18,8 @@ export interface KnowledgeStorageCapabilities {
    * pin kinds don't report it, and core refuses listing pins on them rather than store a page pin.
    */
   supportsPinKinds?: boolean;
+  /** The adapter stores importer runs, cursors and page ownership ({@link KnowledgeImporterStore}). */
+  supportsImporters?: boolean;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -156,7 +159,7 @@ export function createKnowledgeUlid(now = Date.now()): string {
   return `${encodeCrockford(BigInt(now), 10)}${encodeCrockford(lastUlidRandom, 16)}`;
 }
 
-export abstract class KnowledgeStorage extends StorageDomain implements KnowledgePageStore {
+export abstract class KnowledgeStorage extends StorageDomain implements KnowledgePageStore, KnowledgeImporterStore {
   readonly #storageIsolationKey: unknown;
 
   constructor(config: { storageIsolationKey?: unknown } = {}) {
@@ -331,5 +334,43 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   }
   listPins(_input: Parameters<KnowledgePageStore['listPins']>[0]): ReturnType<KnowledgePageStore['listPins']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('listPins'));
+  }
+
+  // Importer storage (see ./importers.ts). Adapters without it refuse, and `runImporter` explains why.
+  getImportState(_input: Parameters<KnowledgeImporterStore['getImportState']>[0]): Promise<unknown> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
+  }
+  setImportState(_input: Parameters<KnowledgeImporterStore['setImportState']>[0]): Promise<void> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
+  }
+  createImportRun(
+    _input: Parameters<KnowledgeImporterStore['createImportRun']>[0],
+  ): ReturnType<KnowledgeImporterStore['createImportRun']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
+  }
+  updateImportRun(
+    _input: Parameters<KnowledgeImporterStore['updateImportRun']>[0],
+  ): ReturnType<KnowledgeImporterStore['updateImportRun']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
+  }
+  getImportRun(
+    _input: Parameters<KnowledgeImporterStore['getImportRun']>[0],
+  ): ReturnType<KnowledgeImporterStore['getImportRun']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
+  }
+  listImportRuns(
+    _input: Parameters<KnowledgeImporterStore['listImportRuns']>[0],
+  ): ReturnType<KnowledgeImporterStore['listImportRuns']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
+  }
+  listImportOwnedPages(
+    _input: Parameters<KnowledgeImporterStore['listImportOwnedPages']>[0],
+  ): ReturnType<KnowledgeImporterStore['listImportOwnedPages']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
+  }
+  updateImportOwnedPages(
+    _input: Parameters<KnowledgeImporterStore['updateImportOwnedPages']>[0],
+  ): ReturnType<KnowledgeImporterStore['updateImportOwnedPages']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
   }
 }
