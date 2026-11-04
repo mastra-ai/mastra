@@ -93,7 +93,7 @@ export const opsAgent = new Agent({
 })
 ```
 
-With no options, the agent gets tools for every connected provider that has a toolset. Tool names start with the provider ID, such as `linear_list_issues`. Some providers serve their tools from a hosted Model Context Protocol (MCP) server instead. You use the same `tools()` API for them, but their tools are discovered at runtime.
+With no options, the agent gets tools for every connected provider that has a toolset. Each tool key starts with a provider prefix, such as `linear_list_issues`. The prefix can differ from the provider ID: `google-calendar` tools start with `google_calendar_`. The [provider toolsets reference](/reference/connect/providers) lists every key. Some providers serve their tools from a hosted Model Context Protocol (MCP) server instead. You use the same `tools()` API for them, but their tools are discovered at runtime.
 
 To keep your own tools as well, spread the resolver's result in a `tools` function. Your tools win when a key collides:
 

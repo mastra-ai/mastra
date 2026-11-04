@@ -167,6 +167,11 @@ function noteBlock(note: string | undefined): string {
   return note ? `:::note\n\n${note}\n\n:::\n\n` : '';
 }
 
+/** Escapes text for a single-quoted TypeScript string literal. */
+function tsString(text: string): string {
+  return `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
 function agentExample(id: string, docs: ProviderDocs): string {
   return `\`\`\`typescript title="src/mastra/agents/${id}-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -174,8 +179,8 @@ import { tools } from '@mastra/connect'
 
 export const ${camelCase(id)}Agent = new Agent({
   id: '${id}-agent',
-  name: '${docs.name} agent',
-  instructions: 'You help people ${docs.summary} in ${docs.name}.',
+  name: ${tsString(`${docs.name} agent`)},
+  instructions: ${tsString(`You help people ${docs.summary} in ${docs.name}.`)},
   model: '${MODEL}',
   tools: tools({ providers: ['${id}'] }),
 })

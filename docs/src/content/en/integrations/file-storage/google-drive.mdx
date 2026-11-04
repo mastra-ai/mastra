@@ -87,7 +87,7 @@ The service account is its own Google identity. It can't see anything in Drive u
 
 :::warning
 
-Service accounts can't create files in standard "My Drive" folders. A service account has no personal Drive storage quota, so any file it creates needs to be owned by a quota-bearing entity. If you only share a personal Drive folder, read operations work but writes fail with a quota error.
+Service accounts can't create files in standard "My Drive" folders. A service account has no personal Drive storage quota. Any file it creates must be owned by a quota-bearing entity. If you only share a personal Drive folder, read operations work but writes fail with a quota error.
 
 For write access, place the folder inside a **shared drive** (formerly Team Drive) and add the service account as a member of that shared drive. Shared drives provide the storage quota that service-account-created files need.
 

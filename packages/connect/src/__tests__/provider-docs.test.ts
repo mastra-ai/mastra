@@ -143,6 +143,20 @@ describe('Connect provider docs generation', () => {
     expect(page).toContain('Shared accounts can only read events.');
   });
 
+  it('escapes names and summaries inside the example code', () => {
+    const metadata = meta();
+    metadata.toolProviders.acme = {
+      ...metadata.toolProviders.acme!,
+      name: "Acme's Calendar",
+      summary: 'book a\\b slot',
+    };
+    generate(metadata);
+    const page = read(join(INTEGRATIONS_DIR, 'providers/acme.mdx'));
+
+    expect(page).toContain("name: 'Acme\\'s Calendar agent',");
+    expect(page).toContain("instructions: 'You help people book a\\\\b slot in Acme\\'s Calendar.',");
+  });
+
   it('writes a partial without frontmatter for a handwritten page, sharing the provider note', () => {
     generate();
     const partial = read(join(PARTIALS_DIR, 'chatty.mdx'));
@@ -261,6 +275,16 @@ describe('Connect provider docs metadata matches the published catalog', () => {
   });
 
   it('keeps MCP providers out of the generated toolsets', () => {
+    // Explicit approved inventory, so dropping an MCP provider from metadata fails here.
+    expect(Object.keys(MCP_PROVIDERS).sort()).toEqual([
+      'attio-mcp',
+      'canva-mcp',
+      'clay-mcp',
+      'neon-mcp',
+      'render-mcp',
+      'robinhood-mcp',
+      'sanity-mcp',
+    ]);
     for (const id of Object.keys(MCP_PROVIDERS)) {
       expect(id.endsWith('-mcp')).toBe(true);
       expect(TOOL_PROVIDERS[id]).toBeUndefined();

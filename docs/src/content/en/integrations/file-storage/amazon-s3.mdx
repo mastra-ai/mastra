@@ -80,7 +80,7 @@ Provider functions only apply to `S3Filesystem` API calls. When mounting the fil
 
 When `prefix` is set, initialization calls `ListObjectsV2` with the normalized prefix, including its trailing `/`, and `MaxKeys: 1`. Credentials must permit listing that prefix. Without a prefix, initialization uses `HeadBucket`. These checks verify access, not whether a directory exists.
 
-The prefix limits which keys the filesystem addresses; it isn't an authorization boundary. For isolation, use credentials whose storage-provider policy restricts access to that prefix. Keep parent credentials on your backend. Read and write permissions alone aren't sufficient for prefixed filesystem initialization.
+The prefix limits which keys the filesystem addresses. It isn't an authorization boundary. For isolation, use credentials whose storage-provider policy restricts access to that prefix. Keep parent credentials on your backend. Read and write permissions alone aren't sufficient for prefixed filesystem initialization.
 
 ### Cloudflare R2
 

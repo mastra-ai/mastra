@@ -224,7 +224,7 @@ export const reviseDraft = task(
 
 #### Create the orchestration task
 
-The parent dispatches three reviews in parallel with `Promise.all()`, then sends their combined feedback to the revision step. Retries are disabled at this level because each child defines its own policy. If you enable orchestration retries, ensure that another attempt cannot duplicate external side effects or other non-idempotent work.
+The parent dispatches three reviews in parallel with `Promise.all()`, then sends their combined feedback to the revision step. Retries are disabled at this level because each child defines its own policy. If you enable orchestration retries, ensure that another attempt can't duplicate external side effects or other non-idempotent work.
 
 ```ts title="src/tasks/editorial-task.ts"
 import { task } from '@renderinc/sdk/workflows'
@@ -328,7 +328,7 @@ Running the pipeline on Render requires a _workflow service_. This is the Render
   <StepItem>
     #### Create the workflow service
 
-    In the [Render Dashboard](https://dashboard.render.com?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), click **New > Workflow** and link the repository from the previous step. Then complete the creation form:
+    In the [Render Dashboard](https://dashboard.render.com?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), select **New > Workflow** and link the repository from the previous step. Then complete the creation form:
 
     | Field | Value |
     | - | - |
