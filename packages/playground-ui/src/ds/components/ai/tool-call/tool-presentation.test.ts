@@ -65,6 +65,18 @@ describe('presentTool', () => {
     expect(presentTool('fetch_pull_request', undefined).pose).toBe('tool');
   });
 
+  it('stops a process instead of running one, and makes a folder instead of writing one', () => {
+    expect(presentTool('kill_process', { pid: 42 }).pose).toBe('stopping');
+    expect(presentTool('mkdir', { path: 'src/new' }).pose).toBe('creating');
+  });
+
+  it('presents a patch as an edit', () => {
+    expect(presentTool('mastra_workspace_apply_patch', { patch: '*** Begin Patch' })).toMatchObject({
+      pose: 'editing',
+      label: 'Edit',
+    });
+  });
+
   it('prettifies unknown tool names instead of surfacing raw identifiers', () => {
     expect(presentTool('fetch_pull_request', undefined).label).toBe('Fetch pull request');
   });
