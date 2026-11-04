@@ -39,7 +39,7 @@ One Atlas cluster handles vector search and conversation storage, while Bedrock 
 
 - In the same thread, ask “Show me that as a TypeScript snippet.” The agent can use the earlier question as context without you repeating it.
 - Open the Studio trace for a question and follow the query embedding on Bedrock, vector search in Atlas, and answer generation.
-- With the included example corpus, ask “How do I define a tool in Mastra?” and follow the rendered page and raw markdown links in the **Sources** list to inspect the passages behind the answer.
+- With the included example corpus, ask “How do I define a tool in Mastra?” and follow the rendered page and raw Markdown links in the **Sources** list to inspect the passages behind the answer.
 - Stop `npm run dev`, start it again, and reopen the same thread. Ask a follow-up question to explore the conversation stored in MongoDB.
 
 ## Customization
@@ -64,7 +64,7 @@ export AGENTCORE_USER_ID="your-own-operator-id"
 npx @aws/agentcore@0.31.1 invoke --user-id "$AGENTCORE_USER_ID" --prompt "How do I define a tool in Mastra?"
 ```
 
-`scripts/ask.sh "your question"` wraps that invoke call and renders the answer as markdown in your terminal.
+`scripts/ask.sh "your question"` wraps that invoke call and renders the answer as Markdown in your terminal.
 
 Invocation JSON is limited to 64 KiB (UTF-8 bytes), including requests without `Content-Length`. Larger uploads return HTTP 413; uploads that do not finish within 30 seconds return HTTP 408 and close the connection. These application limits apply independently of AgentCore service quotas.
 
