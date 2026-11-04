@@ -65,7 +65,14 @@ it('does not persist mastra__authToken while an evented agent waits for approval
   const mastra = new Mastra({ agents: { agent }, storage, logger: false });
   const workflowsStore = (await storage.getStore('workflows'))!;
   const writes: unknown[] = [];
-  for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults'] as const) {
+  for (const method of [
+    'persistWorkflowSnapshot',
+    'updateWorkflowResults',
+    'writeWorkflowRunCheckpoint',
+    'appendWorkflowRunEntries',
+    'mergeWorkflowRunStepResult',
+    'updateWorkflowRunHeader',
+  ] as const) {
     const original = workflowsStore[method].bind(workflowsStore) as (args: unknown) => Promise<unknown>;
     vi.spyOn(workflowsStore, method).mockImplementation(async (args: unknown) => {
       writes.push(structuredClone(args));
@@ -89,6 +96,8 @@ it('does not persist mastra__authToken while an evented agent waits for approval
     );
 
     expect(writes.length).toBeGreaterThan(0);
+    // The rest of the request context is stored, so the token was dropped, not the whole context.
+    expect(JSON.stringify(writes)).toContain('acme');
     for (const write of writes) {
       expect(JSON.stringify(write)).not.toContain('live-bearer-token-of-alice');
     }

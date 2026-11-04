@@ -730,25 +730,77 @@ describe('autoStorageVersion', () => {
     ).toBe('suspended');
   });
 
-  it('stores a new run as v1 on the evented engine', async () => {
-    const workflow = createEventedWorkflow({
-      id: 'evented-auto',
+  function autoEventedGated() {
+    return createEventedWorkflow({
+      id: 'gated',
       inputSchema: z.object({}),
-      outputSchema: z.object({}),
+      outputSchema: z.object({ approved: z.boolean() }),
       options: { autoStorageVersion: true },
     })
-      .then(createStep({ id: 's', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) }))
+      .then(gateStep())
       .commit();
+  }
+
+  it.each([
+    ['v2 on a store with run journals', true, 2],
+    ['v1 on a store without run journals', false, 1],
+  ] as const)('stores a new evented run as %s', async (_, journal, version) => {
     const storage = new MockStore();
-    const mastra = new Mastra({ logger: false, storage, pubsub: new EventEmitterPubSub(), workflows: { workflow } });
+    const workflow = autoEventedGated();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { gated: workflow },
+    });
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsRunJournal').mockReturnValue(journal);
     await mastra.startWorkers();
     try {
       const run = await workflow.createRun();
-      expect(run.storageVersion).toBe(1);
-      expect((await run.start({ inputData: {} })).status).toBe('success');
-      expect((storage.stores.workflows as any).db.workflowRunHeaders.size).toBe(0);
+      expect(run.storageVersion).toBe(version);
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      const db = (storage.stores.workflows as any).db;
+      expect(db.workflowRunHeaders.size).toBe(version === 2 ? 1 : 0);
+      expect(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 1 })).toEqual(
+        version === 1 ? expect.objectContaining({ status: 'suspended' }) : null,
+      );
+      expect((await run.resume({ step: 'gate', resumeData: true })).status).toBe('success');
     } finally {
       await mastra.stopWorkers();
+    }
+  });
+
+  it('finishes a v1 evented run stored before it was set in v1', async () => {
+    const storage = new MockStore();
+    const before = eventedGateWorkflow();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { gated: before },
+    });
+    await mastra.startWorkers();
+    let runId: string;
+    try {
+      const run = await before.createRun();
+      runId = run.runId;
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    } finally {
+      await mastra.stopWorkers();
+    }
+
+    const after = autoEventedGated();
+    const host = new Mastra({ logger: false, storage, pubsub: new EventEmitterPubSub(), workflows: { gated: after } });
+    await host.startWorkers();
+    try {
+      const continued = await after.createRun({ runId });
+      expect(continued.storageVersion).toBe(1);
+      expect((await continued.resume({ step: 'gate', resumeData: true })).status).toBe('success');
+      expect((storage.stores.workflows as any).db.workflowRunHeaders.size).toBe(0);
+      expect((await after.createRun()).storageVersion).toBe(2);
+    } finally {
+      await host.stopWorkers();
     }
   });
 

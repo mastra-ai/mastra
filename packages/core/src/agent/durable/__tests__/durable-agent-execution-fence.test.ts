@@ -1450,7 +1450,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         [DurableStepIds.AGENTIC_EXECUTION]: 'running',
       });
       const writes = (
-        ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState', 'deleteWorkflowRunById'] as const
+        [
+          'persistWorkflowSnapshot',
+          'updateWorkflowResults',
+          'updateWorkflowState',
+          'appendWorkflowRunEntries',
+          'mergeWorkflowRunStepResult',
+          'writeWorkflowRunCheckpoint',
+          'updateWorkflowRunHeader',
+          'deleteWorkflowRunById',
+        ] as const
       ).map(method => vi.spyOn(workflows, method));
       await memory.saveMessages({ messages: [recoveredAssistantMessage(messageId, 'recovered answer')] });
 
@@ -1569,6 +1578,7 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
       'updateWorkflowResults',
       'updateWorkflowState',
       'appendWorkflowRunEntries',
+      'mergeWorkflowRunStepResult',
       'writeWorkflowRunCheckpoint',
       'updateWorkflowRunHeader',
     ] as const) {

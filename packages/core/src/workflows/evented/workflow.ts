@@ -1814,8 +1814,11 @@ export class EventedWorkflow<
     }
 
     // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
-    const optionVersion = this.options.storageVersion;
-    const unsupportedV2 = optionVersion === 2 && !!workflowsStore && !workflowsStore.supportsRunJournal();
+    // With autoStorageVersion, a new run takes v2 only where it can be stored as v2.
+    const { storageVersion: optionVersion, autoStorageVersion } = this.options;
+    const journal = !!workflowsStore?.supportsRunJournal();
+    const unsupportedV2 = optionVersion === 2 && !!workflowsStore && !journal;
+    const autoVersion = autoStorageVersion && journal ? 2 : undefined;
     const cachedRun = this.runs.get(runIdToUse);
 
     const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
@@ -1829,7 +1832,7 @@ export class EventedWorkflow<
     const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
     // A stored run keeps the version it was created with, whatever the workflow sets now; a new
     // run takes the workflow's. Only a caller-given id can name a run stored in the other table.
-    let storageVersion: 1 | 2 = cachedRun?.storageVersion ?? (unsupportedV2 ? 1 : (optionVersion ?? 1));
+    let storageVersion: 1 | 2 = cachedRun?.storageVersion ?? (unsupportedV2 ? 1 : (optionVersion ?? autoVersion ?? 1));
     const probeOtherVersion = !!options?.runId && !cachedRun;
     const loadStoredHeader = (version: 1 | 2) =>
       createRunStorage({
