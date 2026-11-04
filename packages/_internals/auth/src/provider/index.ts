@@ -66,6 +66,14 @@ export interface IMastraAuthProvider<TUser = unknown> {
    * Map an authenticated user to a memory resource id
    */
   mapUserToResourceId?(user: TUser): string | undefined | null;
+  /**
+   * Return response headers (typically `Set-Cookie` for a rotated session)
+   * that the provider accumulated while handling this request and clear them
+   * from the provider's per-request state. The server middleware appends them
+   * to the outgoing response so that server-to-server session refreshes
+   * reach the browser.
+   */
+  consumePendingResponseHeaders?(request: MastraAuthRequest): Record<string, string> | undefined;
 }
 
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
@@ -82,7 +90,9 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase imp
 
     this.protected = options?.protected;
     this.public = options?.public;
-    this.mapUserToResourceId = options?.mapUserToResourceId;
+    if (options?.mapUserToResourceId) {
+      this.mapUserToResourceId = options.mapUserToResourceId;
+    }
   }
 
   /**
@@ -316,6 +326,19 @@ export class CompositeAuth
       }
     }
     return null;
+  }
+
+  consumePendingResponseHeaders(request: MastraAuthRequest): Record<string, string> | undefined {
+    let merged: Record<string, string> | undefined;
+    for (const provider of this.providers) {
+      try {
+        const pending = provider.consumePendingResponseHeaders?.(request);
+        if (pending) merged = { ...(merged ?? {}), ...pending };
+      } catch {
+        // best-effort: never let header forwarding break auth
+      }
+    }
+    return merged;
   }
 
   async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {

@@ -1,8 +1,11 @@
 import type { MastraDBMessage, MastraErrorPart } from '@mastra/core/agent/message-list';
+import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers } from '@mastra/react/ui';
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { MessageAttachments } from '../attachments/message-attachments';
+import { splitMessageAttachments } from '../attachments/split-message-attachments';
 import { AssistantMessageActions, DatasetSaveAction } from '@/domains/chat';
 import { ChatRunningContext, useChatRunning } from '@/domains/chat/context/chat-context';
 import { AssistantTextPartRenderer } from '@/domains/chat/messages/renderers/assistant-text-part-renderer';
@@ -29,7 +32,6 @@ import type { DataMessagePart } from '@/domains/chat/tools/tool-card';
 import { badgeStatus, isSettledState } from '@/domains/chat/tools/tool-card-kind';
 import type { ToolCardContext } from '@/domains/chat/tools/tool-card-kind';
 import { collectToolGroups } from '@/domains/chat/tools/tool-groups';
-import { useMcpAppTools } from '@/domains/mcps/hooks/use-mcp-app-tools';
 import { useRevealedParts } from '@/ds/components/ai/message-reveal';
 import { ToolCallGroup } from '@/ds/components/ai/tool-call';
 import { Arriving } from '@/ds/components/Arrival';
@@ -97,8 +99,8 @@ const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
         typeof part.type === 'string' && part.type.startsWith('data-'),
     )
     .map(part => ({
-      type: part.type,
-      name: 'name' in part && typeof part.name === 'string' ? part.name : undefined,
+      type: 'data',
+      name: part.type.slice('data-'.length),
       data: readField(part, 'data'),
     }));
 
@@ -175,7 +177,7 @@ export const MessageRow = memo(function MessageRow({
                 steps={members.map(member => ({
                   toolName: member.toolName,
                   args: member.input,
-                  status: badgeStatus(member.state, isRunning),
+                  status: badgeStatus(member, dataParts, isRunning),
                   hasResult: isSettledState(member.state),
                 }))}
               >
@@ -269,8 +271,10 @@ export const MessageRow = memo(function MessageRow({
       );
     }
 
+    const { attachments, content } = splitMessageAttachments(shownMessage.content.parts ?? []);
+    const contentMessage = { ...shownMessage, content: { ...shownMessage.content, parts: content } };
     const isPending = isPendingMessage(message);
-    const text = getTextFromParts(message);
+    const text = getTextFromParts(contentMessage);
     const canCopy = text.trim().length > 0;
 
     return (
@@ -280,6 +284,7 @@ export const MessageRow = memo(function MessageRow({
         className={className}
         data-message-id={message.id}
         pending={isPending}
+        attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
         footer={
           <MessageActions>
             {canCopy && <MessageCopyButton text={text} />}
@@ -288,7 +293,9 @@ export const MessageRow = memo(function MessageRow({
           </MessageActions>
         }
       >
-        <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
+        {(attachments.length === 0 || content.length > 0) && (
+          <MessageFactory message={contentMessage} {...userRenderers} status={messageStatusRenderers} />
+        )}
       </Message>
     );
   }

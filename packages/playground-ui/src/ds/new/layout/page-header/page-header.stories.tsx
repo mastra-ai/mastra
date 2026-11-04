@@ -61,7 +61,21 @@ function PageHeaderStory({
 const meta = {
   title: 'Layout/PageHeader',
   component: PageHeaderStory,
-  parameters: { layout: 'centered' },
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'centered',
+    docs: {
+      description: {
+        component: [
+          'PageHeader groups a page title, description, metadata and actions. `spacing="default"` is the default and keeps the existing padding and normal-flow eyebrow layout.',
+          'Use `spacing="breathing"` only on a specific page-level header in a bar-less PageLayout when that page should align with related pages that have a breadcrumb or header-actions bar. A missing bar alone does not require breathing spacing.',
+          'Breathing spacing reserves 40px above the heading. An optional PageHeader.Eyebrow sits inside that band, so adding or removing it does not move the title.',
+          'Keep the default when PageLayout renders a bar, in compact toolbars or action rows such as agent-builder lists, or when the surrounding layout already supplies the top space. Breathing spacing does not detect a bar or turn itself off when one appears; the caller owns that choice. Do not make it a global default or use it for general section spacing.',
+          'See Layout/PageLayout → Top Bar Spacing Comparison for the intended alignment and the unchanged bar-less default.',
+        ].join('\n\n'),
+      },
+    },
+  },
   args: {
     description: 'Searches trusted sources and writes cited summaries.',
     isLoading: false,

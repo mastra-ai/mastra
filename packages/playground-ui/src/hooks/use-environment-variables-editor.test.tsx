@@ -39,7 +39,7 @@ describe('useEnvironmentVariablesEditor', () => {
     );
 
     act(() => {
-      expect(result.current.handlePaste(1, 'API_KEY=secret\nDATABASE_URL=postgres://localhost/db')).toBe(true);
+      expect(result.current.handlePaste(1, 'API_KEY=secret\nDATABASE_URL=postgres://localhost/db', 'key')).toBe(true);
     });
 
     expect(result.current.rows).toEqual([
@@ -63,18 +63,54 @@ describe('useEnvironmentVariablesEditor', () => {
     );
 
     act(() => {
-      expect(result.current.handlePaste(0, 'token=part')).toBe(false);
+      expect(result.current.handlePaste(0, 'token=part', 'key')).toBe(false);
     });
 
     expect(result.current.rows).toEqual([{ key: 'PUBLIC_URL', value: 'https://example.com' }]);
 
     act(() => {
-      expect(result.current.handlePaste(0, 'export API_KEY=secret=with=equals')).toBe(true);
+      expect(result.current.handlePaste(0, 'export API_KEY=secret=with=equals', 'key')).toBe(true);
     });
 
     expect(result.current.rows).toEqual([
       { key: 'PUBLIC_URL', value: 'https://example.com' },
       { key: 'API_KEY', value: 'secret=with=equals' },
+    ]);
+  });
+
+  it('treats a single-line KEY=value pasted into a value field as the literal value', () => {
+    const { result } = renderHook(() =>
+      useEnvironmentVariablesEditor({ initialRows: [{ key: 'DATABASE_URL', value: '' }] }),
+    );
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'PGOPTIONS=-c search_path=app', 'value')).toBe(false);
+    });
+    expect(result.current.rows).toEqual([{ key: 'DATABASE_URL', value: '' }]);
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'A=1\nB=2', 'value')).toBe(true);
+
+      const pem = '-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASC\nAB==\n-----END PRIVATE KEY-----';
+      expect(result.current.handlePaste(0, pem, 'value')).toBe(false);
+      expect(result.current.handlePaste(0, '{\n  "type": "service_account",\n  "key": "a=b"\n}', 'value')).toBe(false);
+    });
+    expect(result.current.rows).toEqual([
+      { key: 'DATABASE_URL', value: '' },
+      { key: 'A', value: '1' },
+      { key: 'B', value: '2' },
+    ]);
+  });
+
+  it('imports lowercase multi-line KEY=value pastes into a value field', () => {
+    const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: '', value: '' }] }));
+
+    act(() => {
+      expect(result.current.handlePaste(0, 'foo=1\nbar=2', 'value')).toBe(true);
+    });
+    expect(result.current.rows).toEqual([
+      { key: 'foo', value: '1' },
+      { key: 'bar', value: '2' },
     ]);
   });
 
@@ -332,7 +368,7 @@ describe('useEnvironmentVariablesEditor row identity', () => {
     const [idA, idB, idC] = [0, 1, 2].map(index => result.current.getRowId(index));
 
     act(() => {
-      result.current.handlePaste(1, 'N1=1\nN2=2');
+      result.current.handlePaste(1, 'N1=1\nN2=2', 'key');
     });
 
     expect(result.current.rows.map(row => row.key)).toEqual(['A', 'B', 'N1', 'N2', 'C']);
@@ -365,7 +401,7 @@ describe('useEnvironmentVariablesEditor row identity', () => {
     const draftId = result.current.getRowId(1);
 
     act(() => {
-      result.current.handlePaste(1, 'A=1\nB=2');
+      result.current.handlePaste(1, 'A=1\nB=2', 'key');
     });
 
     const ids = [0, 1, 2].map(index => result.current.getRowId(index));
@@ -484,7 +520,7 @@ describe('useEnvironmentVariablesEditor visibility', () => {
     });
 
     act(() => {
-      result.current.handlePaste(0, 'B=2\nC=3');
+      result.current.handlePaste(0, 'B=2\nC=3', 'key');
     });
 
     expect(result.current.isValueRevealed(0)).toBe(false);
@@ -496,7 +532,7 @@ describe('useEnvironmentVariablesEditor paste', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor());
 
     act(() => {
-      expect(result.current.handlePaste(0, 'just some prose')).toBe(false);
+      expect(result.current.handlePaste(0, 'just some prose', 'key')).toBe(false);
     });
 
     expect(result.current.rows).toEqual([{ key: '', value: '' }]);
@@ -506,7 +542,7 @@ describe('useEnvironmentVariablesEditor paste', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor());
 
     act(() => {
-      result.current.handlePaste(0, 'A=1\nB=2');
+      result.current.handlePaste(0, 'A=1\nB=2', 'key');
     });
 
     // The blank row is replaced, not pushed along in front of the paste.
@@ -527,7 +563,7 @@ describe('useEnvironmentVariablesEditor paste', () => {
     );
 
     act(() => {
-      result.current.handlePaste(0, 'A=1\nB=2');
+      result.current.handlePaste(0, 'A=1\nB=2', 'key');
     });
 
     expect(result.current.rows.map(row => row.key)).toEqual(['FIRST', 'A', 'B', 'LAST']);
@@ -545,7 +581,7 @@ describe('useEnvironmentVariablesEditor paste', () => {
     );
 
     act(() => {
-      result.current.handlePaste(1, 'A=1\nB=2');
+      result.current.handlePaste(1, 'A=1\nB=2', 'key');
     });
 
     expect(result.current.rows.map(row => row.key)).toEqual(['FIRST', 'A', 'B', 'LAST']);
@@ -555,7 +591,7 @@ describe('useEnvironmentVariablesEditor paste', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'FIRST', value: '1' }] }));
 
     act(() => {
-      result.current.handlePaste(9, 'A=1\nB=2');
+      result.current.handlePaste(9, 'A=1\nB=2', 'key');
     });
 
     expect(result.current.rows.map(row => row.key)).toEqual(['FIRST', 'A', 'B']);
@@ -572,7 +608,7 @@ describe('useEnvironmentVariablesEditor paste', () => {
     expect(result.current.uploadError).not.toBeNull();
 
     act(() => {
-      result.current.handlePaste(0, 'A=1\nB=2');
+      result.current.handlePaste(0, 'A=1\nB=2', 'key');
     });
 
     expect(result.current.uploadError).toBeNull();
@@ -582,7 +618,7 @@ describe('useEnvironmentVariablesEditor paste', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] }));
 
     act(() => {
-      expect(result.current.handlePaste(0, '=orphan')).toBe(false);
+      expect(result.current.handlePaste(0, '=orphan', 'key')).toBe(false);
     });
 
     expect(result.current.rows).toEqual([{ key: 'A', value: '1' }]);
@@ -601,7 +637,7 @@ describe('useEnvironmentVariablesEditor emptiness', () => {
     );
 
     act(() => {
-      result.current.handlePaste(0, 'A=1\nB=2');
+      result.current.handlePaste(0, 'A=1\nB=2', 'key');
     });
 
     expect(result.current.rows.map(row => row.key)).toContain('KEEP_ME');
@@ -611,7 +647,7 @@ describe('useEnvironmentVariablesEditor emptiness', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: '   ', value: '' }] }));
 
     act(() => {
-      result.current.handlePaste(0, 'A=1\nB=2');
+      result.current.handlePaste(0, 'A=1\nB=2', 'key');
     });
 
     // The whitespace row is replaced, not kept in front of the paste.
@@ -629,7 +665,7 @@ describe('useEnvironmentVariablesEditor emptiness', () => {
     );
 
     act(() => {
-      result.current.handlePaste(0, 'A=1\nB=2');
+      result.current.handlePaste(0, 'A=1\nB=2', 'key');
     });
 
     expect(result.current.rows.map(row => row.value)).toContain('typed-first');
@@ -646,7 +682,7 @@ describe('useEnvironmentVariablesEditor emptiness', () => {
     );
 
     act(() => {
-      result.current.handlePaste(0, 'A=1\nB=2');
+      result.current.handlePaste(0, 'A=1\nB=2', 'key');
     });
 
     expect(result.current.rows.map(row => row.key)).toEqual(['TYPED_FIRST', 'A', 'B', 'OTHER']);
@@ -728,7 +764,7 @@ describe('useEnvironmentVariablesEditor pasted text', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor());
 
     act(() => {
-      expect(result.current.handlePaste(0, '  API_KEY=secret  ')).toBe(true);
+      expect(result.current.handlePaste(0, '  API_KEY=secret  ', 'key')).toBe(true);
     });
 
     expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
@@ -738,7 +774,7 @@ describe('useEnvironmentVariablesEditor pasted text', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] }));
 
     act(() => {
-      expect(result.current.handlePaste(0, 'prefix_TOKEN=abc')).toBe(false);
+      expect(result.current.handlePaste(0, 'prefix_TOKEN=abc', 'key')).toBe(false);
     });
 
     expect(result.current.rows).toEqual([{ key: 'A', value: '1' }]);
@@ -748,7 +784,7 @@ describe('useEnvironmentVariablesEditor pasted text', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor());
 
     act(() => {
-      expect(result.current.handlePaste(0, 'export   API_KEY=secret')).toBe(true);
+      expect(result.current.handlePaste(0, 'export   API_KEY=secret', 'key')).toBe(true);
     });
 
     expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
@@ -758,7 +794,7 @@ describe('useEnvironmentVariablesEditor pasted text', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor());
 
     act(() => {
-      expect(result.current.handlePaste(0, 'API_KEY = secret')).toBe(true);
+      expect(result.current.handlePaste(0, 'API_KEY = secret', 'key')).toBe(true);
     });
 
     expect(result.current.rows).toEqual([{ key: 'API_KEY', value: 'secret' }]);
@@ -768,7 +804,7 @@ describe('useEnvironmentVariablesEditor pasted text', () => {
     const { result } = renderHook(() => useEnvironmentVariablesEditor({ initialRows: [{ key: 'A', value: '1' }] }));
 
     act(() => {
-      expect(result.current.handlePaste(0, '# from staging\nAPI_KEY=secret')).toBe(true);
+      expect(result.current.handlePaste(0, '# from staging\nAPI_KEY=secret', 'key')).toBe(true);
     });
 
     expect(result.current.rows).toEqual([

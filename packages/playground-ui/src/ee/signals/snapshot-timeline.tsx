@@ -1,4 +1,5 @@
 import { Pause, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
@@ -64,7 +65,7 @@ export function TimelineTrack({
             as="span"
             variant="meta"
             tone="muted"
-            font="mono"
+
             key={`day-${snapshot.snapshotId}`}
             aria-hidden="true"
             className="absolute top-7 -translate-x-1/2 tabular-nums"
@@ -90,7 +91,7 @@ export function SnapshotTimeline({
   snapshots: ThemeSnapshot[];
   selectedIndex: number;
   totalSnapshots?: number;
-  summary: string;
+  summary: ReactNode;
   isPlaying: boolean;
   onPlayingChange: (isPlaying: boolean) => void;
   onSnapshotChange: (index: number) => void;
@@ -106,7 +107,7 @@ export function SnapshotTimeline({
   const statusParts = [
     `Snapshot ${snapshot.ordinal}/${totalCount}`,
     ...(snapshot.cutoffAt
-      ? [`as of ${selectedDate}`, `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
+      ? [`As of ${selectedDate}`, `Window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
       : [selectedDate]),
     traceLabel(snapshot.traceCount),
   ];
@@ -135,13 +136,13 @@ export function SnapshotTimeline({
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
         ) : null}
-        <Txt variant="caption" tone="muted" font="mono" className="tabular-nums" data-testid="snapshot-summary">
+        <Txt variant="caption" tone="muted" className="tabular-nums" data-testid="snapshot-summary">
           {summary}
         </Txt>
       </div>
       {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
-        {statusParts.join(' · ')}
+        {statusParts.join('. ')}
       </p>
     </section>
   );

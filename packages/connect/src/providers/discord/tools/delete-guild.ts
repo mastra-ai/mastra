@@ -3,10 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
-
-const MetadataSchema = z.object({
-  botToken: z.string().describe('Discord bot token from the Discord Developer Portal'),
-});
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const deleteGuildInputSchema = z.object({
   guild_id: z.string().describe('The ID of the guild for the bot to leave.'),
@@ -26,17 +23,7 @@ export function deleteGuildTool(proxy: PlatformProxy) {
     outputSchema: deleteGuildOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteGuildOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata();
-      const parsedMetadata = MetadataSchema.safeParse(metadata);
-
-      if (!parsedMetadata.success) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please configure the bot token in the connection metadata.',
-        });
-      }
-
-      const botToken = parsedMetadata.data.botToken;
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // Discord does not permit bots to delete guilds via the API.
       // DELETE /users/@me/guilds/{guild_id} is the bot-accessible endpoint to leave a guild.

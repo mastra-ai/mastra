@@ -8,6 +8,7 @@ import themeCss from '../../../theme.css?raw';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/Popover';
 import { Txt } from '../components/Txt/Txt';
 import { FoundationPage, FoundationSection } from './foundations-layout';
+import { SERIES_HUES } from '@/domains/metrics/lib/series-colors';
 import { cn } from '@/lib/utils';
 
 const meta = {
@@ -30,7 +31,7 @@ type Theme = 'dark' | 'light';
 
 const themeSources = [themeCss, colorsCss, statusCss, dataVizCss, surfacesCss];
 const rampPattern =
-  /^(?:(?:red|orange|yellow|green|cyan|blue|purple|pink)-(?:soft-)?\d+|gray-(?:alpha-)?\d+|background-\d)$/;
+  /^(?:(?:red|orange|amber|green|cyan|blue|purple|pink)-(?:soft-)?\d+|gray-(?:alpha-)?\d+|background-\d)$/;
 
 const readTheme = (theme: Theme) => {
   const references = new Map<string, string>();
@@ -287,7 +288,7 @@ const MatrixTable = ({
   </div>
 );
 
-const hues = ['red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink'];
+const hues = ['red', 'orange', 'amber', 'green', 'cyan', 'blue', 'purple', 'pink'];
 const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const grayColumns = Array.from({ length: 10 }, (_, index) => index + 1);
 const countNote = 'The number under a step counts the roles that resolve to it in this mode. Blank means unused.';
@@ -329,6 +330,14 @@ const textRows: TokenRow[] = [
   { token: 'foreground', use: <span className="text-foreground">Values, names, prose</span> },
   { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, timestamps, descriptions</span> },
   { token: 'placeholder', use: <span className="text-placeholder">Text not written yet</span> },
+  {
+    token: 'control-icon-rest',
+    use: <span className="text-(color:--control-icon-rest)">Icons inside a control, at rest</span>,
+  },
+  {
+    token: 'control-icon-hover',
+    use: <span className="text-(color:--control-icon-hover)">Icons inside a control, while hovered</span>,
+  },
 ];
 
 const productRoles = ['studio', 'server', 'observability', 'factory', 'workers', 'persistent-server'];
@@ -336,8 +345,9 @@ const productRoles = ['studio', 'server', 'observability', 'factory', 'workers',
 const chartRows: TokenRow[] = [
   { token: 'chart-blue', use: 'Primary series: p50 latency, input tokens, completed runs' },
   { token: 'chart-blue-deep', use: 'Lower segment of a stack topped by chart-blue' },
-  { token: 'chart-yellow', use: 'Second series beside blue: p95 latency, output tokens' },
-  { token: 'chart-green', use: 'First scorer series' },
+  { token: 'chart-amber', use: 'Second series beside blue: p95 latency, output tokens' },
+  { token: 'chart-green', use: 'First scorer series, 2xx responses' },
+  { token: 'chart-cyan', use: 'Standalone counts beside the status hues: cold starts' },
   { token: 'chart-purple', use: 'Cost, in tokens and currency' },
   { token: 'chart-orange', use: 'Scorer datasets, fourth scorer series' },
   { token: 'chart-pink', use: 'Errors, stacked on chart-blue-deep' },
@@ -347,6 +357,16 @@ const chartRows: TokenRow[] = [
     use: step === 1 ? 'Ordered values, highest contrast against the page first' : '',
   })),
   { token: 'chart-sequential-pale', use: 'Secondary flow beside the sequential scale, same in both modes' },
+  ...[1, 2, 3, 4, 5].map(step => ({
+    token: `chart-share-${step}`,
+    use: step === 1 ? 'Share list rows, in rank order: green, sky, violet, teal, indigo' : '',
+  })),
+  { token: 'chart-share-rest', use: 'Share list rows past the colored ones, folded into one gray' },
+  ...SERIES_HUES.map((hue, i) => ({
+    token: `chart-series-${hue}`,
+    use: i === 0 ? 'Series by model, provider or key: each lab reserves one hue (seriesColors)' : '',
+  })),
+  { token: 'chart-series-neutral', use: 'xAI, and a white series in dark mode (black in light)' },
 ];
 
 const spanRows: TokenRow[] = [

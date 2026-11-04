@@ -16,7 +16,7 @@ import type { StorageBlobEntry } from '@mastra/core/storage';
 /**
  * Configuration for S3BlobStore.
  *
- * Compatible with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, etc.
+ * Compatible with AWS S3, Cloudflare R2, Neon Object Storage, MinIO, DigitalOcean Spaces, etc.
  */
 export interface S3BlobStoreOptions {
   /** S3 bucket name */
@@ -43,6 +43,7 @@ export interface S3BlobStoreOptions {
    * Examples:
    * - Cloudflare R2: 'https://{accountId}.r2.cloudflarestorage.com'
    * - MinIO: 'http://localhost:9000'
+   * - Neon Object Storage: 'https://{branchId}.storage.{cell}.{region}.aws.neon.tech'
    */
   endpoint?: string;
   /** Force path-style URLs (required for some S3-compatible services like MinIO) */

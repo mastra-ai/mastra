@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkItemRow, WorkItemStageEntry } from './base.js';
+import type { Card, WorkItemStageEntry } from './base.js';
 import { computeFactoryMetrics, parseMetricsRange } from './metrics.js';
 
 /** Fixed "now" so every duration in the specs is deterministic. */
@@ -23,12 +23,42 @@ function hoursAgo(hours: number): string {
 }
 
 /** A card the Factory ran — the population every metric is computed over. */
-function makeItem(overrides: Partial<WorkItemRow>): WorkItemRow {
+function makeItem(overrides: Partial<Card>): Card {
   return {
     id: '00000000-0000-4000-8000-000000000001',
     orgId: 'org_1',
     createdBy: 'user_1',
     factoryProjectId: '00000000-0000-4000-8000-0000000000aa',
+    workItemId: 'work-1',
+    parentWorkItemId: null,
+    parentBoardItemId: null,
+    board: 'work',
+    triageType: null,
+    acceptedAt: null,
+    autonomyArmedAt: null,
+    plansPreapprovedAt: null,
+    commentCount: 0,
+    revision: 1,
+    workItem: {
+      id: 'work-1',
+      orgId: 'org_1',
+      factoryProjectId: '00000000-0000-4000-8000-0000000000aa',
+      sources: [],
+      provider: 'factory',
+      externalId: '00000000-0000-4000-8000-000000000001',
+      key: null,
+      url: null,
+      title: 'Item',
+      state: null,
+      labels: [],
+      author: null,
+      parentWorkItemId: null,
+      metadata: null,
+      revision: 1,
+      syncedAt: null,
+      createdAt: new Date(NOW.getTime() - HOUR),
+      updatedAt: new Date(NOW.getTime() - HOUR),
+    },
     externalSource: null,
     title: 'Item',
     stages: ['intake'],
@@ -42,7 +72,7 @@ function makeItem(overrides: Partial<WorkItemRow>): WorkItemRow {
 }
 
 /** A completed item: created `createdHoursAgo` ago, done `doneHoursAgo` ago. */
-function doneItem(id: string, createdHoursAgo: number, doneHoursAgo: number): WorkItemRow {
+function doneItem(id: string, createdHoursAgo: number, doneHoursAgo: number): Card {
   const history: WorkItemStageEntry[] = [
     { stage: 'intake', enteredAt: hoursAgo(createdHoursAgo), exitedAt: hoursAgo(doneHoursAgo + 2), by: 'user_1' },
     { stage: 'execute', enteredAt: hoursAgo(doneHoursAgo + 2), exitedAt: hoursAgo(doneHoursAgo), by: 'user_1' },
@@ -511,7 +541,7 @@ describe('computeFactoryMetrics', () => {
     });
 
     it('given agent passes with different endings, then outcomes classify done, canceled, and in flight', () => {
-      const autoTriage = (id: string, stages: string[], tail: WorkItemStageEntry[]): WorkItemRow =>
+      const autoTriage = (id: string, stages: string[], tail: WorkItemStageEntry[]): Card =>
         makeItem({
           id,
           stages,

@@ -1,6 +1,7 @@
-import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
+import { FACTORY_ROLE_STAGES, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
-import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
+import type { BoardCardState, BoardCardStatus } from './boardCardState';
+import { itemSessionSpec, metadataLabels, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
@@ -14,7 +15,7 @@ export interface CardPrimaryAction {
 
 /** A lane the card can be moved into, named by what the lane's rule then runs. */
 export interface CardMove {
-  label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review' | 'Re-review';
+  label: 'Investigate' | 'Plan' | 'Build' | 'Prepare approval' | 'Review' | 'Re-review';
   /** Session slot the lane's run fills on the card, e.g. `plan` or `work`. */
   role: FactoryRole;
   stage: FactoryRuleStage;
@@ -23,35 +24,54 @@ export interface CardMove {
 }
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
-export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
-  Partial<Pick<WorkItem, 'board' | 'stages' | 'acceptedAt'>>;
+export type MovableCard = Pick<WorkItem, 'source' | 'metadata' | 'workItem'> &
+  Partial<Pick<WorkItem, 'board' | 'stages'>>;
 
 const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
+const PLAN: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };
 const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
+
+/** An issue card's moves from each column, following the Work board's `nextPhases`: Building comes only after Planning. */
+function issueMoves(columnStage: BoardStageId): CardMove[] {
+  if (columnStage === 'planning') return [PLAN, BUILD];
+  if (columnStage === 'execute') return [BUILD, PLAN];
+  return [INVESTIGATE, PLAN];
+}
 const PREPARE_APPROVAL: CardMove = {
   label: 'Prepare approval',
   role: 'triage',
   stage: 'triage',
   awaitsHumanDecision: true,
 };
-const REVIEW: CardMove = { label: 'Review', role: 'review', stage: 'review' };
-const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
+/** A pull request's own card is reviewed in Work's PR review, or in Reviewing on the Review board it was filed on. */
+function reviewMoves(item: MovableCard): { review: CardMove; reReview: CardMove } {
+  // Pull request cards with no board predate persisted boards and sit on Review.
+  const stage = (item.board ?? 'review') === 'review' ? 'review' : 'pr-review';
+  return {
+    review: { label: 'Review', role: 'review', stage },
+    reReview: { label: 'Re-review', role: 'review', stage },
+  };
+}
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
-  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
+  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [reviewMoves(item).reReview] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
-  if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
+  if (item.source === 'github-issue') {
+    return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
+      ? [PREPARE_APPROVAL]
+      : issueMoves(columnStage);
+  }
   if (
     item.source === 'gitlab-issue' ||
     item.source === 'linear-issue' ||
     item.source === 'jira-issue' ||
     item.source === 'incidentio-follow-up'
   ) {
-    return [INVESTIGATE, BUILD];
+    return issueMoves(columnStage);
   }
-  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW] : [];
+  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [reviewMoves(item).review] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
@@ -62,50 +82,57 @@ function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): bo
   );
 }
 
-function seatDepth(role: string): number {
-  return Object.keys(FACTORY_ROLE_STAGES).indexOf(role);
-}
+// PR review carries a pull request card's reviewer, after the builder's lanes.
+const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROLE_STAGES), 'pr-review'];
 
-/** Resume re-enters the lane of the deepest seat the card has used, and lets that lane's rule dispatch. */
+/**
+ * Resume re-enters the deepest working lane a card parked in Intake has been in, and lets
+ * that lane's rule dispatch. Phases can share a session, so the lane comes from the card's
+ * stage history; a card that never had a session is a fresh arrival with nothing to resume.
+ */
 export function resumeStage(
   columnStage: BoardStageId,
-  sessions: Record<string, WorkItemSessionRef>,
+  item: {
+    /** The card's resolved board (`itemBoard`): a legacy pull request card with no board sits on Review. */
+    board: string;
+    sessions: Record<string, WorkItemSessionRef>;
+    stageHistory?: readonly { stage: string }[];
+  },
 ): FactoryRuleStage | undefined {
-  if (columnStage !== 'intake') return undefined;
-  const deepest = Object.keys(sessions)
-    .filter(isFactoryRole)
-    .sort((left, right) => seatDepth(left) - seatDepth(right))
-    .at(-1);
-  return deepest === undefined ? undefined : FACTORY_ROLE_STAGES[deepest];
+  if (columnStage !== 'intake' || Object.keys(item.sessions).length === 0) return undefined;
+  const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
+  const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
+  // On Work, Intake leads to neither Building nor its self-review: a card that got that far
+  // resumes in Planning. The Review board has no Planning, and its Intake leads back to Reviewing.
+  return item.board === 'work' && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
 }
 
 /**
- * Triage classified the card as something other than a bug, so the rules hold
- * it until a person moves it forward. The card then asks for that decision
- * instead of offering a run that would only advance it as a side effect.
+ * Triage looked at the card and left it in Intake, so the next move is a
+ * person's decision. The card then asks for that decision instead of offering
+ * a run that would only advance it as a side effect. A card that has been past
+ * Triage since (a parked build, say) resumes instead.
  */
 export function awaitsTriageDecision(
-  item: Pick<WorkItem, 'triageType' | 'acceptedAt'> & Partial<Pick<WorkItem, 'board'>>,
+  item: Pick<WorkItem, 'sessions'> & Partial<Pick<WorkItem, 'board' | 'stageHistory'>>,
   columnStage: BoardStageId,
 ) {
   return (
     (item.board == null || item.board === 'work') &&
-    (columnStage === 'intake' || columnStage === 'triage') &&
-    item.triageType !== null &&
-    item.triageType !== 'bug' &&
-    item.acceptedAt === null
+    columnStage === 'intake' &&
+    item.sessions.triage !== undefined &&
+    (resumeStage(columnStage, { ...item, board: 'work' }) ?? 'triage') === 'triage'
   );
 }
 
 export interface TriageDecision {
   label: string;
-  stage: 'planning' | 'execute' | 'canceled';
+  stage: 'planning' | 'canceled';
 }
 
 /** The maintainer's choices for a held card, the likeliest first. */
 export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
   { label: 'Accept and plan', stage: 'planning' },
-  { label: 'Accept and build', stage: 'execute' },
   { label: 'Close', stage: 'canceled' },
 ];
 
@@ -180,59 +207,46 @@ export function sessionLink(href: string | undefined): CardAction | undefined {
 
 export function retryButton({
   decisionId,
-  retryingDecisionId,
   onRetry,
 }: {
   decisionId?: string;
-  retryingDecisionId?: string;
   onRetry: (decisionId: string) => void;
-}): CardAction | undefined {
+}): CardPrimaryAction | undefined {
   if (decisionId === undefined) return undefined;
-  const retrying = decisionId === retryingDecisionId;
-  return { label: retrying ? 'Retrying…' : 'Retry', disabled: retrying, start: () => onRetry(decisionId) };
-}
-
-export function runButton({
-  action,
-  pending,
-  suggestion,
-}: {
-  action?: CardPrimaryAction;
-  /** A session start the card is still resolving; a move needs none, it is optimistic. */
-  pending: boolean;
-  /** The waiting suggestion's label, so the button says which run it releases. */
-  suggestion?: string;
-}): CardAction | undefined {
-  if (action === undefined) return undefined;
-  return {
-    label: pending ? 'Starting…' : action.label,
-    ariaLabel: suggestion === undefined ? action.ariaLabel : `Start suggested run: ${suggestion}`,
-    disabled: pending,
-    start: action.start,
-  };
+  return { label: 'Retry', start: () => onRetry(decisionId) };
 }
 
 /** The card's buttons, the likeliest next click first; `urgent` marks the one the card waits on a person for. */
 export function cardActions({
-  running,
-  waiting,
+  state,
   session,
   retry,
   run,
 }: {
-  running: boolean;
-  /** The run is a parked suggestion or a held card's decision: it needs the user, so it lights up once nothing is running. */
-  waiting: boolean;
+  state: BoardCardState;
   session?: CardAction;
-  retry?: CardAction;
-  run?: CardAction;
+  retry?: CardPrimaryAction;
+  run?: CardPrimaryAction;
 }): CardAction[] {
-  // A running session owns the branch, so no retry, rival run, or parked suggestion can start beside it.
-  const nextRetry = running ? undefined : retry;
-  const nextRun = running ? undefined : run;
-  const main = nextRetry ?? nextRun ?? session;
+  const { owner } = state;
+  if (owner.kind === 'free') return freeCardActions(state.status, { session, retry, run });
+  if (session !== undefined) return [session];
+  if (owner.kind === 'session' || run === undefined) return [];
+  return [{ label: owner.progressLabel, start: run.start, disabled: true }];
+}
+
+function freeCardActions(
+  status: BoardCardStatus,
+  { session, retry, run }: { session?: CardAction; retry?: CardPrimaryAction; run?: CardPrimaryAction },
+): CardAction[] {
+  const namedRun =
+    run !== undefined && status.kind === 'waiting'
+      ? { ...run, ariaLabel: `Start suggested run: ${status.label}` }
+      : run;
+  const main = retry ?? namedRun ?? session;
   if (main === undefined) return [];
-  const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
-  const urgent = (action: CardAction) => action === nextRetry || (waiting && action === nextRun);
-  return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
+  const awaitsPerson = status.kind === 'waiting' || status.kind === 'held';
+  const isUrgent = (action: CardAction) => action === retry || (awaitsPerson && action === namedRun);
+  const rest = [session, namedRun].filter(action => action !== undefined).filter(action => action !== main);
+  return [main, ...rest].map(action => ({ ...action, urgent: isUrgent(action) }));
 }

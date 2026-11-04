@@ -5,7 +5,7 @@ export type { OrchestrationWorkerConfig } from './workers/orchestration-worker';
 export { SchedulerWorker } from './workers/scheduler-worker';
 export { BackgroundTaskWorker } from './workers/background-task-worker';
 export type { BackgroundTaskWorkerConfig } from './workers/background-task-worker';
-export type { StepExecutionStrategy, StepExecutionParams } from './types';
+export type { StepExecutionStrategy, StepExecutionParams, StepExecutionParentWorkflow } from './types';
 export { InProcessStrategy } from './strategies/in-process-strategy';
 export { HttpRemoteStrategy, StepExecutionError } from './strategies/http-remote-strategy';
 export type { WorkerTransport, WorkerTransportStopOptions, EventRouter } from './transport/transport';

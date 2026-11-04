@@ -2,14 +2,8 @@ import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 
-export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, error, id, value }) => {
-  const {
-    key: _key,
-    error: _error,
-    'aria-describedby': ariaDescribedBy,
-    'aria-invalid': ariaInvalid,
-    ...props
-  } = inputProps;
+export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, value }) => {
+  const { key: _key, ...props } = inputProps;
 
   return (
     <Select
@@ -25,12 +19,7 @@ export const SelectField: React.FC<AutoFormFieldProps> = ({ field, inputProps, e
         props.onChange(syntheticEvent);
       }}
     >
-      <SelectTrigger
-        id={id}
-        className={error ? 'border-destructive-indicator' : ''}
-        aria-invalid={ariaInvalid}
-        aria-describedby={ariaDescribedBy}
-      >
+      <SelectTrigger>
         <SelectValue placeholder="Select an option" />
       </SelectTrigger>
       <SelectContent>

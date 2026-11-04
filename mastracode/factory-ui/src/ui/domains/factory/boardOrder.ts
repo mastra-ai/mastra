@@ -1,7 +1,8 @@
 import type { WorkItem, WorkItemStageEntry } from './services/workItems';
 import type { BoardStageId } from './stages';
 
-export type BoardSort = 'recent' | 'recent-mine' | 'created-newest' | 'created-oldest';
+export const BOARD_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
+export type BoardSort = (typeof BOARD_SORTS)[number];
 
 function latestColumnEntry(item: WorkItem, stage: BoardStageId): WorkItemStageEntry | undefined {
   let latest: WorkItemStageEntry | undefined;

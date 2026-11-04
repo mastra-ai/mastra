@@ -101,6 +101,55 @@ export const serializedObservationalMemoryConfigSchema = z.union([
   serializedObservationalMemoryConfigObjectSchema,
 ]);
 
+const serializedMemoryConfigFields = {
+  vector: z
+    .union([z.string(), z.literal(false)])
+    .optional()
+    .describe('Vector database identifier or false to disable'),
+  options: z
+    .object({
+      readOnly: z.boolean().optional(),
+      lastMessages: lastMessagesSchema.optional(),
+      messageHistory: messageHistorySchema.optional(),
+      semanticRecall: z.union([z.boolean(), semanticRecallSchema]).optional(),
+      generateTitle: titleGenerationSchema.optional(),
+    })
+    .optional()
+    .describe('Memory behavior configuration, excluding workingMemory and threads'),
+  embedder: z
+    .string()
+    .optional()
+    .describe('Embedding model ID in the format "provider/model" (e.g., "openai/text-embedding-3-small")'),
+  embedderOptions: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Options to pass to the embedder, omitting telemetry'),
+  observationalMemory: serializedObservationalMemoryConfigSchema
+    .optional()
+    .describe('Serialized observational memory configuration'),
+};
+
+type SerializedMemoryConfigData = z.infer<z.ZodObject<typeof serializedMemoryConfigFields>>;
+
+/** If semanticRecall is enabled (true or object), both vector and embedder are required */
+function hasSemanticRecallDependencies(data: SerializedMemoryConfigData): boolean {
+  const semanticRecall = data.options?.semanticRecall;
+  const semanticRecallEnabled =
+    semanticRecall === true || (typeof semanticRecall === 'object' && semanticRecall !== null);
+
+  if (semanticRecallEnabled) {
+    const hasVector = typeof data.vector === 'string' && data.vector.length > 0;
+    const hasEmbedder = typeof data.embedder === 'string' && data.embedder.length > 0;
+    return hasVector && hasEmbedder;
+  }
+  return true;
+}
+
+const semanticRecallRefinement = {
+  message: 'Semantic recall requires both vector and embedder to be configured',
+  path: ['options', 'semanticRecall'],
+};
+
 /**
  * Serialized memory configuration matching SerializedMemoryConfig from @mastra/core
  *
@@ -108,52 +157,27 @@ export const serializedObservationalMemoryConfigSchema = z.union([
  * @see packages/core/src/memory/types.ts
  */
 export const serializedMemoryConfigSchema = z
-  .object({
-    vector: z
-      .union([z.string(), z.literal(false)])
-      .optional()
-      .describe('Vector database identifier or false to disable'),
-    options: z
-      .object({
-        readOnly: z.boolean().optional(),
-        lastMessages: lastMessagesSchema.optional(),
-        messageHistory: messageHistorySchema.optional(),
-        semanticRecall: z.union([z.boolean(), semanticRecallSchema]).optional(),
-        generateTitle: titleGenerationSchema.optional(),
-      })
-      .optional()
-      .describe('Memory behavior configuration, excluding workingMemory and threads'),
-    embedder: z
-      .string()
-      .optional()
-      .describe('Embedding model ID in the format "provider/model" (e.g., "openai/text-embedding-3-small")'),
-    embedderOptions: z
-      .record(z.string(), z.unknown())
-      .optional()
-      .describe('Options to pass to the embedder, omitting telemetry'),
-    observationalMemory: serializedObservationalMemoryConfigSchema
-      .optional()
-      .describe('Serialized observational memory configuration'),
-  })
-  .refine(
-    data => {
-      // If semanticRecall is enabled (true or object), both vector and embedder are required
-      const semanticRecall = data.options?.semanticRecall;
-      const semanticRecallEnabled =
-        semanticRecall === true || (typeof semanticRecall === 'object' && semanticRecall !== null);
+  .object(serializedMemoryConfigFields)
+  .refine(hasSemanticRecallDependencies, semanticRecallRefinement);
 
-      if (semanticRecallEnabled) {
-        // vector must be a string (not false or undefined)
-        const hasVector = typeof data.vector === 'string' && data.vector.length > 0;
-        // embedder must be defined
-        const hasEmbedder = typeof data.embedder === 'string' && data.embedder.length > 0;
-
-        return hasVector && hasEmbedder;
-      }
-      return true;
-    },
-    {
-      message: 'Semantic recall requires both vector and embedder to be configured',
-      path: ['options', 'semanticRecall'],
-    },
-  );
+/**
+ * Stored-agent memory: a reference to a Memory instance registered on Mastra,
+ * an explicitly tagged inline config, or a legacy untagged inline config.
+ *
+ * The legacy branch rejects any `type` key so a malformed reference
+ * (e.g. `{ type: 'id' }` without `memoryId`) is not stripped to `{}` and
+ * silently accepted as an empty inline config.
+ */
+export const storedMemoryRefSchema = z.union([
+  z.object({
+    type: z.literal('id'),
+    memoryId: z.string().min(1).describe('Registry key (or id) of a Memory instance registered on Mastra'),
+  }),
+  z.object({
+    type: z.literal('inline'),
+    config: serializedMemoryConfigSchema,
+  }),
+  z
+    .object({ ...serializedMemoryConfigFields, type: z.never().optional() })
+    .refine(hasSemanticRecallDependencies, semanticRecallRefinement),
+]);

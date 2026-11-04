@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
   SettingsLayout,
@@ -10,7 +11,6 @@ import {
 } from './index';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
-import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -19,7 +19,15 @@ import { ThemeToggle } from '@/ds/components/ThemeToggle';
 const meta = {
   title: 'New/Settings',
   component: SettingsGroup,
-  parameters: { layout: 'padded' },
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        component:
+          'A settings page is `SettingsLayout` around `SettingsGroup`s, each a `SettingsHeader` over a `SettingsContainer` of `SettingsRow`s. The container divides its rows with hairlines on one surface, and that is the treatment to use for every settings page, form, and list of choices. `variant="inset"` is an exception, not a second style: see the Inset story before reaching for it.',
+      },
+    },
+  },
   decorators: [
     Story => (
       <ThemeProvider defaultTheme="dark" storageKey="storybook-new-settings">
@@ -53,6 +61,32 @@ export const General: Story = {
   ),
 };
 
+export const Inset: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`variant="inset"` nests each row as its own recessed strip inside the card, one pixel apart, with rounded outer corners. It is for a short stack of two to four rows that is the main content of a dialog, where the card frames a small decision such as adding credits. Do not use it on a settings page, in a drawer, beside a `DataList`, for a long list, or when the container shares a view with another card: the recessed rows read as nested surfaces and make the screen busier than the rest of the product. If a screen is not a dialog like that, use the default variant.',
+      },
+    },
+  },
+  render: () => (
+    <SettingsGroup>
+      <SettingsHeader>
+        <SettingsTitle>General</SettingsTitle>
+      </SettingsHeader>
+      <SettingsContainer variant="inset">
+        <SettingsRow label="Theme" description="Color scheme for the interface">
+          <ThemeToggle />
+        </SettingsRow>
+        <SettingsRow label="Notifications" description="Notify when a run finishes">
+          <Switch aria-label="Notifications" defaultChecked />
+        </SettingsRow>
+      </SettingsContainer>
+    </SettingsGroup>
+  ),
+};
+
 export const Connection: Story = {
   render: () => (
     <SettingsGroup>
@@ -61,12 +95,18 @@ export const Connection: Story = {
         <SettingsDescription>Configure the connection used by Studio.</SettingsDescription>
       </SettingsHeader>
       <SettingsContainer>
-        <SettingsRow label="Mastra instance URL" htmlFor="mastra-url">
-          <Input id="mastra-url" defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
+        <SettingsRow label="Mastra instance URL">
+          <Input defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
         </SettingsRow>
-        <SettingsRow label="API prefix" htmlFor="api-prefix">
-          <Input id="api-prefix" defaultValue="/api" className="w-full sm:max-w-96" />
+        <SettingsRow label="API prefix">
+          <Input defaultValue="/api" className="w-full sm:max-w-96" />
         </SettingsRow>
+        <SettingsFieldsetRow label="Header" description="Sent with every request.">
+          <div className="flex w-full gap-2 sm:max-w-96">
+            <Input aria-label="Header name" defaultValue="x-api-key" />
+            <Input aria-label="Header value" type="password" defaultValue="secret" />
+          </div>
+        </SettingsFieldsetRow>
       </SettingsContainer>
     </SettingsGroup>
   ),
@@ -102,17 +142,11 @@ export const Validation: Story = {
         <SettingsTitle>Agent</SettingsTitle>
       </SettingsHeader>
       <SettingsContainer>
-        <SettingsRow label="Model" htmlFor="model" required errorMsg="Choose the model this agent runs on.">
-          <Input
-            id="model"
-            className="w-56"
-            placeholder="openai/gpt-5.2"
-            error
-            aria-describedby={fieldErrorId('model')}
-          />
+        <SettingsRow label="Model" required errorMsg="Choose the model this agent runs on.">
+          <Input className="w-56" placeholder="openai/gpt-5.2" />
         </SettingsRow>
-        <SettingsRow label="Max steps" htmlFor="max-steps" required>
-          <Input id="max-steps" className="w-56" defaultValue="5" />
+        <SettingsRow label="Max steps" required>
+          <Input className="w-56" defaultValue="5" />
         </SettingsRow>
       </SettingsContainer>
     </SettingsGroup>
@@ -146,8 +180,8 @@ export const Page: Story = {
           <SettingsTitle>Connection</SettingsTitle>
         </SettingsHeader>
         <SettingsContainer>
-          <SettingsRow label="Mastra instance URL" htmlFor="page-mastra-url">
-            <Input id="page-mastra-url" defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
+          <SettingsRow label="Mastra instance URL">
+            <Input defaultValue="http://localhost:4111" className="w-full sm:max-w-96" />
           </SettingsRow>
         </SettingsContainer>
       </SettingsGroup>

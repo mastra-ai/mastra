@@ -1,17 +1,15 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
-import { ExternalLinkIcon } from 'lucide-react';
+import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useState } from 'react';
-import { useTraceSpanScores } from '../hooks/use-trace-span-scores';
-import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { Metadata } from '@/ds/components/Metadata';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 import { Spinner } from '@/ds/components/Spinner';
 import { getShortId } from '@/ds/components/Text';
 import { Txt } from '@/ds/components/Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
-import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { formatDate } from '@/utils/date-format';
 
@@ -29,7 +27,12 @@ export type TraceScoresTabProps = {
  */
 export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTabProps) {
   const [page, setPage] = useState(0);
-  const { data: scoresData, isLoading } = useTraceSpanScores({ traceId, spanId, page });
+  const { data: scoresData, isLoading } = useTraceSpanScores({
+    traceId,
+    spanId,
+    page,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
 
   if (isLoading) {
     return (
@@ -58,38 +61,29 @@ export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTa
 function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSelect: () => void }) {
   const createdAt = new Date(score.createdAt);
   const scorerName = String(score.scorer?.name || score.scorer?.id || 'Scorer');
-  const { Link, paths } = useLinkComponent();
-  const scorerHref = paths.scorerLink(score.scorerId, { scoreId: score.id });
 
   return (
-    <MetricsKpiCard className="min-w-0">
+    <MetricsKpiCard className="relative min-w-0 cursor-pointer">
       <button
         type="button"
         onClick={onSelect}
         aria-label={`Score ${getShortId(score.id)}`}
-        className="grid gap-1 text-left"
+        className="grid cursor-pointer gap-1 text-left after:absolute after:inset-0 after:content-['']"
       >
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
         <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
-          <Txt as="span" variant="meta" font="mono">
-            {getShortId(score.id)}
-          </Txt>{' '}
-          · {formatDate(createdAt, 'date-time-seconds')}
+          <Metadata>
+            <Metadata.Item>
+              <Txt as="span" variant="meta" font="mono">
+                {getShortId(score.id)}
+              </Txt>
+            </Metadata.Item>
+            <Metadata.Item>{formatDate(createdAt, 'date-time-seconds')}</Metadata.Item>
+          </Metadata>
         </Txt>
       </button>
       {score.reason && <TraceScoreReason reason={score.reason} />}
-      {scorerHref && (
-        <Button
-          render={<Link href={scorerHref} />}
-          variant="ghost"
-          size="sm"
-          className="-ml-2 justify-self-start"
-          icon={<ExternalLinkIcon />}
-        >
-          Open scorer run
-        </Button>
-      )}
     </MetricsKpiCard>
   );
 }
@@ -108,9 +102,11 @@ function TraceScoreReason({ reason }: { reason: string }) {
           <button
             type="button"
             onClick={() => setExpanded(value => !value)}
-            className={cn(quietTextHover, controlStateColorTransition, 'underline underline-offset-2')}
+            className={cn(quietTextHover, controlStateColorTransition, 'relative z-10 underline underline-offset-2')}
           >
-            {expanded ? 'Read less' : 'Read more'}
+            <Txt as="span" variant="caption">
+              {expanded ? 'Read less' : 'Read more'}
+            </Txt>
           </button>
         </>
       )}

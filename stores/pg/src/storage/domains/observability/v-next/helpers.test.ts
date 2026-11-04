@@ -68,3 +68,32 @@ describe('rowToSpanRecord jsonb payload round-trip', () => {
     expect(record.output).toBeUndefined();
   });
 });
+
+describe('spanRecordToRow stored previews', () => {
+  const span = (extra: Record<string, unknown>) =>
+    spanRecordToRow({
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      name: 'step',
+      spanType: SpanType.WORKFLOW_STEP,
+      isEvent: false,
+      startedAt: new Date('2026-01-01T00:00:00.000Z'),
+      endedAt: new Date('2026-01-01T00:00:01.000Z'),
+      ...extra,
+    } as any);
+
+  it('builds every preview from the stored payload, with an empty string for nothing to preview', () => {
+    const row = span({ input: { messages: [{ role: 'user', content: 'hi' }] }, output: { rows: [1] } });
+    expect([row.inputPreview, row.outputPreview, row.errorPreview]).toEqual(['hi', '{"rows":[1]}', '']);
+  });
+
+  it('prefers upstream previews', () => {
+    const row = span({ input: 'payload', inputPreview: '  upstream  ', errorPreview: '' });
+    expect([row.inputPreview, row.errorPreview]).toEqual(['upstream', '']);
+  });
+
+  it('strips NUL characters that a PostgreSQL text column rejects', () => {
+    const row = span({ input: 'before\u0000after', outputPreview: 'up\u0000stream' });
+    expect([row.inputPreview, row.outputPreview]).toEqual(['beforeafter', 'upstream']);
+  });
+});

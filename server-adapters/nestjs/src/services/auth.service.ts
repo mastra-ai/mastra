@@ -2,6 +2,12 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { coreAuthMiddleware, MASTRA_USER_KEY } from '@mastra/server/auth';
+import {
+  MASTRA_AUTH_MODE_KEY,
+  MASTRA_CLIENT_TYPE_HEADER,
+  isStudioClientTypeHeader,
+} from '@mastra/server/server-adapter';
+import type { MastraAuthMode } from '@mastra/server/server-adapter';
 import { ForbiddenException, HttpException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
@@ -37,11 +43,26 @@ export class AuthService {
 
   /**
    * Whether Mastra auth should run: module options enable it, or the Mastra
-   * server has auth configured (unless module options explicitly disable it).
+   * server or Studio has auth configured (unless module options explicitly disable it).
    */
   isEnabled(): boolean {
     if (this.options.auth?.enabled === false) return false;
-    return Boolean(this.options.auth?.enabled || this.mastra.getServer()?.auth);
+    return Boolean(this.options.auth?.enabled || this.mastra.getServer()?.auth || this.mastra.getStudio?.()?.auth);
+  }
+
+  /**
+   * Studio requests (`x-mastra-client-type: studio`) use `studio.auth` exclusively when it is
+   * configured, without falling back to `server.auth`; all other requests use `server.auth`.
+   */
+  private getEffectiveAuthConfig(request: Request): { authConfig: MastraAuthConfig; authMode: MastraAuthMode } | null {
+    const clientType = request.headers[MASTRA_CLIENT_TYPE_HEADER];
+    const isStudioRequest = isStudioClientTypeHeader(Array.isArray(clientType) ? clientType[0] : clientType);
+    const studioAuth = this.mastra.getStudio?.()?.auth as MastraAuthConfig | undefined;
+    if (isStudioRequest && studioAuth) {
+      return { authConfig: studioAuth, authMode: 'studio' };
+    }
+    const serverAuth = this.mastra.getServer()?.auth as MastraAuthConfig | undefined;
+    return serverAuth ? { authConfig: serverAuth, authMode: 'server' } : null;
   }
 
   /**
@@ -50,12 +71,15 @@ export class AuthService {
    * Throws UnauthorizedException or ForbiddenException if auth fails.
    */
   async authenticate(request: Request, options: AuthenticateOptions = {}): Promise<unknown> {
-    const authConfig = this.mastra.getServer()?.auth as MastraAuthConfig | undefined;
-    if (!authConfig) {
+    const effectiveAuth = this.getEffectiveAuthConfig(request);
+    if (!effectiveAuth) {
       return undefined;
     }
+    const { authConfig, authMode } = effectiveAuth;
 
     const requestContext = options.requestContext ?? new RequestContext();
+    // Downstream RBAC/FGA checks pick the studio or server provider from this.
+    requestContext.set(MASTRA_AUTH_MODE_KEY, authMode);
     const path = request.path;
     const method = request.method;
     let customRouteAuthConfig = this.customRoutes.customRouteAuthConfig;

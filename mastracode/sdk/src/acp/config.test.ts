@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { MastraCodeAcpAgent } from './agent.js';
 
-async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavailable: string[] = []) {
+async function setup(
+  modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'],
+  unavailable: string[] = [],
+  defaultThinkingLevel: ThinkingLevelSetting = 'medium',
+) {
   let emit: (event: AgentControllerEvent) => void = () => {};
   const sessionUpdate = vi.fn().mockResolvedValue(undefined);
   let modelId = 'openai/gpt-5.5';
@@ -12,6 +16,10 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
   const state: { thinkingLevel?: ThinkingLevelSetting } = {};
   const setState = vi.fn(async updates => {
     Object.assign(state, updates);
+  });
+  const switchModel = vi.fn(async (id: string, { thinkingLevel }: { thinkingLevel?: ThinkingLevelSetting } = {}) => {
+    modelId = id;
+    if (thinkingLevel !== undefined) state.thinkingLevel = thinkingLevel;
   });
   const session = {
     subscribe: (listener: typeof emit) => {
@@ -27,9 +35,7 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
     },
     model: {
       get: () => modelId,
-      switch: async ({ modelId: id }: { modelId: string }) => {
-        modelId = id;
-      },
+      switch: switchModel,
     },
     state: { get: () => state, set: setState },
   } as unknown as Session;
@@ -40,10 +46,18 @@ async function setup(modelIds = ['openai/gpt-5.5', 'openai/gpt-5.6-sol'], unavai
         modelIds.map(id => ({ id, modelName: id.slice(id.indexOf('/') + 1), hasApiKey: !unavailable.includes(id) })),
     } as unknown as AgentController,
     modes: [{ id: 'build' }, { id: 'plan' }],
-    getThinkingLevel: () => state.thinkingLevel ?? 'medium',
+    getThinkingLevel: () => state.thinkingLevel ?? defaultThinkingLevel,
   }));
   const initial = await agent.newSession({ cwd: '/project', mcpServers: [] });
-  return { agent, initial, setState, sessionUpdate, session, emit: (event: AgentControllerEvent) => emit(event) };
+  return {
+    agent,
+    initial,
+    setState,
+    switchModel,
+    sessionUpdate,
+    session,
+    emit: (event: AgentControllerEvent) => emit(event),
+  };
 }
 
 describe('ACP session configuration', () => {
@@ -88,8 +102,8 @@ describe('ACP session configuration', () => {
     });
   });
 
-  it('normalizes max when switching to a model whose reasoning scale ends at xhigh', async () => {
-    const { agent, initial, setState } = await setup();
+  it('reports max as xhigh on a model whose reasoning scale ends at xhigh without saving it', async () => {
+    const { agent, initial, setState, switchModel } = await setup();
     await agent.setSessionConfigOption({
       sessionId: initial.sessionId,
       configId: 'model',
@@ -101,8 +115,47 @@ describe('ACP session configuration', () => {
       configId: 'model',
       value: 'openai/gpt-5.5',
     });
-    expect(setState).toHaveBeenLastCalledWith({ thinkingLevel: 'xhigh' });
+    expect(switchModel).toHaveBeenLastCalledWith('openai/gpt-5.5');
+    expect(setState).toHaveBeenCalledExactlyOnceWith({ thinkingLevel: 'max' });
     expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
+  });
+
+  it.each([
+    ['anthropic/claude-opus-4-7', 'xhigh', 'anthropic/claude-sonnet-4-6', 'high'],
+    ['anthropic/claude-opus-4-7', 'xhigh', 'google/gemini-3-pro-preview', 'high'],
+    ['openai/gpt-5.5', 'xhigh', 'openai/gpt-5', 'high'],
+    ['anthropic/claude-opus-4-7', 'medium', 'openai/gpt-5-pro', 'high'],
+  ] as const)(
+    'keeps %s at %s after a round trip through %s, which runs it as %s',
+    async (modelId, savedLevel, otherModelId, otherRunLevel) => {
+      const { agent, initial } = await setup([modelId, otherModelId]);
+      const thinkingAfterSelecting = async (value: string) => {
+        const result = await agent.setSessionConfigOption({ sessionId: initial.sessionId, configId: 'model', value });
+        return result.configOptions.find(option => option.id === 'thought_level');
+      };
+
+      await thinkingAfterSelecting(modelId);
+      await agent.setSessionConfigOption({
+        sessionId: initial.sessionId,
+        configId: 'thought_level',
+        value: savedLevel,
+      });
+      expect(await thinkingAfterSelecting(otherModelId)).toMatchObject({ currentValue: otherRunLevel });
+      expect(await thinkingAfterSelecting(modelId)).toMatchObject({ currentValue: savedLevel });
+    },
+  );
+
+  it('keeps the saved level across a model that cannot think', async () => {
+    const { agent, initial } = await setup(['openai/gpt-5.6-sol', 'google/gemini-2.0-flash']);
+    const thinkingAfterSelecting = async (value: string) => {
+      const result = await agent.setSessionConfigOption({ sessionId: initial.sessionId, configId: 'model', value });
+      return result.configOptions.find(option => option.id === 'thought_level');
+    };
+
+    await thinkingAfterSelecting('openai/gpt-5.6-sol');
+    await agent.setSessionConfigOption({ sessionId: initial.sessionId, configId: 'thought_level', value: 'max' });
+    expect(await thinkingAfterSelecting('google/gemini-2.0-flash')).toMatchObject({ currentValue: 'off' });
+    expect(await thinkingAfterSelecting('openai/gpt-5.6-sol')).toMatchObject({ currentValue: 'max' });
   });
 
   it('notifies clients when the runtime changes mode outside a configuration request', async () => {
@@ -116,6 +169,17 @@ describe('ACP session configuration', () => {
         configOptions: expect.arrayContaining([expect.objectContaining({ id: 'mode', currentValue: 'plan' })]),
       },
     });
+  });
+
+  it('keeps an inherited default inherited when switching mode', async () => {
+    const { agent, initial, setState } = await setup(undefined, [], 'max');
+    const result = await agent.setSessionConfigOption({
+      sessionId: initial.sessionId,
+      configId: 'mode',
+      value: 'plan',
+    });
+    expect(setState).not.toHaveBeenCalled();
+    expect(result.configOptions.find(option => option.id === 'thought_level')).toMatchObject({ currentValue: 'xhigh' });
   });
 
   it.each([

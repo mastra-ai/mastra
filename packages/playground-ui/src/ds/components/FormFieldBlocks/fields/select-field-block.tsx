@@ -26,6 +26,7 @@ export type SelectFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labe
     size?: SelectTriggerProps['size'];
   };
 
+/** @deprecated Use `Field` + `FieldLabel` + `Select`. */
 export function SelectFieldBlock({
   name,
   helpText,

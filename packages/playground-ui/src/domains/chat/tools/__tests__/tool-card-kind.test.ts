@@ -43,6 +43,21 @@ describe('toolCardKind', () => {
       expect(toolCardKind(fields('ask_user', { output: { answer: 'yes' } }), {})).toBe('ask_user');
     });
 
+    it('detects a settled request_connection call as a connect prompt, and leaves a running one plain', () => {
+      const payload = { type: 'connect-prompt', providers: [] };
+      expect(toolCardKind(fields('request_connection', { output: payload }), {})).toBe('connect_prompt');
+      // No output yet (still running) or an unexpected shape: fall back to the plain badge.
+      expect(toolCardKind(fields('request_connection'), {})).toBe('plain');
+      expect(toolCardKind(fields('request_connection', { output: 'oops' }), {})).toBe('plain');
+    });
+
+    it('detects a request_connection call paused on its connect prompt', () => {
+      const metadata: MessageMetadata = {
+        suspendedTools: { 'call-1': { suspendPayload: { type: 'connect-prompt', providers: [] } } },
+      };
+      expect(toolCardKind(fields('request_connection'), { metadata })).toBe('connect_prompt');
+    });
+
     it('detects submit_plan by tool name', () => {
       expect(toolCardKind(fields('submit_plan'), {})).toBe('submit_plan');
     });
@@ -103,18 +118,38 @@ describe('toolCardKind', () => {
 });
 
 describe('badgeStatus', () => {
+  const call = (state: string, toolName = 'view') => ({ toolName, toolCallId: 'call-1', state });
+  const exit = (exitCode: number, killed?: boolean) => [
+    { type: 'data', name: 'sandbox-exit', data: { exitCode, success: exitCode === 0, killed, toolCallId: 'call-1' } },
+  ];
+
   it('reports an error state regardless of the run', () => {
-    expect(badgeStatus('output-error', true)).toBe('error');
+    expect(badgeStatus(call('output-error'), undefined, true)).toBe('error');
   });
 
   it('reads settled calls and stale history as idle', () => {
-    expect(badgeStatus('output-available', true)).toBe('idle');
-    expect(badgeStatus('result', true)).toBe('idle');
-    expect(badgeStatus('input-available', false)).toBe('idle');
+    expect(badgeStatus(call('output-available'), undefined, true)).toBe('idle');
+    expect(badgeStatus(call('result'), undefined, true)).toBe('idle');
+    expect(badgeStatus(call('input-available'), undefined, false)).toBe('idle');
   });
 
   it('reads an unsettled call carried by a live run as running', () => {
-    expect(badgeStatus('input-available', true)).toBe('running');
+    expect(badgeStatus(call('input-available'), undefined, true)).toBe('running');
+  });
+
+  describe('when a command reports its exit', () => {
+    const command = WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+
+    it('reads a non-zero exit as failed, even though the call returned normally', () => {
+      expect(badgeStatus(call('output-available', command), exit(1), false)).toBe('error');
+    });
+
+    it('keeps a clean exit, and the process another tool killed, successful', () => {
+      expect(badgeStatus(call('output-available', command), exit(0), false)).toBe('idle');
+      expect(badgeStatus(call('output-available', WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS), exit(137, true), false)).toBe(
+        'idle',
+      );
+    });
   });
 });
 

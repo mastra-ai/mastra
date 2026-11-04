@@ -384,4 +384,81 @@ describe('gateway oauth fetch wrappers', () => {
       /Not logged in to xAI/,
     );
   });
+
+  describe('a stored token the provider rejects', () => {
+    async function wrappers() {
+      anthropicStorage.get.mockReturnValue({ type: 'oauth' });
+      anthropicStorage.getApiKey.mockResolvedValue('revoked');
+      openAIStorage.get.mockReturnValue({ type: 'oauth', access: 'revoked', expires: Date.now() + 60_000 });
+      githubCopilotStorage.get.mockReturnValue({
+        type: 'oauth',
+        access: 'tid=test;proxy-ep=proxy.individual.githubcopilot.com;',
+        refresh: 'ghu_x',
+        expires: Date.now() + 60_000,
+      });
+      githubCopilotStorage.getApiKey.mockResolvedValue('tid=test;proxy-ep=proxy.individual.githubcopilot.com;');
+      xaiStorage.get.mockReturnValue({ type: 'oauth', access: 'revoked', expires: Date.now() + 60_000 });
+      xaiStorage.getApiKey.mockResolvedValue('revoked');
+
+      const { buildAnthropicOAuthFetch } = await import('../claude-max.js');
+      const { buildOpenAICodexOAuthFetch } = await import('../openai-codex.js');
+      const { buildGitHubCopilotOAuthFetch } = await import('../github-copilot.js');
+      const { buildXAIOAuthFetch } = await import('../xai.js');
+      return [
+        {
+          name: 'Anthropic',
+          provider: 'anthropic',
+          url: 'https://api.anthropic.com/v1/messages',
+          fetch: buildAnthropicOAuthFetch({ authStorage: anthropicStorage as any }),
+        },
+        {
+          name: 'OpenAI Codex',
+          provider: 'openai-codex',
+          url: 'https://chatgpt.com/backend-api/codex/responses',
+          fetch: buildOpenAICodexOAuthFetch({ authStorage: openAIStorage as any }),
+        },
+        {
+          name: 'GitHub Copilot',
+          provider: 'github-copilot',
+          url: 'https://api.individual.githubcopilot.com/chat/completions',
+          fetch: buildGitHubCopilotOAuthFetch({ authStorage: githubCopilotStorage as any }),
+        },
+        {
+          name: 'xAI',
+          provider: 'xai',
+          url: 'https://api.x.ai/v1/chat/completions',
+          fetch: buildXAIOAuthFetch({ authStorage: xaiStorage as any }),
+        },
+      ];
+    }
+
+    it('reports a 401 as a missing sign-in, keeping the provider message and attribution', async () => {
+      for (const wrapper of await wrappers()) {
+        fetchMock.mockResolvedValueOnce(
+          new Response(JSON.stringify({ type: 'error', error: { message: 'OAuth access token is invalid.' } }), {
+            status: 401,
+          }),
+        );
+
+        const error = await wrapper.fetch(wrapper.url, { method: 'POST', body: '{}' }).catch(e => e);
+
+        expect(error, wrapper.name).toMatchObject({
+          name: 'ProviderAuthRequiredError',
+          message: `${wrapper.name} rejected the stored sign-in: OAuth access token is invalid.`,
+          status: 401,
+        });
+        expect(providerFromError(error), wrapper.name).toBe(wrapper.provider);
+      }
+    });
+
+    it('passes other failure responses through for normal error handling', async () => {
+      for (const wrapper of await wrappers()) {
+        for (const status of [403, 429, 500]) {
+          fetchMock.mockResolvedValueOnce(new Response('{}', { status }));
+          const response = await wrapper.fetch(wrapper.url, { method: 'POST', body: '{}' });
+          expect(response.status, `${wrapper.name} ${status}`).toBe(status);
+        }
+      }
+    });
+  });
 });

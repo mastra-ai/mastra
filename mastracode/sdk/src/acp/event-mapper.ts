@@ -132,7 +132,8 @@ export function handleAgentControllerEvent(
       break;
 
     case 'error':
-      state.error = event.error;
+      // A retryable error is an attempt still in progress, not the cause of the turn ending.
+      if (event.retryable !== true) state.error = event.error;
       if (event.finishReason === 'length') state.stopReason = 'max_tokens';
       else if (event.finishReason === 'content-filter') state.stopReason = 'refusal';
       break;
@@ -224,13 +225,15 @@ async function handleToolSuspended(
       suspendPayload.kind === 'sandbox_access_request');
   if (isSandboxAccess || toolName === 'submit_plan') {
     state.cancelSuspensions ??= new Map();
-    state.cancelSuspensions.set(toolCallId, () =>
-      session.resumeToolCall({
-        toolCallId,
+    state.cancelSuspensions.set(toolCallId, async () => {
+      const address = session.suspensions.resolveAddress({ toolCallId, runId: event.runId });
+      if (!address) return;
+      await session.resumeToolCall({
+        address,
         resumeData: isSandboxAccess ? 'No' : { action: 'rejected' },
         resolveOnToolEnd: true,
-      }),
-    );
+      });
+    });
   }
   if (state.cancelled) {
     try {

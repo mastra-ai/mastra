@@ -19,7 +19,10 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
+    testTimeout: 15_000,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['e2e/**', '**/node_modules/**'],
+    // @mcp-ui/client's AppRenderer sends hostContext before its bridge connects and drops the rejected promise.
+    onUnhandledError: error => !(error.message === 'Not connected' && error.stack?.includes('sendHostContextChange')),
   },
 });

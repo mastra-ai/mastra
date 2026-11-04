@@ -99,7 +99,9 @@ export function tryRepairJson(input: string): Record<string, any> | null {
 }
 
 export type StreamPart =
-  | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
+  | Exclude<LanguageModelV2StreamPart, { type: 'finish' | 'tool-result' }>
+  // V3+ provider specs (AI SDK v6+) stream partial provider-executed results flagged `preliminary`.
+  | (Extract<LanguageModelV2StreamPart, { type: 'tool-result' }> & { preliminary?: boolean })
   // Present on newer AI SDK provider specs (V4 / AI SDK v7) but absent from the V2 union.
   | {
       type: 'reasoning-file';
@@ -294,6 +296,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           isError: value.isError,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
+          ...(value.preliminary ? { preliminary: true } : {}),
         },
       };
 
@@ -494,17 +497,17 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           title: chunk.payload.title,
           providerMetadata: chunk.payload.providerMetadata,
         };
-      } else {
-        return {
-          type: 'source',
-          sourceType: 'document',
-          id: chunk.payload.id,
-          mediaType: chunk.payload.mimeType!,
-          title: chunk.payload.title,
-          filename: chunk.payload.filename,
-          providerMetadata: chunk.payload.providerMetadata,
-        };
       }
+      return {
+        type: 'source',
+        sourceType: 'document',
+        id: chunk.payload.id,
+        mediaType: chunk.payload.mimeType!,
+        title: chunk.payload.title,
+        filename: chunk.payload.filename,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
     case 'file': {
       const filePart =
         mode === 'generate'
@@ -608,6 +611,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         toolName: chunk.payload.toolName,
         output: chunk.payload.result,
+        ...(chunk.payload.preliminary ? { preliminary: true } : {}),
         // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
       };
     case 'tool-error':
@@ -645,7 +649,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
           ...(chunk.payload || {}),
         } as OutputChunkType<OUTPUT>;
       }
-      return;
+      return undefined;
   }
 }
 
@@ -742,7 +746,7 @@ function normalizeUsage(
     return {
       inputTokens,
       outputTokens,
-      totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
+      totalTokens: inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined,
       reasoningTokens: output.reasoning,
       cachedInputTokens: input.cacheRead,
       cacheCreationInputTokens: input.cacheWrite,
@@ -756,7 +760,11 @@ function normalizeUsage(
   return {
     inputTokens: v2Usage.inputTokens,
     outputTokens: v2Usage.outputTokens,
-    totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
+    totalTokens:
+      v2Usage.totalTokens ??
+      (v2Usage.inputTokens !== undefined && v2Usage.outputTokens !== undefined
+        ? v2Usage.inputTokens + v2Usage.outputTokens
+        : undefined),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
     cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,

@@ -63,7 +63,7 @@ describe('messageAuthor', () => {
 
   it('reads through a parts array with a hole instead of throwing', () => {
     const message = persisted({ author: ADA });
-    const parts = message.content.parts as MastraMessagePart[];
+    const parts = message.content.parts;
     // A sparse write past the end leaves holes, which `find` visits as
     // undefined parts — reading `.type` off one must not throw.
     parts[3] = { type: 'text', text: 'Far ahead' };

@@ -8,6 +8,7 @@ import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 
 import { createSignalsPubSub } from '../../../utils/signals-pubsub.js';
 import { createThreadOwnershipManager } from '../../ownership.js';
+import { AgentConnectionRegistry, stablePeerId } from '../../registry.js';
 import { createSessionThreadAdvertisement } from '../../session-advertisement.js';
 
 const [role, resourceIdArg, scenario = 'request-reply', startAtArg] = process.argv.slice(2);
@@ -22,16 +23,49 @@ const transitionedSenderThreadId = 'sender-thread-2';
 const contentionThreadId = 'contended-thread';
 const threadId = role === 'owner' ? ownerThreadId : senderThreadId;
 const peerThreadId = role === 'owner' ? senderThreadId : ownerThreadId;
-const pubsub = createSignalsPubSub(resourceId);
+// A thread may be keyed to a resource other than the project's (e.g. after `/resource`).
+const threadResourceId = process.env.MC_TEST_THREAD_RESOURCE_ID || resourceId;
+const pubsub = createSignalsPubSub(resourceId, {
+  sharedAgentDiscovery: process.env.MC_TEST_SHARED_DISCOVERY === '1',
+});
+
+function promptText(props: { prompt?: unknown }) {
+  return JSON.stringify(props.prompt ?? '');
+}
+
+const model = createMockModel({
+  mockText: `${role}-response`,
+  spyStream:
+    scenario === 'simultaneous-owner-wake'
+      ? () => emit('model-stream', { threadId: contentionThreadId })
+      : scenario === 'gated-owner'
+        ? props => emit('model-stream', { prompt: promptText(props) })
+        : undefined,
+});
+let releaseGate: () => void = () => {};
+const gate = new Promise<void>(resolve => {
+  releaseGate = resolve;
+});
+if (scenario === 'gated-owner' && role === 'owner' && model.specificationVersion === 'v2') {
+  // The first model call blocks until the parent sends `release`, keeping the
+  // owner's run active while a signal arrives.
+  const doStream = model.doStream.bind(model);
+  let gated = false;
+  model.doStream = async (props: Parameters<typeof doStream>[0]) => {
+    if (!gated) {
+      gated = true;
+      emit('gated');
+    }
+    await gate;
+    return doStream(props);
+  };
+}
+
 const agent = new Agent({
   id: 'code-agent',
   name: role,
   instructions: 'Cross-process signal test',
-  model: createMockModel({
-    mockText: `${role}-response`,
-    spyStream:
-      scenario === 'simultaneous-owner-wake' ? () => emit('model-stream', { threadId: contentionThreadId }) : undefined,
-  }),
+  model,
   pubsub,
 });
 
@@ -65,9 +99,9 @@ async function waitForCommand<T extends string>(expected: T | readonly T[]): Pro
 
 async function claimThread(claimThreadId: string) {
   const claim = await agent.claimThreadOwnership({
-    resourceId,
+    resourceId: threadResourceId,
     threadId: claimThreadId,
-    streamOptions: { memory: { resource: resourceId, thread: claimThreadId } },
+    streamOptions: { memory: { resource: threadResourceId, thread: claimThreadId } },
     peer: { label: `${role}:${claimThreadId}`, metadata: { pid: process.pid, role } },
   });
   if (!claim.claimed) throw new Error(`Failed to claim ${claimThreadId}`);
@@ -75,7 +109,7 @@ async function claimThread(claimThreadId: string) {
 }
 
 async function runRequestReply() {
-  const subscription = await agent.subscribeToThread({ resourceId, threadId });
+  const subscription = await agent.subscribeToThread({ resourceId: threadResourceId, threadId });
   const iterator = subscription.stream[Symbol.asyncIterator]();
   const claim = await claimThread(threadId);
   emit('thread-owned', { threadId });
@@ -84,11 +118,11 @@ async function runRequestReply() {
     const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
     const peer = peers.find(candidate => candidate.threadId === peerThreadId);
     if (!peer) throw new Error(`Did not discover ${peerThreadId}`);
-    emit('discovered', { peerId: peer.id, peerThreadId: peer.threadId });
+    emit('discovered', { peerId: peer.id, peerThreadId: peer.threadId, peerResourceId: peer.resourceId });
 
     const signal = await agent.sendSignal(
       { type: 'user-message', contents: 'cross-process request' },
-      { resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+      { resourceId: peer.resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
     );
     const accepted = await signal.accepted;
     emit('send-result', { action: accepted.action, runId: 'runId' in accepted ? accepted.runId : undefined });
@@ -107,11 +141,11 @@ async function runRequestReply() {
     const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
     const peer = peers.find(candidate => candidate.threadId === peerThreadId);
     if (!peer) throw new Error(`Did not discover ${peerThreadId}`);
-    emit('discovered', { peerId: peer.id, peerThreadId: peer.threadId });
+    emit('discovered', { peerId: peer.id, peerThreadId: peer.threadId, peerResourceId: peer.resourceId });
 
     const signal = await agent.sendSignal(
       { type: 'user-message', contents: 'cross-process reply' },
-      { resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+      { resourceId: peer.resourceId, threadId: peerThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
     );
     const accepted = await signal.accepted;
     emit('send-result', { action: accepted.action, runId: 'runId' in accepted ? accepted.runId : undefined });
@@ -129,6 +163,26 @@ async function runClaimOnly() {
   claim.unsubscribe();
 }
 
+/**
+ * Claims the way a session does: through the ownership manager, which retries
+ * a claim that fails (say, on an election lock a crashed process left behind).
+ */
+async function runManagedClaim() {
+  const manager = createThreadOwnershipManager(async claimThreadId => {
+    const claim = await agent.claimThreadOwnership({
+      resourceId: threadResourceId,
+      threadId: claimThreadId,
+      streamOptions: { memory: { resource: threadResourceId, thread: claimThreadId } },
+      peer: { label: `${role}:${claimThreadId}`, metadata: { pid: process.pid, role } },
+    });
+    if (claim.claimed) emit('thread-owned', { threadId: claimThreadId });
+    return claim;
+  });
+  await manager.claim(threadId).catch(() => {});
+  await waitForCommand('close');
+  manager.close();
+}
+
 async function runDiscoveryProbe() {
   const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
   const peer = peers.find(candidate => candidate.threadId === peerThreadId);
@@ -140,11 +194,140 @@ async function runDiscoveryProbe() {
   await waitForCommand('close');
 }
 
+const HAMMER_ROUNDS = 100;
+
+/** Keeps this process's event loop busy, as a long tool result, a big parse or a render does. */
+function busyFor(ms: number) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    // spin
+  }
+}
+
+/**
+ * Owner: claims its thread and waits. Sender: for each `probe <threadId> <busyMs>` command, checks
+ * whether the saved peer on that thread is currently advertised, the way `agent_signal_send` does
+ * before sending. Its event loop is kept busy for `busyMs` right after it asks.
+ */
+async function runBusyPresence() {
+  if (role === 'owner') {
+    const claim = await claimThread(ownerThreadId);
+    emit('thread-owned', { threadId: ownerThreadId });
+    await waitForCommand('close');
+    claim.unsubscribe();
+    return;
+  }
+
+  const registry = new AgentConnectionRegistry();
+  const context = { agent: { resourceId, threadId: senderThreadId }, runtimeAgent: agent };
+  emit('ready');
+  for await (const line of commandLines) {
+    if (line === 'close') break;
+    const [command, targetThreadId, busyMs] = line.split(' ');
+    if (command !== 'probe' || !targetThreadId) continue;
+    const now = Date.now();
+    const saved = {
+      id: stablePeerId({ agentId: agent.id, resourceId, threadId: targetThreadId }),
+      agentId: agent.id,
+      resourceId,
+      threadId: targetThreadId,
+      connectedAt: now,
+      lastSeenAt: now,
+    };
+    const startedAt = Date.now();
+    // Start the busy block only once the discovery request is out, so the replies arrive while
+    // this process is blocked, which is what a busy sender meets.
+    const publish = pubsub.publish;
+    pubsub.publish = async (topic, event, options) => {
+      await publish.call(pubsub, topic, event, options);
+      if (topic === 'agent.thread-peer-discovery') {
+        pubsub.publish = publish;
+        busyFor(Number(busyMs));
+      }
+    };
+    const peers = registry.connectedPeers(context, [saved]);
+    const target = (await peers).find(peer => peer.id === saved.id);
+    pubsub.publish = publish;
+    emit('probed', {
+      threadId: targetThreadId,
+      busyMs: Number(busyMs),
+      presence: target?.presence,
+      canAttemptSend: target?.canAttemptSend,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }
+}
+
+async function runDiscoveryHammer() {
+  if (role === 'owner') {
+    const claim = await claimThread(ownerThreadId);
+    emit('thread-owned', { threadId: ownerThreadId });
+    await waitForCommand('close');
+    claim.unsubscribe();
+    return;
+  }
+
+  let found = 0;
+  for (let i = 0; i < HAMMER_ROUNDS; i++) {
+    const peers = await agent.discoverThreadPeers({ timeoutMs: 250 });
+    if (peers.some(candidate => candidate.threadId === ownerThreadId)) found++;
+  }
+  // Each failed claim of the owner's thread runs one owner-discovery round trip.
+  let claimed = 0;
+  for (let i = 0; i < HAMMER_ROUNDS; i++) {
+    const claim = await agent.claimThreadOwnership({ resourceId, threadId: ownerThreadId, peer: false });
+    if (claim.claimed) {
+      claimed++;
+      claim.unsubscribe();
+    }
+  }
+  // Reply topics are released fire-and-forget once each request settles.
+  await new Promise(resolve => setTimeout(resolve, 250));
+  emit('discovery-hammer-done', { found, claimed, rounds: HAMMER_ROUNDS });
+  await waitForCommand('close');
+}
+
+/**
+ * Owner: starts a run on its own thread whose first model call blocks until
+ * `release`, and reports every finished run. Sender: wakes the owner's thread
+ * (found through discovery) with `WAKE-<nonce>` while that run is active.
+ */
+async function runGatedOwner() {
+  if (role === 'owner') {
+    const subscription = await agent.subscribeToThread({ resourceId: threadResourceId, threadId: ownerThreadId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const claim = await claimThread(ownerThreadId);
+    emit('thread-owned', { threadId: ownerThreadId });
+    void (async () => {
+      for (;;) emit('run-finished', await readRun(iterator));
+    })().catch(() => {});
+    await agent.sendSignal(
+      { type: 'user-message', contents: 'START' },
+      { resourceId: threadResourceId, threadId: ownerThreadId, ifIdle: { behavior: 'wake' } },
+    ).accepted;
+    while ((await waitForCommand(['release', 'close'])) === 'release') releaseGate();
+    claim.unsubscribe();
+    subscription.unsubscribe();
+    return;
+  }
+
+  const peers = await agent.discoverThreadPeers({ timeoutMs: 1_000 });
+  const peer = peers.find(candidate => candidate.threadId === ownerThreadId);
+  if (!peer) throw new Error(`Did not discover ${ownerThreadId}`);
+  const signal = await agent.sendSignal(
+    { type: 'user-message', contents: `WAKE-${startAtArg}` },
+    { resourceId: peer.resourceId, threadId: ownerThreadId, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+  );
+  const accepted = await signal.accepted;
+  emit('send-result', { action: accepted.action, runId: 'runId' in accepted ? accepted.runId : undefined });
+  await waitForCommand('close');
+}
+
 async function runOwnershipContention() {
   const claim = await agent.claimThreadOwnership({
-    resourceId,
+    resourceId: threadResourceId,
     threadId: contentionThreadId,
-    streamOptions: { memory: { resource: resourceId, thread: contentionThreadId } },
+    streamOptions: { memory: { resource: threadResourceId, thread: contentionThreadId } },
     peer: { label: `${role}:${contentionThreadId}`, metadata: { pid: process.pid, role } },
   });
   emit('claim-result', { claimed: claim.claimed, threadId: contentionThreadId });
@@ -482,7 +665,11 @@ async function main() {
   else if (scenario === 'stale-lease-takeover') await runStaleLeaseTakeover();
   else if (scenario === 'lease-mutation-hammer') await runLeaseMutationHammer();
   else if (scenario === 'claim-only') await runClaimOnly();
+  else if (scenario === 'managed-claim') await runManagedClaim();
   else if (scenario === 'discovery-probe') await runDiscoveryProbe();
+  else if (scenario === 'discovery-hammer') await runDiscoveryHammer();
+  else if (scenario === 'busy-presence') await runBusyPresence();
+  else if (scenario === 'gated-owner') await runGatedOwner();
   else if (scenario === 'ownership-contention') await runOwnershipContention();
   else if (scenario === 'simultaneous-owner-wake') await runSimultaneousOwnerWake();
   else if (scenario === 'simultaneous-wake-sender') await runSimultaneousWakeSender();

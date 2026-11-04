@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthenticatedCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,7 +9,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { StudioSettingsPage } from '../index';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
-import type { AuthenticatedCapabilities } from '@/domains/auth/types';
 import {
   MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
   StudioConfigProvider,
@@ -81,11 +81,14 @@ const renderSettingsPage = async () => {
   const capabilityRequests: (string | null)[] = [];
 
   server.use(
-    http.get(`${BASE_URL}/`, () => HttpResponse.json({ status: 'ok' })),
     http.get(`${BASE_URL}/api/auth/capabilities`, ({ request }) => {
       capabilityRequests.push(request.headers.get('authorization'));
       return HttpResponse.json(authenticatedCapabilities);
     }),
+  );
+  // The instance status probe hits the same route before the client renders; keep it out of the count.
+  server.use(
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authenticatedCapabilities), { once: true }),
   );
 
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -106,7 +109,7 @@ const renderSettingsPage = async () => {
 };
 
 const saveAuthorizationHeader = (value: string) => {
-  fireEvent.click(screen.getByRole('button', { name: 'Add Header' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
   fireEvent.change(screen.getByPlaceholderText('e.g. Authorization'), { target: { value: 'Authorization' } });
   fireEvent.change(screen.getByPlaceholderText('e.g. Bearer <token>'), { target: { value } });
   fireEvent.submit(screen.getByRole('button', { name: /save configuration/i }).closest('form')!);

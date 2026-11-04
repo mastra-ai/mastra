@@ -2,8 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
+import { usePermissionPatterns } from '@mastra/react/hooks/auth';
 import { RotateCcw } from 'lucide-react';
-import { usePermissionPatterns } from '../hooks/use-permission-patterns';
 import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';
 import { MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY } from '@/domains/configuration/context/studio-config-context';
 
@@ -94,7 +94,7 @@ const GateInvalidBaseUrl = ({ error, baseUrl }: GateInvalidBaseUrlProps) => {
         descriptionSlot={messages.join('\n\n')}
         actionSlot={
           <Button icon={<RotateCcw />} onClick={handleReset}>
-            Reset Studio Configuration
+            Reset Studio configuration
           </Button>
         }
       />

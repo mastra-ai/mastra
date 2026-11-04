@@ -54,7 +54,6 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_knowledge_nodes: new Map(),
       mastra_knowledge_records: new Map(),
       mastra_knowledge_mentions: new Map(),
-      mastra_knowledge_cursors: new Map(),
       mastra_knowledge_activity: new Map(),
       mastra_knowledge_semantic_outbox: new Map(),
     };

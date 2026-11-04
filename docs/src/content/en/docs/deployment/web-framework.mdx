@@ -10,7 +10,7 @@ packages:
 When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. Follow the instructions below to ensure your Mastra integration deploys correctly.
 
 :::warning
-If you're deploying to a cloud provider, remove any usage of [LibSQLStore](/integrations/databases/libsql) from your Mastra configuration. LibSQLStore requires filesystem access and isn't compatible with serverless platforms.
+If you're deploying to a cloud provider, don't use [LibSQLStore](/integrations/databases/libsql) with a local `file:` or in-memory database. Local databases require filesystem access and aren't compatible with serverless platforms. Point LibSQLStore at a remote database such as Turso instead.
 :::
 
 Integration guides:

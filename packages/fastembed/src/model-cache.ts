@@ -5,18 +5,12 @@ import { FlagEmbedding, EmbeddingModel } from './fastembed.js';
 
 export type FastEmbedModelType = 'BGESmallENV15' | 'BGEBaseENV15' | 'MLE5Large';
 
-let modelCachePathPromise: Promise<string> | undefined;
-
+// Resolved on every load rather than once per process, so a changed HOME or a deleted
+// cache directory doesn't leave later loads pointing at a path that no longer exists.
 async function getModelCachePath() {
-  modelCachePathPromise ??= (async () => {
-    const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
-    await fsp.mkdir(cachePath, { recursive: true });
-    return cachePath;
-  })().catch(error => {
-    modelCachePathPromise = undefined;
-    throw error;
-  });
-  return modelCachePathPromise;
+  const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
+  await fsp.mkdir(cachePath, { recursive: true });
+  return cachePath;
 }
 
 const modelCache = new Map<FastEmbedModelType, Promise<FlagEmbedding>>();

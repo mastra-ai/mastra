@@ -19,6 +19,7 @@ export type TextareaFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'la
     size?: TextareaProps['size'];
   };
 
+/** @deprecated Use `Field` + `FieldLabel` + `Textarea`. */
 export function TextareaFieldBlock({
   name,
   label,

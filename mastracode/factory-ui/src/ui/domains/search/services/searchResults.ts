@@ -1,6 +1,6 @@
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../../factory/boardCandidates';
-import { persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
+import { isPersistedCandidate, persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
@@ -17,7 +17,7 @@ export interface SessionSearchResult {
   id: string;
   kind: 'work-session' | 'review-session' | 'user-session';
   title: string;
-  context: string;
+  context: readonly string[];
   identifier?: string;
   value: string;
   path: string;
@@ -29,7 +29,7 @@ export interface SessionSearchResult {
 export interface WorkItemSearchResult {
   id: string;
   title: string;
-  context: string;
+  context: readonly string[];
   identifier?: string;
   value: string;
   path: string;
@@ -74,7 +74,7 @@ function createFactorySessionResult(
   const factoryKind = getFactorySessionKind(session, item);
   const kind: SessionSearchResult['kind'] = factoryKind === 'review' ? 'review-session' : 'work-session';
   const title = item?.title ?? session.branch;
-  const context = `${factoryKind === 'review' ? 'Review' : 'Work'} session · ${session.branch}`;
+  const context = [`${factoryKind === 'review' ? 'Review' : 'Work'} session`, session.branch];
   const threadId = association?.ref.threadId ?? session.sessionId;
   // Work items carry the issue/PR number; when they fail to load the review branch is the only place it survives.
   const identifier = (item ? workItemIdentifier(item) : undefined) ?? getReviewBranchIdentifier(session.branch);
@@ -100,7 +100,7 @@ function createUserSessionResult(factoryId: string, session: FactoryUserSession)
     id: session.sessionId,
     kind,
     title,
-    context: isAutomaticUserSessionBranch(session) ? 'User session' : `User session · ${session.branch}`,
+    context: isAutomaticUserSessionBranch(session) ? ['User session'] : ['User session', session.branch],
     value: buildValue(session, kind, title, undefined, undefined),
     path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
     preserveOrigin: false,
@@ -162,7 +162,7 @@ function createWorkItemResult(factoryId: string, item: WorkItem): WorkItemSearch
   return {
     id: item.id,
     title: item.title,
-    context: `${sourceLabel} · ${stage} · not started`,
+    context: [sourceLabel, stage, 'not started'],
     identifier,
     value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
     path: relationshipPath(item, factoryId),
@@ -179,7 +179,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
   return {
     id: candidate.sourceKey,
     title: candidate.title,
-    context: `${sourceLabel} · ${stage} · not filed`,
+    context: [sourceLabel, stage, 'not filed'],
     identifier,
     value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
     path: relationshipPath(candidate, factoryId),
@@ -195,7 +195,7 @@ export function createWorkItemSearchResults(input: {
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
 }): WorkItemSearchResult[] {
   const filed = persistedSourceKeys(input.workItems);
-  const candidates = input.candidates.filter(({ candidate }) => !filed.has(candidate.sourceKey));
+  const candidates = input.candidates.filter(({ candidate }) => !isPersistedCandidate(filed, candidate));
 
   return [
     ...input.workItems

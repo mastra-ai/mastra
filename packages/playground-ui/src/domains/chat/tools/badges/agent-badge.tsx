@@ -3,17 +3,16 @@ import Markdown from 'react-markdown';
 import { ToolCard } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 
 type TextMessage = {
   type: 'text';
@@ -31,7 +30,9 @@ type ToolMessage = {
 
 export type AgentMessage = TextMessage | ToolMessage;
 
-export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+const DelegationIcon = agentGlyph('delegating');
+
+export interface AgentBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   agentId: string;
   messages: AgentMessage[];
   metadata?: MessageMetadata;
@@ -112,9 +113,17 @@ export const AgentBadge = ({
     );
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="agent-badge"
-      icon={<AgentIcon className="text-span-agent" />}
+      icon={<DelegationIcon className="text-span-agent" />}
       title={agentId}
       status={status}
       initialCollapsed={shouldCollapseContent}
@@ -175,7 +184,7 @@ export const AgentBadge = ({
           })}
 
           {shownError && (
-            <ToolCallMono copyText={shownError} data-testid="agent-error" className="text-destructive-indicator">
+            <ToolCallMono copyText={shownError} data-testid="agent-error" className="text-destructive-foreground">
               {shownError}
             </ToolCallMono>
           )}
@@ -186,17 +195,8 @@ export const AgentBadge = ({
               {suspendPayloadSlot}
             </div>
           )}
-
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
         </>
       )}
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

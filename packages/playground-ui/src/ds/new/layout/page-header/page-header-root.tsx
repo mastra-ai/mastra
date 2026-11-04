@@ -9,7 +9,9 @@ import type { PageHeaderMetaProps } from './page-header-meta';
 import { PageHeaderTitle } from './page-header-title';
 import { cn } from '@/lib/utils';
 
-export type PageHeaderRootProps = ComponentPropsWithoutRef<'header'>;
+export type PageHeaderRootProps = ComponentPropsWithoutRef<'header'> & {
+  spacing?: 'default' | 'breathing';
+};
 
 function isSlot(child: ReactNode, type: ElementType) {
   return isValidElement(child) && child.type === type;
@@ -30,20 +32,21 @@ function groupSlots(items: ReactNode[]) {
   return { eyebrows, icons, headline, below, actions };
 }
 
-export function PageHeaderRoot({ children, className, ...props }: PageHeaderRootProps) {
+export function PageHeaderRoot({ children, className, spacing = 'default', ...props }: PageHeaderRootProps) {
   const items = Children.toArray(children);
   const { eyebrows, icons, headline, below, actions } = groupSlots(items);
-  const hasControls = icons.length > 0 || actions.length > 0;
 
   return (
-    <header className={cn('relative flex w-full flex-col', !hasControls && 'gap-1', className)} {...props}>
+    <header
+      className={cn('relative flex w-full flex-col', className, spacing === 'breathing' && 'pt-10')}
+      data-page-header-spacing={spacing === 'breathing' ? spacing : undefined}
+      {...props}
+    >
       {eyebrows}
       <div className="flex w-full items-start gap-3">
         {icons}
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {headline.length > 0 && (
-            <div className={cn('flex min-w-0 items-start gap-3', hasControls && 'py-1')}>{headline}</div>
-          )}
+          {headline.length > 0 && <div className="flex min-w-0 items-start gap-3 py-1">{headline}</div>}
           {below}
         </div>
         {actions}

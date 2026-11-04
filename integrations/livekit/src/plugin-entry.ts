@@ -15,3 +15,19 @@ export type {
   VoiceTurnResult,
   VoiceTurnUsage,
 } from './bridge';
+
+export { observeVoiceSession, mastraLLMNode } from './speech';
+export type { ObserveVoiceSessionOptions } from './speech';
+export { VOICE_TEXT_FLUSH } from './turn-metrics';
+export type {
+  VoiceReplyChunk,
+  VoiceOutcome,
+  VoiceTurnIdentity,
+  VoiceToolTiming,
+  VoiceGenerationMetrics,
+  VoiceSpeechMetrics,
+  VoiceTurnMetrics,
+  VoiceTurnMetricsHook,
+  VoiceSpeechResult,
+  VoiceSpeechCompleteHook,
+} from './turn-metrics';

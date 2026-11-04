@@ -153,7 +153,10 @@ export function estimateCosts(
 
   if (usage.outputDetails?.reasoning) {
     const result = estimateCostForMeter({
-      meter: PricingMeter.OUTPUT_REASONING_TOKENS,
+      // Providers bill reasoning tokens as output tokens unless they publish a separate reasoning rate.
+      meter: pricingTier.hasMatchingMeterForUsage(PricingMeter.OUTPUT_REASONING_TOKENS)
+        ? PricingMeter.OUTPUT_REASONING_TOKENS
+        : PricingMeter.OUTPUT_TOKENS,
       tokenCount: usage.outputDetails.reasoning,
       ...estimateFields,
     });

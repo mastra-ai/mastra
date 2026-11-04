@@ -81,14 +81,7 @@ export function NoiseDetailPanel({
           {insightTraceId === undefined && (
             <>
               <section aria-labelledby="noise-summary-heading">
-                <Txt
-                  as="h2"
-                  variant="caption"
-                  tone="muted"
-                  font="mono"
-                  id="noise-summary-heading"
-                  className="tracking-wider uppercase"
-                >
+                <Txt as="h2" variant="eyebrow" tone="muted" id="noise-summary-heading">
                   Summary
                 </Txt>
                 <Txt tone="ink" className="mt-3">
@@ -101,10 +94,10 @@ export function NoiseDetailPanel({
                   </Txt>
                 )}
                 {noiseQuery.isError && (
-                  <Txt className="mt-4 text-destructive-indicator">Unable to load noise details.</Txt>
+                  <Txt className="mt-4 text-destructive-foreground">Unable to load noise details.</Txt>
                 )}
                 {noiseQuery.data && (
-                  <Txt tone="ink" font="mono" className="mt-4 tabular-nums">
+                  <Txt tone="ink" className="mt-4 tabular-nums">
                     {shareSentence(
                       filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
                       filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
@@ -114,14 +107,7 @@ export function NoiseDetailPanel({
               </section>
 
               <section aria-labelledby="noise-examples-heading">
-                <Txt
-                  as="h2"
-                  variant="caption"
-                  tone="muted"
-                  font="mono"
-                  id="noise-examples-heading"
-                  className="tracking-wider uppercase"
-                >
+                <Txt as="h2" variant="eyebrow" tone="muted" id="noise-examples-heading">
                   Example summaries
                 </Txt>
                 {examplesQuery.isPending && (
@@ -130,7 +116,7 @@ export function NoiseDetailPanel({
                   </Txt>
                 )}
                 {examplesQuery.isError && (
-                  <Txt className="mt-3 text-destructive-indicator">Unable to load examples.</Txt>
+                  <Txt className="mt-3 text-destructive-foreground">Unable to load examples.</Txt>
                 )}
                 {examplesQuery.data && (
                   <>
@@ -145,13 +131,16 @@ export function NoiseDetailPanel({
                             <button
                               type="button"
                               aria-label={`View trace insight for ${example.signalText}`}
-                              className={cn(
-                                raisedSurfaceStyle,
-                                'state-layer w-full cursor-pointer rounded-md p-3 text-left text-body text-foreground',
-                              )}
                               onClick={() => setInsightTraceId(example.traceId)}
+                              className={cn(
+                                'text-foreground',
+                                raisedSurfaceStyle,
+                                'state-layer w-full cursor-pointer rounded-md p-3 text-left',
+                              )}
                             >
-                              {example.signalText}
+                              <Txt as="span" variant="body" className="block">
+                                {example.signalText}
+                              </Txt>
                             </button>
                           </li>
                         ))}

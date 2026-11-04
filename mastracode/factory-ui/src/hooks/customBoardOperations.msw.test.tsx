@@ -28,7 +28,6 @@ const item: WorkItem = {
   triageType: null,
   acceptedAt: null,
   commentCount: 0,
-  feedActivityAt: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',
@@ -57,7 +56,9 @@ describe('custom board operations', () => {
       useBoardItems({ factoryProjectId: 'fp-1', kind: 'release' }),
     );
     await waitForMutationsIdle(client);
-    act(() => result.current.handleDrop({ kind: 'work-item', id: item.id, fromStage: 'queued' }, stage));
+    act(() =>
+      result.current.handleDrop({ kind: 'work-item', id: item.id, fromStage: 'queued', ownerKind: 'free' }, stage),
+    );
     expect(transition).not.toHaveBeenCalled();
   });
 
@@ -79,7 +80,12 @@ describe('custom board operations', () => {
     server.use(listHandler(), http.post('*/web/factory/projects/:id/work-items/:itemId/transition', transition));
     const { result, client } = renderHookWithProviders(() => useBoardItems({ factoryProjectId: 'fp-1', kind }));
     await waitForMutationsIdle(client);
-    act(() => result.current.handleDrop({ kind: 'work-item', id: item.id, fromStage: 'queued' }, 'preparing'));
+    act(() =>
+      result.current.handleDrop(
+        { kind: 'work-item', id: item.id, fromStage: 'queued', ownerKind: 'free' },
+        'preparing',
+      ),
+    );
     expect(transition).not.toHaveBeenCalled();
     act(() => result.current.move(item.id, 'preparing'));
     await waitFor(() => expect(transition).toHaveBeenCalledTimes(1));

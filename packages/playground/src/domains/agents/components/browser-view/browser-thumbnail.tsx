@@ -173,7 +173,9 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
           {toolCalls.length > 0 && (
             <div ref={actionsRef} className="max-h-40 overflow-y-auto border-t border-border">
               <div className="px-3 py-2">
-                <h4 className="mb-2 text-subheading text-muted-foreground">Browser Actions</h4>
+                <Txt as="h4" variant="subheading" tone="muted" className="mb-2">
+                  Browser Actions
+                </Txt>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

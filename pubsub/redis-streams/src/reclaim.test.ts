@@ -143,6 +143,38 @@ describe('RedisStreamsPubSub reclaim loop', () => {
     expect(deliveriesA).toBe(1);
   });
 
+  it('does not let a sibling reclaim an entry whose handler keeps extending it', async () => {
+    const psA = createPubSub({ inFlightTimeoutMs: 300 });
+    const psB = createPubSub();
+    const topic = `t-${randomUUID()}`;
+    const group = `extend-${randomUUID()}`;
+
+    let deliveriesA = 0;
+    let acked = false;
+    await psA.subscribe(
+      topic,
+      async (_event, ack, _nack, extend) => {
+        deliveriesA++;
+        const heartbeat = setInterval(() => void extend?.(), 80);
+        await sleep(1200);
+        clearInterval(heartbeat);
+        await ack?.();
+        acked = true;
+      },
+      { group },
+    );
+    await psA.publish(topic, makeEvent({ type: 'long' }));
+    await waitFor(() => deliveriesA === 1, 5000);
+
+    let deliveriesB = 0;
+    await psB.subscribe(topic, () => void deliveriesB++, { group });
+
+    await waitFor(() => acked, 5000);
+    await sleep(400);
+    expect(deliveriesA).toBe(1);
+    expect(deliveriesB).toBe(0);
+  });
+
   it('nacks a hung handler on its behalf after inFlightTimeoutMs, honoring the attempt cap', async () => {
     // Single consumer, handler never settles. With inFlightTimeoutMs set the
     // reclaim loop must nack the entry itself: republish with deliveryAttempt

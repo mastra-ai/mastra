@@ -2,16 +2,24 @@
 
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useDatasetVersions } from '@mastra/react/hooks/datasets';
 import { useEffect } from 'react';
-import { useDatasetVersions } from '../hooks/use-dataset-versions';
 
 export interface DatasetVersionsProps {
   datasetId: string;
   value: number | null;
   onValueChange: (version: number | null) => void;
   currentVersion?: number;
+  /** Creation date of the dataset, shown for the latest version when the dataset has no version records yet (v0). */
+  datasetCreatedAt?: string | Date;
   className?: string;
   container?: ComboboxProps['container'];
+  variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
+  align?: ComboboxProps['align'];
+  'aria-label'?: string;
 }
 
 export function DatasetVersions({
@@ -19,8 +27,14 @@ export function DatasetVersions({
   value,
   onValueChange,
   currentVersion,
+  datasetCreatedAt,
   className,
   container,
+  variant,
+  size = 'md',
+  popupWidth,
+  align,
+  'aria-label': ariaLabel,
 }: DatasetVersionsProps) {
   const {
     data: versions = [],
@@ -28,7 +42,7 @@ export function DatasetVersions({
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useDatasetVersions(datasetId);
+  } = useDatasetVersions({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage) {
@@ -40,10 +54,15 @@ export function DatasetVersions({
   const options = versions.map(version => ({
     label: version.isCurrent ? `Latest (v${version.version})` : `v${version.version}`,
     value: String(version.version),
+    description: describeCreatedAt(version.createdAt),
   }));
 
   if (versions.length === 0 && latestVersion != null) {
-    options.push({ label: `Latest (v${latestVersion})`, value: String(latestVersion) });
+    options.push({
+      label: `Latest (v${latestVersion})`,
+      value: String(latestVersion),
+      description: describeCreatedAt(datasetCreatedAt),
+    });
   }
 
   return (
@@ -55,12 +74,21 @@ export function DatasetVersions({
         onValueChange(nextVersion === latestVersion ? null : nextVersion);
       }}
       placeholder={isLoading ? 'Loading versions...' : 'Select version'}
-      searchPlaceholder="Search versions..."
+      searchPlaceholder="Search versions"
       emptyText="No versions found."
       className={className}
       disabled={isLoading || options.length === 0}
-      size="md"
+      variant={variant}
+      size={size}
+      popupWidth={popupWidth}
+      align={align}
       container={container}
+      aria-label={ariaLabel}
     />
   );
+}
+
+function describeCreatedAt(createdAt: string | Date | undefined) {
+  const formatted = createdAt ? formatDate(createdAt, 'date-time') : undefined;
+  return formatted ? `Created ${formatted}` : undefined;
 }

@@ -48,7 +48,7 @@ if (!deploymentUrl || !adminKey) {
     ...(storageFunction ? { storageFunction } : {}),
   });
 
-  createTestSuite(store, { listScoresBySpan: false });
+  createTestSuite(store, { listScoresBySpan: false, workflowResultsNoopWhenRunMissing: false });
 
   // Pre-configured client acceptance tests
   createClientAcceptanceTests({

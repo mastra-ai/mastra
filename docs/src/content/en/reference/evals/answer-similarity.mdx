@@ -16,7 +16,7 @@ The `createAnswerSimilarityScorer()` function creates a scorer that evaluates ho
   content={[
   {
     name: 'model',
-    type: 'LanguageModel',
+    type: 'MastraModelConfig',
     required: true,
     description: 'The language model used to evaluate semantic similarity between outputs and ground truth.',
   },
@@ -86,7 +86,7 @@ The `createAnswerSimilarityScorer()` function creates a scorer that evaluates ho
 ]}
 />
 
-This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but **requires ground truth** to be provided in the run object.
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but expects ground truth to be provided in the run object. When `options.requireGroundTruth` is `true` (the default), a run without ground truth throws an error. Set it to `false` to score runs without ground truth as 0.
 
 ## `.run()` returns
 
@@ -145,7 +145,9 @@ The scorer uses a multi-step process:
 1. **Score**: Calculates weighted similarity with penalties for contradictions
 1. **Reason**: Generates human-readable explanation
 
-Score calculation: `max(0, base_score - contradiction_penalty - missing_penalty - extra_info_penalty) × scale`
+Score calculation: `max(0, min(1, base_score - contradiction_penalty - extra_info_penalty)) × scale`
+
+`base_score` is the sum of per-match credits, minus `missingPenalty` for each missing unit, divided by `ground_truth_units × (1 + exactMatchBonus)`. The score is 0 when the ground truth has no units.
 
 ## Example
 

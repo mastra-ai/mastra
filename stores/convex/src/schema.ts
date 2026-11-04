@@ -269,6 +269,9 @@ export const mastraBackgroundTasksTable = defineTable({
   // field would reject those documents and fail `convex deploy`.
   ownerId: v.optional(v.union(v.string(), v.null())),
   leaseExpiresAt: v.optional(v.union(v.string(), v.null())),
+  // Optional for the same reason: rows written before these fields existed.
+  expiresAt: v.optional(v.union(v.string(), v.null())),
+  metadata: v.optional(v.union(v.string(), v.null())),
 })
   .index('by_record_id', ['id'])
   .index('by_status_created', ['status', 'createdAt'])
@@ -333,6 +336,8 @@ export const mastraObservationalMemoryTable = defineTable({
   lastBufferedAtTokens: v.number(),
   lastBufferedAtTime: v.optional(v.union(v.string(), v.null())),
   metadata: v.optional(v.union(v.string(), v.null())),
+  // Set to the successor's id when a reflection retires this generation; never cleared.
+  supersededBy: v.optional(v.union(v.string(), v.null())),
   createdAt: v.string(),
   updatedAt: v.string(),
 })

@@ -1,5 +1,3 @@
-export { ReviewItemCard } from './review-item-card';
-export type { ReviewItem } from './review-item-card';
-export { TagPicker } from './tag-picker';
+export type { ReviewItem } from '@mastra/react/hooks/review';
 export { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 export { ProposalTag } from './proposal-tag';

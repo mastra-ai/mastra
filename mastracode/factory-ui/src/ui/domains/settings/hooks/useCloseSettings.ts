@@ -1,4 +1,4 @@
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import type { Location } from 'react-router';
 
@@ -11,14 +11,14 @@ export function useCloseSettings() {
   const navigate = useNavigate();
   const location = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { openMobile: mobileDrawerOpen, setOpenMobile } = useMainSidebar();
+  const { openMobile: mobileDrawerOpen, setOpenMobile } = useSidebar();
 
   return function closeSettings() {
     const from = (location.state as { from?: Location } | null)?.from;
     void navigate(from ?? (factoryId ? `/factories/${factoryId}` : '/'));
     setOpenMobile(false);
 
-    const focusTargetId = mobileDrawerOpen ? 'mobile-navigation-trigger' : 'settings-trigger';
+    const focusTargetId = mobileDrawerOpen ? 'mobile-navigation-trigger' : 'user-menu-trigger';
     requestAnimationFrame(() => document.getElementById(focusTargetId)?.focus());
   };
 }

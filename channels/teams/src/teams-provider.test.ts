@@ -49,9 +49,50 @@ function makeProvider(config: Partial<TeamsProviderConfig> = {}) {
   return { provider, storage };
 }
 
+/** Tenant id baked into the fake Graph token's `tid` claim. */
+const TOKEN_TENANT_ID = 'token-tenant-id';
+
+/** A minimal unsigned JWT so `decodeTenantId` can read claims from test tokens. */
+function fakeJwt(claims: Record<string, unknown>): string {
+  const b64 = (obj: object) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+  return `${b64({ alg: 'none', typ: 'JWT' })}.${b64(claims)}.`;
+}
+
+const GRAPH_TOKEN = fakeJwt({ tid: TOKEN_TENANT_ID });
+
 /** A scope-aware manager resolver returning a distinct token per audience. */
 function makeTokenResolver(): TeamsTokenResolver & ReturnType<typeof vi.fn> {
-  return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? 'graph-token' : 'dev-portal-token'));
+  return vi.fn(async (scope: string | string[]) => (scope === TEAMS_GRAPH_SCOPE ? GRAPH_TOKEN : 'dev-portal-token'));
+}
+
+/**
+ * Read the request body handed to an undici mock reply callback as UTF-8 text.
+ *
+ * undici 8 no longer surfaces a `fetch` string body verbatim to mock replies: an
+ * iterable/async-iterable body (what `fetch` uses internally) arrives as a
+ * stream/chunk array, so `String(reqOpts.body)` yields "[object Object]" and
+ * parsing throws. Reply callbacks that need the body must therefore be async.
+ */
+async function readMockBody(body: unknown): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+
+  const chunks: Uint8Array[] = [];
+  const collect = (chunk: unknown) => {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : Buffer.from(chunk as Uint8Array));
+  };
+
+  if (Array.isArray(body)) {
+    for (const chunk of body) collect(chunk);
+  } else if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    for await (const chunk of body as AsyncIterable<unknown>) collect(chunk);
+  } else {
+    return String(body);
+  }
+  // Join the raw bytes before decoding: a multibyte character split across two
+  // chunks would otherwise decode into two replacement characters.
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /** Stub the client-credentials token mint used to validate self-managed bot credentials. */
@@ -63,8 +104,8 @@ function stubCredentialMint(opts: { ok?: boolean; tenant?: string } = {}): () =>
     .intercept({ path: `/${tenant}/oauth2/v2.0/token`, method: 'POST' })
     .reply(
       ok ? 200 : 401,
-      reqOpts => {
-        captured = String(reqOpts.body);
+      async reqOpts => {
+        captured = await readMockBody(reqOpts.body);
         return ok
           ? { token_type: 'Bearer', access_token: 'bf-token', expires_in: 3599 }
           : { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided.' };
@@ -86,23 +127,23 @@ function stubProvisioning() {
   mockAgent
     .get(GRAPH_ORIGIN)
     .intercept({ path: '/v1.0/applications', method: 'POST' })
-    .reply(201, reqOpts => {
-      createAppBody = JSON.parse(String(reqOpts.body));
+    .reply(201, async reqOpts => {
+      createAppBody = JSON.parse(await readMockBody(reqOpts.body));
       createAppAuth = (reqOpts.headers as Record<string, string>).authorization;
       return { id: OBJECT_ID, appId: MINTED_APP_ID };
     });
   mockAgent
     .get(GRAPH_ORIGIN)
     .intercept({ path: `/v1.0/applications/${OBJECT_ID}/addPassword`, method: 'POST' })
-    .reply(200, reqOpts => {
-      addPasswordBody = JSON.parse(String(reqOpts.body));
+    .reply(200, async reqOpts => {
+      addPasswordBody = JSON.parse(await readMockBody(reqOpts.body));
       return { secretText: MINTED_SECRET, keyId: 'key-1' };
     });
   mockAgent
     .get(DEV_PORTAL_ORIGIN)
     .intercept({ path: '/api/botframework', method: 'POST' })
-    .reply(200, reqOpts => {
-      botRegistrationBody = JSON.parse(String(reqOpts.body));
+    .reply(200, async reqOpts => {
+      botRegistrationBody = JSON.parse(await readMockBody(reqOpts.body));
       botRegistrationAuth = (reqOpts.headers as Record<string, string>).authorization;
       return {};
     });
@@ -256,15 +297,19 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     const result = await provider.connect('agent-1', { name: 'Sales Bot' });
     expect(result).toMatchObject({ type: 'deep_link', url: DEV_PORTAL_BOTS_URL });
 
-    // Two audiences resolved — Graph for the Entra app, Dev Portal for the bot.
+    // Two audiences resolved — Graph for the Entra app, Dev Portal for the
+    // bot. No tenant is configured, so the Graph resolve runs tenant-less and
+    // the Dev Portal resolve uses the tenant derived from the token's `tid`.
     expect(tokenResolver).toHaveBeenCalledWith(TEAMS_GRAPH_SCOPE, undefined);
-    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, undefined);
-    expect(stubs.createAppAuth()).toBe('Bearer graph-token');
+    expect(tokenResolver).toHaveBeenCalledWith(TEAMS_DEV_PORTAL_SCOPE, TOKEN_TENANT_ID);
+    expect(stubs.createAppAuth()).toBe(`Bearer ${GRAPH_TOKEN}`);
     expect(stubs.botRegistrationAuth()).toBe('Bearer dev-portal-token');
 
+    // New multitenant bot registrations are deprecated — provisioning
+    // defaults to a single-tenant app in the token's tenant.
     expect(stubs.createAppBody()).toMatchObject({
       displayName: 'Sales Bot',
-      signInAudience: 'AzureADMultipleOrgs',
+      signInAudience: 'AzureADMyOrg',
     });
     expect(stubs.addPasswordBody()).toMatchObject({ passwordCredential: { displayName: 'mastra-teams' } });
 
@@ -272,6 +317,8 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     expect(record?.status).toBe('active');
     expect(record?.data.appId).toBe(MINTED_APP_ID);
     expect(record?.data.entraObjectId).toBe(OBJECT_ID);
+    expect(record?.data.appTenantId).toBe(TOKEN_TENANT_ID);
+    expect(record?.data.appType).toBe('SingleTenant');
     expect(isEncrypted(String(record?.data.appPassword))).toBe(true);
 
     expect(stubs.botRegistrationBody()).toMatchObject({
@@ -279,6 +326,7 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
       name: 'Sales Bot',
       messagingEndpoint: `${BASE_URL}/${PLATFORM}/events/${record?.webhookId}`,
       callingEndpoint: '',
+      isSingleTenant: true,
     });
   });
 
@@ -305,6 +353,20 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     const storage = new InMemoryChannelsStorage();
     const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
     await expect(provider.connect('agent-1')).rejects.toThrow(/needs a baseUrl/);
+  });
+
+  it('registers the messaging endpoint against MASTRA_SERVER_URL when no baseUrl is set', async () => {
+    vi.stubEnv('MASTRA_SERVER_URL', 'https://my-app.server.example.com/');
+    const storage = new InMemoryChannelsStorage();
+    const provider = new TeamsProvider({ storage, tokenResolver: makeTokenResolver(), encryptionKey: ENC_KEY });
+    const stubs = stubProvisioning();
+
+    await provider.connect('agent-1');
+
+    const record = await storage.getInstallationByAgent(PLATFORM, 'agent-1');
+    expect(String(stubs.botRegistrationBody()?.messagingEndpoint)).toBe(
+      `https://my-app.server.example.com/${PLATFORM}/events/${record?.webhookId}`,
+    );
   });
 
   it('rolls back the Entra application when the Dev Portal registration fails', async () => {
@@ -345,13 +407,26 @@ describe('TeamsProvider.connect — delegated provisioning', () => {
     await expect(provider.connect('agent-1')).rejects.toThrow('platform credential fetch failed');
   });
 
-  it('rejects SingleTenant provisioning without a tenant id', async () => {
+  it('rejects SingleTenant provisioning when no tenant id is available (opaque token, no tid claim)', async () => {
     const { provider } = makeProvider({
-      tokenResolver: makeTokenResolver(),
+      // Opaque token — decodeTenantId cannot derive a tenant from it.
+      tokenResolver: vi.fn(async () => 'opaque-token'),
       encryptionKey: ENC_KEY,
       appType: 'SingleTenant',
     });
     await expect(provider.connect('agent-1')).rejects.toThrow(/no appTenantId is available/);
+  });
+
+  it('still provisions MultiTenant bots when explicitly configured', async () => {
+    const stubs = stubProvisioning();
+    const { provider } = makeProvider({
+      tokenResolver: makeTokenResolver(),
+      encryptionKey: ENC_KEY,
+      appType: 'MultiTenant',
+    });
+    await provider.connect('agent-1');
+    expect(stubs.createAppBody()).toMatchObject({ signInAudience: 'AzureADMultipleOrgs' });
+    expect(stubs.botRegistrationBody()).toMatchObject({ isSingleTenant: false });
   });
 
   it('provisions SingleTenant bots with the tenant stored and passed to the resolver', async () => {

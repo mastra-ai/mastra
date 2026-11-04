@@ -64,10 +64,6 @@ export const setupLoginRefreshScenario = {
 
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Observational Memory/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Claude Haiku\s+Via Max subscription/i, terminal, 8_000);
-    terminal.write('\r');
-
     await runtime.waitForScreenText(/Tool Approval/i, terminal, 8_000);
     terminal.write('\r');
 
@@ -76,16 +72,16 @@ export const setupLoginRefreshScenario = {
 
     terminal.submit('/memory');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Observer model\s+claude-haiku-4-5/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+claude-haiku-4-5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observer model\s+Auto \(claude-haiku-4-5\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+Auto \(claude-haiku-4-5\)/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("SETUP_LOGIN_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("SETUP_LOGIN_PACK="+s.models.activeModelPackId+":"+s.onboarding.modePackId+":"+s.onboarding.omPackId+":"+s.models.activeOmPackId); console.log("SETUP_LOGIN_BUILTIN_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("SETUP_LOGIN_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("SETUP_LOGIN_PACK="+s.models.activeModelPackId+":"+s.onboarding.modePackId+":"+(s.onboarding.omPackId||"none")+":"+(s.models.activeOmPackId||"none")+":"+(s.models.observerModelSelection||"auto")+":"+(s.models.reflectorModelSelection||"auto")); console.log("SETUP_LOGIN_BUILTIN_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
     );
     await runtime.waitForScreenText(/SETUP_LOGIN_AUTH=oauth:mc-setup-login-refresh-access/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_LOGIN_PACK=anthropic:anthropic:anthropic:anthropic/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_LOGIN_PACK=anthropic:anthropic:none:none:auto:auto/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_LOGIN_BUILTIN_DEFAULTS=0/i, terminal, 8_000);
 
     terminal.keyCtrlC();

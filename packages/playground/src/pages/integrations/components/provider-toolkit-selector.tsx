@@ -1,6 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import type { ProviderItem, ToolkitItem } from '../types';
 
 interface ProviderToolkitSelectorProps {
@@ -42,39 +44,44 @@ export function ProviderToolkitSelector({
 }: ProviderToolkitSelectorProps) {
   return (
     <div className="space-y-4 rounded border p-4">
-      <SelectFieldBlock
-        name="provider"
-        label="Provider"
-        value={providerId}
-        onValueChange={onProviderChange}
-        disabled={providersLoading}
-        placeholder={providersLoading ? 'Loading providers…' : 'Select provider'}
-        options={providers.map(provider => ({
-          value: provider.id,
-          label: `${provider.displayName ?? provider.name} (${provider.id})`,
-        }))}
-        errorMsg={providersError ? String(providersError) : undefined}
-      />
+      <Field invalid={Boolean(providersError)} disabled={providersLoading}>
+        <FieldLabel>Provider</FieldLabel>
+        <Select value={providerId} onValueChange={onProviderChange}>
+          <SelectTrigger>
+            <SelectValue placeholder={providersLoading ? 'Loading providers…' : 'Select provider'} />
+          </SelectTrigger>
+          <SelectContent>
+            {providers.map(provider => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {`${provider.displayName ?? provider.name} (${provider.id})`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldError>{providersError ? String(providersError) : undefined}</FieldError>
+      </Field>
 
-      <SelectFieldBlock
-        name="toolkit"
-        label="Toolkit"
-        value={toolkit}
-        onValueChange={onToolkitChange}
-        disabled={!providerId || toolkitsLoading}
-        placeholder={toolkitsLoading ? 'Loading toolkits…' : 'Select toolkit'}
-        options={toolkits.map(item => ({ value: item.slug, label: `${item.name} (${item.slug})` }))}
-        errorMsg={toolkitsError ? String(toolkitsError) : undefined}
-      />
+      <Field invalid={Boolean(toolkitsError)} disabled={!providerId || toolkitsLoading}>
+        <FieldLabel>Toolkit</FieldLabel>
+        <Select value={toolkit} onValueChange={onToolkitChange}>
+          <SelectTrigger>
+            <SelectValue placeholder={toolkitsLoading ? 'Loading toolkits…' : 'Select toolkit'} />
+          </SelectTrigger>
+          <SelectContent>
+            {toolkits.map(item => (
+              <SelectItem key={item.slug} value={item.slug}>
+                {`${item.name} (${item.slug})`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <FieldError>{toolkitsError ? String(toolkitsError) : undefined}</FieldError>
+      </Field>
 
-      <TextFieldBlock
-        name="connection-label"
-        label="Label (optional)"
-        placeholder="My personal Gmail"
-        value={label}
-        onChange={event => onLabelChange(event.target.value)}
-        disabled={!providerId || !toolkit}
-      />
+      <Field disabled={!providerId || !toolkit}>
+        <FieldLabel>Label (optional)</FieldLabel>
+        <Input placeholder="My personal Gmail" value={label} onChange={event => onLabelChange(event.target.value)} />
+      </Field>
 
       <Button
         type="button"

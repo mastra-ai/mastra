@@ -14,7 +14,7 @@ Vitest + MSW + typed @mastra/client-js fixtures is the primary test strategy
 
 Test-first (TDD): RED failing MSW test → GREEN minimum code → REFACTOR.
 
-BDD-style, lint-enforced in `eslint.config.js`; MSW runs with
+BDD-style, lint-enforced in `oxlint.config.ts`; MSW runs with
 `onUnhandledRequest: 'error'`. Outer `describe` = the unit; inner
 `describe('when …')` = ONE precondition via a real MSW fixture; each `it` =
 ONE outcome. Same shape for MSW tests (`src/**`) and Playwright E2E specs
@@ -22,6 +22,8 @@ ONE outcome. Same shape for MSW tests (`src/**`) and Playwright E2E specs
 
 Fixtures: nearby `__tests__/fixtures/`, typed with @mastra/client-js response
 types (no inline types, no `as any`). MSW is wired in `vitest.setup.ts`.
+Exception: `/connect/*` fixtures use `@mastra/playground-ui/domains/connect`
+types (routes not in the SDK).
 
 Playwright E2E (`e2e-tests-studio` skill) only when MSW can't model the journey
 (multi-page, real server, streaming, real browser concerns).

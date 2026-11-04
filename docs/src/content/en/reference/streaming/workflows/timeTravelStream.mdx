@@ -52,10 +52,14 @@ All parameters are the same as [`Run.timeTravel()`](../../workflows/run-methods/
     description: 'A promise that resolves to the final workflow execution result',
   },
   {
-    name: 'output.traceId',
+    name: 'output.runId',
     type: 'string',
-    isOptional: true,
-    description: 'The trace ID associated with this execution when Tracing is enabled',
+    description: 'The ID of the workflow run',
+  },
+  {
+    name: 'output.workflowId',
+    type: 'string',
+    description: 'The ID of the workflow',
   },
 ]}
 />
@@ -65,7 +69,7 @@ All parameters are the same as [`Run.timeTravel()`](../../workflows/run-methods/
 The stream emits workflow events during execution:
 
 - `workflow-step-start`: Emitted when a step begins execution
-- `workflow-step-finish`: Emitted when a step completes successfully
+- `workflow-step-result`: Emitted when a step produces a result
 - `workflow-step-error`: Emitted when a step encounters an error
 - `workflow-step-suspended`: Emitted when a step suspends
 - Additional events depending on step types (agents, tools, etc.)
@@ -87,8 +91,8 @@ for await (const event of output.fullStream) {
     case 'workflow-step-start':
       console.log(`Starting step: ${event.payload.stepName}`)
       break
-    case 'workflow-step-finish':
-      console.log(`Completed step: ${event.payload.stepName}`)
+    case 'workflow-step-result':
+      console.log(`Completed step: ${event.payload.id}`)
       break
     case 'workflow-step-error':
       console.error(`Error in step: ${event.payload.stepName}`, event.payload.error)

@@ -85,7 +85,12 @@ const createMockConnectorHandler = (): ConnectorHandler => {
 
 // Run the shared test suite. The default test topology is standalone MongoDB,
 // where identity-aware item writes and permanent purge require transactions.
-createTestSuite(new MongoDBStore(TEST_CONFIG), { datasetItemIdentity: false, datasetItemPurge: false });
+createTestSuite(new MongoDBStore(TEST_CONFIG), {
+  datasetItemIdentity: false,
+  datasetItemPurge: false,
+  workflowResultsNoopWhenRunMissing: false,
+  skillsMetadataFilter: false,
+});
 
 // Configuration validation tests
 createConfigValidationTests({

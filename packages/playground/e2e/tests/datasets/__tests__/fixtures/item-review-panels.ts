@@ -52,6 +52,10 @@ export async function mockPanelRequests(page: Page) {
     url => url.pathname === '/api/experiments',
     route => route.fulfill({ json: experimentsResponse }),
   );
+  await page.route(
+    url => url.pathname === `/api/experiments/${experiment.id}`,
+    route => route.fulfill({ json: experiment }),
+  );
   await page.route(`**/api/datasets/${dataset.id}`, route => route.fulfill({ json: dataset }));
   await page.route(`**/api/datasets/${dataset.id}/items?*`, route => route.fulfill({ json: panelItems }));
   await page.route(`**/api/datasets/${dataset.id}/items/*`, route => {

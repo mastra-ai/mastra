@@ -1,5 +1,5 @@
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useEffect } from 'react';
-import { useWorkflows } from '../hooks/use-workflows';
 import { Combobox } from '@/ds/components/Combobox';
 import type { ComboboxProps } from '@/ds/components/Combobox';
 import { useLinkComponent } from '@/lib/framework';
@@ -16,6 +16,7 @@ export interface WorkflowComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -23,13 +24,14 @@ export interface WorkflowComboboxProps {
 export function WorkflowCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a workflow...',
-  searchPlaceholder = 'Search workflows...',
+  placeholder = 'Select a workflow',
+  searchPlaceholder = 'Search workflows',
   emptyText = 'No workflows found.',
   className,
   disabled = false,
   variant,
   size,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
   requestContext,
@@ -69,6 +71,7 @@ export function WorkflowCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />

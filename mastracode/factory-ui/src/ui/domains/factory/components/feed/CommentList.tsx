@@ -1,8 +1,9 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Comment, CommentArrival } from '@mastra/playground-ui/components/Comment';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { CommentListSkeleton } from './CommentListSkeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageCircle, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -187,26 +188,20 @@ export function CommentList({
           {/* Chat anchoring: a short stream sits against the composer, not the description. */}
           <div className="mt-auto flex min-h-40 flex-col justify-end py-2">
             {!showSkeleton && leading !== undefined && (
-              <div
-                aria-hidden
-                className="text-meta text-muted-foreground stream-landing flex items-center gap-2 px-3 pb-1"
-                style={landingStyle(1)}
-              >
+              <div aria-hidden style={landingStyle(1)} className="stream-landing flex items-center gap-2 px-3 pb-1">
                 <span className="bg-border h-px flex-1" />
-                Activity
+                <Txt tone="muted" as="span" variant="meta" className="block">
+                  Activity
+                </Txt>
                 <span className="bg-border h-px flex-1" />
               </div>
             )}
-            {showSkeleton ? (
-              <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-4/5" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : null}
+            {showSkeleton ? <CommentListSkeleton /> : null}
             {comments.isError ? (
-              <div className="text-caption text-muted-foreground flex items-center gap-2 px-2 py-2">
-                <span>Unable to load comments.</span>
+              <div className="text-muted-foreground flex items-center gap-2 px-2 py-2">
+                <Txt as="span" variant="caption">
+                  Unable to load comments.
+                </Txt>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void comments.refetch()}>
                   <RefreshCw aria-hidden />
                   Try again
@@ -214,9 +209,11 @@ export function CommentList({
               </div>
             ) : null}
             {!showSkeleton && !comments.isError && rows.length === 0 ? (
-              <div className="text-caption text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
+              <div className="text-muted-foreground flex items-center justify-center gap-1.5 px-2 py-6">
                 <MessageCircle size={14} aria-hidden />
-                <span>No activity yet</span>
+                <Txt as="span" variant="caption">
+                  No activity yet
+                </Txt>
               </div>
             ) : null}
             {/* Mounted through loading so the live region exists before the first addition. */}

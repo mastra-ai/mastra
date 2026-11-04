@@ -55,7 +55,7 @@ These type parameters ensure type safety throughout your adapter implementation 
 
 ## Required methods
 
-You must implement these six abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
+You must implement these seven abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
 
 ### `registerContextMiddleware()`
 
@@ -120,6 +120,53 @@ registerAuthMiddleware(): void {
 }
 ```
 
+### `registerHttpLoggingMiddleware()`
+
+Register request logging middleware. `init()` calls this after the context, auth, and user middleware. Return early when request logging isn't enabled in `this.httpLoggingConfig`, and skip paths that `this.shouldLogRequest()` excludes. Implement this method as a no-op if your framework has no way to log requests.
+
+```typescript oxfmt:false
+registerHttpLoggingMiddleware(): void {
+  if (!this.httpLoggingConfig?.enabled) return;
+
+  this.app.use((req, res, next) => {
+    if (!this.shouldLogRequest(req.path)) {
+      return next();
+    }
+
+    const start = Date.now();
+    const method = req.method;
+    const path = req.path;
+
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const level = this.httpLoggingConfig?.level || 'info';
+      const logData: Record<string, unknown> = {
+        method,
+        path,
+        status: res.statusCode,
+        duration: `${duration}ms`,
+      };
+
+      if (this.httpLoggingConfig?.includeQueryParams) {
+        logData.query = req.query;
+      }
+
+      if (this.httpLoggingConfig?.includeHeaders) {
+        const headers = { ...req.headers };
+        for (const name of this.httpLoggingConfig.redactHeaders || []) {
+          const key = name.toLowerCase();
+          if (headers[key] !== undefined) headers[key] = '[REDACTED]';
+        }
+        logData.headers = headers;
+      }
+
+      this.logger[level](`${method} ${path} ${res.statusCode} ${duration}ms`, logData);
+    });
+    next();
+  });
+}
+```
+
 ### `registerRoute()`
 
 Register a single route with your framework. This method is called once for each Mastra route during initialization. It receives a `ServerRoute` object containing the path, HTTP method, handler function, and Zod schemas for validation. Your implementation should wire this up to your framework's routing system.
@@ -177,7 +224,7 @@ async getParams(
   request: MyRequest
 ): Promise<{
   urlParams: Record<string, string>;
-  queryParams: Record<string, string>;
+  queryParams: Record<string, string | string[]>; // repeated keys (?tag=a&tag=b) become arrays
   body: unknown;
 }> {
   return {
@@ -302,6 +349,10 @@ constructor(options: {
   bodyLimitOptions?: BodyLimitOptions;
   streamOptions?: StreamOptions;
   customRouteAuthConfig?: Map<string, boolean>;
+  tools?: ToolsInput;
+  taskStore?: InMemoryTaskStore;
+  customApiRoutes?: ApiRoute[];
+  mcpOptions?: MCPOptions;
 }) {
   super(options);
 }
@@ -339,6 +390,11 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
     const authConfig = this.mastra.getServer()?.auth
     if (!authConfig) return
     // ... implement auth middleware
+  }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) return
+    // ... implement request logging
   }
 
   async registerRoute(

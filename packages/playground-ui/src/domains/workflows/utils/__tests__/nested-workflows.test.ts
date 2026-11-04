@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, expect, it } from 'vitest';
 
 import { workflowsFixture } from '../../components/workflows-list/__tests__/fixtures/workflows';

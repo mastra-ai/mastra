@@ -113,3 +113,76 @@ describe('transient signals (transient: true)', () => {
     expect(() => mastraDBMessageToSignal(corruptPersistedMessage)).toThrow('state signals cannot be transient');
   });
 });
+
+describe('signal attribute rendering', () => {
+  it('renders the same markup after storage reorders the attribute keys', () => {
+    const attributes = {
+      userId: 'u1',
+      name: 'jane',
+      turnId: 't1',
+      messageId: 'm1',
+      attempt: '1',
+      expectsTerminal: 'true',
+    };
+    const fresh = createSignal({ type: 'user', contents: 'hello', attributes });
+
+    // Postgres jsonb returns object keys sorted by length, then bytewise.
+    const dbMessage = fresh.toDBMessage();
+    const signalMeta = dbMessage.content.metadata!.signal as { attributes: Record<string, unknown> };
+    const reorderedAttributes = Object.fromEntries(
+      Object.keys(signalMeta.attributes)
+        .sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0))
+        .map(key => [key, signalMeta.attributes[key]]),
+    );
+    const reloaded = mastraDBMessageToSignal({
+      ...dbMessage,
+      content: {
+        ...dbMessage.content,
+        metadata: { ...dbMessage.content.metadata, signal: { ...signalMeta, attributes: reorderedAttributes } },
+      },
+    });
+
+    expect(Object.keys(reloaded.attributes!)).not.toEqual(Object.keys(attributes));
+    expect(reloaded.toLLMMessage()).toEqual(fresh.toLLMMessage());
+    expect(fresh.toLLMMessage().content).toBe(
+      '<user attempt="1" expectsTerminal="true" messageId="m1" name="jane" turnId="t1" userId="u1">hello</user>',
+    );
+  });
+});
+
+describe('signal contents', () => {
+  const skill = (contents: string, tagName = 'skill') =>
+    createSignal({ type: 'reactive', tagName, attributes: { name: 'a&"<b>' }, contents }).toLLMMessage().content;
+
+  it('reaches the model as written inside its tag', () => {
+    const contents = 'Run `pnpm build && pnpm test 2>&1`.\n\n<work-item-feed>\nfeed\n</work-item-feed>';
+    expect(skill(contents)).toBe(`<skill name="a&amp;&quot;&lt;b&gt;">${contents}</skill>`);
+  });
+
+  it("escapes the signal's own closing tag in any whitespace or case form", () => {
+    expect(skill('a </skill> b </skill >c</SKILL\n\t> </skills> <system-reminder>x</system-reminder>')).toBe(
+      '<skill name="a&amp;&quot;&lt;b&gt;">a &lt;/skill&gt; b &lt;/skill &gt;c&lt;/SKILL\n\t&gt; </skills> <system-reminder>x</system-reminder></skill>',
+    );
+  });
+
+  it('matches a dotted tag name literally', () => {
+    expect(skill('</myXskill> </my.skill >', 'my.skill')).toBe(
+      '<my.skill name="a&amp;&quot;&lt;b&gt;"></myXskill> &lt;/my.skill &gt;</my.skill>',
+    );
+  });
+
+  it('applies the same rule to the inline marker of multimodal contents', () => {
+    const content = createSignal({
+      type: 'reactive',
+      tagName: 'skill',
+      contents: [
+        { type: 'text', text: 'a && b </skill>' },
+        { type: 'file', data: 'aGVsbG8=', mediaType: 'image/png' },
+      ],
+    }).toLLMMessage().content;
+    expect(Array.isArray(content) && content[0]).toMatchObject({
+      type: 'text',
+      text: '<skill>a && b &lt;/skill&gt;</skill>',
+    });
+  });
+});

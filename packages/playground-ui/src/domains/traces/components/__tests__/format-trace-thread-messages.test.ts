@@ -71,6 +71,19 @@ describe('formatTraceThreadMessages', () => {
     });
   });
 
+  describe('when the agent run is a resume, so its input carries no user message', () => {
+    it('renders no user message but keeps the tool calls and the response', () => {
+      const spans = agentTraceWithTools.spans.map(span =>
+        span.spanId === 'agent-root' ? { ...span, input: { resumeData: { approved: true } } } : span,
+      );
+
+      const messages = formatTraceThreadMessages(spans);
+
+      expect(messages.map(message => message.role)).toEqual(Array(5).fill('assistant'));
+      expect(messages.at(-1)?.content.parts).toEqual([{ type: 'text', text: 'Your Paris itinerary is ready.' }]);
+    });
+  });
+
   describe('when the turn calls tools the chat hides', () => {
     it('renders no message for task and working memory tool calls', () => {
       const client = agentTraceWithTools.spans.find(span => span.spanId === 'client-tool');
@@ -299,6 +312,42 @@ describe('formatTraceThreadMessages', () => {
       const messages = formatTraceThreadMessages(spans);
 
       expect(messages[0]?.content.parts).toEqual([{ type: 'text', text: 'Plan a weekend in Paris' }]);
+    });
+
+    it('opens with the signal itself when it is not a user message, such as a skill', () => {
+      const spans = basicAgentTrace.spans.map(span =>
+        span.spanType === SpanType.AGENT_RUN
+          ? {
+              ...span,
+              attributes: {
+                ...span.attributes,
+                signal: { id: 'skill-1', type: 'reactive', tagName: 'skill', attributes: { name: 'trip-planner' } },
+              },
+              input: {
+                __isCreatedSignal: true,
+                id: 'skill-1',
+                type: 'reactive',
+                tagName: 'skill',
+                attributes: { name: 'trip-planner' },
+                contents: 'Plan a weekend.\n\nARGUMENTS: Paris',
+                toDBMessage: '[Function]',
+              },
+            }
+          : span,
+      );
+
+      const messages = formatTraceThreadMessages(spans);
+
+      expect(messages.map(message => message.role)).toEqual(['signal', 'assistant']);
+      expect(messages[0]).toMatchObject({
+        type: 'skill',
+        content: {
+          parts: [{ type: 'text', text: 'Plan a weekend.\n\nARGUMENTS: Paris' }],
+          metadata: {
+            signal: { id: 'skill-1', type: 'reactive', tagName: 'skill', attributes: { name: 'trip-planner' } },
+          },
+        },
+      });
     });
   });
 

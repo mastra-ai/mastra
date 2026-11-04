@@ -1,7 +1,12 @@
 import type { Event } from '../../events/types';
 
 export interface EventRouter {
-  route(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>): Promise<void>;
+  route(
+    event: Event,
+    ack?: () => Promise<void>,
+    nack?: () => Promise<void>,
+    extend?: () => Promise<void>,
+  ): Promise<void>;
 }
 
 export interface WorkerTransportStopOptions {

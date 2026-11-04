@@ -159,4 +159,37 @@ describe('NestJS Adapter - Multipart FormData', () => {
     expect(Buffer.isBuffer(parsed.file1)).toBe(true);
     expect(Buffer.isBuffer(parsed.file2)).toBe(true);
   });
+
+  it('should ignore fields named with special object keys', async () => {
+    const boundary = '----mastra-boundary-special-keys';
+    const body = buildMultipartBody(boundary, [
+      {
+        name: '__proto__',
+        content: JSON.stringify({ isAdmin: true }),
+      },
+      {
+        name: 'constructor',
+        content: JSON.stringify({ prototype: { isAdmin: true } }),
+      },
+      {
+        name: 'prototype',
+        filename: 'payload.bin',
+        contentType: 'application/octet-stream',
+        content: Buffer.from([1, 2, 3]),
+      },
+      {
+        name: 'name',
+        content: 'legit-recording',
+      },
+    ]);
+
+    const req = createMultipartRequest(boundary, body);
+    const parsed = await parseMultipartFormData(req);
+
+    expect(parsed.name).toBe('legit-recording');
+    expect(Object.keys(parsed)).toEqual(['name']);
+    expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+    expect((parsed as any).isAdmin).toBeUndefined();
+    expect(({} as any).isAdmin).toBeUndefined();
+  });
 });

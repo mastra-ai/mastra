@@ -157,6 +157,7 @@ describe('describeSpanOutput', () => {
       toolCallId: 'call_1',
     };
     const aborted = { status: 'aborted', reason: 'abort' };
+    const interrupted = { status: 'interrupted', reason: 'run recovered after its process stopped' };
 
     expect(describeSpanOutput(span(SpanType.AGENT_RUN, { output: suspended }))).toEqual({
       type: 'interrupted',
@@ -165,6 +166,10 @@ describe('describeSpanOutput', () => {
     expect(describeSpanOutput(span(SpanType.AGENT_RUN, { output: aborted }))).toEqual({
       type: 'interrupted',
       value: aborted,
+    });
+    expect(describeSpanOutput(span(SpanType.AGENT_RUN, { output: interrupted }))).toEqual({
+      type: 'interrupted',
+      value: interrupted,
     });
     expect(describeSpanOutput(span(SpanType.MODEL_GENERATION, { output: suspended }))).toEqual({
       type: 'interrupted',

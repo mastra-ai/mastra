@@ -1,18 +1,21 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type {
   AgentEditorConfig,
-  AgentMessageInput,
   AgentModelManagerConfig,
   AgentSignalInput,
   DurableAgentLike,
+  SendAgentSignalOptions,
+  SendAgentSignalResult,
 } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
+import { matchesPermission } from '@mastra/core/auth/ee';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -20,19 +23,27 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StorageCreateAgentInput, StorageModelListEntry } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
-import { MASTRA_IS_STUDIO_KEY, MASTRA_RESOURCE_ID_KEY, WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
+import {
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  WORKSPACE_TOOLS,
+  resolveToolConfig,
+} from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
+  agentRunPathParams,
   agentSkillPathParams,
   agentVersionQuerySchema,
   listAgentsResponseSchema,
@@ -63,6 +74,7 @@ import {
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   queueAgentMessageBodySchema,
+  queueAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
   abortAgentThreadBodySchema,
   abortAgentThreadResponseSchema,
@@ -80,18 +92,23 @@ import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
+import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
+import { assertWriteAccess, getCallerAuthorId } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
+  stripClientCredentialHeaders,
   validateBody,
   getEffectiveResourceId,
   getContextResourceId,
   requireEffectiveResourceId,
   getEffectiveThreadId,
+  applyEffectiveThreadId,
   enforceThreadAccess,
+  getHandlerFGAProvider,
   mergeBodyRequestContext,
   validateThreadOwnership,
   validateRunOwnership,
@@ -137,13 +154,75 @@ function getIsStudioFromContext(requestContext: RequestContext): boolean {
   return requestContext.get(MASTRA_IS_STUDIO_KEY) === true;
 }
 
+function toStoredModelList(
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>,
+): StorageModelListEntry[] {
+  return modelList.map(model => ({
+    id: model.id,
+    provider: model.model.provider,
+    modelId: model.model.modelId,
+    enabled: model.enabled,
+    maxRetries: model.maxRetries,
+  }));
+}
+
+async function persistEditorOwnedModelList({
+  mastra,
+  agent,
+  modelList,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agent: Agent;
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>;
+  requestContext: RequestContext;
+}): Promise<boolean> {
+  const editorConfig = agent.__getEditorConfig?.();
+  if (!editorConfig || editorConfig.model !== true) return false;
+
+  const editorAgent = mastra.getEditor?.()?.agent;
+  const storage = mastra.getStorage?.();
+  const agentsStore = await storage?.getStore('agents');
+  if (!editorAgent || !agentsStore) {
+    throw new HTTPException(500, { message: 'Editor and agent storage are required for Editor-owned model lists' });
+  }
+
+  const storedModelList = toStoredModelList(modelList);
+  const storedAgent = await agentsStore.getById(agent.id);
+  const scope = await getStoredResourceScope(mastra, requestContext);
+  if (storedAgent) {
+    assertStoredResourceScope(storedAgent, scope);
+    assertWriteAccess({
+      requestContext,
+      resource: 'stored-agents',
+      resourceId: agent.id,
+      action: 'edit',
+      record: storedAgent,
+    });
+    await editorAgent.update({ id: agent.id, modelList: storedModelList });
+  } else {
+    const authorId = getCallerAuthorId(requestContext) ?? undefined;
+    await editorAgent.create({
+      id: agent.id,
+      name: agent.name,
+      authorId,
+      visibility: authorId ? 'private' : 'public',
+      metadata: scopeStoredResourceMetadata(undefined, scope),
+      modelList: storedModelList,
+    } as StorageCreateAgentInput);
+  }
+
+  return true;
+}
+
 function normalizePublicExecutionOptions(
   options: Record<string, unknown> | undefined,
   serverRequestContext: RequestContext,
 ): Record<string, unknown> | undefined {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
 
-  const { actor: _actor, requestContext, ...normalized } = options;
+  const { actor: _actor, scopes: _scopes, requestContext, ...normalized } = options;
+  stripClientCredentialHeaders(normalized);
   mergeBodyRequestContext(serverRequestContext, requestContext);
   return { ...normalized, requestContext: serverRequestContext };
 }
@@ -178,6 +257,12 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+// Matches the snapshot wait of the durable resume path this check gates
+// (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
+const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
+// Same as RESUME_SNAPSHOT_POLL_INTERVAL_MS in @mastra/core/workflows, which older supported core versions don't export.
+const DURABLE_SNAPSHOT_WAIT_INTERVAL_MS = 25;
+
 function getDurableLoopWorkflowName(agent: DurableAgentLike): string {
   return agent.durableLoopWorkflowName ?? DurableStepIds.AGENTIC_LOOP;
 }
@@ -189,6 +274,7 @@ async function validateDurableToolCallAccess({
   toolCallId,
   requestContext,
   threadId,
+  abortSignal,
 }: {
   mastra: any;
   agent: Agent;
@@ -196,58 +282,74 @@ async function validateDurableToolCallAccess({
   toolCallId?: string;
   requestContext: RequestContext;
   threadId?: string;
+  abortSignal?: AbortSignal;
 }): Promise<void> {
   if (!isDurableAgentLike(agent)) return;
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-  const workflowRun = await workflowsStore?.getWorkflowRunById({
-    workflowName: getDurableLoopWorkflowName(agent),
-    runId,
-  });
-  if (!workflowRun) {
+  if (!workflowsStore) {
     throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
   }
-
-  let snapshot = workflowRun.snapshot as Record<string, any> | string | undefined;
-  if (typeof snapshot === 'string') {
-    try {
-      snapshot = JSON.parse(snapshot) as Record<string, any>;
-    } catch {
-      snapshot = undefined;
-    }
-  }
-
-  const input = snapshot?.context?.input;
-  const persistedResourceIds = new Set(
-    [
-      workflowRun.resourceId,
-      input?.state?.resourceId,
-      input?.messageListState?.memoryInfo?.resourceId,
-      input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
-    ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
-  );
-  // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+  const workflowName = getDurableLoopWorkflowName(agent);
   const contextResourceId = getContextResourceId(requestContext);
-  const [persistedResourceId] = persistedResourceIds;
-  if (
-    persistedResourceIds.size > 1 ||
-    (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
-  ) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
-  }
 
-  const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
-  if (threadId && persistedThreadId !== threadId) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
-  }
+  // The approval chunk can reach the client before the suspended snapshot is persisted,
+  // so wait (bounded) for storage to catch up before denying.
+  const deadline = Date.now() + DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS;
+  while (true) {
+    const workflowRun = await workflowsStore.getWorkflowRunById({ workflowName, runId });
 
-  if (
-    !snapshot ||
-    snapshot.status !== 'suspended' ||
-    input?.agentId !== agent.id ||
-    (toolCallId !== undefined && !hasSuspendedToolCall(snapshot, toolCallId))
-  ) {
-    throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+    let snapshot = workflowRun?.snapshot as Record<string, any> | string | undefined;
+    if (typeof snapshot === 'string') {
+      try {
+        snapshot = JSON.parse(snapshot) as Record<string, any>;
+      } catch {
+        snapshot = undefined;
+      }
+    }
+
+    const input = snapshot?.context?.input;
+    const persistedResourceIds = new Set(
+      [
+        workflowRun?.resourceId,
+        input?.state?.resourceId,
+        input?.messageListState?.memoryInfo?.resourceId,
+        input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
+      ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
+    );
+    // No server-side identity means a privileged/service caller, matching validateRunOwnership.
+    const [persistedResourceId] = persistedResourceIds;
+    if (
+      persistedResourceIds.size > 1 ||
+      (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
+    ) {
+      throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+    }
+
+    const ready =
+      !!workflowRun &&
+      !!snapshot &&
+      snapshot.status === 'suspended' &&
+      (toolCallId === undefined || hasSuspendedToolCall(snapshot, toolCallId));
+
+    if (ready || Date.now() >= deadline || abortSignal?.aborted) {
+      if (!workflowRun) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+      }
+
+      const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
+      if (threadId && persistedThreadId !== threadId) {
+        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
+      }
+
+      if (!ready || input?.agentId !== agent.id) {
+        throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+      }
+      await validateRunOwnership({ resourceId: persistedResourceId }, contextResourceId, mastra, requestContext);
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, DURABLE_SNAPSHOT_WAIT_INTERVAL_MS));
   }
 }
 
@@ -414,6 +516,8 @@ export interface SerializedAgent {
   modelId?: string;
   modelVersion?: string;
   supportsMemory?: boolean;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean;
   modelList?: Array<
     Omit<AgentModelManagerConfig, 'model'> & {
       model: {
@@ -439,6 +543,22 @@ export interface SerializedAgent {
 
 export interface SerializedAgentWithId extends SerializedAgent {
   id: string;
+}
+
+function getAgentModelRef(agentModel: Agent['model'], llm: Awaited<ReturnType<Agent['getLLM']>> | undefined) {
+  if (typeof agentModel === 'string') {
+    const { provider, modelId } = parseModelString(agentModel);
+    return { provider: provider ?? llm?.getProvider(), modelId };
+  }
+  const model = llm?.getModel();
+  if (
+    model instanceof ModelRouterLanguageModel &&
+    model.gatewayId !== 'models.dev' &&
+    model.gatewayId !== model.provider
+  ) {
+    return { provider: model.gatewayId, modelId: `${model.provider}/${model.modelId}` };
+  }
+  return { provider: llm?.getProvider(), modelId: llm?.getModelId() };
 }
 
 export async function getSerializedAgentTools(
@@ -867,15 +987,12 @@ async function formatAgentList({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     defaultOptions,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
@@ -989,6 +1106,59 @@ export async function getAgentFromSystem({
   }
 
   return agent;
+}
+
+async function getAgentForModelListMutation({
+  mastra,
+  agentId,
+  requestContext,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  requestContext: RequestContext;
+}): Promise<Agent> {
+  const publishedAgent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    requestContext,
+    versionOptions: { status: 'published' },
+  });
+
+  const editorConfig = publishedAgent.__getEditorConfig?.();
+  if (editorConfig === false || editorConfig?.model !== true) {
+    return publishedAgent;
+  }
+
+  const callerPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY);
+  if (
+    Array.isArray(callerPermissions) &&
+    !callerPermissions.some(permission =>
+      typeof permission === 'string' ? matchesPermission(permission, 'stored-agents:write') : false,
+    )
+  ) {
+    throw new HTTPException(403, { message: 'Missing required permission: stored-agents:write' });
+  }
+
+  const agentsStore = await mastra.getStorage?.()?.getStore('agents');
+  const storedAgent = await agentsStore?.getById(agentId);
+  if (storedAgent) {
+    assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+    assertWriteAccess({
+      requestContext,
+      resource: 'stored-agents',
+      resourceId: agentId,
+      action: 'edit',
+      record: storedAgent,
+    });
+  }
+
+  const draftAgent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    requestContext,
+    versionOptions: { status: 'draft' },
+  });
+  return draftAgent === publishedAgent ? draftAgent.__fork() : draftAgent;
 }
 
 async function formatAgent({
@@ -1191,14 +1361,11 @@ async function formatAgent({
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider:
-      typeof agent.model === 'string'
-        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
-        : llm?.getProvider(),
-    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
+    ...getAgentModelRef(agent.model, llm),
     modelVersion: model?.specificationVersion,
     supportsMemory,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
@@ -1325,7 +1492,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
       }
 
       // Filter agents by FGA if configured
-      const fgaProvider = mastra.getServer?.()?.fga;
+      const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
       const user = requestContext?.get('user');
       if (fgaProvider && user) {
         const agentList = Object.values(serializedAgents) as unknown as Array<{ id: string }>;
@@ -1446,7 +1613,8 @@ export const GENERATE_AGENT_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
@@ -1505,7 +1673,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -1554,7 +1722,8 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1624,7 +1793,8 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1770,6 +1940,7 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       connected: isProviderConnected(id, allProviders) || isClaimedByGateway(id, provider.models, gateways),
       docUrl: provider.docUrl,
       models: [...provider.models],
+      modelReleaseDates: provider.modelReleaseDates,
     };
   });
 }
@@ -1844,7 +2015,8 @@ export const STREAM_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
@@ -1902,7 +2074,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -1912,7 +2084,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       // Support `untilIdle` option on the /stream endpoint — delegates to
@@ -2086,24 +2260,24 @@ async function handleAgentMessageRoute({
   mastra,
   agentId,
   requestContext: serverRequestContext,
-  message,
   runId,
   resourceId,
   threadId,
   ifActive,
   ifIdle,
   methodName,
+  invoke,
 }: {
   mastra: any;
   agentId: string;
   requestContext: RequestContext;
-  message: AgentMessageInput;
   runId?: string;
   resourceId?: string;
   threadId?: string;
   ifActive?: { behavior?: 'deliver' | 'persist' | 'discard' };
   ifIdle?: { behavior?: 'wake' | 'persist' | 'discard'; streamOptions?: Record<string, unknown> };
-  methodName: 'sendMessage' | 'queueMessage';
+  methodName: 'sendMessage' | 'queueMessage' | 'queueSignal';
+  invoke: (agent: Agent, target: SendAgentSignalOptions) => SendAgentSignalResult;
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
     | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
@@ -2142,12 +2316,12 @@ async function handleAgentMessageRoute({
   }
 
   if (runId) {
-    const result = await agent[methodName](message, {
+    const result = await invoke(agent, {
       runId,
       ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
-    } as any);
+    } as SendAgentSignalOptions);
     const settled = await result.accepted;
     const settledRunId: string = settled && 'runId' in settled ? settled.runId : runId;
     return result.signal === undefined
@@ -2159,12 +2333,12 @@ async function handleAgentMessageRoute({
     throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
   }
 
-  const result = await agent[methodName](message, {
+  const result = await invoke(agent, {
     resourceId: effectiveResourceId,
     threadId: effectiveThreadId,
     ...(ifActive ? { ifActive } : {}),
     ...ifIdleWithContext,
-  } as any);
+  } as SendAgentSignalOptions);
   const settled = await result.accepted;
   const settledRunId: string = settled && 'runId' in settled ? settled.runId : result.signal?.id;
   return result.signal === undefined
@@ -2186,7 +2360,11 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async params => {
     try {
-      return await handleAgentMessageRoute({ ...params, methodName: 'sendMessage' });
+      return await handleAgentMessageRoute({
+        ...params,
+        methodName: 'sendMessage',
+        invoke: (agent, target) => agent.sendMessage(params.message, target),
+      });
     } catch (error) {
       return handleSignalRoutingError(error, 'error sending agent message');
     }
@@ -2208,9 +2386,114 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async params => {
     try {
-      return await handleAgentMessageRoute({ ...params, methodName: 'queueMessage' });
+      return await handleAgentMessageRoute({
+        ...params,
+        methodName: 'queueMessage',
+        invoke: (agent, target) => agent.queueMessage(params.message, target),
+      });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent message');
+    }
+  },
+});
+
+export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/queue-signal',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: queueAgentSignalBodySchema,
+  responseSchema: sendAgentSignalResponseSchema,
+  summary: 'Queue agent signal',
+  description:
+    'Queues a typed signal to run after the active thread run completes, or starts a memory thread run when idle',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async params => {
+    try {
+      return await handleAgentMessageRoute({
+        ...params,
+        methodName: 'queueSignal',
+        invoke: (agent, target) => agent.queueSignal(params.signal, target),
+      });
+    } catch (error) {
+      return handleSignalRoutingError(error, 'error queueing agent signal');
+    }
+  },
+});
+
+export const ABORT_AGENT_RUN_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/runs/:runId/abort',
+  responseType: 'json',
+  pathParamSchema: agentRunPathParams,
+  responseSchema: abortAgentThreadResponseSchema,
+  summary: 'Abort an agent run',
+  description: 'Explicitly stop a durable run, including runs without a memory thread',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  handler: async ({ mastra, agentId, runId, requestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
+      if (!isDurableAgentLike(agent)) {
+        throw new HTTPException(501, { message: 'Run-scoped cancellation requires a durable agent' });
+      }
+      const workflows = await mastra.getStorage()?.getStore('workflows');
+      const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
+      if (!run) return { aborted: false };
+      await validateRunOwnership(run, getContextResourceId(requestContext), mastra, requestContext);
+      const ownershipSchema = z.object({
+        context: z.object({
+          input: z.object({
+            agentId: z.string(),
+            state: z.object({ threadId: z.string().optional() }).optional(),
+          }),
+        }),
+      });
+      let parsed = ownershipSchema.safeParse(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
+      );
+      if (!parsed.success) {
+        // Active local runs may not checkpoint the outer input until the segment finishes.
+        const execution = await workflows?.getWorkflowRunById({
+          workflowName: getDurableLoopWorkflowName(agent).replace(
+            DurableStepIds.AGENTIC_LOOP,
+            DurableStepIds.AGENTIC_EXECUTION,
+          ),
+          runId,
+        });
+        await validateRunOwnership(execution, getContextResourceId(requestContext), mastra, requestContext);
+        parsed = ownershipSchema.safeParse(
+          typeof execution?.snapshot === 'string' ? JSON.parse(execution.snapshot) : execution?.snapshot,
+        );
+      }
+      // Stop can arrive before either workflow has checkpointed its input. Do not cancel an unverified run.
+      if (!parsed.success) return { aborted: false };
+      if (parsed.data.context.input.agentId !== agent.id) {
+        throw new HTTPException(403, { message: 'Access denied: run does not belong to this agent' });
+      }
+      const threadId = parsed.data.context.input.state?.threadId;
+      if (threadId) {
+        const memory = await agent.getMemory({ requestContext });
+        const thread = await memory?.getThreadById({ threadId });
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId,
+          thread,
+          effectiveResourceId: getContextResourceId(requestContext),
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
+      }
+      // Another server may be executing the run: only report it aborted once that server confirms.
+      if (typeof agent.__abortRunAcknowledged === 'function') {
+        return { aborted: await agent.__abortRunAcknowledged(runId) };
+      }
+      return { aborted: await agent.abortRunStream(runId) };
+    } catch (error) {
+      return handleError(error, 'error aborting agent run');
     }
   },
 });
@@ -2268,12 +2551,17 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
 
-      const aborted = await agent.abortThreadStream({
+      const abortOptions = {
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
         expectedRunId,
-      });
+      };
+      // The run may execute on another server, which only the async variant can reach and report on.
+      const aborted =
+        typeof agent.__abortThreadStreamAcrossProcesses === 'function'
+          ? await agent.__abortThreadStreamAcrossProcesses(abortOptions)
+          : await agent.abortThreadStream(abortOptions);
       return { aborted };
     } catch (error) {
       return handleError(error, 'error aborting agent thread');
@@ -2345,6 +2633,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
     resourceId,
     threadId,
     withInitialHistory,
+    withRunStatus,
     abortSignal,
     requestContext: serverRequestContext,
   }) => {
@@ -2388,6 +2677,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(withInitialHistory ? { withInitialHistory, requestContext: serverRequestContext } : {}),
+        ...(withRunStatus ? { withRunStatus } : {}),
       });
 
       let cleanedUp = false;
@@ -2473,7 +2763,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
@@ -2514,7 +2805,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -2526,7 +2817,9 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       const streamResult = structuredOutput
@@ -2574,36 +2867,65 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId });
-      const agentPubsub = isDurableAgentLike(agent) ? (agent as DurableAgentLike).pubsub : undefined;
-      const pubsub = agentPubsub ?? mastra.pubsub;
-
-      // Create a ReadableStream that subscribes to the agent stream topic
-      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromOffset
+      const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
+      const pubsub = durableAgent?.pubsub ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
-      let handleEvent: ((event: any) => void) | null = null;
+
+      // A durable agent subscribes for us so the client never sees what an
+      // execution that lost the run still publishes. Agents without it, such as
+      // those from an older @mastra/core, are observed through the topic directly.
+      const subscribe = (onEvent: (event: any) => void, onComplete: () => void): Promise<() => Promise<void>> => {
+        if (typeof durableAgent?.__subscribeToRunStream === 'function') {
+          return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
+        }
+        const subscribed =
+          offset !== undefined
+            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
+            : pubsub.subscribeWithReplay(topic, onEvent);
+        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+      };
+
+      let closed = false;
+      let pendingRejection: Error | undefined;
+      let unsubscribe: (() => Promise<void>) | undefined;
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
+      let onAbort: (() => void) | undefined;
 
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
-      function cleanup(controller: ReadableStreamDefaultController) {
+      function releaseSubscription(unsubscribeFromRun: () => Promise<void>) {
+        void Promise.resolve()
+          .then(unsubscribeFromRun)
+          .catch(error => console.error(`[ObserveAgentStream] Failed to unsubscribe from ${topic}:`, error));
+      }
+
+      function stop() {
+        closed = true;
         if (idleTimer) {
           clearTimeout(idleTimer);
           idleTimer = null;
         }
-        if (handleEvent) {
-          void pubsub.unsubscribe(topic, handleEvent);
-          handleEvent = null;
+        if (onAbort) {
+          abortSignal?.removeEventListener('abort', onAbort);
+          onAbort = undefined;
         }
-        try {
-          controller.close();
-        } catch {
-          // Stream may already be closed
+        if (unsubscribe) {
+          const unsubscribeFromRun = unsubscribe;
+          unsubscribe = undefined;
+          releaseSubscription(unsubscribeFromRun);
         }
       }
 
+      function cleanup(controller: ReadableStreamDefaultController) {
+        if (closed) return;
+        stop();
+        controller.close();
+      }
+
       function resetIdleTimer(controller: ReadableStreamDefaultController) {
+        if (closed) return;
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => cleanup(controller), IDLE_TIMEOUT_MS);
       }
@@ -2616,49 +2938,63 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
               cleanup(controller);
               return;
             }
-            abortSignal.addEventListener('abort', () => cleanup(controller), { once: true });
+            onAbort = () => cleanup(controller);
+            abortSignal.addEventListener('abort', onAbort, { once: true });
           }
 
           resetIdleTimer(controller);
 
-          handleEvent = (event: any) => {
-            const isTerminal = event.type === 'finish' || event.type === 'error';
-            try {
-              controller.enqueue(event);
-            } catch {
-              // Stream may be closed
-            }
-            if (isTerminal) {
-              cleanup(controller);
-            } else {
-              resetIdleTimer(controller);
-            }
-          };
-
-          // Subscribe with replay support
-          const subscribePromise =
-            offset !== undefined
-              ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
-              : pubsub.subscribeWithReplay(topic, handleEvent);
-
-          subscribePromise.catch((error: any) => {
-            console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
-            if (idleTimer) {
-              clearTimeout(idleTimer);
-              idleTimer = null;
-            }
-            controller.error(error);
-          });
+          void Promise.resolve()
+            .then(() => {
+              if (closed) return;
+              return subscribe(
+                event => {
+                  if (closed) return;
+                  const type = event.type === 'chunk' ? event.data?.type : event.type;
+                  if (event.type === 'error' && event.data?.delivery === 'reject') {
+                    const error = Object.assign(new Error(event.data.error.message), event.data.error);
+                    stop();
+                    // Erroring immediately discards queued replay chunks. Drain them first.
+                    if ((controller.desiredSize ?? 0) > 0) controller.error(error);
+                    else pendingRejection = error;
+                    return;
+                  }
+                  for (const chunk of toAgentStreamChunks(event)) {
+                    controller.enqueue(chunk);
+                  }
+                  if (type === 'finish' || event.type === 'error' || type === 'abort') {
+                    cleanup(controller);
+                  } else {
+                    resetIdleTimer(controller);
+                  }
+                },
+                () => cleanup(controller),
+              );
+            })
+            .then(
+              unsubscribeFromRun => {
+                if (!unsubscribeFromRun) return;
+                // Replay or cancellation may have ended the stream before setup completed.
+                if (closed) releaseSubscription(unsubscribeFromRun);
+                else unsubscribe = unsubscribeFromRun;
+              },
+              (error: unknown) => {
+                if (closed) return;
+                console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
+                stop();
+                controller.error(error);
+              },
+            );
+        },
+        pull(controller) {
+          if (pendingRejection) {
+            controller.error(pendingRejection);
+            pendingRejection = undefined;
+          }
         },
         cancel() {
-          if (idleTimer) {
-            clearTimeout(idleTimer);
-            idleTimer = null;
-          }
-          if (handleEvent) {
-            void pubsub.unsubscribe(topic, handleEvent);
-            handleEvent = null;
-          }
+          pendingRejection = undefined;
+          stop();
         },
       });
 
@@ -2699,7 +3035,8 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -2707,12 +3044,14 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.approveToolCall({
         ...params,
         requestContext,
-        abortSignal,
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
       return streamResult.fullStream;
@@ -2780,7 +3119,8 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
       const normalizedStreamOptions = normalizePublicExecutionOptions(
         params.streamOptions as Record<string, unknown> | undefined,
         serverRequestContext,
@@ -2900,7 +3240,8 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -2908,12 +3249,14 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const streamResult = await agent.declineToolCall({
         ...params,
         requestContext,
-        abortSignal,
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
       return streamResult.fullStream;
@@ -2942,7 +3285,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+
+      stripClientCredentialHeaders(params);
 
       const {
         resumeData,
@@ -2999,7 +3344,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId ? { thread: applyEffectiveThreadId(memoryOption?.thread, effectiveThreadId) } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
@@ -3010,11 +3355,17 @@ export const RESUME_STREAM_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+      await validateRunOwnership(
+        workflowRun,
+        getEffectiveResourceId(serverRequestContext, undefined),
+        mastra,
+        serverRequestContext,
+      );
 
       const { structuredOutput, untilIdle, ...restOptions } = rest;
 
@@ -3024,7 +3375,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       // Support `untilIdle` option on the /resume-stream endpoint — delegates
@@ -3102,14 +3455,17 @@ export const RECOVER_ROUTE = createRoute({
         workflowName: getDurableLoopWorkflowName(agent),
         runId,
       });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+      await validateRunOwnership(
+        workflowRun,
+        getEffectiveResourceId(serverRequestContext, undefined),
+        mastra,
+        serverRequestContext,
+      );
 
       // NOTE: DurableAgent.recover() reads the workflow's requestContext from
       // the persisted snapshot. serverRequestContext is only used above for
       // ownership checks and version resolution.
-      const streamResult = await (agent as any).recover(runId, {
-        abortSignal,
-      });
+      const streamResult = await (agent as any).recover(runId);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -3138,7 +3494,9 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+
+      stripClientCredentialHeaders(params);
 
       const {
         resumeData,
@@ -3201,7 +3559,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId ? { thread: applyEffectiveThreadId(memoryOption?.thread, effectiveThreadId) } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
@@ -3212,11 +3570,17 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         toolCallId,
         requestContext: serverRequestContext,
         threadId: effectiveThreadId,
+        abortSignal,
       });
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
-      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
+      await validateRunOwnership(
+        workflowRun,
+        getEffectiveResourceId(serverRequestContext, undefined),
+        mastra,
+        serverRequestContext,
+      );
 
       const { structuredOutput, ...restOptions } = rest;
 
@@ -3228,7 +3592,9 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       const streamResult = structuredOutput
@@ -3271,7 +3637,8 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3279,6 +3646,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.approveToolCallGenerate({
@@ -3323,7 +3691,8 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
         mastra,
@@ -3331,6 +3700,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
         runId: params.runId,
         toolCallId: params.toolCallId,
         requestContext,
+        abortSignal,
       });
 
       const result = await agent.declineToolCallGenerate({
@@ -3368,7 +3738,8 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       validateBody({ messages });
 
@@ -3418,7 +3789,8 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       const streamResult = await agent.approveNetworkToolCall({
         ...params,
@@ -3457,7 +3829,8 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
+      stripClientCredentialHeaders(params);
 
       const streamResult = await agent.declineNetworkToolCall({
         ...params,
@@ -3534,16 +3907,35 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, reorderedModelIds }) => {
+  handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
 
-      const modelList = await agent.getModelList();
+      if (typeof mutableAgent.model === 'function') {
+        throw new HTTPException(409, {
+          message: 'Agent model list is dynamic (model is a function) and cannot be edited',
+        });
+      }
+
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      agent.reorderModels(reorderedModelIds);
+      const applied = mutableAgent.reorderModels(reorderedModelIds);
+      if (applied === false) {
+        throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
+      }
+
+      const reorderedModelList = await mutableAgent.getModelList(requestContext);
+      if (reorderedModelList) {
+        await persistEditorOwnedModelList({
+          mastra,
+          agent: mutableAgent,
+          modelList: reorderedModelList,
+          requestContext,
+        });
+      }
 
       return { message: 'Model list reordered' };
     } catch (error) {
@@ -3563,11 +3955,17 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
+  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
 
-      const modelList = await agent.getModelList();
+      if (typeof mutableAgent.model === 'function') {
+        throw new HTTPException(409, {
+          message: 'Agent model list is dynamic (model is a function) and cannot be edited',
+        });
+      }
+
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
@@ -3587,7 +3985,20 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      agent.updateModelInModelList(updated);
+      const applied = mutableAgent.updateModelInModelList(updated);
+      if (applied === false) {
+        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
+
+      const updatedModelList = await mutableAgent.getModelList(requestContext);
+      if (updatedModelList) {
+        await persistEditorOwnedModelList({
+          mastra,
+          agent: mutableAgent,
+          modelList: updatedModelList,
+          requestContext,
+        });
+      }
 
       return { message: 'Model updated in model list' };
     } catch (error) {

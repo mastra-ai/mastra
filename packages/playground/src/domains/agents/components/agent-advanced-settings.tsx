@@ -1,5 +1,5 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { FieldBlock, fieldErrorId } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
@@ -78,12 +78,9 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
     <TooltipProvider>
       <div className="@container/advanced">
         <div className="grid grid-cols-1 gap-2 pb-2 @xs/advanced:grid-cols-2">
-          <div className="space-y-1">
-            <FieldBlock.Label name="frequency-penalty" htmlFor="frequency-penalty">
-              Frequency Penalty
-            </FieldBlock.Label>
+          <Field>
+            <FieldLabel>Frequency Penalty</FieldLabel>
             <Input
-              id="frequency-penalty"
               type="number"
               step="0.1"
               min="-1"
@@ -100,14 +97,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="presence-penalty" htmlFor="presence-penalty">
-              Presence Penalty
-            </FieldBlock.Label>
+          <Field>
+            <FieldLabel>Presence Penalty</FieldLabel>
             <Input
-              id="presence-penalty"
               type="number"
               step="0.1"
               min="-1"
@@ -124,14 +118,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="top-k" htmlFor="top-k">
-              Top K
-            </FieldBlock.Label>
+          <Field>
+            <FieldLabel>Top K</FieldLabel>
             <Input
-              id="top-k"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.topK || ''}
@@ -145,14 +136,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="max-tokens" htmlFor="max-tokens">
-              Max Tokens
-            </FieldBlock.Label>
+          <Field>
+            <FieldLabel>Max Tokens</FieldLabel>
             <Input
-              id="max-tokens"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.maxTokens || ''}
@@ -166,14 +154,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="max-steps" htmlFor="max-steps">
-              Max Steps
-            </FieldBlock.Label>
+          <Field>
+            <FieldLabel>Max Steps</FieldLabel>
             <Input
-              id="max-steps"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.maxSteps || ''}
@@ -187,14 +172,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="max-retries" htmlFor="max-retries">
-              Max Retries
-            </FieldBlock.Label>
+          <Field>
+            <FieldLabel>Max Retries</FieldLabel>
             <Input
-              id="max-retries"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.maxRetries || ''}
@@ -208,14 +190,11 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
 
-          <div className="space-y-1">
-            <FieldBlock.Label name="seed" htmlFor="seed">
-              Seed
-            </FieldBlock.Label>
+          <Field>
+            <FieldLabel>Seed</FieldLabel>
             <Input
-              id="seed"
               type="number"
               readOnly={!canEdit}
               value={settings?.modelSettings?.seed || ''}
@@ -229,12 +208,12 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 })
               }
             />
-          </div>
+          </Field>
         </div>
 
-        <div className="space-y-1">
+        <Field invalid={Boolean(error)} className="gap-1">
           <div className="flex items-center justify-between">
-            <FieldBlock.Label name="provider-options">Provider Options</FieldBlock.Label>
+            <FieldLabel>Provider Options</FieldLabel>
 
             <div className="flex items-center gap-2">
               <Tooltip>
@@ -243,25 +222,25 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                     type="button"
                     onClick={formatProviderOptions}
                     className={buttonClass}
-                    aria-label="Format Provider Options"
+                    aria-label="Format provider options"
                   >
                     <Icon>
                       <Braces />
                     </Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Format the Provider Options JSON</TooltipContent>
+                <TooltipContent>Format the provider options JSON</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy Provider Options">
+                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
                     <Icon>
                       <CopyIcon />
                     </Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Copy Provider Options</TooltipContent>
+                <TooltipContent>Copy provider options</TooltipContent>
               </Tooltip>
 
               {canEdit && (
@@ -271,29 +250,26 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                       type="button"
                       onClick={saveProviderOptions}
                       className={buttonClass}
-                      aria-label="Save Provider Options"
+                      aria-label="Save provider options"
                     >
                       <Icon>{saved ? <CheckIcon /> : <SaveIcon />}</Icon>
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>{saved ? 'Saved' : 'Save Provider Options'}</TooltipContent>
+                  <TooltipContent>{saved ? 'Saved' : 'Save provider options'}</TooltipContent>
                 </Tooltip>
               )}
             </div>
           </div>
           <CodeEditor
-            id="input-provider-options"
             value={providerOptionsValue}
             onChange={setProviderOptionsValue}
             language="json"
             editable={canEdit}
             showCopyButton={false}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? fieldErrorId('provider-options') : undefined}
             className="h-75"
           />
-          {error && <FieldBlock.ErrorMsg name="provider-options">{error}</FieldBlock.ErrorMsg>}
-        </div>
+          <FieldError>{error}</FieldError>
+        </Field>
       </div>
     </TooltipProvider>
   );

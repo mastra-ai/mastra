@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const deleteWebhookInputSchema = z.object({
   webhookId: z.string().describe('The ID of the webhook to delete. Example: "223704706495545344"'),
@@ -21,15 +22,7 @@ export function deleteWebhookTool(proxy: PlatformProxy) {
     outputSchema: deleteWebhookOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteWebhookOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please ensure the Discord connection has a botToken configured.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/webhook#delete-webhook
       const response = await platformProxy.delete({

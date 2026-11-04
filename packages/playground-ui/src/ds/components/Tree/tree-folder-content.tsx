@@ -13,7 +13,7 @@ export const TreeFolderContent = React.forwardRef<HTMLDivElement, TreeFolderCont
     const depth = useTreeDepth();
 
     return (
-      <CollapsibleContent ref={ref} className={cn(className)}>
+      <CollapsibleContent ref={ref} fill className={cn(className)}>
         <TreeDepthProvider depth={depth + 1}>
           <ul role="group" className="flex flex-col">
             {children}

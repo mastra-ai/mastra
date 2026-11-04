@@ -1,14 +1,16 @@
 import { Chunk } from '@codemirror/merge';
-import { Text } from '@codemirror/state';
-import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RangeSetBuilder, Text } from '@codemirror/state';
+import { Decoration, EditorView } from '@codemirror/view';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Code } from '@/ds/components/Code/code';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
-import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { SearchInput } from '@/ds/components/SearchInput';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -42,7 +44,7 @@ const diffLineStyles = {
   removed: 'code-diff-removed bg-destructive-subtle',
   added: 'code-diff-added bg-success-subtle',
 };
-const searchMatchStyle = 'code-search-match rounded-sm bg-badge-yellow-strong';
+const searchMatchStyle = 'code-search-match rounded-sm bg-badge-amber-strong';
 
 interface CodeViewProps {
   code: string;
@@ -52,32 +54,52 @@ interface CodeViewProps {
 }
 
 function CodeView({ code, changed, diffSide, searchQuery }: CodeViewProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<ReactCodeMirrorRef>(null);
   const query = searchQuery.toLowerCase();
 
+  // Matches are scrolled to through CodeMirror: it only renders the visible lines, so an off-screen match has no DOM node yet.
   useEffect(() => {
-    if (query) ref.current?.querySelector('.code-search-match')?.scrollIntoView({ block: 'nearest' });
+    const view = ref.current?.view;
+    if (!query || !view) return;
+    const doc = view.state.doc;
+    for (let n = 1; n <= doc.lines; n++) {
+      const line = doc.line(n);
+      if (line.text.toLowerCase().includes(query)) {
+        view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'nearest' }) });
+        return;
+      }
+    }
   }, [query]);
 
-  const lineClassName = useCallback(
-    (index: number, text: string) => {
-      const classes: string[] = [];
-      if (diffSide && changed?.has(index)) classes.push(diffLineStyles[diffSide === 'a' ? 'removed' : 'added']);
-      if (query && text.toLowerCase().includes(query)) classes.push(searchMatchStyle);
-      return classes.length ? classes.join(' ') : undefined;
-    },
+  const extensions = useMemo(
+    () => [
+      EditorView.decorations.compute(['doc'], state => {
+        const builder = new RangeSetBuilder<Decoration>();
+        for (let n = 1; n <= state.doc.lines; n++) {
+          const line = state.doc.line(n);
+          const classes: string[] = [];
+          if (diffSide && changed?.has(n - 1)) classes.push(diffLineStyles[diffSide === 'a' ? 'removed' : 'added']);
+          if (query && line.text.toLowerCase().includes(query)) classes.push(searchMatchStyle);
+          if (classes.length) builder.add(line.from, line.from, Decoration.line({ class: classes.join(' ') }));
+        }
+        return builder.finish();
+      }),
+    ],
     [changed, diffSide, query],
   );
 
   return (
-    <div ref={ref}>
-      <Code
-        code={code}
-        lang="json"
-        lineClassName={lineClassName}
-        className="font-mono text-caption break-all whitespace-pre-wrap"
-      />
-    </div>
+    <CodeEditor
+      ref={ref}
+      value={code}
+      language="json"
+      editable={false}
+      lineNumbers={false}
+      showCopyButton={false}
+      variant="embedded"
+      aria-label="JSON content"
+      extensions={extensions}
+    />
   );
 }
 
@@ -133,24 +155,32 @@ export function DataCodeSection({
         <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
           {actions}
-          {!usePlainTextView && (
-            <SearchFieldBlock
-              name="code-section-search"
-              label="Search code"
-              labelIsHidden
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onReset={() => setSearchQuery('')}
-              size="sm"
-              isMinimized={searchMinimized}
-              onMinimizedChange={setSearchMinimized}
-            />
-          )}
+          {!usePlainTextView &&
+            (searchMinimized ? (
+              <Button
+                size="icon-sm"
+                aria-label="Search code"
+                tooltip="Search code"
+                onClick={() => setSearchMinimized(false)}
+              >
+                <SearchIcon />
+              </Button>
+            ) : (
+              <SearchInput
+                label="Search code"
+                placeholder="Search"
+                size="sm"
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+                onClose={() => setSearchMinimized(true)}
+                autoFocus
+              />
+            ))}
           <ButtonsGroup size="sm">
             <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
+                size="icon-md"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
@@ -158,7 +188,7 @@ export function DataCodeSection({
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
               </Button>
             )}
-            <Button aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
+            <Button size="icon-md" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
             </Button>
           </ButtonsGroup>
@@ -194,21 +224,19 @@ export function DataCodeSection({
               </DialogTitle>
               <div className="flex shrink-0 items-center gap-2">
                 {!expandedMultiline && (
-                  <SearchFieldBlock
-                    name="expanded-code-search"
+                  <SearchInput
                     label="Search code"
-                    labelIsHidden
-                    placeholder="Search..."
-                    value={expandedSearchQuery}
-                    onChange={e => setExpandedSearchQuery(e.target.value)}
-                    onReset={() => setExpandedSearchQuery('')}
+                    placeholder="Search"
                     size="sm"
+                    value={expandedSearchQuery}
+                    onValueChange={setExpandedSearchQuery}
                   />
                 )}
                 <ButtonsGroup size="sm">
                   <CopyButton content={codeStr || 'No content'} />
                   {hasMultilineText && (
                     <Button
+                      size="icon-md"
                       aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                       tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                       onClick={() => setExpandedMultiline(v => !v)}

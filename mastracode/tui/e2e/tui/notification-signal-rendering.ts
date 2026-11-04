@@ -73,8 +73,8 @@ export const notificationSignalRenderingScenario = {
     await runtime.waitForScreenText(/Start notification host run\./i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/notification from github/i, terminal, 10_000);
-    await runtime.waitForScreenText(/urgent · ci-status · delivered/i, terminal, 10_000);
     await runtime.waitForScreenText(/Notification e2e alert: CI failed on main/i, terminal, 10_000);
+    expect(terminal.serialize().view).not.toMatch(/ci-status · delivered/i);
     runtime.printScreen('after notification signal', terminal);
     terminal.keyCtrlC();
     runtime.printScreen('after Ctrl-C', terminal);

@@ -2,10 +2,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { AppShell } from './app-shell';
+import { MainCard } from './main-card';
 
-function renderShell({ mobileHeader = true, sidebar = false }: { mobileHeader?: boolean; sidebar?: boolean } = {}) {
+function renderShell({
+  edgeToEdge,
+  mobileHeader = true,
+  sidebar = false,
+}: { edgeToEdge?: boolean; mobileHeader?: boolean; sidebar?: boolean } = {}) {
   return renderToStaticMarkup(
     <AppShell
+      edgeToEdge={edgeToEdge}
       mobileHeader={mobileHeader ? <header>Mobile header</header> : undefined}
       sidebar={sidebar ? <nav>Sidebar</nav> : undefined}
     >
@@ -16,6 +22,10 @@ function renderShell({ mobileHeader = true, sidebar = false }: { mobileHeader?: 
 
 function bodyClassName(markup: string) {
   return markup.match(/data-slot="app-shell-body" class="([^"]*)"/)?.[1] ?? '';
+}
+
+function transitionClasses(classes: string[]) {
+  return classes.filter(className => className.includes('transition'));
 }
 
 describe('AppShell', () => {
@@ -52,7 +62,14 @@ describe('AppShell', () => {
     });
 
     it('drops the left inset at lg so the sidebar padding provides the gap', () => {
-      expect(bodyClassName(markup)).toContain('max-lg:p-1.5 lg:py-2 lg:pr-2 lg:pl-0');
+      expect(bodyClassName(markup)).toContain('lg:py-2 lg:pr-2 lg:pl-0');
+    });
+
+    it('does not inset the body below lg, where the sidebar is a drawer', () => {
+      const unscopedPadding = bodyClassName(markup)
+        .split(/\s+/)
+        .filter(className => /^(max-lg:)?p[trblxy]?-/.test(className));
+      expect(unscopedPadding).toEqual([]);
     });
 
     it('never mixes padding shorthands with longhands, so consumer CSS order cannot override the lg inset', () => {
@@ -73,8 +90,8 @@ describe('AppShell', () => {
       expect(markup).not.toContain('lg:grid-cols-');
     });
 
-    it('insets the body on all sides', () => {
-      expect(bodyClassName(markup)).toContain('max-lg:p-1.5 lg:py-2 lg:pr-2 lg:pl-2');
+    it('insets the body on all sides from lg', () => {
+      expect(bodyClassName(markup)).toContain('lg:py-2 lg:pr-2 lg:pl-2');
       expect(bodyClassName(markup)).not.toContain('lg:pl-0');
     });
   });
@@ -86,5 +103,60 @@ describe('AppShell', () => {
       expect(markup).not.toContain('Mobile header');
       expect(markup).toContain('Main content');
     });
+  });
+
+  describe('when edge to edge', () => {
+    it.each([{ sidebar: true }, { sidebar: false }])('drops every lg inset, sidebar: $sidebar', ({ sidebar }) => {
+      const padding = bodyClassName(renderShell({ edgeToEdge: true, sidebar }))
+        .split(/\s+/)
+        .filter(className => /^(lg:)?p[trblxy]?-/.test(className));
+      expect(padding).toEqual([]);
+    });
+  });
+
+  describe('inset animation', () => {
+    it('stays static for apps that leave edgeToEdge out', () => {
+      expect(transitionClasses(bodyClassName(renderShell({ sidebar: true })).split(/\s+/))).toEqual([]);
+    });
+
+    it.each([true, false])('animates both ways for apps that pass edgeToEdge, edgeToEdge: %s', edgeToEdge => {
+      expect(transitionClasses(bodyClassName(renderShell({ edgeToEdge, sidebar: true })).split(/\s+/))).not.toEqual([]);
+    });
+  });
+});
+
+function mainCardClasses({ edgeToEdge }: { edgeToEdge?: boolean } = {}) {
+  return (
+    renderToStaticMarkup(<MainCard edgeToEdge={edgeToEdge}>Content</MainCard>)
+      .match(/data-slot="main-card" class="([^"]*)"/)?.[1]
+      ?.split(/\s+/) ?? []
+  );
+}
+
+describe('MainCard', () => {
+  const classes = mainCardClasses();
+
+  it('frames the content only from lg, where the sidebar sits beside it', () => {
+    expect(classes).toEqual(expect.arrayContaining(['lg:rounded-studio-frame', 'lg:p-px', 'lg:shadow-raised']));
+  });
+
+  it('is flat below lg: no rounding, rim padding or elevation outside the lg variant', () => {
+    const frameClasses = classes.filter(className => /^(max-lg:)?(rounded|p-|shadow)/.test(className));
+    expect(frameClasses).toEqual([]);
+  });
+
+  it('drops the frame when edge to edge', () => {
+    const frameClasses = mainCardClasses({ edgeToEdge: true }).filter(className =>
+      /^(lg:)?(rounded|p-|shadow)/.test(className),
+    );
+    expect(frameClasses).toEqual([]);
+  });
+
+  it('stays static for apps that leave edgeToEdge out', () => {
+    expect(transitionClasses(classes)).toEqual([]);
+  });
+
+  it.each([true, false])('animates the frame both ways for apps that pass edgeToEdge, edgeToEdge: %s', edgeToEdge => {
+    expect(transitionClasses(mainCardClasses({ edgeToEdge }))).not.toEqual([]);
   });
 });

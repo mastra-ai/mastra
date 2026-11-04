@@ -1,11 +1,11 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useStoredAgentMutations } from '@mastra/react/hooks/agents';
 import { useCallback } from 'react';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { formValuesToSaveParams } from '../services/form-values-to-save-params';
 import type { AgentTool } from '../types/agent-tool';
 import { isModelNotAllowedError } from '../utils/is-model-not-allowed';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 interface UseSaveAgentArgs {
@@ -23,7 +23,7 @@ export function useSaveAgent({
   onSuccess,
   silent = false,
 }: UseSaveAgentArgs) {
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { updateStoredAgent } = useStoredAgentMutations({ agentId: agentId });
   const defaultVisibility = useDefaultVisibility();
 
   const save = useCallback(

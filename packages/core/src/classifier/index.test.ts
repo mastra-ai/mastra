@@ -1,9 +1,14 @@
-import { APICallError, type Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
+import { APICallError } from '@ai-sdk/provider-v7';
+import type {
+  Experimental_DecisionModelV4 as DecisionModelV4,
+  Experimental_EvaluationModelV4 as EvaluationModelV4,
+} from '@ai-sdk/provider-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraBase } from '../base';
+import { EntityType, SpanType } from '../observability/types';
 import * as observabilityUtils from '../observability/utils';
-import { Classifier, MastraEvaluationModel } from './index';
+import { Classifier, MastraDecisionModel, MastraEvaluationModel } from './index';
 
 type ProviderResult = Awaited<ReturnType<EvaluationModelV4['doEvaluate']>>;
 
@@ -51,7 +56,7 @@ afterEach(() => {
 
 describe('Classifier', () => {
   it('uses Mastra primitives and supports custom evaluation response transforms', async () => {
-    class TransformedEvaluationModel extends MastraEvaluationModel {
+    class TransformedEvaluationModel extends MastraDecisionModel {
       protected override transformResult(result: ProviderResult): ProviderResult {
         return {
           ...result,
@@ -65,7 +70,7 @@ describe('Classifier', () => {
 
     expect(classifier).toBeInstanceOf(MastraBase);
     expect(classifier.model).toBe(model);
-    await expect(classifier.evaluate({ state: 'content' })).resolves.toMatchObject({
+    await expect(classifier.decide({ state: 'content' })).resolves.toMatchObject({
       answers: { unsafe: { probability: 0.1 } },
     });
   });
@@ -92,13 +97,13 @@ describe('Classifier', () => {
       questions: booleanQuestions,
     });
 
-    const result = await classifier.evaluate({
+    const result = await classifier.decide({
       state: { content: 'hello' },
       providerOptions: { test: { mode: 'fast' } },
     });
 
     expect(doEvaluate).toHaveBeenCalledWith({
-      state: { content: 'hello' },
+      state: [{ type: 'json', value: { content: 'hello' } }],
       questions: {
         unsafe: {
           ...booleanQuestions.unsafe,
@@ -121,6 +126,145 @@ describe('Classifier', () => {
         headers: { 'x-request-id': 'request-id' },
         body: { ok: true },
       },
+    });
+  });
+
+  describe('decision models', () => {
+    function createDecisionModel(doDecide: DecisionModelV4['doDecide']): DecisionModelV4 {
+      return {
+        specificationVersion: 'v4',
+        provider: 'openai.decisions',
+        modelId: 'gpt-6-luna',
+        supportedQuestionTypes: ['choice', 'score', 'boolean'],
+        doDecide,
+      };
+    }
+
+    const questions = {
+      unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
+      route: { type: 'choice', criteria: { support: 'Support', sales: 'Sales' } },
+      quality: { type: 'score', criteria: ['Poor', 'Good', 'Excellent'] },
+    } as const;
+
+    it('calls doDecide and returns boolean, choice, and score answers with usage and probabilities', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: {
+          unsafe: { type: 'boolean', probability: 0.25 },
+          route: { type: 'choice', choice: 'sales', probabilities: { support: 0.4, sales: 0.6 } },
+          quality: { type: 'score', score: 2, probabilities: { '0': 0, '1': 0, '2': 1 } },
+        },
+        usage: { inputTokens: 10, outputTokens: 1 },
+        providerMetadata: { openai: { decisionId: 'dec_123' } },
+        warnings: [],
+      }));
+      const classifier = new Classifier({ id: 'decision', model: createDecisionModel(doDecide) });
+
+      const result = await classifier.decide({ state: 'hello', questions });
+
+      expect(doDecide).toHaveBeenCalledTimes(1);
+      expect(result.answers).toEqual({
+        unsafe: { type: 'boolean', probability: 0.25 },
+        route: { type: 'choice', choice: 'sales', probabilities: { support: 0.4, sales: 0.6 } },
+        quality: { type: 'score', score: 2, probabilities: { '0': 0, '1': 0, '2': 1 } },
+      });
+      expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 1, totalTokens: 11 });
+      expect(result.providerMetadata).toEqual({ openai: { decisionId: 'dec_123' } });
+      expect(result.response.modelId).toBe('gpt-6-luna');
+    });
+
+    it('surfaces non-retryable provider errors such as refusals', async () => {
+      const refusal = new APICallError({
+        message: 'The model refused to answer',
+        url: 'https://example.test/decisions',
+        requestBodyValues: {},
+        statusCode: 400,
+        isRetryable: false,
+      });
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => {
+        throw refusal;
+      });
+      const classifier = new Classifier({ id: 'refusal', model: createDecisionModel(doDecide) });
+
+      await expect(classifier.decide({ state: 'hello', questions })).rejects.toBe(refusal);
+      expect(doDecide).toHaveBeenCalledTimes(1);
+    });
+
+    it('prefers doDecide when a model exposes both doDecide and the legacy doEvaluate alias', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+        warnings: [],
+      }));
+      const doEvaluate = vi.fn();
+      const model = { ...createDecisionModel(doDecide), doEvaluate };
+
+      await new Classifier({ id: 'both', model, questions: booleanQuestions }).decide({ state: 'x' });
+
+      expect(doDecide).toHaveBeenCalledTimes(1);
+      expect(doEvaluate).not.toHaveBeenCalled();
+    });
+
+    it('converts state into provider parts like the AI SDK does', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+        warnings: [],
+      }));
+      const classifier = new Classifier({
+        id: 'parts',
+        model: createDecisionModel(doDecide),
+        questions: booleanQuestions,
+      });
+      const parts = [
+        { type: 'text', text: 'hi' },
+        { type: 'json', value: { a: 1 } },
+      ] as const;
+
+      await classifier.decide({ state: 'I was charged twice' });
+      await classifier.decide({ state: { message: 'hi' } });
+      await classifier.decide({ state: parts });
+      await classifier.decide({ state: ['a', 1] });
+      await classifier.decide({ state: [{ type: 'text', text: 'hi' }, 'b'] });
+
+      expect(doDecide.mock.calls.map(([options]) => options.state)).toEqual([
+        [{ type: 'text', text: 'I was charged twice' }],
+        [{ type: 'json', value: { message: 'hi' } }],
+        parts,
+        [{ type: 'json', value: ['a', 1] }],
+        [{ type: 'json', value: [{ type: 'text', text: 'hi' }, 'b'] }],
+      ]);
+    });
+
+    it('keeps the deprecated evaluate() and MastraEvaluationModel working', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: { unsafe: { type: 'boolean', probability: 0.3 } },
+        warnings: [],
+      }));
+      const model = new MastraEvaluationModel(createDecisionModel(doDecide));
+      const classifier = new Classifier({ id: 'deprecated', model, questions: booleanQuestions });
+
+      const result = await classifier.evaluate({ state: 'x' });
+
+      expect(model).toBeInstanceOf(MastraDecisionModel);
+      expect(classifier.model).toBe(model);
+      expect(result.answers.unsafe.probability).toBe(0.3);
+      expect(doDecide).toHaveBeenCalledTimes(1);
+    });
+
+    it('still calls doEvaluate overrides on MastraEvaluationModel subclasses', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>();
+      class LegacyOverrideModel extends MastraEvaluationModel {
+        override async doEvaluate() {
+          return { answers: { unsafe: { type: 'boolean' as const, probability: 0.9 } }, warnings: [] };
+        }
+      }
+
+      const result = await new Classifier({
+        id: 'legacy-override',
+        model: new LegacyOverrideModel(createDecisionModel(doDecide)),
+        questions: booleanQuestions,
+      }).decide({ state: 'x' });
+
+      expect(result.answers.unsafe.probability).toBe(0.9);
+      expect(doDecide).not.toHaveBeenCalled();
     });
   });
 
@@ -149,7 +293,7 @@ describe('Classifier', () => {
       },
     } as const;
 
-    const result = await classifier.evaluate({ state: 'request', questions });
+    const result = await classifier.decide({ state: 'request', questions });
 
     expect(result.answers.route.choice).toBe('support');
     expect(result.answers.quality.score).toBe(1.5);
@@ -172,12 +316,12 @@ describe('Classifier', () => {
     ).toThrow(/not supported/i);
 
     const classifier = new Classifier({ id: 'runtime', model: createModel({ doEvaluate }) });
-    await expect(classifier.evaluate({ state: Number.NaN as never, questions: booleanQuestions })).rejects.toThrow(
+    await expect(classifier.decide({ state: Number.NaN as never, questions: booleanQuestions })).rejects.toThrow(
       /JSON-compatible/,
     );
-    await expect(classifier.evaluate({ state: 'ok', questions: {} as never })).rejects.toThrow(/non-empty object/);
+    await expect(classifier.decide({ state: 'ok', questions: {} as never })).rejects.toThrow(/non-empty object/);
     await expect(
-      classifier.evaluate({
+      classifier.decide({
         state: 'ok',
         questions: { score: { type: 'score', instructions: 'Score', criteria: ['only one'] } } as never,
       }),
@@ -185,8 +329,63 @@ describe('Classifier', () => {
     expect(doEvaluate).not.toHaveBeenCalled();
   });
 
+  it('accepts refusal answers for any question type', async () => {
+    const questions = {
+      route: { type: 'choice', instructions: 'Route', criteria: { support: 'Support', sales: 'Sales' } },
+      score: { type: 'score', instructions: 'Score', criteria: ['Low', 'High'] },
+      unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
+    } as const;
+    const classifier = new Classifier({
+      id: 'refusals',
+      model: createModel({
+        doEvaluate: async () => ({
+          answers: {
+            route: { type: 'refusal' },
+            score: { type: 'refusal' },
+            unsafe: { type: 'refusal' },
+          },
+          warnings: [],
+        }),
+      }),
+      questions,
+    });
+
+    const result = await classifier.decide({ state: 'content' });
+    expect(result.answers).toEqual({
+      route: { type: 'refusal' },
+      score: { type: 'refusal' },
+      unsafe: { type: 'refusal' },
+    });
+  });
+
+  it('keeps answered questions when another question is refused', async () => {
+    const questions = {
+      route: { type: 'choice', instructions: 'Route', criteria: { support: 'Support', sales: 'Sales' } },
+      risk: { type: 'boolean', criteria: { true: 'Risky', false: 'Safe' } },
+    } as const;
+    const classifier = new Classifier({
+      id: 'mixed',
+      model: createModel({
+        doEvaluate: async () => ({
+          answers: {
+            route: { type: 'choice', choice: 'support' },
+            risk: { type: 'refusal' },
+          },
+          warnings: [],
+        }),
+      }),
+      questions,
+    });
+
+    const result = await classifier.decide({ state: 'content' });
+    expect(result.answers.route).toMatchObject({ type: 'choice', choice: 'support' });
+    expect(result.answers.risk).toEqual({ type: 'refusal' });
+  });
+
   it.each([
     [{ unsafe: { type: 'choice', choice: 'yes' } }, 'does not match'],
+    [{ unsafe: { type: 'bogus' } }, 'does not match'],
+    [{ unsafe: { type: 'refusal', probability: 0 } }, 'must not include answer fields'],
     [{}, 'exactly one answer'],
     [{ unsafe: { type: 'boolean', probability: 2 } }, 'between 0 and 1'],
   ])('rejects malformed boolean output %#', async (answers, message) => {
@@ -195,7 +394,7 @@ describe('Classifier', () => {
       model: createModel({ doEvaluate: async () => ({ answers, warnings: [] }) as ProviderResult }),
       questions: booleanQuestions,
     });
-    await expect(classifier.evaluate({ state: 'content' })).rejects.toThrow(message);
+    await expect(classifier.decide({ state: 'content' })).rejects.toThrow(message);
   });
 
   it('rejects malformed choice and score distributions', async () => {
@@ -217,7 +416,7 @@ describe('Classifier', () => {
       questions,
     });
 
-    await expect(classifier.evaluate({ state: 'content' })).rejects.toThrow(/highest-probability/);
+    await expect(classifier.decide({ state: 'content' })).rejects.toThrow(/highest-probability/);
   });
 
   it('retries retryable failures and stops after success', async () => {
@@ -228,7 +427,7 @@ describe('Classifier', () => {
       .mockResolvedValue({ answers: { unsafe: { type: 'boolean', probability: 0.2 } }, warnings: [] });
     const classifier = new Classifier({ id: 'retry', model: createModel({ doEvaluate }), questions: booleanQuestions });
 
-    const resultPromise = classifier.evaluate({ state: 'content', maxRetries: 2 });
+    const resultPromise = classifier.decide({ state: 'content', maxRetries: 2 });
     await vi.runAllTimersAsync();
 
     await expect(resultPromise).resolves.toMatchObject({ answers: { unsafe: { probability: 0.2 } } });
@@ -243,7 +442,7 @@ describe('Classifier', () => {
       model: createModel({ doEvaluate: noRetry }),
       questions: booleanQuestions,
     });
-    await expect(classifier.evaluate({ state: 'content' })).rejects.toBe(permanent);
+    await expect(classifier.decide({ state: 'content' })).rejects.toBe(permanent);
     expect(noRetry).toHaveBeenCalledTimes(1);
 
     vi.useFakeTimers();
@@ -253,7 +452,7 @@ describe('Classifier', () => {
       model: createModel({ doEvaluate: exhausted }),
       questions: booleanQuestions,
     });
-    const resultPromise = exhaustedClassifier.evaluate({ state: 'content', maxRetries: 1 });
+    const resultPromise = exhaustedClassifier.decide({ state: 'content', maxRetries: 1 });
     const rejection = expect(resultPromise).rejects.toThrow('temporary failure');
     await vi.runAllTimersAsync();
     await rejection;
@@ -271,7 +470,7 @@ describe('Classifier', () => {
       questions: booleanQuestions,
     });
 
-    const resultPromise = classifier.evaluate({ state: 'content', abortSignal: controller.signal, maxRetries: 2 });
+    const resultPromise = classifier.decide({ state: 'content', abortSignal: controller.signal, maxRetries: 2 });
     const rejection = expect(resultPromise).rejects.toBe(abortReason);
     await Promise.resolve();
     await Promise.resolve();
@@ -292,7 +491,7 @@ describe('Classifier', () => {
       model: createModel({ doEvaluate: beforeCall }),
       questions: booleanQuestions,
     });
-    await expect(beforeClassifier.evaluate({ state: 'content', abortSignal: beforeController.signal })).rejects.toThrow(
+    await expect(beforeClassifier.decide({ state: 'content', abortSignal: beforeController.signal })).rejects.toThrow(
       'before',
     );
     expect(beforeCall).not.toHaveBeenCalled();
@@ -308,7 +507,7 @@ describe('Classifier', () => {
       }),
       questions: booleanQuestions,
     });
-    const duringResult = duringClassifier.evaluate({ state: 'content', abortSignal: duringController.signal });
+    const duringResult = duringClassifier.decide({ state: 'content', abortSignal: duringController.signal });
     duringController.abort(new Error('during'));
     await expect(duringResult).rejects.toThrow('during');
 
@@ -323,7 +522,7 @@ describe('Classifier', () => {
       }),
       questions: booleanQuestions,
     });
-    await expect(afterClassifier.evaluate({ state: 'content', abortSignal: afterController.signal })).rejects.toThrow(
+    await expect(afterClassifier.decide({ state: 'content', abortSignal: afterController.signal })).rejects.toThrow(
       'after',
     );
   });
@@ -370,7 +569,7 @@ describe('Classifier', () => {
         model: createModel({ doEvaluate: async () => result as ProviderResult }),
         questions: booleanQuestions,
       });
-      await expect(classifier.evaluate({ state: 'content' }), name).rejects.toThrow(message);
+      await expect(classifier.decide({ state: 'content' }), name).rejects.toThrow(message);
     }
   });
 
@@ -399,26 +598,66 @@ describe('Classifier', () => {
 
     // Core reads `APICallError.isInstance` and `isRetryable` for control flow,
     // so exhaustion must not replace the provider error with a generic one.
-    const error = await classifier.evaluate({ state: 'content', maxRetries: 1 }).catch((e: unknown) => e);
+    const error = await classifier.decide({ state: 'content', maxRetries: 1 }).catch((e: unknown) => e);
     expect(APICallError.isInstance(error)).toBe(true);
     expect((error as APICallError).isRetryable).toBe(true);
     expect((error as APICallError).statusCode).toBe(503);
   });
 
-  it('records only safe classifier tracing metadata', async () => {
+  it('records the state and questions as span input and the answers as span output', async () => {
     const childSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
     const parentSpan = { createChildSpan: vi.fn(() => childSpan) };
     vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(parentSpan as never);
-    const classifier = new Classifier({ id: 'safe-id', model: createModel(), questions: booleanQuestions });
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+    const state = { message: 'I was charged twice' };
 
-    await classifier.evaluate({ state: { secret: 'sensitive-state' } });
+    await classifier.decide({ state });
 
-    const serializedCalls = JSON.stringify([parentSpan.createChildSpan.mock.calls, childSpan.update.mock.calls]);
-    expect(serializedCalls).toContain('safe-id');
-    expect(serializedCalls).toContain('test-model');
-    expect(serializedCalls).not.toContain('sensitive-state');
-    expect(serializedCalls).not.toContain('Unsafe');
-    expect(serializedCalls).not.toContain('probability');
-    expect(childSpan.end).toHaveBeenCalledOnce();
+    expect(parentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: { state, questions: booleanQuestions },
+        attributes: expect.objectContaining({ classifierId: 'router', modelId: 'test-model' }),
+      }),
+    );
+    expect(childSpan.end).toHaveBeenCalledExactlyOnceWith({
+      output: { answers: { unsafe: { type: 'boolean', probability: 0.8 } } },
+    });
+  });
+
+  it('tags a nested evaluation span with the classifier entity', async () => {
+    const childSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
+    const parentSpan = { createChildSpan: vi.fn(() => childSpan) };
+    vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(parentSpan as never);
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+
+    await classifier.decide({ state: 'content' });
+
+    expect(parentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLASSIFIER_EVALUATION,
+        entityType: EntityType.CLASSIFIER,
+        entityId: 'router',
+        entityName: 'router',
+      }),
+    );
+  });
+
+  it('tags a root evaluation span started through registered Mastra observability with the classifier entity', async () => {
+    const rootSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
+    const instance = { startSpan: vi.fn(() => rootSpan) };
+    vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(undefined);
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+    classifier.__registerMastra({ observability: { getSelectedInstance: () => instance } } as never);
+
+    await classifier.decide({ state: 'content' });
+
+    expect(instance.startSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLASSIFIER_EVALUATION,
+        entityType: EntityType.CLASSIFIER,
+        entityId: 'router',
+        entityName: 'router',
+      }),
+    );
   });
 });

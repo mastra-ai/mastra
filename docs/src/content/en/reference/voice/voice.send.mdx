@@ -73,12 +73,12 @@ await voice.send(audioBuffer)
 
 ## Return value
 
-Returns a `Promise<void>` that resolves when the audio data has been accepted by the voice provider.
+Returns a `Promise<void>`. For providers that support real-time audio, it resolves when the provider has accepted the audio data. The default implementation sends nothing and resolves immediately.
 
 ## Notes
 
 - This method is only implemented by real-time voice providers that support speech-to-speech capabilities
-- If called on a voice provider that doesn't support this functionality, it will log a warning and resolve immediately
+- If called on a voice provider that doesn't support this functionality, the default implementation logs a debug message and resolves immediately. `CompositeVoice` instead throws a `MastraError` (`VOICE_COMPOSITE_NO_REALTIME_PROVIDER_SEND`) when no `realtimeProvider` is configured
 - You must call `connect()` before using `send()` to establish the WebSocket connection
 - The audio format requirements depend on the specific voice provider
 - For continuous conversation, you typically call `send()` to transmit user audio, then `answer()` to trigger the AI response

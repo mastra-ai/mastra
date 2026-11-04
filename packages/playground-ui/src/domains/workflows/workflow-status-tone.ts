@@ -16,9 +16,9 @@ export function workflowStatusTone(status: string | undefined): WorkflowStatusTo
 
 export const workflowStatusToneText = {
   success: 'text-success-indicator',
-  destructive: 'text-destructive-indicator',
+  destructive: 'text-destructive-foreground',
   info: 'text-info-indicator',
-  warning: 'text-warning-indicator',
+  warning: 'text-warning-foreground',
   neutral: 'text-muted-foreground',
 } satisfies Record<WorkflowStatusTone, string>;
 

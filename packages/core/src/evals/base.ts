@@ -980,8 +980,9 @@ class MastraScorer<
    * Projects the run's RequestContext down to the keys that should be persisted
    * on the scorer-run span input for repeatability.
    *
-   * `serializeForSpan()` provides the safe base projection — the framework auth
-   * token is redacted and values are shaped for the trace serializer to bound.
+   * `serializeForSpan()` provides the safe base projection — reserved Mastra keys
+   * (auth token, internal plumbing) are omitted and values are shaped for the
+   * trace serializer to bound.
    * `requestContextKeys` then selects from it:
    * - omitted / empty → nothing is persisted (secure default)
    * - `['*']`         → the full (safe) context
@@ -1037,6 +1038,7 @@ class MastraScorer<
       name: `scorer run: '${this.id}'`,
       entityType: EntityType.SCORER,
       entityId: this.id,
+      entityName: this.name,
       input: {
         input: prepared.input,
         output: prepared.output,
@@ -1251,8 +1253,8 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData, bail, ...rest }) => {
-          const observabilityContext = resolveObservabilityContext(rest);
+        execute: async ({ inputData, getInitData, bail, tracing, tracingContext, loggerVNext, metrics }) => {
+          const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
@@ -1269,6 +1271,7 @@ class MastraScorer<
             name: `scorer step: '${scorerStep.name}'`,
             entityType: EntityType.SCORER,
             entityId: this.config.id ?? this.config.name,
+            entityName: this.name,
             input: context,
             attributes: {
               step: scorerStep.name,
@@ -1752,20 +1755,19 @@ class MastraScorer<
           const object = await result.object;
           const score = (object as { score: number }).score;
           return { result: score, prompt, judgeModel, execution: createExecution(score) };
-        } else {
-          const schema = z.object({
-            score: z.number(),
-          });
-          const standardSchema = toStandardSchema(schema as PublicSchema);
-          recordAttempt();
-          result = await judge.generateLegacy(prompt, {
-            output: standardSchemaToJSONSchema(standardSchema),
-            ...judgeRunOptions,
-          });
-          recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
-          const score = (result.object as { score: number }).score;
-          return { result: score, prompt, judgeModel, execution: createExecution(score) };
         }
+        const schema = z.object({
+          score: z.number(),
+        });
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        recordAttempt();
+        result = await judge.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
+          ...judgeRunOptions,
+        });
+        recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
+        const score = (result.object as { score: number }).score;
+        return { result: score, prompt, judgeModel, execution: createExecution(score) };
 
         // GenerateReason output must be a string
       } else if (scorerStep.name === 'generateReason') {
@@ -1788,38 +1790,36 @@ class MastraScorer<
         recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
         const reason = result.text;
         return { result: reason, prompt, judgeModel, execution: createExecution(reason) };
-      } else {
-        const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
-        // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
-        // Cast to PublicSchema since outputSchema can be any schema type
-        const standardSchema = toStandardSchema(promptStep.outputSchema as PublicSchema);
-        let result;
-        if (isSupportedLanguageModel(resolvedModel)) {
-          // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
-          result = await tryStreamWithJsonFallback(judge, prompt, {
-            fallbackJsonPromptInjection,
-            structuredOutput: {
-              schema: standardSchema as any,
-              jsonPromptInjection,
-            },
-            ...createJudgeStreamRunOptions(),
-            ...(onStream ? { onStream } : {}),
-            onStreamAttempt: recordAttempt,
-            onStreamFinish: recordStreamResult,
-          });
-          const object = (await result.object) as JSONValue;
-          return { result: object, prompt, judgeModel, execution: createExecution(object) };
-        } else {
-          recordAttempt();
-          result = await judge.generateLegacy(prompt, {
-            output: standardSchemaToJSONSchema(standardSchema),
-            ...judgeRunOptions,
-          });
-          recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
-          const object = result.object as JSONValue;
-          return { result: object, prompt, judgeModel, execution: createExecution(object) };
-        }
       }
+      const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
+      // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
+      // Cast to PublicSchema since outputSchema can be any schema type
+      const standardSchema = toStandardSchema(promptStep.outputSchema as PublicSchema);
+      let result;
+      if (isSupportedLanguageModel(resolvedModel)) {
+        // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
+        result = await tryStreamWithJsonFallback(judge, prompt, {
+          fallbackJsonPromptInjection,
+          structuredOutput: {
+            schema: standardSchema as any,
+            jsonPromptInjection,
+          },
+          ...createJudgeStreamRunOptions(),
+          ...(onStream ? { onStream } : {}),
+          onStreamAttempt: recordAttempt,
+          onStreamFinish: recordStreamResult,
+        });
+        const object = (await result.object) as JSONValue;
+        return { result: object, prompt, judgeModel, execution: createExecution(object) };
+      }
+      recordAttempt();
+      result = await judge.generateLegacy(prompt, {
+        output: standardSchemaToJSONSchema(standardSchema),
+        ...judgeRunOptions,
+      });
+      recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
+      const object = result.object as JSONValue;
+      return { result: object, prompt, judgeModel, execution: createExecution(object) };
     } catch (error) {
       const failedExecution = createFailedExecution(error);
       if (failedExecution) {

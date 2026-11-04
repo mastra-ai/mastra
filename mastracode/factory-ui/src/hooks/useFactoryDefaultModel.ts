@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -6,7 +6,9 @@ import {
   applyFactoryDefaultModelToSessions,
   fetchFactoryProject,
   updateFactoryDefaultModel,
+  updateFactoryModelScope,
 } from '../ui/domains/workspaces/services/github';
+import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -31,8 +33,34 @@ export function useSetFactoryDefaultModelMutation(factoryProjectId: string | und
       updateFactoryDefaultModel(baseUrl, factoryProjectId!, defaultModelId),
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
   });
+}
+
+const modelScopeMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'project', factoryProjectId ?? null, 'model-scope'] as const;
+
+export function useSetFactoryModelScopeMutation(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: modelScopeMutationKey(factoryProjectId),
+    mutationFn: (modelScope: FactoryModelScope) => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
+    onSuccess: project => {
+      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+      // The scope picks which credentials serve this Factory's models.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
+    },
+  });
+}
+
+/** The scope this Factory is being saved to, read from the mutation cache so it survives a remount. */
+export function usePendingFactoryModelScope(factoryProjectId: string | undefined) {
+  return useMutationState({
+    filters: { mutationKey: modelScopeMutationKey(factoryProjectId), status: 'pending' },
+    select: mutation => mutation.state.variables as FactoryModelScope,
+  }).at(-1);
 }
 
 export function useApplyFactoryDefaultModelMutation(factoryProjectId: string) {

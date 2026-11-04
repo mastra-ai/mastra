@@ -180,6 +180,7 @@ export class UpstashFilterTranslator extends BaseFilterTranslator<UpstashVectorF
     if (op === '$contains') return `${path} NOT CONTAINS ${this.formatValue(val)}`;
     if (op === '$regex') return `${path} NOT GLOB ${this.formatValue(val)}`;
     if (op === '$in') return `${path} NOT IN (${this.formatArray(val as any[])})`;
+    if (op === '$nin') return `${path} IN (${this.formatArray(val as any[])})`;
     if (op === '$exists') return val ? `HAS NOT FIELD ${path}` : `HAS FIELD ${path}`;
 
     // Transform NOT(AND) into OR(NOT) and NOT(OR) into AND(NOT)

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -51,13 +52,16 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       aria-label={`New work item in ${stageLabel}`}
       aria-busy={submitting}
       className={cn(
-        'relative flex flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors focus-within:border-border-focus motion-reduce:transition-none',
+        'relative flex flex-col gap-3 rounded-card border border-surface-rim bg-fill-subtle p-2 outline-none transition-colors focus-within:border-border-focus motion-reduce:transition-none',
         error !== undefined && 'border-destructive-indicator',
       )}
       onSubmit={event => void submit(event)}
     >
       <Txt as="span" variant="meta" tone="faint" className="truncate pr-14">
-        Manual · new
+        <Metadata singleLine>
+          <Metadata.Item>Manual</Metadata.Item>
+          <Metadata.Item>new</Metadata.Item>
+        </Metadata>
       </Txt>
       <div className="flex min-w-0 items-center gap-1.5">
         <IntakeIcon className="text-muted-foreground shrink-0" />
@@ -67,7 +71,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           autoFocus
           aria-label="Work item title"
           autoComplete="off"
-          className="text-label text-foreground placeholder:text-muted-foreground h-auto min-w-0 flex-1 p-0 font-semibold"
+          className="text-foreground placeholder:text-muted-foreground text-card-title-strong h-auto min-w-0 flex-1 p-0"
           value={title}
           onChange={event => {
             setTitle(event.target.value);
@@ -78,9 +82,9 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
             event.preventDefault();
             close();
           }}
-          placeholder="Type a name…"
+          placeholder="Type a name"
           readOnly={submitting}
-          error={error !== undefined}
+          aria-invalid={error !== undefined || undefined}
         />
       </div>
       <div className="absolute top-2 right-2 flex items-center">
@@ -105,7 +109,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
         </Button>
       </div>
       {error ? (
-        <Txt variant="meta" className="text-destructive-indicator m-0" role="alert">
+        <Txt variant="meta" className="text-destructive-foreground m-0" role="alert">
           {error}
         </Txt>
       ) : null}

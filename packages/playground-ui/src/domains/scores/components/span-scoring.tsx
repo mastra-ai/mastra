@@ -1,7 +1,7 @@
 import type { GetScorerResponse } from '@mastra/client-js';
+import { useTriggerScorer } from '@mastra/react/hooks/scores';
 import { InfoIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useTriggerScorer } from '../hooks/use-trigger-scorer';
 import { Combobox } from '@/ds/components/Combobox';
 import { DialogAction, DialogBody, DialogCancel, DialogDescription, DialogFooter } from '@/ds/components/Dialog';
 import { Notice } from '@/ds/components/Notice';
@@ -102,8 +102,8 @@ export function SpanScoring({
         <DialogDescription>Select a scorer to evaluate this trace.</DialogDescription>
         <Combobox
           aria-label="Select scorer"
-          searchPlaceholder="Search scorers..."
-          placeholder="Select a scorer..."
+          searchPlaceholder="Search scorers"
+          placeholder="Select a scorer"
           options={scorerList.map(scorer => ({
             label: scorer.name || scorer.id,
             value: scorer.id || scorer.name || '',
@@ -122,7 +122,7 @@ export function SpanScoring({
       <DialogFooter>
         <DialogCancel disabled={isPending}>Cancel</DialogCancel>
         <DialogAction disabled={!selectedScorer || isWaiting} onConfirm={handleStartScoring}>
-          {isPending ? 'Starting...' : 'Start Scoring'}
+          {isPending ? 'Starting...' : 'Start scoring'}
         </DialogAction>
       </DialogFooter>
     </>

@@ -1,5 +1,8 @@
 import type { DatasetRecord } from '@mastra/client-js';
 
+export const DATASETS_LIST_COLUMNS =
+  'minmax(12rem,2fr) minmax(6rem,1fr) minmax(5rem,1fr) minmax(10rem,1fr) minmax(7rem,1fr)';
+
 export const DATASET_EXPERIMENT_OPTIONS = [
   { value: 'all', label: 'All datasets' },
   { value: 'with', label: 'With experiments' },

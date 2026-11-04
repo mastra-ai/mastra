@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
+import type { FactoryLinearRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { linearClaimKey } from './claim.js';
 import { resolveLinearRules } from './default-rules.js';
 import type { LinearRuleOverrides } from './default-rules.js';
 import { LinearRules } from './rules.js';
@@ -37,7 +37,7 @@ async function setup(overrides?: LinearRuleOverrides, boards = createBoardRegist
     boards,
     linearRules: resolveLinearRules(overrides),
   });
-  return { project, service, workItems: seeded.workItems };
+  return { project, service, workItems: seeded.workItems, storage: seeded.storage };
 }
 
 describe('LinearRules', () => {
@@ -80,7 +80,7 @@ describe('LinearRules', () => {
     ]);
   });
 
-  it('does not mint a second card while another Factory holds a live card for the issue', async () => {
+  it('files the same Linear issue in a second project while the first still holds a live card', async () => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
@@ -96,16 +96,23 @@ describe('LinearRules', () => {
         title: `${issue.identifier}: ${issue.title}`,
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: { linearIssueId: issue.id },
       },
     });
 
     await expect(
       service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
 
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
-    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        decision: {
+          type: 'upsertLinkedWorkItem',
+          sourceKey: `linear:${issue.identifier}`,
+          metadata: { linearIssueId: issue.id },
+        },
+      },
+    ]);
   });
 
   it('ingests an issue again once the other Factory finished its card', async () => {
@@ -137,32 +144,80 @@ describe('LinearRules', () => {
         decision: {
           type: 'upsertLinkedWorkItem',
           sourceKey: `linear:${issue.identifier}`,
-          claimKey: linearClaimKey(issue.id),
         },
       },
     ]);
+    const [entry] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(entry?.decision).not.toHaveProperty('claimKey');
   });
 
   it('finds the held card by stable issue id after Linear renamed the identifier', async () => {
     const { project, service, workItems } = await setup();
-    await workItems.upsert({
+    const { item: card } = await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
-      factoryProjectId: 'other-factory',
+      factoryProjectId: project.id,
       input: {
         externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:OLD-1', url: issue.url },
-        claimKey: linearClaimKey(issue.id),
         title: 'OLD-1: Fix intake sync',
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: { linearIssueId: issue.id },
       },
     });
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
 
-    await expect(
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+    await service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] });
+
+    expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ workItemId: card.id, decisions: [] }));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  // A card finished while claims were enforced, the issue moved teams and reopened, and a second
+  // live card was filed under the new identifier with the same stable issue id.
+  it.each([
+    { order: 'the finished card is older', finishedAt: '2030-01-01T00:00:00Z', liveAt: '2030-01-02T00:00:00Z' },
+    { order: 'the finished card is newer', finishedAt: '2030-01-02T00:00:00Z', liveAt: '2030-01-01T00:00:00Z' },
+  ])('evaluates the issue against its live card when $order', async ({ finishedAt, liveAt }) => {
+    const { project, service, workItems, storage } = await setup();
+    const fileCard = async (identifier: string, stage: string, createdAt: string) => {
+      const { item } = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}`, url: issue.url },
+          title: `${identifier}: Fix intake sync`,
+          stages: [stage],
+          sessions: {},
+          metadata: { linearIssueId: issue.id },
+        },
+      });
+      await storage.ops.updateMany('factory_board_items', { id: item.id }, { created_at: new Date(createdAt) });
+      expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.createdAt).toEqual(new Date(createdAt));
+      return item;
+    };
+    const finished = await fileCard('OLD-42', 'done', finishedAt);
+    const live = await fileCard('OPS-42', 'intake', liveAt);
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    // Under the identifier a card was filed with, that card is the issue's card.
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, identifier: 'OLD-42' }],
+    });
+    expect(evaluate).toHaveBeenLastCalledWith(expect.objectContaining({ workItemId: finished.id }));
+
+    // Under an identifier no card was filed with, the live card wins.
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, updatedAt: '2026-07-03T00:00:00Z' }],
+    });
+    expect(evaluate).toHaveBeenLastCalledWith(expect.objectContaining({ workItemId: live.id }));
   });
 
   it("ingests when the other Factory's card finished on its own board's terminal phase", async () => {
@@ -179,7 +234,6 @@ describe('LinearRules', () => {
           externalId: `linear:${issue.identifier}`,
           url: issue.url,
         },
-        claimKey: linearClaimKey(issue.id),
         board: 'release',
         stages: ['shipped'],
         title: `${issue.identifier}: ${issue.title}`,
@@ -354,6 +408,37 @@ describe('LinearRules', () => {
     },
   );
 
+  it('re-reads the card and commits at its fresh revision when a concurrent write makes the commit stale', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const original = workItems.commitRuleEvaluation.bind(workItems);
+    const commit = vi
+      .spyOn(workItems, 'commitRuleEvaluation')
+      .mockImplementationOnce(input => original({ ...input, expectedRevision: (input.expectedRevision ?? 0) - 1 }));
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(commit.mock.calls[1]?.[0].workItemId).toEqual(expect.any(String));
+  });
+
   it('retains ingestion bookkeeping when an event is disabled', async () => {
     const { project, service, workItems } = await setup({ issueObserved: null });
     const input = { orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] };
@@ -383,11 +468,11 @@ describe('LinearRules', () => {
   it.each(['throw', 'invalid', 'timeout'] as const)(
     'records %s handler failures without dispatching decisions',
     async failure => {
-      const handler = () => {
+      const handler = vi.fn(() => {
         if (failure === 'throw') throw new Error('handler failed');
         if (failure === 'timeout') return new Promise<never>(() => {});
         return { type: 'notify' as const, idempotencyKey: '', title: 'invalid decision' };
-      };
+      });
       const { project, service, workItems } = await setup({ issueObserved: handler });
       const commit = vi.spyOn(workItems, 'commitRuleEvaluation');
       if (failure === 'timeout') vi.useFakeTimers();
@@ -398,7 +483,10 @@ describe('LinearRules', () => {
           factoryProjectId: project.id,
           issues: [issue],
         });
-        if (failure === 'timeout') await vi.advanceTimersByTimeAsync(5_001);
+        if (failure === 'timeout') {
+          await vi.waitFor(() => expect(handler).toHaveBeenCalled());
+          await vi.advanceTimersByTimeAsync(5_001);
+        }
         await pending;
         expect(commit).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -464,5 +552,111 @@ describe('LinearRules', () => {
 
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(2);
+  });
+
+  describe('board event handlers', () => {
+    function deliveryBoard(issueClosed: ((context: FactoryLinearRuleContext) => unknown) | null) {
+      return defineBoard({
+        id: 'delivery',
+        title: 'Delivery',
+        initialPhase: 'queued',
+        phases: {
+          queued: { title: 'Queued', kind: 'resting', next: 'building' },
+          building: {
+            title: 'Building',
+            kind: 'working',
+            role: 'work',
+            outcomes: { done: 'shipped', canceled: 'dropped' },
+          },
+          shipped: { title: 'Shipped', kind: 'terminal' },
+          dropped: { title: 'Dropped', kind: 'terminal' },
+        },
+        events: { linear: { issueClosed: issueClosed as never } },
+      });
+    }
+
+    async function seed(
+      workItems: Awaited<ReturnType<typeof setup>>['workItems'],
+      projectId: string,
+      board: string,
+      stage: string,
+    ) {
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: projectId,
+        input: {
+          title: issue.title,
+          board,
+          stages: [stage],
+          sessions: {},
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+        },
+      });
+    }
+
+    it('runs the card board handler with the phase it sits in', async () => {
+      const issueClosed = vi.fn((context: FactoryLinearRuleContext) => ({
+        type: 'transition' as const,
+        board: context.board ?? '',
+        stage:
+          context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+            ? 'dropped'
+            : 'shipped',
+        idempotencyKey: 'delivery-closed',
+      }));
+      const { project, service, workItems } = await setup(
+        undefined,
+        createBoardRegistry({ boards: [deliveryBoard(issueClosed)] }),
+      );
+      await seed(workItems, project.id, 'delivery', 'building');
+      await service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType: 'canceled' }],
+      });
+      expect(issueClosed.mock.calls[0]?.[0]).toMatchObject({
+        board: 'delivery',
+        phase: { id: 'building', kind: 'working', role: 'work', outcomes: ['done', 'canceled'] },
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+        { decision: { type: 'transition', board: 'delivery', stage: 'dropped' } },
+      ]);
+    });
+
+    it('leaves Work cards on the integration default when another board switches the event off', async () => {
+      const { project, service, workItems } = await setup(
+        undefined,
+        createBoardRegistry({ boards: [deliveryBoard(null)] }),
+      );
+      await seed(workItems, project.id, 'work', 'execute');
+      await service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType: 'completed' }],
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+        { decision: { type: 'transition', board: 'work', stage: 'done' } },
+      ]);
+    });
+
+    it('keeps an explicit integration handler ahead of the board handler', async () => {
+      const boardHandler = vi.fn();
+      const { project, service, workItems } = await setup(
+        { issueClosed: null },
+        createBoardRegistry({ boards: [deliveryBoard(boardHandler)] }),
+      );
+      await seed(workItems, project.id, 'delivery', 'building');
+      await service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType: 'completed' }],
+      });
+      expect(boardHandler).not.toHaveBeenCalled();
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    });
   });
 });

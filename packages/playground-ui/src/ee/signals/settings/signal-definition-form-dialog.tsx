@@ -16,7 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/ds/components/Dialog';
-import { FieldBlock, TextFieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
 import { Notice } from '@/ds/components/Notice';
 import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
@@ -103,9 +105,8 @@ export function SignalDefinitionFormDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <form
+          <Form
             id={formId}
-            className="space-y-4"
             onSubmit={event => {
               event.preventDefault();
               const errors = validate(value, editing);
@@ -121,59 +122,51 @@ export function SignalDefinitionFormDialog({
               void action.then(() => onOpenChange(false)).catch(() => undefined);
             }}
           >
-            <TextFieldBlock
-              id="input-name"
-              name="name"
-              label="Signal name"
-              helpText="A stable lowercase slug. It cannot be changed after creation."
-              placeholder="handoff_quality"
-              value={value.name}
-              disabled={editing || pending}
-              errorMsg={validationErrors.name}
-              onChange={event => setField('name', event.target.value)}
-            />
-            <TextFieldBlock
-              id="input-displayLabel"
-              name="displayLabel"
-              label="Display label"
-              placeholder="Handoff quality"
-              value={value.displayLabel}
-              disabled={pending}
-              errorMsg={validationErrors.displayLabel}
-              onChange={event => setField('displayLabel', event.target.value)}
-            />
-            <FieldBlock.Layout>
-              <FieldBlock.Column>
-                <FieldBlock.Label name="description">Description</FieldBlock.Label>
-                <Textarea
-                  id="input-description"
-                  rows={2}
-                  value={value.description}
-                  disabled={pending}
-                  onChange={event => setField('description', event.target.value)}
-                />
-              </FieldBlock.Column>
-              <FieldBlock.Column>
-                <FieldBlock.Label name="taskPrompt">Signal instructions</FieldBlock.Label>
-                <Textarea
-                  id="input-taskPrompt"
-                  rows={5}
-                  value={value.taskPrompt}
-                  disabled={pending}
-                  placeholder="Describe what this signal should evaluate and how the result should be written."
-                  error={Boolean(validationErrors.taskPrompt)}
-                  aria-describedby={validationErrors.taskPrompt ? fieldErrorId('taskPrompt') : undefined}
-                  onChange={event => setField('taskPrompt', event.target.value)}
-                />
-                <FieldBlock.HelpText>
-                  Tell the model what to evaluate and what the signal result should contain. {value.taskPrompt.length}
-                  /2,000 characters
-                </FieldBlock.HelpText>
-                {validationErrors.taskPrompt ? (
-                  <FieldBlock.ErrorMsg name="taskPrompt">{validationErrors.taskPrompt}</FieldBlock.ErrorMsg>
-                ) : null}
-              </FieldBlock.Column>
-            </FieldBlock.Layout>
+            <Field invalid={Boolean(validationErrors.name)} disabled={editing || pending}>
+              <FieldLabel>Signal name</FieldLabel>
+              <Input
+                name="name"
+                placeholder="handoff_quality"
+                value={value.name}
+                onChange={event => setField('name', event.target.value)}
+              />
+              <FieldDescription>A stable lowercase slug. It cannot be changed after creation.</FieldDescription>
+              <FieldError>{validationErrors.name}</FieldError>
+            </Field>
+            <Field invalid={Boolean(validationErrors.displayLabel)} disabled={pending}>
+              <FieldLabel>Display label</FieldLabel>
+              <Input
+                name="displayLabel"
+                placeholder="Handoff quality"
+                value={value.displayLabel}
+                onChange={event => setField('displayLabel', event.target.value)}
+              />
+              <FieldError>{validationErrors.displayLabel}</FieldError>
+            </Field>
+            <Field disabled={pending}>
+              <FieldLabel>Description</FieldLabel>
+              <Textarea
+                name="description"
+                rows={2}
+                value={value.description}
+                onChange={event => setField('description', event.target.value)}
+              />
+            </Field>
+            <Field invalid={Boolean(validationErrors.taskPrompt)} disabled={pending}>
+              <FieldLabel>Signal instructions</FieldLabel>
+              <Textarea
+                name="taskPrompt"
+                rows={5}
+                value={value.taskPrompt}
+                placeholder="Describe what this signal should evaluate and how the result should be written."
+                onChange={event => setField('taskPrompt', event.target.value)}
+              />
+              <FieldDescription>
+                Tell the model what to evaluate and what the signal result should contain. {value.taskPrompt.length}
+                /2,000 characters
+              </FieldDescription>
+              <FieldError>{validationErrors.taskPrompt}</FieldError>
+            </Field>
             {editing ? (
               <Txt variant="meta" tone="muted">
                 Instruction changes create a new version and apply only to new traces. Existing analysis is unchanged.
@@ -184,7 +177,7 @@ export function SignalDefinitionFormDialog({
                 <Notice variant="destructive">{error}</Notice>
               </div>
             ) : null}
-          </form>
+          </Form>
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>

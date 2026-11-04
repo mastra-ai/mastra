@@ -55,7 +55,6 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 // Module-level so React Query can cache each derived value instead of
 // rebuilding it (and, for the set, breaking referential equality) per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
-const selectRunningSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.runningSessionIds);
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
 
@@ -76,16 +75,6 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
-}
-
-/**
- * Sessions with an agent run in flight, taken from the same read as the cards
- * they belong to — a card and its run marker can never come from two polls.
- */
-export function useRunningSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
-  const { baseUrl } = useApiConfig();
-  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectRunningSessions });
-  return data ?? NO_SESSIONS;
 }
 
 /** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
@@ -217,7 +206,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         }),
       );
     },
-    onSuccess: (result, variables, context) => {
+    onSuccess: async (result, variables, context) => {
       patchCards(queryClient, listKey, cards =>
         cards.map(item => {
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
@@ -238,10 +227,12 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
           };
         }),
       );
-      void queryClient.invalidateQueries({ queryKey: listKey });
-      // The lane's rule queues its run inside this commit; without this the card
-      // stays silent until the decisions poll comes round.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) });
+      // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
+      // move pending until the card shows that run, so its button never reappears in between.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: listKey }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),
+      ]);
     },
   });
   const pendingTransitions = useMutationState({
@@ -286,7 +277,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
       if (context?.previous) queryClient.setQueryData(listKey, context.previous);
     },
     onSuccess: () => {
-      // patchCards keeps runningSessionIds, so refetch to drop the deleted card's run marker with it.
+      // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.
       void queryClient.invalidateQueries({ queryKey: listKey });
     },
   });

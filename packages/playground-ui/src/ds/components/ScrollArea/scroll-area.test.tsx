@@ -124,6 +124,12 @@ describe('ScrollArea', () => {
       expect(viewport.className).toContain('mask-b-from');
     });
 
+    it('styles the content wrapper through contentClassName', () => {
+      renderWithViewport({ contentClassName: 'caller-content' });
+
+      expect(getContent().classList.contains('caller-content')).toBe(true);
+    });
+
     it('hands the viewport to a callback ref', () => {
       const seen: Array<HTMLDivElement | null> = [];
       renderWithViewport({ ref: node => void seen.push(node) });

@@ -46,11 +46,29 @@ export function validateCron(cron: string, timezone?: string): void {
  * @throws If the cron expression is invalid or has no future occurrence.
  */
 export function computeNextFireAt(cron: string, options?: { timezone?: string; after?: number }): number {
-  const job = new Cron(cron, { timezone: options?.timezone });
   const reference = options?.after !== undefined ? new Date(options.after) : new Date();
-  const next = job.nextRun(reference);
-  if (!next) {
+  const nextFireAt = findNextFireAt(cron, options?.timezone, reference);
+  if (nextFireAt === null) {
     throw new Error(`Cron expression "${cron}" has no future occurrence after ${reference.toISOString()}`);
   }
-  return next.getTime();
+  return nextFireAt;
+}
+
+/**
+ * Resolve what a cron schedule claim should write after firing at `after`.
+ * Exhausted crons retain their final `nextFireAt` and become completed.
+ */
+export function computeNextFire(
+  schedule: { cron: string; timezone?: string; nextFireAt: number },
+  after: number,
+): { nextFireAt: number; completed: boolean } {
+  const nextFireAt = findNextFireAt(schedule.cron, schedule.timezone, new Date(after));
+  if (nextFireAt === null) {
+    return { nextFireAt: schedule.nextFireAt, completed: true };
+  }
+  return { nextFireAt, completed: false };
+}
+
+function findNextFireAt(cron: string, timezone: string | undefined, reference: Date): number | null {
+  return new Cron(cron, { timezone }).nextRun(reference)?.getTime() ?? null;
 }

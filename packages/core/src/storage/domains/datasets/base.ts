@@ -164,10 +164,6 @@ export abstract class DatasetsStorage extends StorageDomain {
         if (result.invalid.length > 0) {
           throw new SchemaUpdateValidationError(result.invalid);
         }
-
-        // Clear old cache since schema changed
-        validator.clearCache(`dataset:${args.id}:input`);
-        validator.clearCache(`dataset:${args.id}:output`);
       }
     }
 

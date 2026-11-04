@@ -6,6 +6,10 @@ import { traceQueryCapabilities } from '../../../src/pages/traces/__tests__/fixt
  * trace queries. Specs that mock `/observability/traces/query` (or feedback) must
  * advertise the capability so Studio takes the trace-query path.
  */
-export async function mockTraceQueryCapabilities(page: Page) {
-  await page.route('**/api/observability/capabilities', route => route.fulfill({ json: traceQueryCapabilities }));
+export async function mockTraceQueryCapabilities(page: Page, { rootDuration = true }: { rootDuration?: boolean } = {}) {
+  const json = {
+    ...traceQueryCapabilities,
+    capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: rootDuration },
+  };
+  await page.route('**/api/observability/capabilities', route => route.fulfill({ json }));
 }

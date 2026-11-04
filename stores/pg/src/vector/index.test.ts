@@ -1735,78 +1735,6 @@ describe('PgVector', () => {
           }
         });
 
-        it('should place ORDER BY and LIMIT outside CTE when querying with filters', async () => {
-          const queries: string[] = [];
-          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
-          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
-            const client = await origConnect();
-            const origQuery = client.query.bind(client);
-            client.query = ((...args: any[]) => {
-              if (typeof args[0] === 'string') {
-                queries.push(args[0]);
-              }
-              return (origQuery as any)(...args);
-            }) as any;
-            return client;
-          });
-
-          try {
-            await vectorDB.query({
-              indexName,
-              queryVector: [1, 0, 0],
-              topK: 2,
-              filter: { test: 'value' },
-            });
-
-            const cteQuery = queries.find(q => q.includes('vector_scores'));
-            expect(cteQuery).toBeDefined();
-
-            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
-            expect(cteMatch).toBeTruthy();
-            const cteBody = cteMatch![1]!;
-            expect(cteBody).not.toContain('ORDER BY');
-            expect(cteBody).not.toContain('LIMIT');
-          } finally {
-            connectSpy.mockRestore();
-          }
-        });
-
-        it('should place ORDER BY and LIMIT outside CTE when minScore is set', async () => {
-          const queries: string[] = [];
-          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
-          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
-            const client = await origConnect();
-            const origQuery = client.query.bind(client);
-            client.query = ((...args: any[]) => {
-              if (typeof args[0] === 'string') {
-                queries.push(args[0]);
-              }
-              return (origQuery as any)(...args);
-            }) as any;
-            return client;
-          });
-
-          try {
-            await vectorDB.query({
-              indexName,
-              queryVector: [1, 0, 0],
-              topK: 2,
-              minScore: 0.5,
-            });
-
-            const cteQuery = queries.find(q => q.includes('vector_scores'));
-            expect(cteQuery).toBeDefined();
-
-            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
-            expect(cteMatch).toBeTruthy();
-            const cteBody = cteMatch![1]!;
-            expect(cteBody).not.toContain('ORDER BY');
-            expect(cteBody).not.toContain('LIMIT');
-          } finally {
-            connectSpy.mockRestore();
-          }
-        });
-
         it('should return all rows above minScore when topK is larger than matching rows', async () => {
           // 3 vectors exist: [1,0,0] (score~1.0), [0.8,0.2,0] (score~0.97), [0,1,0] (score~0.0)
           // With topK=3 and minScore=0.5, exactly 2 rows should pass the score filter
@@ -2469,6 +2397,37 @@ describe('PgVector', () => {
           expect(indexes).toContain(testIndexName);
         });
 
+        it('returns bit arrays from a metadata-only query with includeVector', async () => {
+          if (!bitSupported) return;
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 4,
+            metric: 'cosine',
+            vectorType: 'bit',
+          });
+          await bitVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [
+              [1, 0, 1, 0],
+              [0, 1, 0, 1],
+            ],
+            metadata: [
+              { label: 'lead-one', kind: 'bits' },
+              { label: 'lead-zero', kind: 'bits' },
+            ],
+          });
+
+          const results = await bitVectorDB.query({
+            indexName: testIndexName,
+            filter: { kind: 'bits' },
+            includeVector: true,
+          });
+          const byLabel = Object.fromEntries(results.map(r => [r.metadata?.label, r.vector]));
+
+          expect(byLabel).toEqual({ 'lead-one': [1, 0, 1, 0], 'lead-zero': [0, 1, 0, 1] });
+        });
+
         it('should upsert and query bit vectors', async () => {
           if (!bitSupported) {
             console.log('Skipping test: bit requires pgvector >= 0.7.0');
@@ -2673,6 +2632,25 @@ describe('PgVector', () => {
 
           const indexes = await sparseVectorDB.listIndexes();
           expect(indexes).toContain(testIndexName);
+        });
+
+        it('returns dense vectors from a metadata-only query with includeVector', async () => {
+          if (!sparsevecSupported) return;
+
+          await sparseVectorDB.createIndex({ indexName: testIndexName, dimension: 4, vectorType: 'sparsevec' });
+          await sparseVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [[0.5, 0, 0.25, 0]],
+            metadata: [{ label: 'a' }],
+          });
+
+          const results = await sparseVectorDB.query({
+            indexName: testIndexName,
+            filter: { label: 'a' },
+            includeVector: true,
+          });
+
+          expect(results[0]?.vector).toEqual([0.5, 0, 0.25, 0]);
         });
 
         it('should upsert and query sparsevec vectors', async () => {

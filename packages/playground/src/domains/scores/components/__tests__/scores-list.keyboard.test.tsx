@@ -56,9 +56,9 @@ describe('ScoresList keyboard navigation', () => {
       renderList({ onScoreClick });
 
       const rows = interactiveRows();
-      fireEvent.focus(rows[0] as HTMLElement);
-      fireEvent.keyDown(rows[0] as HTMLElement, { key: 'ArrowDown' });
-      fireEvent.click(rows[1] as HTMLElement);
+      fireEvent.focus(rows[0]);
+      fireEvent.keyDown(rows[0], { key: 'ArrowDown' });
+      fireEvent.click(rows[1]);
 
       expect(onScoreClick).toHaveBeenCalledWith('score-2');
     });

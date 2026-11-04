@@ -61,7 +61,8 @@ Use when optimizing context selection for:
       {
         name: 'scale',
         type: 'number',
-        description: 'Scale factor to multiply the final score (default: 1)',
+        description:
+          'Positive scale factor to multiply the final score by (default: 1). The score ranges from 0 to scale.',
         required: false,
       },
     ],
@@ -69,7 +70,9 @@ Use when optimizing context selection for:
 ]}
 />
 
-Either `context` or `contextExtractor` must be provided. If both are provided, `contextExtractor` takes precedence.
+Either `context` or `contextExtractor` must be provided. `contextExtractor` is only called when the run input and output have agent shapes: the input has `inputMessages`, `rememberedMessages` and `systemMessages` arrays plus a `taggedSystemMessages` object, and the output is an array of messages. For any other input/output shape the scorer uses `context`. When neither is provided, the scorer throws.
+
+If you pass `context`, the array must be non-empty. The constructor throws `Context array cannot be empty if provided` even when `contextExtractor` is also configured. When only `contextExtractor` is configured and the run isn't agent-shaped, there's no context to score against and evaluation throws `No context available for evaluation`.
 
 ## `.run()` returns
 
@@ -78,7 +81,7 @@ Either `context` or `contextExtractor` must be provided. If both are provided, `
   {
     name: 'score',
     type: 'number',
-    description: 'Mean Average Precision score between 0 and scale (default 0-1)',
+    description: 'Mean Average Precision score between 0 and scale (default 0-1). Assumes a positive scale.',
   },
   {
     name: 'reason',

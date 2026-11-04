@@ -19,6 +19,7 @@ import {
   addApplicationPassword,
   createApplication,
   createBotRegistration,
+  decodeTenantId,
   deleteApplication,
   deleteBotRegistration,
   validateBotCredentials,
@@ -351,19 +352,28 @@ export class TeamsProvider implements ChannelProvider {
     }
 
     const botName = options.name ?? agentId;
-    const appType = this.#config.appType ?? 'MultiTenant';
-    const appTenantId = options.appTenantId ?? this.#config.appTenantId;
-    if (appType === 'SingleTenant' && !appTenantId) {
-      throw new Error(
-        'TeamsProvider is configured for SingleTenant bots but no appTenantId is available. ' +
-          'Set `appTenantId` on the provider or pass it to connect().',
-      );
-    }
+    // Microsoft deprecated new multitenant bot registrations (July 2025) —
+    // the Dev Portal rejects them with HTTP 400, so delegated provisioning
+    // defaults to SingleTenant.
+    const appType = this.#config.appType ?? 'SingleTenant';
+    let appTenantId = options.appTenantId ?? this.#config.appTenantId;
     const webhookId = existing?.webhookId ?? randomUUID();
     const messagingEndpoint = `${baseUrl}/${PLATFORM}/events/${webhookId}`;
 
     // 1. Entra application + client secret (Microsoft Graph audience).
     const graphToken = await tokenResolver(TEAMS_GRAPH_SCOPE, appTenantId);
+    if (appType === 'SingleTenant' && !appTenantId) {
+      // Default the tenant from the delegated token's `tid` claim so
+      // connect() stays zero-config; an explicit appTenantId still wins.
+      appTenantId = decodeTenantId(graphToken);
+      if (!appTenantId) {
+        throw new Error(
+          'TeamsProvider provisions SingleTenant bots but no appTenantId is available ' +
+            'and the Graph access token carries no `tid` claim. ' +
+            'Set `appTenantId` on the provider or pass it to connect().',
+        );
+      }
+    }
     const application = await createApplication(
       graphToken,
       { displayName: botName, signInAudience: appType === 'SingleTenant' ? 'AzureADMyOrg' : 'AzureADMultipleOrgs' },
@@ -388,6 +398,7 @@ export class TeamsProvider implements ChannelProvider {
           iconUrl: this.#config.botIconUrl ?? '',
           messagingEndpoint,
           callingEndpoint: '',
+          isSingleTenant: appType === 'SingleTenant',
         },
         this.#config.devPortalBaseUrl,
       );
@@ -661,6 +672,14 @@ export class TeamsProvider implements ChannelProvider {
   #getBaseUrl(): string | undefined {
     if (this.#config.baseUrl) return stripTrailingSlash(this.#config.baseUrl);
     const server = this.#mastra?.getServer();
+    // MASTRA_SERVER_URL is the server's public URL (deployment platforms
+    // inject it). It beats bind-address derivation — a deployed server binds
+    // 0.0.0.0, which is never reachable as a Bot Framework messaging
+    // endpoint — but explicit `server.studio*` overrides in user config win.
+    const hasPublicOverride =
+      server?.studioHost != null || server?.studioPort != null || server?.studioProtocol != null;
+    const envUrl = process.env.MASTRA_SERVER_URL?.trim();
+    if (!hasPublicOverride && envUrl) return stripTrailingSlash(envUrl);
     if (!server) return undefined;
     const protocol = server.studioProtocol ?? 'http';
     const host = server.studioHost ?? server.host ?? 'localhost';

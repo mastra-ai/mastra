@@ -90,7 +90,7 @@ const ENABLE_TESTS = process.env.ENABLE_TESTS === 'true';
 
 if (!ENABLE_TESTS) {
   console.log(
-    'Spanner integration tests are disabled by default. Run with ENABLE_TESTS=true and a running Spanner emulator.',
+    'Spanner integration tests are disabled by default. Run `pnpm test:integration` (needs docker) to start the emulator and run them.',
   );
 }
 
@@ -123,7 +123,10 @@ if (ENABLE_TESTS) {
     disableMetrics: false,
   };
 
-  createTestSuite(new SpannerStore(sharedConfig));
+  createTestSuite(new SpannerStore(sharedConfig), {
+    workflowResultsNoopWhenRunMissing: false,
+    skillsMetadataFilter: false,
+  });
 
   describe('retention', () => {
     it('prunes expired observability spans and metrics', async () => {

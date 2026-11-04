@@ -4,15 +4,39 @@ import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
-import { resolveCurrentState } from '../helpers';
+import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
 import type { ProcessorArgs } from '.';
 
 const FOREACH_QUEUED = '__mastra_foreach_queued__';
 
-function isQueuedForeachIteration(value: unknown): value is { [FOREACH_QUEUED]: true } {
+export function isQueuedForeachIteration(value: unknown): value is { [FOREACH_QUEUED]: true; nestedRunId?: string } {
   return Boolean(value && typeof value === 'object' && FOREACH_QUEUED in value);
+}
+
+export async function evaluateLoopCondition(
+  args: Omit<ProcessorArgs, 'workflow'>,
+  step: Extract<StepFlowEntry, { type: 'loop' }>,
+  stepExecutor: StepExecutor,
+  stepResult: StepResult<any, any, any, any>,
+) {
+  return stepExecutor.evaluateCondition({
+    workflowId: args.workflowId,
+    condition: step.condition,
+    runId: args.runId,
+    // The body's latest result only arrives as stepResult, so expose it to the condition's
+    // getStepResult(body) the way the default engine does (handlers/control-flow.ts).
+    stepResults: { ...args.stepResults, [getEntryId(step.step)]: stepResult },
+    state: resolveCurrentState({ stepResult, stepResults: args.stepResults, state: args.state }),
+    requestContext: new RequestContext(Object.entries(args.requestContext ?? {}) as any),
+    actor: args.actor,
+    inputData: stepResult.status === 'success' ? stepResult.output : undefined,
+    resumeData: args.resumeData,
+    abortController: new AbortController(),
+    retryCount: args.retryCount ?? 0,
+    iterationCount: (args.stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) + 1,
+  });
 }
 
 export async function processWorkflowLoop(
@@ -38,37 +62,41 @@ export async function processWorkflowLoop(
     stepExecutor,
     step,
     stepResult,
+    savedCondition,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
+    savedCondition?: boolean;
   },
 ) {
   // Get current state from stepResult, stepResults or passed state
   const currentState = resolveCurrentState({ stepResult, stepResults, state });
 
-  // Create a proper RequestContext from the plain object passed in ProcessorArgs
-  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
-
-  // Get iteration count from step results metadata (same pattern as control-flow.ts)
   const prevIterationCount = stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0;
   const iterationCount = prevIterationCount + 1;
-
-  const loopCondition = await stepExecutor.evaluateCondition({
-    workflowId,
-    condition: step.condition,
-    runId,
-    stepResults,
-    state: currentState,
-    requestContext: reqContext,
-    actor,
-    inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
-    resumeData,
-    abortController: new AbortController(),
-    retryCount,
-    iterationCount,
-  });
+  const loopCondition =
+    savedCondition ??
+    (await evaluateLoopCondition(
+      {
+        workflowId,
+        runId,
+        executionPath,
+        stepResults,
+        activeStepsPath,
+        resumeSteps,
+        resumeData,
+        requestContext,
+        actor,
+        retryCount,
+        state: currentState,
+        prevResult,
+      },
+      step,
+      stepExecutor,
+      stepResult,
+    ));
 
   // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
   // resume metadata. Otherwise the body would keep receiving the same resumeData on every
@@ -90,7 +118,7 @@ export async function processWorkflowLoop(
       ...stepResults,
       [getEntryId(step.step)]: {
         ...stepResults[getEntryId(step.step)],
-        metadata: { ...stepResults[getEntryId(step.step)]?.metadata, iterationCount },
+        metadata: { ...stepResults[getEntryId(step.step)]?.metadata, ...stepResult.metadata, iterationCount },
       },
     },
     prevResult: stepResult,
@@ -126,12 +154,10 @@ export async function processWorkflowLoop(
     } else {
       await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     }
+  } else if (loopCondition) {
+    await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
   } else {
-    if (loopCondition) {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
-    } else {
-      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
-    }
+    await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
   }
 }
 
@@ -165,6 +191,9 @@ export async function processWorkflowForEach(
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
+  // Restart checkpoints may point at an iteration, but the coordinator advances the workflow path.
+  if (restart) executionPath = [executionPath[0]!];
+
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
@@ -173,6 +202,74 @@ export async function processWorkflowForEach(
 
   const idx = currentResult?.output?.length ?? 0;
   const targetLen = (prevResult as any)?.output?.length ?? 0;
+
+  const publishSuspendedState = async (suspendedForEachIndex: number | undefined) => {
+    const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+    let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
+    for (const iterResult of currentResult.output) {
+      if (iterResult?.status === 'suspended') {
+        if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
+          Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+        }
+        if (firstSuspendedIterationPayload === undefined) {
+          firstSuspendedIterationPayload = iterResult.suspendPayload;
+        }
+      }
+    }
+
+    const suspendMeta: {
+      foreachIndex?: number;
+      resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+    } = {
+      foreachIndex: suspendedForEachIndex,
+    };
+    if (Object.keys(collectedResumeLabels).length > 0) {
+      suspendMeta.resumeLabels = collectedResumeLabels;
+    }
+
+    const aggregatedSuspendPayload = {
+      ...firstSuspendedIterationPayload,
+      __workflow_meta: {
+        ...currentResult?.suspendPayload?.__workflow_meta,
+        ...(firstSuspendedIterationPayload?.__workflow_meta as Record<string, unknown> | undefined),
+        ...suspendMeta,
+      },
+    };
+
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.end',
+      runId,
+      data: {
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath,
+        resumeSteps,
+        stepResults: {
+          ...stepResults,
+          [getEntryId(step.step)]: {
+            ...currentResult,
+            status: 'suspended',
+            suspendedAt: Date.now(),
+            suspendPayload: aggregatedSuspendPayload,
+          },
+        },
+        prevResult: {
+          status: 'suspended',
+          output: currentResult.output,
+          suspendPayload: aggregatedSuspendPayload,
+          payload: currentResult.payload,
+          startedAt: currentResult.startedAt,
+          suspendedAt: Date.now(),
+        },
+        activeStepsPath,
+        requestContext,
+        actor,
+        state: currentState,
+        outputOptions,
+      },
+    });
+  };
 
   // Handle resume with forEachIndex: kick off the targeted iteration resume
   if (forEachIndex !== undefined && resumeSteps?.length > 0 && idx > 0) {
@@ -246,74 +343,8 @@ export async function processWorkflowForEach(
     // If so, re-suspend the workflow to wait for those to be resumed.
     const pendingIterations = currentResult.output.filter((r: any) => r === null || r?.status === 'suspended');
     if (pendingIterations.length > 0) {
-      // Collect resumeLabels from all suspended iterations and capture the first
-      // suspended iteration's full suspendPayload so non-__workflow_meta keys
-      // (e.g. __streamState stashed by the agent loop) survive aggregation.
-      const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
-      let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
-      for (let i = 0; i < currentResult.output.length; i++) {
-        const iterResult = currentResult.output[i];
-        if (iterResult?.status === 'suspended') {
-          if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
-            Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
-          }
-          if (firstSuspendedIterationPayload === undefined) {
-            firstSuspendedIterationPayload = iterResult.suspendPayload;
-          }
-        }
-      }
-
-      // Build the suspend metadata with all collected resumeLabels
-      const suspendMeta: {
-        foreachIndex?: number;
-        resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
-      } = {
-        foreachIndex: forEachIndex,
-      };
-      if (Object.keys(collectedResumeLabels).length > 0) {
-        suspendMeta.resumeLabels = collectedResumeLabels;
-      }
-
-      const aggregatedSuspendPayload = {
-        ...firstSuspendedIterationPayload,
-        __workflow_meta: suspendMeta,
-      };
-
-      // Re-suspend the workflow - there are still pending iterations
-      // Use workflow.step.end with suspended status to update storage
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults: {
-            ...stepResults,
-            [getEntryId(step.step)]: {
-              ...currentResult,
-              status: 'suspended',
-              suspendedAt: Date.now(),
-              suspendPayload: aggregatedSuspendPayload,
-            },
-          },
-          prevResult: {
-            status: 'suspended',
-            output: currentResult.output,
-            suspendPayload: aggregatedSuspendPayload,
-            payload: currentResult.payload,
-            startedAt: currentResult.startedAt,
-            suspendedAt: Date.now(),
-          },
-          activeStepsPath,
-          requestContext,
-          actor,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      // Re-suspend the workflow - there are still pending iterations.
+      await publishSuspendedState(forEachIndex);
       return;
     }
 
@@ -367,7 +398,7 @@ export async function processWorkflowForEach(
           ...currentResult,
           output: updatedOutput,
         } as any,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
       });
 
       // Check if inner step is a nested workflow
@@ -431,13 +462,53 @@ export async function processWorkflowForEach(
         ? iterationResult.output
         : ({ [FOREACH_QUEUED]: true } as { [FOREACH_QUEUED]: true }),
     );
+    // Drop failure records from the previous attempt so a replayed iteration that fails
+    // again is treated as the first failure and fails the run.
+    currentResult.suspendPayload = {
+      ...currentResult.suspendPayload,
+      __workflow_meta: {
+        ...currentResult.suspendPayload.__workflow_meta,
+        foreachOutput: preservedForeachOutput.map((iterationResult: any) =>
+          iterationResult?.status === 'failed' ? null : iterationResult,
+        ),
+      },
+    };
 
     await workflowsStore?.updateWorkflowResults({
       workflowName: workflowId,
       runId,
       stepId,
       result: currentResult,
-      requestContext,
+      requestContext: withoutAuthToken(requestContext),
+    });
+    stepResults[stepId] = currentResult;
+  }
+
+  if (
+    restart &&
+    !restart.isForeachRestarted &&
+    Array.isArray(currentResult?.output) &&
+    currentResult.output.some((result: any) => result === null)
+  ) {
+    const unfinishedCount = currentResult.output.filter((result: any) => result === null).length;
+    currentResult.output = currentResult.output.map((result: any, index: number) => {
+      if (result !== null) return result;
+      const nestedRunId =
+        currentResult.metadata?.foreachNestedRunIds?.[index] ??
+        (!currentResult.metadata?.foreachNestedRunIds &&
+        unfinishedCount === 1 &&
+        restart.activeStepsPath?.[stepId]?.[1] === index
+          ? currentResult.metadata?.nestedRunId
+          : undefined);
+      return { [FOREACH_QUEUED]: true, ...(nestedRunId ? { nestedRunId } : {}) };
+    });
+
+    await workflowsStore?.updateWorkflowResults({
+      workflowName: workflowId,
+      runId,
+      stepId,
+      result: currentResult,
+      requestContext: withoutAuthToken(requestContext),
     });
     stepResults[stepId] = currentResult;
   }
@@ -451,7 +522,14 @@ export async function processWorkflowForEach(
       getInitData: () => (stepResults as any)?.input,
     });
     const runningCount = currentResult.output.filter((result: any) => result === null).length;
-    const indicesToRun = queuedIndices.slice(0, Math.max(0, concurrency - runningCount));
+    const suspendedIndices = currentResult.output.flatMap((result: any, index: number) =>
+      result?.status === 'suspended' ? [index] : [],
+    );
+    const indicesToRun = queuedIndices.slice(0, Math.max(0, concurrency - runningCount - suspendedIndices.length));
+    if (indicesToRun.length === 0 && runningCount === 0 && suspendedIndices.length > 0) {
+      await publishSuspendedState(suspendedIndices[0]);
+      return;
+    }
 
     if (indicesToRun.length > 0) {
       const updatedOutput = [...currentResult.output];
@@ -463,7 +541,7 @@ export async function processWorkflowForEach(
         runId,
         stepId,
         result: { ...currentResult, output: updatedOutput } as any,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
       });
 
       const isNestedWorkflow = getEntryWorkflow(step.step) !== null;
@@ -483,7 +561,18 @@ export async function processWorkflowForEach(
             executionPath: [executionPath[0]!, index],
             resumeSteps,
             timeTravel,
-            restart,
+            // Only recorded children receive recovery events. Plain steps and slots
+            // that never started still execute normally through the leaf runner.
+            restart:
+              isNestedWorkflow && !timeTravel && currentResult.output[index]?.nestedRunId
+                ? {
+                    ...restart,
+                    activePaths: restart?.activePaths ?? [executionPath[0]!, index],
+                    activeStepsPath: { ...restart?.activeStepsPath, [stepId]: [executionPath[0]!, index] },
+                    stepResults,
+                    isForeachRestarted: true,
+                  }
+                : undefined,
             stepResults,
             prevResult: iterationPrevResult,
             resumeData,
@@ -500,9 +589,32 @@ export async function processWorkflowForEach(
     return;
   }
 
+  const concurrency =
+    idx === 0
+      ? undefined
+      : resolveForeachConcurrency(step.opts, {
+          inputData: (prevResult as any)?.output,
+          getInitData: () => (stepResults as any)?.input,
+        });
+  const runningIterations = currentResult?.output?.filter((result: any) => result === null).length ?? 0;
+  const suspendedIndices =
+    currentResult?.output?.flatMap((result: any, index: number) => (result?.status === 'suspended' ? [index] : [])) ??
+    [];
+  const activeIterations = runningIterations + suspendedIndices.length;
+
+  if (
+    suspendedIndices.length > 0 &&
+    runningIterations === 0 &&
+    (idx >= targetLen || (concurrency !== undefined && activeIterations >= concurrency))
+  ) {
+    await publishSuspendedState(suspendedIndices[0]);
+    return;
+  }
+
   if (
     (idx >= targetLen &&
-      currentResult?.output?.filter((r: any) => r !== null && !isQueuedForeachIteration(r))?.length >= targetLen) ||
+      currentResult?.output?.filter((r: any) => r !== null && r?.status !== 'suspended' && !isQueuedForeachIteration(r))
+        ?.length >= targetLen) ||
     (prevResult as any)?.output?.length === 0
   ) {
     // Foreach completed all iterations or the previous result is an empty array - advance to next step
@@ -521,9 +633,32 @@ export async function processWorkflowForEach(
         runId,
         stepId: getEntryId(step.step),
         result,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
       });
       stepResults[getEntryId(step.step)] = result as StepResult<any, any, any, any>;
+    } else if (currentResult?.status !== 'success') {
+      // Iteration step-ends keep the record 'running'; only here has every iteration settled.
+      result = {
+        ...currentResult,
+        status: 'success',
+        suspendedAt: undefined,
+        startedAt: currentResult.startedAt ?? Date.now(),
+        endedAt: Date.now(),
+      };
+      const merged = await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: getEntryId(step.step),
+        result,
+        requestContext: withoutAuthToken(requestContext),
+      });
+      stepResults[getEntryId(step.step)] = (merged?.[getEntryId(step.step)] ?? result) as StepResult<
+        any,
+        any,
+        any,
+        any
+      >;
+      result = stepResults[getEntryId(step.step)] as typeof result;
     }
 
     await pubsub.publish('workflows', {
@@ -569,12 +704,13 @@ export async function processWorkflowForEach(
       runId,
       stepId: getEntryId(step.step),
       result: {
-        status: 'success',
+        // Iterations are still running; the completion branch above writes success.
+        status: 'running',
         output: dummyResult as any,
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
       } as any,
-      requestContext,
+      requestContext: withoutAuthToken(requestContext),
     });
 
     // Check if inner step is a nested workflow - only then extract individual items
@@ -600,7 +736,6 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults,
           timeTravel,
-          restart,
           prevResult: iterationPrevResult,
           resumeData,
           activeStepsPath,
@@ -616,18 +751,22 @@ export async function processWorkflowForEach(
     return;
   }
 
+  if (concurrency !== undefined && activeIterations >= concurrency) {
+    return;
+  }
+
   (currentResult as any).output.push(null);
   await workflowsStore?.updateWorkflowResults({
     workflowName: workflowId,
     runId,
     stepId: getEntryId(step.step),
     result: {
-      status: 'success',
+      status: 'running',
       output: (currentResult as any).output,
-      startedAt: Date.now(),
+      startedAt: currentResult?.startedAt ?? Date.now(),
       payload: (prevResult as any)?.output,
     } as any,
-    requestContext,
+    requestContext: withoutAuthToken(requestContext),
   });
 
   // For nested workflows, extract individual item since they receive prevResult directly
@@ -649,7 +788,6 @@ export async function processWorkflowForEach(
       executionPath: [executionPath[0]!, idx],
       resumeSteps,
       timeTravel,
-      restart,
       stepResults,
       prevResult: iterationPrevResult,
       resumeData,

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createWorkflow } from '../../../../workflows/create';
 import { globalRunRegistry } from '../../run-registry';
 import { createDurableBackgroundTaskCheckStep } from './background-task-check';
 
@@ -79,6 +80,42 @@ describe('createDurableBackgroundTaskCheckStep', () => {
     expect(result).toBe(input);
     globalRunRegistry.delete(runId);
   });
+
+  it.each(['error', 'other'])(
+    'does not revive terminal %s signal-discard state when a background task completes',
+    async reason => {
+      const { listTasks, waitForNextTask } = setupRegistry({});
+      let complete!: () => void;
+      const completion = new Promise<void>(resolve => {
+        complete = resolve;
+      });
+      waitForNextTask.mockImplementationOnce(async () => {
+        queueMicrotask(complete);
+        await completion;
+        return makeRunningTask('t1');
+      });
+      const step = createDurableBackgroundTaskCheckStep();
+      const workflow = createWorkflow({
+        id: 'terminal-background-check',
+        inputSchema: step.inputSchema,
+        outputSchema: step.outputSchema,
+      })
+        .then(step)
+        .commit();
+      const run = await workflow.createRun();
+      const input = {
+        ...baseInput(),
+        runId: 'run-1',
+        agentId: 'a1',
+        stepResult: { reason, isContinued: false, signalPreempted: true },
+      };
+      const result = await run.start({ inputData: input });
+      if (result.status !== 'success') throw new Error(`Background check failed: ${result.status}`);
+      expect(result.result).toEqual(input);
+      expect(listTasks).not.toHaveBeenCalled();
+      expect(waitForNextTask).not.toHaveBeenCalled();
+    },
+  );
 
   it('passes through unchanged when there are no running tasks', async () => {
     const { waitForNextTask, getInitData } = setupRegistry({ runningTasks: [] });

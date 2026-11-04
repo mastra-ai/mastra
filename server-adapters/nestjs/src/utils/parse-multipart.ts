@@ -1,4 +1,5 @@
 import { Busboy } from '@fastify/busboy';
+import { isSafeObjectKey } from '@mastra/server/server-adapter';
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import type { Request } from 'express';
 
@@ -72,7 +73,7 @@ export function parseMultipartFormData(
         });
 
         file.on('end', () => {
-          if (!limitExceeded) {
+          if (!limitExceeded && isSafeObjectKey(fieldname)) {
             result[fieldname] = Buffer.concat(chunks);
           }
         });
@@ -80,6 +81,9 @@ export function parseMultipartFormData(
     );
 
     busboy.on('field', (fieldname: string, value: string) => {
+      if (!isSafeObjectKey(fieldname)) {
+        return;
+      }
       // Try to parse JSON strings (like 'options')
       try {
         result[fieldname] = JSON.parse(value);

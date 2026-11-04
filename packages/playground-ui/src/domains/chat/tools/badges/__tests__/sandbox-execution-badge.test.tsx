@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -67,6 +66,23 @@ describe('SandboxExecutionBadge', () => {
 
       expect(screen.getByText('killed')).not.toBeNull();
       expect(screen.queryByText('exit 137')).toBeNull();
+    });
+  });
+
+  describe('when a command runs past its timeout', () => {
+    it('says it timed out, not that something killed it', () => {
+      renderBadge({
+        dataParts: [
+          {
+            type: 'data',
+            name: 'sandbox-exit',
+            data: { exitCode: 124, success: false, killed: true, timedOut: true, toolCallId: 'call-command' },
+          },
+        ],
+      });
+
+      expect(screen.getByText('timed out')).not.toBeNull();
+      expect(screen.queryByText('killed')).toBeNull();
     });
   });
 

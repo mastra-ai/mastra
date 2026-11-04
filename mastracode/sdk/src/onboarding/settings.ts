@@ -6,6 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { OMModel } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
@@ -245,7 +246,6 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
-    quietModePreferenceSelected: boolean;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -296,11 +296,15 @@ export interface GlobalSettings {
      * when set. Written by `/om` when the observer model is changed independently.
      */
     observerModelOverride: string | null;
+    /** Persisted Observer model intent. Missing values use legacy-field compatibility. */
+    observerModelSelection: OMModel | null;
     /**
      * Explicit Reflector model override — takes precedence over `omModelOverride`
      * when set. Written by `/om` when the reflector model is changed independently.
      */
     reflectorModelOverride: string | null;
+    /** Persisted Reflector model intent. Missing values use legacy-field compatibility. */
+    reflectorModelSelection: OMModel | null;
     /** Default OM observation threshold used for new threads unless overridden per-thread. */
     omObservationThreshold: number | null;
     /** Default OM reflection threshold used for new threads unless overridden per-thread. */
@@ -328,15 +332,14 @@ export interface GlobalSettings {
   // Global behavior preferences
   preferences: {
     yolo: boolean | null;
-    theme: 'auto' | 'dark' | 'light';
+    /** 'auto' | 'dark' | 'light', or the name of a custom theme file in ~/.mastracode/themes/<name>.json */
+    theme: 'auto' | 'dark' | 'light' | (string & {});
     /** Default reasoning effort level used for all threads/models unless overridden in-session. */
     thinkingLevel: ThinkingLevelSetting;
     /** Whether native subagents are enabled for Mastra Code TUI sessions. */
     subagentsEnabled: boolean;
-    /** When true, components like subagent output collapse to compact summaries on completion. */
-    quietMode: boolean;
-    /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
-    quietModeMaxToolPreviewLines: number;
+    /** Maximum detail preview lines shown under compact tool calls (0-8). Set to 0 to hide previews. */
+    previewLines: number;
     /**
      * Default web search/extract provider. `auto` picks the first configured
      * provider key (Tavily, then Parallel). An explicit provider is only
@@ -377,6 +380,49 @@ export interface GlobalSettings {
   mcp: McpDiscoverySettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+  // Remote Factory connection selected via /factory (null = run locally)
+  factory: FactoryConnectionSettings | null;
+}
+
+export interface FactoryConnectionSettings {
+  url: string;
+  orgId: string;
+  projectId: string;
+  projectName: string;
+  environmentId: string;
+  environmentName: string;
+  factoryProjectId: string;
+  factoryProjectName: string;
+  projectRepositoryId: string;
+  repositorySlug: string;
+  /** Factory user session ID; addresses the remote agent-controller session as its resourceId. */
+  sessionId: string;
+  branch: string;
+  /** False keeps the connection saved but starts Mastra Code locally. */
+  active?: boolean;
+}
+
+function parseFactoryConnectionSettings(raw: unknown): FactoryConnectionSettings | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const keys = [
+    'url',
+    'orgId',
+    'projectId',
+    'projectName',
+    'environmentId',
+    'environmentName',
+    'factoryProjectId',
+    'factoryProjectName',
+    'projectRepositoryId',
+    'repositorySlug',
+    'sessionId',
+    'branch',
+  ] as const;
+  if (!keys.every(key => typeof obj[key] === 'string' && obj[key])) return null;
+  const parsed = Object.fromEntries(keys.map(key => [key, obj[key]])) as unknown as FactoryConnectionSettings;
+  if (obj.active === false) parsed.active = false;
+  return parsed;
 }
 
 export interface McpDiscoverySettings {
@@ -400,6 +446,8 @@ export interface SignalSettings {
   experimentalCrossAgentSignals: boolean;
   /** Experimental: give the agent tools to create and manage `/schedules` schedules on its thread. */
   experimentalScheduleTools: boolean;
+  /** Experimental: give the agent Knowledge (search, read, write, pin) on Mastra Code's own storage. */
+  experimentalKnowledge: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -443,7 +491,6 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
-    quietModePreferenceSelected: true,
   },
   models: {
     activeModelPackId: null,
@@ -455,7 +502,9 @@ const DEFAULTS: GlobalSettings = {
     activeOmPackId: null,
     omModelOverride: null,
     observerModelOverride: null,
+    observerModelSelection: null,
     reflectorModelOverride: null,
+    reflectorModelSelection: null,
     omObservationThreshold: null,
     omReflectionThreshold: null,
     omCavemanObservations: null,
@@ -469,8 +518,7 @@ const DEFAULTS: GlobalSettings = {
     theme: 'auto',
     thinkingLevel: 'off',
     subagentsEnabled: false,
-    quietMode: false,
-    quietModeMaxToolPreviewLines: 2,
+    previewLines: 2,
     webSearchProvider: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
@@ -496,14 +544,16 @@ const DEFAULTS: GlobalSettings = {
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
     experimentalScheduleTools: false,
+    experimentalKnowledge: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
   observability: { resources: {}, localTracing: false },
+  factory: null,
 };
 
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
-const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
+const PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
 function cloneSignalSettings(signals: SignalSettings): SignalSettings {
@@ -521,6 +571,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
     left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
     left.experimentalScheduleTools === right.experimentalScheduleTools &&
+    left.experimentalKnowledge === right.experimentalKnowledge &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -628,10 +679,21 @@ export function pruneRemovedAccountPreferences(settings: GlobalSettings, removed
   settings.models.packAccountPreferences = next;
 }
 
-function parseQuietModeMaxToolPreviewLines(value: unknown): number {
-  const rawValue =
-    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
-  return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * Resolves the preview line limit. `previewLines` wins when valid; otherwise the legacy
+ * `quietModeMaxToolPreviewLines` key (still written by older Mastra Code versions) is used.
+ */
+function parsePreviewLines(raw: Record<string, unknown>): number {
+  const value = isFiniteNumber(raw.previewLines)
+    ? raw.previewLines
+    : isFiniteNumber(raw.quietModeMaxToolPreviewLines)
+      ? raw.quietModeMaxToolPreviewLines
+      : DEFAULTS.preferences.previewLines;
+  return Math.min(PREVIEW_LINES_MAX, Math.max(0, Math.floor(value)));
 }
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
@@ -643,7 +705,7 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     subagentsEnabled:
       typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
-    quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+    previewLines: parsePreviewLines(raw),
     webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };
 }
@@ -700,6 +762,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalScheduleTools === 'boolean'
         ? raw.experimentalScheduleTools
         : DEFAULTS.signals.experimentalScheduleTools,
+    experimentalKnowledge:
+      typeof raw.experimentalKnowledge === 'boolean'
+        ? raw.experimentalKnowledge
+        : DEFAULTS.signals.experimentalKnowledge,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
@@ -710,26 +776,6 @@ function parseMcpDiscoverySettings(rawMcp: unknown): McpDiscoverySettings {
     claudeCodeGlobal: typeof raw.claudeCodeGlobal === 'boolean' ? raw.claudeCodeGlobal : DEFAULTS.mcp.claudeCodeGlobal,
     codexGlobal: typeof raw.codexGlobal === 'boolean' ? raw.codexGlobal : DEFAULTS.mcp.codexGlobal,
   };
-}
-
-function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
-  return Boolean(
-    rawOnboarding &&
-    typeof rawOnboarding === 'object' &&
-    Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
-  );
-}
-
-function applyQuietModePreferenceRollout(settings: GlobalSettings, rawOnboarding: unknown): void {
-  if (hasQuietModePreferenceSelected(rawOnboarding)) return;
-  settings.onboarding.quietModePreferenceSelected = settings.preferences.quietMode === true;
-}
-
-function getNewInstallDefaults(): GlobalSettings {
-  const settings = structuredClone(DEFAULTS);
-  settings.preferences.quietMode = true;
-  settings.onboarding.quietModePreferenceSelected = true;
-  return settings;
 }
 
 export function getSettingsPath(): string {
@@ -1052,8 +1098,8 @@ function migrateFromAuth(settingsPath: string): boolean {
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
+        factory: parseFactoryConnectionSettings(raw.factory),
       };
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
     }
@@ -1148,7 +1194,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
+  if (!existsSync(filePath)) return rememberLoadedSettings(structuredClone(DEFAULTS));
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
@@ -1193,14 +1239,14 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
+      factory: parseFactoryConnectionSettings(raw.factory),
     };
 
-    // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
-    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
-      settingsChanged = true;
-    }
+    // Persist the resolved preview line limit under its current key. Legacy quiet-mode keys are
+    // left untouched so older Mastra Code instances that are still running keep working.
+    const persistPreviewLines = !isFiniteNumber(raw.preferences?.previewLines);
+    // Migrate legacy omModelId → omModelOverride
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;
@@ -1212,6 +1258,22 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 
     if (settingsChanged) {
       saveSettings(settings, filePath);
+    } else if (persistPreviewLines) {
+      // Add only the preview key so a sparse settings file isn't expanded with every default.
+      // Best effort: an unwritable file still loads with the resolved value in memory.
+      const rawPreferences = raw.preferences && typeof raw.preferences === 'object' ? raw.preferences : {};
+      try {
+        writeFileAtomically(
+          filePath,
+          JSON.stringify(
+            { ...raw, preferences: { ...rawPreferences, previewLines: settings.preferences.previewLines } },
+            null,
+            2,
+          ),
+        );
+      } catch {
+        // Keep the loaded settings.
+      }
     }
 
     return rememberLoadedSettings(settings);
@@ -1394,7 +1456,18 @@ export function resolveOmRoleModel(
   role: 'observer' | 'reflector',
   builtinOmPacks: Array<{ id: string; modelId: string }>,
 ): string | null {
-  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
+  const {
+    activeOmPackId,
+    omModelOverride,
+    observerModelOverride,
+    observerModelSelection,
+    reflectorModelOverride,
+    reflectorModelSelection,
+  } = settings.models;
+  const model = role === 'observer' ? observerModelSelection : reflectorModelSelection;
+  if (model === 'auto') return null;
+  if (model) return model;
+
   const roleOverride = role === 'observer' ? observerModelOverride : reflectorModelOverride;
   if (roleOverride) return roleOverride;
 

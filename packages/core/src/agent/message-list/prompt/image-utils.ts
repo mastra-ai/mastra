@@ -1,3 +1,5 @@
+import { convertBase64ToUint8Array, convertUint8ArrayToBase64 } from '@ai-sdk/provider-utils-v6';
+import { detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat/media';
 import { convertDataContentToBase64String } from './data-content';
 
 /**
@@ -171,6 +173,155 @@ export function isValidUrl(str: string): boolean {
         return false;
       }
     }
+    return false;
+  }
+}
+
+// Characters of the standard and URL-safe base64 alphabets, plus padding and whitespace.
+// Deliberately loose: it only has to catch strings that clearly aren't base64 (paths, hosts).
+const BASE64_PATTERN = /^[A-Za-z0-9+/\-_=\s]*$/;
+
+/**
+ * Checks whether a string plausibly holds raw base64 content. Relative paths such as
+ * `/api/images/foo.png` fail, so they aren't wrapped as a data URL that can never decode.
+ */
+export function isBase64Like(data: string): boolean {
+  return BASE64_PATTERN.test(data);
+}
+
+const STRICT_BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
+const SIGNED_IMAGE_MEDIA_TYPES = new Set<string>([
+  ...imageMediaTypeSignatures.map(signature => signature.mediaType),
+  'image/jpg',
+]);
+const HEIF_BRANDS = new Set([
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'heim',
+  'heis',
+  'hevm',
+  'hevs',
+  'mif1',
+  'msf1',
+  'avif',
+  'avis',
+]);
+
+const ascii = (bytes: Uint8Array, start: number, length = 4) =>
+  String.fromCharCode(...bytes.subarray(start, start + length));
+
+/**
+ * HEIC and AVIF files start with an ISO BMFF `ftyp` box whose size and brand list vary (iPhone
+ * HEIC uses a 24-byte box), so the fixed signature table misses most real files. Check the box
+ * structure instead: `ftyp` at byte 4, then a HEIF/AVIF major or compatible brand.
+ */
+function isHeifImage(bytes: Uint8Array): boolean {
+  if (bytes.length < 16 || ascii(bytes, 4) !== 'ftyp') return false;
+  const boxSize = ((bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) >>> 0;
+  if (boxSize < 16 || boxSize % 4 !== 0) return false;
+  if (HEIF_BRANDS.has(ascii(bytes, 8))) return true;
+  for (let offset = 16; offset + 4 <= Math.min(boxSize, bytes.length); offset += 4) {
+    if (HEIF_BRANDS.has(ascii(bytes, offset))) return true;
+  }
+  return false;
+}
+
+// A relative path such as `/api/attachments/123` or `uploads/abc` is made only of base64
+// characters, so it passes as base64. Base64 content can look like a path too (text often has
+// no `+` or `=`), but real paths are short, so only short payloads are treated as paths.
+const PATH_PATTERN = /^\/?[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)+\/?$|^\/[A-Za-z0-9_-]+\/?$/;
+const MAX_PATH_LENGTH = 256;
+
+/**
+ * Checks whether inline base64 content can be decoded. Images with a known signature and PDFs
+ * (whose `%PDF` header must appear in the first 1 KB) must also look like one; mislabelled
+ * images are fine, since any known image signature passes. Other types can't be validated
+ * exhaustively (audio containers and text encodings vary too much), so they are only rejected
+ * when the content is a path rather than encoded file data.
+ */
+function isValidInlineContent(base64: string, mediaType: string | undefined): boolean {
+  const payload = base64.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  if (!payload || !STRICT_BASE64_PATTERN.test(payload)) return false;
+  const unpaddedLength = payload.replace(/=+$/, '').length;
+  if (unpaddedLength % 4 === 1 || (unpaddedLength !== payload.length && payload.length % 4 !== 0)) return false;
+
+  // Decode only the start of the payload. Compare decoded bytes: base64 prefixes depend on the
+  // bytes that follow a signature (e.g. a WebP's file size), so a real file can fail a text match.
+  const head = (chars: number) => convertBase64ToUint8Array(payload.slice(0, chars));
+
+  if (mediaType && SIGNED_IMAGE_MEDIA_TYPES.has(mediaType)) {
+    const bytes = head(64);
+    return detectMediaType({ data: bytes, signatures: imageMediaTypeSignatures }) !== undefined || isHeifImage(bytes);
+  }
+  if (mediaType === 'application/pdf') return ascii(head(1368), 0, 1026).includes('%PDF');
+  const trimmed = base64.trim();
+  return trimmed.length > MAX_PATH_LENGTH || !PATH_PATTERN.test(trimmed);
+}
+
+/** Whether a data URL's header declares base64 content (`data:<type>;base64,...`). */
+export function isBase64DataUri(data: string): boolean {
+  const comma = data.indexOf(',');
+  return comma !== -1 && /;base64$/i.test(data.slice(5, comma));
+}
+
+/**
+ * Converts a percent-encoded data URL (`data:image/svg+xml,%3Csvg...`) to its base64 form, which
+ * is what the AI SDK prompt conversion expects. Decodes like `fetch()` does: the `#fragment` is
+ * not content, and an invalid escape such as `%zz` stays as literal text.
+ */
+export function toBase64DataUri(dataUri: string): string | undefined {
+  const comma = dataUri.indexOf(',');
+  if (comma === -1) return undefined;
+  const hash = dataUri.indexOf('#', comma);
+  const payload = dataUri.slice(comma + 1, hash === -1 ? undefined : hash);
+  return `data:${dataUri.slice(5, comma)};base64,${convertUint8ArrayToBase64(decodePercentEncoded(payload))}`;
+}
+
+function decodePercentEncoded(payload: string): Uint8Array {
+  const encoder = new TextEncoder();
+  const bytes: number[] = [];
+  for (let i = 0; i < payload.length;) {
+    const hex = payload.slice(i + 1, i + 3);
+    if (payload[i] === '%' && /^[0-9a-f]{2}$/i.test(hex)) {
+      bytes.push(Number.parseInt(hex, 16));
+      i += 3;
+    } else {
+      const char = String.fromCodePoint(payload.codePointAt(i)!);
+      bytes.push(...encoder.encode(char));
+      i += char.length;
+    }
+  }
+  return new Uint8Array(bytes);
+}
+
+/**
+ * Checks whether file/image part data can be sent to a model: an OpenAI file ID (`file-...`),
+ * an absolute URL (any scheme), or inline content (raw base64 or a data URL) that decodes and,
+ * for images and PDFs, looks like one. Anything else, such as a relative path or a path that
+ * was wrapped as a base64 data URL, can't be downloaded or decoded.
+ */
+export function isSendableFileData(data: string, mediaType?: string): boolean {
+  if (data.startsWith('data:')) {
+    const base64Uri = isBase64DataUri(data) ? data : toBase64DataUri(data);
+    if (!base64Uri) return false;
+    const comma = base64Uri.indexOf(',');
+    return isValidInlineContent(base64Uri.slice(comma + 1), base64Uri.slice(5, comma).split(';')[0] || mediaType);
+  }
+  if (data.startsWith('file-') || isAbsoluteUrl(data)) return true;
+  return isValidInlineContent(data, mediaType);
+}
+
+/**
+ * Checks if a string parses as an absolute URL (any scheme, e.g. `https:`, `gs:`, `s3:`).
+ * Unlike {@link isValidUrl}, protocol-relative and relative paths are not accepted.
+ */
+export function isAbsoluteUrl(str: string): boolean {
+  try {
+    new URL(str);
+    return true;
+  } catch {
     return false;
   }
 }

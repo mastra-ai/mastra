@@ -2,7 +2,7 @@ import { DEFAULT_API_CONNECT_OPTIONS, llm } from '@livekit/agents';
 import type { APIConnectOptions } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
-import { createAgentReplyGenerator } from './bridge';
+import { createAgentReplyGenerator, instrumentVoiceReply } from './bridge';
 import type {
   MastraVoiceAgentMemory,
   VoiceReplyGenerator,
@@ -14,6 +14,8 @@ import type {
 import { chatContextToMessages, extractNewTurnMessages } from './messages';
 import { createRemoteAgentReplyGenerator } from './remote';
 import type { RemoteMastraAgentOptions } from './remote';
+import type { VoiceTurnMetricsHook } from './turn-metrics';
+import { VOICE_FLUSH_METADATA, VOICE_TURN_METADATA } from './turn-metrics';
 
 export type { RemoteMastraAgentOptions } from './remote';
 
@@ -24,6 +26,8 @@ export type { RemoteMastraAgentOptions } from './remote';
  * the `remote` and `agent` sources; a `generate` source owns its own hooks.
  */
 export interface MastraLLMOptions {
+  /** Per-attempt metrics; use observeVoiceSession for playback metrics. */
+  onTurnMetrics?: VoiceTurnMetricsHook;
   /** Remote Mastra server. Provide exactly one of `remote`, `agent`, `generate`. */
   remote?: RemoteMastraAgentOptions;
   /** In-process Mastra agent (reuses `createAgentReplyGenerator`). */
@@ -115,6 +119,7 @@ function livekitToolNames(toolCtx: object): string[] {
  */
 export class MastraLLM extends llm.LLM {
   readonly #model: string;
+  readonly #onTurnMetrics?: VoiceTurnMetricsHook;
   readonly #memory: MastraVoiceAgentMemory | false;
   readonly #requestContext?: RequestContext;
   /** Non-remote sources are built once; remote is built per turn so it can pick up `connOptions.timeoutMs`. */
@@ -128,6 +133,7 @@ export class MastraLLM extends llm.LLM {
 
   constructor(options: MastraLLMOptions) {
     super();
+    this.#onTurnMetrics = options.onTurnMetrics;
     const sources = [
       options.remote ? 'remote' : undefined,
       options.agent ? 'agent' : undefined,
@@ -220,6 +226,7 @@ export class MastraLLM extends llm.LLM {
       toolCtx,
       connOptions,
       generator: this.resolveGenerator(connOptions),
+      onTurnMetrics: this.#onTurnMetrics,
       memory: this.#memory,
       requestContext: this.#requestContext,
     });
@@ -230,6 +237,7 @@ export class MastraLLM extends llm.LLM {
 }
 
 interface MastraLLMStreamOptions {
+  onTurnMetrics?: VoiceTurnMetricsHook;
   chatCtx: llm.ChatContext;
   toolCtx?: llm.ToolContext;
   connOptions: APIConnectOptions;
@@ -246,12 +254,14 @@ interface MastraLLMStreamOptions {
  */
 class MastraLLMStream extends llm.LLMStream {
   readonly #generator: VoiceReplyGenerator;
+  readonly #onTurnMetrics?: VoiceTurnMetricsHook;
   readonly #memory: MastraVoiceAgentMemory | false;
   readonly #requestContext?: RequestContext;
 
   constructor(mastraLLM: MastraLLM, options: MastraLLMStreamOptions) {
     super(mastraLLM, { chatCtx: options.chatCtx, toolCtx: options.toolCtx, connOptions: options.connOptions });
     this.#generator = options.generator;
+    this.#onTurnMetrics = options.onTurnMetrics;
     this.#memory = options.memory;
     this.#requestContext = options.requestContext;
   }
@@ -273,7 +283,7 @@ class MastraLLMStream extends llm.LLMStream {
       },
     };
 
-    const reply = await this.#generator(turnCtx);
+    const { reply, identity } = await instrumentVoiceReply(this.#generator, turnCtx, this.#onTurnMetrics);
     if (!reply) return;
     if (this.abortController.signal.aborted) {
       await reply.cancel().catch(() => {});
@@ -281,7 +291,7 @@ class MastraLLMStream extends llm.LLMStream {
     }
 
     // A single provider response id ties all of this turn's chunks together for the base class metrics.
-    const id = globalThis.crypto.randomUUID();
+    const id = identity.attemptId;
     const reader = reply.getReader();
     const onAbort = () => void reader.cancel().catch(() => {});
     this.abortController.signal.addEventListener('abort', onAbort, { once: true });
@@ -290,7 +300,15 @@ class MastraLLMStream extends llm.LLMStream {
         const { done, value } = await reader.read();
         if (done) break;
         if (this.abortController.signal.aborted) break;
-        if (value) this.queue.put({ id, delta: { role: 'assistant', content: value } });
+        if (value)
+          this.queue.put({
+            id,
+            delta: {
+              role: 'assistant',
+              ...(typeof value === 'string' ? { content: value } : {}),
+              extra: { [VOICE_TURN_METADATA]: identity, [VOICE_FLUSH_METADATA]: typeof value !== 'string' },
+            },
+          });
       }
     } catch (error) {
       // Barge-in tears down the reply stream; that surfaces as a read rejection but is not a failure.

@@ -1,5 +1,45 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { generateMarkdownList, type SidebarItem } from '../sidebars-handler'
+import { generateMarkdownList, parseSidebarFile, type SidebarItem, type SidebarsConfig } from '../sidebars-handler'
+
+describe('parseSidebarFile', () => {
+  it.each<{ name: string; sidebars: SidebarsConfig; expected: SidebarItem[] }>([
+    { name: 'empty', sidebars: {}, expected: [] },
+    { name: 'single', sidebars: { docsSidebar: ['index'] }, expected: ['index'] },
+    {
+      name: 'multiple',
+      sidebars: {
+        docsSidebar: ['index'],
+        platformSidebar: [
+          {
+            type: 'category',
+            label: 'Platform',
+            items: ['mastra-platform/overview', 'mastra-platform/connect/overview'],
+          },
+        ],
+      },
+      expected: [
+        'index',
+        {
+          type: 'category',
+          label: 'Platform',
+          items: ['mastra-platform/overview', 'mastra-platform/connect/overview'],
+        },
+      ],
+    },
+  ])('loads $name sidebars in order without flattening categories', async ({ sidebars, expected }) => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'llms-sidebars-'))
+    try {
+      const file = path.join(dir, 'sidebars.mjs')
+      await writeFile(file, `export default ${JSON.stringify(sidebars)}`)
+      expect(await parseSidebarFile(file)).toEqual(expected)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
 
 const MODELS = 'https://mastra.ai/models'
 

@@ -17,7 +17,7 @@ These events are commonly implemented across real-time voice providers:
   content={[
   {
     name: 'error',
-    type: 'Error',
+    type: '{ message: string; code?: string; details?: unknown }',
     description: 'Emitted when an error occurs during voice processing or when audio data format is unsupported',
   },
   {
@@ -42,8 +42,9 @@ These events are commonly implemented across real-time voice providers:
   },
   {
     name: 'speaker',
-    type: 'StreamWithId',
-    description: 'Emitted with a new audio stream that can be piped to an audio output',
+    type: 'NodeJS.ReadableStream',
+    description:
+      'Emitted with a new audio stream that can be piped to an audio output. Some realtime providers attach an `id` property to the stream',
   },
   {
     name: 'writing',

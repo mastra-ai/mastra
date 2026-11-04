@@ -12,7 +12,7 @@ jobs:
   sync-templates:
     name: Sync Template Repositories
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
 

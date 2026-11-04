@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { BotIcon, CoinsIcon, HashIcon } from 'lucide-react';
 import { MetricsKpiCard } from '../MetricsKpiCard';
 import { MetricsCardGroup } from './metrics-card-group';
 
@@ -8,21 +9,15 @@ const meta: Meta<typeof MetricsCardGroup> = {
   parameters: {
     layout: 'padded',
   },
-  args: {
-    variant: 'default',
-  },
-  argTypes: {
-    variant: { control: 'inline-radio', options: ['default', 'inset'] },
-  },
 };
 
 export default meta;
 type Story = StoryObj<typeof MetricsCardGroup>;
 
 const kpis = [
-  { label: 'Total Agent Runs', value: '12.3k', changePct: 15.3, prevValue: '10.7k' },
-  { label: 'Total Model Cost', value: '$75.21', changePct: -45.3, prevValue: '$137.52', lowerIsBetter: true },
-  { label: 'Total Tokens', value: '8.2M', changePct: -12.5, prevValue: '9.4M' },
+  { label: 'Agent runs', value: '12.3k', changePct: 15.3, prevValue: '10.7k' },
+  { label: 'Model cost', value: '$75.21', changePct: -45.3, prevValue: '$137.52', lowerIsBetter: true },
+  { label: 'Tokens', value: '8.2M', changePct: -12.5, prevValue: '9.4M' },
 ];
 
 export const KpiCards: Story = {
@@ -33,7 +28,8 @@ export const KpiCards: Story = {
           <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
           <MetricsKpiCard.ValueRow>
             <MetricsKpiCard.Value>{value}</MetricsKpiCard.Value>
-            <MetricsKpiCard.Change {...change} />
+            <MetricsKpiCard.Change comparison="vs previous 24h" {...change} />
+            <MetricsKpiCard.Prev value={change.prevValue} />
           </MetricsKpiCard.ValueRow>
         </MetricsKpiCard>
       ))}
@@ -45,27 +41,27 @@ export const MixedStates: Story = {
   render: args => (
     <MetricsCardGroup {...args}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label>Total Agent Runs</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>12.3k</MetricsKpiCard.Value>
-          <MetricsKpiCard.Change changePct={15.3} prevValue="10.7k" />
+          <MetricsKpiCard.Change comparison="vs previous 24h" changePct={15.3} prevValue="10.7k" />
         </MetricsKpiCard.ValueRow>
+        <MetricsKpiCard.Footer detail="41 runs today" prevValue="10.7k" />
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label>Total Model Cost</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<CoinsIcon />}>Model cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Loading />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label>Total Tokens</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<HashIcon />}>Tokens</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>8.2M</MetricsKpiCard.Value>
-          <MetricsKpiCard.NoChange />
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label>Total Threads</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label>Threads</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Error />
         </MetricsKpiCard.ValueRow>

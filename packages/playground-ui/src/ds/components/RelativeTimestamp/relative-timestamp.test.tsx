@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RelativeTimestamp } from './relative-timestamp';
@@ -38,6 +39,7 @@ describe('RelativeTimestamp', () => {
     const { container } = render(<RelativeTimestamp value={now - 12 * 3_600_000} label="Deployed" />);
     const [time] = container.getElementsByTagName('time');
     expect(time.querySelector('[aria-hidden]')?.textContent).toBe('12h ago');
+    expect([...time.querySelectorAll('.font-mono')].map(word => word.textContent)).toEqual(['12h']);
     expect(time.querySelector('.sr-only')?.textContent).toMatch(/^Deployed /);
 
     act(() => time.focus());

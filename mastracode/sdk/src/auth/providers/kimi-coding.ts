@@ -221,7 +221,7 @@ export async function pollKimiCodingDeviceLogin(
 
 export async function loginKimiCoding(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
   const pending = await startKimiCodingDeviceLogin({ signal: callbacks.signal });
-  callbacks.onAuth({ url: pending.url, instructions: pending.instructions });
+  callbacks.onAuth({ url: pending.url, instructions: pending.instructions, userCode: pending.userCode });
   callbacks.onProgress?.('Waiting for Kimi For Coding device authorization...');
   return pollDeviceCodeUntilComplete({
     state: pending.state,

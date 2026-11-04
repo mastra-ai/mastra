@@ -1,6 +1,6 @@
+import type { StoredAgent } from '@mastra/react/hooks/agents';
 import type { AgentBuilderEditFormValues, AgentBuilderModel } from '../schemas';
 import { extractWorkspaceId } from './extract-workspace-id';
-import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { extractFormToolProviders } from '@/domains/tool-providers/mappers/tool-providers-form-mappers';
 
 function flattenAgentSkills(skills: StoredAgent['skills'] | undefined): Record<string, unknown> {
@@ -12,7 +12,7 @@ function flattenAgentSkills(skills: StoredAgent['skills'] | undefined): Record<s
     }
     return merged;
   }
-  return skills as Record<string, unknown>;
+  return skills;
 }
 
 /**

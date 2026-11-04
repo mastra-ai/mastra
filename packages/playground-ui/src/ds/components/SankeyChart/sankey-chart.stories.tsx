@@ -7,6 +7,7 @@ import { SankeyChart } from './sankey-chart';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -60,14 +61,14 @@ function UserLandControls() {
           <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-wrap items-center gap-2">
             {controlColumns.map(column => {
               const checkbox = (
-                <label className="flex items-center gap-2 text-caption">
+                <Field orientation="horizontal">
                   <Checkbox
                     checked={column.visible}
                     onCheckedChange={() => toggleColumn(column.id)}
                     aria-label={`Include ${column.label}`}
                   />
-                  <span>{column.label}</span>
-                </label>
+                  <FieldLabel size="smaller">{column.label}</FieldLabel>
+                </Field>
               );
 
               if (!column.visible) {
@@ -187,7 +188,7 @@ const semanticNodeColors = new Map([
   ['Search', 'var(--chart-blue)'],
   ['Referral', 'var(--chart-purple)'],
   ['Partner', 'var(--chart-orange)'],
-  ['Europe', 'var(--chart-yellow)'],
+  ['Europe', 'var(--chart-amber)'],
   ['North America', 'var(--chart-green)'],
   ['Asia Pacific', 'var(--chart-pink)'],
   ['Won', 'var(--chart-blue)'],

@@ -5,6 +5,12 @@ import { PageLayout } from './index';
 
 afterEach(cleanup);
 
+const viewportOf = (text: string) => screen.getByText(text).closest<HTMLElement>('[style*="overflow"]');
+
+const contentOf = (text: string) =>
+  screen.getByText(text).closest('[data-slot="page-layout-container"]')?.parentElement ??
+  screen.getByText(text).parentElement;
+
 describe('PageLayout', () => {
   describe('when breadcrumbs and header actions are provided', () => {
     it('renders them inside a header above the main content', () => {
@@ -39,6 +45,48 @@ describe('PageLayout', () => {
     });
   });
 
+  describe('scroll area', () => {
+    it.each(['container', 'fit', 'narrow'] as const)(
+      'scrolls the "%s" variant in an overlay scroll area with no reserved gutter',
+      variant => {
+        render(
+          <PageLayout variant={variant}>
+            <p>Body</p>
+          </PageLayout>,
+        );
+
+        const area = screen.getByRole('main').firstElementChild;
+        expect(area?.className).toContain('group/scroll-area');
+        expect(screen.getByRole('main').outerHTML).not.toContain('scrollbar-gutter');
+        expect(screen.getByText('Body').closest<HTMLElement>('[style*="overflow"]')?.style.overflowY).toBe('scroll');
+      },
+    );
+  });
+
+  describe('mask', () => {
+    const viewportOf = () => screen.getByText('Body').closest<HTMLElement>('[style*="overflow"]');
+
+    it('does not fade the body edges by default', () => {
+      render(
+        <PageLayout>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      expect(viewportOf()?.className).not.toContain('mask-');
+    });
+
+    it('fades the edges the caller asks for', () => {
+      render(
+        <PageLayout mask={{ y: true }}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      expect(viewportOf()?.className).toContain('mask-b-from');
+    });
+  });
+
   describe('variant', () => {
     it('pads the body by default and removes padding with "fit"', () => {
       const { rerender } = render(
@@ -46,14 +94,14 @@ describe('PageLayout', () => {
           <p>Body</p>
         </PageLayout>,
       );
-      expect(screen.getByRole('main').className).toContain('p-4');
+      expect(viewportOf('Body')?.className).toContain('p-4');
 
       rerender(
         <PageLayout variant="fit">
           <p>Body</p>
         </PageLayout>,
       );
-      expect(screen.getByRole('main').className).not.toContain('p-4');
+      expect(viewportOf('Body')?.className).not.toContain('p-4');
     });
 
     it.each([undefined, <h1 key="title">Title</h1>])('constrains the "fit" column to the page width', header => {
@@ -62,7 +110,7 @@ describe('PageLayout', () => {
           <p>Body</p>
         </PageLayout>,
       );
-      expect(screen.getByRole('main').className).toContain('grid-cols-1');
+      expect(contentOf('Body')?.className).toContain('grid-cols-1');
     });
   });
 
@@ -98,7 +146,7 @@ describe('PageLayout', () => {
       expect(container.className).toContain('max-w-5xl');
       expect(container.className).toContain('p-4');
       expect(container.contains(screen.getByRole('heading', { name: 'Title' }))).toBe(true);
-      expect(screen.getByRole('main').className).not.toContain('p-4');
+      expect(contentOf('Body')?.className).not.toContain('p-4');
     });
 
     it('leaves spacing between header and body to the call site', () => {

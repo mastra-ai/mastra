@@ -53,7 +53,7 @@ describe('useProjectIssuesQuery', () => {
   it('given the server returns issues, when the hook resolves, then it exposes them', async () => {
     server.use(http.get(ISSUES_URL, () => HttpResponse.json({ issues, nextPage: null })));
 
-    const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+    const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
 
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data).toEqual(issues);
@@ -61,7 +61,7 @@ describe('useProjectIssuesQuery', () => {
   });
 
   it('given more pages, when fetchNextPage is called, then pages accumulate in order', async () => {
-    const pageTwoIssue: GithubIssue = { ...issues[0]!, number: 13, title: 'Page two issue' };
+    const pageTwoIssue: GithubIssue = { ...issues[0], number: 13, title: 'Page two issue' };
     const requestedPages: string[] = [];
     server.use(
       http.get(ISSUES_URL, ({ request }) => {
@@ -73,7 +73,7 @@ describe('useProjectIssuesQuery', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+    const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
 
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.hasNextPage).toBe(true);
@@ -95,7 +95,7 @@ describe('useProjectIssuesQuery', () => {
       }),
     );
 
-    const { result, client } = renderHookWithProviders(() => useProjectIssuesQuery(undefined));
+    const { result, client } = renderHookWithProviders(() => useProjectIssuesQuery([]));
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(result.current.fetchStatus).toBe('idle');
@@ -106,7 +106,7 @@ describe('useProjectIssuesQuery', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       let hits = 0;
-      const freshIssue: GithubIssue = { ...issues[0]!, number: 99, title: 'Fresh intake' };
+      const freshIssue: GithubIssue = { ...issues[0], number: 99, title: 'Fresh intake' };
       server.use(
         http.get(ISSUES_URL, () => {
           hits += 1;
@@ -116,7 +116,7 @@ describe('useProjectIssuesQuery', () => {
         }),
       );
 
-      const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+      const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
       await waitFor(() => expect(result.current.data).toBeDefined());
       expect(result.current.data).toHaveLength(1);
 
@@ -134,7 +134,7 @@ describe('useProjectIssuesQuery', () => {
       http.get(ISSUES_URL, () => HttpResponse.json({ error: 'github_error', message: 'boom' }, { status: 502 })),
     );
 
-    const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+    const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBeInstanceOf(Error);
@@ -152,7 +152,7 @@ describe('useProjectIssuesQuery', () => {
         }),
       );
 
-      const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+      const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(hits).toBe(1);
 
@@ -171,7 +171,7 @@ describe('useProjectPullRequestsQuery', () => {
   it('given the server returns pull requests, when the hook resolves, then it exposes them', async () => {
     server.use(http.get(PRS_URL, () => HttpResponse.json({ pullRequests, nextPage: null })));
 
-    const { result } = renderHookWithProviders(() => useProjectPullRequestsQuery(PROJECT_ID));
+    const { result } = renderHookWithProviders(() => useProjectPullRequestsQuery([PROJECT_ID]));
 
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data).toEqual(pullRequests);
@@ -186,10 +186,78 @@ describe('useProjectPullRequestsQuery', () => {
       }),
     );
 
-    const { result, client } = renderHookWithProviders(() => useProjectPullRequestsQuery(undefined));
+    const { result, client } = renderHookWithProviders(() => useProjectPullRequestsQuery([]));
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(result.current.fetchStatus).toBe('idle');
     expect(hit).not.toHaveBeenCalled();
+  });
+});
+
+describe('intake feeds across linked repositories', () => {
+  const SECOND_ID = 'github-project-2';
+  const SECOND_ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${SECOND_ID}/issues`;
+  const secondIssue: GithubIssue = { ...issues[0], number: 7, title: 'Second repository issue', repositoryId: 2 };
+
+  it('given two linked repositories, when the feed resolves, then it carries issues from both', async () => {
+    server.use(
+      http.get(ISSUES_URL, () => HttpResponse.json({ issues, nextPage: null })),
+      http.get(SECOND_ISSUES_URL, () => HttpResponse.json({ issues: [secondIssue], nextPage: null })),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID, SECOND_ID]));
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+    expect(result.current.data?.map(issue => issue.number)).toEqual([12, 7]);
+  });
+
+  it('given repositories with different page counts, when more pages load, then only repositories with more pages are requested', async () => {
+    const requests: string[] = [];
+    server.use(
+      http.get(ISSUES_URL, ({ request }) => {
+        const page = new URL(request.url).searchParams.get('page');
+        requests.push(`first:${page}`);
+        return page === '1'
+          ? HttpResponse.json({ issues, nextPage: 2 })
+          : HttpResponse.json({ issues: [{ ...issues[0], number: 13 }], nextPage: null });
+      }),
+      http.get(SECOND_ISSUES_URL, ({ request }) => {
+        requests.push(`second:${new URL(request.url).searchParams.get('page')}`);
+        return HttpResponse.json({ issues: [secondIssue], nextPage: null });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID, SECOND_ID]));
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+    await result.current.fetchNextPage();
+
+    await waitFor(() => expect(result.current.data?.map(issue => issue.number)).toEqual([12, 7, 13]));
+    expect(result.current.hasNextPage).toBe(false);
+    expect(requests.sort()).toEqual(['first:1', 'first:2', 'second:1']);
+  });
+
+  it('given one repository fails, when the feed resolves, then the other repository still feeds intake', async () => {
+    server.use(
+      http.get(ISSUES_URL, () => HttpResponse.json({ error: 'github_error', message: 'boom' }, { status: 502 })),
+      http.get(SECOND_ISSUES_URL, () => HttpResponse.json({ issues: [secondIssue], nextPage: null })),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID, SECOND_ID]));
+
+    await waitFor(() => expect(result.current.data).toEqual([secondIssue]));
+    expect(result.current.isError).toBe(false);
+  });
+
+  it('given every repository fails, when the feed resolves, then it surfaces the error', async () => {
+    server.use(
+      http.get(PRS_URL, () => HttpResponse.json({ error: 'github_error', message: 'boom' }, { status: 502 })),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${SECOND_ID}/prs`, () =>
+        HttpResponse.json({ error: 'github_error', message: 'boom' }, { status: 502 }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectPullRequestsQuery([PROJECT_ID, SECOND_ID]));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

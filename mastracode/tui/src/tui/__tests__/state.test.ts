@@ -141,8 +141,6 @@ describe('createTUIState', () => {
     expect(state.pendingSubmitPlanComponents).toBeInstanceOf(Map);
     expect(state.pendingSubmitPlanComponents.size).toBe(0);
     expect(state.pendingInlineQuestions).toEqual([]);
-    expect(state.pendingFollowUpMessages).toEqual([]);
-    expect(state.pendingQueuedActions).toEqual([]);
     expect(state.followUpComponents).toEqual([]);
     expect(state.pendingSignalMessageComponentsById).toBeInstanceOf(Map);
     expect(state.pendingSignalMessageComponentsById.size).toBe(0);
@@ -152,8 +150,7 @@ describe('createTUIState', () => {
 
     expect(state.toolOutputExpanded).toBe(false);
     expect(state.hideThinkingBlock).toBe(true);
-    expect(state.quietMode).toBe(false);
-    expect(state.quietModeMaxToolPreviewLines).toBe(2);
+    expect(state.previewLines).toBe(2);
     expect(state.modelAuthStatus).toEqual({ hasAuth: true });
     expect(state.projectInfo).toEqual({ rootPath: '/tmp/mastra-code-project', gitBranch: 'main' });
 

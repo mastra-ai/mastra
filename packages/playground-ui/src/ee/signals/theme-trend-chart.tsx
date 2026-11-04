@@ -2,11 +2,12 @@ import { getSignalAreaClass, getSignalColor } from './signal-colors';
 import { formatSnapshotDate, traceLabel } from './signal-formatting';
 import type { ThemeHistoryPoint } from './theme-trend';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 const TREND_CHART_HEIGHT = 32;
 
 function trendPointLabel(point: ThemeHistoryPoint) {
-  return `${formatSnapshotDate(point.startedAt)} · ${traceLabel(point.traceCount)} (${Math.round(point.coverage * 100)}%)`;
+  return `${formatSnapshotDate(point.startedAt)}: ${traceLabel(point.traceCount)} (${Math.round(point.coverage * 100)}%)`;
 }
 
 /** Trace count over time for one theme, with absent stretches dropping to the baseline. */
@@ -64,9 +65,13 @@ export function ThemeTrendChart({ points, signalName }: { points: ThemeHistoryPo
           );
         })}
       </div>
-      <div className="mt-1 flex justify-between font-mono text-caption text-muted-foreground">
-        <span>{formatSnapshotDate(firstPoint.startedAt)}</span>
-        <span>{formatSnapshotDate(lastPoint.startedAt)}</span>
+      <div className="mt-1 flex justify-between">
+        <Txt tone="muted" as="span" variant="caption">
+          {formatSnapshotDate(firstPoint.startedAt)}
+        </Txt>
+        <Txt tone="muted" as="span" variant="caption">
+          {formatSnapshotDate(lastPoint.startedAt)}
+        </Txt>
       </div>
     </div>
   );

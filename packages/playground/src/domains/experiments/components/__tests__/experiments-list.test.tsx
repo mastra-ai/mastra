@@ -1,7 +1,7 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactElement } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentsList } from '../experiments-list';
 import { experiments, noAgents, noProcessors, noScorers, noWorkflows } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -78,6 +78,43 @@ describe('ExperimentsList', () => {
 
       expect(screen.getByText('Run completed')).toBeDefined();
       expect(screen.queryByText('completed')).toBeNull();
+    });
+  });
+
+  describe('when an experiment is selected but the search hides every row', () => {
+    it('leaves the select-all checkbox unchecked', () => {
+      renderList(
+        <ExperimentsList
+          experiments={experiments}
+          isLoading={false}
+          search="no-such-experiment"
+          selection={{ selectedExperimentIds: [experiments[0].id], onToggleSelection: vi.fn(), onToggleAll: vi.fn() }}
+        />,
+      );
+
+      expect(screen.getByRole('checkbox', { name: 'Select all experiments' }).getAttribute('aria-checked')).toBe(
+        'false',
+      );
+    });
+  });
+
+  describe('when no loaded experiment matches and more pages can still load', () => {
+    it('does not claim that no experiment matches', () => {
+      renderList(
+        <ExperimentsList experiments={experiments} isLoading={false} search="no-such-experiment" hasNextPage />,
+      );
+
+      expect(screen.queryByText('No experiments match your filters')).toBeNull();
+    });
+  });
+
+  describe('when no experiment matches and every page is loaded', () => {
+    it('says that no experiment matches the filters', () => {
+      renderList(
+        <ExperimentsList experiments={experiments} isLoading={false} search="no-such-experiment" hasNextPage={false} />,
+      );
+
+      expect(screen.getByText('No experiments match your filters')).toBeDefined();
     });
   });
 

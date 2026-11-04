@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
@@ -11,10 +12,10 @@ function TextHighlightDemo() {
   const supportsHighlights = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight !== 'undefined';
   return (
     <HookDemo>
-      <Txt as="label" htmlFor="highlight-query">
-        Find text (at least two characters)
-      </Txt>
-      <Input id="highlight-query" value={search} onChange={event => setSearch(event.target.value)} />
+      <Field>
+        <FieldLabel>Find text (at least two characters)</FieldLabel>
+        <Input value={search} onChange={event => setSearch(event.target.value)} />
+      </Field>
       {!supportsHighlights && (
         <Txt role="status">This browser does not support CSS Custom Highlights. Text remains readable.</Txt>
       )}

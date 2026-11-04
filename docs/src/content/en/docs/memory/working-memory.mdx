@@ -236,7 +236,7 @@ const paragraphMemory = new Memory({
 
 Working memory can also be defined using a structured schema instead of a Markdown template. A [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.). When using a schema, the agent will see and update working memory as a JSON object matching your schema.
 
-**Requirement:** You must specify either `template` or `schema`, but not both.
+You can specify either `template` or `schema`, but not both. If you omit both, Mastra uses the default working memory template.
 
 ### Example: Schema-Based Working Memory
 
@@ -290,6 +290,22 @@ Schema-based working memory uses **merge semantics**, meaning the agent only nee
 - **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
 - **Set a field to `null` to delete it:** This explicitly removes the field from memory
 - **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays aren't merged element-by-element)
+
+### Concurrent updates
+
+With `scope: 'resource'` and a storage adapter that supports atomic merges (currently `@mastra/pg`), each merge runs inside a row-locked database transaction. Concurrent updates to different fields from separate processes are all kept. Other adapters merge in the application, which only serializes writers inside a single process.
+
+To merge a partial update from your own code, call `memory.mergeWorkingMemory()`:
+
+```typescript
+await memory.mergeWorkingMemory({
+  threadId: 'thread-1',
+  resourceId: 'user-123',
+  workingMemory: { preferences: { tone: 'formal' } },
+})
+```
+
+It throws if working memory isn't schema-based and resource-scoped, or if the storage adapter doesn't support atomic merges. Check `await memory.supportsAtomicWorkingMemoryMerge()` first if you need to fall back.
 
 ## Choosing between template and schema
 
@@ -424,7 +440,7 @@ const response = await agent.generate('What do you know about me?', {
 
 ## Opt in to state signals (experimental)
 
-By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/harness/signals) instead by setting `useStateSignals: true`:
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/signals/state-signals) instead by setting `useStateSignals: true`:
 
 ```typescript
 const memory = new Memory({

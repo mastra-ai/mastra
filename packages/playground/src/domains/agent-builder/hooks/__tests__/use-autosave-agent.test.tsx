@@ -109,7 +109,7 @@ describe('useAutosaveAgent', () => {
         }),
       );
 
-      const { result, form } = renderAutosave({ debounceMs: 30, savedDisplayMs: 30 });
+      const { result, form } = renderAutosave({ debounceMs: 30, savedDisplayMs: 500 });
 
       await act(async () => {
         form().setValue('name', 'Renamed', { shouldDirty: true });

@@ -3,15 +3,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useChannelPlatforms, useChannelInstallations, useDisconnectChannel } from '@mastra/react/hooks/agents';
+import type { ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { Plug, Unplug } from 'lucide-react';
-import {
-  useChannelPlatforms,
-  useChannelInstallations,
-  useConnectChannelAction,
-  useDisconnectChannel,
-} from '../../hooks/use-channels';
-import type { ChannelPlatformInfo } from '../../hooks/use-channels';
 import { PlatformIcon } from './platform-icons';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface AgentChannelsProps {
   agentId: string;
@@ -51,11 +48,17 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({ platform, agentId }: ChannelRowProps) {
-  const { data: installations, isLoading } = useChannelInstallations(platform.id, agentId);
+  const { data: installations, isLoading } = useChannelInstallations({
+    platform: platform.id,
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(platform.id && agentId) },
+  });
   const { connect, isConnecting } = useConnectChannelAction(platform.id);
-  const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel(platform.id);
+  const { mutate: disconnect, isPending: isDisconnecting } = useDisconnectChannel({ platform: platform.id });
 
   const activeInstallation = installations?.find(i => i.status === 'active');
+  const hasPendingInstall = installations?.some(i => i.status === 'pending') ?? false;
+  useReconcilePendingInstallOnFocus({ platform: platform.id, agentId, hasPendingInstall });
 
   const handleConnect = () => {
     connect(agentId);

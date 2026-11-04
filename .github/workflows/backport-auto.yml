@@ -15,7 +15,7 @@ jobs:
       github.repository == 'mastra-ai/mastra' && 
       github.event.pull_request.merged == true && 
       contains(github.event.pull_request.labels.*.name, 'cherry')
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     steps:
       - name: Initial checkout
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -44,6 +44,8 @@ jobs:
           token: ${{ steps.app-auth.outputs.token }}
           persist-credentials: true
           fetch-depth: 0
+          # Partial clone: full history without every historical file version.
+          filter: blob:none
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

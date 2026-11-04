@@ -1,3 +1,4 @@
+import { readUIMessageStream } from '@internal/ai-v6';
 import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
@@ -475,5 +476,130 @@ describe('tool-result provider metadata forwarding (issue #22012)', () => {
 
     expect(uiChunk.type).toBe('tool-output-available');
     expect(uiChunk).not.toHaveProperty('providerMetadata');
+  });
+});
+
+// Issue #28817: partial provider results (e.g. OpenAI image_generation partial images)
+// must reach the UI stream as preliminary so the client doesn't treat them as final.
+describe('tool-result preliminary forwarding (issue #28817)', () => {
+  const toUIChunk = (preliminary?: boolean) => {
+    const chunk = {
+      type: 'tool-result',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: {
+        toolCallId: 'ig-1',
+        toolName: 'image_generation',
+        result: { result: 'partial' },
+        providerExecuted: true,
+        ...(preliminary ? { preliminary } : {}),
+      },
+    } as any;
+    return convertFullStreamChunkToUIMessageStream({
+      part: convertMastraChunkToAISDKv6({ chunk }) as any,
+      onError: String,
+    }) as any;
+  };
+
+  it('keeps preliminary on the tool-output-available ui chunk', () => {
+    expect(toUIChunk(true)).toMatchObject({ type: 'tool-output-available', toolCallId: 'ig-1', preliminary: true });
+  });
+
+  it('omits preliminary for final results', () => {
+    expect(toUIChunk()).not.toHaveProperty('preliminary');
+  });
+});
+
+describe('transient data chunks', () => {
+  const convert = (part: unknown) => convertFullStreamChunkToUIMessageStream({ part: part as any, onError: String });
+
+  it('preserves transient on direct data chunks', () => {
+    expect(convert({ type: 'data-preview', data: { a: 1 }, id: 'p1', transient: true })).toEqual({
+      type: 'data-preview',
+      data: { a: 1 },
+      id: 'p1',
+      transient: true,
+    });
+  });
+
+  it('preserves transient on data chunks nested in tool-output', () => {
+    expect(
+      convert({
+        type: 'tool-output',
+        toolCallId: 't',
+        output: { type: 'data-preview', data: 1, transient: true },
+      }),
+    ).toEqual({ type: 'data-preview', data: 1, transient: true });
+  });
+
+  it('omits transient when not set', () => {
+    expect(convert({ type: 'data-preview', data: 1 })).toEqual({ type: 'data-preview', data: 1 });
+  });
+});
+
+describe('MCP App pointer', () => {
+  const app = { resourceUri: 'ui://weather/view', serverId: 'weather', mimeType: 'text/html;profile=mcp-app' };
+  const toUI = (chunk: any) =>
+    convertFullStreamChunkToUIMessageStream({
+      part: convertMastraChunkToAISDKv6({
+        chunk: { runId: 'r', from: ChunkFrom.AGENT, metadata: {}, ...chunk },
+      }) as any,
+      onError: String,
+    }) as any;
+
+  it('emits toolMetadata.app on tool-input-start and tool-input-available', () => {
+    const start = toUI({
+      type: 'tool-call-input-streaming-start',
+      payload: { toolCallId: 'c1', toolName: 't', toolMetadata: { app } },
+    });
+    const available = toUI({
+      type: 'tool-call',
+      payload: { toolCallId: 'c1', toolName: 't', args: {}, toolMetadata: { app } },
+    });
+    expect(start).toMatchObject({ type: 'tool-input-start', toolMetadata: { app } });
+    expect(available).toMatchObject({ type: 'tool-input-available', toolMetadata: { app } });
+    expect(available.providerMetadata).toBeUndefined();
+  });
+
+  it('merges the pointer with observability metadata', () => {
+    const carrier = { traceparent: '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01' };
+    const available = toUI({
+      type: 'tool-call',
+      payload: { toolCallId: 'c1', toolName: 't', args: {}, toolMetadata: { app }, observability: carrier },
+    });
+    expect(available.toolMetadata).toEqual({ app, __mastraObservability: carrier });
+  });
+
+  it('omits toolMetadata when there is nothing to carry', () => {
+    const available = toUI({ type: 'tool-call', payload: { toolCallId: 'c1', toolName: 't', args: {} } });
+    expect(available).not.toHaveProperty('toolMetadata');
+  });
+
+  it('survives AI SDK v6 client parsing onto the tool UI part', async () => {
+    const chunks = [
+      { type: 'start' },
+      toUI({
+        type: 'tool-call-input-streaming-start',
+        payload: { toolCallId: 'c1', toolName: 't', toolMetadata: { app } },
+      }),
+      toUI({ type: 'tool-call', payload: { toolCallId: 'c1', toolName: 't', args: {}, toolMetadata: { app } } }),
+      { type: 'finish' },
+    ];
+    const stream = new ReadableStream({
+      start(controller) {
+        chunks.forEach(c => controller.enqueue(c));
+        controller.close();
+      },
+    });
+    const snapshots: any[] = [];
+    for await (const message of readUIMessageStream({ stream })) snapshots.push(structuredClone(message));
+    const early = snapshots.find(m => m.parts.some((p: any) => p.toolCallId === 'c1'));
+    expect(early.parts.find((p: any) => p.toolCallId === 'c1')).toMatchObject({
+      state: 'input-streaming',
+      toolMetadata: { app },
+    });
+    const last = snapshots.at(-1);
+    const part = last.parts.find((p: any) => p.toolCallId === 'c1');
+    expect(part.toolMetadata).toEqual({ app });
   });
 });

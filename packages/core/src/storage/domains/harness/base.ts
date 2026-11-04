@@ -32,6 +32,7 @@ export abstract class HarnessStorage extends StorageDomain {
     return next;
   }
 
+  /** @deprecated Pending suspensions are recovered from thread run snapshots. */
   async appendPendingItem(sessionId: string, item: HarnessPendingItemRecord): Promise<SessionRecord> {
     const record = await this.loadSession(sessionId);
     if (!record) {
@@ -47,6 +48,7 @@ export abstract class HarnessStorage extends StorageDomain {
     });
   }
 
+  /** @deprecated Pending suspensions are recovered from thread run snapshots. */
   async updatePendingItem(
     sessionId: string,
     pendingItemId: string,
@@ -78,6 +80,7 @@ export abstract class HarnessStorage extends StorageDomain {
     return this.updateSession(sessionId, { pending });
   }
 
+  /** @deprecated Pending suspensions are recovered from thread run snapshots. */
   async removePendingItem(sessionId: string, pendingItemId: string): Promise<SessionRecord> {
     const record = await this.loadSession(sessionId);
     if (!record) {

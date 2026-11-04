@@ -14,7 +14,7 @@ export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
  * Kept as a closed union (never `| string`) so table-name typos stay
  * compile-time errors instead of routing to the mastra_documents fallback.
  */
-export type ConvexStorageTable = TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY;
+export type ConvexStorageTable = TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY | RunClaimTable;
 
 export type EqualityFilter = {
   field: string;
@@ -65,6 +65,10 @@ export type SerializedOMCurrentRecord = {
   lastObservedAt: string | null;
   totalTokensObserved: number;
   generationCount: number;
+  /** The snapshot's active observations; the server only applies a rollover if the stored text equals or extends it. */
+  activeObservations?: string;
+  /** The snapshot's observation token count; tokens appended since are added to the new generation. */
+  observationTokenCount?: number;
 };
 
 export type StorageRequest =
@@ -140,6 +144,8 @@ export type StorageRequest =
       stepId: string;
       result: string;
       requestContext: string;
+      /** JSON-encoded workflow state recorded as `context.__state` in the same write. */
+      state?: string;
     }
   | {
       op: 'mergeWorkflowState';
@@ -172,6 +178,7 @@ export type StorageRequest =
       newNextFireAt: number;
       lastFireAt: number;
       lastRunId: string;
+      newStatus?: string;
     }
   | {
       op: 'updateSchedule';
@@ -207,6 +214,45 @@ export type StorageRequest =
       /** ISO timestamp; records with createdAt <= to */
       to?: string;
       offset?: number;
+      groupId?: string;
+      recordId?: string;
+      beforeGeneration?: number;
+      afterGeneration?: number;
+      sortDirection?: 'ASC' | 'DESC';
+    }
+  | {
+      op: 'omInitialize';
+      tableName: TABLE_NAMES | string;
+      /** Serialized generation-0 record (deterministic id); inserted only when the lookup key has no record. */
+      record: Record<string, unknown> & { id: string; lookupKey: string };
+    }
+  | {
+      op: 'omCreateReflectionGeneration';
+      tableName: TABLE_NAMES | string;
+      currentRecord: SerializedOMCurrentRecord;
+      /** ID for the new generation record */
+      newId: string;
+      reflection: string;
+      tokenCount: number;
+      /** ISO timestamp */
+      now: string;
+    }
+  | {
+      op: 'omSetPendingMessageTokens';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      tokenCount: number;
+      /** ISO timestamp */
+      updatedAt: string;
+    }
+  | {
+      op: 'omSetBufferingObservationFlag';
+      tableName: TABLE_NAMES | string;
+      id: string;
+      isBuffering: boolean;
+      lastBufferedAtTokens?: number;
+      /** ISO timestamp */
+      updatedAt: string;
     }
   | {
       op: 'omUpdateActive';
@@ -219,6 +265,8 @@ export type StorageRequest =
       observedMessageIds: string[] | null;
       /** ISO timestamp */
       updatedAt: string;
+      /** Commit only if the stored active observations still equal this text. */
+      expectedActiveObservations?: string;
     }
   | {
       op: 'omAppendBufferedChunk';
@@ -275,6 +323,71 @@ export type StorageRequest =
       config: string;
       /** ISO timestamp */
       updatedAt: string;
+    };
+
+/**
+ * Tables holding a run's current claim: its ownership (workflows) or raised
+ * fence (memory). Claims live in the generic documents table under these
+ * names. Spelled out rather than imported from core for the same reason as
+ * TABLE_OBSERVATIONAL_MEMORY.
+ */
+export type RunClaimTable = 'mastra_workflow_run_owners' | 'mastra_memory_run_fences';
+
+export type RunClaimFence = { runId: string; generation: number; ownerId: string };
+
+/**
+ * A run's claim as stored. Times are epoch ms on the Convex clock.
+ * `leaseExpiresAt` is null once released. Ownership claims carry `updatedAt`,
+ * the time of the last claim, renewal or release. Raised fences carry
+ * `retiredAt`, set once the execution holding the fence settles and cleared
+ * when a fence is raised again.
+ */
+export type StoredRunClaim = RunClaimFence & {
+  leaseExpiresAt: number | null;
+  updatedAt?: number;
+  retiredAt?: number | null;
+};
+
+/** Reply to the ownership operations. `now` is the Convex clock the operation ran at. */
+export type RunClaimResult = { applied: boolean; claim: StoredRunClaim | null; now: number };
+
+/**
+ * Run fencing operations. They are routed by `op` before `tableName`, so a
+ * storage function deployed before run fencing rejects them as unsupported
+ * operations rather than running a write unfenced.
+ */
+export type RunClaimRequest =
+  | {
+      op: 'claimRunOwnership';
+      tableName: RunClaimTable;
+      runId: string;
+      ownerId: string;
+      leaseMs: number;
+      force: boolean;
+      expectedGeneration?: number;
+    }
+  | { op: 'renewRunOwnership'; tableName: RunClaimTable; fence: RunClaimFence; leaseMs: number }
+  | { op: 'releaseRunOwnership'; tableName: RunClaimTable; fence: RunClaimFence }
+  | { op: 'getRunOwnership'; tableName: RunClaimTable; runId: string }
+  | { op: 'raiseRunFence'; tableName: RunClaimTable; fence: RunClaimFence }
+  | { op: 'retireRunFence'; tableName: RunClaimTable; fence: RunClaimFence }
+  | {
+      /** Deletes up to `limit` claims whose epoch-ms `column` is set and older than `cutoff`. */
+      op: 'pruneRunClaims';
+      tableName: RunClaimTable;
+      column: 'updatedAt' | 'retiredAt';
+      cutoff: number;
+      limit: number;
+    }
+  | {
+      /**
+       * Runs `request` only if `fence` is the run's current claim in
+       * `tableName`, in the same mutation. Without `request`, only checks.
+       */
+      op: 'fenced';
+      tableName: RunClaimTable;
+      fence: RunClaimFence;
+      request?: StorageRequest;
     };
 
 export type StorageResponse =

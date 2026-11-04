@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TraceThreadPanel, type TraceThreadPanelProps } from '../trace-thread-panel';
+import { TraceThreadPanel } from '../trace-thread-panel';
+import type { TraceThreadPanelProps } from '../trace-thread-panel';
 import {
   queryPageFromList,
   THREAD_ID,
@@ -60,9 +61,8 @@ const renderPanel = (props: Partial<TraceThreadPanelProps> = {}) =>
         threadId={THREAD_ID}
         withQueryTrace
         withFeedback
-        anchorTraceId="trace-a"
         onOpenScore={() => {}}
-        onBack={() => {}}
+        open
         onClose={() => {}}
         {...props}
       />
@@ -70,8 +70,8 @@ const renderPanel = (props: Partial<TraceThreadPanelProps> = {}) =>
   );
 
 describe('TraceThreadPanel', () => {
-  describe('given a thread with two traces and the current trace in the URL', () => {
-    it('shows every turn of the thread with the current trace expanded', async () => {
+  describe('given a thread with two traces', () => {
+    it('shows every turn of the thread, all rows collapsed', async () => {
       mockHeights({ 'trace-row-messages': 300, 'trace-row-timeline': 900 });
       installHandlers();
       const { queryClient } = renderPanel();
@@ -81,9 +81,7 @@ describe('TraceThreadPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       expect(screen.getByRole('heading', { name: /Thread/ }).textContent).toContain(THREAD_ID);
-      const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
-      await waitFor(() => expect(scrollIntoView.mock.instances).toContain(row));
-      expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
+      expect(screen.queryAllByRole('button', { name: 'Collapse' })).toHaveLength(0);
     });
 
     it('when rendered, then the panel opens wide and only takes the full frame once a span is selected', async () => {
@@ -100,13 +98,33 @@ describe('TraceThreadPanel', () => {
       await waitFor(() => expect(dialog().className).toContain('w-full'));
     });
 
-    it('when "Back to trace" is clicked, then onBack is called', async () => {
+    it('when rendered, then it is stacked at depth 2 by default', async () => {
       installHandlers();
-      const onBack = vi.fn();
-      const { queryClient } = renderPanel({ onBack });
+      const { queryClient } = renderPanel();
+
+      const dialog = await screen.findByRole('dialog', { name: `Thread ${THREAD_ID}` });
+      expect(dialog.getAttribute('data-depth')).toBe('2');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when "Back to trace" is clicked, then onClose is called', async () => {
+      installHandlers();
+      const onClose = vi.fn();
+      const { queryClient } = renderPanel({ onClose });
 
       fireEvent.click(await screen.findByRole('button', { name: 'Back to trace' }));
-      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when the host names the close button, then clicking it calls onClose', async () => {
+      installHandlers();
+      const onClose = vi.fn();
+      const { queryClient } = renderPanel({ onClose, closeLabel: 'Close' });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('button', { name: 'Back to trace' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 

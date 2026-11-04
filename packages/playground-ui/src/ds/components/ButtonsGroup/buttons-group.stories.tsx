@@ -5,6 +5,7 @@ import { Button } from '../Button';
 import { Combobox } from '../Combobox';
 import { DropdownMenu } from '../DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
 
@@ -47,7 +48,7 @@ export const Sizes: Story = {
             <InputGroupAddon align="inline-start">
               <SearchIcon />
             </InputGroupAddon>
-            <InputGroupInput aria-label={`Search (${size})`} placeholder="Search..." />
+            <InputGroupInput aria-label={`Search (${size})`} placeholder="Search" />
           </InputGroup>
           <Button icon={<CopyIcon />}>Copy</Button>
           <ButtonsGroupText>{size}</ButtonsGroupText>
@@ -82,7 +83,7 @@ export const AsSplitButton: Story = {
       <Button>Save</Button>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <Button aria-label="More save options">
+          <Button size="icon-md" aria-label="More save options">
             <ChevronDownIcon />
           </Button>
         </DropdownMenu.Trigger>
@@ -92,6 +93,23 @@ export const AsSplitButton: Story = {
           <DropdownMenu.Item>Save a copy</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
+    </ButtonsGroup>
+  ),
+};
+
+export const PopoverFirstSegmentOpen: Story = {
+  render: () => (
+    <ButtonsGroup size="sm">
+      <Popover defaultOpen>
+        <PopoverTrigger variant="ghost" size="sm">
+          Claude Opus 5.5
+          <ChevronDownIcon />
+        </PopoverTrigger>
+        <PopoverContent align="start">Model menu</PopoverContent>
+      </Popover>
+      <Button variant="ghost" size="sm">
+        Thinking
+      </Button>
     </ButtonsGroup>
   ),
 };
@@ -180,7 +198,7 @@ export const SearchWithDropdown: Story = {
           <InputGroupInput
             type="search"
             aria-label="Search projects"
-            placeholder="Search projects..."
+            placeholder="Search projects"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />

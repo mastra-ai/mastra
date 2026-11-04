@@ -55,8 +55,6 @@ const processor = new LanguageDetector({
             type: 'string[]',
             description:
               "Target language(s) for the project. If content is detected in a different language, it may be translated. Can be language name ('English') or ISO code ('en')",
-            isOptional: true,
-            default: "['English', 'en']",
           },
           {
             name: 'threshold',
@@ -146,13 +144,13 @@ const processor = new LanguageDetector({
   },
   {
     name: 'name',
-    type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
+    type: "'Language Detector'",
+    description: "Read-only processor display name, fixed to 'Language Detector'",
+    isOptional: false,
   },
   {
     name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext } & Partial<ObservabilityContext>) => Promise<MastraDBMessage[]>',
     description: 'Processes input messages to detect language and optionally translate content before sending to LLM',
     isOptional: false,
   },

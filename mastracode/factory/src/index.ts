@@ -1,15 +1,23 @@
 export {
   BoardDefinitionError,
   createBoardRegistry,
+  DEFAULT_PHASE_CONTEXT,
   defaultBoards,
   defineBoard,
+  FACTORY_AGENT_ID,
   reviewBoard,
   workBoard,
 } from './boards/index.js';
 export type {
   BoardDefinition,
+  BoardEventIntegration,
+  BoardEventRules,
+  BoardPhase,
   BoardPhaseDefinition,
+  BoardPhaseExitTool,
+  BoardPhaseRunner,
   BoardRegistry,
+  BoardSourceClosed,
   BoardTransition,
   BoardTransitionPolicy,
   BoardTransitionPolicyContext,
@@ -18,9 +26,17 @@ export type {
   ReviewBoardPhase,
   WorkBoardPhase,
 } from './boards/index.js';
+export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
-export type { MastraArgs, MastraFactoryConfig, MastraFactorySandboxConfig, FactorySandboxStart } from './factory.js';
+export type {
+  MastraArgs,
+  MastraFactoryConfig,
+  MastraFactorySandboxConfig,
+  MastraFactorySandboxOption,
+  FactorySandboxStart,
+} from './factory.js';
+export { LocalFactorySandbox, type LocalFactorySandboxOptions } from './sandbox/local-factory-sandbox.js';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
 // annotate a custom handler without importing the deep integration subpath.
 export type { GithubRuleOverrides } from './integrations/github/default-rules.js';
@@ -35,7 +51,13 @@ export type {
 export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 export type { FactoryProject } from './storage/domains/projects/base.js';
 export { WorkItemsStorage } from './storage/domains/work-items/base.js';
-export type { CreateWorkItemInput, WorkItemRow } from './storage/domains/work-items/base.js';
+export type { CreateWorkItemInput, Card, BoardItemRow } from './storage/domains/work-items/base.js';
+export { primarySource } from './storage/domains/work-items/work-item-schema.js';
+export type {
+  WorkItemRow,
+  WorkItemSourceRow,
+  WorkItemProvider,
+} from './storage/domains/work-items/work-item-schema.js';
 export { createStateSigner } from './state-signing.js';
 export type { StateSigner, StateTenant } from './state-signing.js';
 export { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from './secret-encryption.js';

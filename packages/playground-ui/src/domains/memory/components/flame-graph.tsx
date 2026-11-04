@@ -59,19 +59,19 @@ interface FlameGraphProps {
 type RechartsClickState = { activeLabel?: string | number } | null | undefined;
 
 const MSG_COLOR = 'var(--chart-green)';
-const OBS_COLOR = 'var(--chart-yellow)';
+const OBS_COLOR = 'var(--chart-amber)';
 const REFLECT_COLOR = 'var(--chart-pink)';
 
 function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         Time
       </Txt>
-      <div className="flex justify-between px-1 py-1.5 text-meta text-muted-foreground">
+      <div className="flex justify-between px-1 py-1.5">
         {ticks.map(t => (
-          <Txt key={t} as="span" variant="meta" font="mono">
+          <Txt tone="muted" key={t} as="span" variant="meta" font="mono">
             {formatDate(tToTimestamp(t, domain), 'date-time-seconds', { timeZone: 'UTC' })}
           </Txt>
         ))}
@@ -99,10 +99,12 @@ export function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 text-meta tabular-nums`}>
+      <div className={`${overlaySurfaceStyle} flex flex-col gap-0.5 rounded px-2 py-1.5 tabular-nums`}>
         {time && (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">time</span>
+            <Txt as="span" variant="meta" tone="muted">
+              time
+            </Txt>
             <Txt as="span" variant="meta" font="mono" tone="ink">
               {time}
             </Txt>
@@ -110,10 +112,12 @@ export function FlameTooltip({
         )}
         {visibleEntries.map(entry => (
           <div key={entry.name} className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">{entry.name}</span>
-            <span className="text-foreground">
+            <Txt as="span" variant="meta" tone="muted">
+              {entry.name}
+            </Txt>
+            <Txt as="span" variant="meta" tone="ink">
               {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
-            </span>
+            </Txt>
           </div>
         ))}
       </div>
@@ -121,13 +125,13 @@ export function FlameTooltip({
   }
 
   return (
-    <div className={`${overlaySurfaceStyle} rounded px-2 py-1 text-meta`}>
+    <Txt as="p" variant="meta" className={`${overlaySurfaceStyle} rounded px-2 py-1`}>
       {time && (
         <Txt as="span" variant="meta" font="mono" tone="ink">
           {time}
         </Txt>
       )}
-    </div>
+    </Txt>
   );
 }
 
@@ -146,8 +150,8 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
   const yMax = getAreaRowYMax(data, dataKey, threshold);
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border hover:z-10">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         {label}
       </Txt>
       <div>
@@ -189,8 +193,8 @@ interface EventRowProps {
 
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border hover:z-10">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         {label}
       </Txt>
       <div>
@@ -250,8 +254,8 @@ function CombinedRow({
   const combinedData = toCombinedRowData(areaData, areaDataKey, eventData);
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border/50 hover:z-10">
-      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border/50 pl-3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border hover:z-10">
+      <Txt variant="meta" tone="muted" className="flex items-center self-stretch border-r border-border pl-3">
         {label}
       </Txt>
       <div>
@@ -357,8 +361,8 @@ function ZoomTrack({
   }, [toTimestamp, zoomLeft, zoomRight, onZoomLeftChange, onZoomRightChange]);
 
   return (
-    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border/50">
-      <div className="flex items-center gap-1 self-stretch border-r border-border/50 pl-3">
+    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border">
+      <div className="flex items-center gap-1 self-stretch border-r border-border pl-3">
         <Txt variant="meta" tone="muted">
           Zoom
         </Txt>
@@ -392,7 +396,7 @@ function ZoomTrack({
         />
         <div
           data-zoom-part="band"
-          className="absolute inset-y-0 border-y border-border/30 bg-fill-subtle"
+          className="absolute inset-y-0 border-y border-surface-rim bg-fill-subtle"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
         <div

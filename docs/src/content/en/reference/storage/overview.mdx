@@ -28,6 +28,23 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `observability` | Traces and spans used by observability exporters and Studio. |
 | `datasets` | Dataset records, versioned items, and dataset versions used by experiments. |
 | `experiments` | Experiment runs and per-item experiment results. |
+| `agents` | Stored agent definitions and their versions, used by the Mastra Editor. |
+| `promptBlocks` | Stored prompt blocks and their versions, used by the Mastra Editor. |
+| `scorerDefinitions` | Stored scorer definitions, used by the Mastra Editor. |
+| `mcpClients` | Stored MCP client configurations, used by the Mastra Editor. |
+| `mcpServers` | Stored MCP server configurations, used by the Mastra Editor. |
+| `workspaces` | Stored workspace configurations, used by the Mastra Editor. |
+| `skills` | Stored skills and their versions, used by the Mastra Editor. |
+| `favorites` | Per-user favorites on stored entities. |
+| `blobs` | Content-addressable blobs keyed by SHA-256 hash. Stores file contents for skill versioning. |
+| `backgroundTasks` | Background task state: creation, status updates, and cleanup. |
+| `schedules` | Schedules polled by the scheduler to trigger workflow and agent runs. |
+| `channels` | Channel installations and configuration for multi-platform integrations. |
+| `harness` | Harness session records. |
+| `toolProviderConnections` | User-assigned names for tool provider connections. |
+| `notifications` | Notification records. |
+| `threadState` | Durable per-thread state, such as task lists and goals. |
+| `knowledge` | Knowledge graph nodes and records (experimental). |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
 
@@ -41,13 +58,13 @@ The schema definitions below cover the built-in database-backed tables documente
       columns={[
   {
     name: 'id',
-    type: 'uuidv4',
-    description: 'Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the message',
     constraints: [{ type: 'primaryKey' }, { type: 'nullable', value: false }],
   },
   {
     name: 'thread_id',
-    type: 'uuidv4',
+    type: 'text',
     description: 'Parent thread reference',
     constraints: [
       { type: 'foreignKey', value: 'threads.id' },
@@ -56,7 +73,7 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'resourceId',
-    type: 'uuidv4',
+    type: 'text',
     description: 'ID of the resource that owns this message',
     constraints: [{ type: 'nullable', value: true }],
   },
@@ -139,8 +156,8 @@ The schema definitions below cover the built-in database-backed tables documente
       columns={[
   {
     name: 'id',
-    type: 'uuidv4',
-    description: 'Unique identifier for the thread (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the thread',
     constraints: [{ type: 'primaryKey' }, { type: 'nullable', value: false }],
   },
   {
@@ -158,12 +175,13 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'metadata',
-    type: 'text',
-    description: 'Custom thread metadata as stringified JSON. Example:',
+    type: 'jsonb',
+    description: 'Custom thread metadata as JSON. Example:',
     example: {
       category: 'support',
       priority: 1,
     },
+    constraints: [{ type: 'nullable', value: true }],
   },
   {
     name: 'createdAt',
@@ -237,15 +255,14 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'run_id',
-    type: 'uuidv4',
-    description:
-      'Unique identifier for the workflow execution. Used to track state across suspend/resume cycles (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the workflow execution. Used to track state across suspend/resume cycles',
     constraints: [{ type: 'nullable', value: false }],
   },
   {
     name: 'snapshot',
-    type: 'text',
-    description: 'Serialized workflow state as JSON. Example:',
+    type: 'jsonb',
+    description: 'Workflow state as JSON. Example:',
     example: {
       value: { currentState: 'running' },
       context: {

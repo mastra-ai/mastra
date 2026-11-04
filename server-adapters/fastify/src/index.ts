@@ -7,8 +7,11 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -337,7 +340,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           });
 
           file.on('end', () => {
-            if (!limitExceeded) {
+            if (!limitExceeded && isSafeObjectKey(fieldname)) {
               result[fieldname] = Buffer.concat(chunks);
             }
           });
@@ -345,6 +348,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       );
 
       busboy.on('field', (fieldname: string, value: string) => {
+        if (!isSafeObjectKey(fieldname)) {
+          return;
+        }
         // Try to parse JSON strings (like 'options')
         try {
           result[fieldname] = JSON.parse(value);
@@ -478,7 +484,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+        await applyMcpRequestAuth({ req: rawReq, requestContext: request.requestContext, setRequestAuth });
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
@@ -520,6 +528,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         if (request.body !== undefined) {
           rawReq.body = request.body;
         }
+
+        await applyMcpRequestAuth({
+          req: rawReq,
+          requestContext: request.requestContext,
+          setRequestAuth: this.mcpOptions?.setRequestAuth,
+        });
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
@@ -712,24 +726,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return;
         }
 
-        // Check if it's an HTTPException or MastraError with a status code
-        let status = 500;
-        if (error && typeof error === 'object') {
-          // Check for direct status property (HTTPException)
-          if ('status' in error) {
-            status = (error as any).status;
-          }
-          // Check for MastraError with status in details
-          else if (
-            'details' in error &&
-            error.details &&
-            typeof error.details === 'object' &&
-            'status' in error.details
-          ) {
-            status = (error.details as any).status;
-          }
-        }
-        await reply.status(status).send({ error: error instanceof Error ? error.message : 'Unknown error' });
+        const { status, body } = getHTTPErrorResponse(error);
+        await reply.status(status).send(body);
       }
     };
 
@@ -855,12 +853,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Check FGA authorization (EE feature)
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, requestContext, {
-          ...(request.params as Record<string, string>),
           ...(request.query as Record<string, string>),
           ...(typeof request.body === 'object' && request.body !== null
             ? (request.body as Record<string, unknown>)
             : {}),
+          ...(request.params as Record<string, string>),
         });
         if (fgaError) {
           return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });

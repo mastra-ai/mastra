@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { ListFeedbackResponse } from '@mastra/core/storage';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +7,7 @@ import { FeedbackThread } from '../feedback-thread';
 
 afterEach(() => cleanup());
 
-const getInput = () => screen.getByPlaceholderText('Leave feedback...') as HTMLInputElement;
+const getInput = () => screen.getByPlaceholderText('Leave feedback') as HTMLInputElement;
 const getSubmit = () => screen.getByRole('button', { name: 'Send feedback' }) as HTMLButtonElement;
 const type = (value: string) => fireEvent.change(getInput(), { target: { value } });
 const openActions = async () => {
@@ -34,8 +33,10 @@ const feedbackData = {
 const withAuthor = (author: { id: string; name?: string; email?: string; avatarUrl?: string }) =>
   ({ ...feedbackData, feedback: [{ ...feedbackData.feedback[0], author }] }) as unknown as ListFeedbackResponse;
 
-const withReviewStatus = (reviewStatus: 'needs-review' | 'reviewed') =>
-  ({ ...feedbackData, feedback: [{ ...feedbackData.feedback[0], reviewStatus }] }) as unknown as ListFeedbackResponse;
+const withReviewStatus = (reviewStatus: 'needs-review' | 'reviewed') => ({
+  ...feedbackData,
+  feedback: [{ ...feedbackData.feedback[0], reviewStatus }],
+});
 
 describe('FeedbackThread', () => {
   it('renders existing feedback as comments', () => {

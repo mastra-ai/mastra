@@ -148,3 +148,106 @@ describe('WorkflowsLibSQL — threadId filter pushdown', () => {
     expect(runs).toHaveLength(2);
   });
 });
+
+describe('WorkflowsLibSQL — updateWorkflowState', () => {
+  let workflows: WorkflowsLibSQL;
+
+  beforeEach(async () => {
+    const client = createClient({ url: ':memory:' });
+    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
+    await db.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    workflows = new WorkflowsLibSQL({ client });
+  });
+
+  it('advances updatedAt when the snapshot state changes', async () => {
+    const workflowName = 'wf';
+    const runId = 'state-run';
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+
+    await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: { status: 'suspended', context: {} } as unknown as WorkflowRunState,
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    await workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'running' } as any });
+
+    const run = await workflows.getWorkflowRunById({ workflowName, runId });
+    expect(run?.createdAt.toISOString()).toBe(createdAt.toISOString());
+    expect(run!.updatedAt.getTime()).toBeGreaterThan(createdAt.getTime());
+  });
+});
+
+describe('WorkflowsLibSQL — guarded snapshot writes', () => {
+  let workflows: WorkflowsLibSQL;
+  const workflowName = 'wf';
+  const runId = 'guarded-run';
+  const snapshotWith = (status: string) => ({ status, context: {} }) as unknown as WorkflowRunState;
+
+  beforeEach(async () => {
+    const client = createClient({ url: ':memory:' });
+    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
+    await db.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    workflows = new WorkflowsLibSQL({ client });
+  });
+
+  it('rejects a write when the persisted status does not match expectedStatus', async () => {
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshotWith('running') });
+    await workflows.updateWorkflowState({ workflowName, runId, opts: { status: 'canceled' } as any });
+
+    const written = await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: snapshotWith('success'),
+      expectedStatus: ['running', 'success'],
+    });
+
+    expect(written).toBe(false);
+    expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('canceled');
+  });
+
+  it('writes when the persisted status matches expectedStatus or no row exists', async () => {
+    const inserted = await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: snapshotWith('running'),
+      expectedStatus: ['running'],
+    });
+    const updated = await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: snapshotWith('success'),
+      expectedStatus: ['running'],
+    });
+
+    expect(inserted).toBe(true);
+    expect(updated).toBe(true);
+    expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('success');
+  });
+
+  it('never overwrites an existing row when expectedStatus is an empty list', async () => {
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshotWith('running') });
+
+    const written = await workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: snapshotWith('success'),
+      expectedStatus: [],
+    });
+
+    expect(written).toBe(false);
+    expect(await workflows.loadWorkflowRunStatus({ workflowName, runId })).toBe('running');
+  });
+
+  it('returns null status for an unknown run', async () => {
+    expect(await workflows.loadWorkflowRunStatus({ workflowName, runId: 'missing' })).toBeNull();
+  });
+});

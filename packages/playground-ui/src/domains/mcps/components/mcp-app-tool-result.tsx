@@ -1,14 +1,16 @@
 import { useMastraClient } from '@mastra/react';
+import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback } from 'react';
-import type { McpAppToolInfo } from '../hooks/use-mcp-app-tools';
+import { useMcpAppToolCall } from '../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from './mcp-app-viewer';
+import { Txt } from '@/ds/components/Txt';
 
 interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;
   toolArgs?: Record<string, unknown>;
   toolResult?: unknown;
   onSendMessage?: (content: string) => void;
+  onUpdateModelContext?: (context: string | undefined) => void;
   readOnly?: boolean;
 }
 
@@ -20,7 +22,14 @@ interface McpAppToolResultProps {
  * (ui/notifications/tool-input and ui/notifications/tool-result), enabling
  * the app to hydrate with data from the tool call.
  */
-export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage, readOnly }: McpAppToolResultProps) {
+export function McpAppToolResult({
+  appInfo,
+  toolArgs,
+  toolResult,
+  onSendMessage,
+  onUpdateModelContext,
+  readOnly,
+}: McpAppToolResultProps) {
   const client = useMastraClient();
 
   const { data: html, isLoading } = useQuery({
@@ -34,17 +43,13 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
     refetchOnWindowFocus: false,
   });
 
-  const handleToolCall = useCallback(
-    async (toolName: string, args: Record<string, unknown>) => {
-      const tool = client.getMcpServerTool(appInfo.serverId, toolName);
-      return tool.execute({ data: args });
-    },
-    [client, appInfo.serverId],
-  );
+  const handleToolCall = useMcpAppToolCall(appInfo.serverId);
 
   if (isLoading || !html) {
     return (
-      <div className="text-text2 rounded-md border border-border bg-background p-4 text-body">Loading MCP App UI…</div>
+      <Txt as="p" variant="body" tone="muted" className="rounded-md border border-border bg-background p-4">
+        Loading MCP App UI…
+      </Txt>
     );
   }
 
@@ -56,6 +61,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
       toolResult={toolResult}
       onToolCall={readOnly ? undefined : handleToolCall}
       onSendMessage={readOnly ? undefined : onSendMessage}
+      onUpdateModelContext={readOnly ? undefined : onUpdateModelContext}
       className="rounded-md border border-border"
     />
   );

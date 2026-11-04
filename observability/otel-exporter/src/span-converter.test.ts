@@ -56,6 +56,46 @@ describe('SpanConverter', () => {
   // =============================================================================
   // SPAN NAMING CONVENTIONS
   // =============================================================================
+  describe('Span links', () => {
+    const baseSpan = {
+      id: '1111111111111111',
+      traceId: '22222222222222222222222222222222',
+      type: SpanType.GENERIC,
+      startTime: new Date(),
+      endTime: new Date(),
+      isEvent: false,
+      isRootSpan: true,
+    } as const;
+
+    it('exports span links as remote OpenTelemetry links', async () => {
+      const span: ExportedSpan<SpanType.GENERIC> = {
+        ...baseSpan,
+        name: 'served-request',
+        links: [{ traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' }],
+      };
+
+      const result = await converter.convertSpan(span);
+
+      expect(result.links).toEqual([
+        {
+          context: {
+            traceId: '0af7651916cd43dd8448eb211c80319c',
+            spanId: 'b7ad6b7169203331',
+            traceFlags: 1,
+            isRemote: true,
+          },
+        },
+      ]);
+      expect(result.parentSpanContext).toBeUndefined();
+    });
+
+    it('exports no links for a span without links', async () => {
+      const span: ExportedSpan<SpanType.GENERIC> = { ...baseSpan, name: 'plain' };
+
+      expect((await converter.convertSpan(span)).links).toEqual([]);
+    });
+  });
+
   describe('Span Naming Conventions', () => {
     it('should format LLM generation span names correctly', async () => {
       const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {

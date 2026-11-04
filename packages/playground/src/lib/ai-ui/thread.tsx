@@ -1,4 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import {
+  ChatAnnotationsProvider,
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  TranscriptAnnotations,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
+import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -6,7 +14,6 @@ import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
-  ComposerAttachments,
   ComposerBox,
   ComposerInput,
   ComposerRing,
@@ -27,20 +34,22 @@ import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
+import { useReadAloud } from '@mastra/react/hooks/voice';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from 'sonner';
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { ComposerFileDrop } from './attachments/composer-file-drop';
-import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { useComposerAutofocus } from './hooks/use-composer-autofocus';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { AgentChannelsCard } from '@/domains/agents/components/agent-channels/agent-channels-card';
 import { ChatMessagesLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
@@ -50,25 +59,7 @@ import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
 import { startViewTransition } from '@/lib/routing';
 
-const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
-
-/**
- * Returns true only after `flag` has stayed true for `delayMs` continuously, so
- * the pending indicator doesn't flash on fast (local) responses.
- */
-const useDelayedFlag = (flag: boolean, delayMs: number) => {
-  const [delayed, setDelayed] = useState(false);
-  useEffect(() => {
-    if (!flag) {
-      setDelayed(false);
-      return;
-    }
-    const id = setTimeout(() => setDelayed(true), delayMs);
-    return () => clearTimeout(id);
-  }, [flag, delayMs]);
-  return delayed;
-};
 
 /**
  * Detects whether the last assistant message has a part that is actively
@@ -130,7 +121,7 @@ export interface ThreadProps {
   isLoadingPrevious?: boolean;
 }
 
-export const Thread = ({
+const ThreadContent = ({
   agentName,
   agentId,
   threadId,
@@ -149,7 +140,13 @@ export const Thread = ({
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
   const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
-  const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
+  const {
+    isSpeaking,
+    readAloud,
+    stop: stopSpeaking,
+  } = useReadAloud(agentId, requestContext, {
+    onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
+  });
 
   const { hasSession, viewMode } = useBrowserSession();
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');
@@ -157,7 +154,6 @@ export const Thread = ({
   const isEmpty = messages.length === 0;
   const lastMessage = messages[messages.length - 1];
   const showPending = isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
-  const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
   const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
   const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
   // Keyed by the opening message's client key: `data-user-message` reconciliation
@@ -205,6 +201,7 @@ export const Thread = ({
       <ChatShell
         className="h-full"
         scroller={{
+          autoScroll: true,
           defaultScrollPosition: 'last-anchor',
           onReachStart: onLoadPrevious,
           preserveScrollOnPrepend: Boolean(onLoadPrevious),
@@ -230,12 +227,13 @@ export const Thread = ({
                   <ChatMessagesLoadingSkeleton />
                 </ChatShell.Column>
               ) : landingShown ? null : (
-                <ChatShell.Column
+                <ChatShell.Transcript
                   ref={messagesContainerRef}
                   data-testid="thread-message-column"
-                  className="relative flex-1 gap-4 py-4"
+                  className="flex-1 gap-4 py-4"
                 >
                   <BracketOverlay containerRef={messagesContainerRef} />
+                  <TranscriptAnnotations />
                   {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
                   <ArrivalScope>
                     {turnGroups.map((group, index) => {
@@ -264,13 +262,15 @@ export const Thread = ({
                               />
                             </MessageScrollerItem>
                           ))}
-                          {isLiveTurn && delayedPending && <PendingIndicator />}
+                          {isLiveTurn && showPending && (
+                            <PendingIndicator className="animate-in delay-300 duration-200 fade-in-0 fill-mode-backwards" />
+                          )}
                         </ChatShell.Turn>
                       );
                     })}
                   </ArrivalScope>
                   {!isRunning && <SaveFullConversationAction />}
-                </ChatShell.Column>
+                </ChatShell.Transcript>
               )}
             </ChatShell.Content>
             <ChatShell.Dock
@@ -278,9 +278,12 @@ export const Thread = ({
               className={landingShown ? 'static flex flex-1 flex-col justify-center py-12 before:hidden' : undefined}
             >
               {landingShown ? null : <ChatShell.ScrollButton />}
-              <ChatShell.Column className={landingShown ? 'gap-6 px-2 md:px-2' : 'gap-2 px-2 md:px-2'}>
+              <ChatShell.Column className={landingShown ? 'gap-6 px-1 md:px-1' : 'gap-2 px-1 md:px-1'}>
                 {landingShown ? (
-                  <ThreadWelcome agentName={agentName} />
+                  <>
+                    <ThreadWelcome agentName={agentName} />
+                    {agentId ? <AgentChannelsCard agentId={agentId} /> : null}
+                  </>
                 ) : (
                   <>
                     {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
@@ -307,6 +310,12 @@ export const Thread = ({
   );
 };
 
+export const Thread = (props: ThreadProps) => (
+  <ChatAnnotationsProvider>
+    <ThreadContent {...props} />
+  </ChatAnnotationsProvider>
+);
+
 const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
   return (
     <div data-testid="thread-welcome" className="flex w-full flex-col items-center gap-4">
@@ -319,10 +328,7 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
         tone="muted"
         className="starter-heading mx-auto max-w-2xl text-center font-normal text-balance"
       >
-        <span className="starter-shimmer">
-          What can <span className="starter-shimmer starter-shimmer-ink font-medium">{agentName || 'this agent'}</span>{' '}
-          do for you today?
-        </span>
+        What can <span className="font-medium text-foreground">{agentName || 'this agent'}</span> do for you today?
       </Txt>
     </div>
   );
@@ -347,6 +353,7 @@ const AgentComposer = ({
 }: AgentComposerProps) => {
   const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const preparing = useRef(false);
   const lifetime = useRef(0);
   useEffect(
@@ -355,9 +362,9 @@ const AgentComposer = ({
     },
     [],
   );
-  const [preparationError, setPreparationError] = useState<string>();
+  const [submitError, setSubmitError] = useState<string>();
   const send = useChatSend();
-  const { attachments, toCoreUserMessages, clear, isAddingAttachments } = useComposerAttachments();
+  const { attachments, toCoreUserMessages, clear, restore, isAddingAttachments } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
@@ -368,8 +375,10 @@ const AgentComposer = ({
   // new-thread state (same as the first text send) or the chat never loads messages.
   const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
 
-  const isEmpty = text.trim().length === 0 && attachments.length === 0;
+  const isEmpty = text.trim().length === 0 && attachments.length === 0 && annotations.length === 0;
   const sendBlocked = isRunning && !canSendWhileStreaming;
+  const showModelSwitcher = Boolean(agentId && !hasModelList && !hideModelSwitcher);
+  const shownError = submitError || draftStatus?.error;
 
   const submit = async () => {
     if (
@@ -383,8 +392,25 @@ const AgentComposer = ({
       return;
     preparing.current = true;
     const currentLifetime = lifetime.current;
-    const submittedIds = new Set(attachments.map(attachment => attachment.id));
-    setPreparationError(undefined);
+    const submittedAttachments = attachments;
+    const submittedIds = new Set(submittedAttachments.map(attachment => attachment.id));
+    // A message the server can't have stored goes back in the composer, before anything typed since.
+    const withSubmittedText = (typed: string) => [text, typed].filter(Boolean).join('\n\n');
+    const restoreSubmission = (sentAnnotations: readonly ChatAnnotation[]) => {
+      if (lifetime.current !== currentLifetime) return;
+      restoreAnnotations(sentAnnotations);
+      if (updateDraft)
+        updateDraft(previous => ({
+          text: withSubmittedText(previous.text),
+          attachments: [...submittedAttachments, ...previous.attachments],
+        }));
+      else {
+        setThreadInput(withSubmittedText);
+        restore(submittedAttachments);
+      }
+      setSubmitError('Your message could not be sent. Your draft has been restored.');
+    };
+    setSubmitError(undefined);
     try {
       const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
       if (lifetime.current !== currentLifetime) return;
@@ -398,11 +424,15 @@ const AgentComposer = ({
         setThreadInput('');
         clear();
       }
+      const sentAnnotations = takeAnnotations();
       setSendPulseKey(k => k + 1);
-      send({ message: text, attachments: coreUserMessages });
+      const message = formatAnnotatedMessage(text, sentAnnotations);
+      void Promise.resolve(send({ message, attachments: coreUserMessages })).then(delivered => {
+        if (delivered === false) restoreSubmission(sentAnnotations);
+      });
     } catch {
       if (lifetime.current === currentLifetime)
-        setPreparationError('Attachments could not be prepared. Your draft has been kept.');
+        setSubmitError('Attachments could not be prepared. Your draft has been kept.');
     } finally {
       preparing.current = false;
     }
@@ -413,15 +443,15 @@ const AgentComposer = ({
     // the bottom edge independently of the root crossfade.
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
-      {(preparationError || draftStatus?.error) && (
-        <p role="alert" className="text-ui-sm">
-          {preparationError || draftStatus?.error}
-        </p>
+      {shownError && (
+        <Txt variant="caption" role="alert">
+          {shownError}
+        </Txt>
       )}
       {draftStatus?.restoring && (
-        <p role="status" className="text-ui-sm">
+        <Txt variant="caption" role="status" className="sr-only">
           Restoring draft…
-        </p>
+        </Txt>
       )}
       <ComposerFileDrop disabled={!canExecuteAgent || draftStatus?.restoring}>
         <Composer
@@ -431,15 +461,14 @@ const AgentComposer = ({
             void submit();
           }}
         >
-          <ComposerAttachments>
-            <ChatComposerAttachments />
-          </ComposerAttachments>
           <ComposerRing busy={isRunning}>
             <ComposerBox sendingPulseKey={sendPulseKey}>
+              <ComposerAnnotations />
+              <ChatComposerAttachments />
               <ComposerInput
                 ref={textareaRef}
                 value={text}
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                placeholder={canExecuteAgent ? 'Enter your message' : "You don't have permission to execute agents"}
                 onChange={event => {
                   setThreadInput(event.target.value);
                 }}
@@ -457,13 +486,13 @@ const AgentComposer = ({
                 }}
                 disabled={inputDisabled}
               />
-              {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning />}
+              {showModelSwitcher && <ComposerModelWarning />}
               <ComposerActions>
                 <ComposerActionRow
-                  canExecute={canExecuteAgent && !draftStatus?.restoring}
+                  canExecute={canExecuteAgent}
                   agentId={agentId}
                   runOptionsSlot={runOptionsSlot}
-                  showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
+                  showModelSwitcher={showModelSwitcher}
                   isEmpty={isEmpty}
                   isRunning={isRunning}
                   canSendWhileStreaming={canSendWhileStreaming}
@@ -484,12 +513,7 @@ const AgentComposer = ({
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
   const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
-  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
-
-  useEffect(() => {
-    if (!transcript) return;
-    startTransition(() => onTranscript(transcript));
-  }, [onTranscript, transcript]);
+  const { start, stop, isListening } = useSpeechRecognition({ agentId, requestContext });
 
   return (
     <Button
@@ -497,7 +521,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      onClick={() => (isListening ? stop() : start())}
+      onClick={() => (isListening ? stop() : start(onTranscript))}
     >
       {isListening ? <CircleStopIcon /> : <Mic />}
     </Button>
@@ -577,32 +601,35 @@ const ComposerSendButton = ({
   onCancel,
 }: ComposerSendButtonProps) => {
   const { isAddingAttachments } = useComposerAttachments();
-  // While streaming and not allowed to send mid-stream, the only action is cancel.
-  if (isRunning && !canSendWhileStreaming) {
+  const draftCanSteerRun = canSendWhileStreaming && !isEmpty;
+  if (isRunning && !draftCanSteerRun) {
     return (
-      <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
+      <Button
+        variant="default"
+        size="icon-md"
+        type="button"
+        tooltip="Cancel"
+        onClick={event => {
+          // Send turns into Cancel under the pointer: a double-click on Send must not cancel.
+          if (event.detail > 1) return;
+          onCancel();
+        }}
+      >
         <CircleStopIcon />
       </Button>
     );
   }
 
   return (
-    <>
-      <Button
-        type="submit"
-        variant="default"
-        size="icon-md"
-        tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        disabled={!canExecute || isEmpty || isAddingAttachments}
-      >
-        <ArrowUp />
-      </Button>
-      {isRunning && (
-        <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>
-          <CircleStopIcon />
-        </Button>
-      )}
-    </>
+    <Button
+      type="submit"
+      variant="default"
+      size="icon-md"
+      tooltip={canExecute ? 'Send' : 'No permission to execute'}
+      disabled={!canExecute || isEmpty || isAddingAttachments}
+    >
+      <ArrowUp />
+    </Button>
   );
 };
 

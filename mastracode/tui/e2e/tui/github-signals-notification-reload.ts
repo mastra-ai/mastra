@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 function quoteSql(value: string): string {
@@ -113,7 +114,8 @@ values
     terminal.write('\r');
 
     await runtime.waitForScreenText(/notification from github/i, terminal, 8_000);
-    await runtime.waitForScreenText(/high · pull-request-ci-recovered · seen/i, terminal, 8_000);
+    await runtime.waitForScreenText(/CI recovered after GitHub Signals reload fixture/i, terminal, 8_000);
+    expect(terminal.serialize().view).not.toMatch(/pull-request-ci-recovered · seen/i);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17641/i, terminal, 8_000);
     await runtime.waitForScreenText(/PR#17641|mastra-ai\/mastra#17641/i, terminal, 8_000);
     await runtime.waitForScreenText(/Open the persisted GitHub notification fixture/i, terminal, 8_000);

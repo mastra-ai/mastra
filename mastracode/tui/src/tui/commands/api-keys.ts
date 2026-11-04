@@ -5,6 +5,7 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
+import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 
 import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
 import { showModalOverlay } from '../overlay.js';
@@ -15,14 +16,6 @@ interface ProviderInfo {
   provider: string;
   envVar?: string;
   source: 'oauth' | 'env' | 'stored' | 'none';
-}
-
-/**
- * OAuth credentials are stored under the auth provider id, which differs from
- * the catalog provider id for OpenAI (stored as `openai-codex`).
- */
-function getAuthProviderId(provider: string): string {
-  return provider === 'openai' ? 'openai-codex' : provider;
 }
 
 /**
@@ -39,7 +32,9 @@ export function getProviderList(
     if (seen.has(model.provider)) continue;
 
     let source: ProviderInfo['source'] = 'none';
-    if (ctx.authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
+    // OAuth credentials are stored under the credential id, which differs from
+    // the catalog provider id for OpenAI (`openai-codex`) and Kimi (`kimi-for-coding`).
+    if (ctx.authStorage?.isLoggedIn(getCredentialProviderId(model.provider))) {
       source = 'oauth';
     } else if (ctx.authStorage?.hasStoredApiKey(model.provider)) {
       source = 'stored';

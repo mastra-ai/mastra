@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import type { StreamVNextChunkType } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -20,6 +20,7 @@ import {
   partialCompletedLoop,
   pausedLoop,
   rawCompletedRun,
+  resumedElsewhereLoop,
   suspendedLoop,
 } from './fixtures/completed-loop';
 import { completedChunks, replayedChunks, runningChunk } from './fixtures/workflow-stream';
@@ -406,6 +407,71 @@ describe('WorkflowRunProvider', () => {
       });
       await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('success'));
       expect(screen.getByLabelText('Child output').textContent).toBe('{"words":2}');
+    });
+  });
+
+  describe('when a run resumed outside Studio is observed', () => {
+    it('keeps the stored running state instead of the replayed suspension', async () => {
+      const runId = completedLoop.runId;
+      const start: StreamVNextChunkType = { ...runningChunk, runId };
+      const stepStart: StreamVNextChunkType = {
+        type: 'workflow-step-start',
+        runId,
+        from: 'WORKFLOW',
+        payload: { id: 'persisted', stepCallId: 'persisted-call', status: 'running', payload: {}, startedAt: 100 },
+      };
+      const suspended: StreamVNextChunkType = {
+        type: 'workflow-step-suspended',
+        runId,
+        from: 'WORKFLOW',
+        payload: { id: 'persisted', status: 'suspended', suspendPayload: {}, startedAt: 100, suspendedAt: 105 },
+      };
+      const finish: StreamVNextChunkType = {
+        type: 'workflow-finish',
+        runId,
+        from: 'WORKFLOW',
+        payload: {
+          workflowStatus: 'suspended',
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+        },
+      };
+      let streamController!: ReadableStreamDefaultController<Uint8Array>;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
+        },
+      });
+      const send = (...chunks: StreamVNextChunkType[]) =>
+        act(async () => {
+          streamController.enqueue(
+            new TextEncoder().encode(chunks.map(chunk => JSON.stringify(chunk) + '\x1e').join('')),
+          );
+        });
+      server.use(
+        http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
+          HttpResponse.json(resumedElsewhereLoop),
+        ),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () => HttpResponse.json({ runId })),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/observe`, () => new HttpResponse(stream)),
+      );
+      renderProvider(runId);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
+      fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
+
+      // The server replays the cached suspension, then the live run re-emits it.
+      await send(start, stepStart);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('running'));
+      await send(suspended, finish);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
+      await send(start, stepStart);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('running'));
+      await send(suspended);
+      await act(async () => streamController.close());
+
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
+      expect(screen.getByLabelText('Run state').textContent).toBe('running');
+      expect(screen.getByLabelText('Child state').textContent).toBe('running');
     });
   });
 

@@ -4,16 +4,10 @@ import {
   retentionCutoffMs,
   runRetentionBatches,
 } from '@mastra/core/storage';
-import type {
-  TABLE_NAMES,
-  PruneOptions,
-  PruneResult,
-  RetentionPruneTarget,
-  TableRetentionPolicy,
-} from '@mastra/core/storage';
-import type { LibSQLDB } from './db';
+import type { PruneOptions, PruneResult, RetentionPruneTarget, TableRetentionPolicy } from '@mastra/core/storage';
+import type { LibSQLDB, PrunableTable } from './db';
 
-export type PruneTarget = RetentionPruneTarget<TABLE_NAMES>;
+export type PruneTarget = RetentionPruneTarget<PrunableTable>;
 
 async function ensureAnchorIndex(
   db: LibSQLDB,
@@ -75,5 +69,5 @@ export function resolveTargets({
   >;
   order: string[];
 }): PruneTarget[] {
-  return resolveRetentionTargets<TABLE_NAMES>({ policies, descriptor, order });
+  return resolveRetentionTargets<PrunableTable>({ policies, descriptor, order });
 }

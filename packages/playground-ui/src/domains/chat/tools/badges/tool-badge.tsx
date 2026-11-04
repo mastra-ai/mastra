@@ -1,21 +1,23 @@
+import type { McpInputRequestPayload } from '../mcp-input-request';
+import { isDeferredCall } from '../tool-card-kind';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
+import { BackgroundMcpTaskChip, McpTaskChip } from './mcp-task-chip';
+import { useMcpTaskProgress } from './use-mcp-task-progress';
 import type { MessageMetadata } from '@/domains/chat';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ActivityHeadline } from '@/ds/components/ai/activity';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import {
-  hasToolArguments,
   presentTool,
   stringifyToolValue,
-  stripSerializedAnsi,
-  ToolCallArguments,
+  ToolCallBody,
+  toolCallHasBody,
   ToolCallOutput,
 } from '@/ds/components/ai/tool-call';
+import type { ToolCallView } from '@/ds/components/ai/tool-call';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
@@ -27,7 +29,7 @@ function formatArgs(args: Record<string, unknown> | string): { pretty: string; p
   }
 }
 
-export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
@@ -37,6 +39,12 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   toolCalled?: boolean;
   withoutArgs?: boolean;
   status?: ActivityStatus;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
+  /** `running` while the part holds a deferred call's placeholder; `completed`/`failed` once it holds the result. */
+  backgroundTaskStatus?: string;
+  /** The MCP task question the call is waiting on, if it is. */
+  mcpInputRequest?: McpInputRequestPayload;
 }
 
 export const ToolBadge = ({
@@ -52,11 +60,20 @@ export const ToolBadge = ({
   toolCalled: toolCalledProp,
   withoutArgs,
   status = 'idle',
+  backgroundTaskId,
+  backgroundTaskStatus,
+  mcpInputRequest,
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
-  const resultPretty =
-    result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
+  const view: ToolCallView = {
+    toolName,
+    args: argsObject,
+    argsText: argsPretty,
+    hideArguments: withoutArgs,
+    status,
+    result,
+  };
 
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -64,12 +81,11 @@ export const ToolBadge = ({
   const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
-  const hasBody =
-    hasToolArguments({ toolName, args: argsObject, argsText: argsPretty, hideArguments: withoutArgs }) ||
-    Boolean(suspendPayload) ||
-    Boolean(resultPretty) ||
-    toolOutput.length > 0 ||
-    awaitsToolApproval({ toolApprovalMetadata, toolCalled });
+  const needsApproval = awaitsToolApproval({ toolApprovalMetadata, toolCalled });
+  const hasBody = toolCallHasBody(view) || Boolean(suspendPayload) || toolOutput.length > 0 || needsApproval;
+
+  const deferred = isDeferredCall(backgroundTaskId, backgroundTaskStatus);
+  const mcpTask = useMcpTaskProgress(result, status, { deferred, request: mcpInputRequest });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -77,11 +93,20 @@ export const ToolBadge = ({
       : undefined;
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="tool-badge"
-      header={
-        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
-      }
+      icon={<ToolIcon aria-hidden />}
+      title={label}
+      detail={detail}
+      description={description}
       status={status}
       extraInfo={
         metadata?.mode === 'network' ? (
@@ -89,21 +114,23 @@ export const ToolBadge = ({
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
+        ) : mcpTask || (bgEntry?.taskId && bgEntry?.startedAt) ? (
+          <>
+            {mcpTask &&
+              (backgroundTaskId ? (
+                <BackgroundMcpTaskChip task={mcpTask} backgroundTaskId={backgroundTaskId} />
+              ) : (
+                <McpTaskChip task={mcpTask} />
+              ))}
+            {bgEntry?.taskId && bgEntry?.startedAt && <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />}
+          </>
         ) : null
       }
-      initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
+      initialCollapsed={!(toolApprovalMetadata ?? suspendPayload)}
     >
       {hasBody && (
         <>
-          <ToolCallArguments
-            toolName={toolName}
-            args={argsObject}
-            argsText={argsPretty}
-            hideArguments={withoutArgs}
-            data-testid="tool-args"
-          />
+          <ToolCallBody {...view} showFullArguments={needsApproval} />
 
           {suspendPayload !== undefined && suspendPayload && (
             <div>
@@ -116,8 +143,6 @@ export const ToolBadge = ({
             </div>
           )}
 
-          {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
-
           {toolOutput.length > 0 && (
             <div>
               <SectionLabel>Tool output</SectionLabel>
@@ -126,17 +151,8 @@ export const ToolBadge = ({
               </div>
             </div>
           )}
-
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
         </>
       )}
-    </BadgeWrapper>
+    </ToolApprovalBadge>
   );
 };

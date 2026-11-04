@@ -24,9 +24,8 @@ export async function resolveProjectId(
   opts: { config?: string; project?: string },
   auth?: { token: string; orgId: string },
 ): Promise<string> {
-  const envProjectId = process.env.MASTRA_PROJECT_ID;
-  if (envProjectId) return envProjectId;
-
+  // An explicit --project flag beats the environment so a command can target
+  // another project from a shell that exports MASTRA_PROJECT_ID.
   if (opts.project) {
     if (auth) {
       const projects = await fetchServerProjects(auth.token, auth.orgId);
@@ -35,6 +34,9 @@ export async function resolveProjectId(
     }
     return opts.project;
   }
+
+  const envProjectId = process.env.MASTRA_PROJECT_ID;
+  if (envProjectId) return envProjectId;
 
   const config = await loadProjectConfig(process.cwd(), opts.config);
   if (!config?.projectId) {

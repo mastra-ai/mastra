@@ -14,7 +14,7 @@ export type TabsRootProps<T extends string> = Omit<
   value?: T;
   onValueChange?: (value: T) => void;
   appearance?: 'default' | 'contained';
-  frame?: 'stroke' | 'inset';
+  frame?: 'inset';
   className?: string;
 };
 
@@ -24,7 +24,7 @@ export const Tabs = <T extends string>({
   value,
   onValueChange,
   appearance = 'default',
-  frame = 'stroke',
+  frame = 'inset',
   className,
   ...props
 }: TabsRootProps<T>) => {
@@ -35,7 +35,7 @@ export const Tabs = <T extends string>({
     onValueChange?.(next);
   };
   return (
-    <TabsContext.Provider value={{ appearance, frame, value: selectedValue, select }}>
+    <TabsContext.Provider value={{ appearance, value: selectedValue, select }}>
       <BaseTabs.Root
         defaultValue={defaultTab}
         value={selectedValue}

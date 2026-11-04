@@ -365,6 +365,28 @@ interface ProviderConfig {
   url?: string;                    // Optional API base URL
   apiKeyHeader?: string;           // Optional custom auth header
   docUrl?: string;                 // Optional documentation URL
+  pricing?: Record<string, ModelPricing>; // Optional prices per model ID
+}
+```
+
+### Model pricing
+
+models.dev does not list private deployments, so their calls have no cost in [metrics](/docs/observability/metrics/overview). Add a `pricing` entry per model to give them one. Prices are in USD per 1 million tokens and use the same keys as a model's `cost` on [models.dev](https://models.dev): `input`, `output`, `cache_read`, `cache_write`, `reasoning`, `input_audio`, and `output_audio`. `@mastra/observability` reads these prices on the first call to a model it can't price, which also picks up gateways added later with `addGateway()`. Under `mastra dev`, or with `MASTRA_AUTO_REFRESH_PRICING=true`, it also reads them when Mastra starts, so the first call is priced too. models.dev prices take precedence. A gateway price is used only when models.dev has none for that provider and model ID, and then it applies to every call with those IDs, including direct calls. Give a reseller its own provider ID when its rates must stay separate from direct calls. A gateway whose `fetchProviders()` fails is logged and retried about once an hour. Set `MASTRA_OFFLINE=true` to skip loading them. The same shape as models.dev also means you can add `tiers` for long-context pricing.
+
+```typescript
+async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+  return {
+    'my-provider': {
+      name: 'My Provider',
+      models: ['model-1'],
+      apiKeyEnvVar: 'MY_API_KEY',
+      gateway: 'private',
+      url: 'https://api.myprovider.com/v1',
+      pricing: {
+        'model-1': { input: 0.5, output: 1.5, cache_read: 0.05 },
+      },
+    },
+  };
 }
 ```
 

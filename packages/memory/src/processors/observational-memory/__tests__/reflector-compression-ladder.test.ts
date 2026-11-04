@@ -117,6 +117,25 @@ describe('reflector compression retry ladder', () => {
     expect(scripted.callCount).toBe(4);
   });
 
+  it('marks the failed marker for an attempt it is about to retry as retrying', async () => {
+    const scripted = createScriptedModel([observationsPayload(LONG_BODY), observationsPayload('short')]);
+    const reflector = createReflectorRunner(scripted.model);
+    const written: any[] = [];
+
+    await reflector.call(SOURCE_OBSERVATIONS, undefined, {
+      writer: { custom: async (part: any) => void written.push(part) } as any,
+      cycleId: 'cycle-1',
+      startedAt: new Date().toISOString(),
+      recordId: 'record-1',
+      threadId: 'thread-1',
+    });
+
+    const failed = written.filter(part => part.type === 'data-om-observation-failed');
+    expect(failed).toHaveLength(1);
+    expect(failed[0].data).toMatchObject({ operationType: 'reflection', retrying: true });
+    expect(failed[0].data.error).toContain('retrying at level');
+  });
+
   it('exits when a retry successfully compresses below the threshold', async () => {
     const scripted = createScriptedModel([observationsPayload(LONG_BODY), observationsPayload('short')]);
     const reflector = createReflectorRunner(scripted.model);

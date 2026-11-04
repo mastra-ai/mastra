@@ -20,6 +20,43 @@ test.describe('Trace query filtering', () => {
     });
   });
 
+  test.describe('when filtering traces by root duration', () => {
+    test('sends a top-level durationMs predicate and keeps it in the URL', async ({ page }) => {
+      await mockTraceQueryCapabilities(page);
+      const bodies: unknown[] = [];
+      await page.route('**/api/observability/traces/query', route => {
+        bodies.push(route.request().postDataJSON());
+        return route.fulfill({ json: traceQueryPage });
+      });
+      await page.goto('/traces');
+      await expect(page.getByText('Studio preview agent', { exact: true })).toBeVisible();
+
+      const input = page.getByRole('combobox', { name: 'Add filter' });
+      await input.click();
+      await input.fill('Duration (ms)');
+      await page.getByRole('option', { name: 'Duration (ms)', exact: true }).click();
+      await page.getByRole('option', { name: 'greater than' }).click();
+      await input.fill('2000');
+      await input.press('Enter');
+
+      await expect(page).toHaveURL(/filterDurationMs=2000&filterDurationMs\.op=gt/);
+      await expect
+        .poll(() => JSON.stringify(bodies.at(-1)))
+        .toContain(JSON.stringify({ op: 'gt', left: { path: 'durationMs' }, right: { literal: 2000 } }));
+      await expect(page.getByText('Studio preview agent', { exact: true })).toBeVisible();
+    });
+
+    test('hides the field when the server cannot filter on root duration', async ({ page }) => {
+      await mockTraceQueryCapabilities(page, { rootDuration: false });
+      await page.route('**/api/observability/traces/query', route => route.fulfill({ json: traceQueryPage }));
+      await page.goto('/traces');
+
+      await page.getByRole('combobox', { name: 'Add filter' }).click();
+      await expect(page.getByRole('option', { name: 'Trace ID' })).toBeVisible();
+      await expect(page.getByRole('option', { name: 'Duration (ms)', exact: true })).toHaveCount(0);
+    });
+  });
+
   test.describe('when opening an obsolete service-name filter URL', () => {
     test('uses trace queries without requesting a legacy list', async ({ page }) => {
       await mockTraceQueryCapabilities(page);

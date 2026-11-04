@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { useAgentMessages } from '@mastra/playground-ui/domains/agents/hooks/use-agent-messages';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -22,7 +23,6 @@ import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { buildFormSnapshotInstructions } from '@/domains/agent-builder/services/build-form-snapshot';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
-import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 
 interface ConversationPanelProviderProps {
   initialUserMessage?: string;
@@ -204,7 +204,7 @@ const ConversationComposer = () => {
       disabled={isRunning}
       isRunning={isRunning}
       canSubmit={trimmed.length > 0 && !isRunning}
-      placeholder="Tell the builder what to change…"
+      placeholder="Tell the builder what to change"
       inputTestId="agent-builder-conversation-input"
       submitTestId="agent-builder-conversation-submit"
       containerTestId="agent-builder-conversation-composer"

@@ -61,6 +61,81 @@ function getWorkflowIdMetadata(
   throw new Error(`Unable to determine workflow id for ${workflowName} in ${filePath}`);
 }
 
+type StaticProperty = { readable: true; value?: t.Node } | { readable: false };
+
+function getStaticKey(property: t.ObjectProperty | t.ObjectMethod): string | null {
+  if (property.computed && t.isTemplateLiteral(property.key) && property.key.expressions.length === 0) {
+    return property.key.quasis[0]?.value.cooked ?? null;
+  }
+
+  if (property.computed && t.isStringLiteral(property.key)) {
+    return property.key.value;
+  }
+
+  return getObjectPropertyName(property);
+}
+
+function isDynamicKey(property: t.ObjectProperty | t.ObjectMethod): boolean {
+  return (
+    property.computed &&
+    !t.isStringLiteral(property.key) &&
+    !(t.isTemplateLiteral(property.key) && property.key.expressions.length === 0)
+  );
+}
+
+// A later property overrides an earlier one, so a spread or `[key]` hides `name` only when it
+// comes after the last `name` written out in source.
+function findStaticProperty(object: t.ObjectExpression, name: string): StaticProperty {
+  let found: StaticProperty = { readable: true };
+
+  for (const property of object.properties) {
+    if (t.isSpreadElement(property) || isDynamicKey(property)) {
+      found = { readable: false };
+      continue;
+    }
+
+    if (getStaticKey(property) === name) {
+      found = t.isObjectProperty(property) ? { readable: true, value: property.value } : { readable: false };
+    }
+  }
+
+  return found;
+}
+
+/**
+ * Read at build time so runs started outside `TemporalRun` (Schedules, the Temporal CLI) use the
+ * workflow's setting too. `TemporalRun` also sends the setting, which covers `options` the build
+ * cannot read.
+ */
+function getWorkflowValidateInputs(
+  workflowConfig: t.ObjectExpression,
+  workflowName: string,
+  filePath: string,
+): boolean | undefined {
+  const options = findStaticProperty(workflowConfig, 'options');
+  if (options.readable && !options.value) {
+    return undefined;
+  }
+
+  if (options.readable && t.isObjectExpression(options.value)) {
+    const validateInputs = findStaticProperty(options.value, 'validateInputs');
+    if (validateInputs.readable && !validateInputs.value) {
+      return undefined;
+    }
+
+    if (validateInputs.readable && t.isBooleanLiteral(validateInputs.value)) {
+      return validateInputs.value.value;
+    }
+  }
+
+  console.warn(
+    `[@mastra/temporal] Could not read options.validateInputs of ${workflowName} in ${filePath} at build time. ` +
+      'Runs started with run.start() or run.startAsync() use the workflow setting. ' +
+      'Runs started another way, such as from a Temporal Schedule, check step input.',
+  );
+  return undefined;
+}
+
 /**
  * The helper runtime lives in its own `.mjs` module so it can be linted and unit-tested
  * like normal code. We parse that file directly here instead of using `Function#toString()`,
@@ -108,16 +183,28 @@ function getTemporalWorkflowRuntimeOptions(program: t.Program): t.ObjectExpressi
         continue;
       }
 
-      for (const property of temporalParams.properties) {
-        if (
-          t.isObjectProperty(property) &&
-          getObjectPropertyName(property) === 'startToCloseTimeout' &&
-          t.isExpression(property.value)
-        ) {
-          return t.objectExpression([
-            t.objectProperty(t.identifier('startToCloseTimeout'), t.cloneNode(property.value, true)),
-          ]);
+      const runtimeProperties = new Map<string, t.ObjectProperty>();
+      const collectRuntimeProperties = (params: t.ObjectExpression): void => {
+        for (const property of params.properties) {
+          if (t.isSpreadElement(property)) {
+            if (!t.isObjectExpression(property.argument)) {
+              continue;
+            }
+            collectRuntimeProperties(property.argument);
+            continue;
+          }
+          if (!t.isObjectProperty(property) || !t.isExpression(property.value)) {
+            continue;
+          }
+          const name = getObjectPropertyName(property);
+          if (name === 'startToCloseTimeout' || name === 'retry') {
+            runtimeProperties.set(name, t.objectProperty(t.identifier(name), t.cloneNode(property.value, true)));
+          }
         }
+      };
+      collectRuntimeProperties(temporalParams);
+      if (runtimeProperties.size > 0) {
+        return t.objectExpression([...runtimeProperties.values()]);
       }
     }
   }
@@ -202,8 +289,11 @@ function collectStepBindings(program: t.Program): Map<string, string> {
   return stepBindings;
 }
 
-function collectWorkflowBindings(program: t.Program, filePath: string): Map<string, string> {
-  const workflowBindings = new Map<string, string>();
+// The Temporal workflow type the child runs as, and the Mastra workflow id its step records use.
+type WorkflowBinding = { workflowType: string; workflowId: string };
+
+function collectWorkflowBindings(program: t.Program, filePath: string): Map<string, WorkflowBinding> {
+  const workflowBindings = new Map<string, WorkflowBinding>();
 
   for (const statement of program.body) {
     if (
@@ -229,7 +319,7 @@ function collectWorkflowBindings(program: t.Program, filePath: string): Map<stri
       }
 
       const { workflowId } = getWorkflowIdMetadata(workflowConfig, declaration.id.name, filePath);
-      workflowBindings.set(declaration.id.name, toWorkflowType(workflowId));
+      workflowBindings.set(declaration.id.name, { workflowType: toWorkflowType(workflowId), workflowId });
     }
   }
 
@@ -273,7 +363,7 @@ function rewriteChainMethod(
   workflowId: string,
   mappingOrdinal: number,
   stepBindings: Map<string, string>,
-  workflowBindings: Map<string, string>,
+  workflowBindings: Map<string, WorkflowBinding>,
 ): { name: string; args: t.Expression[] } {
   const argNode = (index: number): t.Node | undefined => method.args[index];
   const rewritten = (args: t.Expression[], name = method.name) => ({ name, args });
@@ -284,9 +374,12 @@ function rewriteChainMethod(
     case 'then': {
       const arg = argNode(0);
       if (t.isIdentifier(arg)) {
-        const workflowType = workflowBindings.get(arg.name);
-        if (workflowType) {
-          return rewritten([t.stringLiteral(workflowType)], 'thenWorkflow');
+        const binding = workflowBindings.get(arg.name);
+        if (binding) {
+          return rewritten(
+            [t.stringLiteral(binding.workflowType), t.stringLiteral(binding.workflowId)],
+            'thenWorkflow',
+          );
         }
       }
 
@@ -335,11 +428,12 @@ function rewriteChainMethod(
       }
       const entries = arg.elements.map(element => {
         if (t.isIdentifier(element)) {
-          const workflowType = workflowBindings.get(element.name);
-          if (workflowType) {
+          const binding = workflowBindings.get(element.name);
+          if (binding) {
             return t.objectExpression([
               t.objectProperty(t.identifier('type'), t.stringLiteral('childWorkflow')),
-              t.objectProperty(t.identifier('workflowType'), t.stringLiteral(workflowType)),
+              t.objectProperty(t.identifier('workflowType'), t.stringLiteral(binding.workflowType)),
+              t.objectProperty(t.identifier('id'), t.stringLiteral(binding.workflowId)),
             ]);
           }
         }
@@ -453,14 +547,21 @@ function createTemporalWorkflowStatements(
   filePath: string,
   includeCommit: boolean,
   stepBindings: Map<string, string>,
-  workflowBindings: Map<string, string>,
+  workflowBindings: Map<string, WorkflowBinding>,
   runtimeOptions?: t.ObjectExpression,
+  validateInputs?: boolean,
 ): t.Statement[] {
   // Start from `createWorkflow(<static id>)` and rebuild the chain one call at a time
   // using normalized arguments from `rewriteChainMethod`.
   const createWorkflowArgs = [t.cloneNode(workflowId, true)];
-  if (runtimeOptions) {
-    createWorkflowArgs.push(t.cloneNode(runtimeOptions, true));
+  const optionProperties = runtimeOptions ? runtimeOptions.properties.map(property => t.cloneNode(property, true)) : [];
+
+  if (validateInputs !== undefined) {
+    optionProperties.push(t.objectProperty(t.identifier('validateInputs'), t.booleanLiteral(validateInputs)));
+  }
+
+  if (optionProperties.length > 0) {
+    createWorkflowArgs.push(t.objectExpression(optionProperties));
   }
 
   let expression: t.Expression = t.callExpression(t.identifier('createWorkflow'), createWorkflowArgs);
@@ -585,7 +686,7 @@ interface WorkflowTransformState {
   inlineExportedWorkflowNames: Set<string>;
   strippedNames: Set<string>;
   stepBindings: Map<string, string>;
-  workflowBindings: Map<string, string>;
+  workflowBindings: Map<string, WorkflowBinding>;
   workflowExports: TemporalWorkflowExport[];
   runtimeOptions?: t.ObjectExpression;
 }
@@ -689,7 +790,7 @@ function getNormalizedWorkflowBindingName(name: string, state: WorkflowTransform
     return null;
   }
 
-  return state.workflowBindings.get(name) ?? name;
+  return state.workflowBindings.get(name)?.workflowType ?? name;
 }
 
 function rewriteWorkflowNamedExport(statement: t.ExportNamedDeclaration, state: WorkflowTransformState): void {
@@ -787,6 +888,7 @@ function rewriteWorkflowVariableDeclaration(
         state.stepBindings,
         state.workflowBindings,
         state.runtimeOptions,
+        getWorkflowValidateInputs(workflowConfig, declaration.id.name, filePath),
       ),
     );
   }

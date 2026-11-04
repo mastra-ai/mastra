@@ -5,10 +5,11 @@ import { queryKeys } from '../api/keys';
 import type {
   ArtifactListing,
   DirectoryListing,
+  WorkspaceChangePatches,
   WorkspaceChanges,
-  WorkspaceDiff,
+  WorkspaceChangesScope,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeListing,
   WorkspaceRenderedListing,
 } from '../api/types';
 
@@ -28,9 +29,9 @@ function workspaceRenderedListingUrl(workspacePath: string | undefined, root: st
   return `/web/workspace/rendered/list?${new URLSearchParams({ workspacePath, root })}`;
 }
 
-function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined, threadId: string | undefined) {
-  if (!workspacePath || !path || !threadId) return undefined;
-  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path, threadId })}`;
+function workspaceFileUrl(workspacePath: string | undefined, path: string | undefined) {
+  if (!workspacePath || !path) return undefined;
+  return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
 }
 
 export function isPlanReadablePath(path: string | undefined): path is string {
@@ -76,15 +77,9 @@ function workspaceChangesUrl(workspacePath: string | undefined) {
   return `/web/workspace/changes?${new URLSearchParams({ workspacePath })}`;
 }
 
-function workspaceDiffUrl(
-  workspacePath: string | undefined,
-  path: string | undefined,
-  previousPath: string | undefined,
-) {
-  if (!workspacePath || !path) return undefined;
-  const params = new URLSearchParams({ workspacePath, path });
-  if (previousPath) params.set('previousPath', previousPath);
-  return `/web/workspace/changes/diff?${params}`;
+function workspacePatchesUrl(workspacePath: string | undefined, scope: WorkspaceChangesScope) {
+  if (!workspacePath) return undefined;
+  return `/web/workspace/changes/patches?${new URLSearchParams({ workspacePath, scope })}`;
 }
 
 /**
@@ -127,31 +122,34 @@ export function useWorkspaceRenderedListing(
   });
 }
 
-export function useWorkspaceFiles(
+/**
+ * One directory of a session's checkouts, read live from its sandbox (`''` is
+ * the top level). Each open folder is its own query, so a refresh or a tool
+ * call only refetches what is on screen.
+ */
+export function useWorkspaceTree(
   workspacePath: string | undefined,
-  threadId: string | undefined,
+  path: string,
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
-  const url =
-    workspacePath && threadId ? `/web/workspace/files?${new URLSearchParams({ workspacePath, threadId })}` : undefined;
-  return useQuery<WorkspaceFilesListing>({
-    queryKey: queryKeys.workspaceFiles(workspacePath, threadId),
+  const url = workspacePath ? `/web/workspace/tree?${new URLSearchParams({ workspacePath, path })}` : undefined;
+  return useQuery<WorkspaceTreeListing>({
+    queryKey: queryKeys.workspaceTree(workspacePath, path),
     enabled,
-    queryFn: url ? () => client.get<WorkspaceFilesListing>(url) : skipToken,
+    queryFn: url ? () => client.get<WorkspaceTreeListing>(url) : skipToken,
   });
 }
 
 export function useWorkspaceFile<TData = WorkspaceFile>(
   workspacePath: string | undefined,
   filePath: string | undefined,
-  threadId: string | undefined,
   { enabled = true, select }: { enabled?: boolean; select?: (file: WorkspaceFile) => TData } = {},
 ) {
   const { client } = useApiConfig();
-  const url = workspaceFileUrl(workspacePath, filePath, threadId);
+  const url = workspaceFileUrl(workspacePath, filePath);
   return useQuery<WorkspaceFile, Error, TData>({
-    queryKey: queryKeys.workspaceFile(workspacePath, filePath, threadId),
+    queryKey: queryKeys.workspaceFile(workspacePath, filePath),
     enabled,
     queryFn: url ? () => client.get<WorkspaceFile>(url) : skipToken,
     select,
@@ -188,17 +186,16 @@ export function useWorkspaceChanges(workspacePath: string | undefined, { enabled
   });
 }
 
-export function useWorkspaceDiff(
+export function useWorkspacePatches(
   workspacePath: string | undefined,
-  filePath: string | undefined,
-  previousFilePath?: string,
+  scope: WorkspaceChangesScope,
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
-  const url = workspaceDiffUrl(workspacePath, filePath, previousFilePath);
-  return useQuery<WorkspaceDiff>({
-    queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
+  const url = workspacePatchesUrl(workspacePath, scope);
+  return useQuery<WorkspaceChangePatches>({
+    queryKey: queryKeys.workspacePatches(workspacePath, scope),
     enabled,
-    queryFn: url ? () => client.get<WorkspaceDiff>(url) : skipToken,
+    queryFn: url ? () => client.get<WorkspaceChangePatches>(url) : skipToken,
   });
 }

@@ -7,13 +7,13 @@ import { AIV6Adapter } from './AIV6Adapter';
 
 const output = { value: 42, receipt: 'r-1' };
 
-function expectStoredOutput(message: MastraDBMessage) {
-  expect(message.content.toolInvocations?.[0]?.result).toEqual(output);
+function expectStoredOutput(message: MastraDBMessage, expectedOutput: unknown = output) {
+  expect(message.content.toolInvocations?.[0]?.result).toEqual(expectedOutput);
 
   const part = message.content.parts.find(
     (candidate): candidate is MastraToolInvocationPart => candidate.type === 'tool-invocation',
   );
-  expect(part?.toolInvocation).toMatchObject({ state: 'result', result: output });
+  expect(part?.toolInvocation).toMatchObject({ state: 'result', result: expectedOutput });
 }
 
 describe('UI tool output containing a value key', () => {
@@ -50,5 +50,60 @@ describe('UI tool output containing a value key', () => {
     };
 
     expectStoredOutput(AIV6Adapter.fromUIMessage(message));
+  });
+});
+
+describe('AIV5 model tool output containing a value key', () => {
+  function fromModelMessage(toolOutput: AIV5Type.ToolResultPart['output']) {
+    return AIV5Adapter.fromModelMessage({
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'call-v5',
+          toolName: 'lookup',
+          output: toolOutput,
+        },
+      ],
+    });
+  }
+
+  it('preserves sibling fields', () => {
+    expectStoredOutput(fromModelMessage(output), output);
+  });
+
+  it.each([0, false, '', null])('unwraps a legacy sole-key envelope containing %#', value => {
+    expectStoredOutput(fromModelMessage({ value }), value);
+  });
+
+  it.each([
+    ['error-text', 'failed'],
+    ['error-json', { code: 'E_FAIL' }],
+  ] as const)('stores a documented %s wrapper as an errored invocation', (type, value) => {
+    const message = fromModelMessage({ type, value });
+    const errorText = typeof value === 'string' ? value : JSON.stringify(value);
+
+    expect(message.content.toolInvocations?.[0]).toMatchObject({
+      state: 'output-error',
+      result: value,
+      errorText,
+    });
+
+    const part = message.content.parts.find(
+      (candidate): candidate is MastraToolInvocationPart => candidate.type === 'tool-invocation',
+    );
+    expect(part?.toolInvocation).toMatchObject({
+      state: 'output-error',
+      result: value,
+      errorText,
+    });
+
+    expect(AIV5Adapter.toUIMessage(message).parts).toContainEqual(
+      expect.objectContaining({
+        type: 'tool-lookup',
+        state: 'output-error',
+        errorText,
+      }),
+    );
   });
 });

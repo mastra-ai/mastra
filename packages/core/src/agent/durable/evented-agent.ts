@@ -1,22 +1,22 @@
 /**
- * EventedAgent - A durable agent that uses fire-and-forget execution.
+ * EventedAgent - A durable agent that executes steps through event workers.
  *
  * EventedAgent extends DurableAgent and overrides the execution strategy to use
- * fire-and-forget execution: the workflow run is started without awaiting it.
- *
- * Unlike DurableAgent which runs the workflow synchronously, EventedAgent:
- * 1. Uses an un-awaited start() for non-blocking execution
- * 2. Fire-and-forget pattern - execution starts and returns immediately
- * 3. Events are streamed via pubsub as the workflow executes
+ * the evented workflow engine. stream() returns without awaiting execution,
+ * while the run's completion promise is tracked for safe suspension/resume.
+ * Events are streamed via pubsub as the workflow executes.
  */
 
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { createObservabilityContext } from '../../observability';
 import type { ShouldPersistSnapshotFn } from '../../workflows/types';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
-import { globalRunRegistry } from './run-registry';
+import { DurableExecutionFenceError, EXECUTION_UNVERIFIED_ERROR_ID, setExecutionClaim } from './execution-fence';
+import { getRunRegistryEntry } from './run-registry';
 import type { DurableAgenticWorkflowInput } from './types';
 import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic-workflow';
 
@@ -41,12 +41,12 @@ export interface EventedAgentConfig<
  *   `recoverActiveRuns()` (running step state is persisted before execution)
  *
  * The key difference from DurableAgent is the execution strategy:
- * - DurableAgent: Runs the workflow synchronously via createRun + start
- * - EventedAgent: Starts the run without awaiting it (fire-and-forget); steps
- *   execute via events on `mastra.pubsub`, so any worker sharing that bus can
- *   process them. The agent's stream follows `mastra.pubsub`, so streaming,
- *   suspend/resume, and finish events work even when the agent was constructed
- *   with its own pubsub.
+ * - DurableAgent: Runs workflow steps in-process via createRun + start.
+ * - EventedAgent: Steps execute via events on `mastra.pubsub`, so any worker
+ *   sharing that bus can process them. The agent's stream follows
+ *   `mastra.pubsub`, so streaming, suspend/resume, and finish events work even
+ *   when the agent was constructed with its own pubsub. Execution is tracked
+ *   in the background so resume waits for suspension persistence.
  *
  * Register the EventedAgent on a `Mastra` instance (with storage) to get
  * evented execution — the evented engine needs the host's pubsub, storage,
@@ -107,6 +107,8 @@ export class EventedAgent<
     return 'evented';
   }
 
+  #warnedUnfencedSharedExecution = false;
+
   /**
    * EventedAgent owns its snapshot-persistence policy and always persists the
    * full set (`pending | paused | suspended | running`), ignoring any
@@ -142,18 +144,42 @@ export class EventedAgent<
   }
 
   /**
-   * Execute the durable workflow using fire-and-forget pattern.
+   * Execute the durable workflow using the evented engine.
    *
-   * Unlike DurableAgent which runs the workflow synchronously, EventedAgent starts
-   * the run without awaiting it, then cleans up snapshots when the background
-   * promise reaches a non-suspended terminal status.
+   * The caller tracks this promise in the background without blocking stream(),
+   * then cleans up snapshots on a non-suspended terminal status.
    *
    * @param runId - The unique run ID
    * @param workflowInput - The serialized workflow input
    * @internal
    */
+  // The evented engine may resolve before the suspended snapshot lands, so
+  // closeOnSuspend keeps closing on the SUSPENDED event.
+  protected override get suspendPersistedOnReturn(): boolean {
+    return false;
+  }
+
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+    // Captured now: a later resume() replaces the registry's fence before this
+    // segment's background promise settles.
+    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
+    const executionFence = entry?.executionFence;
+    const pubsub = this.getMastraInstance()?.pubsub ?? this.getPubSub();
+    const sharedTransport =
+      this.resolveWorkflowEngine() === 'evented' &&
+      pubsub !== undefined &&
+      !(pubsub.__rawBus() instanceof EventEmitterPubSub);
+    const sharedExecution = sharedTransport && executionFence?.generation !== undefined;
+    if (entry) entry.eventedExecution = sharedExecution;
     try {
+      if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
+        this.#warnedUnfencedSharedExecution = true;
+        this.guardrailLogger?.warn(
+          `EventedAgent '${this.id}': shared execution without storage-backed run fencing keeps its existing ` +
+            'behavior: API shutdown or loss can interrupt remote workers. Use a shared fencing-capable storage adapter ' +
+            'to keep workers running independently of the API process.',
+        );
+      }
       const workflow = this.getWorkflow();
       // The evented engine executes via pubsub events consumed by in-process
       // workers — without them `run.start()` never resolves (it waits on the
@@ -165,6 +191,22 @@ export class EventedAgent<
       const memoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
+      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
+      if (sharedExecution && entry?.requestContext && executionFence && threadId) {
+        await agentThreadStreamRuntime.claimDurableThreadLease(
+          pubsub,
+          runId,
+          threadId,
+          workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+          executionFence.generation,
+          executionFence.executionId,
+        );
+        setExecutionClaim(entry.requestContext, runId, {
+          ...executionFence.claim,
+          threadId,
+          resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+        });
+      }
       // Note: unlike the default engine, evented `createRun` accepts no
       // `pubsub` — the engine always publishes on `mastra.pubsub` so any
       // worker in a fleet can execute a step. The agent's stream still sees
@@ -179,46 +221,71 @@ export class EventedAgent<
       const run = await workflow.createRun({
         runId,
         resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        ...(this.resolveWorkflowEngine() === 'default' ? { pubsub: this.pubsubInternal } : {}),
+        ...(this.resolveWorkflowEngine() === 'default'
+          ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) }
+          : {}),
       });
-      // Fire and forget - don't await the run, so stream() returns immediately.
+      // stream() runs executeWorkflow in the background. Track the full run here
+      // so an immediate resume waits for the suspension snapshot to be persisted.
       // Pass the caller's requestContext (so config selectors pick the same observability
       // instance the root spans were created with) and parent the run under the AGENT_RUN span.
-      const entry = globalRunRegistry.get(runId);
-      run
+      await run
         .start({
           inputData: workflowInput,
           requestContext: entry?.requestContext,
           actor: workflowInput.options?.actor,
           ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
         })
-        .then(async result => {
+        .then(
           // A failure the loop itself didn't catch resolves (not rejects) with
           // status 'failed' — mirror DurableAgent.executeWorkflow and publish
           // an ERROR event, otherwise the caller's stream never terminates
-          // (#17727's idle-start gap on the evented transport).
-          if (result?.status === 'failed') {
-            const error = new Error((result as any).error?.message || 'Workflow execution failed');
-            // Background variant: a pubsub already closing during shutdown must
-            // not turn the run's own failure into an unhandledRejection (#23168).
-            this.emitErrorInBackground(runId, error);
-          }
-          // Reaching any non-suspended terminal status means the run is done and
-          // its persisted snapshot rows will never be resumed. Delete them so
-          // finished runs stop showing up in listActiveRuns() and being re-driven
-          // by recoverActiveRuns() (#22209). Suspended runs keep their snapshots
-          // so `resume()` / `recoverActiveRuns()` can find them. If the process
-          // dies before this fires, the run is a genuine orphan and the recover
-          // path performs the same cleanup once it reaches a terminal status.
-          if (result?.status && result.status !== 'suspended') {
-            await this.deleteRunSnapshots(runId);
-          }
-        })
-        .catch(error => {
-          this.emitErrorInBackground(runId, error instanceof Error ? error : new Error(String(error)));
-        });
+          // (#17727's idle-start gap on the evented transport). Non-suspended
+          // terminal runs also drop their snapshots so they stop being
+          // re-driven by recoverActiveRuns() (#22209). If the process dies
+          // before this fires, the recover path performs the same cleanup.
+          result => {
+            if (sharedExecution) {
+              executionFence?.detach();
+              return;
+            }
+            return this.settleExecution(runId, executionFence, {
+              status: result?.status,
+              error:
+                result?.status === 'failed'
+                  ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
+                  : undefined,
+            });
+          },
+          // settleExecution never rejects: a pubsub already closing during
+          // shutdown must not become an unhandledRejection (#23168).
+          error => {
+            if (sharedExecution) {
+              executionFence?.detach();
+              // A claim released with no successor leaves nobody to publish to this run's stream, so end it here
+              // without touching run state. After a takeover the successor publishes on the same topic.
+              if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_UNVERIFIED_ERROR_ID) {
+                return this.emitError(runId, error, executionFence?.generation).catch(publishError =>
+                  this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError }),
+                );
+              }
+              this.getMastraInstance()
+                ?.getLogger()
+                ?.warn('Evented durable observer disconnected; workers retain settlement authority', {
+                  runId,
+                  error,
+                });
+              return;
+            }
+            return this.settleExecution(runId, executionFence, {
+              error: this.workflowExecutionError(error, 'Workflow execution failed'),
+            });
+          },
+        );
     } catch (error) {
-      this.emitErrorInBackground(runId, error instanceof Error ? error : new Error(String(error)));
+      await this.settleExecution(runId, executionFence, {
+        error: this.workflowExecutionError(error, 'Workflow execution failed'),
+      });
     }
   }
 }

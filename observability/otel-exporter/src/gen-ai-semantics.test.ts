@@ -9,6 +9,7 @@ import type {
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
 import { __setObservabilityFeaturesForTest } from './features';
+import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
 import { getAttributes, formatUsageMetrics, getSpanName } from './gen-ai-semantics';
 
 const INFERENCE_ENABLED = new Set(['model-inference-span']);
@@ -591,5 +592,65 @@ describe('getAttributes - one span per model call', () => {
       expect(attrs['gen_ai.operation.name']).toBe('model_inference');
       expect(attrs).not.toHaveProperty('gen_ai.usage.input_tokens');
     });
+  });
+});
+
+describe('convertMastraMessagesToGenAIMessages', () => {
+  const convert = (value: unknown) => JSON.parse(convertMastraMessagesToGenAIMessages(JSON.stringify(value)));
+
+  it('keeps tool calls from a tool-only model output as tool_call parts', () => {
+    expect(
+      convert({
+        text: '',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'get_weather', args: { city: 'Paris' } }],
+      }),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [{ type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: JSON.stringify({ city: 'Paris' }) }],
+      },
+    ]);
+  });
+
+  it('keeps both the text and the tool calls when a step has both', () => {
+    expect(
+      convert({
+        text: 'Let me check.',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'get_weather', args: { city: 'Paris' } }],
+      }),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'text', content: 'Let me check.' },
+          { type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: JSON.stringify({ city: 'Paris' }) },
+        ],
+      },
+    ]);
+  });
+
+  it('still emits a text part for a text-only output, even when empty', () => {
+    expect(convert({ text: 'hello', toolCalls: [] })).toEqual([
+      { role: 'assistant', parts: [{ type: 'text', content: 'hello' }] },
+    ]);
+    expect(convert({ text: '' })).toEqual([{ role: 'assistant', parts: [{ type: 'text', content: '' }] }]);
+  });
+
+  it('converts the bare message list recorded as inference input', () => {
+    expect(
+      convert([
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: 'Weather in Paris?' },
+      ]),
+    ).toEqual([
+      { role: 'system', parts: [{ type: 'text', content: 'Be brief.' }] },
+      { role: 'user', parts: [{ type: 'text', content: 'Weather in Paris?' }] },
+    ]);
+  });
+
+  it('returns unknown shapes unchanged', () => {
+    expect(convertMastraMessagesToGenAIMessages('[1,2]')).toBe('[1,2]');
+    expect(convertMastraMessagesToGenAIMessages('{"foo":1}')).toBe('{"foo":1}');
+    expect(convertMastraMessagesToGenAIMessages('not json')).toBe('not json');
   });
 });

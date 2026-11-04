@@ -17,6 +17,9 @@ const FEED_CLOSE = `</${WORK_ITEM_FEED_TAG}>`;
 // before the close all count against the block budget.
 const WRAPPER_CHARS = FEED_OPEN.length + FEED_PREAMBLE.length + FEED_CLOSE.length + 4;
 
+// Worst-case omission marker plus the blank line after it.
+const OMITTED_MARKER_RESERVE = omittedMarkerLength() + 2;
+
 // Lenient on purpose: the reader is a model, not a parser, so spaced or
 // case-shifted variants of either tag would still read as a boundary.
 const FEED_BOUNDARY_RE = /<\s*(\/?)\s*work-item-feed\s*>/gi;
@@ -25,14 +28,17 @@ function escapeFeedBoundary(value: string): string {
   return value.replace(FEED_BOUNDARY_RE, (_match, slash: string) => `&lt;${slash}work-item-feed&gt;`);
 }
 
-function truncate(value: string, limit: number): string {
-  if (value.length <= limit) return value;
+function feedSafe(value: string, commentId: string, label: string): string {
+  if (value.length <= MAX_COMMENT_CHARS) return escapeFeedBoundary(value);
   const chars = [...value];
-  return chars.length > limit ? `${chars.slice(0, limit).join('')}…` : value;
+  if (chars.length <= MAX_COMMENT_CHARS) return escapeFeedBoundary(value);
+  const kept = escapeFeedBoundary(chars.slice(0, MAX_COMMENT_CHARS).join(''));
+  const marker = `[${label}: ${formatCount(MAX_COMMENT_CHARS)} of ${formatCount(chars.length)} characters; comment ${escapeFeedBoundary(commentId)}]`;
+  return `${kept}…\n${marker}`;
 }
 
-function feedSafe(value: string): string {
-  return escapeFeedBoundary(truncate(value, MAX_COMMENT_CHARS));
+function formatCount(value: number): string {
+  return value.toLocaleString('en-US');
 }
 
 function blockquote(text: string): string {
@@ -42,8 +48,18 @@ function blockquote(text: string): string {
 function renderComment(comment: WorkItemCommentRow): string {
   const author = escapeFeedBoundary(comment.author.displayName ?? comment.author.id);
   const header = `[${author} · ${comment.occurredAt.toISOString()}]`;
-  const quote = comment.replyTo?.quote ? blockquote(feedSafe(comment.replyTo.quote)) : '';
-  return `${header}\n${quote}${feedSafe(comment.body)}`;
+  const quote = comment.replyTo?.quote
+    ? blockquote(feedSafe(comment.replyTo.quote, comment.id, 'quote truncated'))
+    : '';
+  return `${header}\n${quote}${feedSafe(comment.body, comment.id, 'truncated')}`;
+}
+
+function omittedMarkerLength(): number {
+  return omittedMarker(MAX_FEED_COMMENTS + 1, true).length;
+}
+
+function omittedMarker(omitted: number, overflow: boolean): string {
+  return `[${omitted}${overflow ? '+' : ''} older comments omitted]`;
 }
 
 /** Renders a work item's recent comments as a kickoff-context block for agent runs. */
@@ -55,12 +71,16 @@ export class FactoryFeedReader {
   }
 
   async readRunContext(input: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<string | null> {
-    const rows = await this.#comments.listRecent({ ...input, limit: MAX_FEED_COMMENTS });
-    if (rows.length === 0) return null;
+    // One extra row reveals whether comments exist beyond the feed's cap.
+    const fetched = await this.#comments.listRecent({ ...input, limit: MAX_FEED_COMMENTS + 1 });
+    if (fetched.length === 0) return null;
+    const overflow = fetched.length > MAX_FEED_COMMENTS;
+    const rows = fetched.slice(0, MAX_FEED_COMMENTS);
     // Walk newest-first and keep prepending while the block still fits: an
-    // overflowing feed drops its oldest entries, never its most recent.
+    // overflowing feed drops its oldest entries, never its most recent. Room
+    // for the omission marker is reserved up front so the block stays in budget.
     const entries: string[] = [];
-    let size = WRAPPER_CHARS;
+    let size = WRAPPER_CHARS + OMITTED_MARKER_RESERVE;
     for (const comment of rows) {
       const entry = renderComment(comment);
       if (size + entry.length + SEPARATOR_CHARS > MAX_BLOCK_CHARS) break;
@@ -68,7 +88,9 @@ export class FactoryFeedReader {
       entries.unshift(entry);
     }
     if (entries.length === 0) return null;
-    return [FEED_OPEN, FEED_PREAMBLE, '', entries.join('\n\n'), FEED_CLOSE].join('\n');
+    const omitted = rows.length - entries.length;
+    const head = omitted > 0 || overflow ? [omittedMarker(omitted + (overflow ? 1 : 0), overflow), ''] : [];
+    return [FEED_OPEN, FEED_PREAMBLE, '', ...head, entries.join('\n\n'), FEED_CLOSE].join('\n');
   }
 }
 

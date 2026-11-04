@@ -3,7 +3,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolExecutionContext } from '@mastra/core/tools';
 import { ProtocolError, ProtocolErrorCode, inputResponse } from '@modelcontextprotocol/server';
 import type { ServerContext } from '@modelcontextprotocol/server';
-import { traceContextFromMeta } from '../shared/trace-context';
+import { callerTraceContext, traceContextFromMeta } from '../shared/trace-context';
+import type { CallerTraceContext } from '../shared/trace-context';
 import type { MCPAuthInfoToUserMapper } from './types';
 
 const unavailable = (feature: string, replacement: string) => (): Promise<never> =>
@@ -43,8 +44,32 @@ export function toToolExecutionContext(ctx: ServerContext, loggerName: string): 
 }
 
 /**
+ * The caller's trace context a request names: `traceparent` and `tracestate` in
+ * `_meta`, else the HTTP headers, which is where OpenTelemetry-instrumented hosts
+ * put them.
+ */
+export function callerTrace(ctx: ServerContext): CallerTraceContext | undefined {
+  const meta = ctx.mcpReq._meta;
+  const headers = ctx.http?.req?.headers;
+  return (
+    callerTraceContext(meta?.traceparent, meta?.tracestate) ??
+    callerTraceContext(headers?.get('traceparent'), headers?.get('tracestate'))
+  );
+}
+
+/**
+ * Where `@mastra/server` attaches, on `req.auth`, the request context its auth
+ * resolved (user, permissions, roles, resource id, tenant, auth mode). A symbol
+ * cannot come out of a token or JSON payload, so only server code can supply it.
+ */
+const MCP_TRUSTED_REQUEST_CONTEXT = Symbol.for('mastra.mcp.trustedRequestContext');
+const MASTRA_USER_KEY = 'mastra__user';
+
+/**
  * Builds the trusted application context for one request. Auth is re-derived from
- * the transport every time; nothing is carried between continuation rounds. The W3C
+ * the transport every time; nothing is carried between continuation rounds. When
+ * the request came through a Mastra server route, the values its auth resolved are
+ * copied in, so tools are authorized the same way as that server's routes. The W3C
  * trace fields sent by the client are exposed under `traceContext` as opaque
  * strings for observability only; they are never consulted for authorization.
  */
@@ -57,6 +82,13 @@ export async function toRequestContext(
   if (traceContext) requestContext.set('traceContext', traceContext);
   const authInfo = ctx.http?.authInfo;
   if (!authInfo) return requestContext;
+  const trusted = (authInfo as { [MCP_TRUSTED_REQUEST_CONTEXT]?: unknown })[MCP_TRUSTED_REQUEST_CONTEXT];
+  if (trusted && typeof trusted === 'object') {
+    for (const [key, value] of Object.entries(trusted)) requestContext.set(key, value);
+    // Server auth also exposes the user under `user`, which MCP's own FGA check reads.
+    const trustedUser = (trusted as Record<string, unknown>)[MASTRA_USER_KEY];
+    if (trustedUser) requestContext.set('user', trustedUser);
+  }
   requestContext.set('authInfo', authInfo);
   const user = await mapAuthInfoToUser?.({ authInfo, extra: { authInfo }, requestContext });
   if (user) requestContext.set('user', user);
@@ -70,14 +102,39 @@ export async function toRequestContext(
  * never share a principal. A token refreshed mid-round therefore starts over.
  */
 export function principalOf(ctx: ServerContext, requestContext: RequestContext): string {
+  return callerOf(ctx, requestContext).principal;
+}
+
+/**
+ * A readable name for the caller, for operators debugging a server: the principal, except that a
+ * token principal keeps only a short prefix of the token's hash. Never a credential, so it can be
+ * stored and shown; it is not unique enough to authorize anything.
+ */
+export function clientLabelOf(ctx: ServerContext, requestContext: RequestContext): string {
+  return callerOf(ctx, requestContext).label;
+}
+
+const TOKEN_LABEL_HASH_LENGTH = 8;
+
+function callerOf(ctx: ServerContext, requestContext: RequestContext): { principal: string; label: string } {
   const authInfo = ctx.http?.authInfo;
-  if (!authInfo) return 'anonymous';
+  if (!authInfo) return { principal: 'anonymous', label: 'anonymous' };
   const subject = authInfo.extra?.sub ?? authInfo.extra?.subject;
-  if (typeof subject === 'string' && subject) return `${authInfo.clientId}:sub:${subject}`;
+  if (typeof subject === 'string' && subject) {
+    const principal = `${authInfo.clientId}:sub:${subject}`;
+    return { principal, label: principal };
+  }
   const user = requestContext.get('user');
   const userId = user && typeof user === 'object' ? (user as { id?: unknown }).id : undefined;
-  if (typeof userId === 'string' && userId) return `${authInfo.clientId}:user:${userId}`;
-  return `${authInfo.clientId}:token:${createHash('sha256').update(authInfo.token).digest('base64url')}`;
+  if (typeof userId === 'string' && userId) {
+    const principal = `${authInfo.clientId}:user:${userId}`;
+    return { principal, label: principal };
+  }
+  const tokenHash = createHash('sha256').update(authInfo.token).digest('base64url');
+  return {
+    principal: `${authInfo.clientId}:token:${tokenHash}`,
+    label: `${authInfo.clientId}:token:${tokenHash.slice(0, TOKEN_LABEL_HASH_LENGTH)}`,
+  };
 }
 
 export function hashArguments(value: unknown): string {

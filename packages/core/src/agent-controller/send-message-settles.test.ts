@@ -22,7 +22,7 @@ function createTextStreamModel() {
   });
 }
 
-async function createController() {
+async function createController({ createInitialThread }: { createInitialThread?: boolean } = {}) {
   const agent = new Agent({
     id: 'test-agent',
     name: 'test-agent',
@@ -36,7 +36,7 @@ async function createController() {
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await controller.init();
-  const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+  const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner', createInitialThread });
   return { agent, controller, session };
 }
 
@@ -99,6 +99,31 @@ describe('Session.sendMessage settles', () => {
     session.thread.cleanupSubscription();
 
     await expect(settleWithin(session.sendMessage({ content: 'hello' }))).rejects.toBe(error);
+  });
+
+  it('rejects when the stream consumer fails on the send that creates the thread', async () => {
+    const { session } = await createController({ createInitialThread: false });
+    expect(session.thread.getId()).toBeNull();
+    const error = new Error('consumer blew up');
+    vi.spyOn(session, 'processSubscribedThreadStream').mockRejectedValue(error);
+
+    await expect(settleWithin(session.sendMessage({ content: 'hello' }))).rejects.toBe(error);
+  });
+
+  it('does not abort the first run after Stop on a session with no thread yet', async () => {
+    const { session } = await createController({ createInitialThread: false });
+    expect(session.thread.getId()).toBeNull();
+    const endReasons: unknown[] = [];
+    session.subscribe(event => {
+      if (event.type === 'agent_end') endReasons.push(event.reason);
+    });
+
+    // Stop with nothing running: no stream is open, so no teardown resets the flag.
+    session.abort();
+    expect(session.run.isAbortRequested()).toBe(true);
+
+    expect(await settleWithin(session.sendMessage({ content: 'hello' }))).toBeUndefined();
+    expect(endReasons).toEqual(['complete']);
   });
 
   it('opens a fresh subscription for the next send after the consumer fails', async () => {

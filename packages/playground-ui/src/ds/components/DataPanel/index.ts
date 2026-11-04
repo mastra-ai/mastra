@@ -1,5 +1,5 @@
 export { DataPanel } from './data-panel';
-export type { DataPanelProps } from './data-panel-root';
+export type { DataPanelProps, DataPanelDrawerProps, DataPanelInlineProps } from './data-panel-root';
 export type { DataPanelHeaderProps } from './data-panel-header';
 export type { DataPanelHeaderContentProps } from './data-panel-header-content';
 export type { DataPanelHeaderActionsProps } from './data-panel-header-actions';

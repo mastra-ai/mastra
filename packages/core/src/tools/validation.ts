@@ -1,3 +1,4 @@
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
 import type { RequestContext } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -22,7 +23,10 @@ export function registerToolOutputValidationSchema(tool: object, schema: unknown
 }
 
 export function resolveToolOutputValidationSchema(tool: ToolWithOutputSchema): StandardSchemaWithJSON | undefined {
-  const outputSchema = typeof tool.outputSchema === 'function' ? tool.outputSchema() : tool.outputSchema;
+  const outputSchema =
+    typeof tool.outputSchema === 'function' && !isStandardSchemaWithJSON(tool.outputSchema)
+      ? tool.outputSchema()
+      : tool.outputSchema;
   if (isStandardSchemaWithJSON(outputSchema)) return outputSchema;
 
   return tool[TOOL_OUTPUT_VALIDATION_SCHEMA];
@@ -89,6 +93,72 @@ export function isValidationError(value: unknown): value is ValidationError {
   );
 }
 
+type JSONSchemaNode = JSONSchema7Definition | undefined;
+
+/**
+ * Lists the dotted paths that failed validation (`root` for top-level issues), for log lines.
+ * `message` echoes the submitted values back to the caller, so logs carry these paths instead.
+ * Only property names declared by `schema` and array indexes are kept; any other segment (a record
+ * key, or anything under a schema that can't be resolved) came from the submitted data and is logged as `*`.
+ */
+export function getValidationIssuePaths(
+  error: ValidationError,
+  schema: PublicSchema | undefined,
+  io: 'input' | 'output' = 'input',
+): string[] {
+  let root: JSONSchemaNode;
+  try {
+    root = schema ? standardSchemaToJSONSchema(toStandardSchema(schema), { io }) : undefined;
+  } catch {
+    root = undefined;
+  }
+
+  const resolve = (node: JSONSchemaNode, seen = new Set<string>()): JSONSchema7[] => {
+    if (!node || typeof node !== 'object') return [];
+    if (node.$ref?.startsWith('#/') && typeof root === 'object' && !seen.has(node.$ref)) {
+      seen.add(node.$ref);
+      const target = node.$ref
+        .slice(2)
+        .split('/')
+        .reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], root);
+      return resolve(target as JSONSchemaNode, seen);
+    }
+    return [
+      node,
+      ...[...(node.anyOf ?? []), ...(node.oneOf ?? []), ...(node.allOf ?? [])].flatMap(branch => resolve(branch, seen)),
+    ];
+  };
+
+  const child = (nodes: JSONSchema7[], key: string): { segment: string; nodes: JSONSchema7[] } => {
+    const declared = nodes.filter(node => node.properties && Object.hasOwn(node.properties, key));
+    if (declared.length > 0) return { segment: key, nodes: declared.flatMap(node => resolve(node.properties![key])) };
+    if (/^\d+$/.test(key)) {
+      const items = nodes.flatMap(node =>
+        Array.isArray(node.items) ? resolve(node.items[Number(key)]) : resolve(node.items),
+      );
+      if (items.length > 0 || nodes.some(node => node.type === 'array')) return { segment: key, nodes: items };
+    }
+    return {
+      segment: '*',
+      nodes: nodes.flatMap(node => [
+        ...resolve(node.additionalProperties),
+        ...Object.values(node.patternProperties ?? {}).flatMap(pattern => resolve(pattern)),
+      ]),
+    };
+  };
+
+  const paths: string[] = [];
+  const walk = (node: { errors: string[]; fields: unknown }, path: string[], nodes: JSONSchema7[]) => {
+    if (node.errors.length > 0) paths.push(path.join('.') || 'root');
+    for (const [key, field] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+      const next = child(nodes, key);
+      walk(field, [...path, next.segment], next.nodes);
+    }
+  };
+  walk(error.validationErrors, [], resolve(root));
+  return [...new Set(paths)];
+}
+
 /**
  * Extracts a string key from a path segment (handles both PropertyKey and PathSegment objects).
  */
@@ -97,6 +167,21 @@ function getPathKey(segment: PropertyKey | { key: PropertyKey }): string {
     return String(segment.key);
   }
   return String(segment);
+}
+
+/**
+ * Builds a path-aware Error from Standard Schema issues.
+ * The `errors` array lets consumers (e.g. the @mastra/mcp 1.x tools/call handler) report one line per field.
+ */
+export function createStandardSchemaIssuesError(issues: ReadonlyArray<StandardSchemaIssue>): Error & {
+  errors: { path: string[]; message: string }[];
+} {
+  const errors = issues.map(issue => ({
+    path: (issue.path ?? []).map(segment => getPathKey(segment)),
+    message: issue.message,
+  }));
+  const message = errors.map(e => `- ${e.path.join('.') || 'root'}: ${e.message}`).join('\n');
+  return Object.assign(new Error(message), { errors });
 }
 
 /**
@@ -523,12 +608,21 @@ export function validateToolInput<T = unknown>(
   // Step 4: Retry with stringified JSON values coerced (GitHub #12757)
   // LLMs like GLM4.7 send stringified JSON for array/object parameters, e.g.
   // { "args": "[\"file.py\"]" } instead of { "args": ["file.py"] }.
+  //
+  // Each fallback builds on the previous one's output so inputs needing several
+  // corrections (e.g. stringified JSON plus null optional fields) still validate
+  // (GitHub #25825).
+  let currentInput = normalizedInput;
+  let currentIssues = validation.issues;
+
   const coercedInput = coerceStringifiedJsonValues(schema, normalizedInput);
   if (coercedInput !== normalizedInput) {
     const coercedValidation = safeValidate(schema, coercedInput);
     if ('value' in coercedValidation) {
       return { data: coercedValidation.value };
     }
+    currentInput = coercedInput;
+    currentIssues = coercedValidation.issues;
   }
 
   // Step 5: Retry with null values stripped only for failing fields (GitHub #12362)
@@ -541,23 +635,30 @@ export function validateToolInput<T = unknown>(
   // This ensures we catch null values regardless of the validator's error message
   // format (e.g., "must be string", "must be object", etc.).
   const failingNullPaths = new Set(
-    validation.issues
+    currentIssues
       .filter(issue => {
         if (!issue.path || issue.path.length === 0) return false;
-        const value = getValueAtPath(normalizedInput, issue.path);
+        const value = getValueAtPath(currentInput, issue.path);
         return value === null || value === undefined;
       })
       .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
       .filter((p): p is string => !!p),
   );
   const strippedInput =
-    failingNullPaths.size > 0 ? stripNullishValuesAtPaths(input, failingNullPaths) : stripNullishValues(input);
+    failingNullPaths.size > 0
+      ? stripNullishValuesAtPaths(currentInput, failingNullPaths)
+      : stripNullishValues(coercedInput !== normalizedInput ? coercedInput : input);
   const normalizedStripped = normalizeNullishInput(schema, strippedInput);
   const retryValidation = safeValidate(schema, normalizedStripped);
 
   if ('value' in retryValidation) {
     return { data: retryValidation.value };
   }
+  if (failingNullPaths.size > 0) {
+    currentInput = normalizedStripped;
+  }
+
+  let aliasIssues: typeof validation.issues | undefined;
 
   // Step 6: Retry with common prompt alias normalization (GitHub #14154)
   // LLMs (especially Claude Sonnet via custom gateways) sometimes drift from
@@ -570,13 +671,8 @@ export function validateToolInput<T = unknown>(
     promptJsonSchema.properties != null &&
     'prompt' in promptJsonSchema.properties;
 
-  if (
-    schemaExpectsPrompt &&
-    normalizedInput != null &&
-    typeof normalizedInput === 'object' &&
-    !Array.isArray(normalizedInput)
-  ) {
-    const obj = normalizedInput as Record<string, unknown>;
+  if (schemaExpectsPrompt && currentInput != null && typeof currentInput === 'object' && !Array.isArray(currentInput)) {
+    const obj = currentInput as Record<string, unknown>;
     if (obj.prompt == null) {
       const alias = [obj.query, obj.message, obj.input].find((v): v is string => typeof v === 'string');
       if (alias !== undefined) {
@@ -585,20 +681,26 @@ export function validateToolInput<T = unknown>(
         if ('value' in coercedPromptValidation) {
           return { data: coercedPromptValidation.value };
         }
+        aliasIssues = coercedPromptValidation.issues;
       }
     }
   }
 
-  // All attempts failed - return the original (non-stripped) error since it's
-  // more informative about what the schema actually expects
-  const errorMessages = validation.issues
+  // All attempts failed. When nulls caused first-pass failures, report the
+  // path-stripped retry's issues: first-pass issues include nulls on optional
+  // fields that stripping already resolved, hiding the real failure (GitHub #24539).
+  // Otherwise the retry stripped every null (including valid .nullable() values),
+  // so the first-pass issues are the accurate ones. A failed prompt-alias retry
+  // builds on all prior corrections, so its issues take precedence.
+  const finalIssues = aliasIssues ?? (failingNullPaths.size > 0 ? retryValidation.issues : currentIssues);
+  const errorMessages = finalIssues
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: buildFormattedErrors<T>(validation.issues),
+    validationErrors: buildFormattedErrors<T>(finalIssues),
   };
 
   return { error };
@@ -637,7 +739,7 @@ export function validateToolOutput<T = unknown>(
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
+    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(redactSensitiveKeys(output))}`,
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
@@ -654,25 +756,34 @@ const SENSITIVE_KEYS = ['password', 'secret', 'token', 'apiKey', 'api_key', 'aut
  * @param obj The object to redact
  * @returns A new object with sensitive values replaced with '[REDACTED]'
  */
-function redactSensitiveKeys(obj: unknown): unknown {
-  if (obj === null || typeof obj !== 'object') {
+function redactSensitiveKeys(obj: unknown, ancestors: WeakSet<object> = new WeakSet()): unknown {
+  // Objects with toJSON (e.g. Date) serialize themselves; walking their own keys would drop them to `{}`.
+  if (obj === null || typeof obj !== 'object' || typeof (obj as { toJSON?: unknown }).toJSON === 'function') {
     return obj;
   }
 
+  // Leave circular references in place so serialization fails the same way it would without redaction.
+  if (ancestors.has(obj)) {
+    return obj;
+  }
+  ancestors.add(obj);
+
+  let result: unknown;
   if (Array.isArray(obj)) {
-    return obj.map(redactSensitiveKeys);
+    result = obj.map(item => redactSensitiveKeys(item, ancestors));
+  } else {
+    const redacted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (SENSITIVE_KEYS.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
+        redacted[key] = '[REDACTED]';
+      } else {
+        redacted[key] = redactSensitiveKeys(value, ancestors);
+      }
+    }
+    result = redacted;
   }
 
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (SENSITIVE_KEYS.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
-      result[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null) {
-      result[key] = redactSensitiveKeys(value);
-    } else {
-      result[key] = value;
-    }
-  }
+  ancestors.delete(obj);
   return result;
 }
 
@@ -702,11 +813,7 @@ export function validateRequestContext<T = any>(
   const standardSchema = toStandardSchema(schema);
 
   // Validate using standard schema interface
-  const validation = standardSchema['~standard'].validate(contextValues);
-
-  if (validation instanceof Promise) {
-    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
-  }
+  const validation = safeValidate(standardSchema, contextValues);
 
   if ('value' in validation) {
     return { data: validation.value };

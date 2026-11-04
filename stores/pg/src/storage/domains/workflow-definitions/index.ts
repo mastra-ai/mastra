@@ -174,7 +174,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
   ): Promise<WorkflowDefinition> {
-    const data: Record<string, any> = { updatedAt: now };
+    const data: Record<string, any> = { updatedAt: now, updatedAtZ: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
     if ('metadata' in input && input.metadata !== undefined) data.metadata = input.metadata;
     if ('inputSchema' in input && input.inputSchema !== undefined) data.inputSchema = input.inputSchema;

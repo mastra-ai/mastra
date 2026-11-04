@@ -4,6 +4,7 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "systemMessage": "You are Mastra Code",
         "userMessage": "Please observe this pasted attachment in OM",
         "hasToolResult": false
       },

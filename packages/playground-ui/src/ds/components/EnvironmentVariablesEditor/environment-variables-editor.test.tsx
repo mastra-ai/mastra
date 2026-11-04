@@ -164,10 +164,13 @@ describe('EnvironmentVariablesEditor', () => {
       />,
     );
 
-    expect(screen.getAllByLabelText('Key').map(input => input.id)).toEqual(['input-env-key-0', 'input-env-key-1']);
-    expect(screen.getAllByLabelText('Value').map(input => input.id)).toEqual([
-      'input-env-value-0',
-      'input-env-value-1',
+    expect(screen.getAllByLabelText<HTMLInputElement>('Key').map(input => input.value)).toEqual([
+      'PUBLIC_URL',
+      'API_KEY',
+    ]);
+    expect(screen.getAllByLabelText<HTMLInputElement>('Value').map(input => input.value)).toEqual([
+      'https://example.com',
+      'secret',
     ]);
   });
 
@@ -175,7 +178,7 @@ describe('EnvironmentVariablesEditor', () => {
     const onSave = vi.fn();
     render(<TestEditor onSave={onSave} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Variable' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add variable' }));
     fireEvent.change(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')[1], {
       target: { value: ' API_KEY ' },
     });

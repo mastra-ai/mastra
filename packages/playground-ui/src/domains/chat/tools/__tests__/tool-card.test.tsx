@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { MastraReactProvider } from '@mastra/react';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -13,7 +13,6 @@ import { AgentBadge } from '../badges/agent-badge';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { failedParentMessages, partialChildMessages, resumedChildMessages } from './fixtures/failed-delegation';
-import { useAgentMessages } from '@/domains/agents/hooks/use-agent-messages';
 import { ChatAgentContext, ChatRunningContext } from '@/domains/chat/context/chat-context';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import type { ToolPart } from '@/domains/chat/messages/renderers/tool-part';
@@ -142,10 +141,11 @@ describe('ToolCard dispatch', () => {
         }),
       );
 
-      expect(screen.getAllByRole<HTMLImageElement>('img', { name: 'Preview' }).map(image => image.src)).toEqual([
-        'https://example.com/generated.png',
-        'data:image/webp;base64,UklGRg==',
-        'data:image/jpeg;base64,/9j/4AAQ',
+      const images = within(screen.getByTestId('tool-result-media')).getAllByRole<HTMLImageElement>('img');
+      expect(images.map(image => ({ src: image.src, alt: image.alt }))).toEqual([
+        { src: 'https://example.com/generated.png', alt: 'generated.png' },
+        { src: 'data:image/webp;base64,UklGRg==', alt: 'Image' },
+        { src: 'data:image/jpeg;base64,/9j/4AAQ', alt: 'Image' },
       ]);
     });
   });
@@ -352,6 +352,60 @@ describe('ToolCard dispatch', () => {
     expect(screen.getByTestId('sandbox-execution-badge')).toBeTruthy();
   });
 
+  describe('when a command exits non-zero after printing output', () => {
+    it('reads as failed, says how it exited, and shows the error only its result carries', () => {
+      renderToolCard(
+        baseProps({
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'pnpm build' },
+          output: 'building\n\nError: sandbox connection lost\nExit code: -1',
+          dataParts: [
+            {
+              type: 'data',
+              name: 'sandbox-stdout',
+              data: { output: 'building\n', timestamp: Date.now(), toolCallId: 'call-1' },
+            },
+            { type: 'data', name: 'sandbox-exit', data: { exitCode: -1, success: false, toolCallId: 'call-1' } },
+          ],
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('exit -1')).toBeTruthy();
+      fireEvent.click(within(line).getByRole('button', { name: /Run/ }));
+      expect(within(line).getByText(/Error: sandbox connection lost/)).toBeTruthy();
+    });
+  });
+
+  describe('when the sandbox could not run a command after it printed output', () => {
+    it('says it errored and shows the whole error, even one with blank lines in it', () => {
+      const error = 'Request failed with status 502\n\n<html>Bad Gateway</html>';
+      renderToolCard(
+        baseProps({
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'pnpm build' },
+          output: `building\n\nError: ${error}\nExit code: -1`,
+          dataParts: [
+            {
+              type: 'data',
+              name: 'sandbox-stdout',
+              data: { output: 'building\n', timestamp: Date.now(), toolCallId: 'call-1' },
+            },
+            { type: 'data', name: 'sandbox-exit', data: { exitCode: -1, success: false, error, toolCallId: 'call-1' } },
+          ],
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('error')).toBeTruthy();
+      expect(within(line).queryByText('exit -1')).toBeNull();
+      fireEvent.click(within(line).getByRole('button', { name: /Run/ }));
+      expect(within(line).getByText(/Error: Request failed with status 502/)).toBeTruthy();
+    });
+  });
+
   it('routes code-mode calls to the code mode badge', () => {
     renderToolCard(
       baseProps({
@@ -529,7 +583,10 @@ describe('ToolCard dispatch', () => {
         />,
         { wrapper: Providers },
       );
-      expect(screen.getByRole('button', { name: 'head' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('head')).not.toBeNull();
+      expect(screen.queryByRole('button', { expanded: true })).toBeNull();
+      expect(screen.queryByRole('button', { expanded: false })).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Approval required');
       expect(screen.getByRole('button', { name: 'Approve agent-head' })).not.toBeNull();
     });
   });

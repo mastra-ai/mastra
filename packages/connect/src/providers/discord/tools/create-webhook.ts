@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const createWebhookInputSchema = z.object({
   channelId: z
@@ -56,11 +57,6 @@ export const createWebhookOutputSchema = z.object({
   applicationId: z.string().optional(),
 });
 
-const MetadataSchema = z.object({
-  botToken: z.string().describe('Discord bot token for authentication'),
-  channelId: z.string().optional().describe('Optional default channel ID for creating webhooks'),
-});
-
 export function createWebhookTool(proxy: PlatformProxy) {
   return createTool({
     id: 'discord_create_webhook',
@@ -69,19 +65,9 @@ export function createWebhookTool(proxy: PlatformProxy) {
     outputSchema: createWebhookOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof createWebhookOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{
-        botToken?: string;
-        channelId?: string;
-      }>();
-      const botToken = metadata?.botToken;
+      const botToken = await resolveDiscordBotToken(platformProxy);
+      const metadata = await platformProxy.getMetadata<{ channelId?: string }>();
       const channelId = input.channelId ?? metadata?.channelId;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'missing_metadata',
-          message: 'botToken is required in connection metadata.',
-        });
-      }
 
       if (!channelId) {
         throw new platformProxy.ActionError({

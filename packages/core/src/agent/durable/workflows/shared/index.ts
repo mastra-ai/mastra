@@ -21,7 +21,25 @@ export {
 } from './schemas';
 export type { BaseIterationState, AccumulatedUsage } from './schemas';
 
-export { calculateAccumulatedUsage, buildStepRecord, createBaseIterationStateUpdate } from './iteration-state';
+export {
+  calculateAccumulatedUsage,
+  buildStepRecord,
+  carriedSpanClocks,
+  createBaseIterationStateUpdate,
+} from './iteration-state';
 export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
+
+export { buildDeferredStepFinishChunk, buildDurableStepContent, expandDurableSteps } from '@internal/core/durable';
+
+export {
+  dehydrateSnapshotTranscripts,
+  hydrateMessageListState,
+  loadRunStoredMessages,
+  openMessageListState,
+  readMessageListState,
+  releaseMessageListState,
+  seedMessageListState,
+  storeMessageListState,
+} from './message-list-state';
 
 export { resolveDurableToolCallConcurrency } from './tool-call-concurrency';

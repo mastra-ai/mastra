@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { MASTRA_USER_AGENT } from './constants.js';
+import { GatewayManager } from './gateway-manager.js';
 import { ModelsDevGateway } from './models-dev.js';
 
 const {
@@ -41,16 +42,16 @@ const {
 }));
 
 vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
-vi.mock('@ai-sdk/cerebras-v6', () => ({ createCerebras: createCerebrasMock }));
-vi.mock('@ai-sdk/deepinfra-v6', () => ({ createDeepInfra: createDeepInfraMock }));
+vi.mock('@ai-sdk/cerebras-v7', () => ({ createCerebras: createCerebrasMock }));
+vi.mock('@ai-sdk/deepinfra-v7', () => ({ createDeepInfra: createDeepInfraMock }));
 vi.mock('@ai-sdk/deepseek-v7', () => ({ createDeepSeek: createDeepSeekMock }));
 vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
-vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
+vi.mock('@ai-sdk/groq-v7', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
 vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
 vi.mock('@ai-sdk/perplexity-v6', () => ({ createPerplexity: createPerplexityMock }));
-vi.mock('@ai-sdk/togetherai-v6', () => ({ createTogetherAI: createTogetherAIMock }));
-vi.mock('@ai-sdk/xai-v6', () => ({ createXai: createXaiMock }));
+vi.mock('@ai-sdk/togetherai-v7', () => ({ createTogetherAI: createTogetherAIMock }));
+vi.mock('@ai-sdk/xai-v7', () => ({ createXai: createXaiMock }));
 vi.mock('@internal/ai-v6', () => ({ createGateway: createGatewayMock }));
 vi.mock('@openrouter/ai-sdk-provider-v6', () => ({ createOpenRouter: createOpenRouterMock }));
 
@@ -89,6 +90,31 @@ describe('ModelsDevGateway', () => {
   });
 
   describe('fetchProviders', () => {
+    it('carries release dates through to the selectable model catalog', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          openai: {
+            id: 'openai',
+            name: 'OpenAI',
+            api: 'https://api.openai.com/v1',
+            npm: '@ai-sdk/openai',
+            models: {
+              'gpt-4o': { id: 'gpt-4o', release_date: '2024-05-13' },
+              'gpt-5': { id: 'gpt-5', release_date: '2025-08-07' },
+              custom: { id: 'custom' },
+            },
+          },
+        }),
+      });
+      const catalog = await new GatewayManager([gateway]).listAvailableModels();
+      expect(catalog.map(({ id, releaseDate }) => ({ id, releaseDate }))).toEqual([
+        { id: 'openai/custom', releaseDate: undefined },
+        { id: 'openai/gpt-4o', releaseDate: '2024-05-13' },
+        { id: 'openai/gpt-5', releaseDate: '2025-08-07' },
+      ]);
+    });
+
     const mockApiResponse = {
       openai: {
         id: 'openai',
@@ -356,6 +382,58 @@ describe('ModelsDevGateway', () => {
       expect(gateway.getAttachmentCapabilities().groq).toContain('legacy-model');
       expect(gateway.getTemperatureCapabilities().groq).toContain('legacy-model');
       expect(gateway.getStructuredOutputCapabilities().groq).toContain('legacy-model');
+    });
+
+    it('keeps each model reasoning options and drops entries it cannot read', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          anthropic: {
+            id: 'anthropic',
+            name: 'Anthropic',
+            models: {
+              'claude-opus-4-6': {
+                reasoning: true,
+                reasoning_options: [
+                  { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+                  { type: 'budget_tokens', min: 1024 },
+                ],
+              },
+              'claude-sonnet-5': {
+                reasoning: true,
+                reasoning_options: [
+                  { type: 'toggle' },
+                  { type: 'adaptive_v2', values: ['auto'] },
+                  { type: 'effort', values: [] },
+                  { type: 'effort', values: [null] },
+                  { type: 'budget_tokens', min: '1024' },
+                ],
+              },
+              'claude-opus-4-7': {
+                reasoning: true,
+                reasoning_options: [{ type: 'effort', values: [null, 'low', 'medium', 'high'] }],
+              },
+              'claude-haiku-4-5': { reasoning: true, reasoning_options: [] },
+              'claude-3-haiku': { reasoning: false },
+            },
+            env: ['ANTHROPIC_API_KEY'],
+            npm: '@ai-sdk/anthropic',
+          },
+        }),
+      });
+
+      await gateway.fetchProviders();
+
+      expect(gateway.getReasoningCapabilities()).toEqual({
+        anthropic: {
+          'claude-opus-4-6': [
+            { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+            { type: 'budget_tokens', min: 1024 },
+          ],
+          'claude-sonnet-5': [{ type: 'toggle' }],
+          'claude-opus-4-7': [{ type: 'effort', values: ['low', 'medium', 'high'] }],
+        },
+      });
     });
 
     it('should extract model IDs from each provider', async () => {

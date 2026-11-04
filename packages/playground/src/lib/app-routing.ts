@@ -13,6 +13,8 @@ export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) =
   return redirect(`/agents/${params.agentId}/threads/${params.threadId ?? 'new'}${search}`);
 };
 
+const toolSearch = (toolId: string) => `?${new URLSearchParams({ tool: toolId }).toString()}`;
+
 export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArgs) => {
   const search = new URL(request.url).search;
   return redirect(`/agents/${params.agentId}/threads/new${search}`);
@@ -33,13 +35,21 @@ export const experimentReviewQueueLink = (experimentId?: string, resultId?: stri
 export const traceScoreLink = (traceId: string, scoreId: string) =>
   `/traces?traceId=${encodeURIComponent(traceId)}&scoreId=${encodeURIComponent(scoreId)}`;
 
+/** Skills are browsed as files: open the skill's SKILL.md in the workspace view. */
+export function workspaceSkillFileLink(workspaceId?: string, skillPath?: string | null): string {
+  if (!workspaceId) return '/workspaces';
+  const base = `/workspaces/${encodeURIComponent(workspaceId)}`;
+  if (!skillPath) return base;
+  const file = `${skillPath.replace(/\/+$/, '')}/SKILL.md`;
+  return `${base}?${new URLSearchParams({ file })}`;
+}
+
 export const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
-  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
+  agentToolLink: (agentId: string, toolId: string, threadId?: string) =>
+    `/agents/${agentId}/threads/${threadId ?? 'new'}${toolSearch(toolId)}`,
+  agentSkillLink: (_agentId: string, _skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceSkillFileLink(workspaceId, skillPath),
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
@@ -68,21 +78,17 @@ export const paths: LinkComponentProviderProps['paths'] = {
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
-  toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
+  toolLink: (toolId: string) => `/tools${toolSearch(toolId)}`,
+  skillLink: (_skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceSkillFileLink(workspaceId, skillPath),
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
+  workspaceSkillLink: (_skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceSkillFileLink(workspaceId, skillPath),
   workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
-  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
+  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}${toolSearch(toolId)}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,

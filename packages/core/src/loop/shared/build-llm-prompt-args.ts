@@ -37,6 +37,12 @@ export interface BuildLlmPromptArgsInput {
    * underlying `MessageList` default (10) when omitted.
    */
   downloadConcurrency?: number;
+  /**
+   * Replace user attachments that fail to download with a text placeholder
+   * instead of failing the prompt. Set on the last-resort retry after error
+   * processors and fallback models could not recover the download failure.
+   */
+  skipUnavailableAttachments?: boolean;
 }
 
 export interface BuildLlmPromptArgsResult {
@@ -49,12 +55,14 @@ export interface BuildLlmPromptArgsResult {
    * produced by a different provider earlier in the same thread.
    */
   targetProvider: string | undefined;
+  skipUnavailableAttachments: boolean | undefined;
 }
 
 export async function buildLlmPromptArgs({
   model,
   downloadRetries,
   downloadConcurrency,
+  skipUnavailableAttachments,
 }: BuildLlmPromptArgsInput): Promise<BuildLlmPromptArgsResult> {
   let supportedUrls: Record<string, RegExp[]> | undefined;
   const raw = model?.supportedUrls;
@@ -70,5 +78,6 @@ export async function buildLlmPromptArgs({
     downloadRetries,
     downloadConcurrency,
     targetProvider: model?.provider,
+    skipUnavailableAttachments,
   };
 }

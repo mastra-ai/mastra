@@ -56,9 +56,9 @@ describe('FilterableList', () => {
   it('local search filters the rows by label', async () => {
     const { getByTestId, queryByTestId } = renderList();
 
-    const input = getByTestId('list-filter-search').querySelector('input');
+    const input = getByTestId('list-filter-search');
     expect(input).toBeTruthy();
-    fireEvent.change(input!, { target: { value: 'bet' } });
+    fireEvent.change(input, { target: { value: 'bet' } });
 
     await waitFor(() => expect(queryByTestId('list-filter-item-alpha')).toBeNull());
     expect(queryByTestId('list-filter-item-beta')).toBeTruthy();
@@ -97,8 +97,8 @@ describe('FilterableList', () => {
   it('shows a no-matches message when the search excludes everything', async () => {
     const { getByTestId, findByText } = renderList();
 
-    const input = getByTestId('list-filter-search').querySelector('input');
-    fireEvent.change(input!, { target: { value: 'zzz' } });
+    const input = getByTestId('list-filter-search');
+    fireEvent.change(input, { target: { value: 'zzz' } });
 
     expect(await findByText('No matches')).toBeTruthy();
   });

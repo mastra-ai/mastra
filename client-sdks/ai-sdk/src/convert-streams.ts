@@ -12,7 +12,7 @@ import type { UIMessage as UIMessageV7, UIMessageStreamOptions as UIMessageStrea
 import type { MastraModelOutput, ChunkType, MastraAgentNetworkStream, WorkflowRunOutput } from '@mastra/core/stream';
 import type { MastraWorkflowStream, Step, WorkflowResult } from '@mastra/core/workflows';
 import type { ZodObject, ZodType } from 'zod/v4';
-import type { V6UIMessageStream, V7UIMessageStream } from './public-types';
+import type { V6UIMessageStream, V7UIMessageStream, WithTraceId } from './public-types';
 import { applyMastraStreamTransforms } from './smooth-stream';
 import type { MastraStreamTransformOptions } from './smooth-stream';
 import {
@@ -74,19 +74,19 @@ type AgentStreamOptionsBase = {
 
 type AgentStreamOptionsV5 = AgentStreamOptionsBase & {
   version?: 'v5';
-  messageMetadata?: UIMessageStreamOptionsV5<UIMessageV5>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV5<UIMessageV5>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV5<UIMessageV5>['onError'];
 };
 
 type AgentStreamOptionsV6 = AgentStreamOptionsBase & {
   version: 'v6';
-  messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
 };
 
 type AgentStreamOptionsV7 = AgentStreamOptionsBase & {
   version: 'v7';
-  messageMetadata?: UIMessageStreamOptionsV7<UIMessageV7>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV7<UIMessageV7>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV7<UIMessageV7>['onError'];
 };
 

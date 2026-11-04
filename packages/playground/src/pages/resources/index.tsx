@@ -81,7 +81,7 @@ export default function Resources() {
                   <ExternalLinkIcon className="ml-auto h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
               </div>
-              <Txt variant="caption" className="text-text3">
+              <Txt variant="caption" tone="muted">
                 {resource.description}
               </Txt>
             </a>

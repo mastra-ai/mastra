@@ -9,12 +9,13 @@
  */
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { MastraModelConfig } from '@mastra/core/llm';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import type { OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
 const XAI_PROVIDER_ID = 'xai';
+const XAI_PROVIDER_NAME = 'xAI';
 const XAI_BASE_URL = 'https://api.x.ai/v1';
 
 // Singleton auth storage instance (shared with claude-max.ts / github-copilot.ts when not overridden).
@@ -45,14 +46,12 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
 
     const cred = storage.get(XAI_PROVIDER_ID);
     if (!cred || cred.type !== 'oauth') {
-      throw new ProviderAuthRequiredError('Not logged in to xAI.');
+      throw ProviderAuthRequiredError.notSignedIn(XAI_PROVIDER_NAME);
     }
 
     // getApiKey() refreshes the access token if it has expired.
     const accessToken = await storage.getApiKey(XAI_PROVIDER_ID);
-    if (!accessToken) {
-      throw new ProviderAuthRequiredError('Failed to refresh the xAI token.');
-    }
+    if (!accessToken) throw ProviderAuthRequiredError.signInExpired(XAI_PROVIDER_NAME);
 
     // Preserve existing headers, strip auth-related ones. Explicit init
     // headers override headers carried by an incoming Request.
@@ -66,7 +65,10 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
     headers.set('Authorization', `Bearer ${accessToken}`);
 
     try {
-      return await fetch(url, { ...init, headers });
+      return await rejectUnauthorizedResponse(await fetch(url, { ...init, headers }), {
+        providerName: XAI_PROVIDER_NAME,
+        requestUrl: url instanceof URL ? url.toString() : typeof url === 'string' ? url : (url as Request).url,
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {
@@ -85,7 +87,7 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
 export function xaiProvider(
   modelId: string,
   options?: { headers?: Record<string, string>; authStorage?: CredentialStore },
-): MastraModelConfig {
+): ReturnType<OpenAICompatibleProvider['chatModel']> {
   const provider = createOpenAICompatible({
     name: XAI_PROVIDER_ID,
     baseURL: XAI_BASE_URL,

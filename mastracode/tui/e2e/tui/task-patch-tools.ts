@@ -13,12 +13,12 @@ export const taskPatchToolsScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
     terminal.submit('Exercise task patch tools through real task tools.');
 
-    await runtime.waitForScreenText(/Tasks\s+\[0\/1 completed\]/i, terminal, 8_000);
+    await runtime.waitForScreenText(/0\/1\s+▶ Verifying task patch e2e/, terminal, 8_000);
     await runtime.waitForScreenText(/Verifying task patch e2e/i, terminal, 8_000);
     await runtime.waitForOutputText(/Tasks/i, terminal, 8_000);
     await runtime.waitForOutputText(/▶ Verifying task patch e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task Status:\s+\[0\/1 completed\]/i, terminal, 8_000);
-    await runtime.waitForScreenText(/All tasks completed:\s+NO/i, terminal, 8_000);
+    await runtime.waitForScreenText(/- Completed: 0/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task patch e2e complete\./i, terminal, 8_000);
 
     terminal.keyCtrlC();

@@ -60,6 +60,25 @@ describe('EventEmitterPubSub', () => {
       expect(cb1).toHaveBeenCalledTimes(1);
       expect(cb2).not.toHaveBeenCalled();
     });
+
+    it('isolates synchronous subscriber failures from other subscribers', async () => {
+      const error = vi.fn();
+      const local = new EventEmitterPubSub(undefined, {
+        logger: { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any,
+      });
+      const goodCb = vi.fn();
+      const subscriberError = new Error('sync subscriber boom');
+
+      await local.subscribe('topic-a', () => {
+        throw subscriberError;
+      });
+      await local.subscribe('topic-a', goodCb);
+
+      await expect(local.publish('topic-a', makeEvent())).resolves.toBeUndefined();
+
+      expect(goodCb).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith('[EventEmitterPubSub] subscriber failed for topic-a', subscriberError);
+    });
   });
 
   describe('group (competing consumers)', () => {
@@ -121,6 +140,29 @@ describe('EventEmitterPubSub', () => {
       expect(groupA1.mock.calls.length + groupA2.mock.calls.length).toBe(1);
       // group-b: groupB1 gets it (only member)
       expect(groupB1).toHaveBeenCalledTimes(1);
+    });
+
+    it('isolates synchronous group subscriber failures from other groups', async () => {
+      const error = vi.fn();
+      const local = new EventEmitterPubSub(undefined, {
+        logger: { error, warn: vi.fn(), info: vi.fn(), debug: vi.fn() } as any,
+      });
+      const goodCb = vi.fn();
+      const subscriberError = new Error('sync group subscriber boom');
+
+      await local.subscribe(
+        'tasks',
+        () => {
+          throw subscriberError;
+        },
+        { group: 'group-a' },
+      );
+      await local.subscribe('tasks', goodCb, { group: 'group-b' });
+
+      await expect(local.publish('tasks', makeEvent())).resolves.toBeUndefined();
+
+      expect(goodCb).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith('[EventEmitterPubSub] subscriber failed for tasks', subscriberError);
     });
 
     it('group subscribers and fan-out subscribers coexist on the same topic', async () => {

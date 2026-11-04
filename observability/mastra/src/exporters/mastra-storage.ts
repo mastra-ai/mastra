@@ -25,6 +25,7 @@ import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 import { EventBuffer } from './event-buffer';
 import type { BufferedEvent, RetryCount, UpdateSpanPartial } from './event-buffer';
+import { withSpanPreviews } from './span-previews';
 
 /** Configuration for the MastraStorageExporter's batching, retry, and strategy behavior. */
 export interface MastraStorageExporterConfig extends BaseExporterConfig {
@@ -69,6 +70,8 @@ type FlushResult = {
 };
 
 const FLUSH_SUCCEEDED: FlushResult = { failed: false };
+/** Max join/write rounds a single flush() makes before it returns under continuous traffic */
+const MAX_FLUSH_ROUNDS = 3;
 
 /**
  * Storage-backed exporter. Buffers observability events and flushes them in
@@ -86,6 +89,8 @@ export class MastraStorageExporter extends BaseExporter {
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
+  /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
+  #inFlightFlushes = new Set<Promise<void>>();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -222,7 +227,7 @@ export class MastraStorageExporter extends BaseExporter {
     }
     this.#flushTimer = setTimeout(() => {
       this.#flushTimer = undefined;
-      this.flushBuffer().catch(error => {
+      this.trackFlushBuffer().catch(error => {
         this.logger.error('Scheduled flush failed', {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -265,7 +270,7 @@ export class MastraStorageExporter extends BaseExporter {
    */
   private async handleBatchedFlush(): Promise<void> {
     if (this.shouldFlush()) {
-      await this.flushBuffer();
+      await this.trackFlushBuffer();
     } else if (this.#eventBuffer.totalSize === 1) {
       this.scheduleFlush();
     }
@@ -341,6 +346,7 @@ export class MastraStorageExporter extends BaseExporter {
       }
 
       const dropped = this.#eventBuffer.reAddCreates(events);
+      this.#eventBuffer.forgetDroppedCreates(dropped);
       const retryAttempt = this.retryAttempt(events);
       this.logStorageFailure(signal, events, retryAttempt, error);
       this.emitDrop(signal, 'retry-exhausted', dropped.length, error);
@@ -349,7 +355,15 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
-   * Flush span update/end events, deferring any whose span hasn't been created yet.
+   * Flush span update/end events.
+   *
+   * When the store supports conditional updates, only spans this exporter started
+   * and hasn't confirmed the create for are deferred. Everything else, including
+   * spans another exporter instance started (such as a durable agent ending spans
+   * it rebuilt after a crash), goes straight to storage, and updates that didn't
+   * apply are counted as drops. Without conditional updates, updates for spans this
+   * exporter hasn't created are deferred until their create is flushed.
+   *
    * When `isEnd` is true, successfully flushed spans are removed from tracking.
    */
   private async flushSpanUpdates(
@@ -364,10 +378,18 @@ export class MastraStorageExporter extends BaseExporter {
       return { failed: true };
     }
 
+    const storage = this.#observabilityStorage!;
+    // Detected at runtime so older stores and older core versions keep the previous behavior
+    const batchUpdateUnendedSpans =
+      typeof storage.batchUpdateUnendedSpans === 'function' ? storage.batchUpdateUnendedSpans.bind(storage) : undefined;
+
     const partials: UpdateSpanPartial[] = [];
     for (const event of events) {
       const span = event.exportedSpan;
-      if (this.#eventBuffer.spanExists(span)) {
+      const canSend = batchUpdateUnendedSpans
+        ? !this.#eventBuffer.isAwaitingCreate(span)
+        : this.#eventBuffer.spanExists(span);
+      if (canSend) {
         partials.push({
           traceId: span.traceId,
           spanId: span.id,
@@ -381,7 +403,12 @@ export class MastraStorageExporter extends BaseExporter {
     if (partials.length === 0) return FLUSH_SUCCEEDED;
 
     try {
-      await this.#observabilityStorage!.batchUpdateSpans({ records: partials });
+      if (batchUpdateUnendedSpans) {
+        const { updated } = await batchUpdateUnendedSpans({ records: partials });
+        this.emitNotApplied(partials, updated);
+      } else {
+        await storage.batchUpdateSpans({ records: partials });
+      }
       if (isEnd) {
         this.#eventBuffer.endFinishedSpans({ records: partials });
       }
@@ -413,6 +440,43 @@ export class MastraStorageExporter extends BaseExporter {
       this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
       return { failed: true, retryAttempt };
     }
+  }
+
+  /**
+   * Reports conditional span updates that storage didn't apply: the span wasn't
+   * stored, or it had already ended. Ended spans are immutable, so these are dropped.
+   */
+  private emitNotApplied(partials: UpdateSpanPartial[], updated: { traceId: string; spanId: string }[]): void {
+    // Count per key: one batch can hold two ends for the same span, and only the first applies.
+    const appliedCounts = new Map<string, number>();
+    for (const span of updated) {
+      const key = `${span.traceId}:${span.spanId}`;
+      appliedCounts.set(key, (appliedCounts.get(key) ?? 0) + 1);
+    }
+    let notApplied = 0;
+    for (const partial of partials) {
+      const key = `${partial.traceId}:${partial.spanId}`;
+      const remaining = appliedCounts.get(key) ?? 0;
+      if (remaining > 0) {
+        appliedCounts.set(key, remaining - 1);
+      } else {
+        notApplied++;
+      }
+    }
+    if (notApplied === 0) return;
+
+    this.logger.debug('Span updates not applied: span not stored or already ended', { count: notApplied });
+    this.emitDrop('tracing', 'span-not-updatable', notApplied);
+  }
+
+  /**
+   * Runs flushBuffer() and tracks its promise so flush() can wait for writes
+   * that a timer or size trigger started on their own.
+   */
+  private trackFlushBuffer(): Promise<void> {
+    const promise = this.flushBuffer().finally(() => this.#inFlightFlushes.delete(promise));
+    this.#inFlightFlushes.add(promise);
+    return promise;
   }
 
   /**
@@ -557,7 +621,7 @@ export class MastraStorageExporter extends BaseExporter {
       return;
     }
 
-    this.#eventBuffer.addEvent(event);
+    this.#eventBuffer.addEvent({ ...event, exportedSpan: withSpanPreviews(event.exportedSpan) });
     await this.handleBatchedFlush();
   }
 
@@ -611,12 +675,32 @@ export class MastraStorageExporter extends BaseExporter {
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
-    if (this.#eventBuffer.totalSize > 0) {
-      this.logger.debug('Flushing buffered events', {
-        bufferedEvents: this.#eventBuffer.totalSize,
-      });
-      await this.flushBuffer();
+    // A timer or size trigger may have taken a batch out of the buffer and still be
+    // writing it, so an empty buffer doesn't mean the data reached storage. Each round
+    // joins those writes first (they can defer span updates back into the buffer), then
+    // writes whatever the buffer holds. Writes that start while we work get a few more
+    // rounds, then we stop taking on new work so flush() stays bounded under non-stop
+    // traffic (same cap as ObservabilityBus), but we still join the writes already running
+    // so nothing is mid-write when we return. A batch that failed is left to its retry
+    // timer, as before.
+    for (let round = 0; round < MAX_FLUSH_ROUNDS; round++) {
+      if (this.#inFlightFlushes.size > 0) {
+        await Promise.allSettled([...this.#inFlightFlushes]);
+      }
+      if (this.#eventBuffer.totalSize > 0) {
+        this.logger.debug('Flushing buffered events', {
+          bufferedEvents: this.#eventBuffer.totalSize,
+        });
+        await this.trackFlushBuffer();
+      }
+      if (this.#inFlightFlushes.size === 0) {
+        return;
+      }
     }
+    await Promise.allSettled([...this.#inFlightFlushes]);
+    this.logger.warn(`flush() stopped after ${MAX_FLUSH_ROUNDS} rounds; new writes kept starting`, {
+      bufferedEventsLeftBehind: this.#eventBuffer.totalSize,
+    });
   }
 
   async shutdown(): Promise<void> {

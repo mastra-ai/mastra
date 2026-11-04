@@ -113,14 +113,14 @@ export function CommentComposer({
         <ComposerInput
           ref={textareaRef}
           value={draft}
-          placeholder="Add a comment…"
+          placeholder="Add a comment"
           aria-label="Comment"
           aria-autocomplete="list"
           aria-controls={suggestionItems.length > 0 ? suggestionsId : undefined}
           aria-activedescendant={suggestionItems[mentions.activeIndex]?.id}
           autoFocus={variant === 'thread'}
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}
-          className={cn('text-caption', variant === 'panel' && 'min-h-9 pt-2')}
+          className={cn(variant === 'panel' && 'min-h-9 pt-2', 'text-caption')}
           onChange={event => {
             setDraft(event.target.value);
             mentions.onDraftChange(event.target.selectionStart);
@@ -131,7 +131,7 @@ export function CommentComposer({
           onKeyDown={onKeyDown}
         />
         {sendError ? (
-          <Txt variant="meta" role="alert" className="text-destructive-indicator m-0 px-3 pb-1">
+          <Txt variant="meta" role="alert" className="text-destructive-foreground m-0 px-3 pb-1">
             {sendError}
           </Txt>
         ) : null}

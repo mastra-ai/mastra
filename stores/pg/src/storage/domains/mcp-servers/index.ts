@@ -180,6 +180,7 @@ export class MCPServersPG extends MCPServersStorage {
 
   async create(input: { mcpServer: StorageCreateMCPServerInput }): Promise<StorageMCPServerType> {
     const { mcpServer } = input;
+    let draftInserted = false;
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_SERVERS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -203,6 +204,7 @@ export class MCPServersPG extends MCPServersStorage {
           nowIso,
         ],
       );
+      draftInserted = true;
 
       // 2. Extract snapshot fields and create version 1
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = mcpServer;
@@ -226,18 +228,21 @@ export class MCPServersPG extends MCPServersStorage {
         updatedAt: now,
       };
     } catch (error) {
-      // Best-effort cleanup
-      try {
-        const tableName = getTableName({
-          indexName: TABLE_MCP_SERVERS,
-          schemaName: getSchemaName(this.#schema),
-        });
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [mcpServer.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          const tableName = getTableName({
+            indexName: TABLE_MCP_SERVERS,
+            schemaName: getSchemaName(this.#schema),
+          });
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [mcpServer.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
       if (error instanceof MastraError) throw error;

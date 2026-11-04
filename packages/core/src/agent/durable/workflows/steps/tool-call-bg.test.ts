@@ -69,7 +69,10 @@ function makeMessageList() {
     updateToolInvocation: vi.fn().mockReturnValue(true),
     updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(true),
     add: vi.fn(),
-    get: { all: { db: vi.fn().mockReturnValue([]) } },
+    get: {
+      all: { db: vi.fn().mockReturnValue([]) },
+      input: { aiV5: { model: vi.fn().mockReturnValue([]) } },
+    },
   };
 }
 
@@ -1210,7 +1213,9 @@ describe('durable tool-call background task dispatch', () => {
           'response',
         );
       }
-      expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
+      expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined, {
+        beforePersist: expect.any(Function),
+      });
     },
   );
 

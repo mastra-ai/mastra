@@ -135,20 +135,34 @@ export class ToolCallFilter implements Processor {
       // the loop is on its second iteration or resuming after a suspension. Anything
       // else in the prompt is prior history. Read `content` rather than the `toolCalls`
       // getter: steps restored from a suspend snapshot are plain JSON without class getters.
+      // `content` can be empty after Observational Memory prunes messages mid-run, so also
+      // merge the flat `toolCalls`/`toolResults` records (durable engines) and the step's
+      // own `response.messages`, which stay intact after pruning.
       const currentRunToolCallIds = new Set<string>();
-      for (const step of steps ?? []) {
-        if (step.content) {
-          for (const part of step.content) {
-            if (part.type === 'tool-call' || part.type === 'tool-result') {
-              currentRunToolCallIds.add(part.toolCallId);
-            }
+      const addParts = (parts: unknown) => {
+        if (!Array.isArray(parts)) return;
+        for (const part of parts) {
+          if (
+            part &&
+            (part.type === 'tool-call' || part.type === 'tool-result') &&
+            typeof part.toolCallId === 'string'
+          ) {
+            currentRunToolCallIds.add(part.toolCallId);
           }
-          continue;
         }
-        // Durable engines pass reduced step records with flat `toolCalls`/`toolResults` and no `content`.
-        const record = step as { toolCalls?: { toolCallId: string }[]; toolResults?: { toolCallId: string }[] };
+      };
+      for (const step of steps ?? []) {
+        addParts(step.content);
+        const record = step as {
+          toolCalls?: { toolCallId: string }[];
+          toolResults?: { toolCallId: string }[];
+          response?: { messages?: { content?: unknown }[] };
+        };
         for (const call of [...(record.toolCalls ?? []), ...(record.toolResults ?? [])]) {
-          currentRunToolCallIds.add(call.toolCallId);
+          if (call?.toolCallId) currentRunToolCallIds.add(call.toolCallId);
+        }
+        for (const message of record.response?.messages ?? []) {
+          addParts(message?.content);
         }
       }
       return currentRunToolCallIds;

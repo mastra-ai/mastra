@@ -7,9 +7,20 @@
  * cleanup callback invocation, size/runIds accounting, and the
  * override lifecycle in ExtendedRunRegistry.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ExtendedRunRegistry, RunRegistry } from './run-registry';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import { Mastra } from '../../mastra';
+import { Agent } from '../agent';
+import { createDurableAgent } from './create-durable-agent';
+import {
+  endRunSpansWithError,
+  ExtendedRunRegistry,
+  getActiveDurableAgentWorkflowExecutions,
+  globalRunRegistry,
+  RunRegistry,
+} from './run-registry';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -283,5 +294,53 @@ describe('ExtendedRunRegistry', () => {
     registry.registerWithMessageList('run-1', makeEntry(), fakeMessageList);
     registry.registerWithMessageList('run-2', makeEntry(), fakeMessageList);
     expect(registry.size).toBe(2);
+  });
+});
+
+describe('globalRunRegistry missing-key lookups', () => {
+  const pubsubs: EventEmitterPubSub[] = [];
+
+  afterEach(async () => {
+    globalRunRegistry.clear();
+    await Promise.all(pubsubs.splice(0).map(pubsub => pubsub.close()));
+  });
+
+  it('does not create an entry when aborting a run owned by another process', async () => {
+    const pubsub = new EventEmitterPubSub();
+    pubsubs.push(pubsub);
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'Test',
+        model: new MockLanguageModelV2({}),
+      }),
+      pubsub,
+    });
+    const mastra = new Mastra({ agents: { durableAgent } });
+    const runId = 'foreign-run';
+
+    expect(durableAgent.abortRunStream(runId)).toBe(false);
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    expect([...globalRunRegistry.keys()]).not.toContain(runId);
+    await expect(mastra.shutdown()).resolves.toBeUndefined();
+  });
+
+  it('skips valueless entries while collecting active workflow executions', async () => {
+    const mastra = new Mastra();
+    const runId = 'valueless-run';
+
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+    expect([...globalRunRegistry.keys()]).toContain(runId);
+    expect(getActiveDurableAgentWorkflowExecutions(mastra)).toEqual([]);
+    await expect(mastra.shutdown()).resolves.toBeUndefined();
+  });
+
+  it('does not create an entry when ending spans for an unknown run', () => {
+    const runId = 'unknown-run';
+
+    expect(() => endRunSpansWithError(runId, new Error('test error'))).not.toThrow();
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    expect([...globalRunRegistry.keys()]).not.toContain(runId);
   });
 });

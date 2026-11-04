@@ -5,12 +5,14 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type {
   AnySpan,
+  ClassifierEvaluationAttributes,
   CostContext,
   MetricsContext,
   ModelGenerationAttributes,
   ProcessorPipelineAttributes,
   UsageStats,
 } from '@mastra/core/observability';
+import { generateSignalId } from '../ids';
 import { resolveModelId } from '../model-id';
 import { estimateCosts } from './estimator';
 import { TokenMetrics } from './types';
@@ -33,18 +35,19 @@ export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): voi
   });
 }
 
-/** Emit token usage metrics for a model-generation span. */
+/** Emit token usage metrics for a model-generation or classifier-evaluation span. */
 export function emitTokenMetrics(span: AnySpan, metrics: MetricsContext): void {
-  if (span.type !== SpanType.MODEL_GENERATION) {
+  if (span.type === SpanType.MODEL_GENERATION) {
+    const attrs = span.attributes as ModelGenerationAttributes | undefined;
+    if (attrs?.usage) emitUsageMetrics(attrs, attrs.usage, metrics);
     return;
   }
 
-  const attrs = span.attributes as ModelGenerationAttributes | undefined;
-  if (!attrs?.usage) {
-    return;
+  if (span.type === SpanType.CLASSIFIER_EVALUATION) {
+    // Classifier spans name their model `modelId`; cost lookup reads `model`.
+    const attrs = span.attributes as ClassifierEvaluationAttributes | undefined;
+    if (attrs?.usage) emitUsageMetrics({ provider: attrs.provider, model: attrs.modelId }, attrs.usage, metrics);
   }
-
-  emitUsageMetrics(attrs, attrs.usage, metrics);
 }
 
 /**
@@ -60,9 +63,10 @@ export function emitTokenMetricsForUsage(
   usage: UsageStats,
   provider: string | undefined,
   model: string | undefined,
+  usageIncomplete: boolean | undefined,
   metrics: MetricsContext,
 ): void {
-  emitUsageMetrics({ provider, model } as ModelGenerationAttributes, usage, metrics);
+  emitUsageMetrics({ provider, model, usageIncomplete } as ModelGenerationAttributes, usage, metrics);
 }
 
 /** Emit all auto-extracted metrics for a live span end. */
@@ -110,14 +114,14 @@ function emitUsageMetrics(
     }
   }
 
+  const labels = attrs.usageIncomplete ? { usageIncomplete: 'true' } : undefined;
+  // One id per usage observation, shared by all of its token/cost rows, so storage can
+  // collapse them to one row per model call. Rolled-up hidden calls each get their own id
+  // even though they share the ancestor's spanId.
+  const usageId = generateSignalId();
   const emit = (name: TokenMetrics, value: number) => {
     const costContext = metricCosts.get(name);
-    if (!costContext) {
-      metrics.emit(name, value);
-      return;
-    }
-
-    metrics.emit(name, value, undefined, { costContext });
+    metrics.emit(name, value, labels, costContext ? { costContext, usageId } : { usageId });
   };
 
   for (const sample of getTokenMetricSamples(usage)) {

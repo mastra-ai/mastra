@@ -612,7 +612,7 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
+export function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
   // Direct transformer callers can pass any PublicSchema; normalize it before
   // selecting the format-specific handler.
   const normalizedSchema = schema ? toStandardSchema(schema) : undefined;
@@ -627,6 +627,16 @@ function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSc
     default:
       return new ObjectFormatHandler(normalizedSchema);
   }
+}
+
+/**
+ * Errors this transformer emits itself (validation, truncation, malformed enum), as opposed to
+ * errors the provider streamed. They are enqueued before the model's `finish` chunk.
+ */
+const structuredOutputErrors = new WeakSet<object>();
+
+export function isStructuredOutputError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && structuredOutputErrors.has(error);
 }
 
 /**
@@ -654,12 +664,27 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   let currentRunId: string | undefined;
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
   let finishReason: MastraFinishReason | undefined;
+  let hasPendingToolCalls = false;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
       if (chunk.runId) {
         // save runId to use in error chunks
         currentRunId = chunk.runId;
+      }
+
+      // A single transformer can span several model steps (durable agents pipe the whole run through
+      // one stream). Only the terminal step's text is the structured answer, so start each step fresh.
+      if (chunk.type === 'step-start') {
+        accumulatedText = '';
+        previousObject = undefined;
+        finalResult = undefined;
+        finishReason = undefined;
+        hasPendingToolCalls = false;
+      }
+
+      if (chunk.type === 'tool-call' && !chunk.payload?.providerExecuted) {
+        hasPendingToolCalls = true;
       }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
@@ -683,15 +708,15 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         }
       }
 
-      // Always pass through the original chunk for downstream processing
-      controller.enqueue(chunk);
-
-      // Wait for the terminal finish reason before resolving the final object.
+      // Resolve structured output before finish: thread subscribers stop reading at that boundary.
       // Providers that omit finish are handled by the flush fallback below.
       if (chunk.type === 'finish') {
         finishReason = chunk.payload.stepResult.reason;
         await finalize(controller);
       }
+
+      // Always pass through the original chunk for downstream processing
+      controller.enqueue(chunk);
     },
 
     async flush(controller) {
@@ -700,7 +725,14 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   });
 
   async function finalize(controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
-    if (!accumulatedText?.trim() || finalResult) {
+    if (!accumulatedText?.trim() || finalResult || finishReason === 'error') {
+      return;
+    }
+
+    // Text from a step that calls client-executed tools is narration before the tools run, not the
+    // final answer. Truncated steps still fall through so the truncation is reported; an error finish
+    // already surfaces its own error, so its narration must not become an object result.
+    if (hasPendingToolCalls && finishReason !== 'length' && finishReason !== 'content-filter') {
       return;
     }
 
@@ -749,6 +781,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         metadata: { fallback: true },
       });
     } else {
+      structuredOutputErrors.add(error);
       controller.enqueue({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',

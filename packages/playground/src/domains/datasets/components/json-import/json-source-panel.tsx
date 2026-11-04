@@ -152,7 +152,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
         </Txt>
       </div>
       <Txt variant="meta" tone="muted">
-        .json · an array of items · up to {MAX_IMPORT_LABEL}
+        .json files containing an array of items, up to {MAX_IMPORT_LABEL}
       </Txt>
     </div>
   );
@@ -221,9 +221,9 @@ function FileCard({
       ))}
 
       {total > PREVIEW_ROW_COUNT && (
-        <div className="border-t border-border px-3 py-1.5 text-meta text-muted-foreground">
+        <Txt as="p" variant="meta" tone="muted" className="border-t border-border px-3 py-1.5">
           + {total - PREVIEW_ROW_COUNT} more
-        </div>
+        </Txt>
       )}
     </div>
   );

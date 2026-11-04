@@ -853,4 +853,33 @@ describe('NovaSonicVoice', () => {
       expect(listener.enabled).toBe(false);
     });
   });
+
+  describe('textOutput interruption detection', () => {
+    const textOutput = (content: string) => (voice as any).handleServerEvent({ textOutput: { role: 'USER', content } });
+
+    it('emits writing, not interrupt, for transcripts that contain the word "interrupted"', () => {
+      const onInterrupt = vi.fn();
+      const onWriting = vi.fn();
+      voice.on('interrupt', onInterrupt);
+      voice.on('writing', onWriting);
+
+      textOutput('Sorry, I was interrupted earlier');
+
+      expect(onInterrupt).not.toHaveBeenCalled();
+      expect(onWriting).toHaveBeenCalledTimes(1);
+      expect(onWriting.mock.calls[0][0]).toMatchObject({ text: 'Sorry, I was interrupted earlier', role: 'user' });
+    });
+
+    it('still treats the JSON barge-in marker as an interrupt', () => {
+      const onInterrupt = vi.fn();
+      const onWriting = vi.fn();
+      voice.on('interrupt', onInterrupt);
+      voice.on('writing', onWriting);
+
+      textOutput('{ "interrupted" : true }');
+
+      expect(onInterrupt).toHaveBeenCalledTimes(1);
+      expect(onWriting).not.toHaveBeenCalled();
+    });
+  });
 });

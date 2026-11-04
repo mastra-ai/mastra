@@ -13,6 +13,7 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
   name: 'om-model-override-reload',
   description: 'Restores and persists role-specific OM model overrides through the real TUI.',
   testName: 'restores and persists OM observer and reflector model overrides',
+  enableObservationalMemory: true,
   skipReason: 'current main opens custom-provider API key prompt while selecting OM override models',
   useOpenAIModel: true,
   aimockFixture: 'om-model-override-reload.json',
@@ -24,7 +25,6 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
-      quietModePreferenceSelected: true,
     };
     settings.customProviders = [
       {

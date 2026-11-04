@@ -3,6 +3,60 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ContinuationDeps } from './continuation-core';
 import { decideContinuation } from './continuation-core';
 
+describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)', mode => {
+  const deps = (overrides: Partial<ContinuationDeps> = {}) =>
+    makeDeps({ policy: mode === 'default' ? { mode, hasFiniteMaxSteps: true } : { mode }, ...overrides });
+
+  it('reports normal completion on the final allowed step', async () => {
+    expect(await decideContinuation(deps({ underMaxSteps: false, llmWantsToContinue: false }))).toMatchObject({
+      isFinal: true,
+      stopCause: 'model_finished',
+    });
+  });
+
+  it('reports a step limit only when the model requested continuation', async () => {
+    expect(await decideContinuation(deps({ underMaxSteps: false, llmWantsToContinue: true }))).toMatchObject({
+      isFinal: true,
+      stopCause: 'max_steps',
+    });
+  });
+
+  it('reports a step limit when a hook requests another turn after the model finishes', async () => {
+    expect(
+      await decideContinuation(deps({ underMaxSteps: false, onIterationComplete: () => ({ continue: true }) })),
+    ).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+  });
+
+  it('does not attribute an intentional hook stop to the step limit', async () => {
+    expect(
+      await decideContinuation(
+        deps({ underMaxSteps: false, llmWantsToContinue: true, onIterationComplete: () => ({ continue: false }) }),
+      ),
+    ).toMatchObject({ isFinal: true, stopCause: 'iteration_hook' });
+  });
+
+  it('reports a stop condition without re-running the predicate', async () => {
+    let calls = 0;
+    const decision = await decideContinuation(
+      deps({
+        llmWantsToContinue: true,
+        stopWhen: () => {
+          calls++;
+          return true;
+        },
+      }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'stop_condition' });
+    expect(calls).toBe(1);
+  });
+
+  it('does not report a terminal cause after a hook reopens execution', async () => {
+    const decision = await decideContinuation(deps({ onIterationComplete: () => ({ continue: true }) }));
+    expect(decision.isFinal).toBe(false);
+    expect(decision.stopCause).toBeUndefined();
+  });
+});
+
 /**
  * Truth-table tests for the per-engine continuation policy split.
  *
@@ -50,11 +104,30 @@ describe('decideContinuation — pendingFeedbackStop finality', () => {
         onIterationComplete: async () => ({ continue: true }),
       }),
     );
-    expect(decision).toEqual({ isFinal: true, forceContinue: false, nextPendingFeedbackStop: false });
+    expect(decision).toEqual({
+      isFinal: true,
+      forceContinue: false,
+      nextPendingFeedbackStop: false,
+      stopCause: 'feedback_complete',
+    });
   });
 });
 
 describe('decideContinuation — delegation bail ordering (per-engine split)', () => {
+  it.each(['default', 'durable'] as const)('%s: records bail when it stops requested continuation', async mode => {
+    const decision = await decideContinuation(
+      makeDeps({ policy: { mode }, llmWantsToContinue: true, underMaxSteps: true, consumeDelegationBail: () => true }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'delegation' });
+  });
+
+  it.each(['default', 'durable'] as const)('%s: a queued bail does not relabel normal model completion', async mode => {
+    const decision = await decideContinuation(
+      makeDeps({ policy: { mode }, llmWantsToContinue: false, consumeDelegationBail: () => true }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'model_finished' });
+  });
+
   it('default: the bail is checked AFTER the hook — the hook sees a pre-bail isFinal, then the bail wins the stop', async () => {
     const consumeDelegationBail = vi.fn(() => true);
     const seenIsFinal: boolean[] = [];
@@ -146,8 +219,8 @@ describe('decideContinuation — delegation bail ordering (per-engine split)', (
   });
 });
 
-describe('decideContinuation — feedback on hook resurrection (per-engine split)', () => {
-  it('default: { continue: true, feedback } on a stopped run resurrects but silently DROPS the feedback (shipped wart, pinned)', async () => {
+describe('decideContinuation — feedback on hook resurrection', () => {
+  it('default: { continue: true, feedback } injects the feedback before resurrecting a stopped run', async () => {
     const injectFeedback = vi.fn();
     const decision = await decideContinuation(
       makeDeps({
@@ -156,10 +229,7 @@ describe('decideContinuation — feedback on hook resurrection (per-engine split
         onIterationComplete: async () => ({ continue: true, feedback: 'fix it' }),
       }),
     );
-    // Released contract: the feedback gate requires the LLM to already want
-    // to continue, so the resurrection branch never injects. Fixing the drop
-    // is a real data-loss fix but ships separately with a product decision.
-    expect(injectFeedback).not.toHaveBeenCalled();
+    expect(injectFeedback).toHaveBeenCalledWith('fix it');
     expect(decision.isFinal).toBe(false);
     expect(decision.forceContinue).toBe(true);
   });
@@ -246,6 +316,36 @@ describe('decideContinuation — feedback force-continue requires a finite maxSt
     );
     expect(decision.forceContinue).toBe(true);
     expect(decision.isFinal).toBe(false);
+  });
+
+  it('default finite: feedback alone does not reopen a model-finished run', async () => {
+    const injectFeedback = vi.fn();
+    const decision = await decideContinuation(
+      makeDeps({
+        policy: { mode: 'default', hasFiniteMaxSteps: true },
+        llmWantsToContinue: false,
+        injectFeedback,
+        onIterationComplete: hook,
+      }),
+    );
+    expect(injectFeedback).not.toHaveBeenCalled();
+    expect(decision.forceContinue).toBe(false);
+    expect(decision.isFinal).toBe(true);
+  });
+
+  it('default unbounded: feedback does not reopen a model-finished run', async () => {
+    const injectFeedback = vi.fn();
+    const decision = await decideContinuation(
+      makeDeps({
+        policy: { mode: 'default', hasFiniteMaxSteps: false },
+        llmWantsToContinue: false,
+        injectFeedback,
+        onIterationComplete: hook,
+      }),
+    );
+    expect(injectFeedback).not.toHaveBeenCalled();
+    expect(decision.forceContinue).toBe(false);
+    expect(decision.isFinal).toBe(true);
   });
 });
 

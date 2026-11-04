@@ -55,5 +55,5 @@ This method doesn't return a value.
 - Always call `close()` when you're done with a real-time voice session to free up resources
 - After calling `close()`, you'll need to call `connect()` again if you want to start a new session
 - This method is primarily used with real-time voice providers that maintain persistent connections
-- If called on a voice provider that doesn't support real-time connections, it will log a warning and do nothing
+- If called on a voice provider that doesn't support real-time connections, it will log a debug message and do nothing
 - Failing to close connections can lead to resource leaks and potential billing issues with voice service providers

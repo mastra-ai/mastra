@@ -31,6 +31,10 @@ async function validateAgainstConfiguredSchema(schema: PublicSchema, value: unkn
   throw new Error(`Working memory update does not match the configured schema, so it was not saved: ${details}`);
 }
 
+function isEmptyPlainObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
 async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promise<{
   template?: string;
   current?: string | null;
@@ -104,10 +108,16 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
 
         let document: unknown = current;
         if (configuredSchema) {
-          if (current === null) {
+          // An empty object carries no update (some providers, e.g. Gemini, can only emit `{}` for the generic
+          // record schema), and storing it would wipe the existing working memory.
+          if (current === null || isEmptyPlainObject(current)) {
             return undefined;
           }
           document = await validateAgainstConfiguredSchema(configuredSchema, current);
+          // Validation drops nulls in optional fields, so `{"name": null}` can become `{}`.
+          if (document === null || isEmptyPlainObject(document)) {
+            return undefined;
+          }
         }
 
         const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');

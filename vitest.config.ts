@@ -7,7 +7,6 @@ import { configDefaults, defineConfig } from 'vitest/config';
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
   'packages/_config',
-  'packages/_types-builder',
   'packages/_vendored',
   'server-adapters/server-adapters-test-suite',
   'browser/_test-utils',
@@ -21,6 +20,7 @@ const EXCLUDED_DIRS = new Set([
 // Directories to scan for vitest configs
 const PROJECT_GLOBS = [
   'packages/*/vitest.config.ts',
+  'packages/_internals/*/vitest.config.ts',
   'packages/playground/vercel-preview/vitest.config.ts',
   'stores/*/vitest.config.ts',
   'deployers/*/vitest.config.ts',
@@ -135,5 +135,8 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
 export default defineConfig(async () => ({
   test: {
     projects: await discoverProjects(),
+    // Vitest only honours onUnhandledError at the root, so the playground packages' filter is repeated here.
+    // @mcp-ui/client's AppRenderer sends hostContext before its bridge connects and drops the rejected promise.
+    onUnhandledError: error => !(error.message === 'Not connected' && error.stack?.includes('sendHostContextChange')),
   },
 }));

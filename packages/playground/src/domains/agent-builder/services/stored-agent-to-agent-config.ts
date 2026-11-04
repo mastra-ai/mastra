@@ -1,4 +1,4 @@
-import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import type { StoredAgent } from '@mastra/react/hooks/agents';
 
 export interface AgentConfig {
   id: string;

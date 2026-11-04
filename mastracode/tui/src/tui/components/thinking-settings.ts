@@ -7,8 +7,8 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, Focusable } from '@earendil-works/pi-tui';
-import { getAvailableThinkingLevelsForModel } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { getCatalogThinkingLevels } from '@mastra/code-sdk/thinking-catalog';
 import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
@@ -39,7 +39,7 @@ const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
   { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
   { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
   { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
-  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning (Anthropic, GPT-5.6+)' },
+  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning' },
 ];
 
 function isOpenAIModel(modelId: string): boolean {
@@ -47,7 +47,7 @@ function isOpenAIModel(modelId: string): boolean {
 }
 
 export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[] {
-  const availableLevels = getAvailableThinkingLevelsForModel(modelId);
+  const availableLevels = getCatalogThinkingLevels(modelId);
   const levels = BASE_THINKING_LEVELS.filter(level => availableLevels.some(available => available === level.id));
   if (!modelId.startsWith('openai/')) return [...levels];
   return levels.map(level => ({ ...level, label: level.providerValue }));

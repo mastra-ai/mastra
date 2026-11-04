@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
@@ -19,31 +19,44 @@ import { createAgentControllerClient } from '../ui/domains/chat/services/agentCo
 const DEFAULT_INITIAL_MESSAGE_LIMIT = INITIAL_THREAD_MESSAGE_LIMIT;
 const LOAD_MORE_PAGE_SIZE = INITIAL_THREAD_MESSAGE_LIMIT;
 
+/** How often to re-read a session thread the server has not created yet. */
+const MISSING_THREAD_REFETCH_MS = 2_000;
+
+function isNotFound(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 404;
+}
+
 interface UseAgentControllerThreadMessagesArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   threadId?: string;
   baseUrl?: string;
   enabled?: boolean;
   initialLimit?: number;
   pageSize?: number;
+  /**
+   * The thread is the session's own thread. The server creates it only when
+   * the controller session boots, which can trail opening the session by as
+   * long as its environment takes to check out, so a 404 here means "not
+   * created yet": it reads as an empty history (the live stream fills the
+   * transcript) and is re-read until the thread exists.
+   */
+  isSessionThread?: boolean;
 }
 
 export function useAgentControllerThreadMessages({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   threadId,
   baseUrl = '',
   enabled = true,
   initialLimit = DEFAULT_INITIAL_MESSAGE_LIMIT,
   pageSize = LOAD_MORE_PAGE_SIZE,
+  isSessionThread = false,
 }: UseAgentControllerThreadMessagesArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
-    scope,
+    sessionId,
     baseUrl,
     enabled,
   });
@@ -66,11 +79,25 @@ export function useAgentControllerThreadMessages({
   }
 
   // Prefix without the limit — used to detect "same thread" for placeholder data.
-  const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId);
+  const threadKey = queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId);
+
+  // The thread id whose last read was a 404 that `isSessionThread` turned into an empty history.
+  const missingThreadRef = useRef<string | undefined>(undefined);
 
   const query = useQuery({
-    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId, limit),
-    queryFn: () => session!.listMessages(threadId!, limit),
+    queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, sessionId, threadId, limit),
+    queryFn: async () => {
+      try {
+        const messages = await session!.listMessages(threadId!, limit);
+        missingThreadRef.current = undefined;
+        return messages;
+      } catch (error) {
+        if (!isSessionThread || !isNotFound(error)) throw error;
+        missingThreadRef.current = threadId;
+        return [];
+      }
+    },
+    refetchInterval: () => (missingThreadRef.current === threadId ? MISSING_THREAD_REFETCH_MS : false),
     enabled: enabled && Boolean(session) && Boolean(threadId),
     refetchOnWindowFocus: false,
     // Live stream only reaches a mounted transcript — re-entering the route must

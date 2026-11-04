@@ -9,15 +9,24 @@ interface ReviewToolProps {
   status?: ActivityStatus;
   output?: string;
   children?: ReactNode;
+  badges?: ReactNode;
   defaultOpen?: boolean;
 }
 
-export function ReviewTool({ toolName, args, status = 'idle', output, children, defaultOpen }: ReviewToolProps) {
+export function ReviewTool({
+  toolName,
+  args,
+  status = 'idle',
+  output,
+  children,
+  badges,
+  defaultOpen,
+}: ReviewToolProps) {
   const { icon: ToolIcon, label, detail } = presentTool(toolName, args);
   return (
     <Activity status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
       <ActivityTrigger>
-        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} />
+        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} badges={badges} />
       </ActivityTrigger>
       <ActivityContent>
         <ToolCallArguments toolName={toolName} args={args} />

@@ -18,11 +18,11 @@ Providers are supplied via `MastraEditorConfig.processorProviders`.
 
 ```typescript title="src/mastra/index.ts"
 import { MastraEditor } from '@mastra/editor'
-import { moderationProcessorProvider } from '@mastra/processors/moderation'
+import { moderationProvider } from '@mastra/core/processor-provider'
 
 new MastraEditor({
   processorProviders: {
-    moderation: moderationProcessorProvider,
+    moderation: moderationProvider,
   },
 })
 ```

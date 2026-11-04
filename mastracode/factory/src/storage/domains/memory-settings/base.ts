@@ -20,23 +20,13 @@ export interface MemorySettingsRecord {
   updatedAt: Date;
 }
 
-/** Partial update — only the provided knobs are written. */
+/** Partial update — only the provided knobs are written. `null` resets a model role to auto. */
 export interface MemorySettingsPatch {
-  observerModelId?: string;
-  reflectorModelId?: string;
+  observerModelId?: string | null;
+  reflectorModelId?: string | null;
   observationThreshold?: number;
   reflectionThreshold?: number;
   observeAttachments?: 'auto' | boolean;
-}
-
-/**
- * Knobs written only when the stored value is still unset (`NULL`). The check
- * happens inside the backend's atomic-update primitive, so a concurrent
- * explicit write to the same knob is never clobbered by a fill.
- */
-export interface MemorySettingsFillIfUnset {
-  observerModelId?: string;
-  reflectorModelId?: string;
 }
 
 /**
@@ -129,34 +119,24 @@ export class MemorySettingsStorage extends FactoryStorageDomain {
 
   /**
    * Upsert the user's row, writing only the knobs present in `patch`.
-   * `fillIfUnset` knobs are written only where the stored value is still
-   * `NULL`, decided inside the atomic update so concurrent explicit writes
-   * win over fills. Concurrent first writes are resolved via the shared
+   * Concurrent first writes are resolved via the shared
    * insert-then-catch-unique-violation pattern (see `queue_health`).
    */
   async patch({
     orgId,
     userId,
     patch,
-    fillIfUnset,
   }: {
     orgId: string;
     userId: string;
     patch: MemorySettingsPatch;
-    fillIfUnset?: MemorySettingsFillIfUnset;
   }): Promise<MemorySettingsRecord> {
     const now = new Date();
     const updateExisting = () =>
-      this.#db.updateAtomic<MemorySettingsDbRow>('memory_settings', { org_id: orgId, user_id: userId }, row => {
-        const columns: Partial<MemorySettingsDbRow> = { ...patchToColumns(patch), updated_at: now };
-        if (fillIfUnset?.observerModelId !== undefined && row.observer_model_id == null) {
-          columns.observer_model_id = patch.observerModelId ?? fillIfUnset.observerModelId;
-        }
-        if (fillIfUnset?.reflectorModelId !== undefined && row.reflector_model_id == null) {
-          columns.reflector_model_id = patch.reflectorModelId ?? fillIfUnset.reflectorModelId;
-        }
-        return columns;
-      });
+      this.#db.updateAtomic<MemorySettingsDbRow>('memory_settings', { org_id: orgId, user_id: userId }, () => ({
+        ...patchToColumns(patch),
+        updated_at: now,
+      }));
 
     const updated = await updateExisting();
     if (updated) return toRecord(updated);
@@ -165,8 +145,8 @@ export class MemorySettingsStorage extends FactoryStorageDomain {
       const row = await this.#db.insertOne<MemorySettingsDbRow>('memory_settings', {
         org_id: orgId,
         user_id: userId,
-        observer_model_id: fillIfUnset?.observerModelId ?? null,
-        reflector_model_id: fillIfUnset?.reflectorModelId ?? null,
+        observer_model_id: null,
+        reflector_model_id: null,
         observation_threshold: null,
         reflection_threshold: null,
         observe_attachments: null,

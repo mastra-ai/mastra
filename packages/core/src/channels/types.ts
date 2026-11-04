@@ -35,6 +35,11 @@ export type { InlineLinkEntry } from './inline-media';
  */
 export type PostableMessage = string | CardElement | { markdown: string };
 
+/** What `formatError` knows about the failure beyond the error itself. */
+export interface ChannelErrorContext {
+  requestContext?: RequestContext;
+}
+
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
   adapter: Adapter<any, any>;
@@ -55,10 +60,12 @@ export interface ChannelAdapterBaseConfig {
   /**
    * Override how errors are rendered in the chat.
    * Return a user-friendly message instead of exposing the raw error.
+   * `context.requestContext` is the failed run's request context, so a host can
+   * link the message back to whatever the run belongs to.
    *
    * @default `"❌ Error: <error.message>"`
    */
-  formatError?: (error: Error) => PostableMessage;
+  formatError?: (error: Error, context: ChannelErrorContext) => PostableMessage;
 
   /**
    * Dialect for the agent's final reply text.
@@ -72,6 +79,16 @@ export interface ChannelAdapterBaseConfig {
    * notices are unaffected.
    */
   textFormat?: 'markdown' | 'plain';
+
+  /**
+   * Whether the agent's reply text is posted to the channel.
+   * - `'show'` (default) - reply text streams (or posts) to the thread as it does today.
+   * - `'hidden'` - reply text is never posted. The agent's own messages reach the
+   *   channel only through tools you give it (for example a reply tool that posts to the thread).
+   *
+   * Tool display, approval prompts, error messages, and typing status are unaffected.
+   */
+  textDisplay?: 'show' | 'hidden';
 
   /**
    * What to do with buffered (not-yet-posted) reply text when a run is aborted.
@@ -95,6 +112,9 @@ export interface ChannelAdapterBaseConfig {
    * @default `true` for Slack, Discord, Teams, Google Chat and Telegram; `false` otherwise.
    */
   approvalButtons?: boolean;
+
+  /** Who may approve or deny a tool call in a shared channel. Defaults to the requester. */
+  toolApprovers?: 'requester' | 'anyone';
 
   /**
    * Show platform typing indicators (and adaptive status text where supported,
@@ -221,6 +241,7 @@ export type ToolDisplayEvent =
    * Fired once after the user approves an approval card. Only `post` results
    * are honored: the returned message replaces the approval card in place.
    * Returning nothing (or a blank message) keeps the default "Approved" card.
+   * `byUser` is the approving user's name, or undefined in DMs.
    */
   | {
       kind: 'approved';
@@ -229,6 +250,7 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+      byUser?: string;
     }
   /**
    * Fired once after the user denies an approval card. Only `post` results
@@ -411,12 +433,12 @@ export interface ChannelHandlerContext {
    */
   readonly signalMetadata: Record<string, unknown>;
   /**
-   * Earlier messages the Chat SDK batched into this dispatch when a
-   * `chatOptions.concurrency` strategy such as `burst`, `debounce`, or `queue`
-   * is set, oldest first. Empty when nothing was batched. `defaultHandler`
-   * merges consecutive messages from the same sender into one agent turn and
-   * dispatches each sender's messages as a separate turn. Only the turn that
-   * contains the current message uses this context's `requestContext`.
+   * Earlier messages from the same sender that the Chat SDK batched into this
+   * turn when a `chatOptions.concurrency` strategy such as `burst`, `debounce`,
+   * or `queue` is set, oldest first. Empty when nothing was batched. A batch
+   * spanning several senders is split into one turn per sender; the handler is
+   * called once per turn with its own context, and `defaultHandler` dispatches
+   * that turn.
    */
   readonly skipped: readonly Message[];
 }
@@ -487,6 +509,8 @@ export interface ResolveResourceIdContext {
   message: Message;
   /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
   defaultResourceId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -511,6 +535,8 @@ export interface ResolveThreadIdContext {
   resourceId: string;
   /** The built-in default: a random UUID. Return this to keep current behavior. */
   defaultThreadId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -533,6 +559,13 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onMention?: ChannelHandlerConfig;
+
+  /**
+   * Handler for messages that neither mention the bot nor belong to a subscribed thread.
+   * Opt-in: registered only when a function is supplied; omitted or false ignores these messages.
+   * Calling defaultHandler runs the agent, posts the response, and subscribes the thread.
+   */
+  onMessage?: ChannelHandlerConfig;
 
   /**
    * Handler for messages in subscribed threads.
@@ -639,6 +672,17 @@ export interface ChannelConfig {
    * ```
    */
   inlineLinks?: InlineLinkEntry[];
+
+  /**
+   * Total bytes of channel attachments the agent may store under
+   * `channel-attachments/` in its workspace. Binary attachments that need an
+   * authenticated download (e.g. Slack files) are saved there so workspace
+   * tools can open them. When saving a file would go over this limit, the
+   * agent gets the attachment URL instead and nothing is written.
+   *
+   * @default 104857600 (100 MiB)
+   */
+  maxAttachmentStorageBytes?: number;
 
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;
@@ -938,9 +982,21 @@ export interface ChannelProvider {
 
   /**
    * List active installations for this platform.
-   * Returns public info only (no secrets).
+   * Returns public info only (no secrets). Must be a pure read — any state
+   * repair belongs in {@link reconcileInstallation}.
    */
   listInstallations?(): Promise<ChannelInstallationInfo[]>;
+
+  /**
+   * Reconcile an agent's installation with external platform state — e.g.
+   * confirm a pending install whose connect flow completed out-of-band, where
+   * the platform offers no callback. May persist changes, but only to this
+   * agent's installation: the server exposes it behind write authorization for
+   * that agent. Returns the (possibly updated) installation's public info, or
+   * `null` when the agent has no installation. Omit on platforms whose
+   * connect flows confirm synchronously or via webhook.
+   */
+  reconcileInstallation?(agentId: string): Promise<ChannelInstallationInfo | null>;
 }
 
 /**
@@ -1024,6 +1080,8 @@ export type ChannelContext = {
   botUserId?: string;
   /** The bot's display name on this platform. */
   botUserName?: string;
+  /** The bot's current profile display name, when the adapter resolves one that differs from `botUserName`. */
+  botDisplayName?: string;
   /** The bot's mention string (e.g. '<@U123>' on Slack/Discord). */
   botMention?: string;
 };

@@ -4,18 +4,9 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
-import {
-  buildKimiCodingApiKeyFetch,
-  buildKimiCodingOAuthFetch,
-  KIMI_CODING_MODELS,
-  kimiCodingProvider,
-} from './kimi-coding.js';
+import { buildKimiCodingApiKeyFetch, buildKimiCodingOAuthFetch, kimiCodingProvider } from './kimi-coding.js';
 
 describe('Kimi For Coding model provider', () => {
-  it('publishes the subscription catalog', () => {
-    expect(KIMI_CODING_MODELS).toEqual(['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed']);
-  });
-
   it('reports its own provider id so history compatibility can tell Kimi turns apart from Anthropic ones', () => {
     const model = kimiCodingProvider('k3', { apiKey: 'k' }) as unknown as { provider: string; modelId: string };
 
@@ -71,6 +62,40 @@ describe('Kimi For Coding model provider', () => {
       expect(headers.get('x-msh-device-id')).toBe('d'.repeat(32));
       expect(headers.get('x-msh-platform')).toBe('mastracode');
       expect(headers.get('x-test')).toBe('kept');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports a token Kimi rejects as a missing sign-in', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify({ error: { message: 'invalid token' } }), { status: 401 })),
+    );
+    try {
+      const credentialStore = {
+        reload: vi.fn(),
+        get: vi.fn(() => ({
+          type: 'oauth' as const,
+          access: 'revoked',
+          refresh: 'rt',
+          expires: Date.now() + 60_000,
+          deviceId: 'd'.repeat(32),
+        })),
+        getStoredApiKey: vi.fn(),
+        getApiKey: vi.fn(async () => 'revoked'),
+      };
+
+      await expect(
+        buildKimiCodingOAuthFetch({ credentialStore })('https://api.kimi.com/coding/v1/messages'),
+      ).rejects.toMatchObject({
+        name: 'ProviderAuthRequiredError',
+        message: 'Kimi For Coding rejected the stored sign-in: invalid token',
+        status: 401,
+        requestUrl: 'https://api.kimi.com/coding/v1/messages',
+      });
     } finally {
       vi.unstubAllGlobals();
     }

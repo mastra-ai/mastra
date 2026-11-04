@@ -1,6 +1,6 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useCallback, useState } from 'react';
 
 type UseAddTagToResultsArgs = {

@@ -1,7 +1,7 @@
-import { ChevronRight } from 'lucide-react';
 import * as React from 'react';
 import { useTreeContext, useTreeDepth, useTreeFolderContext } from './tree-context';
 import { CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -51,7 +51,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
             focusFolderItem(e.currentTarget, { focus: false });
           }}
         >
-          <ChevronRight aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
+          <DisclosureChevron direction="right" open={folderCtx?.isOpen} className="size-3 text-muted-foreground" />
           {children}
         </CollapsibleTrigger>
         {actions && (

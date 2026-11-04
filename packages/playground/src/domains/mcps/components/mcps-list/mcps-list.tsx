@@ -9,8 +9,8 @@ import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMastraClient } from '@mastra/react';
+import { useMCPServerTools } from '@mastra/react/hooks/mcps';
 import { useMemo } from 'react';
-import { useMCPServerTools } from '../../hooks/useMCPServerTools';
 
 type McpServer = McpServerListResponse['servers'][number];
 
@@ -39,7 +39,7 @@ function McpServerRow({ server, rowProps }: { server: McpServer; rowProps?: Reco
   const transportPath = hasSse ? 'sse' : 'mcp';
   const serverUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/${transportPath}` : '';
 
-  const { data: tools } = useMCPServerTools(server);
+  const { data: tools } = useMCPServerTools({ selectedServer: server });
   const toolsList = Object.values(tools || {});
   const toolsCount = toolsList.length;
   const agentToolsCount = toolsList.filter(t => t.toolType === 'agent').length;
@@ -89,12 +89,12 @@ export function McpServersList({ mcpServers, isLoading, search = '', sort, onSor
           <DataList.TopCell>Name</DataList.TopCell>
         )}
         <DataList.TopCell>URL</DataList.TopCell>
-        <DataList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent Tools" className="text-center" />
+        <DataList.TopCellSmart long="Agents" short={<AgentIcon />} tooltip="Agent tools" className="text-center" />
         <DataList.TopCellSmart long="Tools" short={<ToolsIcon />} tooltip="Tools" className="text-center" />
         <DataList.TopCellSmart
           long="Workflows"
           short={<WorkflowIcon />}
-          tooltip="Workflow Tools"
+          tooltip="Workflow tools"
           className="text-center"
         />
       </DataList.Top>

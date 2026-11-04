@@ -135,24 +135,23 @@ describe('Hono Server Adapter', () => {
           stream: response.body,
           headers,
         };
-      } else {
-        // Read the body exactly once; parsing JSON from text avoids consuming
-        // the body twice when the payload is not valid JSON.
-        const rawText = await response.text();
-        let data: unknown;
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          data = rawText;
-        }
-
-        return {
-          status: response.status,
-          type: 'json',
-          data,
-          headers,
-        };
       }
+      // Read the body exactly once; parsing JSON from text avoids consuming
+      // the body twice when the payload is not valid JSON.
+      const rawText = await response.text();
+      let data: unknown;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = rawText;
+      }
+
+      return {
+        status: response.status,
+        type: 'json',
+        data,
+        headers,
+      };
     },
   });
 
@@ -202,7 +201,7 @@ describe('Hono Server Adapter', () => {
 
       await expectErrorResponse(response, 400, {
         code: 'TRACE_QUERY_CURSOR_MALFORMED',
-        message: 'The trace query cursor is malformed',
+        message: 'The query cursor is malformed',
       });
     });
 
@@ -268,7 +267,7 @@ describe('Hono Server Adapter', () => {
 
       const body = await expectErrorResponse(response, 504, {
         code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-        message: 'The trace query exceeded its execution timeout',
+        message: 'The query exceeded its execution timeout',
       });
       expect(JSON.stringify(body)).not.toMatch(/select|parameter|stack|driver/i);
     });

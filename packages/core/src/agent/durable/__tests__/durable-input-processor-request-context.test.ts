@@ -72,6 +72,7 @@ describe('DurableAgent input processor requestContext writes (#23904)', () => {
     expect(getRequestContextEntries(result.workflowInput)).toEqual({
       userId: 'user-123',
       routePin: 'specialized',
+      mastra__scopes: [],
     });
   });
 
@@ -114,6 +115,7 @@ describe('DurableAgent input processor requestContext writes (#23904)', () => {
       userId: 'user-123',
       stage: 'processed',
       [MASTRA_VERSIONS_KEY]: { agents: { helper: { status: 'draft' } } },
+      mastra__scopes: [],
     });
   });
 });

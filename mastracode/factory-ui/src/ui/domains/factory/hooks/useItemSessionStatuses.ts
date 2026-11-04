@@ -26,7 +26,7 @@ export function useItemSessionStatuses({
     resourceIds: boundSessionIds,
   });
   const parkedSessionIds = useParkedSessions(factoryProjectId);
-  const workspaces = useWorkspacesQuery(projectRepositoryId);
+  const workspaces = useWorkspacesQuery(factoryProjectId);
   const materializingSessionIds = new Set(
     allSessionRows(workspaces.data)
       .filter(session => !session.materializedAt)

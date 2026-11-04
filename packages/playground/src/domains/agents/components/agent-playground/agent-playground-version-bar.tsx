@@ -15,20 +15,16 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
+import { Check, ChevronDown, Download, GitPullRequest, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
-
-import { useAgentVersions } from '../../hooks/use-agent-versions';
 
 interface AgentPlaygroundVersionBarProps {
   agentId: string;
@@ -78,6 +74,7 @@ export function AgentPlaygroundVersionBar({
   const { data } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -91,10 +88,12 @@ export function AgentPlaygroundVersionBar({
       versions.map(v => {
         const isPublished = v.id === activeVersionId;
         const isDraftVersion = activeVersionNumber !== undefined && v.versionNumber > activeVersionNumber;
+        const versionName = `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber}`;
+        const createdAt = formatDate(v.createdAt, 'date-time');
 
         return {
           value: v.id,
-          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'date-time') ?? ''}`,
+          label: createdAt ? `${versionName} (${createdAt})` : versionName,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
             <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
@@ -111,6 +110,7 @@ export function AgentPlaygroundVersionBar({
   const currentValue = selectedVersionId ?? latestVersion?.id ?? '';
 
   const saveDisabled = readOnly || !isDirty || isSavingDraft || isPublishing;
+  const codeSaveDisabled = readOnly || (!isDirty && !hasDraft) || isSavingDraft || isPublishing;
   const versionInfoText = isCodeSourceAgent
     ? 'Code mode saves write override JSON to filesystem-backed editor storage. This dropdown shows saved override snapshots for this agent.'
     : "Changes are saved as draft versions. When you're ready, publish a version to make it the active configuration used in production.";
@@ -131,7 +131,7 @@ export function AgentPlaygroundVersionBar({
             options={versionOptions}
             value={currentValue}
             onValueChange={onVersionSelect}
-            placeholder="Select version..."
+            placeholder="Select version"
             variant="ghost"
             className="min-w-0 flex-1"
           />
@@ -141,21 +141,11 @@ export function AgentPlaygroundVersionBar({
           </Txt>
         )}
 
-        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" />}
 
-        <Tooltip>
-          <TooltipTrigger
-            aria-label="Version information"
-            className={cn('shrink-0 rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
-          >
-            <Icon size="xs">
-              <Info />
-            </Icon>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="start" className="max-w-56">
-            {versionInfoText}
-          </TooltipContent>
-        </Tooltip>
+        <InfoTooltip aria-label="Version information" side="bottom" align="start" contentClassName="max-w-56">
+          {versionInfoText}
+        </InfoTooltip>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {readOnly && <Badge variant="warning">Read-only</Badge>}
@@ -181,7 +171,12 @@ export function AgentPlaygroundVersionBar({
                 Open PR
               </Button>
             ) : (
-              <Button variant="primary" size="md" onClick={() => void onSaveDraft()} disabled={saveDisabled}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => void (isDirty ? onSaveDraft() : onPublish())}
+                disabled={codeSaveDisabled}
+              >
                 {isSavingDraft ? (
                   <>
                     <Spinner className="size-3.5" />
@@ -212,14 +207,14 @@ export function AgentPlaygroundVersionBar({
                     <Icon size="xs">
                       <Save />
                     </Icon>
-                    Save New Version
+                    Save new version
                   </>
                 )}
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" disabled={saveDisabled} aria-label="More save options">
-                    <ChevronDown className="size-3.5" />
+                  <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
+                    <ChevronDown />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
@@ -253,7 +248,7 @@ export function AgentPlaygroundVersionBar({
                   <Icon size="xs">
                     <Check />
                   </Icon>
-                  {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+                  {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
                 </>
               )}
             </Button>
@@ -267,11 +262,10 @@ export function AgentPlaygroundVersionBar({
               <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
             </DialogHeader>
             <DialogBody>
-              <div className="grid gap-2">
-                <Label htmlFor="change-message">Change message</Label>
+              <Field>
+                <FieldLabel>Change message</FieldLabel>
                 <Input
-                  id="change-message"
-                  placeholder="Describe what changed..."
+                  placeholder="Describe what changed"
                   value={changeMessage}
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
@@ -282,11 +276,11 @@ export function AgentPlaygroundVersionBar({
                   disabled={isSavingDraft}
                   autoFocus
                 />
-              </div>
+              </Field>
             </DialogBody>
             <DialogFooter>
               <DialogCancel>Cancel</DialogCancel>
-              <DialogAction onConfirm={handleSaveWithMessage}>Save Version</DialogAction>
+              <DialogAction onConfirm={handleSaveWithMessage}>Save version</DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>

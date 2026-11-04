@@ -29,9 +29,26 @@ A client that accepts command and argument fields can use:
 }
 ```
 
-Configure provider authentication in Mastra Code before starting the client, or supply API keys in the server process's environment. ACP sessions don't load project `.env` files into the shared process environment. The server doesn't offer interactive ACP authentication.
-
 After initialization, the client calls `session/new` with an absolute `cwd` and an `mcpServers` array. The response includes the session ID and configuration choices. Send that ID with subsequent prompts and configuration requests.
+
+## Authentication
+
+`session/new` returns an `auth_required` error when no model provider is configured, so clients can offer the methods from the `initialize` response:
+
+| Method ID | Type | Behavior |
+| - | - | - |
+| `openai-codex` | Agent | Opens the browser to sign in with a ChatGPT Plus or Pro subscription. |
+| `kimi-for-coding` | Agent | Opens the browser to approve a Kimi For Coding device sign-in. |
+| `xai` | Agent | Opens the browser to approve an xAI device sign-in. |
+| `anthropic` | Terminal | Runs `mastracode login --provider anthropic` to sign in with a Claude Pro or Max subscription. |
+| `github-copilot` | Terminal | Runs `mastracode login --provider github-copilot` to sign in with GitHub Copilot. |
+| `mastracode-login` | Terminal | Runs `mastracode login` to choose any provider or save an API key. |
+
+Terminal methods are offered only to clients that advertise terminal authentication.
+
+For agent methods, `authenticate` runs the sign-in inside the server process and returns after the credentials are saved. If a provider needs typed input, such as a code to paste, the request fails and asks you to run `mastracode login` in a terminal.
+
+API keys in the server process's environment also count as a configured provider. ACP sessions don't load project `.env` files into the shared process environment. New sessions pick up saved credentials without restarting the server. When the default model's provider isn't configured, a new session starts on the default model of a provider that is, such as `anthropic/claude-fable-5` after an Anthropic sign-in.
 
 ## `acpMain(options?)`
 

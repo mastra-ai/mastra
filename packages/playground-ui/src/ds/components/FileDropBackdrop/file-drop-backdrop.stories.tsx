@@ -1,12 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp, Paperclip, X } from 'lucide-react';
+import { ArrowUp, Paperclip } from 'lucide-react';
 import { useRef, useState } from 'react';
 
-import { Badge } from '../Badge/Badge';
 import { Button } from '../Button';
-import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput } from '../Composer';
+import { Composer, ComposerActions, ComposerBox, ComposerInput } from '../Composer';
 import { Input } from '../Input';
 import { FileDropBackdrop } from './file-drop-backdrop';
+import { FileChipEntry } from '@/domains/chat/attachments/attachment-preview-dialog';
+import { ComposerAttachment } from '@/domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentList } from '@/domains/chat/attachments/composer-attachment-list';
 
 const meta: Meta<typeof FileDropBackdrop> = {
   title: 'Elements/FileDropBackdrop',
@@ -31,7 +33,7 @@ const InputDemo = () => {
   return (
     <FileDropBackdrop onFilesDrop={files => setFileNames(files.map(file => file.name).join(', '))}>
       <div className="w-80">
-        <Input readOnly aria-label="Dropped files" placeholder="Drag a file anywhere…" value={fileNames} />
+        <Input readOnly aria-label="Dropped files" placeholder="Drag a file anywhere" value={fileNames} />
       </div>
     </FileDropBackdrop>
   );
@@ -50,25 +52,21 @@ const ComposerDemo = ({ accept, label, description }: { accept?: string; label?:
   return (
     <FileDropBackdrop onFilesDrop={addFiles} accept={accept} label={label} description={description}>
       <Composer aria-label="Message composer" onSubmit={event => event.preventDefault()}>
-        {files.length > 0 && (
-          <ComposerAttachments aria-label="Attachments" className="flex flex-wrap gap-1.5">
-            {files.map((file, index) => (
-              <Badge key={`${file.name}-${index}`} size="sm">
-                {file.name}
-                <button
-                  type="button"
-                  aria-label={`Remove ${file.name}`}
-                  className="ml-0.5 opacity-60 hover:opacity-100"
-                  onClick={() => setFiles(current => current.filter((_, i) => i !== index))}
-                >
-                  <X className="size-3" />
-                </button>
-              </Badge>
-            ))}
-          </ComposerAttachments>
-        )}
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Drop files anywhere to attach them…" />
+          {files.length > 0 && (
+            <ComposerAttachmentList>
+              {files.map((file, index) => (
+                <ComposerAttachment
+                  key={`${file.name}-${index}`}
+                  name={file.name}
+                  onRemove={() => setFiles(current => current.filter((_, i) => i !== index))}
+                >
+                  <FileChipEntry name={file.name} contentType={file.type} />
+                </ComposerAttachment>
+              ))}
+            </ComposerAttachmentList>
+          )}
+          <ComposerInput aria-label="Message" placeholder="Drop files anywhere to attach them" />
           <ComposerActions>
             <input
               ref={fileInputRef}

@@ -7,7 +7,7 @@ packages:
 
 # StorageWorkspaceRef
 
-`StorageWorkspaceRef` is the discriminated union used to attach a workspace to a stored agent. It either points at a workspace registered on the Mastra runtime by ID, or embeds a workspace snapshot inline.
+`StorageWorkspaceRef` is the discriminated union used to attach a workspace to a stored agent. It points at a workspace registered on the Mastra runtime by ID, embeds a workspace snapshot inline, or names a workspace provider registered on `MastraEditor.workspaces` that builds the workspace.
 
 It's the type used by [`BuilderAgentDefaults.workspace`](https://agent-builder.mastra.ai/reference/builder-agent-defaults) and by stored agent records.
 
@@ -43,6 +43,23 @@ new MastraEditor({
               config: { basePath: './agent-files' },
             },
           },
+        },
+      },
+    },
+  },
+})
+
+// Variant 3 — build the workspace with a registered workspace provider
+new MastraEditor({
+  workspaces: { 'my-provider': myWorkspaceProvider },
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        workspace: {
+          type: 'provider',
+          provider: 'my-provider',
+          config: { region: 'us-east-1' },
         },
       },
     },
@@ -97,6 +114,34 @@ new MastraEditor({
             type: 'StorageWorkspaceSnapshotType',
             description:
               'Serialized workspace configuration (filesystem, sandbox, mounts, search, skills, tools). See the `StorageWorkspaceSnapshotType` section below for the field list.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "{ type: 'provider'; provider: string; config: Record<string, unknown> }",
+    type: 'ProviderRef',
+    description:
+      'Build the entire workspace with a workspace provider registered on `MastraEditor.workspaces`. The ref is stored as-is in the agent snapshot; no separate workspace record is persisted.',
+    properties: [
+      {
+        type: "{ type: 'provider'; provider: string; config: Record<string, unknown> }",
+        parameters: [
+          {
+            name: 'type',
+            type: "'provider'",
+            description: 'Discriminant. Must be the literal `"provider"`.',
+          },
+          {
+            name: 'provider',
+            type: 'string',
+            description: 'Id of a workspace provider registered via `new MastraEditor({ workspaces })`.',
+          },
+          {
+            name: 'config',
+            type: 'Record<string, unknown>',
+            description: "Provider-specific configuration passed to the provider's `createWorkspace(config)`.",
           },
         ],
       },
@@ -178,7 +223,7 @@ The shape embedded under `{ type: 'inline', config }`. Defined in `@mastra/core/
 
 ## Hydration
 
-`StorageWorkspaceRef` is resolved lazily on `mastra.editor.agent.getById()`, not on `list()`. The editor looks up filesystem and sandbox providers on `MastraEditor.filesystems` / `MastraEditor.sandboxes` and materializes a runtime `Workspace`. Missing providers surface as a warning and the workspace is omitted.
+`StorageWorkspaceRef` is resolved lazily on `mastra.editor.agent.getById()`, not on `list()`. The editor looks up filesystem and sandbox providers on `MastraEditor.filesystems` / `MastraEditor.sandboxes` and materializes a runtime `Workspace`. Missing providers surface as a warning and the workspace is omitted. For `{ type: 'provider' }` refs, the editor calls `createWorkspace(config)` on the provider registered on `MastraEditor.workspaces`. An unregistered provider throws an error.
 
 ## Related
 

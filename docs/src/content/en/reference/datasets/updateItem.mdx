@@ -51,6 +51,31 @@ const updated = await dataset.updateItem({
     description: 'Updated ground truth.',
   },
   {
+    name: 'expectedTrajectory',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Updated expected trajectory for trajectory scorers.',
+  },
+  {
+    name: 'toolMocks',
+    type: 'DatasetItemToolMock[]',
+    isOptional: true,
+    description:
+      "Updated static tool mocks used during experiments. Each mock has `toolName`, `args`, `output`, and an optional `matchArgs` (`'strict' | 'ignore'`).",
+  },
+  {
+    name: 'unmockedToolPolicy',
+    type: "'allow' | 'deny'",
+    isOptional: true,
+    description: 'Overrides how the experiment handles tool calls that are not declared in `toolMocks`.',
+  },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Updated request context applied when the item runs.',
+  },
+  {
     name: 'scorerIds',
     type: 'string[] | null',
     isOptional: true,
@@ -62,6 +87,12 @@ const updated = await dataset.updateItem({
     type: 'Record<string, unknown>',
     isOptional: true,
     description: 'Updated metadata.',
+  },
+  {
+    name: 'source',
+    type: "{ type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener'; referenceId?: string }",
+    isOptional: true,
+    description: 'Updated provenance of the item.',
   },
 ]}
 />

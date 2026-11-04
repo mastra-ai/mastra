@@ -5,6 +5,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
   TABLE_BACKGROUND_TASKS,
+  TABLE_WORKFLOW_RUN_OWNERS,
+  TABLE_MEMORY_RUN_FENCES,
 } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
@@ -19,6 +21,8 @@ const ENTITY_MAP: Record<string, string> = {
   [TABLE_WORKFLOW_SNAPSHOT]: 'workflow_snapshot',
   [TABLE_SCORERS]: 'score',
   [TABLE_BACKGROUND_TASKS]: 'background_task',
+  [TABLE_WORKFLOW_RUN_OWNERS]: 'workflow_run_owner',
+  [TABLE_MEMORY_RUN_FENCES]: 'memory_run_fence',
 };
 
 /**
@@ -39,6 +43,10 @@ function getDeleteKey(entityName: string, item: any): Record<string, any> {
       key.workflow_name = item.workflow_name;
       key.run_id = item.run_id;
       break;
+    case 'workflow_run_owner':
+    case 'memory_run_fence':
+      key.run_id = item.run_id;
+      break;
     default:
       key.id = item.id;
   }
@@ -49,7 +57,10 @@ function getDeleteKey(entityName: string, item: any): Record<string, any> {
 /**
  * Deletes all data for a given table/entity type
  */
-export async function deleteTableData(service: Service<Record<string, any>>, tableName: TABLE_NAMES): Promise<void> {
+export async function deleteTableData(
+  service: Service<Record<string, any>>,
+  tableName: TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES,
+): Promise<void> {
   const entityName = ENTITY_MAP[tableName];
   if (!entityName || !service.entities[entityName]) {
     throw new Error(`No entity mapping found for table: ${tableName}`);

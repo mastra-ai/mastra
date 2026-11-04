@@ -57,6 +57,7 @@ const mastra = new Mastra({/* storage config */})
 const experiment = await mastra.datasets.getExperiment({
   experimentId: 'exp-id',
 })
+if (!experiment) throw new Error('Experiment not found')
 
 console.log(`Dataset: ${experiment.datasetId}`)
 console.log(`Status: ${experiment.status}`)

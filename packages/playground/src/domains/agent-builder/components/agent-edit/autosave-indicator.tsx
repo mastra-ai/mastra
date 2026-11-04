@@ -45,23 +45,21 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
 
   if (status === 'error') {
     return (
-      <Txt
-        as="span"
-        variant="caption"
-        tone="muted"
-        className="flex items-center gap-1.5"
-        data-testid="agent-builder-autosave-error"
-      >
-        <span title={lastError?.message}>Failed to save</span>
+      <span className="flex items-center gap-1.5 text-muted-foreground" data-testid="agent-builder-autosave-error">
+        <Txt as="span" variant="caption" title={lastError?.message}>
+          Failed to save
+        </Txt>
         <button
           type="button"
           onClick={onRetry}
           data-testid="agent-builder-autosave-retry"
           className={cn('underline underline-offset-2', quietTextHover, controlStateColorTransition)}
         >
-          Retry
+          <Txt as="span" variant="caption">
+            Retry
+          </Txt>
         </button>
-      </Txt>
+      </span>
     );
   }
 

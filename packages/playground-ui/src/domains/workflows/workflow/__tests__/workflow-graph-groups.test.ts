@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, expect, it } from 'vitest';
 import { constructNodesAndEdges } from '../utils';
 import { getWorkflowGraphGroups, getWorkflowMapContext } from '../workflow-graph-groups';
@@ -13,7 +12,7 @@ describe('Workflow graph groups', () => {
       expect(getWorkflowGraphGroups(nodes)).toEqual([
         expect.objectContaining({
           label: 'Parallel',
-          description: '2 paths · Run together',
+          description: '2 paths run together',
           nodeIds: ['node-add-letter-b', 'node-add-letter-c'],
         }),
       ]);

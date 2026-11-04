@@ -3,11 +3,10 @@ import type { AgentSignalIfIdleOptions } from '../agent/types';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { ApiRoute } from '../server/types';
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SignalProviderTarget = {
   threadId: string;
@@ -20,8 +19,6 @@ export type SignalProviderTarget = {
 /**
  * A subscription that links an agent thread to an external resource
  * monitored by a signal provider.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SignalSubscription = {
   /** Unique identifier for the subscription */
@@ -42,8 +39,6 @@ export type SignalSubscription = {
 
 /**
  * Options for the handleWebhook method.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SignalProviderWebhookRequest = {
   body: unknown;
@@ -99,8 +94,6 @@ export type SignalProviderWebhookRequest = {
  *   }
  * }
  * ```
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export abstract class SignalProvider<TId extends string = string> {
   abstract readonly id: TId;
@@ -424,6 +417,40 @@ export abstract class SignalProvider<TId extends string = string> {
    */
   handleWebhook?(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }>;
 
+  /**
+   * Return API routes this provider needs on the Mastra server, such as
+   * webhook receivers or OAuth callbacks. Mastra merges them into
+   * `server.apiRoutes` when the provider's agent is registered, so users
+   * don't have to add them by hand. Routes already registered with the same
+   * method and path win, and Mastra logs a warning when it skips one.
+   *
+   * Routes require auth by default. A route with `requiresAuth: false` must
+   * verify the sender (for example a webhook signature) before handling the
+   * request. Paths must not start with the server `apiPrefix` (`/api`).
+   *
+   * @example
+   * ```ts
+   * getRoutes() {
+   *   return [
+   *     registerApiRoute('/acme/webhook', {
+   *       method: 'POST',
+   *       requiresAuth: false,
+   *       handler: async c => {
+   *         // Public route: verify the sender before handling the payload
+   *         const rawBody = await c.req.text();
+   *         if (!verifyAcmeSignature(rawBody, c.req.header('x-acme-signature'))) {
+   *           return c.json({ error: 'invalid signature' }, 401);
+   *         }
+   *         const result = await this.handleWebhook({ body: JSON.parse(rawBody), headers: c.req.header() });
+   *         return c.json(result.body ?? {}, result.status ?? 200);
+   *       },
+   *     }),
+   *   ];
+   * }
+   * ```
+   */
+  getRoutes?(): ApiRoute[];
+
   // ── Lifecycle ──────────────────────────────────────────────────────
 
   /**
@@ -479,8 +506,6 @@ export abstract class SignalProvider<TId extends string = string> {
 
 /**
  * Type guard to check if an object is a SignalProvider.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export function isSignalProvider(obj: unknown): obj is SignalProvider {
   return obj instanceof SignalProvider;

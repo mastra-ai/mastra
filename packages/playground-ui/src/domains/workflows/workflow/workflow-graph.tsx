@@ -6,7 +6,6 @@ import { WorkflowGraphBoundary } from './workflow-graph-boundary';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowGraphPlaceholder } from '@/ds/components/Workflow';
 import { lodashTitleCase } from '@/utils/string';
-import '../../../index.css';
 
 export interface WorkflowGraphProps {
   workflowId: string;

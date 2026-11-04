@@ -32,6 +32,8 @@ export interface SqliteClient {
   batch(statements: Array<string | SqliteStatement>, mode?: SqliteTransactionMode): Promise<SqliteResultSet[]>;
   transaction(mode?: SqliteTransactionMode): Promise<SqliteTransaction>;
   close(): void | Promise<void>;
+  /** Pulls the primary's changes into an embedded replica. */
+  sync?(): Promise<unknown>;
   readonly closed: boolean;
   readonly protocol: string;
 }

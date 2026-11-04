@@ -1,11 +1,12 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardCandidate } from '../boardCandidates';
-import type { BoardCardStatus } from '../boardCardStatus';
-import { externalLinkLabel, metadataLabelColors, metadataLabels } from '../boardItems';
-import { CardLabels, CardStatus, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
+import type { BoardCardStatus } from '../boardCardState';
+import { externalLinkLabel } from '../boardItems';
+import { CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from './BoardCardParts';
 import { SourceIcon } from './BoardIcons';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -30,11 +31,17 @@ export function CandidateCardRows({
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <Txt as="span" variant="meta" tone="faint" className="truncate pr-16">
-          {candidate.meta}
+          <Metadata singleLine>
+            {candidate.meta.map((part, index) => (
+              <Metadata.Item key={index} className={index === 0 ? 'shrink-0' : undefined}>
+                {part}
+              </Metadata.Item>
+            ))}
+          </Metadata>
         </Txt>
         <div className="flex min-w-0 items-center gap-1.5">
           <SourceIcon source={candidate.source} />
-          <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate font-semibold">
+          <Txt as="span" variant="card-title-strong" tone="ink" className="min-w-0 flex-1 truncate">
             <SourceTitle source={candidate.source} title={candidate.title} id={titleId} />
           </Txt>
           {/* Triage reads the source before deciding, so keep it one click away. */}
@@ -50,7 +57,7 @@ export function CandidateCardRows({
           </a>
         </div>
       </div>
-      <CardLabels labels={metadataLabels(candidate.metadata)} colors={metadataLabelColors(candidate.metadata)} />
+      <MetadataLabels metadata={candidate.metadata} />
       <CardStatus status={status} />
       {actions}
     </>

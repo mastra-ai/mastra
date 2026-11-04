@@ -1,0 +1,613 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { confirm, password, select, text } from '@clack/prompts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../auth/credentials.js', () => ({
+  getToken: vi.fn().mockResolvedValue('tok'),
+  openBrowser: vi.fn(),
+}));
+vi.mock('../auth/orgs.js', () => ({
+  resolveCurrentOrg: vi.fn().mockResolvedValue({ orgId: 'org_1', orgName: 'Org' }),
+}));
+vi.mock('../env/resolve-project.js', () => ({
+  resolveProject: vi.fn().mockResolvedValue({ id: 'proj_1', name: 'My Project' }),
+}));
+vi.mock('./api.js', () => ({
+  fetchIntegrationCatalog: vi.fn(),
+  fetchProjectConnections: vi.fn(),
+  fetchOrgConnections: vi.fn(),
+  fetchOrgMembers: vi.fn(),
+  addConnectionToProject: vi.fn(),
+  createProjectConnectSession: vi.fn(),
+  removeProjectConnection: vi.fn(),
+  updateConnectionDisplayName: vi.fn(),
+}));
+
+const CANCEL = Symbol('cancel');
+vi.mock('@clack/prompts', () => ({
+  select: vi.fn(),
+  confirm: vi.fn(),
+  text: vi.fn(),
+  password: vi.fn(),
+  isCancel: (value: unknown) => value === CANCEL,
+  spinner: () => ({ start: vi.fn(), stop: vi.fn() }),
+}));
+vi.mock('./nango.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('./nango.js')>();
+  return { ...actual, submitCredentialAuth: vi.fn() };
+});
+
+import { openBrowser } from '../auth/credentials.js';
+import { resolveProject } from '../env/resolve-project.js';
+import {
+  addConnectionToProject,
+  createProjectConnectSession,
+  fetchIntegrationCatalog,
+  fetchOrgConnections,
+  fetchOrgMembers,
+  fetchProjectConnections,
+  removeProjectConnection,
+  updateConnectionDisplayName,
+} from './api.js';
+import { connectProviderAction, listProvidersAction, removeConnectionAction } from './connect.js';
+import { submitCredentialAuth } from './nango.js';
+
+function authField(overrides: Record<string, unknown>) {
+  return {
+    name: 'apiKey',
+    target: 'credentials',
+    label: 'API key',
+    description: null,
+    placeholder: null,
+    defaultValue: null,
+    options: null,
+    documentationUrl: null,
+    visibleWhen: null,
+    secret: true,
+    required: true,
+    order: 0,
+    ...overrides,
+  };
+}
+
+function connection(overrides: Record<string, unknown>) {
+  return {
+    id: 'conn_1',
+    integrationId: 'linear',
+    status: 'active',
+    accountLabel: null,
+    displayName: null,
+    connectedByUserId: 'user_1',
+    connectedAt: null,
+    createdAt: '2026-09-25T14:41:21.878Z',
+    ...overrides,
+  };
+}
+
+describe('listProvidersAction', () => {
+  let output: string[];
+
+  beforeEach(() => {
+    output = [];
+    vi.spyOn(console, 'info').mockImplementation((line: string) => void output.push(line));
+    vi.mocked(fetchIntegrationCatalog).mockResolvedValue([
+      { id: 'linear', displayName: 'Linear', logoUrl: null, authType: 'OAUTH2', authFields: [], comingSoon: false },
+      { id: 'slack', displayName: 'Slack', logoUrl: null, authType: 'OAUTH2', authFields: [], comingSoon: false },
+    ]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows the account label when present without fetching members', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([connection({ accountLabel: 'charlie@mastra.ai' })]);
+
+    await listProvidersAction();
+
+    expect(output.join('\n')).toContain('connected (charlie@mastra.ai)');
+    expect(fetchOrgMembers).not.toHaveBeenCalled();
+  });
+
+  it('falls back to "connected by <member name>" when the label is null', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([connection({})]);
+    vi.mocked(fetchOrgMembers).mockResolvedValue([
+      { userId: 'user_1', email: 'charlie@mastra.ai', firstName: 'Charlie', lastName: 'Smith' },
+    ]);
+
+    await listProvidersAction();
+
+    expect(output.join('\n')).toContain('connected by Charlie Smith');
+  });
+
+  it('falls back to the member email when no name is set', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([connection({})]);
+    vi.mocked(fetchOrgMembers).mockResolvedValue([
+      { userId: 'user_1', email: 'charlie@mastra.ai', firstName: null, lastName: null },
+    ]);
+
+    await listProvidersAction();
+
+    expect(output.join('\n')).toContain('connected by charlie@mastra.ai');
+  });
+
+  it('still renders when the connecting member is unknown', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([connection({ connectedByUserId: 'user_gone' })]);
+    vi.mocked(fetchOrgMembers).mockResolvedValue([]);
+
+    await listProvidersAction();
+
+    expect(output.join('\n')).toContain('connected by a teammate');
+  });
+});
+
+describe('connectProviderAction', () => {
+  let output: string[];
+  const originalStdinTTY = process.stdin.isTTY;
+  const originalStdoutTTY = process.stdout.isTTY;
+  const originalCI = process.env.CI;
+
+  beforeEach(() => {
+    output = [];
+    vi.spyOn(console, 'info').mockImplementation((line: string) => void output.push(line));
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    delete process.env.CI;
+    vi.mocked(fetchIntegrationCatalog).mockResolvedValue([
+      { id: 'linear', displayName: 'Linear', logoUrl: null, authType: 'OAUTH2', authFields: [], comingSoon: false },
+    ]);
+    vi.mocked(createProjectConnectSession).mockResolvedValue({
+      connectionId: 'conn_new',
+      integrationId: 'linear',
+      connectUrl: 'https://connect.example/session',
+      sessionToken: 'session_tok',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    vi.mocked(fetchOrgMembers).mockResolvedValue([
+      { userId: 'user_1', email: 'charlie@mastra.ai', firstName: 'Charlie', lastName: 'Smith' },
+    ]);
+  });
+
+  afterEach(() => {
+    process.stdin.isTTY = originalStdinTTY;
+    process.stdout.isTTY = originalStdoutTTY;
+    if (originalCI === undefined) delete process.env.CI;
+    else process.env.CI = originalCI;
+    vi.restoreAllMocks();
+    vi.mocked(select).mockReset();
+    vi.mocked(text).mockReset();
+    vi.mocked(confirm).mockReset();
+    vi.mocked(password).mockReset();
+    vi.mocked(fetchProjectConnections).mockReset();
+    vi.mocked(fetchOrgConnections).mockReset();
+    vi.mocked(addConnectionToProject).mockReset();
+    vi.mocked(createProjectConnectSession).mockReset();
+    vi.mocked(updateConnectionDisplayName).mockReset();
+    vi.mocked(removeProjectConnection).mockReset();
+    vi.mocked(submitCredentialAuth).mockReset();
+  });
+
+  it('attaches an existing org connection when the user picks one', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([connection({ id: 'conn_org', accountLabel: 'charlie' })]);
+    vi.mocked(select).mockResolvedValue('conn_org');
+
+    await connectProviderAction('linear');
+
+    expect(addConnectionToProject).toHaveBeenCalledWith('tok', 'org_1', 'proj_1', 'conn_org');
+    expect(createProjectConnectSession).not.toHaveBeenCalled();
+    expect(output.join('\n')).toContain('(charlie) to My Project');
+  });
+
+  it('renders aligned columns with account, connected by, and date', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({ id: 'conn_a', accountLabel: 'Mastra', connectedAt: '2026-09-25T12:00:00.000Z' }),
+      connection({ id: 'conn_b', accountLabel: 'charlie@mastra.ai', connectedAt: '2026-10-02T12:00:00.000Z' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('conn_a');
+
+    await connectProviderAction('linear');
+
+    const { options } = vi.mocked(select).mock.calls[0]![0] as { options: { label: string }[] };
+    const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '');
+    const labels = options.map(option => stripAnsi(option.label));
+    expect(labels[0]).toBe('Mastra             connected by Charlie Smith  Sep 25, 2026');
+    expect(labels[1]).toBe('charlie@mastra.ai  connected by Charlie Smith  Oct 2, 2026');
+    expect(labels[2]).toBe('Create a new connection');
+    // The date column starts at the same offset in every connection row.
+    expect(labels[0]!.indexOf('Sep 25')).toBe(labels[1]!.indexOf('Oct 2'));
+  });
+
+  it('goes straight to the create flow when no org connections exist', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([]);
+
+    await connectProviderAction('linear');
+
+    expect(select).not.toHaveBeenCalled();
+    expect(addConnectionToProject).not.toHaveBeenCalled();
+    expect(createProjectConnectSession).toHaveBeenCalled();
+    expect(output.join('\n')).toContain('Connected');
+  });
+
+  it('runs the create flow when the user picks "Create a new connection"', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([connection({ id: 'conn_org', accountLabel: 'charlie' })]);
+    vi.mocked(select).mockResolvedValue('__create_new__');
+
+    await connectProviderAction('linear');
+
+    expect(addConnectionToProject).not.toHaveBeenCalled();
+    expect(createProjectConnectSession).toHaveBeenCalled();
+  });
+
+  it('shows the display name first with the account in the detail column, never the id', async () => {
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({
+        id: 'conn_a',
+        displayName: 'Prod',
+        accountLabel: 'Mastra',
+        connectedAt: '2026-09-25T12:00:00.000Z',
+      }),
+      connection({ id: 'conn_b', accountLabel: 'charlie', connectedAt: '2026-10-02T12:00:00.000Z' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('conn_a');
+
+    await connectProviderAction('linear');
+
+    const { options } = vi.mocked(select).mock.calls[0]![0] as { options: { label: string }[] };
+    const stripAnsi = (value: string) => value.replace(/\x1b\[[0-9;]*m/g, '');
+    const labels = options.map(option => stripAnsi(option.label));
+    expect(labels[0]).toBe('Prod     Mastra  connected by Charlie Smith  Sep 25, 2026');
+    expect(labels[1]).toBe('charlie          connected by Charlie Smith  Oct 2, 2026');
+    expect(labels.join('\n')).not.toContain('conn_');
+  });
+
+  it('saves the display name entered after a new connection goes active', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([]);
+    vi.mocked(text).mockResolvedValue('Prod Linear');
+
+    await connectProviderAction('linear');
+
+    expect(updateConnectionDisplayName).toHaveBeenCalledWith('tok', 'org_1', 'conn_new', 'Prod Linear');
+    expect(output.join('\n')).toContain('(Prod Linear) to My Project');
+  });
+
+  it('suggests a name that does not collide with existing connections', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'Mastra' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([connection({ id: 'conn_org', accountLabel: 'Mastra' })]);
+    vi.mocked(select).mockResolvedValue('__create_new__');
+    vi.mocked(text).mockResolvedValue(undefined as never);
+
+    await connectProviderAction('linear');
+
+    const textCall = vi.mocked(text).mock.calls[0]![0] as { initialValue?: string };
+    expect(textCall.initialValue).toBe('Mastra 2');
+    // Existing connections are listed so the user can see what's taken.
+    expect(output.join('\n')).toContain("Your organization's existing Linear connections:");
+    expect(updateConnectionDisplayName).not.toHaveBeenCalled();
+  });
+
+  it('warns and confirms before using a name that collides', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({ id: 'conn_org', displayName: 'Prod', accountLabel: 'Mastra' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('__create_new__');
+    vi.mocked(text).mockResolvedValue('prod');
+    vi.mocked(confirm).mockResolvedValue(true);
+
+    await connectProviderAction('linear');
+
+    const confirmCall = vi.mocked(confirm).mock.calls[0]![0] as { message: string };
+    expect(confirmCall.message).toContain('already named "Prod"');
+    expect(updateConnectionDisplayName).toHaveBeenCalledWith('tok', 'org_1', 'conn_new', 'prod');
+  });
+
+  it('re-prompts when the user declines a colliding name', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([
+      connection({ id: 'conn_org', displayName: 'Prod', accountLabel: 'Mastra' }),
+    ]);
+    vi.mocked(select).mockResolvedValue('__create_new__');
+    vi.mocked(text).mockResolvedValueOnce('Prod').mockResolvedValueOnce('Prod 2');
+    vi.mocked(confirm).mockResolvedValue(false);
+
+    await connectProviderAction('linear');
+
+    expect(text).toHaveBeenCalledTimes(2);
+    expect(updateConnectionDisplayName).toHaveBeenCalledWith('tok', 'org_1', 'conn_new', 'Prod 2');
+  });
+
+  it('skips the reuse prompt entirely with --yes', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([connection({ id: 'conn_org' })]);
+
+    await connectProviderAction('linear', { yes: true });
+
+    expect(fetchOrgConnections).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+    expect(createProjectConnectSession).toHaveBeenCalled();
+  });
+
+  it('does not create a session when the credential form is cancelled', async () => {
+    vi.mocked(fetchIntegrationCatalog).mockResolvedValue([
+      {
+        id: 'fireflies',
+        displayName: 'Fireflies',
+        logoUrl: null,
+        authType: 'API_KEY',
+        authFields: [],
+        comingSoon: false,
+      },
+    ]);
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([]);
+    vi.mocked(password).mockResolvedValue(CANCEL as never);
+
+    await expect(connectProviderAction('fireflies')).rejects.toThrow('Cancelled');
+    expect(createProjectConnectSession).not.toHaveBeenCalled();
+  });
+
+  it('unlinks the pending connection when the provider rejects the credentials', async () => {
+    vi.mocked(fetchIntegrationCatalog).mockResolvedValue([
+      {
+        id: 'fireflies',
+        displayName: 'Fireflies',
+        logoUrl: null,
+        authType: 'API_KEY',
+        authFields: [],
+        comingSoon: false,
+      },
+    ]);
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([]);
+    vi.mocked(password).mockResolvedValue('bad-key');
+    vi.mocked(submitCredentialAuth).mockRejectedValue(new Error('The provider rejected these credentials.'));
+    vi.mocked(removeProjectConnection).mockResolvedValue(undefined);
+
+    await expect(connectProviderAction('fireflies')).rejects.toThrow('rejected these credentials');
+    expect(removeProjectConnection).toHaveBeenCalledWith('tok', 'org_1', 'proj_1', 'conn_new');
+  });
+
+  it('opens the hosted connect page without prompting for fields it cannot use', async () => {
+    vi.mocked(fetchIntegrationCatalog).mockResolvedValue([
+      {
+        id: 'netsuite',
+        displayName: 'NetSuite',
+        logoUrl: null,
+        authType: 'TWO_STEP',
+        authFields: [authField({ name: 'accountId', label: 'Account ID' })],
+        comingSoon: false,
+      },
+    ]);
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', integrationId: 'netsuite' })]);
+
+    await connectProviderAction('netsuite', { yes: true });
+
+    expect(text).not.toHaveBeenCalled();
+    expect(password).not.toHaveBeenCalled();
+    expect(openBrowser).toHaveBeenCalledWith('https://connect.example/session');
+  });
+
+  it('only prompts for params fields on OAuth and carries them into the URL', async () => {
+    vi.mocked(fetchIntegrationCatalog).mockResolvedValue([
+      {
+        id: 'linear',
+        displayName: 'Linear',
+        logoUrl: null,
+        authType: 'OAUTH2',
+        authFields: [
+          authField({ name: 'clientId', label: 'Client ID' }),
+          authField({ name: 'subdomain', target: 'params', label: 'Subdomain', secret: false }),
+        ],
+        comingSoon: false,
+      },
+    ]);
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new' })]);
+    vi.mocked(text).mockResolvedValue('acme');
+
+    await connectProviderAction('linear', { yes: true });
+
+    expect(text).toHaveBeenCalledTimes(1);
+    expect(password).not.toHaveBeenCalled();
+    const url = vi.mocked(openBrowser).mock.calls.at(-1)![0] as string;
+    expect(url).toContain('params[subdomain]=acme');
+  });
+
+  it('stops polling as soon as the connection reports an error', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', status: 'error' })]);
+
+    await expect(connectProviderAction('linear', { yes: true })).rejects.toThrow('did not authorize');
+  });
+
+  it('skips the rename request when the accepted name matches the account label', async () => {
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new', accountLabel: 'charlie' })]);
+    vi.mocked(fetchOrgConnections).mockResolvedValue([]);
+    vi.mocked(text).mockResolvedValue('charlie');
+
+    await connectProviderAction('linear');
+
+    expect(updateConnectionDisplayName).not.toHaveBeenCalled();
+    expect(output.join('\n')).toContain('(charlie) to My Project');
+  });
+});
+
+describe('removeConnectionAction', () => {
+  let output: string[];
+  const originalStdinTTY = process.stdin.isTTY;
+  const originalStdoutTTY = process.stdout.isTTY;
+  const originalCI = process.env.CI;
+
+  beforeEach(() => {
+    output = [];
+    vi.spyOn(console, 'info').mockImplementation((line: string) => void output.push(line));
+    process.stdin.isTTY = true;
+    process.stdout.isTTY = true;
+    delete process.env.CI;
+    vi.mocked(fetchProjectConnections).mockResolvedValue([
+      connection({ id: 'conn_a', accountLabel: 'Mastra' }),
+      connection({ id: 'conn_b', accountLabel: 'charlie' }),
+    ]);
+  });
+
+  afterEach(() => {
+    process.stdin.isTTY = originalStdinTTY;
+    process.stdout.isTTY = originalStdoutTTY;
+    if (originalCI === undefined) delete process.env.CI;
+    else process.env.CI = originalCI;
+    vi.restoreAllMocks();
+    vi.mocked(select).mockReset();
+    vi.mocked(fetchProjectConnections).mockReset();
+    vi.mocked(removeProjectConnection).mockReset();
+  });
+
+  it('refuses to remove several connections with --yes unless --all is passed', async () => {
+    await expect(removeConnectionAction('linear', { yes: true })).rejects.toThrow('--all');
+    expect(removeProjectConnection).not.toHaveBeenCalled();
+  });
+
+  it('removes every connection with --yes --all', async () => {
+    await removeConnectionAction('linear', { yes: true, all: true });
+
+    expect(removeProjectConnection).toHaveBeenCalledTimes(2);
+    expect(removeProjectConnection).toHaveBeenCalledWith('tok', 'org_1', 'proj_1', 'conn_a');
+    expect(removeProjectConnection).toHaveBeenCalledWith('tok', 'org_1', 'proj_1', 'conn_b');
+  });
+
+  it('removes only the connection named with --connection', async () => {
+    await removeConnectionAction('linear', { yes: true, connection: 'conn_b' });
+
+    expect(removeProjectConnection).toHaveBeenCalledTimes(1);
+    expect(removeProjectConnection).toHaveBeenCalledWith('tok', 'org_1', 'proj_1', 'conn_b');
+  });
+
+  it('errors when --connection does not match an attached connection', async () => {
+    await expect(removeConnectionAction('linear', { yes: true, connection: 'conn_missing' })).rejects.toThrow(
+      'No linear connection with id conn_missing',
+    );
+    expect(removeProjectConnection).not.toHaveBeenCalled();
+  });
+});
+
+describe('dotenv loading', () => {
+  let dir: string;
+  let originalCwd: typeof process.cwd;
+  const originalProjectId = process.env.MASTRA_PROJECT_ID;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'connect-env-'));
+    originalCwd = process.cwd;
+    process.cwd = () => dir;
+    delete process.env.MASTRA_PROJECT_ID;
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.mocked(fetchIntegrationCatalog).mockResolvedValue([]);
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    process.cwd = originalCwd;
+    if (originalProjectId === undefined) delete process.env.MASTRA_PROJECT_ID;
+    else process.env.MASTRA_PROJECT_ID = originalProjectId;
+    rmSync(dir, { recursive: true, force: true });
+    vi.mocked(resolveProject).mockReset();
+    vi.mocked(resolveProject).mockResolvedValue({ id: 'proj_1', name: 'My Project' } as never);
+    vi.restoreAllMocks();
+  });
+
+  it('loads MASTRA_PROJECT_ID from a .env file in the cwd before resolving the project', async () => {
+    writeFileSync(join(dir, '.env'), 'MASTRA_PROJECT_ID=proj_from_dotenv\n');
+    let seenAtCall: string | undefined;
+    vi.mocked(resolveProject).mockImplementation(async () => {
+      seenAtCall = process.env.MASTRA_PROJECT_ID;
+      return { id: 'proj_1', name: 'My Project' } as never;
+    });
+
+    await listProvidersAction();
+
+    expect(seenAtCall).toBe('proj_from_dotenv');
+  });
+
+  it('does not override an already-exported env var', async () => {
+    writeFileSync(join(dir, '.env'), 'MASTRA_PROJECT_ID=proj_from_dotenv\n');
+    process.env.MASTRA_PROJECT_ID = 'proj_from_shell';
+    let seenAtCall: string | undefined;
+    vi.mocked(resolveProject).mockImplementation(async () => {
+      seenAtCall = process.env.MASTRA_PROJECT_ID;
+      return { id: 'proj_1', name: 'My Project' } as never;
+    });
+
+    await listProvidersAction();
+
+    expect(seenAtCall).toBe('proj_from_shell');
+  });
+
+  it('only promotes the Mastra Connect allowlist keys from .env into process.env', async () => {
+    const originalDatabaseUrl = process.env.DATABASE_URL;
+    const originalOpenAI = process.env.OPENAI_API_KEY;
+    const originalAccessToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+    const originalSecretKey = process.env.MASTRA_PLATFORM_SECRET_KEY;
+    delete process.env.DATABASE_URL;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+    delete process.env.MASTRA_PLATFORM_SECRET_KEY;
+
+    writeFileSync(
+      join(dir, '.env'),
+      [
+        'MASTRA_PROJECT_ID=proj_from_dotenv',
+        'MASTRA_PLATFORM_ACCESS_TOKEN=mp_token_from_dotenv',
+        'MASTRA_PLATFORM_SECRET_KEY=ms_secret_from_dotenv',
+        'DATABASE_URL=postgres://nope',
+        'OPENAI_API_KEY=sk-should-not-leak',
+      ].join('\n') + '\n',
+    );
+
+    try {
+      await listProvidersAction();
+
+      expect(process.env.MASTRA_PROJECT_ID).toBe('proj_from_dotenv');
+      expect(process.env.MASTRA_PLATFORM_ACCESS_TOKEN).toBe('mp_token_from_dotenv');
+      expect(process.env.MASTRA_PLATFORM_SECRET_KEY).toBe('ms_secret_from_dotenv');
+      expect(process.env.DATABASE_URL).toBeUndefined();
+      expect(process.env.OPENAI_API_KEY).toBeUndefined();
+    } finally {
+      if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = originalDatabaseUrl;
+      if (originalOpenAI === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = originalOpenAI;
+      if (originalAccessToken === undefined) delete process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
+      else process.env.MASTRA_PLATFORM_ACCESS_TOKEN = originalAccessToken;
+      if (originalSecretKey === undefined) delete process.env.MASTRA_PLATFORM_SECRET_KEY;
+      else process.env.MASTRA_PLATFORM_SECRET_KEY = originalSecretKey;
+    }
+  });
+});

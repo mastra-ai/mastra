@@ -36,7 +36,7 @@ const CLIENT_CALL_ID = 'tc-client-1';
  * `getWeather` call, finishReason 'tool-calls'.
  * Step 2: the deferred provider tool-result + text, finishReason 'stop'.
  */
-function createDeferredProviderModel(deferredResult: Record<string, unknown>) {
+function createDeferredProviderModel(deferredResult: Record<string, unknown>, isError?: boolean) {
   let callCount = 0;
   return new MockLanguageModelV2({
     doStream: async () => {
@@ -79,6 +79,7 @@ function createDeferredProviderModel(deferredResult: Record<string, unknown>) {
             toolName: 'web_search',
             result: deferredResult,
             providerExecuted: true,
+            ...(isError ? { isError: true } : {}),
           },
           { type: 'text-start', id: 'text-1' },
           { type: 'text-delta', id: 'text-1', delta: 'Done.' },
@@ -137,15 +138,16 @@ function findInvocations(value: unknown, toolCallId: string, found: any[] = []):
 interface SetupOptions {
   deferredResult: Record<string, unknown>;
   outputProcessors?: any[];
+  isError?: boolean;
 }
 
-function setup(pubsub: EventEmitterPubSub, { deferredResult, outputProcessors }: SetupOptions) {
+function setup(pubsub: EventEmitterPubSub, { deferredResult, outputProcessors, isError }: SetupOptions) {
   const mockMemory = new MockMemory();
   const baseAgent = new Agent({
     id: 'deferred-provider-agent',
     name: 'Deferred Provider Agent',
     instructions: 'You are a helpful agent.',
-    model: createDeferredProviderModel(deferredResult) as LanguageModelV2,
+    model: createDeferredProviderModel(deferredResult, isError) as LanguageModelV2,
     memory: mockMemory,
     tools: { getWeather: weatherTool },
     ...(outputProcessors ? { outputProcessors } : {}),
@@ -157,7 +159,7 @@ function setup(pubsub: EventEmitterPubSub, { deferredResult, outputProcessors }:
     storage: new InMemoryStore(),
     pubsub,
   });
-  return { mockMemory, durableAgent };
+  return { mockMemory, durableAgent, baseAgent };
 }
 
 describe('DurableAgent deferred provider-executed tool results (#14282)', () => {
@@ -199,6 +201,82 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
     expect(invocations.some((inv: any) => inv.state === 'result')).toBe(true);
     expect(JSON.stringify(recalled.messages)).toContain('deferred-search');
     result.cleanup();
+  });
+
+  describe('deferred result flagged isError (#26526)', () => {
+    const toolSearchError = { type: 'tool_search_tool_result_error', errorCode: 'invalid_tool_input' };
+
+    async function expectPersistedAsError(mockMemory: MockMemory, threadId: string, resourceId: string) {
+      const recalled = await mockMemory.recall({ threadId, resourceId });
+      const part = findInvocationPart(recalled.messages, PROVIDER_CALL_ID);
+      expect(part?.toolInvocation.state).toBe('output-error');
+      expect(part?.toolInvocation.result).toEqual(toolSearchError);
+      expect(part?.toolInvocation.errorText).toBe(JSON.stringify(toolSearchError));
+    }
+
+    it('DurableAgent persists the deferred error as output-error', async () => {
+      const { mockMemory, durableAgent } = setup(pubsub, { deferredResult: toolSearchError, isError: true });
+      const result = await durableAgent.stream('search and check weather', {
+        memory: { thread: 'thread-deferred-error', resource: 'resource-deferred-error' },
+      });
+      await drain(result.fullStream);
+      await expectPersistedAsError(mockMemory, 'thread-deferred-error', 'resource-deferred-error');
+      result.cleanup();
+    });
+
+    it('Agent persists the deferred error as output-error', async () => {
+      const { mockMemory, baseAgent } = setup(pubsub, { deferredResult: toolSearchError, isError: true });
+      const result = await baseAgent.stream('search and check weather', {
+        memory: { thread: 'thread-deferred-error-agent', resource: 'resource-deferred-error' },
+      });
+      await result.consumeStream();
+      await expectPersistedAsError(mockMemory, 'thread-deferred-error-agent', 'resource-deferred-error');
+    });
+
+    const redactingErrorProcessor = {
+      id: 'deferred-error-redactor',
+      name: 'Deferred Error Redactor',
+      processToolResult: async ({ toolCallId, toolName, args, messageList }: any) => {
+        if (toolCallId === PROVIDER_CALL_ID) {
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId,
+              toolName,
+              args,
+              result: toolSearchError,
+              errorText: JSON.stringify(toolSearchError),
+            },
+            providerExecuted: true,
+          });
+        }
+      },
+    };
+
+    it.each(['durable', 'base'] as const)(
+      'keeps a processToolResult redaction of the deferred error (%s agent)',
+      async kind => {
+        const { mockMemory, durableAgent, baseAgent } = setup(pubsub, {
+          deferredResult: { ...toolSearchError, detail: 'SECRET-DETAIL' },
+          isError: true,
+          outputProcessors: [redactingErrorProcessor],
+        });
+        const thread = `thread-deferred-error-redact-${kind}`;
+        const options = { memory: { thread, resource: 'resource-deferred-error' } };
+        if (kind === 'durable') {
+          const result = await durableAgent.stream('search and check weather', options);
+          await drain(result.fullStream);
+          result.cleanup();
+        } else {
+          const result = await baseAgent.stream('search and check weather', options);
+          await result.consumeStream();
+        }
+        await expectPersistedAsError(mockMemory, thread, 'resource-deferred-error');
+        const recalled = await mockMemory.recall({ threadId: thread, resourceId: 'resource-deferred-error' });
+        expect(JSON.stringify(recalled.messages)).not.toContain('SECRET-DETAIL');
+      },
+    );
   });
 
   it('runs processToolResult on the deferred result before emission and persistence', async () => {

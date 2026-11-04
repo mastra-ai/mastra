@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const deleteReactionInputSchema = z.object({
   channel_id: z.string().describe('The ID of the channel containing the message. Example: "123456789012345678"'),
@@ -26,15 +27,7 @@ export function deleteReactionTool(proxy: PlatformProxy) {
     outputSchema: deleteReactionOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteReactionOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please configure the bot token from Discord Developer Portal.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/channel#delete-own-reaction
       // DELETE /channels/{channel.id}/messages/{message.id}/reactions/{emoji}/@me

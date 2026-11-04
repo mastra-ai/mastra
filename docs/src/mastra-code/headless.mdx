@@ -42,9 +42,10 @@ echo "Summarize the repo" | mastracode --prompt -
 | `--max-turns <n>` | Abort after N agentic turns (exit code 1) |
 | `--permission-mode <mode>` | How tool approvals/suspensions resolve: `auto` (default) approves everything; `deny` refuses approvals and aborts on suspension |
 | `--output`, `-o <mode>` | Output mode: `human` (default), `json`, or `jsonl` |
-| `--model`, `-m <id>` | Model override (e.g. a `provider/model` id) |
-| `--mode <build\|plan\|fast>` | Execution mode — defaults to `build` if omitted |
-| `--thinking-level <level>` | Thinking level: `off`, `low`, `medium`, `high`, `xhigh` |
+| `--model`, `-m <id>` | Model override (e.g. a `provider/model` id). Takes precedence over the pack's model for the active mode |
+| `--pack <id>` | Start with a model pack: a built-in pack id (e.g. `anthropic`, `openai`), `custom:<name>`, or a bare custom-pack name. Applies the pack like `/models` → Activate (mode models, subagent models, model route) and makes it the default pack; also takes precedence over `MASTRACODE_MODEL_ID` |
+| `--mode <build\|plan\|fast>` | Execution mode — defaults to `build` if omitted. `fast` selects Explore mode |
+| `--thinking-level <level>` | Thinking level: `off`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `--settings <path>` | Path to a `settings.json` file (default: global settings) |
 | `--help`, `-h` | Show usage |
 
@@ -56,13 +57,13 @@ echo "Summarize the repo" | mastracode --prompt -
 | - | - |
 | `human` | Streaming assistant text to stdout; tool activity and errors to stderr |
 | `json` | A single final JSON object (text, usage, tool calls/results, threadId, status) |
-| `jsonl` | Newline-delimited JSON: one line per event, then a final `{ "type": "result", ... }` line |
+| `jsonl` | Newline-delimited JSON: one line per event except `display_state_changed` UI snapshots, then a final `{ "type": "result", ... }` line |
 
 ### Exit codes
 
 | Code | Meaning |
 | - | - |
-| `0` | Agent completed successfully |
+| `0` | Run completed successfully (`completed` or `done`) |
 | `1` | Error, aborted, or max turns reached |
 | `2` | Timeout |
 
@@ -80,6 +81,9 @@ mastracode --prompt "Review this PR" --permission-mode deny --max-turns 10
 
 # Use a CI-specific settings file
 mastracode --settings ./settings-ci.json --prompt "Run tests"
+
+# Run on a custom model pack, with one mode's model overridden
+mastracode --pack custom:Kimi --model __GATEWAY_ANTHROPIC_MODEL_OPUS__ --prompt "Review this PR"
 
 # Resume the most recent thread
 mastracode -c --prompt "Continue where you left off"
@@ -116,7 +120,7 @@ console.log(result.status, result.text)
 
 `runMC` returns an `MCRun`, which is both an async-iterable over controller events and a handle that resolves to a final result:
 
-```typescript
+```typescript oxfmt:false
 const run = runMC({ controller, session, prompt })
 
 run.result // Promise<RunMCResult>
@@ -134,11 +138,12 @@ Both `for await (const event of run)` and `await run.result` work on the same ru
 | - | - | - |
 | `controller` | `AgentController` | Controller from `createMastraCode()` (required) |
 | `session` | `Session` | Session from `createMastraCode()` (required) |
-| `prompt` | `string` | The task to run (required) |
+| `prompt` | `string` | The task to run (required unless `goal` is set) |
+| `goal` | `RunMCGoalOptions` | Run a goal instead of a prompt. Requires `objective`, `judgeModelId`, and `maxRuns` |
 | `model` | `string` | Explicit model id override; takes precedence over `mode` |
 | `mode` | `'build' \| 'plan' \| 'fast'` | Execution mode; resolves a model from `modeDefaults` when `model` is absent |
 | `modeDefaults` | `Record<string, string>` | Per-mode default model ids |
-| `thinkingLevel` | `'off' \| 'low' \| 'medium' \| 'high' \| 'xhigh'` | Thinking-effort level |
+| `thinkingLevel` | `'off' \| 'low' \| 'medium' \| 'high' \| 'xhigh' \| 'max'` | Thinking-effort level |
 | `thread` | `{ id?: string; continueLatest?: boolean; clone?: boolean }` | Thread selection / mutation |
 | `resourceId` | `string` | Resource id for thread scoping |
 | `title` | `string` | Set or rename the thread title before running |
@@ -151,8 +156,13 @@ Both `for await (const event of run)` and `await run.result` work on the same ru
 
 | Field | Type | Description |
 | - | - | - |
-| `status` | `'completed' \| 'error' \| 'aborted' \| 'timeout' \| 'max_turns'` | How the run ended |
+| `status` | `'completed' \| 'done' \| 'paused' \| 'error' \| 'aborted' \| 'timeout' \| 'max_turns'` | How the run ended. `done` and `paused` are terminal goal-run states |
 | `text` | `string` | Aggregated assistant text across the run |
+| `objective` | `string` | Goal objective for a goal run |
+| `goalEvent` | `AgentControllerEvent` | Terminal goal evaluation for a goal run |
+| `reason` | `string` | Goal reason, when the goal evaluation provides one |
+| `iterations` | `number` | Goal iterations completed |
+| `maxRuns` | `number` | Maximum goal runs configured for the goal |
 | `finishReason` | `string` | Underlying finish reason when the run finished normally |
 | `usage` | `{ inputTokens?; outputTokens?; totalTokens? }` | Token usage |
 | `toolCalls` | `Array<{ id; name; args }>` | Tool calls made during the run |
@@ -177,15 +187,15 @@ The CLI `--permission-mode` flag maps directly onto these via `permissionModeToP
 
 ### Custom policies
 
-Implement the `ResolutionPolicy` interface to make per-event decisions:
+Implement the `ResolutionPolicy` interface to make per-event decisions. A policy only responds when a tool requests approval; it does not choose which tools the agent can use. For a read-only run, also select Explore mode with `mode: 'fast'`, whose tool set excludes writes and shell commands.
 
 ```typescript title="src/strict-policy.ts"
 import { createMastraCode, runMC, type ResolutionPolicy } from 'mastracode'
 
 const readOnlyPolicy: ResolutionPolicy = {
-  // Only approve read_file; deny everything else.
+  // Only approve reading files with view; deny everything else.
   onToolApproval(event) {
-    return event.toolName === 'read_file' ? 'approve' : 'deny'
+    return event.toolName === 'view' ? 'approve' : 'deny'
   },
   // Abort rather than answer suspensions unattended.
   onSuspension() {
@@ -199,6 +209,7 @@ const run = runMC({
   controller,
   session,
   prompt: 'Audit the codebase for secrets',
+  mode: 'fast',
   policy: readOnlyPolicy,
 })
 

@@ -115,8 +115,11 @@ export interface TeamsProviderConfigBase {
   appTenantId?: string;
   /**
    * Bot application audience. Provisioned (delegated) bots default to
-   * `MultiTenant`.
-   * @default 'MultiTenant'
+   * `SingleTenant` — Microsoft deprecated new multitenant bot registrations
+   * (July 2025). The tenant defaults to the delegated token's `tid` claim
+   * when {@link appTenantId} is not set. Self-managed bots infer the type
+   * from whether `appTenantId` is provided.
+   * @default 'SingleTenant'
    */
   appType?: 'MultiTenant' | 'SingleTenant';
   /** Override the Bot Framework service URL (e.g. sovereign clouds). Forwarded to the adapter. */

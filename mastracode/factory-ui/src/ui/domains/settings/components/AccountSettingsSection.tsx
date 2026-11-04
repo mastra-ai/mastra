@@ -31,7 +31,7 @@ function authProviderLabel(provider: string | undefined): string {
 
 function AccountValue({ children, mono = false }: { children: string; mono?: boolean }) {
   return (
-    <Txt as="span" variant="caption" font={mono ? 'mono' : undefined} className="text-muted-foreground truncate">
+    <Txt tone="muted" as="span" variant="caption" font={mono ? 'mono' : undefined} className="truncate">
       {children}
     </Txt>
   );

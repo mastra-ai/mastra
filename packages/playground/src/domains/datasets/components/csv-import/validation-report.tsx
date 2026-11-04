@@ -1,5 +1,8 @@
 'use client';
 
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { AlertTriangleIcon, CheckCircleIcon } from 'lucide-react';
 import type { CsvValidationResult, RowValidationResult } from '../../utils/csv-validation';
@@ -19,9 +22,11 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   // All rows valid
   if (invalidCount === 0) {
     return (
-      <div className={cn('flex items-center gap-2 text-body text-success-indicator', className)}>
+      <div className={cn('flex items-center gap-2 text-success-indicator', className)}>
         <CheckCircleIcon className="h-4 w-4" />
-        All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
+        <Txt as="span" variant="body" className="block">
+          All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
+        </Txt>
       </div>
     );
   }
@@ -29,21 +34,39 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   return (
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
-      <div className="flex items-center gap-2 text-body text-warning-indicator">
+      <div className="flex items-center gap-2 text-warning-foreground">
         <AlertTriangleIcon className="h-4 w-4" />
-        {invalidCount} of {totalRows} rows will be skipped (validation failed)
+        <Txt as="span" variant="body" className="block">
+          {invalidCount} of {totalRows} rows will be skipped (validation failed)
+        </Txt>
       </div>
 
-      {validCount > 0 && <div className="text-body text-muted-foreground">{validCount} rows will be imported</div>}
+      {validCount > 0 && (
+        <Txt as="p" variant="body" tone="muted">
+          {validCount} rows will be imported
+        </Txt>
+      )}
 
       {/* Failing rows table */}
       <div className="max-h-48 overflow-y-auto rounded-md border">
-        <table className="w-full text-caption">
+        <table className="w-full">
           <thead className="sticky top-0 bg-muted">
             <tr>
-              <th className="px-2 py-1 text-left font-medium">Row</th>
-              <th className="px-2 py-1 text-left font-medium">Field</th>
-              <th className="px-2 py-1 text-left font-medium">Error</th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Row
+                </Txt>
+              </th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Field
+                </Txt>
+              </th>
+              <th className="px-2 py-1 text-left">
+                <Txt as="span" variant="column" className="block">
+                  Error
+                </Txt>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -53,7 +76,9 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
             {invalidCount > invalidRows.length && (
               <tr>
                 <td colSpan={3} className="px-2 py-1 text-muted-foreground italic">
-                  ... and {invalidCount - invalidRows.length} more
+                  <Txt as="span" variant="caption" className="block">
+                    ... and {invalidCount - invalidRows.length} more
+                  </Txt>
                 </td>
               </tr>
             )}
@@ -75,12 +100,12 @@ function ValidationRow({ row }: { row: RowValidationResult }) {
     <tr className="border-t">
       <td className="px-2 py-1 text-muted-foreground">{row.rowNumber}</td>
       <td className="px-2 py-1">
-        <code className="rounded bg-muted px-1 text-caption">
+        <InlineCode className="rounded bg-muted px-1 text-caption">
           {row.field}
           {errorPath !== '/' ? errorPath : ''}
-        </code>
+        </InlineCode>
       </td>
-      <td className="px-2 py-1 text-destructive-indicator">{errorMessage}</td>
+      <td className="px-2 py-1 text-destructive-foreground">{errorMessage}</td>
     </tr>
   );
 }

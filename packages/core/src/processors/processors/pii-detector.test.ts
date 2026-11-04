@@ -1,6 +1,6 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
@@ -1610,8 +1610,9 @@ describe('PIIDetector', () => {
       // Only configure email detection (regex-only, no buffering)
       const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: ['email'] });
 
-      // Phone should NOT be detected
-      const phoneResult = await detector.processOutputStream({
+      // Phone should NOT be detected: the held text is released when the step finishes
+      const phoneState: Record<string, any> = {};
+      await detector.processOutputStream({
         part: {
           type: 'text-delta',
           payload: { id: 'test-id', text: 'Call 555-123-4567' },
@@ -1619,10 +1620,16 @@ describe('PIIDetector', () => {
           from: ChunkFrom.AGENT,
         },
         streamParts: [],
-        state: {},
+        state: phoneState,
         abort: vi.fn() as any,
       });
-      expect(phoneResult).not.toBeNull();
+      const phoneResult = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state: phoneState,
+        abort: vi.fn() as any,
+      });
+      expect(phoneResult).toMatchObject({ type: 'text-delta', payload: { text: 'Call 555-123-4567' } });
 
       // Email SHOULD be detected
       const emailResult = await detector.processOutputStream({
@@ -1802,7 +1809,7 @@ describe('PIIDetector', () => {
       await detector.processOutputStream({
         part: {
           type: 'text-delta',
-          payload: { id: 'text-0', text: 'a'.repeat(190) },
+          payload: { id: 'text-0', text: 'a '.repeat(95) },
           runId: 'test-run-id',
           from: ChunkFrom.AGENT,
         },
@@ -1833,8 +1840,8 @@ describe('PIIDetector', () => {
         state,
         abort: vi.fn() as any,
       });
-      // No full email yet — should pass through
-      expect(result1).not.toBeNull();
+      // No full email yet, but the prefix is held until it can be checked
+      expect(result1).toBeNull();
 
       // Second chunk: completes the email
       const result2 = await detector.processOutputStream({
@@ -1850,6 +1857,14 @@ describe('PIIDetector', () => {
       });
       // Now the carryover + new chunk forms "test@example.com" — should filter
       expect(result2).toBeNull();
+
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'test-run-id', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      expect(flushed).toMatchObject({ type: 'text-delta', payload: { text: ' is here' } });
     });
 
     it('should redact PII split across chunks correctly', async () => {
@@ -2236,6 +2251,125 @@ describe('PIIDetector', () => {
       }
     });
 
+    it.each([
+      ['block', ''],
+      ['filter', ' end'],
+    ] as const)('applies %s before releasing PII at every two-chunk split', async (strategy, expected) => {
+      const text = `${'a'.repeat(100)} mail «secret@example.com», n°123-45-6789, card 4111 1111 1111 1111 end`;
+      const stream = async (chunks: string[]) => {
+        const detector = new PIIDetector({
+          model: new MockLanguageModelV1(),
+          strategy,
+          detectionTypes: ['email', 'ssn', 'credit-card'],
+        });
+        const state: Record<string, any> = {};
+        const abort = vi.fn((reason?: string) => {
+          throw new TripWire(reason ?? 'blocked');
+        }) as any;
+        const parts = [
+          ...chunks.map((chunk, i) => ({ type: 'text-delta', payload: { id: `text-${i}`, text: chunk } })),
+          { type: 'step-finish', payload: {} },
+        ];
+        let output = '';
+        let blocked = false;
+        try {
+          for (const part of parts) {
+            const result = await detector.processOutputStream({
+              part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+              streamParts: [],
+              state,
+              abort,
+            });
+            if (result?.type === 'text-delta') output += result.payload.text;
+          }
+        } catch (error) {
+          if (!(error instanceof TripWire)) throw error;
+          blocked = true;
+        }
+        return { output, blocked };
+      };
+
+      const whole = await stream([text]);
+      expect(whole).toEqual({ output: expected, blocked: strategy === 'block' });
+      for (let i = 1; i < text.length; i++) {
+        const chunks = [text.slice(0, i), text.slice(i)];
+        expect(await stream(chunks), JSON.stringify(chunks)).toEqual(whole);
+      }
+    });
+
+    it.each([
+      ['block', ['Your SSN is ', '123', '-45', '-678', '9', '.'], ''],
+      ['filter', ['Your SSN is ', '123', '-45', '-678', '9', '.'], '.'],
+      ['filter', ['Reach me at ', 'john', '.doe', '@', 'acme', '.co', 'm', ' anytime'], ' anytime'],
+      ['filter', ['Mail ', 'secret@example.com'], ''],
+    ] as const)('%s releases no prefix of PII split over many chunks: %j', async (strategy, chunks, expected) => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy,
+        detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+      });
+      const state: Record<string, any> = {};
+      const abort = vi.fn((reason?: string) => {
+        throw new TripWire(reason ?? 'blocked');
+      }) as any;
+      let output = '';
+      const run = async () => {
+        for (const part of [
+          ...chunks.map((text, i) => ({ type: 'text-delta', payload: { id: `text-${i}`, text } })),
+          { type: 'step-finish', payload: {} },
+        ]) {
+          const result = await detector.processOutputStream({
+            part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+            streamParts: [],
+            state,
+            abort,
+          });
+          if (result?.type === 'text-delta') output += result.payload.text;
+        }
+      };
+
+      if (strategy === 'block') await expect(run()).rejects.toThrow(TripWire);
+      else await run();
+      expect(output).toBe(expected);
+    });
+
+    it.each(['block', 'filter', 'redact'] as const)(
+      '%s holds an email address longer than the carryover until it is complete',
+      async strategy => {
+        const address = `${'a'.repeat(64)}@${'1'.repeat(63)}.${'2'.repeat(63)}.com`;
+        const detector = new PIIDetector({
+          model: new MockLanguageModelV1(),
+          strategy,
+          redactionMethod: 'placeholder',
+          detectionTypes: ['email'],
+        });
+        const state: Record<string, any> = {};
+        const abort = vi.fn((reason?: string) => {
+          throw new TripWire(reason ?? 'blocked');
+        }) as any;
+        let output = '';
+        const run = async () => {
+          for (const part of [
+            { type: 'text-delta', payload: { id: 'text-0', text: `Mail ${address.slice(0, -4)}` } },
+            { type: 'text-delta', payload: { id: 'text-1', text: `${address.slice(-4)} now` } },
+            { type: 'step-finish', payload: {} },
+          ]) {
+            const result = await detector.processOutputStream({
+              part: { ...part, runId: 'test-run-id', from: ChunkFrom.AGENT } as ChunkType,
+              streamParts: [],
+              state,
+              abort,
+            });
+            if (result?.type === 'text-delta') output += result.payload.text;
+          }
+        };
+
+        if (strategy === 'block') await expect(run()).rejects.toThrow(TripWire);
+        else await run();
+        expect(output).toBe({ block: 'Mail ', filter: 'Mail  now', redact: 'Mail [EMAIL] now' }[strategy]);
+      },
+    );
+
     it('keeps mixed-mode sentence fragments in regex carryover', async () => {
       const model = new MockLanguageModelV1({
         defaultObjectGenerationMode: 'json',
@@ -2429,7 +2563,7 @@ describe('PIIDetector', () => {
         state,
         abort: vi.fn() as any,
       });
-      expect(state._piiBuffer).toBe('Hello world');
+      expect(state._piiRegexTail).toBe('Hello world');
 
       // Non-text part triggers flush — gets queued
       const nonText1 = {
@@ -2466,7 +2600,7 @@ describe('PIIDetector', () => {
       // Queue is drained
       expect(state._piiPendingNonText).toBeUndefined();
       // Text was re-buffered
-      expect(state._piiBuffer).toBe('more text');
+      expect(state._piiRegexTail).toBe('more text');
     });
 
     it('should use default bufferSize of 200 when not specified', async () => {
@@ -2792,5 +2926,150 @@ describe('PIIDetector', () => {
       expect(consoleSpy).toHaveBeenCalledWith('[PIIDetector] onDetection callback failed:', expect.any(Error));
       consoleSpy.mockRestore();
     });
+  });
+
+  describe('redact strategy with no usable redaction', () => {
+    const ssn = '123-45-6789';
+    const wholeMessageSSN = (): PIIDetection => ({
+      type: 'ssn',
+      value: ssn,
+      confidence: 0.9,
+      start: 0,
+      end: ssn.length,
+      redacted_value: null,
+    });
+    const methods = ['processInput', 'processOutputResult'] as const;
+    const roleFor = (method: (typeof methods)[number]) => (method === 'processOutputResult' ? 'assistant' : 'user');
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it.each(methods)('%s drops a message that remove redaction leaves as whitespace only', async method => {
+      const second = '987-65-4321';
+      const text = `${ssn} ${second}`;
+      const model = setupMockModel(
+        createMockPIIResult(
+          ['ssn'],
+          [
+            wholeMessageSSN(),
+            {
+              type: 'ssn',
+              value: second,
+              confidence: 0.9,
+              start: ssn.length + 1,
+              end: text.length,
+              redacted_value: null,
+            },
+          ],
+        ),
+      );
+      const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod: 'remove' });
+      const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await detector[method]({
+        messages: [createTestMessage(text, roleFor(method))],
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual([]);
+      for (const call of [...infoSpy.mock.calls, ...warnSpy.mock.calls]) {
+        expect(JSON.stringify(call)).not.toContain(ssn);
+        expect(JSON.stringify(call)).not.toContain(second);
+      }
+    });
+
+    it.each(methods)('%s drops a message that remove redaction leaves empty', async method => {
+      const model = setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()]));
+      const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod: 'remove' });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await detector[method]({
+        messages: [createTestMessage(ssn, roleFor(method))],
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual([]);
+      for (const call of warnSpy.mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(ssn);
+      }
+    });
+
+    it.each(methods)('%s drops a message flagged by category with no spans', async method => {
+      const model = setupMockModel([createMockPIIResult(), createMockPIIResult(['ssn'])]);
+      const detector = new PIIDetector({ model, strategy: 'redact' });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = await detector[method]({
+        messages: [
+          createTestMessage('hello', roleFor(method), 'keep'),
+          createTestMessage(`my number is ${ssn}`, roleFor(method), 'drop'),
+        ],
+        abort: vi.fn() as any,
+      });
+
+      expect(result.map(m => m.id)).toEqual(['keep']);
+      expect(JSON.stringify(result)).not.toContain(ssn);
+    });
+
+    it.each(methods)('%s keeps the remaining text when remove redaction is partial', async method => {
+      const text = `my number is ${ssn}`;
+      const detection: PIIDetection = { ...wholeMessageSSN(), start: 13, end: 13 + ssn.length };
+      const model = setupMockModel(createMockPIIResult(['ssn'], [detection]));
+      const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod: 'remove' });
+
+      const result = await detector[method]({
+        messages: [createTestMessage(text, roleFor(method))],
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toHaveLength(1);
+      expect((result[0]!.content.parts[0] as TextPart).text).toBe('my number is ');
+    });
+
+    it.each(['mask', 'hash', 'placeholder'] as const)(
+      'still redacts a whole-message match with %s',
+      async redactionMethod => {
+        for (const method of methods) {
+          const model = setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()]));
+          const detector = new PIIDetector({ model, strategy: 'redact', redactionMethod });
+
+          const result = await detector[method]({
+            messages: [createTestMessage(ssn, roleFor(method))],
+            abort: vi.fn() as any,
+          });
+
+          expect(result).toHaveLength(1);
+          const text = (result[0]!.content.parts[0] as TextPart).text;
+          expect(text).not.toBe('');
+          expect(text).not.toContain(ssn);
+        }
+      },
+    );
+
+    it.each(methods)(
+      '%s returns the same shape as the filter strategy when the only message is dropped',
+      async method => {
+        const redactDetector = new PIIDetector({
+          model: setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()])),
+          strategy: 'redact',
+          redactionMethod: 'remove',
+        });
+        const filterDetector = new PIIDetector({
+          model: setupMockModel(createMockPIIResult(['ssn'], [wholeMessageSSN()])),
+          strategy: 'filter',
+        });
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+
+        const args = () => ({ messages: [createTestMessage(ssn, roleFor(method))], abort: vi.fn() as any });
+        const redacted = await redactDetector[method](args());
+        const filtered = await filterDetector[method](args());
+
+        expect(redacted).toEqual(filtered);
+        expect(redacted).toEqual([]);
+      },
+    );
   });
 });

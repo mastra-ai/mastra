@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 9f836014ab8b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -13,9 +13,15 @@ const SentenceSchema = z.object({
   speaker_name: z.string().nullish(),
   speaker_id: z.string().nullish(),
   raw_text: z.string().nullish(),
-  start_time: z.string().nullish(),
-  end_time: z.string().nullish(),
+  start_time: z.number().nullish(),
+  end_time: z.number().nullish(),
   text: z.string().nullish(),
+});
+
+const ProviderSentenceSchema = SentenceSchema.extend({
+  speaker_id: z.union([z.string(), z.number()]).nullish(),
+  start_time: z.union([z.number(), z.string()]).nullish(),
+  end_time: z.union([z.number(), z.string()]).nullish(),
 });
 
 const SummarySectionSchema = z.object({
@@ -36,6 +42,10 @@ const SummarySchema = z.object({
   topics_discussed: z.array(z.string()).nullish(),
   transcript_chapters: z.array(z.string()).nullish(),
   extended_sections: z.array(SummarySectionSchema).nullish(),
+});
+
+const ProviderSummarySchema = SummarySchema.extend({
+  action_items: z.union([z.string(), z.array(z.string())]).nullish(),
 });
 
 const SpeakerSchema = z.object({
@@ -92,8 +102,8 @@ const AnalyticsSchema = z.object({
 const TranscriptSchema = z.object({
   id: z.string().nullish(),
   title: z.string().nullish(),
-  sentences: z.array(SentenceSchema).nullish(),
-  summary: SummarySchema.nullable().optional(),
+  sentences: z.array(ProviderSentenceSchema).nullish(),
+  summary: ProviderSummarySchema.nullable().optional(),
   speakers: z.array(SpeakerSchema).nullish(),
   meeting_info: MeetingInfoSchema.nullable().optional(),
   meeting_attendees: z.array(MeetingAttendeeSchema).nullish(),
@@ -127,6 +137,28 @@ export const getTranscriptOutputSchema = z.object({
   meeting_attendees: z.array(MeetingAttendeeSchema).optional(),
   analytics: AnalyticsSchema.optional(),
 });
+
+function normalizeActionItems(actionItems: string | string[]): string {
+  return Array.isArray(actionItems) ? actionItems.join('\n') : actionItems;
+}
+
+function toFiniteNumber(value: string | number | null | undefined): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  const trimmed = value.trim();
+  if (trimmed === '') return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeSentence(sentence: z.infer<typeof ProviderSentenceSchema>): z.infer<typeof SentenceSchema> {
+  return {
+    ...sentence,
+    speaker_id: sentence.speaker_id != null ? String(sentence.speaker_id) : sentence.speaker_id,
+    start_time: toFiniteNumber(sentence.start_time),
+    end_time: toFiniteNumber(sentence.end_time),
+  };
+}
 
 export function getTranscriptTool(proxy: PlatformProxy) {
   return createTool({
@@ -245,8 +277,16 @@ export function getTranscriptTool(proxy: PlatformProxy) {
       return {
         id: transcript.id ?? undefined,
         title: transcript.title ?? undefined,
-        sentences: transcript.sentences ?? undefined,
-        summary: transcript.summary ?? undefined,
+        sentences: transcript.sentences ? transcript.sentences.map(normalizeSentence) : undefined,
+        summary: transcript.summary
+          ? {
+              ...transcript.summary,
+              action_items:
+                transcript.summary.action_items != null
+                  ? normalizeActionItems(transcript.summary.action_items)
+                  : transcript.summary.action_items,
+            }
+          : undefined,
         speakers: transcript.speakers ?? undefined,
         meeting_info: transcript.meeting_info ?? undefined,
         meeting_attendees: transcript.meeting_attendees ?? undefined,

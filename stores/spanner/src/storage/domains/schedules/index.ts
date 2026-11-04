@@ -428,13 +428,15 @@ export class SchedulesSpanner extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     try {
       const sql = `UPDATE ${quoteIdent(TABLE_SCHEDULES, 'table name')}
                    SET ${quoteIdent('next_fire_at', 'column name')} = @newNext,
                        ${quoteIdent('last_fire_at', 'column name')} = @lastFire,
                        ${quoteIdent('last_run_id', 'column name')} = @lastRun,
-                       ${quoteIdent('updated_at', 'column name')} = @updatedAt
+                       ${quoteIdent('updated_at', 'column name')} = @updatedAt,
+                       ${quoteIdent('status', 'column name')} = @newStatus
                    WHERE ${quoteIdent('id', 'column name')} = @id
                      AND ${quoteIdent('next_fire_at', 'column name')} = @expected
                      AND ${quoteIdent('status', 'column name')} = @status`;
@@ -448,6 +450,7 @@ export class SchedulesSpanner extends SchedulesStorage {
           lastRun: lastRunId,
           updatedAt: Date.now(),
           status: 'active',
+          newStatus: newStatus ?? 'active',
         },
         types: {
           expected: 'int64',

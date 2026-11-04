@@ -79,6 +79,7 @@ export {
 // DurableAgent class (base class for durable agents)
 export {
   DurableAgent,
+  applyReservedMemoryContextKeys,
   type DurableAgentConfig,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
@@ -96,12 +97,30 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
+export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
+export { persistDurableRunInput } from './persist-run-input';
+export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state
-export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
+export {
+  RunRegistry,
+  ExtendedRunRegistry,
+  globalRunRegistry,
+  getRunRegistryEntry,
+  setRunRegistryEntry,
+  deleteRunRegistryEntry,
+  takeRunScorerInstances,
+  type ExtendedRunRegistryEntry,
+} from './run-registry';
+
+// Shared resumeGenerate argument normalization (Agent order + deprecated runId-first order)
+export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
+
+// Lets shared test suites simulate a process crash
+export { __resetExecutionFencesForTests } from './execution-fence';
 
 // Shared thread-stream runtime, so durable-agent integrations outside core
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
@@ -115,6 +134,7 @@ export {
   emitStepFinishEvent,
   emitFinishEvent,
   emitErrorEvent,
+  emitAbortEvent,
   emitSuspendedEvent,
   type DurableAgentStreamOptions as StreamAdapterOptions,
   type DurableAgentStreamResult as StreamAdapterResult,
@@ -126,10 +146,16 @@ export {
   AGENT_CONTROL_TOPIC,
   AgentStreamEventTypes,
   AgentControlEventTypes,
+  DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
 } from './constants';
-export { publishAbortRequest, subscribeToAbortRequests, ensureRemoteAbortListener } from './abort-transport';
+export {
+  publishAbortRequest,
+  requestAcknowledgedAbort,
+  subscribeToAbortRequests,
+  ensureRemoteAbortListener,
+} from './abort-transport';
 
 // Types
 export type {
@@ -151,6 +177,7 @@ export type {
   AgentStreamEvent,
   AgentChunkEventData,
   AgentStepFinishEventData,
+  DurableAgentStepFinishResult,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
@@ -196,11 +223,14 @@ export {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableIsTaskCompleteStep,
+  createDurableGoalStep,
 } from './workflows/steps';
 
 // Shared workflow utilities
 export {
   executeDurableAgentScorers,
+  loadRunStoredMessages,
   modelConfigSchema,
   modelListEntrySchema,
   accumulatedUsageSchema,
@@ -224,3 +254,11 @@ export type {
 // surface stays additive at patch level. Removed in v2.
 export { executeDurableToolCalls } from './workflows/deprecated-tool-execution';
 export type { ToolExecutionContext, ToolExecutionError } from './workflows/deprecated-tool-execution';
+
+// Snapshot pruning hook shared with external durable engines (e.g. Inngest)
+export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
+
+// Shared runtime outcome classification for external durable engines.
+export { endRunSpansWithError } from './run-registry';
+/** @internal Runtime instrumentation helpers. */
+export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

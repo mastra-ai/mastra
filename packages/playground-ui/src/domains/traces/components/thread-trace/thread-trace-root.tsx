@@ -4,16 +4,15 @@ import type { ComponentProps } from 'react';
 import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
 import { ThreadTraceContext } from './thread-trace-context';
 import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
+import { MessageScrollerProvider } from '@/ds/components/MessageScroller';
+import { PanelGroup } from '@/lib/resize/panel-group';
 import { cn } from '@/lib/utils';
 
 export interface ThreadTraceRootProps extends ComponentProps<'div'> {
   /** Trace ids in reading order (oldest first); must match the order of the rendered rows. */
   traceIds: string[];
-  /**
-   * The row to start from: it mounts expanded and is scrolled into view once. Only read at mount,
-   * so a row that arrives on a later page is left alone.
-   */
-  anchorTraceId?: string | null;
+  /** Fires when the reader scrolls up to the oldest loaded row; load the previous page here. */
+  onLoadOlder?: () => void;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
 }
@@ -21,12 +20,12 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
 /**
  * Owns the interaction state of a thread rendered as its traces: the selected span, the
  * highlighted spans, which rows are expanded, and which rows are on screen. Layout parts read it
- * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the outer grid that gains a
- * side column while a span is selected.
+ * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the resizable panel group that
+ * gains a span column while a span is selected.
  */
 export function ThreadTraceRoot({
   traceIds,
-  anchorTraceId,
+  onLoadOlder,
   onSelectedSpanChange,
   className,
   children,
@@ -37,9 +36,8 @@ export function ThreadTraceRoot({
 
   const [selected, setSelected] = useState<ThreadTraceSelectedSpan | null>(null);
   const [highlight, setHighlight] = useState<ThreadTraceHighlight | null>(null);
-  const [anchor] = useState(() => anchorTraceId ?? null);
-  // Selecting a span expands its row and it stays expanded until the reader collapses it with "Show less".
-  const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(() => new Set(anchor ? [anchor] : []));
+  // Selecting a span expands its row and it stays expanded until the reader collapses it with "Collapse".
+  const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const setTraceExpanded = useCallback((traceId: string, expanded: boolean) => {
     setExpandedTraceIds(current => {
@@ -91,7 +89,6 @@ export function ThreadTraceRoot({
   const contextValue = useMemo<ThreadTraceContextValue>(
     () => ({
       traceIds,
-      anchorTraceId: anchor,
       selected,
       selectSpan,
       highlight,
@@ -105,7 +102,6 @@ export function ThreadTraceRoot({
     }),
     [
       traceIds,
-      anchor,
       selected,
       selectSpan,
       highlight,
@@ -120,19 +116,16 @@ export function ThreadTraceRoot({
 
   return (
     <ThreadTraceContext.Provider value={contextValue}>
-      <div
-        data-slot="thread-trace"
-        className={cn(
-          // The span cell always exists and collapses to zero so opening/closing it animates
-          // via `grid-template-columns`, like the trace panel's columns.
-          'grid h-full min-h-0 transition-[grid-template-columns] duration-300 ease-in-out',
-          selected ? 'grid-cols-[minmax(0,2fr)_minmax(0,1fr)]' : 'grid-cols-[minmax(0,2fr)_minmax(0,0fr)]',
-          className,
-        )}
-        {...props}
-      >
-        {children}
-      </div>
+      {/* Opens on the latest turn and keeps the reading position when older turns are prepended.
+          No auto-follow: turns are settled before mount, so the only growth at the end comes from
+          the reader expanding a row, which must not move the view. */}
+      <MessageScrollerProvider defaultScrollPosition="end" preserveScrollOnPrepend onReachStart={onLoadOlder}>
+        <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
+          <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
+            {children}
+          </PanelGroup>
+        </div>
+      </MessageScrollerProvider>
     </ThreadTraceContext.Provider>
   );
 }

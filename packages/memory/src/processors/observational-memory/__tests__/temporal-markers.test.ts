@@ -91,8 +91,7 @@ function createMemoryProvider(messages: MastraDBMessage[]): MemoryContextProvide
 
 function createTestSendSignal(messageList: MessageList, capturedParts: unknown[] = []) {
   return async (signalInput: AgentSignalInput) => {
-    const signal = createSignal(signalInput);
-    messageList.add(signal.toDBMessage(), 'input');
+    const signal = messageList.addSignal(createSignal(signalInput));
     capturedParts.push(signal.toDataPart());
     return signal;
   };

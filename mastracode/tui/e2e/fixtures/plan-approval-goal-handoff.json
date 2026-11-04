@@ -67,7 +67,7 @@
         "turnIndex": 2
       },
       "response": {
-        "content": "Resumed plan output before goal startup."
+        "content": "Resumed plan output after approval."
       }
     },
     {
@@ -77,7 +77,7 @@
         "userMessage": "E2E Goal Plan"
       },
       "response": {
-        "content": "Plan goal handoff e2e goal run started."
+        "content": "Unexpected second goal run."
       }
     }
   ]

@@ -44,6 +44,11 @@ function calendarDayIn(instant: Date, timeZone: string | undefined): number {
   return Date.UTC(part('year'), part('month') - 1, part('day')) / DAY_MS;
 }
 
+/** Format an instant relative to today, using the record's calendar time zone. */
+export function formatRelativeTime(date: Date, currentDate: Date, timeZone?: string): string {
+  return formatRelativeDays(calendarDayIn(currentDate, timeZone) - calendarDayIn(date, timeZone));
+}
+
 function formatRelativeDays(diffDays: number): string {
   if (diffDays < 0) {
     const futureDays = Math.abs(diffDays);
@@ -85,10 +90,9 @@ export function formatGapBetweenDates(prevDate: Date, currDate: Date): string | 
     return `[${weeks} weeks later]`;
   } else if (diffDays < 60) {
     return `[1 month later]`;
-  } else {
-    const months = Math.floor(diffDays / 30);
-    return `[${months} months later]`;
   }
+  const months = Math.floor(diffDays / 30);
+  return `[${months} months later]`;
 }
 
 /** A calendar span: a single day has `start` and `end` on the same day. */

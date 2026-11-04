@@ -158,6 +158,18 @@ export function getFactoryAuthOrgId(user: FactoryAuthUser | undefined): string |
 }
 
 /**
+ * The org rung a user's rows are keyed by: the organization they belong to, or a
+ * per-user rung for personal (no-org) accounts so their rows never land in the
+ * shared `local` scope. Every writer and reader of a `(org, user)` row must
+ * agree on this, so it lives here rather than being re-derived per call site.
+ */
+export function factoryUserOrgId(user: FactoryAuthUser | undefined): string | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  return getFactoryAuthOrgId(user) ?? `user:${userId}`;
+}
+
+/**
  * Resolve the tenant identity `(orgId, userId)` from the authenticated user on
  * the context. Returns `undefined` when there is no signed-in user (auth
  * disabled or unauthenticated). `orgId` is `undefined` for personal accounts;
@@ -307,6 +319,41 @@ async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUse
   }
 }
 
+/**
+ * The `org_id` claim of a JWT bearer token. Read only after the provider has
+ * verified the token, and only adopted when the user is a verified member of
+ * that org — so it picks among orgs the user already has, never grants one.
+ */
+export function bearerTokenOrgClaim(token: string | undefined): string | undefined {
+  const payload = token?.split('.')[1];
+  if (!payload) return undefined;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { org_id?: unknown };
+    return typeof claims.org_id === 'string' && claims.org_id ? claims.org_id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Picks the request's org: an explicit `X-Mastra-Organization-Id` header, else
+ * a bearer token's `org_id` claim (MCP clients such as ChatGPT can't send the
+ * header, and the verify endpoint otherwise reports the user's default org).
+ * Either must name an org the user belongs to, else `false` — never fall back
+ * to another org than the one asked for. With neither, bootstraps the user's org.
+ */
+async function applyRequestedOrganization(
+  provider: IMastraAuthProvider,
+  c: Context,
+  token: string | undefined,
+  user: FactoryAuthUser,
+): Promise<boolean> {
+  const requested = (token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined) || bearerTokenOrgClaim(token);
+  if (requested) return selectRequestedOrganization(user, requested);
+  await ensureUserOrg(provider, user);
+  return true;
+}
+
 function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizationId: string): boolean {
   if (user.organizationId === requestedOrganizationId) return true;
   if (!user.organizationMembershipIds?.includes(requestedOrganizationId)) return false;
@@ -319,13 +366,27 @@ function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizatio
  * provider's (possibly partial) `ISessionProvider.getClearSessionHeaders`.
  */
 function providerClearCookies(provider: IMastraAuthProvider): string[] {
+  const cookies: string[] = [];
   const getClearSessionHeaders = (provider as Partial<ISessionProvider>).getClearSessionHeaders;
-  if (typeof getClearSessionHeaders !== 'function') return [];
-  const headers = getClearSessionHeaders.call(provider) ?? {};
-  const setCookie = headers['Set-Cookie'];
-  if (!setCookie) return [];
-  // A provider may join several clearing cookies into one header value.
-  return setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim());
+  if (typeof getClearSessionHeaders === 'function') {
+    const headers = getClearSessionHeaders.call(provider) ?? {};
+    const setCookie = headers['Set-Cookie'];
+    // A provider may join several clearing cookies into one header value.
+    if (setCookie) cookies.push(...setCookie.split(/,(?=\s*[^;=,\s]+=)/).map(cookie => cookie.trim()));
+  }
+  cookies.push(...providerLegacySessionClearCookies(provider));
+  return cookies;
+}
+
+/**
+ * Expiring `Set-Cookie` values for legacy copies of the provider's session
+ * cookie (e.g. one an earlier release scoped to a shared parent domain), from
+ * the optional `ISessionProvider.getLegacySessionClearCookies`.
+ */
+function providerLegacySessionClearCookies(provider: IMastraAuthProvider): string[] {
+  const getLegacy = (provider as Partial<ISessionProvider>).getLegacySessionClearCookies;
+  if (typeof getLegacy !== 'function') return [];
+  return getLegacy.call(provider) ?? [];
 }
 
 /**
@@ -393,6 +454,19 @@ export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): Ma
  *
  * Returns `undefined` when there is no valid session (or auth is disabled).
  */
+function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context): void {
+  // Forward a renewed session cookie (e.g. rotated by the shared API during
+  // verification) so the browser's cookie stays current. Best-effort.
+  try {
+    const pending = provider.consumePendingResponseHeaders?.(c.req.raw);
+    for (const [name, value] of Object.entries(pending ?? {})) {
+      c.header(name, value, { append: true });
+    }
+  } catch {
+    // never fail a request over header forwarding
+  }
+}
+
 export async function ensureFactoryAuthUser(
   provider: IMastraAuthProvider | undefined,
   c: Context,
@@ -403,15 +477,13 @@ export async function ensureFactoryAuthUser(
 
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
+  // Routes declared `requiresAuth: false` skip the gate, so this is their only
+  // authentication — forward a renewed session cookie from here too.
+  forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
-  const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-  if (requestedOrganizationId) {
-    if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-      throw new HTTPException(403, { message: 'organization_forbidden' });
-    }
-  } else {
-    await ensureUserOrg(provider, user);
+  if (!(await applyRequestedOrganization(provider, c, token, user))) {
+    throw new HTTPException(403, { message: 'organization_forbidden' });
   }
 
   c.set(FACTORY_AUTH_USER_KEY, user);
@@ -649,8 +721,7 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
               // Fallback for providers that expose ISessionProvider but leave
               // cookie construction to the server (e.g. MastraAuthStudio, which
               // returns just the sealed session as accessToken so
-              // getSessionHeaders can scope the cookie to this deployment's
-              // domain via MASTRA_COOKIE_DOMAIN / sharedApiUrl auto-detection).
+              // getSessionHeaders can issue this deployment's host-only cookie).
               // Mirrors packages/server/src/server/handlers/auth.ts:492-503.
               const resultUser = result.user as { id: string; organizationId?: string };
               const session = await provider.createSession(resultUser.id, {
@@ -662,6 +733,10 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
               for (const [key, value] of Object.entries(provider.getSessionHeaders(session))) {
                 c.header(key, value, { append: true });
               }
+            }
+            // Signing in also expires legacy (e.g. shared parent-domain) session cookies.
+            for (const cookie of providerLegacySessionClearCookies(provider)) {
+              c.header('Set-Cookie', cookie, { append: true });
             }
             return c.redirect(returnTo);
           } catch {
@@ -783,6 +858,21 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
 }
 
 /**
+ * `/auth/*` routes for auth-disabled mode (`auth: null`). Only `/auth/me`, answering
+ * 404 — the UI's "auth disabled" signal. Without it the deployer's HTML catch-all
+ * answers `/auth/me` with 200 text/html and the UI retries forever.
+ */
+export function buildAuthDisabledRoutes(): ApiRoute[] {
+  return [
+    registerApiRoute('/auth/me', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => c.json({ authEnabled: false, authenticated: false }, 404),
+    }),
+  ];
+}
+
+/**
  * Channel webhook paths whose adapter verifies the platform's request signature,
  * making the delivery self-authenticating. Add a platform here only once its
  * adapter rejects unsigned or mis-signed requests.
@@ -797,6 +887,21 @@ const SESSION_FAVICON_PATHS = new Set([
   '/favicon-session-awaiting.svg',
   '/favicon-session-error.svg',
 ]);
+
+/**
+ * Request-context key marking an authenticated interactive turn. HTTP requests
+ * and linked Slack senders verified against their session owner can carry it;
+ * wakes, webhooks, and dispatcher turns cannot.
+ */
+export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
+
+/** With auth disabled there is no gate; this marks every HTTP request as interactive instead. */
+export function createFactoryInteractiveMarker() {
+  return async (c: Context, next: () => Promise<void>): Promise<void> => {
+    c.get('requestContext')?.set(FACTORY_INTERACTIVE_KEY, true);
+    await next();
+  };
+}
 
 /**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
@@ -862,22 +967,19 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
       authenticateRequest(provider, token, c.req.raw),
     );
+    forwardPendingResponseHeaders(provider, c);
 
     if (user) {
-      const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-      if (requestedOrganizationId) {
-        if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-          return c.json({ error: 'organization_forbidden' }, 403);
-        }
-      } else {
-        // Bootstrap a personal org for no-org accounts so the org id resolves on
-        // this request (see ensureFactoryAuthUser for the rationale).
-        await ensureUserOrg(provider, user);
+      // Without a requested org, no-org accounts get a bootstrapped personal org
+      // so the org id resolves on this request (see ensureFactoryAuthUser).
+      if (!(await applyRequestedOrganization(provider, c, token, user))) {
+        return c.json({ error: 'organization_forbidden' }, 403);
       }
       c.set(FACTORY_AUTH_USER_KEY, user);
       const requestContext = c.get('requestContext');
       requestContext?.set('user', user);
       requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
+      requestContext?.set(FACTORY_INTERACTIVE_KEY, true);
       return next();
     }
 

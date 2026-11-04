@@ -45,7 +45,7 @@ const results = await vectorStore.query({
 
 ## Documentation
 
-- [@mastra/chroma documentation](https://mastra.ai/reference/vectors/chroma)
+- [@mastra/chroma documentation](https://mastra.ai/integrations/vectors/chroma)
 
 ## Changelog
 

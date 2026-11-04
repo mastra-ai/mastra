@@ -679,72 +679,96 @@ describe('OtelExporter', () => {
     });
   });
 
-  describe('Signal Endpoint Resolution', () => {
+  describe('Flush waits for in-flight exports', () => {
+    const provider = { custom: { endpoint: 'http://localhost:4318' } };
+
     beforeEach(() => {
-      mockEmit.mockClear();
+      vi.useRealTimers();
     });
 
-    it('rewrites a trace endpoint to /v1/logs when constructing the log exporter', async () => {
-      const ctorArgs: Array<Record<string, unknown>> = [];
-      const { loadSignalExporter } = await import('./loadExporter');
-      vi.mocked(loadSignalExporter).mockResolvedValueOnce(
-        class MockLogExporter {
-          constructor(options: Record<string, unknown>) {
-            ctorArgs.push(options);
-          }
-          export = vi.fn().mockResolvedValue(undefined);
-          shutdown = vi.fn().mockResolvedValue(undefined);
-        },
-      );
+    const endedSpan = {
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: {
+        id: 'span-1',
+        traceId: 'trace-1',
+        type: SpanType.AGENT_RUN,
+        name: 'Test',
+        startTime: new Date(),
+        endTime: new Date(),
+      } as unknown as AnyExportedSpan,
+    };
 
-      exporter = new OtelExporter({
-        provider: {
-          custom: {
-            endpoint: 'http://localhost:4318/v1/traces',
-          },
-        },
+    it('should wait for the span exporter forceFlush after the processor flush', async () => {
+      let releaseExport!: () => void;
+      const customExporter = {
+        export: vi.fn(),
+        shutdown: vi.fn().mockResolvedValue(undefined),
+        forceFlush: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseExport = resolve;
+          }),
+        ),
+      };
+      exporter = new OtelExporter({ provider, exporter: customExporter, signals: { logs: false } });
+      await exporter.exportTracingEvent(endedSpan);
+
+      let flushed = false;
+      const flushing = exporter.flush().then(() => {
+        flushed = true;
       });
+      await new Promise(resolve => setImmediate(resolve));
+      expect(customExporter.forceFlush).toHaveBeenCalledTimes(1);
+      expect(flushed).toBe(false);
 
-      await exporter.onLogEvent({
-        type: 'log',
-        log: {
-          timestamp: new Date(),
-          level: 'info',
-          message: 'Test endpoint resolution',
-        },
-      });
-
-      expect(ctorArgs[0]).toMatchObject({ url: 'http://localhost:4318/v1/logs' });
-      expect(mockEmit).toHaveBeenCalledTimes(1);
+      releaseExport();
+      await flushing;
     });
 
-    it('appends /v1/logs without producing double slashes when the endpoint has a trailing slash', async () => {
-      const ctorArgs: Array<Record<string, unknown>> = [];
-      const { loadSignalExporter } = await import('./loadExporter');
-      vi.mocked(loadSignalExporter).mockResolvedValueOnce(
-        class MockLogExporter {
-          constructor(options: Record<string, unknown>) {
-            ctorArgs.push(options);
-          }
-          export = vi.fn().mockResolvedValue(undefined);
-          shutdown = vi.fn().mockResolvedValue(undefined);
-        },
-      );
-
-      exporter = new OtelExporter({
-        provider: {
-          custom: {
-            endpoint: 'http://localhost:4318/',
-          },
-        },
+    it('should still wait for the span exporter when the processor flush fails', async () => {
+      const { BatchSpanProcessor } = await import('@opentelemetry/sdk-trace-base');
+      vi.mocked(BatchSpanProcessor).mockImplementationOnce(function () {
+        return {
+          onEnd: vi.fn(),
+          onStart: vi.fn(),
+          shutdown: vi.fn().mockResolvedValue(undefined),
+          forceFlush: vi.fn().mockRejectedValue(new Error('batch rejected')),
+        } as any;
       });
+      let releaseExport!: () => void;
+      const customExporter = {
+        export: vi.fn(),
+        shutdown: vi.fn().mockResolvedValue(undefined),
+        forceFlush: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseExport = resolve;
+          }),
+        ),
+      };
+      exporter = new OtelExporter({ provider, exporter: customExporter, signals: { logs: false } });
+      await exporter.exportTracingEvent(endedSpan);
 
-      await exporter.onLogEvent({
-        type: 'log',
-        log: { timestamp: new Date(), level: 'info', message: 'trailing slash' },
+      let settled = false;
+      const flushing = exporter.flush().finally(() => {
+        settled = true;
       });
+      flushing.catch(() => {});
+      await new Promise(resolve => setImmediate(resolve));
+      expect(customExporter.forceFlush).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
 
-      expect(ctorArgs[0]).toMatchObject({ url: 'http://localhost:4318/v1/logs' });
+      releaseExport();
+      await expect(flushing).rejects.toThrow('batch rejected');
+    });
+
+    it('should flush normally when the span exporter has no forceFlush', async () => {
+      const customExporter = {
+        export: vi.fn(),
+        shutdown: vi.fn().mockResolvedValue(undefined),
+      };
+      exporter = new OtelExporter({ provider, exporter: customExporter, signals: { logs: false } });
+      await exporter.exportTracingEvent(endedSpan);
+
+      await expect(exporter.flush()).resolves.toBeUndefined();
     });
   });
 

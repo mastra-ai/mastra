@@ -1,5 +1,6 @@
 import { RequestError } from '@agentclientprotocol/sdk';
 import type { NewSessionRequest } from '@agentclientprotocol/sdk';
+import { resolveSubagentsSetting } from '../agents/subagents/index.js';
 import { createMastraCode } from '../index.js';
 import type { MastraCodeConfig } from '../index.js';
 import type { McpServerConfig } from '../mcp/types.js';
@@ -29,6 +30,7 @@ export async function createAcpSession(
         : { url: server.url, headers: Object.fromEntries(server.headers.map(item => [item.name, item.value])) };
     return [server.name, config] as const;
   });
+  const settings = loadSettings();
   const result = await createMastraCode({
     coAuthor: options.coAuthor,
     cwd: request.cwd,
@@ -45,8 +47,8 @@ export async function createAcpSession(
     disableHooks: false,
     // Project environment files must not mutate other ACP sessions.
     disableEnvFile: true,
+    subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
   });
-  const settings = loadSettings();
   let cleanupPromise: Promise<void> | undefined;
   const runtime: AcpSessionRuntime = {
     controller: result.controller,
@@ -58,17 +60,41 @@ export async function createAcpSession(
       resolveDefaultThinkingLevel(settings, result.session.mode.get()).level,
     cleanup: () =>
       (cleanupPromise ??= (async () => {
-        result.session.abort();
-        result.session.thread.detachFromCurrent();
-        result.stopPluginSignalProviders();
-        result.githubSignals?.stopAllPolling();
+        // Release thread claims before the slow teardown, so a restarted
+        // process can claim the thread (and peers can reach it) right away.
+        try {
+          result.releaseThreadClaims();
+        } catch {
+          // Best-effort — cleanup continues regardless.
+        }
         await Promise.allSettled([
-          result.session.thread.clearAndReleaseLock(),
-          result.mcpManager?.disconnect(),
-          result.controller.getMastra()?.stopWorkers(),
-          result.controller.stopIntervals(),
-          (result.signalsPubSub as { close?: () => void | Promise<void> } | undefined)?.close?.(),
+          Promise.resolve().then(() => result.session.abort()),
+          Promise.resolve().then(() => result.session.thread.detachFromCurrent()),
+          Promise.resolve().then(() => result.stopPluginSignalProviders()),
+          Promise.resolve().then(() => result.githubSignals?.stopAllPolling()),
+          Promise.resolve().then(() => result.threadScheduler.stop()),
         ]);
+        // Leave time for the other cleanup phases within ACP's shared 10-second cap.
+        // A timed-out dispatch may still finish later; this grace is not cancellation.
+        let dispatchTimeout: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          Promise.resolve()
+            .then(() => result.stopNotificationDispatch())
+            .catch(() => {}),
+          new Promise<void>(resolve => {
+            dispatchTimeout = setTimeout(resolve, 2_000);
+            dispatchTimeout.unref();
+          }),
+        ]).finally(() => clearTimeout(dispatchTimeout));
+        await Promise.allSettled([
+          Promise.resolve().then(() => result.session.thread.clearAndReleaseLock()),
+          Promise.resolve().then(() => result.mcpManager?.disconnect()),
+          Promise.resolve().then(() => result.controller.getMastra()?.stopWorkers()),
+          Promise.resolve().then(() => result.controller.stopIntervals()),
+        ]);
+        await Promise.resolve()
+          .then(() => (result.signalsPubSub as { close?: () => void | Promise<void> } | undefined)?.close?.())
+          .catch(() => {});
         await result.storage.close();
       })()),
   };

@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -78,9 +78,9 @@ function renderSidebar(initialPath: string) {
         element: (
           <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
             <TooltipProvider>
-              <MainSidebarProvider>
+              <SidebarProvider>
                 <AgentBuilderSidebar />
-              </MainSidebarProvider>
+              </SidebarProvider>
             </TooltipProvider>
           </LinkComponentProvider>
         ),

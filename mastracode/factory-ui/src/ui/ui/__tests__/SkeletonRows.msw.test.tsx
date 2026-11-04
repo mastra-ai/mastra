@@ -28,9 +28,9 @@ describe('SkeletonRows', () => {
 
   describe('given no row count', () => {
     it('defaults to 3 rows', () => {
-      render(<SkeletonRows label="Loading model packs" />);
+      render(<SkeletonRows label="Loading model defaults" />);
 
-      const region = screen.getByRole('status', { name: 'Loading model packs' });
+      const region = screen.getByRole('status', { name: 'Loading model defaults' });
       expect(region.children).toHaveLength(3);
     });
   });

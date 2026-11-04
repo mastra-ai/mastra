@@ -119,6 +119,14 @@ export class SpanConverter {
       attributes['mastra.tags'] = JSON.stringify(span.tags);
     }
 
+    // Explicit mappings override generated attributes, without changing default exports.
+    for (const [metadataKey, attributeName] of Object.entries(this.params.config?.metadataMapping ?? {})) {
+      if (!attributeName || !span.metadata || !Object.hasOwn(span.metadata, metadataKey)) continue;
+      const value = span.metadata[metadataKey];
+      if (value === null || value === undefined || value === '') continue;
+      attributes[attributeName] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    }
+
     const startTime = dateToHrTime(span.startTime);
     const endTime = span.endTime ? dateToHrTime(span.endTime) : startTime;
     const duration = computeDuration(span.startTime, span.endTime);
@@ -145,7 +153,10 @@ export class SpanConverter {
         }
       : undefined;
 
-    const links: Link[] = []; // fill if you add link support later
+    // Spans in other traces, such as the caller of a served MCP request.
+    const links: Link[] = (span.links ?? []).map(link => ({
+      context: { traceId: link.traceId, spanId: link.spanId, traceFlags: TraceFlags.SAMPLED, isRemote: true },
+    }));
 
     const readable: ReadableSpan = {
       name,

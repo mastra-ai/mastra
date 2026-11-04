@@ -1,5 +1,6 @@
 import type { McpServerInfo, McpServerToolListResponse, McpToolInfo } from '@mastra/client-js';
-import type { AuthCapabilities } from '@/domains/auth/types';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
+import type { ReadMcpServerResourceResponse } from '@mastra/react/hooks/mcps';
 
 const versionDetail: McpServerInfo['version_detail'] = {
   version: '1.0.0',
@@ -37,6 +38,39 @@ export const echoTool: McpToolInfo = {
   inputSchema: JSON.stringify({ type: 'object', properties: { message: { type: 'string' } } }),
 };
 
+/** A tool that ships an MCP App, rendered above its Playground form. */
+export const dashboardTool: McpToolInfo = {
+  id: 'showDashboard',
+  name: 'showDashboard',
+  description: 'Shows a dashboard',
+  inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+  _meta: { ui: { resourceUri: 'ui://dashboard/app' } },
+};
+
+export const dashboardAppResource: ReadMcpServerResourceResponse = {
+  contents: [{ uri: 'ui://dashboard/app', text: '<!DOCTYPE html><html><body>dashboard</body></html>' }],
+};
+
+/** The dashboard app's data relay: callable by the app only. */
+export const relayTool: McpToolInfo = {
+  id: 'observabilityMetricAggregate',
+  name: 'observabilityMetricAggregate',
+  description: 'Reads observability data for the app',
+  inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+  _meta: { ui: { visibility: ['app'] } },
+};
+
+/** A tool the server keeps for the model: apps must not call it. */
+export const modelOnlyTool: McpToolInfo = {
+  id: 'deleteTraces',
+  name: 'deleteTraces',
+  description: 'Deletes traces',
+  inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+  _meta: { ui: { visibility: ['model'] } },
+};
+
+export const dashboardServerTools: McpServerToolListResponse = { tools: [dashboardTool, relayTool, modelOnlyTool] };
+
 export const emptyToolList: McpServerToolListResponse = { tools: [] };
 
 export const toolList: McpServerToolListResponse = {
@@ -61,3 +95,12 @@ export const toolList: McpServerToolListResponse = {
 
 /** Auth disabled: every permission check passes. */
 export const authDisabled: AuthCapabilities = { enabled: false, login: { type: 'credentials' } };
+
+/** An authenticated user under RBAC holding exactly `permissions`. */
+export const rbacUser = (permissions: string[]): AuthCapabilities => ({
+  enabled: true,
+  login: { type: 'credentials' },
+  user: { id: 'user-1', email: 'user@example.com' },
+  capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+  access: { roles: ['member'], permissions },
+});

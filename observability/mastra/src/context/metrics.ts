@@ -87,6 +87,7 @@ export class MetricsContextImpl implements MetricsContext {
       labels: filteredLabels,
       correlationContext: this.correlationContext,
       costContext,
+      ...(options?.usageId ? { usageId: options.usageId } : {}),
       metadata: this.metadata,
     };
 

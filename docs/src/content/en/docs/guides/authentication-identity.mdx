@@ -228,6 +228,10 @@ export const getCustomerRecord = createTool({
 
 This example uses the default bridge. Mastra first preserves any `req.auth` value set by middleware. Otherwise, `server.mcpOptions.setRequestAuth` defines the `authInfo` shape when configured. Whichever source supplies `req.auth` must provide the fields your MCP tools read.
 
+`setRequestAuth` and upstream middleware only control `authInfo`. Whenever `req.auth` is set, Mastra also gives MCP tools the user, permissions, roles, resource, and organization that server auth resolved, through the tool's `requestContext`. These values come from server code, never from the MCP client, and `authInfo` doesn't change them, even when it names a different principal. Read identity from one source consistently in each tool.
+
+When you configure `MCPServer.mapAuthInfoToUser` and it returns a user, that user replaces `requestContext.get('user')`, which fine-grained authorization reads. Permissions, roles, resource, and organization stay as server auth resolved them.
+
 `MCPServer.mapAuthInfoToUser` performs the reverse mapping when MCP transport identity must become the user consumed by [fine-grained authorization](/docs/auth/fga). Keep the mapping at the transport boundary instead of accepting a user ID as a tool argument.
 
 ## Keep secrets outside the model boundary
@@ -244,7 +248,7 @@ This example uses the default bridge. Mastra first preserves any `req.auth` valu
 
 Return only the data the model needs. Remove credentials and sensitive upstream fields before returning a tool result.
 
-`RequestContext.serializeForSpan()` redacts `MASTRA_AUTH_TOKEN_KEY` when context is attached to tracing spans. Application logs and custom telemetry must apply the same principle to other credentials and sensitive identity fields.
+Reserved Mastra keys (those starting with `mastra__` or `__mastra_`, including `MASTRA_AUTH_TOKEN_KEY`) are omitted when request context is attached to tracing spans or saved on score records. Application logs and custom telemetry must apply the same principle to other credentials and sensitive identity fields.
 
 ## Add authorization after authentication
 

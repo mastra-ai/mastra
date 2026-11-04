@@ -1,0 +1,22 @@
+{
+  "name": "vendor-risk-questionnaire-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "bits-ui": "^2.0.0",
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@types/node": "^22.20.1",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.0.0"
+  }
+}

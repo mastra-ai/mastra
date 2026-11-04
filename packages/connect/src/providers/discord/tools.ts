@@ -29,6 +29,7 @@ import { listMessagesTool } from './tools/list-messages.js';
 import { listRolesTool } from './tools/list-roles.js';
 import { listWebhooksTool } from './tools/list-webhooks.js';
 import { removeGuildMemberRoleTool } from './tools/remove-guild-member-role.js';
+import { searchMembersTool } from './tools/search-members.js';
 import { updateChannelTool } from './tools/update-channel.js';
 import { updateGuildMemberTool } from './tools/update-guild-member.js';
 import { updateGuildTool } from './tools/update-guild.js';
@@ -66,6 +67,7 @@ export function createDiscordTools(options?: ProviderToolsOptions) {
     discord_list_roles: listRolesTool(platformProxy),
     discord_list_webhooks: listWebhooksTool(platformProxy),
     discord_remove_guild_member_role: removeGuildMemberRoleTool(platformProxy),
+    discord_search_members: searchMembersTool(platformProxy),
     discord_update_channel: updateChannelTool(platformProxy),
     discord_update_guild_member: updateGuildMemberTool(platformProxy),
     discord_update_guild: updateGuildTool(platformProxy),

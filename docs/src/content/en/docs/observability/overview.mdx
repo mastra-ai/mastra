@@ -82,10 +82,6 @@ export const mastra = new Mastra({
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
         ],
-        logging: {
-          enabled: true,
-          level: 'info',
-        },
       },
     },
   }),
@@ -105,7 +101,6 @@ An observability config usually contains:
 - `serviceName`: The service identifier attached to exported observability data.
 - `exporters`: One or more destinations for traces, logs, and derived metrics.
 - `spanOutputProcessors`: Transformations that run before spans are exported.
-- `logging`: Log forwarding settings for observability storage.
 
 ### Maintaining Studio access
 

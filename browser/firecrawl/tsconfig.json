@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.node.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
     "moduleResolution": "bundler",
     "types": ["node"]
   },

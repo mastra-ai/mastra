@@ -1,10 +1,13 @@
 import { z } from 'zod/v4';
+import type { ActorSignal, MastraFGAPermissionInput } from '../../../auth/ee';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
-import type { ToolCallConcurrency } from '../../../loop/types';
+import { hydrateSuspendedStreamState } from '../../../loop/suspended-stream-state';
+import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
+import { checkThreadFGA } from '../../../memory/thread-fga';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
@@ -15,7 +18,7 @@ import { createWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
-import type { CreatedAgentSignal } from '../../signals';
+import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -45,9 +48,12 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
   agentId: string;
+  actor?: ActorSignal;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
@@ -61,6 +67,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  subscribePendingSignals?: (runId: string, listener: PendingSignalListener) => () => void;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -83,7 +90,9 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   eagerToolExecution,
   resumeContext,
   agentId,
+  actor,
   agentVersionId,
+  resolvedScopes,
   agentName,
   toolCallId,
   workspace,
@@ -92,6 +101,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
+  subscribePendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   // Per-run scope shared between prepare-stream steps. Class instances
   // (MessageList, Tools), Maps, and closures live here instead of step
@@ -106,6 +116,38 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   // workflow registers. Prepare-stream and the agentic loop deliberately do
   // not share runtime state — each owns its own per-run scratch space.
   const runScope = createRunScope();
+  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  const authorizeMemory = (permission: MastraFGAPermissionInput, threadId: string) => {
+    const existingCheck = memoryAuthorizationChecks.get(permission);
+    if (existingCheck) return existingCheck;
+
+    const check = checkThreadFGA({
+      mastra: capabilities.mastra,
+      user: requestContext.get('user'),
+      threadId,
+      resourceId,
+      agentId,
+      requestContext,
+      permission,
+      actor,
+    }).catch(error => {
+      memoryAuthorizationChecks.delete(permission);
+      throw error;
+    });
+    memoryAuthorizationChecks.set(permission, check);
+    return check;
+  };
+
+  // Hydrated once: prepare-tools-step restores processor-loaded tools from the
+  // suspended transcript, and stream-step resumes the loop from it.
+  let resumeSnapshot: Promise<any> | undefined;
+  const getResumeSnapshot = resumeContext
+    ? () =>
+        (resumeSnapshot ??= hydrateSuspendedStreamState(resumeContext.snapshot, memory, {
+          logger: capabilities.logger,
+          runId,
+        }))
+    : undefined;
 
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -118,6 +160,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     methodType,
     memory,
     backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
+    getResumeSnapshot,
     runScope,
   });
 
@@ -134,6 +177,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memoryConfig,
     memory,
     isResume: !!resumeContext,
+    authorizeMemory,
     runScope,
   });
 
@@ -145,8 +189,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolCallConcurrency,
     eagerToolExecution,
     resumeContext,
+    getResumeSnapshot,
     agentId,
     agentVersionId,
+    resolvedScopes,
     agentName,
     toolCallId,
     methodType,
@@ -161,6 +207,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
+    subscribePendingSignals,
     runScope,
   });
 
@@ -176,8 +223,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     agentId,
     agentVersionId,
+    resolvedScopes,
     methodType,
     saveQueueManager,
+    authorizeMemory,
     runScope,
   });
 

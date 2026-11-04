@@ -13,7 +13,6 @@ export type TabMeasurement = {
 
 export const TabsContext = createContext<{
   appearance: 'default' | 'contained';
-  frame: 'stroke' | 'inset';
   value: string;
   select(value: string): void;
 } | null>(null);

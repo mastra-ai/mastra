@@ -3,7 +3,8 @@ import type { McE2eScenario } from './types.js';
 export const omSettingsScenario: McE2eScenario = {
   name: 'om-settings',
   description: 'Exercise observational memory settings overlay through the real TUI.',
-  testName: 'opens OM settings and toggles caveman observations in the real TUI',
+  testName: 'searches OM models and toggles caveman observations in the real TUI',
+  enableObservationalMemory: true,
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal);
@@ -17,6 +18,13 @@ export const omSettingsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Caveman observations/i, terminal);
     await runtime.waitForScreenText(/Observe attachments/i, terminal);
     runtime.printScreen('after /memory', terminal);
+
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Type to search .* navigate .* Enter select .* Esc cancel/i, terminal);
+    await runtime.waitForScreenText(/Auto \(.+\)/i, terminal);
+    runtime.printScreen('after observer model picker', terminal);
+    terminal.write('\x1b');
+    await runtime.waitForScreenText(/Observational Memory Settings/i, terminal);
 
     terminal.write('\x1b[B'.repeat(2));
     await runtime.waitForScreenText(

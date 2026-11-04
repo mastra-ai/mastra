@@ -1,13 +1,16 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -40,58 +43,39 @@ function stubSessions(
       HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: viewerUserId, ...viewerProfile } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
+            id: 'fp-1',
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
                 sandboxWorkdir: '/workspace/hello',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
   );
 }
 
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
 
-/** The list opens on the viewer's own sessions; attribution is about everyone else's. */
-async function showAllOwners() {
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: 'Filter sessions' }));
-  fireEvent.click(await screen.findByRole('combobox', { name: 'Owner' }));
-  const item = await screen.findByRole('option', { name: 'All owners' });
-  fireEvent.pointerDown(item, { pointerType: 'mouse' });
-  fireEvent.click(item, { detail: 1 });
-  await user.keyboard('{Escape}');
-  await screen.findByRole('button', { name: 'Filter sessions, 1 active' });
-}
-
 describe('user session attribution', () => {
-  it("sorts the viewer's own sessions first and marks sessions owned by others", async () => {
-    // The server lists the other user's org-visible session before the
-    // viewer's own; the sidebar must re-order and attribute it.
+  it('marks sessions owned by others', async () => {
     stubSessions(
       [
         userSession({
@@ -114,16 +98,10 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await showAllOwners();
     const user = userEvent.setup();
 
-    const mine = await screen.findByRole('button', { name: 'mine' });
-    const other = screen.getByRole('button', { name: 'alpha' });
-    const labels = screen
-      .getAllByRole('button')
-      .map(button => button.getAttribute('aria-label'))
-      .filter(label => label === 'mine' || label === 'alpha');
-    expect(labels).toEqual(['mine', 'alpha']);
+    const mine = await screen.findByRole('link', { name: 'mine' });
+    const other = screen.getByRole('link', { name: 'alpha' });
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
     expect(screen.queryByText('Grace Hopper')).not.toBeInTheDocument();
 
@@ -145,9 +123,6 @@ describe('user session attribution', () => {
   });
 
   it('offers delete only on the viewer-owned session', async () => {
-    // The DELETE route is owner-only and 404s for non-owners, and the delete
-    // service treats 404 as an idempotent success, so a non-owned row must not
-    // offer a delete action that would fake-succeed.
     stubSessions(
       [
         userSession({ id: 'row-other', sessionId: 'sess-other', userId: 'user-owner-1', branch: 'user/alpha' }),
@@ -158,10 +133,9 @@ describe('user session attribution', () => {
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
-    await showAllOwners();
     const user = userEvent.setup();
 
-    const other = await screen.findByRole('button', { name: 'alpha' });
+    const other = await screen.findByRole('link', { name: 'alpha' });
     await user.hover(other);
     const card = await screen.findByLabelText('alpha session details');
     expect(within(card).getByText('user-owner-1')).toBeInTheDocument();

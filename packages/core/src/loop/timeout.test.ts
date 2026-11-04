@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createTimeoutAbortSignal, isMastraTimeoutError, MastraTimeoutError, raceAgainstAbort } from './timeout';
+import {
+  createTimeoutAbortSignal,
+  isMastraTimeoutError,
+  MastraTimeoutError,
+  raceAgainstAbort,
+  settledOrElapsed,
+} from './timeout';
 
 const tick = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -93,6 +99,37 @@ describe('createTimeoutAbortSignal', () => {
     expect(signal?.aborted).toBe(false);
     expect(removeSpy).toHaveBeenCalled();
   });
+
+  it('after default cleanup, a parent abort no longer reaches the signal', () => {
+    const parent = new AbortController();
+    const { signal, cleanup } = createTimeoutAbortSignal({
+      parentSignal: parent.signal,
+      timeoutMs: 10_000,
+      timeoutType: 'step',
+    });
+    cleanup();
+    parent.abort(new Error('stop'));
+
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it('with detachParentOnCleanup: false, cleanup only clears the timer and keeps the parent link', async () => {
+    const parent = new AbortController();
+    const { signal, cleanup } = createTimeoutAbortSignal({
+      parentSignal: parent.signal,
+      timeoutMs: 10,
+      timeoutType: 'total',
+      detachParentOnCleanup: false,
+    });
+    cleanup();
+    await tick(30);
+    expect(signal?.aborted).toBe(false);
+
+    const reason = new Error('stop');
+    parent.abort(reason);
+    expect(signal?.aborted).toBe(true);
+    expect(signal?.reason).toBe(reason);
+  });
 });
 
 describe('raceAgainstAbort', () => {
@@ -119,5 +156,46 @@ describe('raceAgainstAbort', () => {
 
   it('passes the promise through when no signal is provided', async () => {
     await expect(raceAgainstAbort(Promise.resolve('ok'), undefined)).resolves.toBe('ok');
+  });
+});
+
+describe('settledOrElapsed', () => {
+  it('resolves as soon as the promise settles, before the wait elapses', async () => {
+    vi.useFakeTimers();
+    try {
+      let done = false;
+      const pending = Promise.withResolvers<string>();
+      const waited = settledOrElapsed(pending.promise, 1_000).then(() => {
+        done = true;
+      });
+      pending.resolve('saved');
+      await vi.advanceTimersByTimeAsync(0);
+      await waited;
+      expect(done).toBe(true);
+      // The wait timer is cleared once the promise wins.
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolves after the wait when the promise never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      let done = false;
+      void settledOrElapsed(new Promise(() => {}), 1_000).then(() => {
+        done = true;
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resolves rather than rejects when the promise rejects', async () => {
+    await expect(settledOrElapsed(Promise.reject(new Error('store down')), 1_000)).resolves.toBeUndefined();
   });
 });

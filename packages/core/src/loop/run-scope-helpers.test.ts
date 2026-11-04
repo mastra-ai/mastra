@@ -35,6 +35,7 @@ import {
   STEP_ACTIVE_TOOLS_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
+  SUBSCRIBE_PENDING_SIGNALS_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
@@ -79,6 +80,7 @@ describe('hydrateRunScopeFromInternal', () => {
     const agentBackgroundConfig = { tag: 'agentBackgroundConfig' } as any;
     const backgroundTaskManagerConfig = { tag: 'backgroundTaskManagerConfig' } as any;
     const drainPendingSignals = (() => []) as StreamInternal['drainPendingSignals'];
+    const subscribePendingSignals = () => () => {};
     const initialSignalEchoes = [{ tag: 'echo' }] as any;
     const toolPayloadTransform = { tag: 'toolPayloadTransform' } as any;
 
@@ -98,6 +100,7 @@ describe('hydrateRunScopeFromInternal', () => {
       backgroundTaskManagerConfig,
       skipBgTaskWait: true,
       drainPendingSignals,
+      subscribePendingSignals,
       initialSignalEchoes,
       toolPayloadTransform,
     };
@@ -120,6 +123,7 @@ describe('hydrateRunScopeFromInternal', () => {
     expect(scope.get(BACKGROUND_TASK_MANAGER_CONFIG_KEY)).toBe(backgroundTaskManagerConfig);
     expect(scope.get(SKIP_BG_TASK_WAIT_KEY)).toBe(true);
     expect(scope.get(DRAIN_PENDING_SIGNALS_KEY)).toBe(drainPendingSignals);
+    expect(scope.get(SUBSCRIBE_PENDING_SIGNALS_KEY)).toBe(subscribePendingSignals);
     expect(scope.get(INITIAL_SIGNAL_ECHOES_KEY)).toBe(initialSignalEchoes);
     expect(scope.get(TOOL_PAYLOAD_TRANSFORM_KEY)).toBe(toolPayloadTransform);
 

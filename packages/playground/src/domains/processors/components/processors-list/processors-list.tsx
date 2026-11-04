@@ -4,9 +4,9 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { sortBy } from '@mastra/playground-ui/sort/sort-by';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
+import type { ProcessorInfo, ProcessorPhase } from '@mastra/react/hooks/processors';
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import { useMemo } from 'react';
-import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';
 
 const phaseKeys: ProcessorPhase[] = ['input', 'inputStep', 'outputStep', 'outputStream', 'outputResult'];
 
@@ -62,7 +62,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
           <DataList.TopCell>Name</DataList.TopCell>
         )}
         <DataList.TopCell>Description</DataList.TopCell>
-        <DataList.TopCellSmart long="Input" short="Input" tooltip="Contains Input phase" className="text-center" />
+        <DataList.TopCellSmart long="Input" short="Input" tooltip="Contains input phase" className="text-center" />
         <DataList.TopCellSmart
           long="Input Step"
           short={
@@ -70,7 +70,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
               <FileInput /> Step
             </>
           }
-          tooltip="Contains Input Step phase"
+          tooltip="Contains input step phase"
           className="text-center"
         />
         <DataList.TopCellSmart
@@ -80,7 +80,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
               <FileOutput /> Step
             </>
           }
-          tooltip="Contains Output Step phase"
+          tooltip="Contains output step phase"
           className="text-center"
         />
         <DataList.TopCellSmart
@@ -90,7 +90,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
               <FileOutput /> Stream
             </>
           }
-          tooltip="Contains Output Stream phase"
+          tooltip="Contains output stream phase"
           className="text-center"
         />
         <DataList.TopCellSmart
@@ -100,7 +100,7 @@ export function ProcessorsList({ processors, isLoading, search = '', sort, onSor
               <FileOutput /> Result
             </>
           }
-          tooltip="Contains Output Result phase"
+          tooltip="Contains output result phase"
           className="text-center"
         />
         {onSortChange ? (

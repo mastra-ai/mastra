@@ -1,4 +1,3 @@
-import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { WorkflowCardDisplayStatus, WorkflowStepCardViewProps } from '../../types';
@@ -9,6 +8,8 @@ import { WorkflowClock } from '../workflow-clock';
 import { WorkflowTypeBadge } from '../workflow-type-badge';
 import { ActivityWick } from '@/ds/components/Activity';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Metadata } from '@/ds/components/Metadata';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
@@ -39,9 +40,9 @@ const statusLineClasses: Partial<Record<ReportedStatus, string>> = {
 
 const footerStatusClasses: Partial<Record<ReportedStatus, string>> = {
   success: 'text-success-indicator',
-  failed: 'text-destructive-indicator',
-  suspended: 'text-warning-indicator',
-  tripwire: 'text-warning-indicator',
+  failed: 'text-destructive-foreground',
+  suspended: 'text-warning-foreground',
+  tripwire: 'text-warning-foreground',
 };
 
 const suspendedWickStyle: CSSProperties & { '--belt-hue': string } = { '--belt-hue': 'var(--warning-indicator)' };
@@ -160,7 +161,11 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               )}
               {capabilities.length > 0 && (
                 <Txt as="span" variant="meta" tone="muted">
-                  {capabilities.join(' · ')}
+                  <Metadata>
+                    {capabilities.map(capability => (
+                      <Metadata.Item key={capability}>{capability}</Metadata.Item>
+                    ))}
+                  </Metadata>
                 </Txt>
               )}
             </span>
@@ -198,7 +203,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                 <span>
                   {expanded ? 'Collapse' : 'Expand'} {isForEach ? 'loop' : 'workflow'}
                 </span>
-                <ChevronRight aria-hidden size={14} />
+                <DisclosureChevron direction="right" className="size-3.5" />
               </CollapsibleTrigger>
               <CollapsibleContent className="h-155 overflow-hidden border-t border-dashed border-border">
                 {body}

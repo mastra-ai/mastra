@@ -21,6 +21,7 @@ import xxhash from 'xxhash-wasm';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../shared/pool-error-guard';
 import { parseSchemaName } from '../shared/schema-name';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
@@ -205,6 +206,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       this.pool = new pg.Pool(poolConfig);
+      guardCheckedOutClientErrors(this.pool, message => this.logger?.warn?.(message));
 
       // pg emits 'error' on the pool when an idle client's connection drops
       // (backend restart, network partition, cloud proxies reaping idle
@@ -321,11 +323,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  /**
-   * Checks if the installed pgvector version supports halfvec type.
-   * halfvec was introduced in pgvector 0.7.0.
-   */
-  private supportsHalfvec(): boolean {
+  /** Checks if the installed pgvector version is at least the given major.minor version. */
+  private isVectorExtensionAtLeast(minMajor: number, minMinor: number): boolean {
     if (!this.vectorExtensionVersion) {
       return false;
     }
@@ -333,12 +332,24 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const parts = this.vectorExtensionVersion.split('.');
     const major = parseInt(parts[0] ?? '', 10);
     const minor = parseInt(parts[1] ?? '', 10);
-    // If parsing failed (NaN), assume version doesn't support halfvec
+    // If parsing failed (NaN), assume the version is too old
     if (isNaN(major) || isNaN(minor)) {
       return false;
     }
-    // halfvec was introduced in pgvector 0.7.0
-    return major > 0 || (major === 0 && minor >= 7);
+    return major > minMajor || (major === minMajor && minor >= minMinor);
+  }
+
+  /**
+   * Checks if the installed pgvector version supports halfvec type.
+   * halfvec was introduced in pgvector 0.7.0.
+   */
+  private supportsHalfvec(): boolean {
+    return this.isVectorExtensionAtLeast(0, 7);
+  }
+
+  /** Checks if pgvector >= 0.8.0 (required for the hnsw.iterative_scan setting). */
+  private supportsIterativeScan(): boolean {
+    return this.isVectorExtensionAtLeast(0, 8);
   }
 
   /** Checks if pgvector >= 0.7.0 (required for bit type). */
@@ -737,6 +748,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let client;
       try {
         await this.ensureNamespaceReady(indexName);
+        // Load metadata before holding a connection so a cold cache cannot exhaust the pool.
+        const indexInfo = includeVector ? await this.getIndexMetadata({ indexName }) : undefined;
+        const ops = indexInfo && this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
         client = await this.pool.connect();
         const translatedFilter = this.transformFilter(filter);
         const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
@@ -760,7 +774,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           id,
           score: 0,
           metadata,
-          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+          ...(ops && embedding && { vector: ops.parseEmbedding(embedding) }),
         }));
       } catch (error) {
         if (error instanceof MastraError) {
@@ -810,7 +824,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
         await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
-        await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        if (this.supportsIterativeScan()) {
+          await client.query(`SET LOCAL hnsw.iterative_scan = strict_order`);
+        }
       }
 
       if (indexInfo.type === 'ivfflat' && probes) {
@@ -826,53 +842,58 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage.
-      // Only safe when minScore won't filter out candidates (minScore <= 0), otherwise the inner LIMIT
-      // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
-      // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
-      // vectors in other clusters, returning fewer results than expected.
       const filterClause = filterQuery.trim().replace(/^WHERE\s+/i, '');
       const hasFilter = filterClause.length > 0;
-      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
       const namespaceParam = filterValues.length + 1;
+      const queryValues = [...filterValues, namespace];
+      const selectColumns = `vector_id as id, ${scoreExpr} as score, metadata${includeVector ? ', embedding' : ''}`;
+      const whereClause = `WHERE namespace = $${namespaceParam}${filterClause ? ` AND (${filterClause})` : ''}`;
 
-      const query = useIndexedOrder
-        ? `
+      // IVFFlat stays on the exact query because Mastra builds it on an empty table, so its lists don't
+      // match the data (#28949). Filtered HNSW searches need pgvector >= 0.8 iterative scans to find enough rows.
+      const useIndexedOrder = indexInfo.type === 'hnsw' && (!hasFilter || this.supportsIterativeScan());
+
+      let rows: any[] | undefined;
+      if (useIndexedOrder) {
+        // Rows are ordered best-first and minScore keeps the best side, so applying it after LIMIT
+        // returns the same rows as applying it before.
+        const indexedQuery = `
         WITH vector_scores AS (
-          SELECT
-            vector_id as id,
-            ${scoreExpr} as score,
-            metadata
-            ${includeVector ? ', embedding' : ''}
+          SELECT ${selectColumns}
           FROM ${tableName}
-          WHERE namespace = $${namespaceParam}
+          ${whereClause}
           ORDER BY ${distanceExpr}
           LIMIT $2
         )
-        SELECT *
+        SELECT *, score > $1 AS above_min_score
         FROM vector_scores
-        WHERE score > $1
-        ORDER BY score DESC`
-        : `
+        ORDER BY score DESC`;
+        const candidates = (await client.query(indexedQuery, queryValues)).rows;
+
+        // Fewer than topK candidates means fewer rows match or the index walk stopped early
+        // (hnsw.max_scan_tuples). The exact query is correct in both cases and cheap in the first (#28949).
+        if (candidates.length >= topK) {
+          rows = candidates.filter(row => row.above_min_score);
+        }
+      }
+
+      if (!rows) {
+        const exactQuery = `
         WITH vector_scores AS (
-          SELECT
-            vector_id as id,
-            ${scoreExpr} as score,
-            metadata
-            ${includeVector ? ', embedding' : ''}
+          SELECT ${selectColumns}
           FROM ${tableName}
-          WHERE namespace = $${namespaceParam}
-          ${filterClause ? `AND (${filterClause})` : ''}
+          ${whereClause}
         )
         SELECT *
         FROM vector_scores
         WHERE score > $1
         ORDER BY score DESC
         LIMIT $2`;
-      const result = await client.query(query, [...filterValues, namespace]);
+        rows = (await client.query(exactQuery, queryValues)).rows;
+      }
       await client.query('COMMIT');
 
-      return result.rows.map(({ id, score, metadata, embedding }) => ({
+      return rows.map(({ id, score, metadata, embedding }) => ({
         id,
         score,
         metadata,
@@ -1304,7 +1325,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           }
 
           if (metadataIndexes?.length) {
-            await this.createMetadataIndexes(tableName, indexName, metadataIndexes);
+            await this.createMetadataIndexes(client, tableName, indexName, metadataIndexes);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
@@ -1511,7 +1532,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     });
   }
 
-  private async createMetadataIndexes(tableName: string, indexName: string, metadataFields: string[]) {
+  private async createMetadataIndexes(
+    client: pg.PoolClient,
+    tableName: string,
+    indexName: string,
+    metadataFields: string[],
+  ) {
     const hasher = await this.hasher;
     for (const field of metadataFields) {
       // Hash the field to produce a safe, fixed-length suffix for the index name.
@@ -1523,9 +1549,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // DDL statements don't support bind parameters, so we must interpolate
       // the field name as a literal. Escape single quotes to prevent SQL injection.
       const escapedField = field.replace(/'/g, "''");
-      // Use CONCURRENTLY to avoid blocking writers on large existing tables.
-      // This must run outside a transaction, so we use pool.query() directly.
-      await this.pool.query(
+      // CONCURRENTLY avoids blocking writers on large tables. It can't run inside a transaction, and the
+      // caller's client isn't in one. Reusing it keeps a single-connection pool from deadlocking.
+      await client.query(
         `
         CREATE INDEX CONCURRENTLY IF NOT EXISTS ${metadataIdxName}
         ON ${tableName} ((metadata->>'${escapedField}'))

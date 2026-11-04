@@ -115,6 +115,32 @@ describe('SourceAgentsSourceControl', () => {
     });
   });
 
+  it('omits code-owned fields for file-based agents', async () => {
+    const provider = new MockSourceProvider();
+    const storage = new SourceAgentsSourceControl({ provider });
+    storage.__registerMastra({
+      getAgentById: () => ({
+        source: 'fs',
+        __getEditorConfig: () => ({ tools: { description: true } }),
+      }),
+    });
+
+    await storage.create({
+      agent: {
+        id: 'fs-agent',
+        name: 'FS Agent',
+        instructions: 'The agent folder owns these instructions.',
+        model,
+        tools: { weatherTool: { description: 'Editable description' } },
+      },
+    });
+
+    expect(provider.writes[0]?.path).toBe('agents/fs-agent.json');
+    expect(JSON.parse(provider.writes[0]?.content ?? '{}')).toEqual({
+      tools: { weatherTool: { description: 'Editable description' } },
+    });
+  });
+
   it('persists editable snapshots for storage-only agents without a code definition', async () => {
     const provider = new MockSourceProvider();
     const storage = new SourceAgentsSourceControl({ provider });

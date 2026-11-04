@@ -1,15 +1,16 @@
 'use client';
 
+import type { TrajectoryStep } from '@mastra/core/evals';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { useMastraClient } from '@mastra/react';
+import { useSpanDetail } from '@mastra/react/hooks/traces';
 import { useQuery } from '@tanstack/react-query';
-import { EyeIcon } from 'lucide-react';
-import { SaveAsDatasetItemDialog } from '@/domains/datasets';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
+import { AddDatasetItemDialog } from '@/domains/datasets';
+import type { AddDatasetItemDialogProps, TrajectoryExpectation } from '@/domains/datasets';
 import type { SpanRecord } from '@/domains/traces/types';
-import type { SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
+
+type ExpectedStep = NonNullable<TrajectoryExpectation['steps']>[number];
 
 type TraceAsItemDialogProps = {
   /** Full span record — if provided, used directly (no fetch). */
@@ -19,8 +20,23 @@ type TraceAsItemDialogProps = {
   traceId?: string;
   isOpen: boolean;
   onClose: () => void;
-  level?: SideDialogRootProps['level'];
+  renderCreateDatasetDialog?: AddDatasetItemDialogProps['renderCreateDatasetDialog'];
 };
+
+const readsAsJson = (text: string) => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Strings show as plain text, unless the text reads as JSON: those stay quoted so they are saved back as strings. */
+function toEditorText(value: unknown): string {
+  if (typeof value === 'string' && !readsAsJson(value)) return value;
+  return safeStringify(value, 2);
+}
 
 function getInitialInput(traceDetails?: SpanRecord): string {
   if (traceDetails?.input == null) return '{}';
@@ -35,7 +51,15 @@ function getInitialInput(traceDetails?: SpanRecord): string {
     'messages' in spanInput;
   const rawInput = isWrappedAgentInput ? (spanInput.messages ?? traceDetails.input) : traceDetails.input;
 
-  return safeStringify(rawInput, 2);
+  return toEditorText(rawInput);
+}
+
+/** A recorded step as an expectation: what it did, without how long it took or what ran inside it. */
+function toExpectedStep(step: TrajectoryStep): ExpectedStep {
+  // Expectations can't type provider-executed tools yet, so those match by name only.
+  if (step.stepType === 'provider_tool_call') return { name: step.name };
+  const { children: _children, durationMs: _durationMs, metadata: _metadata, ...expected } = step;
+  return expected;
 }
 
 export function TraceAsItemDialog({
@@ -44,65 +68,45 @@ export function TraceAsItemDialog({
   traceId,
   isOpen,
   onClose,
-  level = 2,
+  renderCreateDatasetDialog,
 }: TraceAsItemDialogProps) {
   const client = useMastraClient();
 
   // Lazy-load the root span details when dialog opens and no traceDetails provided
-  const { data: lazySpanDetail } = useSpanDetail(
-    !externalTraceDetails && isOpen ? traceId : null,
-    !externalTraceDetails && isOpen ? rootSpanId : null,
-  );
+  const spanTraceId = !externalTraceDetails && isOpen ? traceId : null;
+  const spanId = !externalTraceDetails && isOpen ? rootSpanId : null;
+  const { data: lazySpanDetail, isLoading: isSpanLoading } = useSpanDetail({
+    traceId: spanTraceId,
+    spanId,
+    queryOptions: { enabled: Boolean(spanTraceId) && Boolean(spanId) },
+  });
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
 
   const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
     queryKey: ['trace-trajectory', traceId],
     queryFn: () => client.getTraceTrajectory(traceId ?? ''),
-    enabled: isOpen && !!traceId,
+    enabled: isOpen && Boolean(traceId),
   });
 
-  // Convert trajectory to a TrajectoryExpectation JSON string
-  const initialTrajectory =
-    trajectory?.steps && trajectory.steps.length > 0
-      ? safeStringify(
-          {
-            steps: trajectory.steps.map(step => {
-              const { name, stepType, children, ...rest } = step as Record<string, unknown>;
-              const expected: Record<string, unknown> = { name, stepType };
-              for (const [k, v] of Object.entries(rest)) {
-                if (v != null && k !== 'durationMs' && k !== 'metadata') {
-                  expected[k] = v;
-                }
-              }
-              return expected;
-            }),
-            ordering: 'relaxed',
-          },
-          2,
-        )
-      : undefined;
-
+  // The dialog seeds its form when it opens, so it opens once everything the form is seeded from has arrived.
+  const isReady = !isSpanLoading && !isTrajectoryLoading;
+  const steps = trajectory?.steps ?? [];
   // Derive item-level tool mocks from the recorded tool calls in the trajectory
-  const toolMocks = trajectory?.steps ? collectToolMocks(trajectory.steps) : [];
-  const initialToolMocks = toolMocks.length > 0 ? safeStringify(toolMocks, 2) : undefined;
+  const toolMocks = collectToolMocks(steps);
 
   return (
-    <SaveAsDatasetItemDialog
+    <AddDatasetItemDialog
+      open={isOpen && isReady}
+      onOpenChange={open => {
+        if (!open) onClose();
+      }}
       initialInput={getInitialInput(traceDetails)}
-      initialGroundTruth={traceDetails?.output != null ? safeStringify(traceDetails.output, 2) : ''}
-      initialTrajectory={initialTrajectory}
-      trajectoryLoading={isTrajectoryLoading}
-      initialToolMocks={initialToolMocks}
-      breadcrumb={
-        <TextAndIcon>
-          <EyeIcon /> {getShortId(traceId)}
-        </TextAndIcon>
-      }
-      isOpen={isOpen}
-      onClose={onClose}
-      level={level}
+      initialGroundTruth={traceDetails?.output != null ? toEditorText(traceDetails.output) : ''}
+      initialToolMocks={toolMocks.length > 0 ? safeStringify(toolMocks, 2) : undefined}
+      initialTrajectory={steps.length > 0 ? { steps: steps.map(toExpectedStep), ordering: 'relaxed' } : undefined}
       source={traceId ? { type: 'trace', referenceId: traceId } : undefined}
+      renderCreateDatasetDialog={renderCreateDatasetDialog}
     />
   );
 }

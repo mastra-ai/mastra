@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Fragment } from 'react';
 import { Button } from '../Button/Button';
+import { Field, FieldError, FieldLabel } from '../Field';
 import { Txt } from '../Txt/Txt';
 import { Input } from './input';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -35,7 +36,7 @@ type Story = StoryObj<typeof Input>;
 
 export const Default: Story = {
   args: {
-    placeholder: 'Enter text...',
+    placeholder: 'Enter text',
     variant: 'default',
   },
 };
@@ -108,6 +109,28 @@ export const Password: Story = {
   },
 };
 
+// Password managers stay out of DS text fields unless the field asks for them: with no
+// `autoComplete`, a field renders `autocomplete="off"` plus each manager's ignore attribute.
+// A credential form opts in with a real autofill token.
+export const PasswordManagerAutofill: Story = {
+  render: () => (
+    <form className="flex w-72 flex-col gap-4" onSubmit={event => event.preventDefault()}>
+      <Field>
+        <FieldLabel>Name (opted out by default)</FieldLabel>
+        <Input placeholder="Dataset name" />
+      </Field>
+      <Field>
+        <FieldLabel>Email</FieldLabel>
+        <Input type="email" autoComplete="email" placeholder="you@example.com" />
+      </Field>
+      <Field>
+        <FieldLabel>Password</FieldLabel>
+        <Input type="password" autoComplete="current-password" placeholder="Enter password" />
+      </Field>
+    </form>
+  ),
+};
+
 export const Number: Story = {
   args: {
     type: 'number',
@@ -134,8 +157,14 @@ export const Error: Story = {
   args: {
     placeholder: 'invalid@',
     defaultValue: 'invalid@',
-    error: true,
   },
+  render: args => (
+    <Field invalid className="w-50">
+      <FieldLabel>Email</FieldLabel>
+      <Input {...args} />
+      <FieldError>Enter a complete email address.</FieldError>
+    </Field>
+  ),
 };
 
 export const OnDifferentSurfaces: Story = {
@@ -145,25 +174,25 @@ export const OnDifferentSurfaces: Story = {
         <Txt variant="caption" tone="muted" className="mb-2">
           Sidebar
         </Txt>
-        <Input aria-label="Search agents on the sidebar" placeholder="Search agents..." />
+        <Input aria-label="Search agents on the sidebar" placeholder="Search agents" />
       </div>
       <div className="rounded-lg border border-border bg-background p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Main canvas
         </Txt>
-        <Input aria-label="Search agents on the main canvas" placeholder="Search agents..." />
+        <Input aria-label="Search agents on the main canvas" placeholder="Search agents" />
       </div>
       <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
         <Txt variant="caption" tone="muted" className="mb-2">
           Card
         </Txt>
-        <Input aria-label="Search agents on a card" placeholder="Search agents..." />
+        <Input aria-label="Search agents on a card" placeholder="Search agents" />
       </div>
       <div className="rounded-lg border border-border bg-popover p-4">
         <Txt variant="caption" tone="muted" className="mb-2">
           Popover
         </Txt>
-        <Input aria-label="Search agents in a popover" placeholder="Search agents..." />
+        <Input aria-label="Search agents in a popover" placeholder="Search agents" />
       </div>
     </div>
   ),

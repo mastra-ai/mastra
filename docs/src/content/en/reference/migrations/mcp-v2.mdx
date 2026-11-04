@@ -19,12 +19,12 @@ Streamable HTTP still streams responses as Server-Sent Events. What's removed is
 
 ### `@mastra/core` peer range
 
-`@mastra/mcp` 2.0 requires `@mastra/core` 1.68 or newer, which adds the shared server contract (`mcpVersion`, `MCPToolExecutionResultV2`, `context.mcp.protocolVersion`). Update both packages together.
+`@mastra/mcp` 2.0 requires `@mastra/core` 1.76 or a later 1.x release, which includes the shared server contract (`mcpVersion`, `MCPToolExecutionResultV2`, `context.mcp.protocolVersion`). Update both packages together.
 
 ```diff
 - "@mastra/core": "^1.60.0",
 - "@mastra/mcp": "^1.17.0"
-+ "@mastra/core": "^1.68.0",
++ "@mastra/core": "^1.76.0",
 + "@mastra/mcp": "^2.0.0"
 ```
 
@@ -207,7 +207,7 @@ Persisted credentials changed shape too: tokens are stored per authorization-ser
 
 ### Server `protocolVersion` option
 
-Servers accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is served now, exposed as the `MCP_PROTOCOL_VERSION` constant. Remove the option; a client that doesn't offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade.
+Servers accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is served now, exposed as the `MCP_PROTOCOL_VERSION` constant. Remove the option; a client that doesn't offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade. To keep serving clients that still open with `initialize` over HTTP, set `legacy: 'stateless'` on the server. Each of their requests is then answered without a session.
 
 ```diff
   const server = new MCPServer({

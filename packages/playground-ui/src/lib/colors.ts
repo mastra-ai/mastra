@@ -1,4 +1,4 @@
-export const categoricalHues = ['blue', 'green', 'orange', 'purple', 'pink', 'yellow', 'cyan'] as const;
+export const categoricalHues = ['blue', 'green', 'orange', 'purple', 'pink', 'amber', 'cyan'] as const;
 
 export type CategoricalHue = (typeof categoricalHues)[number];
 
@@ -24,7 +24,7 @@ const HUE_FILL_CLASS: Record<CategoricalHue, string> = {
   orange: 'bg-badge-orange-strong text-badge-orange-foreground',
   purple: 'bg-badge-purple-strong text-badge-purple-foreground',
   pink: 'bg-badge-pink-strong text-badge-pink-foreground',
-  yellow: 'bg-badge-yellow-strong text-badge-yellow-foreground',
+  amber: 'bg-badge-amber-strong text-badge-amber-foreground',
   cyan: 'bg-badge-cyan-strong text-badge-cyan-foreground',
 };
 

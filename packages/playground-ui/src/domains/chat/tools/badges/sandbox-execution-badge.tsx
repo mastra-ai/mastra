@@ -1,15 +1,13 @@
-import { useEffect, useRef } from 'react';
 import type { DataMessagePart } from '../tool-card';
-import { parseToolArgs, toolDataParts, workspaceMetadata } from './workspace-data-parts';
+import { parseToolArgs, sandboxExit, toolDataParts, workspaceMetadata } from './workspace-data-parts';
 import { WorkspaceLink } from './workspace-link';
 import type { MessageMetadata } from '@/domains/chat';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
 import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ToolApprovalButtons } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import { ActivityHeadline } from '@/ds/components/ai/activity';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { presentTool, ToolCallCommand, ToolCallMono } from '@/ds/components/ai/tool-call';
+import { presentTool, ToolCallBody, ToolCallExitStatus, toolCallHasBody } from '@/ds/components/ai/tool-call';
+import type { ToolCallView } from '@/ds/components/ai/tool-call';
 import { Txt } from '@/ds/components/Txt';
 import { useElapsedTime } from '@/hooks/use-elapsed-time';
 import { cn } from '@/utils/cn';
@@ -25,14 +23,7 @@ const SANDBOX_STATUS_DOT: Record<string, string> = {
   failed: 'bg-destructive-indicator',
 };
 
-interface SandboxExit {
-  exitCode?: number;
-  success?: boolean;
-  executionTimeMs?: number;
-  killed?: boolean;
-}
-
-export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: unknown;
@@ -41,15 +32,6 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   dataParts?: ReadonlyArray<DataMessagePart>;
   status?: ActivityStatus;
 }
-
-const ExitStatus = ({ exit }: { exit: SandboxExit }) => {
-  if (exit.exitCode === undefined || exit.success) return null;
-  return (
-    <Txt as="span" variant="meta" className={exit.killed ? 'text-warning-indicator' : 'text-destructive-indicator'}>
-      {exit.killed ? 'killed' : `exit ${exit.exitCode}`}
-    </Txt>
-  );
-};
 
 export const SandboxExecutionBadge = ({
   toolName,
@@ -63,11 +45,10 @@ export const SandboxExecutionBadge = ({
   dataParts,
   status = 'idle',
 }: SandboxExecutionBadgeProps) => {
-  const outputRef = useRef<HTMLPreElement>(null);
-  const { icon: ToolIcon, label, detail, description, command } = presentTool(toolName, parseToolArgs(args));
+  const parsedArgs = parseToolArgs(args);
+  const { icon: ToolIcon, label, detail, description, command } = presentTool(toolName, parsedArgs);
   const startedCommand = toolDataParts(dataParts, 'sandbox-command', toolCallId)[0]?.data?.command;
   const originalCommand = typeof startedCommand === 'string' ? startedCommand : undefined;
-  const shownCommand = command ?? originalCommand;
 
   const outputChunks = (dataParts ?? []).filter(
     part =>
@@ -75,34 +56,39 @@ export const SandboxExecutionBadge = ({
       (part.name === 'sandbox-stdout' || part.name === 'sandbox-stderr') &&
       part.data?.toolCallId === toolCallId,
   );
-  const output =
-    outputChunks.map(part => part.data?.output ?? '').join('') || (typeof result === 'string' ? result : '');
-
-  const exit: SandboxExit | undefined = toolDataParts(dataParts, 'sandbox-exit', toolCallId)[0]?.data;
+  const exit = sandboxExit(dataParts, toolCallId);
+  const view: ToolCallView = {
+    toolName,
+    args: parsedArgs,
+    status,
+    command: command ?? originalCommand,
+    output: outputChunks.map(part => part.data?.output ?? '').join(''),
+    result,
+    exit,
+  };
   const workspace = workspaceMetadata(dataParts, toolCallId);
   const isRunning = status === 'running' && Boolean(workspace) && !exit;
   const toolCalled = toolCalledProp ?? (Boolean(workspace) || Boolean(exit) || typeof result === 'string');
   const elapsedTime = useElapsedTime(isRunning, outputChunks[0]?.data?.timestamp);
 
   const needsApproval = awaitsToolApproval({ toolApprovalMetadata, toolCalled });
-  const hasBody = Boolean(shownCommand) || Boolean(output) || needsApproval;
-
-  useEffect(() => {
-    const outputBlock = outputRef.current;
-    if (outputBlock) outputBlock.scrollTop = outputBlock.scrollHeight;
-  }, [output]);
+  const hasBody = toolCallHasBody(view) || needsApproval;
 
   return (
-    <BadgeWrapper
+    <ToolApprovalBadge
+      approval={{
+        toolCalled,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
       data-testid="sandbox-execution-badge"
-      header={
-        <ActivityHeadline
-          icon={<ToolIcon aria-hidden />}
-          label={label}
-          detail={originalCommand ?? detail}
-          description={description}
-        />
-      }
+      icon={<ToolIcon aria-hidden />}
+      title={label}
+      detail={originalCommand ?? detail}
+      description={description}
       status={status}
       extraInfo={
         <>
@@ -122,7 +108,7 @@ export const SandboxExecutionBadge = ({
               {workspace.sandbox.name || workspace.sandbox.provider}
             </WorkspaceLink>
           )}
-          {exit && <ExitStatus exit={exit} />}
+          {exit && <ToolCallExitStatus exit={exit} />}
           {(isRunning || exit?.executionTimeMs !== undefined) && (
             <Txt as="span" variant="meta" tone="muted" className="px-1 tabular-nums">
               {isRunning ? formatElapsed(elapsedTime) : formatDuration(exit?.executionTimeMs ?? 0)}
@@ -132,24 +118,7 @@ export const SandboxExecutionBadge = ({
       }
       initialCollapsed={!toolApprovalMetadata}
     >
-      {hasBody && (
-        <>
-          {shownCommand && <ToolCallCommand command={shownCommand} />}
-          {output && (
-            <ToolCallMono ref={outputRef} copyText={output} className="text-muted-foreground">
-              {output}
-            </ToolCallMono>
-          )}
-          <ToolApprovalButtons
-            toolCalled={toolCalled}
-            toolCallId={toolCallId}
-            toolApprovalMetadata={toolApprovalMetadata}
-            toolName={toolName}
-            isNetwork={isNetwork}
-            isGenerateMode={metadata?.mode === 'generate'}
-          />
-        </>
-      )}
-    </BadgeWrapper>
+      {hasBody && <ToolCallBody {...view} showFullArguments={needsApproval} />}
+    </ToolApprovalBadge>
   );
 };

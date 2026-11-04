@@ -180,6 +180,7 @@ export class WorkspacesPG extends WorkspacesStorage {
 
   async create(input: { workspace: StorageCreateWorkspaceInput }): Promise<StorageWorkspaceType> {
     const { workspace } = input;
+    let draftInserted = false;
     try {
       const tableName = getTableName({ indexName: TABLE_WORKSPACES, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -203,6 +204,7 @@ export class WorkspacesPG extends WorkspacesStorage {
           nowIso,
         ],
       );
+      draftInserted = true;
 
       // 2. Extract snapshot fields and create version 1
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = workspace;
@@ -226,18 +228,21 @@ export class WorkspacesPG extends WorkspacesStorage {
         updatedAt: now,
       };
     } catch (error) {
-      // Best-effort cleanup
-      try {
-        const tableName = getTableName({
-          indexName: TABLE_WORKSPACES,
-          schemaName: getSchemaName(this.#schema),
-        });
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [workspace.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          const tableName = getTableName({
+            indexName: TABLE_WORKSPACES,
+            schemaName: getSchemaName(this.#schema),
+          });
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [workspace.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
       if (error instanceof MastraError) throw error;

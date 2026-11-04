@@ -65,8 +65,9 @@ const processor = new WorkingMemory({
                   },
                   {
                     name: 'content',
-                    type: 'string',
-                    description: 'Template content defining the structure of working memory data',
+                    type: 'string | Record<string, unknown>',
+                    description:
+                      'Template content defining the structure of working memory data. The object form is only valid when format is json',
                     isOptional: false,
                   },
                 ],
@@ -150,9 +151,10 @@ const processor = new WorkingMemory({
 ```typescript title="src/mastra/agents/personalized-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { WorkingMemory, MessageHistory } from '@mastra/core/processors'
-import { PostgresStorage } from '@mastra/pg'
+import { PostgresStore } from '@mastra/pg'
 
-const storage = new PostgresStorage({
+const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 })
 

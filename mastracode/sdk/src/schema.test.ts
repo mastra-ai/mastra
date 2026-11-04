@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { MODEL_ROUTE_MAX_ENTRIES, MODEL_ROUTE_MAX_FIELD_LENGTH } from './constants.js';
 import { stateSchema } from './schema.js';
 
 describe('stateSchema', () => {
@@ -43,6 +44,34 @@ describe('stateSchema', () => {
     expect(parsed.modeId).toBe('build');
   });
 
+  it('rejects model routes beyond the execution cap', () => {
+    const entry = { id: 'route', label: 'Route', modelId: 'openai/gpt-5.6-sol' };
+
+    expect(
+      stateSchema.safeParse({ modelRoute: { entries: Array.from({ length: MODEL_ROUTE_MAX_ENTRIES }, () => entry) } })
+        .success,
+    ).toBe(true);
+    expect(
+      stateSchema.safeParse({
+        modelRoute: { entries: Array.from({ length: MODEL_ROUTE_MAX_ENTRIES + 1 }, () => entry) },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects oversized model route fields', () => {
+    const oversized = 'x'.repeat(MODEL_ROUTE_MAX_FIELD_LENGTH + 1);
+
+    for (const field of ['id', 'label', 'modelId', 'accountId', 'memoryModelId'] as const) {
+      expect(
+        stateSchema.safeParse({
+          modelRoute: {
+            entries: [{ id: 'route', label: 'Route', modelId: 'openai/gpt-5.6-sol', [field]: oversized }],
+          },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it('normalizes the HTTP null sentinel to an absent thinking override', () => {
     const parsed = stateSchema.parse({ thinkingLevel: null });
 
@@ -59,6 +88,25 @@ describe('stateSchema', () => {
     // The schema strips unknown keys on parse; a factoryOrgId missing from the
     // schema is silently discarded and the memory seam falls back to ownerId.
     expect(parsed.factoryOrgId).toBe('FOdo4tqL98ibdYH8uhLXs0mZrDDE5Uiw');
+  });
+
+  it('defaults fresh OM roles to auto without materializing model IDs', () => {
+    const parsed = stateSchema.parse({});
+
+    expect(parsed.observerModelId).toBeUndefined();
+    expect(parsed.reflectorModelId).toBeUndefined();
+    expect(parsed.observerModelSelection).toBe('auto');
+    expect(parsed.reflectorModelSelection).toBe('auto');
+  });
+
+  it('treats legacy concrete OM model IDs as explicit selections', () => {
+    const parsed = stateSchema.parse({
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+
+    expect(parsed.observerModelSelection).toBe('openai/gpt-5.4-mini');
+    expect(parsed.reflectorModelSelection).toBe('anthropic/claude-haiku-4-5');
   });
 
   // Regression: /browser status compares the persisted active snapshot against the

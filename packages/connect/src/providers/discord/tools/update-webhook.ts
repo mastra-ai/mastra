@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const updateWebhookInputSchema = z.object({
   webhook_id: z.string().describe('The ID of the webhook to update. Example: "223704706495545344"'),
@@ -63,18 +64,7 @@ export function updateWebhookTool(proxy: PlatformProxy) {
     outputSchema: updateWebhookOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof updateWebhookOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata: unknown = await platformProxy.getMetadata();
-      const botToken =
-        metadata && typeof metadata === 'object' && 'botToken' in metadata && typeof metadata.botToken === 'string'
-          ? metadata.botToken
-          : undefined;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // Build the request body with only provided fields
       const requestBody: Record<string, unknown> = {};

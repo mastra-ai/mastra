@@ -528,6 +528,25 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.error.mock.calls[0]?.[0]).toContain('child blew up');
   });
+
+  it('keeps the message of a failed step.invoke() through step output serialization', async () => {
+    const { execute } = createNestedResumeFixture(
+      {},
+      {
+        mode: 'fresh',
+        invokeImpl: async (id: string) => {
+          throw new StepError(id, serializeError(new Error('step output size is greater than the limit')));
+        },
+      },
+    );
+
+    const result = await execute();
+
+    expect(result).toMatchObject({ status: 'failed' });
+    // Inngest memoizes step.run() output as JSON, so assert on the serialized form.
+    const serialized = JSON.parse(JSON.stringify((result as any).error));
+    expect(serialized.message).toContain('step output size is greater than the limit');
+  });
 });
 
 describe('InngestExecutionEngine.wrapDurableOperation', () => {

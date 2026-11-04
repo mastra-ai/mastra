@@ -75,19 +75,25 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   toolChoice,
   activeTools,
   targetVersion = 'v2',
+  stripToolsWhenNone = false,
 }: {
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
   /** Target model version: 'v2' for AI SDK v5, 'v3' for AI SDK v6, 'v4' for AI SDK v7. Defaults to 'v2'. */
   targetVersion?: ModelSpecVersion;
+  /**
+   * Drop tool definitions when toolChoice is 'none'. Set this when the request also carries a
+   * structured-output schema: providers like Gemini reject tools combined with
+   * response_format: json_schema (#14459). Otherwise tools are kept (AI SDK semantics) so
+   * providers like Bedrock don't strip tool-call history from the prompt (#25908).
+   */
+  stripToolsWhenNone?: boolean;
 }): {
   tools: PreparedTool[] | undefined;
   toolChoice: PreparedToolChoice | undefined;
 } {
-  if (toolChoice === 'none') {
-    // When toolChoice is 'none', strip tools entirely — providers like Gemini reject
-    // requests that combine tools + structured output (response_format: json_schema)
+  if (toolChoice === 'none' && (stripToolsWhenNone || Object.keys(tools || {}).length === 0)) {
     return {
       tools: undefined,
       toolChoice: { type: 'none' as const },
@@ -237,8 +243,12 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
 
 /**
  * Serialize a tool set into `ModelToolDefinition[]` for the `tools` attribute
- * on MODEL_GENERATION spans, reusing the same conversion the provider request
+ * on MODEL_GENERATION and MODEL_INFERENCE spans, reusing the same conversion the provider request
  * goes through so exporters see the schemas the model actually received.
+ *
+ * Pass the model's `specificationVersion` so provider tools carry the same
+ * `type` the request does ('provider' for v3/v4 models, 'provider-defined'
+ * otherwise).
  *
  * Never throws — tracing must not break model execution. Returns undefined
  * when there are no tools or serialization fails.
@@ -247,15 +257,27 @@ export function getToolDefinitionsForTracing<TOOLS extends Record<string, Tool>>
   tools,
   toolChoice,
   activeTools,
+  specificationVersion,
+  stripToolsWhenNone,
 }: {
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
+  specificationVersion?: string;
+  /** Must match the flag used for the provider request — see prepareToolsAndToolChoice. */
+  stripToolsWhenNone?: boolean;
 }): ModelToolDefinition[] | undefined {
   try {
-    // Pass the real toolChoice through: 'none' strips tools from the provider
-    // request, and the span must not claim tools the model never received.
-    const { tools: prepared } = prepareToolsAndToolChoice({ tools, toolChoice, activeTools });
+    // Pass the real toolChoice and strip flag through: the span must not claim
+    // tools the model never received.
+    const targetVersion = specificationVersion === 'v4' ? 'v4' : specificationVersion === 'v3' ? 'v3' : 'v2';
+    const { tools: prepared } = prepareToolsAndToolChoice({
+      tools,
+      toolChoice,
+      activeTools,
+      targetVersion,
+      stripToolsWhenNone,
+    });
     if (!prepared?.length) return undefined;
     return prepared.map(tool =>
       tool.type === 'function'

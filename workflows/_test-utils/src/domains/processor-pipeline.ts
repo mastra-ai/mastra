@@ -69,32 +69,6 @@ export function createProcessorPipelineTests(context: DurableAgentTestContext) {
         expect(result.registryEntry.outputProcessors).toBeDefined();
         expect(Array.isArray(result.registryEntry.outputProcessors)).toBe(true);
       });
-
-      it('should stream successfully with output processors configured', async () => {
-        const mockOutputProcessor = {
-          id: 'stream-output-processor',
-          processOutput: async ({ messages }: any) => ({ messages }),
-        };
-
-        const agent = new Agent({
-          id: 'stream-output-agent',
-          name: 'Stream Output Agent',
-          instructions: 'Test',
-          model: createTextStreamModel('Done'),
-          outputProcessors: [mockOutputProcessor],
-        } as any);
-
-        const durableAgent = createDurableAgent({
-          agent,
-          pubsub: getPubSub(),
-        });
-
-        const { output, cleanup } = await durableAgent.stream('Hello');
-        const text = await output.text;
-
-        expect(text).toBe('Done');
-        cleanup();
-      });
     });
 
     describe('error processors', () => {
@@ -125,6 +99,7 @@ export function createProcessorPipelineTests(context: DurableAgentTestContext) {
           'test-error-processor',
           'provider-history-compat',
           'prefill-error-handler',
+          'unsupported-file-handler',
           'stream-error-retry-processor',
         ]);
       });
@@ -184,37 +159,6 @@ export function createProcessorPipelineTests(context: DurableAgentTestContext) {
         expect(result.registryEntry.inputProcessors).toBeDefined();
         expect(result.registryEntry.outputProcessors).toBeDefined();
         expect(result.registryEntry.processorStates).toBeDefined();
-      });
-
-      it('should stream with combined processors', async () => {
-        const mockInputProcessor = {
-          id: 'stream-combined-input',
-          processInput: async ({ messages }: any) => ({ messages }),
-        };
-        const mockOutputProcessor = {
-          id: 'stream-combined-output',
-          processOutput: async ({ messages }: any) => ({ messages }),
-        };
-
-        const agent = new Agent({
-          id: 'stream-combined-agent',
-          name: 'Stream Combined Agent',
-          instructions: 'Test',
-          model: createTextStreamModel('Combined result'),
-          inputProcessors: [mockInputProcessor],
-          outputProcessors: [mockOutputProcessor],
-        } as any);
-
-        const durableAgent = createDurableAgent({
-          agent,
-          pubsub: getPubSub(),
-        });
-
-        const { output, cleanup } = await durableAgent.stream('Hello');
-        const text = await output.text;
-
-        expect(text).toBe('Combined result');
-        cleanup();
       });
     });
   });

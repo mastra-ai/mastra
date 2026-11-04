@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { afterEach, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TracesListView } from '../traces-list-view';
 import type { TracesListViewTrace } from '../traces-list-view';
+import {
+  FAILED_SPAN_ID,
+  FAILED_TRACE_ID,
+  errorPreview,
+  failedSpanDetail,
+  fullErrorMessage,
+} from './fixtures/trace-error-cell';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 // jsdom implements neither ResizeObserver nor element layout; without both the
 // virtualizer sees a zero-height scroll container and renders no rows. The stub
@@ -26,14 +36,17 @@ beforeAll(() => {
             devicePixelContentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
           },
         ],
-        this as unknown as ResizeObserver,
+        this,
       );
     }
     unobserve() {}
     disconnect() {}
   }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
+  // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
   // Base UI waits for the menu's exit animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];
 });
@@ -51,7 +64,10 @@ function makeTrace(
   };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 function headerTexts(container: HTMLElement): (string | null)[] {
   const top = container.querySelector('.data-list-top');
@@ -74,13 +90,17 @@ describe('TracesListView columns', () => {
         'Primitive type',
         'Primitive name',
         'Input',
-        'Status',
+        'Output',
+        'Outcome',
+        'Stop reason',
         'Duration',
         'Est. cost',
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe(
+        '11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 7rem 9rem 7rem 8rem',
+      );
     });
   });
 
@@ -108,13 +128,15 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe(
+        '11rem minmax(8rem,1fr) 7rem 9rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)',
+      );
     });
   });
 });
 
 describe('TracesListView — status column', () => {
-  // Status is the last default column only when the trailing optional ones are hidden.
+  // Outcome is followed only by Stop reason when the trailing optional columns are hidden.
   const statusLast = { visibleColumns: [], customColumns: [], metadataKeys: [] } as const;
 
   it('renders the computed status carried by lightweight rows', () => {
@@ -130,7 +152,7 @@ describe('TracesListView — status column', () => {
       />,
     );
 
-    const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
+    const statuses = screen.getAllByRole('button').map(row => row.children[row.children.length - 2]?.textContent);
     expect(statuses).toEqual(['ERR', 'OK', 'RUN']);
   });
 
@@ -143,8 +165,205 @@ describe('TracesListView — status column', () => {
       />,
     );
 
-    const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
+    const statuses = screen.getAllByRole('button').map(row => row.children[row.children.length - 2]?.textContent);
     expect(statuses).toEqual(['-']);
+  });
+});
+
+describe('TracesListView — outcome column', () => {
+  const outcomeLast = { visibleColumns: [], customColumns: [], metadataKeys: [] } as const;
+  // Outcome and Stop reason are the last two cells when no optional columns follow them.
+  const cellFromEnd = (traceName: string, fromEnd: number) => {
+    const cells = screen.getByRole('button', { name: new RegExp(traceName) }).children;
+    const cell = cells[cells.length - 1 - fromEnd];
+    assert(cell instanceof HTMLElement);
+    return cell;
+  };
+  const outcomeCell = (traceName: string) => cellFromEnd(traceName, 1);
+  const stopReasonCell = (traceName: string) => cellFromEnd(traceName, 0);
+
+  it('shows the outcome and the stop reason in their own columns', () => {
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[makeTrace({ traceId: 'limited', status: 'success', outcome: 'limit', stopReason: 'max_steps' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(outcomeCell('run limited').textContent).toBe('Limit');
+    expect(stopReasonCell('run limited').textContent).toBe('max_steps');
+  });
+
+  it('shows only the badge when no stop reason was recorded', () => {
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[makeTrace({ traceId: 'ok', status: 'success', outcome: 'success' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(outcomeCell('run ok').textContent).toBe('OK');
+    expect(stopReasonCell('run ok').textContent).toBe('');
+    expect(screen.getByRole('button', { name: /run ok/ }).querySelector('[data-base-ui-tooltip-trigger]')).toBeNull();
+  });
+
+  it('lists the stop reason context when hovering the stop reason', async () => {
+    const user = userEvent.setup();
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[
+          makeTrace({
+            traceId: 'limited',
+            outcome: 'limit',
+            stopReason: 'max_steps',
+            stopReasonContext: { limit: 5, scope: 'agent' },
+          }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    await user.hover(screen.getByText('max_steps'));
+
+    expect(await screen.findByText('limit')).toBeTruthy();
+    // The tooltip names the reason too, since the cell can truncate it.
+    expect(screen.getAllByText('max_steps')).toHaveLength(2);
+    expect(screen.getByText('5')).toBeTruthy();
+    expect(screen.getByText('scope')).toBeTruthy();
+    expect(screen.getByText('agent')).toBeTruthy();
+  });
+
+  it('falls back to the error-based status and says the outcome was not recorded', async () => {
+    const user = userEvent.setup();
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[makeTrace({ traceId: 'legacy', status: 'error' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(outcomeCell('run legacy').textContent).toBe('ERR');
+    expect(stopReasonCell('run legacy').textContent).toBe('');
+    await user.hover(screen.getByText('ERR'));
+
+    expect(await screen.findByText('Outcome not recorded; status from error')).toBeTruthy();
+  });
+
+  it('shows unknown and custom outcomes as neutral badges', () => {
+    render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        traces={[
+          makeTrace({ traceId: 'unknown', outcome: 'unknown' }),
+          makeTrace({ traceId: 'custom', outcome: 'handed_off' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Unknown').className).toContain('text-badge-neutral-foreground');
+    expect(screen.getByText('handed_off').className).toContain('text-badge-neutral-foreground');
+  });
+
+  it('keeps the Status column when the outcome column is turned off', () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={outcomeLast}
+        outcomeColumn={false}
+        traces={[makeTrace({ traceId: 'thread', status: 'error', outcome: 'limit' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(headerTexts(container)).toContain('Status');
+    expect(headerTexts(container)).not.toContain('Stop reason');
+    expect(cellFromEnd('run thread', 0).textContent).toBe('ERR');
+  });
+});
+
+describe('TracesListView — time to first chunk column', () => {
+  const ttfcOnly = { visibleColumns: ['timeToFirstChunk'], customColumns: [], metadataKeys: [] } as const;
+
+  it('labels the column TTFC right after Outcome', () => {
+    const { container } = render(<TracesListView traces={[]} columnPreferences={ttfcOnly} onTraceClick={vi.fn()} />);
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'TTFC']);
+  });
+
+  it('shows how long each root took to stream its first chunk, leaving rows that never streamed empty', () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={ttfcOnly}
+        traces={[
+          makeTrace({ traceId: 'trace-streamed', timeToFirstChunkMs: 412 }),
+          makeTrace({ traceId: 'trace-slow', timeToFirstChunkMs: 1830 }),
+          makeTrace({ traceId: 'trace-never-streamed', timeToFirstChunkMs: null }),
+          makeTrace({ traceId: 'trace-unreported' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const ttfc = screen
+      .getAllByRole('button')
+      .filter(row => !top.contains(row))
+      .map(row => row.lastElementChild?.textContent);
+    expect(ttfc).toEqual(['412ms', '1.83s', '', '']);
+  });
+});
+
+describe('TracesListView — time to first token column', () => {
+  const ttftOnly = { visibleColumns: ['timeToFirstToken'], customColumns: [], metadataKeys: [] } as const;
+
+  it('labels the column TTFT right after Outcome', () => {
+    const { container } = render(<TracesListView traces={[]} columnPreferences={ttftOnly} onTraceClick={vi.fn()} />);
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'TTFT']);
+  });
+
+  it('places TTFT right after TTFC when both are shown', () => {
+    const { container } = render(
+      <TracesListView
+        traces={[]}
+        columnPreferences={{
+          visibleColumns: ['timeToFirstToken', 'timeToFirstChunk'],
+          customColumns: [],
+          metadataKeys: [],
+        }}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'TTFC', 'TTFT']);
+  });
+
+  it("shows how long each root's model took to produce its first token, leaving rows without one empty", () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={ttftOnly}
+        traces={[
+          makeTrace({ traceId: 'trace-streamed', timeToFirstTokenMs: 538 }),
+          makeTrace({ traceId: 'trace-slow', timeToFirstTokenMs: 2140 }),
+          makeTrace({ traceId: 'trace-never-streamed', timeToFirstTokenMs: null }),
+          makeTrace({ traceId: 'trace-unreported' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const ttft = screen
+      .getAllByRole('button')
+      .filter(row => !top.contains(row))
+      .map(row => row.lastElementChild?.textContent);
+    expect(ttft).toEqual(['538ms', '2.14s', '', '']);
   });
 });
 
@@ -184,6 +403,61 @@ describe('TracesListView — type column', () => {
       expect(screen.getByText('weatherAgent')).not.toBeNull();
       expect(screen.getByText('fetchWeather')).not.toBeNull();
     });
+  });
+});
+
+describe('TracesListView — failed row error', () => {
+  const failedRow = makeTrace({
+    traceId: FAILED_TRACE_ID,
+    spanId: FAILED_SPAN_ID,
+    status: 'error',
+    errorPreview,
+  });
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json(failedSpanDetail),
+      ),
+    );
+  });
+
+  it('shows the full error from the span when hovering the cut-off preview', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
+
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText(fullErrorMessage)).not.toBeNull();
+    expect(screen.getByText('AI_APICallError')).not.toBeNull();
+  });
+
+  it('keeps the preview and says so when the full error fails to load', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json({ error: 'Internal Server Error' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
+
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText("Couldn't load the full error.")).not.toBeNull();
+    expect(screen.getAllByText(errorPreview)).toHaveLength(2);
+  });
+
+  it('copies the error from the card without opening the trace', async () => {
+    const user = userEvent.setup();
+    const onTraceClick = vi.fn();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={onTraceClick} />);
+
+    await user.hover(screen.getByText(errorPreview));
+    await screen.findByText(fullErrorMessage);
+    await user.click(screen.getByRole('button', { name: 'Copy error' }));
+
+    expect(await navigator.clipboard.readText()).toBe(fullErrorMessage);
+    expect(onTraceClick).not.toHaveBeenCalled();
   });
 });
 
@@ -346,6 +620,26 @@ describe('TracesListView — empty and loading', () => {
     render(<TracesListView traces={[]} filtersApplied onTraceClick={vi.fn()} />);
     expect(screen.getByText('No traces found for applied filters')).toBeTruthy();
   });
+
+  it('names spans in the empty messages of a span list', () => {
+    render(<TracesListView traces={[]} resource="spans" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="spans" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found for applied filters')).toBeTruthy();
+  });
+
+  it('names threads in the empty messages of a thread list', () => {
+    render(<TracesListView traces={[]} resource="threads" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="threads" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found for applied filters')).toBeTruthy();
+  });
 });
 
 describe('TracesListView — usage cells', () => {
@@ -367,7 +661,7 @@ describe('TracesListView — usage cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Total tokens']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'Total tokens']);
       expect(screen.getByText('12.4K')).toBeTruthy();
     });
 
@@ -461,7 +755,7 @@ describe('TracesListView — environment and end time cells', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Environment']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'Environment']);
       expect(screen.getByText('production')).toBeTruthy();
       expect(screen.getByText('—')).toBeTruthy();
     });
@@ -511,7 +805,7 @@ describe('TracesListView — custom columns', () => {
       );
 
       const headers = headerTexts(container);
-      expect(headers).toEqual(['Start', 'Primitive name', 'Status', 'Thread ID']);
+      expect(headers).toEqual(['Start', 'Primitive name', 'Outcome', 'Stop reason', 'Thread ID']);
       expect(screen.getByText('thread-42')).toBeTruthy();
     });
 
@@ -557,44 +851,16 @@ describe('TracesListView — custom columns', () => {
   });
 });
 
-describe('TracesListView — scrolling back to the top', () => {
-  it('re-reads the scroll position once a fresh query resolves', () => {
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-    const { rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-    dispatchEvent.mockClear();
+describe('TracesListView — scroll container', () => {
+  const gridOf = (container: HTMLElement) => container.querySelector('[style*="grid-template-columns"]');
+
+  it('keeps the same scroll container once a query resolves', () => {
+    const { container, rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+    const gridBefore = gridOf(container);
 
     rerender(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
 
-    // The list swapped its scroll container, so the virtualizer has to be told
-    // to read the new element's scrollTop rather than keep the old offset.
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(true);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone while paginating', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(
-      <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1' }), makeTrace({ traceId: 'trace-2' })]}
-        isFetchingNextPage
-        onTraceClick={vi.fn()}
-      />,
-    );
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone when a query starts', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
+    expect(gridOf(container)).toBe(gridBefore);
   });
 });
 
@@ -684,5 +950,88 @@ describe('TracesListView — featuring by trace alone', () => {
     const rows = screen.getAllByRole('button');
     expect(rows[0]?.hasAttribute('data-featured')).toBe(true);
     expect(rows[1]?.hasAttribute('data-featured')).toBe(false);
+  });
+});
+
+describe('TracesListView column reordering', () => {
+  function dragHeader(container: HTMLElement, from: string, to: string) {
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const cells = Array.from(top.children) as HTMLElement[];
+    const source = cells.find(cell => cell.textContent === from);
+    const target = cells.find(cell => cell.textContent === to);
+    assert(source && target);
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? '',
+      types: ['application/x-mastra-data-list-column'],
+      effectAllowed: 'move',
+      dropEffect: 'move',
+    };
+    fireEvent.dragStart(source, { dataTransfer });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+  }
+
+  function visualHeaders(container: HTMLElement): string[] {
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const cells = Array.from(top.children) as HTMLElement[];
+    const css = container.querySelector('style')?.textContent ?? '';
+    const orderOf = (index: number) =>
+      Number(new RegExp(`nth-child\\(${index + 1}\\) \\{ order: (\\d+)`).exec(css)?.[1]);
+    return cells
+      .map((cell, index) => ({ text: cell.textContent ?? '', order: orderOf(index) }))
+      .sort((a, b) => a.order - b.order)
+      .map(cell => cell.text);
+  }
+
+  describe('when every column is rendered', () => {
+    it('makes every header draggable, including the Start column', () => {
+      const { container } = render(
+        <TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />,
+      );
+      const top = container.querySelector('.data-list-top');
+      assert(top);
+      expect(Array.from(top.children).every(cell => cell.getAttribute('draggable') === 'true')).toBe(true);
+    });
+  });
+
+  describe('when a column is moved and then optional columns change', () => {
+    it('keeps the moved order by column key', () => {
+      const traces = [makeTrace({ traceId: 'trace-1' })];
+      const base = { visibleColumns: ['type', 'input', 'duration'] as const, customColumns: [], metadataKeys: [] };
+      const { container, rerender } = render(
+        <TracesListView traces={traces} columnPreferences={base} onTraceClick={vi.fn()} />,
+      );
+      dragHeader(container, 'Outcome', 'Start');
+      expect(visualHeaders(container)).toEqual([
+        'Outcome',
+        'Start',
+        'Primitive type',
+        'Primitive name',
+        'Input',
+        'Stop reason',
+        'Duration',
+      ]);
+
+      rerender(
+        <TracesListView
+          traces={traces}
+          columnPreferences={{ ...base, visibleColumns: ['input', 'duration'], metadataKeys: ['tenant'] }}
+          onTraceClick={vi.fn()}
+        />,
+      );
+      expect(visualHeaders(container)).toEqual([
+        'Outcome',
+        'Start',
+        'Primitive name',
+        'Input',
+        'Stop reason',
+        'Duration',
+        'tenant',
+      ]);
+    });
   });
 });

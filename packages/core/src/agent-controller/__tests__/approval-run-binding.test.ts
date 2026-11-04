@@ -17,10 +17,13 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
-import { SUSPENDED_RUN_AGENT_KEY, type Session } from '../session';
+import { SUSPENDED_RUN_AGENT_KEY, THREAD_OWNER_ID_CONTEXT_KEY } from '../session';
+import type { Session } from '../session';
 import { createMockWorkspace } from '../test-utils';
+import type { AgentControllerRequestContext } from '../types';
 
 function createController() {
   const agent = new Agent({
@@ -84,7 +87,12 @@ const finishChunk = () => ({
  * the form `{ __effect }` is not yielded — it runs between chunks, which is how
  * these tests simulate the session rebinding to another thread mid-run.
  */
-async function processSubscribedChunks(session: Session<any>, chunks: any[], activeRunId = 'run-a') {
+async function processSubscribedChunks(
+  session: Session<any>,
+  chunks: any[],
+  activeRunId = 'run-a',
+  requestContext?: RequestContext,
+) {
   const subscription = {
     stream: (async function* () {
       for (const chunk of chunks) {
@@ -96,7 +104,7 @@ async function processSubscribedChunks(session: Session<any>, chunks: any[], act
       }
     })(),
     activeRunId: () => activeRunId,
-    __getCurrentRunRequestContext: () => undefined,
+    __getCurrentRunRequestContext: () => requestContext,
     abort: () => {},
     unsubscribe: () => {},
   };
@@ -128,6 +136,73 @@ describe('tool approvals resolve against the run that raised them', () => {
     expect(sendToolApproval).toHaveBeenCalledTimes(1);
     expect(sendToolApproval.mock.calls[0]?.[0].threadId).toBe('thread-a');
     expect(sendToolApproval.mock.calls[0]?.[0].approved).toBe(true);
+  });
+
+  it('preserves the run owner snapshot when approval resumes after an ownership transfer', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'owner-a' });
+    const streamOptions = await session.machinery.buildStreamOptions({});
+    const runRequestContext = streamOptions.requestContext as RequestContext;
+    expect(runRequestContext.getRaw(THREAD_OWNER_ID_CONTEXT_KEY)).toBe('owner-a');
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    vi.spyOn(agent, '__getSuspendedRunRequestContextValue').mockResolvedValue(undefined);
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    await processSubscribedChunks(
+      session,
+      [
+        { type: 'start', runId: 'run-a' },
+        {
+          __effect: () =>
+            session.thread.transferOwnership({
+              toOwnerId: 'owner-b',
+            }),
+        },
+        toolCallApprovalChunk(),
+        finishChunk(),
+      ],
+      'run-a',
+      runRequestContext,
+    );
+
+    const approvalContext = sendToolApproval.mock.calls[0]?.[0].requestContext?.get('controller') as
+      | AgentControllerRequestContext
+      | undefined;
+    expect(approvalContext?.threadOwnerId).toBe('owner-a');
+    await expect(session.thread.getOwner()).resolves.toBe('owner-b');
+  });
+
+  it('ignores a caller-supplied owner when a legacy approval has no persisted snapshot', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'legacy-owner-session', ownerId: 'owner-a' });
+    const threadId = session.thread.getId()!;
+    await session.thread.transferOwnership({ toOwnerId: 'owner-b' });
+
+    vi.spyOn(agent, '__getSuspendedRunRequestContextValue').mockResolvedValue(undefined);
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+      accepted: true,
+      runId: 'legacy-run',
+    });
+    const callerContext = new RequestContext();
+    callerContext.setRaw(THREAD_OWNER_ID_CONTEXT_KEY, 'spoofed-owner');
+    callerContext.set('controller', { threadOwnerId: 'spoofed-owner' } as AgentControllerRequestContext);
+
+    await session.approveToolCall({
+      toolCallId: 'legacy-tool-call',
+      runId: 'legacy-run',
+      threadId,
+      resourceId: session.identity.getResourceId(),
+      agent,
+      requestContext: callerContext,
+    });
+
+    const approvalRequestContext = sendToolApproval.mock.calls[0]?.[0].requestContext;
+    const approvalContext = approvalRequestContext?.get('controller') as AgentControllerRequestContext | undefined;
+    expect(approvalContext?.threadOwnerId).toBe('owner-b');
+    expect(approvalRequestContext?.getRaw(THREAD_OWNER_ID_CONTEXT_KEY)).toBe('owner-b');
   });
 
   it('resolves a parked gate on the run thread after the session switched thread', async () => {
@@ -418,5 +493,85 @@ describe('prompt-derived authority is scoped to the gate owner', () => {
     expect(session.hasToolGrant('read_file')).toBe(true);
     expect(session.hasToolGrant('read_file', 'thread-b')).toBe(true);
     expect(session.resolveToolApproval('read_file', 'thread-b')).toBe('allow');
+  });
+});
+
+describe('tool approvals keep the run step budget', () => {
+  // Regression: approve/decline resumed the run without maxSteps, so it fell back
+  // to the agent's default (~5 steps) and ended mid-task as "complete".
+  it.each([
+    ['approve', (session: Session<any>) => session.approveToolCall({ toolCallId: 'tool-call-1', runId: 'run-a' })],
+    ['decline', (session: Session<any>) => session.declineToolCall({ toolCallId: 'tool-call-1', runId: 'run-a' })],
+  ])('forwards maxSteps when the user chooses %s', async (_decision, resolve) => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    await resolve(session);
+
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
+    expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.maxSteps).toBe(1000);
+    expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.savePerStep).toBe(false);
+  });
+});
+
+describe('a user message that interrupts a parked approval', () => {
+  // Regression (#28342): a run reattached from storage has no request context of
+  // its own, so the decline continuation that a new user message triggers ran
+  // without the sender's `user`. Tenant credential resolution then failed with
+  // "the request has no authenticated user" on every message.
+  it('declines the gate with the sender request context', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'thread-a' });
+    const resourceId = session.identity.getResourceId();
+
+    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('ask');
+    vi.spyOn(session.thread, 'getById').mockResolvedValue({ id: 'thread-a', resourceId } as any);
+    vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-a' }),
+      persisted: Promise.resolve(),
+      signal: {},
+    } as any);
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
+
+    const senderContext = new RequestContext();
+    senderContext.set('user', { id: 'user-1', workosId: 'user-1' });
+
+    let sent: Promise<unknown> | undefined;
+    session.subscribe(event => {
+      if (event.type !== 'tool_approval_required' || sent) return;
+      sent = session.sendSignal({ content: 'do something else instead' }, { requestContext: senderContext }).accepted;
+    });
+
+    // A run reattached after a restart or reload: it has no request context.
+    const chunks = [{ type: 'start', runId: 'run-a' }, toolCallApprovalChunk(), finishChunk()];
+    const subscription = {
+      stream: (async function* () {
+        yield* chunks;
+      })(),
+      activeRunId: () => 'run-a',
+      __getCurrentRunRequestContext: () => undefined,
+      abort: () => {},
+      unsubscribe: () => {},
+    };
+    session.stream.attach({
+      subscription: subscription as any,
+      agent,
+      key: `${agent.id}:${resourceId}:thread-a`,
+      resourceId,
+      threadId: 'thread-a',
+    });
+    await session.processSubscribedThreadStream(subscription as any);
+    await sent;
+
+    expect(sendToolApproval).toHaveBeenCalledTimes(1);
+    const call = sendToolApproval.mock.calls[0]?.[0];
+    expect(call?.approved).toBe(false);
+    expect(call?.declineContext?.reason).toBe('interrupted_by_user_message');
+    expect(call?.requestContext?.get('user')).toEqual({ id: 'user-1', workosId: 'user-1' });
   });
 });

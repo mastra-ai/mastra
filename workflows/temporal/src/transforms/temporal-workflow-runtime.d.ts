@@ -1,9 +1,28 @@
-export interface WorkflowExecutionResult {
+import type { ActivityOptions } from '@temporalio/workflow';
+
+export type WorkflowRuntimeOptions = {
+  startToCloseTimeout?: string;
+  retry?: ActivityOptions['retry'];
+};
+
+export type StepExecutionResult = {
   status: 'success';
+  payload: unknown;
+  output: unknown;
+  startedAt: number;
+  endedAt: number;
+  suspendPayload?: unknown;
+  resumeData?: unknown;
+};
+
+export interface WorkflowExecutionResult {
+  status: 'success' | 'running' | 'suspended';
   input: unknown;
-  result: unknown;
+  result?: unknown;
   state: unknown;
-  steps: Record<string, unknown>;
+  steps: Record<string, StepExecutionResult | unknown>;
+  suspended?: string[][];
+  suspendPayload?: Record<string, unknown>;
 }
 
 export type StepEntry = {
@@ -21,11 +40,13 @@ export type ParallelEntry = StepEntry | ChildWorkflowEntry;
 export type WorkflowRuntime = ((startArgs?: {
   runId?: string;
   resourceId?: string;
+  requestContext?: unknown;
+  validateInputs?: boolean;
   inputData?: unknown;
   initialState?: unknown;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
-  thenWorkflow(workflowType: string): WorkflowRuntime;
+  thenWorkflow(workflowType: string, id: string): WorkflowRuntime;
   map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
@@ -41,15 +62,17 @@ export type WorkflowRuntime = ((startArgs?: {
 };
 
 export class TemporalExecutionEngine {
-  constructor(params?: { options?: { startToCloseTimeout?: string } });
+  constructor(params?: { options?: WorkflowRuntimeOptions });
   execute(params: {
     workflowId: string;
     runId?: string;
     resourceId?: string;
+    requestContext?: unknown;
+    validateInputs?: boolean;
     graph: { id: string; steps: unknown[] };
     input?: unknown;
     initialState?: unknown;
   }): Promise<WorkflowExecutionResult>;
 }
 
-export function createWorkflow(workflowId: string, options?: { startToCloseTimeout?: string }): WorkflowRuntime;
+export function createWorkflow(workflowId: string, options?: WorkflowRuntimeOptions): WorkflowRuntime;

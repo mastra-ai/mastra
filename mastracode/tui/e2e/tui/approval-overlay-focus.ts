@@ -89,7 +89,7 @@ export const approvalOverlayFocusScenario = {
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
 
     terminal.submit('/mode plan');
-    await runtime.waitForScreenText(/▐plan▌/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bplan · /i, terminal, 8_000);
 
     terminal.submit('Create a concise implementation plan for the plan approval e2e test.');
 

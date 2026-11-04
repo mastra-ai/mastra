@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { Node } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';

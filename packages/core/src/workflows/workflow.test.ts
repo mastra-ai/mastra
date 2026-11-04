@@ -1,24 +1,18 @@
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
-import type {
-  WorkflowResult,
-  ResumeWorkflowOptions,
-  TimeTravelWorkflowOptions,
-  StreamWorkflowResult,
-  StreamEvent,
-} from '@internal/workflow-test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { FGADeniedError } from '../auth/ee/fga-check';
 import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
-import { RequestContext } from '../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
 import { createWorkflow } from './create';
+import { createDefaultEngineTestSuite } from './test-utils/default-engine-suite';
 import type { Workflow } from './types';
 import { createStep } from './workflow';
 
@@ -26,209 +20,12 @@ import { createStep } from './workflow';
 // Shared Test Suite (Default Engine)
 // ============================================================================
 
+// These runs share one store and rely on real, unique run ids.
+vi.unmock('crypto');
+vi.unmock('node:crypto');
+
 // Shared storage for all tests - provides persistence for resume tests
-const sharedStorage = new MockStore();
-
-// Create a shared Mastra instance for tests that need it
-let _mastra: Mastra;
-
-createWorkflowTestSuite({
-  name: 'Workflow (Default Engine)',
-
-  getWorkflowFactory: () => {
-    return { createWorkflow, createStep, createTool, Agent };
-  },
-
-  // Register workflows with Mastra for storage/resume support
-  registerWorkflows: async registry => {
-    // Collect all workflows + any Mastra-level agents/tools the entries declare
-    // (used by `.agent('id')` / `.tool('id')` by-id forms).
-    const workflows: Record<string, any> = {};
-    const agents: Record<string, any> = {};
-    const tools: Record<string, any> = {};
-    for (const [id, entry] of Object.entries(registry)) {
-      workflows[id] = entry.workflow;
-      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
-      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
-    }
-
-    // Create Mastra with all workflows - this automatically binds mastra to each workflow
-    _mastra = new Mastra({
-      logger: false,
-      storage: sharedStorage,
-      workflows,
-      agents: Object.keys(agents).length ? agents : undefined,
-      tools: Object.keys(tools).length ? tools : undefined,
-    });
-  },
-
-  getStorage: () => sharedStorage,
-
-  beforeAll: async () => {
-    vi.unmock('crypto');
-    vi.unmock('node:crypto');
-  },
-
-  afterAll: async () => {
-    // Nothing to cleanup
-  },
-
-  beforeEach: async () => {
-    // These workflows share a single storage instance and rely on real, unique run
-    // IDs so a previous test's snapshot can never be mistaken for the current run.
-    // The shared test setup installs a deterministic `globalThis.crypto.randomUUID`
-    // spy before every test, so undo it for this suite.
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockRestore();
-    vi.clearAllMocks();
-  },
-
-  // ============================================================================
-  // Domain-level skips
-  // ============================================================================
-  skip: {
-    // All domains should work on Default Engine
-    restart: false, // Default engine supports restart
-  },
-
-  // ============================================================================
-  // Individual test skips
-  // ============================================================================
-  skipTests: {
-    // Enable all tests - Default Engine is the reference implementation
-    // Enable opt-in tests that require storage
-    errorStorageRoundtrip: false,
-    errorPersistWithoutStack: false,
-    errorPersistMastraError: false,
-    // This test rebuilds workflow instances to simulate server restart,
-    // requiring direct Mastra registration which the shared suite can't do.
-    // The test remains in workflow.test.ts as a default-engine-specific test.
-    resumeMapBranchCondition: true,
-
-    //default engine uses the same runId for parent and nested workflows which makes this test fail.
-    //The test will be added in workflow.test.ts as a default-engine-specific test.
-    restartNested: true,
-  },
-
-  executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
-    const wf = workflow as Workflow<any, any, any, any, any, any, any>;
-
-    const run = await wf.createRun({
-      runId: options.runId,
-      resourceId: options.resourceId,
-    });
-
-    // Use streaming API to ensure it works correctly - just await the result
-    const streamResult = run.stream({
-      inputData,
-      initialState: options.initialState,
-      perStep: options.perStep,
-      requestContext: options.requestContext as any,
-      outputOptions: options.outputOptions,
-    });
-
-    // Consume the stream to ensure it completes
-    for await (const _event of streamResult.fullStream) {
-      // Discard events - we only care about the result
-    }
-
-    const result = await streamResult.result;
-
-    return result as WorkflowResult;
-  },
-
-  resumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<WorkflowResult> => {
-    const wf = workflow as Workflow<any, any, any, any, any, any, any>;
-
-    const run = await wf.createRun({ runId: options.runId });
-    const result = await run.resume({
-      step: options.step as any,
-      label: options.label,
-      resumeData: options.resumeData,
-      forEachIndex: options.forEachIndex,
-    });
-
-    return result as WorkflowResult;
-  },
-
-  timetravelWorkflow: async (workflow, options: TimeTravelWorkflowOptions): Promise<WorkflowResult> => {
-    const wf = workflow as Workflow<any, any, any, any, any, any, any>;
-
-    const run = await wf.createRun({ runId: options.runId });
-    const result = await run.timeTravel({
-      step: options.step as any,
-      context: options.context as any,
-      perStep: options.perStep,
-      inputData: options.inputData as any,
-      nestedStepsContext: options.nestedStepsContext as any,
-      resumeData: options.resumeData as any,
-    });
-
-    return result as WorkflowResult;
-  },
-
-  streamWorkflow: async (workflow, inputData, options = {}, api = 'stream'): Promise<StreamWorkflowResult> => {
-    const wf = workflow as Workflow<any, any, any, any, any, any, any>;
-
-    const run = await wf.createRun({
-      runId: options.runId,
-      resourceId: options.resourceId,
-    });
-
-    const events: StreamEvent[] = [];
-
-    if (api === 'streamLegacy') {
-      const { stream, getWorkflowState } = run.streamLegacy({
-        inputData,
-        initialState: options.initialState,
-        perStep: options.perStep,
-        requestContext: options.requestContext as any,
-      });
-
-      for await (const event of stream) {
-        events.push(JSON.parse(JSON.stringify(event)));
-      }
-
-      const result = await getWorkflowState();
-      return { events, result: result as WorkflowResult };
-    } else {
-      const streamResult = run.stream({
-        inputData,
-        initialState: options.initialState,
-        perStep: options.perStep,
-        requestContext: options.requestContext as any,
-        closeOnSuspend: options.closeOnSuspend,
-      });
-
-      for await (const event of streamResult.fullStream) {
-        events.push(JSON.parse(JSON.stringify(event)));
-      }
-
-      const result = await streamResult.result;
-      return { events, result: result as WorkflowResult };
-    }
-  },
-
-  streamResumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<StreamWorkflowResult> => {
-    const wf = workflow as Workflow<any, any, any, any, any, any, any>;
-
-    const run = await wf.createRun({ runId: options.runId });
-
-    const events: StreamEvent[] = [];
-    const streamResult = run.resumeStream({
-      step: options.step as any,
-      label: options.label,
-      resumeData: options.resumeData,
-      forEachIndex: options.forEachIndex,
-    });
-
-    for await (const event of streamResult.fullStream) {
-      events.push(JSON.parse(JSON.stringify(event)));
-    }
-
-    const result = await streamResult.result;
-    return { events, result: result as WorkflowResult };
-  },
-});
+createDefaultEngineTestSuite({ name: 'Workflow (Default Engine)', storage: new MockStore() });
 
 // ============================================================================
 // Default Engine-Specific Tests
@@ -279,6 +76,248 @@ describe('Workflow (Default Engine Specifics)', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+    });
+
+    it('does not resolve before workflow dispatch is durable', async () => {
+      let releaseOnStart!: () => void;
+      const onStartGate = new Promise<void>(resolve => {
+        releaseOnStart = resolve;
+      });
+      const onStart = vi.fn(() => onStartGate);
+
+      const step = createStep({
+        id: 'step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: vi.fn().mockResolvedValue({}),
+      });
+      const workflow = createWorkflow({
+        id: 'durable-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { onStart },
+      })
+        .then(step)
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'durable-startAsync-workflow': workflow } });
+
+      const run = await workflow.createRun();
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+      let startReturned = false;
+      const startPromise = run.startAsync({ inputData: {} }).then(result => {
+        startReturned = true;
+        return result;
+      });
+
+      await vi.waitFor(() => expect(onStart).toHaveBeenCalledOnce());
+      const snapshotWhileOnStartWasBlocked = await workflowsStore?.getWorkflowRunById({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+      const returnedWhileSnapshotWasPending = startReturned;
+
+      releaseOnStart();
+      await startPromise;
+      const snapshotAfterStartReturned = await workflowsStore?.getWorkflowRunById({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+
+      const dispatchSnapshot = persistSnapshot.mock.calls.find(
+        ([args]) => (args.snapshot as any).status === 'waiting',
+      )?.[0].snapshot as any;
+
+      expect((snapshotWhileOnStartWasBlocked?.snapshot as any)?.status).toBe('pending');
+      expect(returnedWhileSnapshotWasPending).toBe(false);
+      expect(dispatchSnapshot).toMatchObject({
+        status: 'waiting',
+        context: { input: {} },
+        activePaths: [0],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        waitingPaths: {},
+      });
+      expect(dispatchSnapshot.serializedStepGraph).toBeDefined();
+      expect((snapshotAfterStartReturned?.snapshot as any)?.status).not.toBe('pending');
+    });
+
+    it('does not persist the auth token in the durable dispatch snapshot', async () => {
+      const workflow = createWorkflow({
+        id: 'token-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: vi.fn().mockResolvedValue({}),
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'token-startAsync-workflow': workflow } });
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-bearer-token');
+      requestContext.set('tenant', 'acme');
+      const run = await workflow.createRun();
+      await run.startAsync({ inputData: {}, requestContext });
+
+      const dispatchSnapshot = persistSnapshot.mock.calls.find(
+        ([args]) => (args.snapshot as any).status === 'waiting',
+      )?.[0].snapshot as any;
+      expect(dispatchSnapshot.requestContext).toEqual({ tenant: 'acme' });
+    });
+
+    it('preserves null input in the durable dispatch snapshot', async () => {
+      const workflow = createWorkflow({
+        id: 'null-input-startAsync-workflow',
+        inputSchema: z.null(),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.null(),
+            outputSchema: z.object({}),
+            execute: vi.fn().mockResolvedValue({}),
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'null-input-startAsync-workflow': workflow } });
+
+      const run = await workflow.createRun();
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      await run.startAsync({ inputData: null });
+
+      const dispatchSnapshot = persistSnapshot.mock.calls.find(
+        ([args]) => (args.snapshot as any).status === 'waiting',
+      )?.[0].snapshot as any;
+      expect(dispatchSnapshot.context).toEqual({ input: null });
+    });
+
+    it('rejects without executing when onStart fails', async () => {
+      const execute = vi.fn().mockResolvedValue({});
+      const workflow = createWorkflow({
+        id: 'rejected-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: {
+          onStart: () => {
+            throw new Error('start rejected');
+          },
+        },
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute,
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'rejected-startAsync-workflow': workflow } });
+
+      const run = await workflow.createRun();
+
+      await expect(run.startAsync({ inputData: {} })).rejects.toThrow('start rejected');
+      expect(execute).not.toHaveBeenCalled();
+      expect((await workflow.getWorkflowRunById(run.runId))?.status).toBe('pending');
+    });
+
+    it('rejects when the durable dispatch snapshot cannot be persisted', async () => {
+      const execute = vi.fn().mockResolvedValue({});
+      const workflow = createWorkflow({
+        id: 'failed-dispatch-persistence-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute,
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'failed-dispatch-persistence-workflow': workflow } });
+
+      const run = await workflow.createRun();
+      const workflowsStore = await storage.getStore('workflows');
+      vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot').mockRejectedValueOnce(new Error('storage unavailable'));
+
+      await expect(run.startAsync({ inputData: {} })).rejects.toThrow('storage unavailable');
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('respects snapshot persistence opt-out for startAsync', async () => {
+      const execute = vi.fn().mockResolvedValue({});
+      const workflow = createWorkflow({
+        id: 'non-persisting-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { shouldPersistSnapshot: () => false },
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute,
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'non-persisting-startAsync-workflow': workflow } });
+
+      const run = await workflow.createRun();
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      await expect(run.startAsync({ inputData: {} })).resolves.toEqual({ runId: run.runId });
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+
+      expect(persistSnapshot.mock.calls.some(([args]) => (args.snapshot as any).status === 'waiting')).toBe(false);
+    });
+
+    it('does not add the startAsync dispatch snapshot to synchronous start', async () => {
+      const workflow = createWorkflow({
+        id: 'synchronous-start-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: vi.fn().mockResolvedValue({}),
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'synchronous-start-workflow': workflow } });
+
+      const run = await workflow.createRun();
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      await run.start({ inputData: {} });
+
+      expect(persistSnapshot.mock.calls.some(([args]) => (args.snapshot as any).status === 'waiting')).toBe(false);
     });
   });
 
@@ -762,7 +801,53 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 
-  describe('tool step cancellation', () => {
+  describe('workflow cancellation', () => {
+    it('leaves an executor-aborted run recoverable without invoking onFinish', async () => {
+      let notifyStepStarted!: () => void;
+      const stepStarted = new Promise<void>(resolve => {
+        notifyStepStarted = resolve;
+      });
+      const onFinish = vi.fn();
+
+      const blockingStep = createStep({
+        id: 'blocking-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ abortSignal }) => {
+          notifyStepStarted();
+          await new Promise<void>(resolve => abortSignal?.addEventListener('abort', () => resolve(), { once: true }));
+          return {};
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'executor-abort-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [blockingStep],
+        options: { onFinish },
+      });
+      workflow.then(blockingStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'executor-abort-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const resultPromise = run.start({ inputData: {} });
+      await stepStarted;
+
+      run.abortController.abort();
+
+      const result = await resultPromise;
+      const snapshot = await workflow.getWorkflowRunById(run.runId);
+
+      expect(result.status).toBe('waiting');
+      expect(snapshot?.status).toBe('waiting');
+      expect(onFinish).not.toHaveBeenCalled();
+    });
+
     it('forwards abortSignal to tool-wrapped steps so run.cancel() can stop cooperative tools', async () => {
       let capturedAbortSignal: AbortSignal | undefined;
       let toolStoppedEarly = false;
@@ -1154,6 +1239,63 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       await expect(run.resume({ resumeData: { approved: true } })).resolves.toMatchObject({ status: 'success' });
       expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    describe('nested user workflows', () => {
+      function createNestedWorkflows() {
+        const step = createStep({
+          id: 'nested-fga-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ inputData }) => inputData,
+        });
+        const inner = createWorkflow({
+          id: 'fga-inner',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          steps: [step],
+        })
+          .then(step)
+          .commit();
+        const outer = createWorkflow({
+          id: 'fga-outer',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          steps: [inner],
+        })
+          .then(inner)
+          .commit();
+        return outer;
+      }
+
+      async function runAs(grants: string[]) {
+        const fgaProvider = {
+          require: vi.fn(async (user: any, { resource, permission }: any) => {
+            if (!grants.includes(`${user?.id}:${resource.id}:${permission}`)) {
+              throw new FGADeniedError(user, resource, permission);
+            }
+          }),
+          check: vi.fn(),
+          filterAccessible: vi.fn(),
+        };
+        const outer = createNestedWorkflows();
+        new Mastra({ logger: false, storage: new MockStore(), server: { fga: fgaProvider }, workflows: { outer } });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { id: 'user-1' });
+        const run = await outer.createRun();
+        return run.start({ inputData: { value: 'ok' }, requestContext });
+      }
+
+      it('denies a user who may run the outer workflow but not the nested one', async () => {
+        const result = await runAs(['user-1:fga-outer:workflows:execute']);
+        expect(result.status).toBe('failed');
+        expect(JSON.stringify(result)).toContain('fga-inner');
+      });
+
+      it('runs when the user may execute both workflows', async () => {
+        const result = await runAs(['user-1:fga-outer:workflows:execute', 'user-1:fga-inner:workflows:execute']);
+        expect(result).toMatchObject({ status: 'success', result: { value: 'ok' } });
+      });
     });
   });
 

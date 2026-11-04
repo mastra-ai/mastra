@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { builtinModules } from 'node:module';
 import { dirname, extname, join, relative } from 'node:path';
@@ -29,6 +30,22 @@ function nodeBuiltinsExternal(): Plugin {
       return null;
     },
   };
+}
+
+/**
+ * Whether a package is in a node_modules directory at or above `fromDirectory`, which is where
+ * wrangler looks for it. Node's own resolution isn't used because it also searches NODE_PATH,
+ * which pnpm sets for package binaries like `mastra build`.
+ */
+function isInstalled(packageName: string, fromDirectory: string): boolean {
+  for (let dir = fromDirectory; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, 'node_modules', packageName, 'package.json'))) {
+      return true;
+    }
+    if (dirname(dir) === dir) {
+      return false;
+    }
+  }
 }
 
 /** @deprecated */
@@ -183,9 +200,23 @@ export default { createRequire };
 `;
     await writeFile(join(outputDirectory, this.outputDir, moduleStubPath), moduleStub);
 
+    // posthog-node (a @mastra/core dependency) lazily imports its optional peer @opentelemetry/api.
+    // Wrangler bundles every import it finds, so the build fails when the peer isn't installed.
+    // Point it at a module that fails to load, which is how the optional import expects a missing peer to behave.
+    const otelApiStubPath = 'opentelemetry-api-stub.mjs';
+    const stubOtelApi =
+      !userAlias?.['@opentelemetry/api'] && !isInstalled('@opentelemetry/api', join(outputDirectory, this.outputDir));
+    if (stubOtelApi) {
+      const otelApiStub = `// Stub for the optional @opentelemetry/api peer, which isn't installed in this project
+throw new Error('@opentelemetry/api is not installed');
+`;
+      await writeFile(join(outputDirectory, this.outputDir, otelApiStubPath), otelApiStub);
+    }
+
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
-      compatibility_date: '2025-04-01',
+      // WeakRef and FinalizationRegistry are available from this date.
+      compatibility_date: '2025-05-05',
       compatibility_flags: ['nodejs_compat', 'nodejs_compat_populate_process_env'],
       observability: {
         logs: {
@@ -203,6 +234,7 @@ export default { createRequire };
         module: `./${moduleStubPath}`,
         'node:module': `./${moduleStubPath}`,
         ...this.getWorkersValidationRuntimeAlias(),
+        ...(stubOtelApi ? { '@opentelemetry/api': `./${otelApiStubPath}` } : {}),
         ...userAlias,
       },
     };
@@ -215,6 +247,7 @@ export default { createRequire };
     const mainFilePath = join(outputDirectory, this.outputDir, 'index.mjs');
     const tsStubFilePath = join(outputDirectory, this.outputDir, typescriptStubPath);
     const moduleStubFilePath = join(outputDirectory, this.outputDir, moduleStubPath);
+    const otelApiStubFilePath = join(outputDirectory, this.outputDir, otelApiStubPath);
 
     const wranglerJsoncConfig: Unstable_RawConfig & { placeholder: string } = {
       placeholder: 'PLACEHOLDER',
@@ -226,6 +259,7 @@ export default { createRequire };
         typescript: `./${relative(projectRoot, tsStubFilePath)}`,
         module: `./${relative(projectRoot, moduleStubFilePath)}`,
         'node:module': `./${relative(projectRoot, moduleStubFilePath)}`,
+        ...(stubOtelApi ? { '@opentelemetry/api': `./${relative(projectRoot, otelApiStubFilePath)}` } : {}),
       },
     };
 

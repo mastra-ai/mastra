@@ -151,7 +151,7 @@ function SignalProbe() {
 }
 
 // Exposes the memory-timeline open/close controls so a test can drive the OM
-// detail panel the same way the surviving "Analyze Observations" CTA does,
+// detail panel the same way the surviving "Analyze observations" CTA does,
 // without depending on a sidebar-local toggle button.
 let openPanel: () => void = () => {};
 function TimelineProbe() {
@@ -252,9 +252,11 @@ describe('MemorySidebar', () => {
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
-    // The sidebar is still a single standalone bordered block with no nested container.
-    const blocks = container.querySelectorAll('.bg-card.border-border\\/50');
-    expect(blocks.length).toBe(1);
+    // Threads and memory share one panel shell, with no nested panel.
+    const panels = container.querySelectorAll('[data-slot="sidebar-panel"]');
+    expect(panels.length).toBe(1);
+    expect(panels[0]?.contains(card)).toBe(true);
+    expect(panels[0]?.contains(screen.getByTestId('memory-sidebar-thread-layer'))).toBe(true);
   });
 
   it('renders the capabilities footer and reveals capability details on expand', async () => {
@@ -353,7 +355,7 @@ describe('MemorySidebar', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onMessages).not.toHaveBeenCalled();
 
-    // When the OM detail is opened (as the "Analyze Observations" CTA does): the
+    // When the OM detail is opened (as the "Analyze observations" CTA does): the
     // OM detail replaces the regular memory content (fills the panel), so
     // "Clone Thread" is gone and the OM subpanel + Back button are shown.
     act(() => openPanel());

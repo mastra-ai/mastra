@@ -77,7 +77,9 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
           {getPhaseMessage()}
         </Txt>
         {(streamResult?.runId || runId) && (
-          <div className="mt-2 text-caption text-muted-foreground">Run ID: {streamResult?.runId ?? runId}</div>
+          <Txt as="p" variant="caption" tone="muted" className="mt-2">
+            Run ID: {streamResult?.runId ?? runId}
+          </Txt>
         )}
       </div>
 
@@ -92,12 +94,15 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'flex items-center gap-3 rounded-lg bg-destructive-subtle p-4 text-body text-foreground',
-            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-indicator [&>svg]:opacity-70',
+            'text-foreground',
+            'flex items-center gap-3 rounded-lg bg-destructive-subtle p-4',
+            '[&>svg]:h-6 [&>svg]:w-6 [&>svg]:text-destructive-foreground [&>svg]:opacity-70',
           )}
         >
           <OctagonXIcon />
-          {error || 'Something went wrong'}
+          <Txt as="span" variant="body" className="block">
+            {error || 'Something went wrong'}
+          </Txt>
         </div>
       )}
 
@@ -106,9 +111,11 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="grid justify-items-center gap-4 text-center text-body text-muted-foreground">
+        <div className={cn('text-muted-foreground', 'grid justify-items-center gap-4 text-center')}>
           <Spinner />
-          <p>This may take some time...</p>
+          <Txt as="p" variant="body">
+            This may take some time...
+          </Txt>
         </div>
       )}
     </Container>

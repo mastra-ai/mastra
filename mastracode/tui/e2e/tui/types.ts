@@ -5,12 +5,18 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'factory-client-mode'
   | 'abort-followup'
+  | 'abort-escape-off'
+  | 'abort-escape-durable'
+  | 'abort-escape-evented'
+  | 'abort-queued-followup'
   | 'startup-interrupted'
   | 'account-rotation'
   | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-cross-project'
   | 'agent-connections-expected-reply-watchdog'
   | 'agent-connections-tool-flow'
   | 'agent-connections-notification-signal'
@@ -95,7 +101,9 @@ export type ScenarioName =
   | 'initial-prompt-resume'
   | 'tui-prompt-resume'
   | 'openai-strict-schema'
+  | 'pack-flag-startup'
   | 'plan-approval-goal-handoff'
+  | 'plan-approval-goal-replaces-active'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
   | 'permission-request-hook'
@@ -125,11 +133,12 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'knowledge-browser'
+  | 'knowledge-settings'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-keeps-om-auto'
   | 'login-preserves-model-pack'
-  | 'login-seeds-om-default'
   | 'modal-and-shell'
   | 'mcp-disable-enable'
   | 'mcp-http-tool-call'
@@ -143,7 +152,9 @@ export type ScenarioName =
   | 'model-search'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
+  | 'mode-switch-applies-pack-model'
   | 'models-pack-activation-persistence'
+  | 'models-pack-memory-auto'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
@@ -151,6 +162,10 @@ export type ScenarioName =
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'
+  | 'om-auto-selection'
+  | 'om-auto-preview-google-api-key'
+  | 'om-auto-preview-stored-google-key'
+  | 'om-auto-preview-anthropic-only'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
@@ -159,23 +174,26 @@ export type ScenarioName =
   | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'onboarding-om-follows-login'
-  | 'quiet-settings'
+  | 'legacy-settings-no-prompt'
+  | 'legacy-settings-upgrade'
+  | 'preview-lines-settings'
   | 'web-search-provider-settings'
-  | 'quiet-streaming-preview-height'
-  | 'quiet-tool-history-parity'
+  | 'streaming-preview-height'
+  | 'tool-history-parity'
   | 'report-issue-command'
   | 'request-access-modal'
   | 'state-commands'
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
-  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'legacy-thread-model-restore'
+  | 'saved-thread-model-restore'
   | 'shell-passthrough-during-run'
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'
@@ -199,7 +217,10 @@ export type ScenarioName =
   | 'task-patch-tools'
   | 'task-progress-events'
   | 'terminal-resize-reflow'
+  | 'think-picker-per-model'
   | 'task-prompt-context-next-turn'
+  | 'resume-locked-thread'
+  | 'resume-missing-thread'
   | 'thread-history'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'
@@ -208,6 +229,7 @@ export type ScenarioName =
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'
+  | 'gateway-web-search'
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
@@ -247,6 +269,8 @@ export type McE2eScenarioRuntime = {
 };
 
 export type McE2ePrepareContext = {
+  /** AIMock server origin, set when the scenario uses `useOpenAIModel`. */
+  aimockUrl?: string;
   appDataDir: string;
   dbPath: string;
   homeDir: string;
@@ -269,7 +293,14 @@ export type McE2eStartMastraCodeAppOptions = {
   tui?: Partial<
     Pick<
       MastraTUIOptions,
-      'appName' | 'initialMessage' | 'resumeSkipNotice' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'
+      | 'appName'
+      | 'initialMessage'
+      | 'initialPackId'
+      | 'resumeSkipNotice'
+      | 'inlineQuestions'
+      | 'processMemoryDiagnostics'
+      | 'resumeThreadId'
+      | 'verbose'
     >
   >;
 };
@@ -291,6 +322,10 @@ export type McE2eScenario = {
   projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
+  /** Opt into OM model work, which deterministic TUI scenarios suppress by default. */
+  enableObservationalMemory?: boolean;
+  /** Opt into title model work, which deterministic TUI scenarios suppress by default. */
+  enableTitleGeneration?: boolean;
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;

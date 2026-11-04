@@ -19,6 +19,81 @@ async function transform(source: string): Promise<string> {
 }
 
 describe('workflow transform', () => {
+  it.each([
+    '...{ retry: { maximumAttempts: 5 } }',
+    '...{ ...{ retry: { maximumAttempts: 5 } } }',
+    'retry: { maximumAttempts: 0 }, ...{ retry: { maximumAttempts: 5 } }',
+    '...{ retry: { maximumAttempts: 0 } }, retry: { maximumAttempts: 5 }',
+  ])('preserves retry options and override order from inline spreads: %s', async options => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ${options} });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(/createWorkflow\('weather-workflow',\s*\{\s*retry: \{\s*maximumAttempts: 5\s*\}\s*\}\)/);
+    expect(result).not.toContain('maximumAttempts: 0');
+  });
+
+  it('preserves builds with unresolved init option spreads and no activity options', async () => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const config = { taskQueue: 'mastra' };
+      const { createWorkflow } = init({ client: undefined, ...config });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toContain("createWorkflow('weather-workflow')");
+  });
+
+  it.each([
+    "...config, retry: { maximumAttempts: 5 }, startToCloseTimeout: '5 minutes'",
+    "retry: { maximumAttempts: 5 }, startToCloseTimeout: '5 minutes', ...config",
+  ])('forwards explicit activity options while skipping unresolved spreads: %s', async options => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const config = { retry: { maximumAttempts: 99 }, startToCloseTimeout: '99 minutes' };
+      const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ${options} });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(
+      /createWorkflow\('weather-workflow',\s*\{\s*retry: \{\s*maximumAttempts: 5\s*\},\s*startToCloseTimeout: '5 minutes'\s*\}\)/,
+    );
+    expect(result).not.toContain('maximumAttempts: 99');
+    expect(result).not.toContain("'99 minutes'");
+  });
+
+  it.each([true, false])('injects activity retries with configured timeout: %s', async withTimeout => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const { createWorkflow } = init({
+        client: undefined,
+        taskQueue: 'mastra',
+        ${withTimeout ? "startToCloseTimeout: '5 minutes'," : ''}
+        retry: {
+          initialInterval: '5 seconds',
+          backoffCoefficient: 2,
+          maximumInterval: '5 minutes',
+          maximumAttempts: 5,
+          nonRetryableErrorTypes: ['ValidationError'],
+        },
+      });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(/createWorkflow\('weather-workflow',\s*\{/);
+    expect(result).toContain('retry: {');
+    expect(result).toContain("initialInterval: '5 seconds'");
+    expect(result).toContain('backoffCoefficient: 2');
+    expect(result).toContain("maximumInterval: '5 minutes'");
+    expect(result).toContain('maximumAttempts: 5');
+    expect(result).toContain("nonRetryableErrorTypes: ['ValidationError']");
+    if (withTimeout) {
+      expect(result).toContain("startToCloseTimeout: '5 minutes'");
+    }
+  });
+
   it.each(['weather-workflow'])('matches fixture output for %s', async fixtureName => {
     const inputPath = fileURLToPath(new URL(`./__fixtures__/workflow/${fixtureName}/input.mjs`, import.meta.url));
     const outputPath = fileURLToPath(new URL(`./__fixtures__/workflow/${fixtureName}/output.js`, import.meta.url));
@@ -72,7 +147,7 @@ describe('workflow transform', () => {
 
     expect(result).toContain('const fetchWeatherWorkflow =');
     expect(result).toContain('const weatherWorkflow =');
-    expect(result).toContain('.thenWorkflow("fetchWeatherWorkflow")');
+    expect(result).toContain('.thenWorkflow("fetchWeatherWorkflow", "fetch-weather")');
     expect(result).not.toContain('.then("subWorkflow")');
   });
 
@@ -87,6 +162,7 @@ describe('workflow transform', () => {
 
     expect(result).toContain('type: "childWorkflow"');
     expect(result).toContain('workflowType: "childWorkflow"');
+    expect(result).toContain('id: "child"');
     expect(result).not.toContain('.parallel(["child"])');
   });
 
@@ -164,6 +240,29 @@ describe('workflow transform', () => {
           .commit();
       `),
     ).rejects.toThrow('requires an inline function or a statically declared function identifier');
+  });
+
+  // A setting the build cannot read is left out, so the Worker uses the one run.start() sends.
+  const readSetting = 'validateInputs: false';
+  const leftOut = "createWorkflow('checked-workflow')";
+  it.each([
+    ['options: { ...sharedOptions, validateInputs: false }', readSetting],
+    ["options: { ['validateInputs']: false }", readSetting],
+    ['options: { validateInputs: false, tracingPolicy: sharedOptions.tracingPolicy }', readSetting],
+    ['options: sharedOptions', leftOut],
+    ['options: { validateInputs: flag }', leftOut],
+    ['options: { validateInputs: false, ...sharedOptions }', leftOut],
+    ['options: { [key]: false }', leftOut],
+  ])('reads validateInputs from %s at build time', async (options, expected) => {
+    const output = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      const sharedOptions = {};
+      const flag = false;
+      const key = 'validateInputs';
+      export const checkedWorkflow = createWorkflow({ id: 'checked-workflow', ${options} }).commit();
+    `);
+
+    expect(output).toContain(expected);
   });
 
   it('forwards mapping options while retaining the generated mapping activity id', async () => {

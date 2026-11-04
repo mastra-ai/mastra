@@ -264,10 +264,18 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
         className="pointer-events-none absolute top-6 right-0 left-0 z-2 grid grid-cols-4 lg:top-11"
         aria-hidden="true"
       >
-        <span className="factory-stage-label">Intake</span>
-        <span className="factory-stage-label">Build</span>
-        <span className="factory-stage-label">Review</span>
-        <span className="factory-stage-label">Ship</span>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Intake
+        </Txt>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Build
+        </Txt>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Review
+        </Txt>
+        <Txt as="span" variant="body-sm" tone="muted" className="factory-stage-label">
+          Ship
+        </Txt>
       </div>
       <canvas ref={canvasRef} className="absolute inset-0 size-full cursor-crosshair" aria-hidden="true" />
       <Txt

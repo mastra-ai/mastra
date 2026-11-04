@@ -1,6 +1,7 @@
 import { Txt } from '../Txt';
 import { Icon } from '@/ds/icons';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { textStyle } from '@/ds/primitives/text';
 import { cn } from '@/lib/utils';
 
 export interface EntityProps {
@@ -51,11 +52,7 @@ export const EntityName = ({ children, className }: EntityProps) => {
 };
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
-  return (
-    <Txt as="div" variant="caption" tone="muted" className={className}>
-      {children}
-    </Txt>
-  );
+  return <div className={cn(textStyle({ variant: 'caption', tone: 'muted' }), className)}>{children}</div>;
 };
 
 export const EntityContent = ({ children, className }: EntityProps) => {

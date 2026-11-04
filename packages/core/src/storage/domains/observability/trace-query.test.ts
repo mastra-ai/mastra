@@ -3,21 +3,17 @@ import { ObservabilityStorage } from './base';
 import {
   compareTraceQueryStrings,
   createTraceQueryObservedFieldDescriptor,
-  encodeTraceQueryCursor,
-  encodeTraceQueryDeltaCursor,
-  getTraceQueryDeltaWatermark,
   getTraceQueryCanonicalFieldDescriptors,
   getTraceQueryFieldsArgsSchema,
   getTraceQueryFieldsResponseSchema,
   getTraceQueryValuesArgsSchema,
   getTraceQueryValuesResponseSchema,
   isTraceQueryValueSuggestionsPath,
+  normalizeTraceQueryText,
   parseGetTraceQueryFieldsArgs,
   parseGetTraceQueryValuesArgs,
   parseQueryThreadsInput,
   parseTraceQueryRequest,
-  planThreadQuery,
-  planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQuerySelectionPredicate,
   planTraceQueryValues,
@@ -47,8 +43,15 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
   TraceQueryValidationError,
-  type TraceQueryPredicate,
 } from './trace-query';
+import type { TraceQueryPredicate } from './trace-query';
+import {
+  encodeTraceQueryCursor,
+  encodeTraceQueryDeltaCursor,
+  getTraceQueryDeltaWatermark,
+  planThreadQuery,
+  planTraceQuery,
+} from './trace-query-plan';
 
 const baseRequest = {
   timeRange: {
@@ -242,6 +245,15 @@ describe('traceQueryRequestSchema', () => {
     expect(oversizedSet.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid_request', path: ['where', 'set'] }),
     );
+    const oversizedRelatedSet = validationError(() =>
+      parsed({
+        ...baseRequest,
+        where: { spans: { some: { op: 'in', value: { path: 'name' }, set: [...values, 'name-over-limit'] } } },
+      }),
+    );
+    expect(oversizedRelatedSet.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_request', path: ['where', 'spans', 'some', 'set'] }),
+    );
 
     const maxString = 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2);
     expect(
@@ -259,6 +271,20 @@ describe('traceQueryRequestSchema', () => {
     expect(oversizedString.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid_request', path: ['where', 'right', 'literal'] }),
     );
+  });
+
+  it('points an oversized membership set nested in other predicates at the set itself', () => {
+    const set = Array.from({ length: TRACE_QUERY_MAX_SET_VALUES + 1 }, (_, index) => `trace-${index}`);
+    const inSet = { op: 'in', value: { path: 'traceId' }, set };
+
+    for (const [where, path] of [
+      [{ op: 'not', arg: inSet }, ['where', 'arg', 'set']],
+      [{ op: 'and', args: [{ op: 'exists', path: 'traceId' }, inSet] }, ['where', 'args', 1, 'set']],
+      [{ spans: { some: inSet } }, ['where', 'spans', 'some', 'set']],
+    ] as const) {
+      const error = validationError(() => parsed({ ...baseRequest, where }));
+      expect(error.issues).toEqual([expect.objectContaining({ code: 'invalid_request', path })]);
+    }
   });
 
   it('bounds raw predicate paths by UTF-8 bytes before allowlist resolution', () => {
@@ -306,7 +332,7 @@ describe('planTraceQuery', () => {
     });
   });
 
-  it('enforces ordered and maximum time ranges', () => {
+  it('enforces ordered time ranges without a maximum width', () => {
     const reversed = validationError(() =>
       planTraceQuery(parsed({ timeRange: { from: '2026-08-02T00:00:00Z', to: '2026-08-01T00:00:00Z' } })),
     );
@@ -317,10 +343,9 @@ describe('planTraceQuery', () => {
       to: '2026-09-01T00:00:00.000Z',
     });
 
-    const tooLarge = validationError(() =>
-      planTraceQuery(parsed({ timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } })),
-    );
-    expect(tooLarge.issues[0]).toMatchObject({ code: 'time_range_too_large', path: ['timeRange'] });
+    expect(
+      planTraceQuery(parsed({ timeRange: { from: '2025-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } })).timeRange,
+    ).toEqual({ from: '2025-09-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' });
   });
 
   it('plans numeric root duration predicates', () => {
@@ -348,6 +373,40 @@ describe('planTraceQuery', () => {
       ],
     });
   });
+
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'plans numeric %s predicates on the root and on spans',
+    field => {
+      const plan = planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: {
+            op: 'and',
+            args: [
+              { op: 'lte', left: { path: field }, right: { literal: 0 } },
+              { op: 'notExists', path: field },
+              { spans: { some: { op: 'gt', left: { path: field }, right: { literal: 800 } } } },
+            ],
+          },
+        }),
+      );
+
+      expect(plan.where).toEqual({
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          { type: 'comparison', field, operator: 'lte', value: 0 },
+          { type: 'presence', field, operator: 'notExists' },
+          {
+            type: 'relation',
+            collection: 'spans',
+            quantifier: 'some',
+            predicate: { type: 'comparison', field, operator: 'gt', value: 800 },
+          },
+        ],
+      });
+    },
+  );
 
   it('rejects invalid root duration literals', () => {
     const stringLiteral = validationError(() =>
@@ -932,7 +991,17 @@ describe('planTraceQuery', () => {
   });
 
   it('keeps correlation fields queryable and does not infer authorization fields', () => {
-    for (const field of ['resourceId', 'threadId', 'runId', 'sessionId', 'userId', 'organizationId'] as const) {
+    for (const field of [
+      'resourceId',
+      'threadId',
+      'runId',
+      'sessionId',
+      'userId',
+      'organizationId',
+      'requestId',
+      'serviceName',
+      'experimentId',
+    ] as const) {
       expect(
         planTraceQuery(
           parsed({
@@ -987,6 +1056,99 @@ describe('planTraceQuery', () => {
     for (const field of ['runId', 'sessionId', 'userId', 'organizationId']) {
       expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
       expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
+    }
+  });
+
+  it('plans request, service and experiment predicates on traces and related spans', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'in', value: { path: 'requestId' }, set: ['request-1', 'request-2'] },
+            { op: 'ne', left: { path: 'experimentId' }, right: { literal: 'exp-1' } },
+            { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'checkout' } } } },
+            { spans: { none: { op: 'exists', path: 'experimentId' } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'membership', field: 'requestId', operator: 'in', values: ['request-1', 'request-2'] },
+        { type: 'comparison', field: 'experimentId', operator: 'ne', value: 'exp-1' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'comparison', field: 'serviceName', operator: 'eq', value: 'checkout' },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'none',
+          predicate: { type: 'presence', field: 'experimentId', operator: 'exists' },
+        },
+      ],
+    });
+    for (const field of ['requestId', 'serviceName', 'experimentId']) {
+      expect(isTraceQueryValueSuggestionsPath('trace', field)).toBe(false);
+      expect(isTraceQueryValueSuggestionsPath('spans', field)).toBe(false);
+    }
+  });
+
+  it('plans root and related-span outcome predicates with arbitrary strings and no sort', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'outcome' }, right: { literal: 'my-custom-outcome' } },
+            { op: 'notExists', path: 'stopReason' },
+            { spans: { some: { op: 'in', value: { path: 'outcome' }, set: ['limit', 'unknown'] } } },
+            { spans: { none: { op: 'eq', left: { path: 'stopReason' }, right: { literal: 'max_steps' } } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'comparison', field: 'outcome', operator: 'eq', value: 'my-custom-outcome' },
+        { type: 'presence', field: 'stopReason', operator: 'notExists' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'membership', field: 'outcome', operator: 'in', values: ['limit', 'unknown'] },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'none',
+          predicate: { type: 'comparison', field: 'stopReason', operator: 'eq', value: 'max_steps' },
+        },
+      ],
+    });
+    for (const scope of ['trace', 'spans'] as const) {
+      expect(isTraceQueryValueSuggestionsPath(scope, 'outcome')).toBe(true);
+      expect(isTraceQueryValueSuggestionsPath(scope, 'stopReason')).toBe(true);
+    }
+    for (const where of [
+      { op: 'exists', path: 'stopReasonContext' },
+      { spans: { some: { op: 'exists', path: 'stopReasonContext' } } },
+      { op: 'eq', left: { path: 'outcome' }, right: { literal: 1 } },
+      { op: 'matches', left: { path: 'outcome' }, right: { literal: 'limit' } },
+    ]) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, where })), JSON.stringify(where)).toThrow();
+    }
+    for (const field of ['outcome', 'stopReason', 'stopReasonContext']) {
+      expect(() => parsed({ ...baseRequest, orderBy: [{ field, direction: 'asc' }] }), field).toThrow();
     }
   });
 
@@ -1093,6 +1255,96 @@ describe('planTraceQuery', () => {
       );
       expect(threads.issues).toContainEqual(expect.objectContaining({ code: 'field_not_allowed' }));
     }
+  });
+
+  it('plans text predicates on human-text fields and rejects them elsewhere', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: { op: 'matches', left: { path: 'comment' }, right: { literal: ' Incorrect, DOSAGE! ' } },
+              },
+            },
+            { spans: { some: { op: 'notMatches', left: { path: '${name}' }, right: { literal: 'gpt-5' } } } },
+          ],
+        },
+      }),
+    );
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        {
+          type: 'relation',
+          collection: 'feedback',
+          quantifier: 'some',
+          predicate: { type: 'text', field: 'comment', operator: 'matches', value: 'incorrect dosage' },
+        },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'text', field: 'name', operator: 'notMatches', value: 'gpt 5' },
+        },
+      ],
+    });
+
+    const noWords = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { feedback: { some: { op: 'matches', left: { path: 'comment' }, right: { literal: '!!! ---' } } } },
+        }),
+      ),
+    );
+    expect(noWords.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_literal', path: ['where', 'feedback', 'some', 'right', 'literal'] }),
+    );
+
+    for (const field of ['environment', 'durationMs', 'tags', 'metadata.region']) {
+      const rejected = validationError(() =>
+        planTraceQuery(
+          parsed({ ...baseRequest, where: { op: 'matches', left: { path: field }, right: { literal: 'production' } } }),
+        ),
+      );
+      expect(rejected.issues).toContainEqual(
+        expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'op'] }),
+      );
+    }
+
+    expect(
+      traceQueryScalarPredicateSchema.safeParse({ op: 'matches', left: { path: 'comment' }, right: { literal: 42 } })
+        .success,
+    ).toBe(false);
+    expect(
+      traceQueryScalarPredicateSchema.safeParse({ op: 'matches', left: { literal: 'x' }, right: { literal: 'y' } })
+        .success,
+    ).toBe(false);
+
+    expect(getTraceQueryCanonicalFieldDescriptors('feedback', 'comment')).toEqual([
+      {
+        path: 'comment',
+        valueKind: 'string',
+        operators: ['eq', 'ne', 'in', 'notIn', 'exists', 'notExists', 'matches', 'notMatches'],
+        valueSuggestions: false,
+      },
+    ]);
+  });
+
+  it('normalizes text literals to lowercase words', () => {
+    expect(normalizeTraceQueryText(' Incorrect, DOSAGE! ')).toBe('incorrect dosage');
+    expect(normalizeTraceQueryText("llm: 'gpt-5'")).toBe('llm gpt 5');
+    expect(normalizeTraceQueryText('see café notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('see cafe\u0301 notes')).toBe('see café notes');
+    expect(normalizeTraceQueryText('नमस्ते, दुनिया!')).toBe('नमस्ते दुनिया');
+    expect(normalizeTraceQueryText('İstanbul')).toBe('istanbul');
+    expect(normalizeTraceQueryText('I\u0307stanbul')).toBe('istanbul');
+    expect(normalizeTraceQueryText('ΟΔΟΣ οδος')).toBe('οδοσ οδοσ');
+    expect(normalizeTraceQueryText('!!! ---')).toBe('');
   });
 
   it('plans tag collection predicates and rejects scalar operators on tags', () => {
@@ -1474,17 +1726,13 @@ describe('queryThreads input and planning', () => {
       to: '2026-09-01T00:00:00.000Z',
     });
 
-    const tooLarge = validationError(() =>
+    expect(
       planThreadQuery(
         parsedThreads({
-          traces: { timeRange: { from: '2026-07-31T23:59:59Z', to: '2026-09-01T00:00:00Z' } },
+          traces: { timeRange: { from: '2025-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } },
         }),
-      ),
-    );
-    expect(tooLarge.issues[0]).toMatchObject({
-      code: 'time_range_too_large',
-      path: ['traces', 'timeRange'],
-    });
+      ).traces.timeRange,
+    ).toEqual({ from: '2025-09-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' });
 
     const invalidField = validationError(() =>
       planThreadQuery(
@@ -1673,6 +1921,50 @@ describe('trace-query cursors', () => {
     ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
   });
 
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'round-trips numeric and empty %s cursors and rejects other kinds',
+    field => {
+      const request = parsed({ ...baseRequest, orderBy: [{ field, direction: 'asc' }] });
+      const plan = planTraceQuery(request);
+      for (const sortValue of [250, 0, null]) {
+        const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue, traceId: 'trace-3' });
+        expect(planTraceQuery({ ...request, page: { limit: 100, after } })).toMatchObject({
+          cursor: { sortValue, traceId: 'trace-3' },
+        });
+      }
+
+      const forged = encodeTraceQueryCursor(plan, {
+        result: 'traces',
+        sortValue: '2026-08-03T00:00:00.000Z',
+        traceId: 'trace-3',
+      });
+      expect(() => planTraceQuery({ ...request, page: { limit: 100, after: forged } })).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+      const startedAtPlan = planTraceQuery(parsed());
+      const numeric = encodeTraceQueryCursor(startedAtPlan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
+      expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: numeric } }))).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+    },
+  );
+
+  it('rejects a cursor after the sort field or direction changes', () => {
+    const plan = planTraceQuery(
+      parsed({ ...baseRequest, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] }),
+    );
+    const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
+    for (const orderBy of [
+      [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
+      [{ field: 'timeToFirstTokenMs', direction: 'asc' }],
+      [{ field: 'startedAt', direction: 'asc' }],
+    ] as const) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, orderBy: [...orderBy], page: { after } }))).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+      );
+    }
+  });
+
   it('binds established shared authorization state only when supplied', () => {
     const plan = planTraceQuery(parsed(), { authorizationBinding: 'scope-a' });
     const cursor = encodeTraceQueryCursor(plan, {
@@ -1702,11 +1994,19 @@ describe('trace-query discovery contract', () => {
     expect(
       getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, limit: TRACE_QUERY_DISCOVERY_MAX_LIMIT + 1 }).success,
     ).toBe(false);
+  });
+
+  it('accepts discovery time ranges of any positive width', () => {
+    const wide = { from: '2025-09-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+    expect(getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, timeRange: wide }).success).toBe(true);
     expect(
-      getTraceQueryFieldsArgsSchema.safeParse({
-        ...discoveryArgs,
-        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00.001Z' },
-      }).success,
+      getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path: 'environment', timeRange: wide }).success,
+    ).toBe(true);
+
+    const empty = { from: wide.to, to: wide.to };
+    expect(getTraceQueryFieldsArgsSchema.safeParse({ ...discoveryArgs, timeRange: empty }).success).toBe(false);
+    expect(
+      getTraceQueryValuesArgsSchema.safeParse({ ...discoveryArgs, path: 'environment', timeRange: empty }).success,
     ).toBe(false);
   });
 
@@ -1852,11 +2152,11 @@ describe('trace-query execution timeout contract', () => {
   it('exposes stable execution-budget identities without driver messages', () => {
     expect(new TraceQueryExecutionError()).toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
     expect(new TraceQueryResourceLimitError()).toMatchObject({
       code: 'TRACE_QUERY_RESOURCE_LIMIT',
-      message: 'The trace query exceeded its resource limit',
+      message: 'The query exceeded its resource limit',
     });
   });
 });
@@ -1872,6 +2172,8 @@ describe('trace-query responses and storage capability', () => {
       createdAt: '2026-08-01T00:00:00Z',
       metadata: { customer: { id: 'customer-1' }, labels: ['support'], count: 2 },
       inputPreview: 'Help with my order',
+      outputPreview: 'Here is your order',
+      errorPreview: null,
       threadId: null,
       resourceId: null,
       startedAt: '2026-08-01T00:00:00Z',
@@ -1882,6 +2184,21 @@ describe('trace-query responses and storage capability', () => {
       status: 'success',
     };
     expect(traceQueryTraceResponseSchema.safeParse({ traces: [trace], page: { next: null } }).success).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [
+          { ...trace, outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps: 5 } },
+          { ...trace, outcome: null, stopReason: null, stopReasonContext: null },
+        ],
+        page: { next: null },
+      }).success,
+    ).toBe(true);
+    expect(
+      traceQueryTraceResponseSchema.safeParse({
+        traces: [{ ...trace, stopReasonContext: 'max_steps' }],
+        page: { next: null },
+      }).success,
+    ).toBe(false);
     expect(
       traceQueryPaginatedTraceResponseSchema.safeParse({
         traces: [trace],

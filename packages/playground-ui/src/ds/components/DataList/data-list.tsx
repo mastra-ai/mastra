@@ -12,6 +12,7 @@ import {
   DataListCreatedCell,
   DataListTimeCell,
 } from './data-list-cells';
+import { DataListGroup } from './data-list-group';
 import { DataListNextPageLoading } from './data-list-next-page-loading';
 import { DataListNoMatch } from './data-list-no-match';
 import { DataListPagination } from './data-list-pagination';
@@ -61,6 +62,7 @@ export const DataList = Object.assign(DataListRoot, {
   SelectCell: DataListSelectCell,
   TopSelectCell: DataListTopSelectCell,
   NoMatch: DataListNoMatch,
+  Group: DataListGroup,
   Subheader: DataListSubheader,
   SubHeading: DataListSubHeading,
   Spacer: DataListSpacer,

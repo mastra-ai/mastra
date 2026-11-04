@@ -28,12 +28,12 @@ describe('JudgeDisplayComponent', () => {
     });
   });
 
-  it('labels judge feedback as Goal and keeps the box aligned', () => {
+  it('labels judge feedback as Goal and keeps the card rows aligned', () => {
     const component = new JudgeDisplayComponent(
       {
         decision: 'continue',
         reason:
-          'This is a long reason that should wrap instead of stretching the box past the right border and making the terminal render jagged.',
+          'This is a long reason that should wrap instead of stretching the card past the terminal width and making the terminal render jagged.',
       },
       2,
       20,
@@ -123,7 +123,9 @@ describe('JudgeDisplayComponent', () => {
 
     expect(activityIndex).toBeGreaterThan(-1);
     expect(reasonIndex).toBe(activityIndex + 2);
-    expect(separator).toMatch(/^\s*│\s+│\s*$/);
+    // The separator is a bare left-bar row.
+    expect(separator?.trimEnd()).toBe('▎');
+    expect(lines.every(line => line.startsWith('▎'))).toBe(true);
   });
 });
 

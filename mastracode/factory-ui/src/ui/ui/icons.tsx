@@ -12,7 +12,8 @@ function svg(path: React.ReactNode, size = 16, className?: string, title?: strin
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      // Same line weight as the lucide icons beside these (Playground UI's token).
+      style={{ strokeWidth: 'var(--icon-stroke-width, 2)' }}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
@@ -83,7 +84,7 @@ export function Wordmark({ className, brand = 'code' }: { className?: string; br
 
   return (
     <pre
-      className={`m-0 overflow-x-auto font-mono text-xs leading-[1.25] whitespace-pre select-none text-foreground${className ? ` ${className}` : ''}`}
+      className={`text-caption m-0 overflow-x-auto font-mono leading-[1.25] whitespace-pre select-none text-foreground${className ? ` ${className}` : ''}`}
       aria-label={factory ? 'Mastra Factory' : 'Mastra Code'}
     >
       {factory ? FACTORY_WORDMARK_ART : CODE_WORDMARK_ART}

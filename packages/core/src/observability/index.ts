@@ -9,8 +9,21 @@
 export * from './types';
 export * from './no-op';
 export * from './utils';
+export * from './w3c';
 export * from './span-record';
 export { wrapMastra } from './context';
 export { createObservabilityContext, resolveObservabilityContext } from './context-factory';
 export { startRagIngestion, withRagIngestion } from './rag-ingestion';
 export type { StartRagIngestionOptions, StartRagIngestionResult } from './rag-ingestion';
+export { buildSpanPreviews } from './span-previews';
+
+/** @internal Runtime instrumentation helper; not a public API. */
+export { executionFailureTermination } from './execution-outcome';
+/** @internal Runtime instrumentation helper; not a public API. */
+export { agentLoopTermination } from '../loop/shared/execution-outcome';
+
+/** @internal Bounded stop-reason context for runtime instrumentation. */
+export { compactStopReasonContext } from './outcome-schema';
+
+/** @internal Preserve observed model usage when an incomplete provider call ends a durable run. */
+export { calculateObservedUsage, isUsageIncomplete } from './usage';

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const listGuildsInputSchema = z.object({
   after: z
@@ -44,15 +45,7 @@ export function listGuildsTool(proxy: PlatformProxy) {
     outputSchema: listGuildsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listGuildsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       const limit = input.limit ?? 200;
 

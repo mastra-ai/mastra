@@ -1,10 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { useUpdateThread } from '@mastra/react/hooks/memory';
 import { useState } from 'react';
-import { useUpdateThread } from '@/domains/memory/hooks/use-memory';
 
 export interface RenameThreadDialogProps {
   agentId: string;
@@ -13,9 +15,6 @@ export interface RenameThreadDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-/**
- * Mount on demand (`{open && ...}`) so the input is seeded from the thread each time it opens.
- */
 export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChange }: RenameThreadDialogProps) {
   const [requestContext] = useEntityRequestContext('agent', agentId);
   const { mutate, isPending } = useUpdateThread(requestContext);
@@ -28,8 +27,16 @@ export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChan
     e.preventDefault();
     if (!canSave) return;
 
-    // On failure the hook toasts and the dialog stays open so the user can retry.
-    mutate({ threadId, agentId, title: trimmed }, { onSuccess: () => onOpenChange(false) });
+    mutate(
+      { threadId, agentId, title: trimmed },
+      {
+        onSuccess: () => {
+          toast.success('Chat renamed');
+          onOpenChange(false);
+        },
+        onError: () => toast.error('Failed to rename chat'),
+      },
+    );
   };
 
   return (
@@ -39,17 +46,16 @@ export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChan
           <DialogTitle>Rename thread</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="rename-thread-title">Title</Label>
+          <Form onSubmit={handleSubmit}>
+            <Field>
+              <FieldLabel>Title</FieldLabel>
               <Input
-                id="rename-thread-title"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Enter a chat title"
                 autoFocus
               />
-            </div>
+            </Field>
 
             <div className="flex justify-end gap-2">
               <Button type="button" onClick={() => onOpenChange(false)} disabled={isPending}>
@@ -59,7 +65,7 @@ export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChan
                 Save
               </Button>
             </div>
-          </form>
+          </Form>
         </DialogBody>
       </DialogContent>
     </Dialog>

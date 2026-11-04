@@ -3,7 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 
@@ -19,9 +19,11 @@ export interface ReviewSourceOutput {
   /**
    * PR/MR author recorded on the review card at intake — for GitHub this is
    * `pullRequest.user.login`, for GitLab it is the GitLab username. The skill
-   * cross-checks it against `gh pr view --json author` (`.author.login`) or
-   * the equivalent MR fetch; a mismatch means the session is bound to a
-   * different PR/MR than the one being reviewed.
+   * cross-checks it against the same REST field of the reviewed PR
+   * (`gh api repos/<owner>/<repo>/pulls/<number> --jq .user.login`; `gh pr view`
+   * formats App authors as `app/<slug>` instead of `<slug>[bot]`) or the
+   * equivalent MR fetch; a mismatch means the session is bound to a different
+   * PR/MR than the one being reviewed.
    */
   triggeredBy: string | null;
   /**
@@ -157,7 +159,7 @@ function buildSessionUrl(input: {
   return `${origin}/factories/${encodeURIComponent(input.factoryProjectId)}/workspaces/${encodeURIComponent(input.sessionId)}/threads/${encodeURIComponent(input.threadId)}`;
 }
 
-function readReviewTarget(item: WorkItemRow): ReviewSourceOutput['reviewTarget'] {
+function readReviewTarget(item: Card): ReviewSourceOutput['reviewTarget'] {
   const source = item.externalSource;
   if (!source) return null;
   return {
@@ -168,8 +170,8 @@ function readReviewTarget(item: WorkItemRow): ReviewSourceOutput['reviewTarget']
   };
 }
 
-function readBoundRepository(item: WorkItemRow): ReviewSourceOutput['boundRepository'] {
-  const metadata = item.metadata;
+function readBoundRepository(item: Card): ReviewSourceOutput['boundRepository'] {
+  const metadata = item.workItem.metadata;
   if (!metadata) return null;
   // Intake stamps repository identity on every PR/MR card:
   // `github/default-rules.ts` writes `githubRepositoryId`, and
@@ -187,10 +189,8 @@ function readBoundRepository(item: WorkItemRow): ReviewSourceOutput['boundReposi
   return null;
 }
 
-function readPullRequestAuthor(item: WorkItemRow): string | null {
-  const metadata = item.metadata;
-  if (!metadata) return null;
-  const author = metadata.author;
+function readPullRequestAuthor(item: Card): string | null {
+  const author = item.workItem.author;
   if (typeof author === 'string' && author.trim()) return author.trim();
   return null;
 }

@@ -98,6 +98,12 @@ To migrate, access MCP-specific properties like `elicitation` and `extra` throug
   });
 ```
 
+:::note
+
+`context.mcp.elicitation.sendRequest()` is deprecated. It throws on servers running `@mastra/mcp` 2.x, which serve the MCP `2026-07-28` revision. On those servers, call `context.suspend(payload)` and read the caller's answer from `context.resumeData` when the tool runs again. See [Tools that ask the caller for input suspend and resume](/reference/migrations/mcp-v2#tools-that-ask-the-caller-for-input-suspend-and-resume).
+
+:::
+
 ## Removed
 
 ### Deprecated MCP client classes

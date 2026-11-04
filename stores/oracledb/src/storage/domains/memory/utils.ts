@@ -2,17 +2,22 @@ import type { MastraError } from '@mastra/core/error';
 import { ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { TABLE_MEMORY_RUN_FENCES } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
+  RunFence,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
   StorageOrderBy,
 } from '@mastra/core/storage';
 
+import oracledb from 'oracledb';
+
 import { clobBind, isOracleErrorCode } from '../../../shared/connection';
 import { qualifyName } from '../../../vector/identifiers';
 import type { OracleDB, OracleCreateIndexOptions, OracleTxClient } from '../../db';
+import { assertRunFence } from '../../db/run-fencing';
 import { createOracleStorageError, parseJsonValue, toDate } from '../../domain-utils';
 
 // Shared helpers used across the memory domain modules (schema, threads, messages,
@@ -60,6 +65,20 @@ export function table(ctx: Pick<MemoryContext, 'schemaName'>, tableName: string)
   return qualifyName(tableName, ctx.schemaName);
 }
 
+/**
+ * The fence check for a memory write; call it first inside the write's
+ * transaction. `fence` is the one `MemoryOracle` already resolved against the
+ * run fence scope, so an unfenced write skips the check.
+ */
+export async function assertMemoryFence(
+  ctx: Pick<MemoryContext, 'schemaName'>,
+  client: OracleTxClient,
+  fence: RunFence | undefined,
+  operation: string,
+): Promise<void> {
+  if (fence) await assertRunFence(client, table(ctx, TABLE_MEMORY_RUN_FENCES), fence, operation);
+}
+
 export function storageError(
   operation: string,
   reason: string,
@@ -97,6 +116,15 @@ export function chunkValues<T>(values: T[], size = ORACLE_IN_LIMIT): T[][] {
     chunks.push(values.slice(index, index + size));
   }
   return chunks;
+}
+
+/**
+ * Bind an instant as TIMESTAMP WITH TIME ZONE. A bare `Date` binds as TIMESTAMP WITH LOCAL
+ * TIME ZONE, which the server converts with the session's fixed offset (captured at connect
+ * time); an instant on the other side of a DST change is then stored shifted by an hour.
+ */
+export function timestampBind(value: Date | string | null | undefined): oracledb.BindParameter | null {
+  return value === undefined || value === null ? null : { type: oracledb.DB_TYPE_TIMESTAMP_TZ, val: toDate(value) };
 }
 
 export function boolToNumber(value: boolean | undefined): number {

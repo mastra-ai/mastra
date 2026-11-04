@@ -1,0 +1,11 @@
+{
+  "name": "@inner/versionless-dependent",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@inner/versionless": "workspace:*"
+  }
+}

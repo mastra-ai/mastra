@@ -96,6 +96,51 @@ Dot paths are supported. An empty group evaluates to `true`, and an unknown oper
 
 Blocks without conditions are always included.
 
+A `prompt_block_ref` can also have its own `rules`. They apply only to that reference in that agent, so you can reuse one stored block under different conditions. If the stored block has rules too, both must pass.
+
+### Runtime slot with a fallback
+
+Combine an inline `prompt_block` and a conditional `prompt_block_ref` to insert a value from request context and fall back to a shared stored block when the value is missing:
+
+```typescript title="src/scripts/attach-prompt.ts"
+await editor.agent.update({
+  id: 'support-agent',
+  instructions: [
+    { type: 'text', content: 'Follow the platform safety policy.' },
+    {
+      type: 'prompt_block',
+      content: '{{userPrompt}}',
+      rules: {
+        operator: 'AND',
+        conditions: [
+          { field: 'userPrompt', operator: 'exists' },
+          { field: 'userPrompt', operator: 'not_equals', value: '' },
+        ],
+      },
+    },
+    {
+      type: 'prompt_block_ref',
+      id: 'default-user-prompt',
+      rules: {
+        operator: 'OR',
+        conditions: [
+          { field: 'userPrompt', operator: 'not_exists' },
+          { field: 'userPrompt', operator: 'equals', value: '' },
+        ],
+      },
+    },
+  ],
+})
+```
+
+When the request context contains a non-empty `userPrompt`, the agent receives that value. Otherwise, it receives the published `default-user-prompt` block. The stored block doesn't need to know about `userPrompt`.
+
+:::note
+
+The `exists` operator treats an empty string as present. The extra `''` conditions make an empty `userPrompt` use the fallback too.
+
+:::
+
 ## Programmatic API
 
 Access prompt blocks through `mastra.getEditor().prompt`. See the [`prompt` namespace](/reference/editor/mastra-editor#namespaces) for complete method signatures.

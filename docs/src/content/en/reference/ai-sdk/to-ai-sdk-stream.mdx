@@ -130,6 +130,14 @@ The second parameter is an options object:
     defaultValue: 'false',
   },
   {
+    name: 'includeSubAgentMetadata',
+    type: 'boolean',
+    description:
+      '(Agent only) Whether to stream sub-agent progress as `data-tool-agent` and `data-tool-agent-step` parts when the agent delegates to sub-agents. `handleChatStream()` and `chatRoute()` enable this by default.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'includeTextStreamParts',
     type: 'boolean',
     description: '(Workflow only) Whether to include text stream parts in the output.',
@@ -138,9 +146,9 @@ The second parameter is an options object:
   },
   {
     name: 'messageMetadata',
-    type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
+    type: '(options: { part: UIMessageStreamPart; traceId?: string }) => Record<string, unknown> | undefined',
     description:
-      '(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.',
+      "(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks. Also receives the run's `traceId` (undefined when tracing is disabled), so you can return it as metadata, for example `({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined)`.",
     isOptional: true,
   },
   {

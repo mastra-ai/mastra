@@ -43,7 +43,7 @@ function experimentalAgentRuntimeScenario(selection: ExperimentalAgent): McE2eSc
 
       terminal.submit('Return the configured Mastra Code e2e smoke phrase.');
       await runtime.waitForScreenText(/MC automated chat smoke response/i, terminal, 20_000);
-      expect(terminal.serialize().view.match(/▐build▌/g) ?? []).toHaveLength(1);
+      expect(terminal.serialize().view.match(/\bbuild · /g) ?? []).toHaveLength(1);
 
       terminal.submit('/thread');
       await runtime.waitForScreenText(/Title: \(untitled\)[\s\S]*ID: [0-9a-f-]+/i, terminal);

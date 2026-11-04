@@ -1,7 +1,7 @@
 import { APICallError } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 
-import { isMastraTextStreamChunk, safeParseErrorObject } from './utils';
+import { isMastraTextStreamChunk, safeParseErrorObject, toUIDataChunk } from './utils';
 
 describe('isMastraTextStreamChunk', () => {
   it('recognizes tool-output-denied so nested workflow-step-output denials are not dropped (#20880)', () => {
@@ -94,5 +94,25 @@ describe('safeParseErrorObject', () => {
     const obj: any = { a: 1 };
     obj.self = obj;
     expect(() => safeParseErrorObject(obj)).not.toThrow();
+  });
+});
+
+describe('toUIDataChunk', () => {
+  it('keeps id and transient when set', () => {
+    expect(toUIDataChunk({ type: 'data-x', data: 1, id: 'a', transient: true })).toEqual({
+      type: 'data-x',
+      data: 1,
+      id: 'a',
+      transient: true,
+    });
+    expect(toUIDataChunk({ type: 'data-x', data: 1, transient: false })).toEqual({
+      type: 'data-x',
+      data: 1,
+      transient: false,
+    });
+  });
+
+  it('omits undefined id and transient', () => {
+    expect(toUIDataChunk({ type: 'data-x', data: 1 })).toStrictEqual({ type: 'data-x', data: 1 });
   });
 });

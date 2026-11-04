@@ -19,7 +19,7 @@ import { Mastra } from '@mastra/core'
 const mastra = new Mastra({/* storage config */})
 
 const comparison = await mastra.datasets.compareExperiments({
-  experimentIds: ['exp-baseline', 'exp-new'],
+  experimentIds: ['exp-baseline', 'exp-prompt-v2', 'exp-new-model'],
   baselineId: 'exp-baseline',
 })
 
@@ -30,11 +30,13 @@ for (const item of comparison.items) {
   console.log(`  Input: ${JSON.stringify(item.input)}`)
 
   for (const [expId, result] of Object.entries(item.results)) {
-    if (result) {
-      console.log(
-        `  ${expId}: output=${JSON.stringify(result.output)}, scores=${JSON.stringify(result.scores)}`,
-      )
+    if (!result) {
+      console.log(`  ${expId}: did not run this item`)
+      continue
     }
+    console.log(
+      `  ${expId}: output=${JSON.stringify(result.output)}, scores=${JSON.stringify(result.scores)}`,
+    )
   }
 }
 ```
@@ -46,20 +48,25 @@ for (const item of comparison.items) {
   {
     name: 'experimentIds',
     type: 'string[]',
-    description: 'Array of experiment IDs to compare. Must contain at least 2.',
+    description:
+      'Array of experiment IDs to compare. Duplicate IDs are removed before the 2-ID minimum is checked, so the list must contain at least 2 distinct IDs.',
   },
   {
     name: 'baselineId',
     type: 'string',
     isOptional: true,
-    description: 'ID of the baseline experiment. Defaults to the first ID in `experimentIds`.',
+    description:
+      'ID of the baseline experiment. Must be one of `experimentIds`. Defaults to the first ID in `experimentIds`.',
   },
 ]}
 />
 
 ## Returns
 
-Throws `MastraError` if fewer than 2 experiment IDs are provided.
+Throws a `MastraError` with ID `COMPARE_INVALID_INPUT` when:
+
+- `experimentIds` contains fewer than 2 distinct IDs.
+- `baselineId` isn't one of `experimentIds`. Earlier versions silently ignored an unknown `baselineId`.
 
 <PropertiesTable
   content={[
@@ -103,7 +110,7 @@ Throws `MastraError` if fewer than 2 experiment IDs are provided.
                     name: 'results',
                     type: 'Record<string, { output: unknown; scores: Record<string, number | null> } | null>',
                     description:
-                      'Results keyed by experiment ID. Each entry contains the output and scorer results for that experiment.',
+                      'Results keyed by experiment ID, with an entry for every experiment in `experimentIds`. Each entry contains the output and scorer results for that experiment, or `null` when that experiment did not run the item.',
                   },
                 ],
               },
@@ -115,6 +122,10 @@ Throws `MastraError` if fewer than 2 experiment IDs are provided.
   },
 ]}
 />
+
+## HTTP route
+
+`POST /api/datasets/:datasetId/compare` calls this method. The route accepts between 2 and 10 IDs in `experimentIds`. It also still accepts the deprecated `{ experimentIdA, experimentIdB }` body, which compares the two experiments with `experimentIdA` as the baseline.
 
 ## Related
 

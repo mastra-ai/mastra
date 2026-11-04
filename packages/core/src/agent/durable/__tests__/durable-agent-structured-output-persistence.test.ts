@@ -1,0 +1,227 @@
+/**
+ * Durable and evented agents must persist `metadata.structuredOutput` on the saved
+ * assistant message, as plain `Agent` does (issue #26432).
+ */
+
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
+import { InMemoryStore } from '../../../storage/mock';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
+
+const THREAD = 'structured-output-thread';
+const RESOURCE = 'structured-output-resource';
+const schema = z.object({ name: z.string(), age: z.number() });
+const expected = { name: 'Alice', age: 30 };
+
+function createJsonModel(text: string, finishReason: 'stop' | 'length' | 'content-filter' = 'stop') {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: text },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason, usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  });
+}
+
+type Engine = 'plain' | 'durable' | 'evented';
+
+async function runAndRecall(
+  engine: Engine,
+  structuredOutput: Record<string, unknown>,
+  text: string,
+  finishReason?: 'stop' | 'length' | 'content-filter',
+) {
+  const memory = new MockMemory();
+  const agent = new Agent({
+    id: `so-persist-${engine}`,
+    name: 'Structured Output Persistence Agent',
+    instructions: 'Return the person',
+    model: createJsonModel(text, finishReason) as LanguageModelV2,
+    memory,
+  });
+  const wrapper =
+    engine === 'durable'
+      ? createDurableAgent({ agent, pubsub: new EventEmitterPubSub() })
+      : engine === 'evented'
+        ? createEventedAgent({ agent })
+        : agent;
+  new Mastra({ agents: { [agent.id]: wrapper }, storage: new InMemoryStore(), logger: false });
+
+  const result = await wrapper.stream('Who is it?', {
+    structuredOutput: structuredOutput as any,
+    memory: { thread: THREAD, resource: RESOURCE },
+  });
+  const output = 'output' in result ? result.output : result;
+  // Schema validation failures reject getFullOutput(); persistence still runs.
+  const object = await output
+    .getFullOutput()
+    .then(full => full.object)
+    .catch(() => undefined);
+  if ('cleanup' in result) result.cleanup();
+
+  const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+  const assistant = messages.findLast(m => m.role === 'assistant');
+  return { object, metadata: assistant?.content.metadata };
+}
+
+describe('structured output persistence (issue #26432)', () => {
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'saves metadata.structuredOutput on the assistant message (%s)',
+    async engine => {
+      const { object, metadata } = await runAndRecall(engine, { schema }, JSON.stringify(expected));
+
+      expect(object).toEqual(expected);
+      expect(metadata?.structuredOutput).toEqual(expected);
+    },
+  );
+
+  it.each(['durable', 'evented'] as const)(
+    'does not save structuredOutput when validation fails (%s)',
+    async engine => {
+      const { metadata } = await runAndRecall(engine, { schema }, JSON.stringify({ name: 'Alice' }));
+
+      expect(metadata).toBeDefined();
+      expect(metadata?.structuredOutput).toBeUndefined();
+    },
+  );
+
+  // The caller rejects truncated output even when the partial text parses, so nothing is saved.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'does not save structuredOutput when the model output was truncated (%s)',
+    async engine => {
+      const { object, metadata } = await runAndRecall(engine, { schema }, JSON.stringify(expected), 'length');
+
+      expect(object).toBeUndefined();
+      expect(metadata?.structuredOutput).toBeUndefined();
+    },
+  );
+
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'saves the fallbackValue when validation fails with errorStrategy fallback (%s)',
+    async engine => {
+      const fallbackValue = { name: 'Fallback', age: 1 };
+      const { object, metadata } = await runAndRecall(
+        engine,
+        { schema, errorStrategy: 'fallback', fallbackValue },
+        JSON.stringify({ name: 'Alice' }),
+      );
+
+      expect(object).toEqual(fallbackValue);
+      expect(metadata?.structuredOutput).toEqual(fallbackValue);
+    },
+  );
+
+  // The caller routes truncation through errorStrategy, so a fallback config returns and saves fallbackValue.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'saves the fallbackValue when truncated output uses errorStrategy fallback (%s)',
+    async engine => {
+      const fallbackValue = { name: 'Fallback', age: 1 };
+      const { object, metadata } = await runAndRecall(
+        engine,
+        { schema, errorStrategy: 'fallback', fallbackValue },
+        JSON.stringify(expected),
+        'length',
+      );
+
+      expect(object).toEqual(fallbackValue);
+      expect(metadata?.structuredOutput).toEqual(fallbackValue);
+    },
+  );
+
+  // Refinements and transforms do not survive the JSON Schema conversion, so in-process
+  // runs must validate with the live schema to match the object returned to the caller.
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'applies live-schema refinements and transforms (%s)',
+    async engine => {
+      const liveSchema = z.object({
+        name: z.string().transform(name => name.toUpperCase()),
+        age: z.number().refine(age => age >= 18),
+      });
+
+      const saved = await runAndRecall(engine, { schema: liveSchema }, JSON.stringify(expected));
+      expect(saved.object).toEqual({ name: 'ALICE', age: 30 });
+      expect(saved.metadata?.structuredOutput).toEqual({ name: 'ALICE', age: 30 });
+
+      const rejected = await runAndRecall(engine, { schema: liveSchema }, JSON.stringify({ name: 'Bob', age: 12 }));
+      expect(rejected.metadata?.structuredOutput).toBeUndefined();
+    },
+  );
+
+  // With `structuredOutput.model`, the main model answers in prose and a separate
+  // structuring model produces the object (#26431).
+  it.each(['plain', 'durable'] as const)('runs the structuring model and saves its object (%s)', async engine => {
+    const structuringModel = createJsonModel(JSON.stringify(expected));
+    const { object, metadata } = await runAndRecall(
+      engine,
+      { schema, model: structuringModel },
+      'It is Alice, who is 30 years old.',
+    );
+
+    expect(structuringModel.doStreamCalls).toHaveLength(1);
+    expect(object).toEqual(expected);
+    expect(metadata?.structuredOutput).toEqual(expected);
+  });
+});
+
+describe('durable structuring model (#26431)', () => {
+  it('fails the run when the structuring pass fails under errorStrategy strict', async () => {
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'so-strict-durable',
+      name: 'Structured Output Strict Agent',
+      instructions: 'Return the person',
+      model: createJsonModel('It is Alice, who is 30 years old.') as LanguageModelV2,
+      memory,
+    });
+    const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    new Mastra({ agents: { [agent.id]: durable }, storage: new InMemoryStore(), logger: false });
+
+    const result = await durable.stream('Who is it?', {
+      structuredOutput: { schema, model: createJsonModel('not json') as LanguageModelV2 },
+      memory: { thread: THREAD, resource: RESOURCE },
+    });
+    const outcome = await result.output.getFullOutput().then(
+      full => ({ object: full.object, error: full.error }),
+      error => ({ object: undefined, error }),
+    );
+    result.cleanup();
+
+    expect(outcome.object).toBeUndefined();
+    expect(outcome.error).toBeDefined();
+  });
+
+  it('persists a model-instance structuring model so other workers can resolve it', async () => {
+    const agent = new Agent({
+      id: 'so-model-instance',
+      name: 'Structured Output Model Instance Agent',
+      instructions: 'Return the person',
+      model: createJsonModel('Alice') as LanguageModelV2,
+    });
+    const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+
+    const prepared = await durable.prepare('Who is it?', {
+      structuredOutput: { schema, model: createJsonModel('{}') as LanguageModelV2 },
+    });
+
+    const so = (prepared.workflowInput as any).options.structuredOutput;
+    expect(so.structuringModelConfig).toMatchObject({
+      provider: 'mock-provider',
+      modelId: 'mock-model-id',
+      originalConfig: 'mock-provider/mock-model-id',
+    });
+  });
+});

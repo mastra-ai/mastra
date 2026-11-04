@@ -128,45 +128,51 @@ function defaultCreateProvider(provider: string, environment: NodeJS.ProcessEnv)
   });
 }
 
-function parseDate(value: string, option: '--from' | '--to'): number {
+function parseDate(value: string, option: '--since' | '--until'): number {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) throw new Error(`${option} must be a valid ISO 8601 date or timestamp.`);
   return timestamp;
 }
 
+/** `--since`/`--until` are the public names; `--from`/`--to` remain as hidden aliases. */
+function windowOptions(options: Pick<TraceImportCommandOptions, 'since' | 'until' | 'from' | 'to'>) {
+  return { since: options.since ?? options.from, until: options.until ?? options.to };
+}
+
 export function resolveTraceImportWindow(
-  options: Pick<TraceImportCommandOptions, 'from' | 'to'>,
+  options: Pick<TraceImportCommandOptions, 'since' | 'until' | 'from' | 'to'>,
   now = new Date(),
 ): TraceImportWindow {
+  const { since, until } = windowOptions(options);
   const nowMs = now.getTime();
   const retentionStartMs = nowMs - DEFAULT_WINDOW_MS;
-  const snapshotMs = options.to ? parseDate(options.to, '--to') : nowMs;
-  const cutoffMs = options.from
-    ? parseDate(options.from, '--from')
-    : Math.max(snapshotMs - DEFAULT_WINDOW_MS, retentionStartMs);
+  const snapshotMs = until ? parseDate(until, '--until') : nowMs;
+  const cutoffMs = since ? parseDate(since, '--since') : Math.max(snapshotMs - DEFAULT_WINDOW_MS, retentionStartMs);
 
-  if (snapshotMs > nowMs) throw new Error('--to cannot be in the future.');
+  if (snapshotMs > nowMs) throw new Error('--until cannot be in the future.');
   if (snapshotMs <= retentionStartMs) {
-    throw new Error('--to must be within the last 30 days because older Platform telemetry is not retained.');
+    throw new Error('--until must be within the last 30 days because older Platform telemetry is not retained.');
   }
-  if (cutoffMs >= snapshotMs) throw new Error('--from must be earlier than --to.');
+  if (cutoffMs >= snapshotMs) throw new Error('--since must be earlier than --until.');
   if (snapshotMs - cutoffMs > DEFAULT_WINDOW_MS) {
     throw new Error('The trace import window cannot exceed 30 days.');
   }
   if (cutoffMs < retentionStartMs) {
-    throw new Error('--from must be within the last 30 days because older Platform telemetry is not retained.');
+    throw new Error('--since must be within the last 30 days because older Platform telemetry is not retained.');
   }
 
   return { cutoffAt: new Date(cutoffMs).toISOString(), snapshotAt: new Date(snapshotMs).toISOString() };
 }
 
-function resumeCommand(manifest: TraceImportManifest): string {
-  return `mastra traces import ${manifest.source.provider} --resume ${manifest.importId} --project ${manifest.targetProjectId}`;
+/** Echo the project the way the user named it, so the printed command reads like the one they typed. */
+function resumeCommand(manifest: TraceImportManifest, project: string): string {
+  const quoted = /[^A-Za-z0-9_.-]/.test(project) ? JSON.stringify(project) : project;
+  return `mastra traces import ${manifest.source.provider} --resume ${manifest.importId} --target-project ${quoted}`;
 }
 
-function resumableError(cause: unknown, manifest: TraceImportManifest): Error {
+function resumableError(cause: unknown, manifest: TraceImportManifest, project: string): Error {
   const message = cause instanceof Error ? cause.message : 'Trace import failed.';
-  return new Error(`${message}\nResume with:\n${resumeCommand(manifest)}`, { cause });
+  return new Error(`${message}\nResume with:\n${resumeCommand(manifest, project)}`, { cause });
 }
 
 function formatBytes(bytes: number): string {
@@ -181,11 +187,17 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
 }
 
+function providerLabel(provider: string): string {
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
 function preparationSummary(manifest: TraceImportManifest, destination: PlatformDestination): string {
+  const { source } = manifest;
+  const sourceProject = source.projectName ? `"${source.projectName}" (${source.projectId})` : source.projectId;
   return [
     `Import ID:       ${manifest.importId}`,
-    `Source project:  ${manifest.source.projectId}`,
-    `Target project:  ${destination.projectName} (${manifest.targetProjectId})`,
+    `Source:          ${providerLabel(source.provider)} project ${sourceProject} at ${source.baseUrl}`,
+    `Target:          Mastra Platform project "${destination.projectName}" (${manifest.targetProjectId})`,
     `Window:          ${manifest.window.cutoffAt} to ${manifest.window.snapshotAt}`,
     `Prepared:        ${manifest.counts.preparedTraces} traces / ${manifest.counts.preparedSpans} spans`,
     `Skipped:         ${manifest.counts.skippedTraces} traces / ${manifest.counts.skippedSpans} spans`,
@@ -198,6 +210,7 @@ async function prepareNewImport(options: {
   provider: TraceImportProvider;
   destination: PlatformDestination;
   window: TraceImportWindow;
+  projectLabel: string;
   stateRoot?: string;
   signal?: AbortSignal;
 }): Promise<{ directory: string; manifest: TraceImportManifest }> {
@@ -221,7 +234,7 @@ async function prepareNewImport(options: {
       }),
     };
   } catch (cause) {
-    throw resumableError(cause, state.manifest);
+    throw resumableError(cause, state.manifest, options.projectLabel);
   }
 }
 
@@ -229,6 +242,7 @@ async function resumeImport(options: {
   importId: string;
   providerName: string;
   destination: PlatformDestination;
+  projectLabel: string;
   environment: NodeJS.ProcessEnv;
   stateRoot?: string;
   signal?: AbortSignal;
@@ -254,7 +268,7 @@ async function resumeImport(options: {
     try {
       manifest = await prepareTraceImport({ directory, provider, signal: options.signal });
     } catch (cause) {
-      throw resumableError(cause, manifest);
+      throw resumableError(cause, manifest, options.projectLabel);
     }
   }
   return { directory, manifest };
@@ -264,8 +278,9 @@ export async function runTraceImport(
   options: RunTraceImportOptions,
   dependencies: TraceImportActionDependencies = {},
 ): Promise<TraceImportActionResult> {
-  if (options.resume && (options.from || options.to)) {
-    throw new Error('--from and --to cannot be changed while resuming an import.');
+  const { since, until } = windowOptions(options);
+  if (options.resume && (since || until)) {
+    throw new Error('--since and --until cannot be changed while resuming an import.');
   }
   if (options.resume && options.dryRun) {
     throw new Error('--dry-run cannot be combined with --resume.');
@@ -280,7 +295,10 @@ export async function runTraceImport(
 
   ui.intro('Mastra trace import');
   ui.step('Resolving Mastra Platform project');
-  const destination = await resolveDestination(options.project, environment);
+  const requestedProject = options.targetProject ?? options.project;
+  const destination = await resolveDestination(requestedProject, environment);
+  // Echo what the user typed; with no flag, the ID is the only value guaranteed to resolve to this project.
+  const projectLabel = requestedProject ?? destination.projectId;
   options.signal?.throwIfAborted();
 
   let state: { directory: string; manifest: TraceImportManifest };
@@ -290,6 +308,7 @@ export async function runTraceImport(
       importId: options.resume,
       providerName: options.provider,
       destination,
+      projectLabel,
       environment,
       stateRoot: dependencies.stateRoot,
       signal: options.signal,
@@ -303,6 +322,7 @@ export async function runTraceImport(
       provider,
       destination,
       window: resolveTraceImportWindow(options, dependencies.now?.() ?? new Date()),
+      projectLabel,
       stateRoot: dependencies.stateRoot,
       signal: options.signal,
     });
@@ -315,7 +335,7 @@ export async function runTraceImport(
 
   if (options.dryRun) {
     const report = await writeTraceImportReport(state.directory, state.manifest);
-    ui.outro(`Dry run complete. Upload later with:\n${resumeCommand(state.manifest)}`);
+    ui.outro(`Dry run complete. Upload later with:\n${resumeCommand(state.manifest, projectLabel)}`);
     return { status: 'dry-run', report };
   }
 
@@ -333,7 +353,7 @@ export async function runTraceImport(
     const shouldUpload = options.yes || (await ui.confirm('Upload these traces to Mastra Platform?'));
     if (!shouldUpload) {
       const report = await writeTraceImportReport(state.directory, state.manifest);
-      ui.cancel(`Upload cancelled. Resume later with:\n${resumeCommand(state.manifest)}`);
+      ui.cancel(`Upload cancelled. Resume later with:\n${resumeCommand(state.manifest, projectLabel)}`);
       return { status: 'cancelled', report };
     }
   }
@@ -355,7 +375,7 @@ export async function runTraceImport(
       try {
         state.manifest = await uploadTraceImport({ directory: state.directory, target, signal: options.signal });
       } catch (cause) {
-        throw resumableError(cause, state.manifest);
+        throw resumableError(cause, state.manifest, projectLabel);
       }
     }
   }
@@ -365,11 +385,11 @@ export async function runTraceImport(
   try {
     report = await verifyImport({ directory: state.directory, verifier, signal: options.signal });
   } catch (cause) {
-    throw resumableError(cause, state.manifest);
+    throw resumableError(cause, state.manifest, projectLabel);
   }
   if (report.phase !== 'complete') {
     ui.warn(`Verification ${report.verification.status}. Prepared data was kept for another attempt.`);
-    ui.outro(`Resume with:\n${resumeCommand(state.manifest)}`);
+    ui.outro(`Resume with:\n${resumeCommand(state.manifest, projectLabel)}`);
     return { status: 'paused', report };
   }
 

@@ -832,7 +832,7 @@ describe('handleGoalCommand', () => {
     promptMocks.cyclesSubmitHandler?.(25);
     await promise;
 
-    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state, 'anthropic/claude-sonnet-4-5', 25);
+    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state.local, 'anthropic/claude-sonnet-4-5', 25);
     expect(showInfo).toHaveBeenCalledWith(
       'Judge defaults set: anthropic/claude-sonnet-4-5, 25 max attempts. Current goal updated.',
     );
@@ -868,7 +868,7 @@ describe('handleGoalCommand', () => {
     promptMocks.cyclesSubmitHandler?.(25);
     await promise;
 
-    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state, 'anthropic/claude-sonnet-4-5', 25);
+    expect(goalManager.updateJudgeDefaults).toHaveBeenCalledWith(ctx.state.local, 'anthropic/claude-sonnet-4-5', 25);
   });
 
   it('does not resume a completed goal', async () => {
@@ -900,7 +900,7 @@ describe('handleGoalCommand', () => {
     expect(sendSignal).not.toHaveBeenCalled();
   });
 
-  it('clears planStartedGoalId when /goal clear is called', async () => {
+  it('clears and deletes the goal when /goal clear is called while idle', async () => {
     const goalManager = {
       clear: vi.fn(),
       saveToThread: vi.fn(),
@@ -911,7 +911,6 @@ describe('handleGoalCommand', () => {
       session: { abort, run: { isRunning: vi.fn(() => false) }, suspensions: { hasPending: vi.fn(() => false) } },
       extra: {
         goalManager,
-        planStartedGoalId: 'plan-goal-123',
         pendingInlineQuestions: [],
         pendingAskUserComponents: new Map(),
       },
@@ -928,9 +927,8 @@ describe('handleGoalCommand', () => {
     expect(goalManager.clear).toHaveBeenCalled();
     // Deletion is a verb of its own: an explicit clear must ask for it, and a
     // save must never be what removes the goal.
-    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state.local);
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBeUndefined();
     expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
     // Not running → must not abort.
     expect(abort).not.toHaveBeenCalled();
@@ -999,7 +997,6 @@ describe('handleGoalCommand', () => {
     }) as any;
     await goalManager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
     const goalId = goalManager.getGoal()?.id;
-    state.planStartedGoalId = goalId;
     storageDown = true;
     const showInfo = vi.fn();
     const showError = vi.fn();
@@ -1011,7 +1008,6 @@ describe('handleGoalCommand', () => {
     expect(showInfo).not.toHaveBeenCalledWith('Goal cleared.');
     expect(abort).not.toHaveBeenCalled();
     expect(goalId).toBeDefined();
-    expect(state.planStartedGoalId).toBe(goalId);
   });
 
   it('reports /goal clear as done when the retry on reload succeeds', async () => {
@@ -1064,7 +1060,6 @@ describe('handleGoalCommand', () => {
       session: { abort, run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
       extra: {
         goalManager,
-        planStartedGoalId: undefined,
         activeInlineQuestion: {},
         pendingInlineQuestions: [() => {}],
         pendingAskUserComponents: new Map([['t', {}]]),
@@ -1079,56 +1074,12 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['clear']);
 
     expect(goalManager.clear).toHaveBeenCalled();
-    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state);
+    expect(goalManager.deleteFromThread).toHaveBeenCalledWith(state.local);
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(abort).toHaveBeenCalledTimes(1);
     expect((state as any).userInitiatedAbort).toBe(true);
     expect(state.activeInlineQuestion).toBeUndefined();
     expect(state.pendingInlineQuestions).toHaveLength(0);
     expect((state.pendingAskUserComponents as Map<string, unknown>).size).toBe(0);
-  });
-
-  it('clears planStartedGoalId when starting a new manual goal', async () => {
-    const goal = {
-      id: 'manual-goal-456',
-      objective: 'new manual objective',
-      status: 'active' as const,
-      turnsUsed: 0,
-      maxTurns: 50,
-      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-      startedAt: new Date().toISOString(),
-    };
-    const goalManager = {
-      getGoal: vi.fn(() => null),
-      setGoal: vi.fn(() => goal),
-      persistOnNextThreadCreate: vi.fn(),
-      saveToThread: vi.fn().mockResolvedValue(undefined),
-    };
-    const sendSignal = vi.fn().mockResolvedValue({ accepted: Promise.resolve() });
-    const state = createMockState({
-      threadId: 'thread-1',
-      session: { model: { get: vi.fn(() => '__GATEWAY_OPENAI_MODEL__') }, sendSignal },
-      controller: { listAvailableModels: vi.fn().mockResolvedValue([{ id: '__GATEWAY_OPENAI_MODEL__' }]) },
-      extra: { goalManager, planStartedGoalId: 'plan-goal-xyz' },
-    }) as any;
-    const showInfo = vi.fn();
-    const showError = vi.fn();
-    const ctx = {
-      state,
-      addUserMessage: vi.fn(),
-      showInfo,
-      showError,
-      updateStatusLine: vi.fn(),
-    } as any;
-
-    await handleGoalCommand(ctx, ['new', 'manual', 'objective']);
-
-    expect(goalManager.setGoal).toHaveBeenCalledWith(
-      state,
-      'new manual objective',
-      expect.any(String),
-      expect.any(Number),
-    );
-    expect(state.planStartedGoalId).toBeUndefined();
   });
 });

@@ -57,7 +57,7 @@ constructor(options: MastraServerOptions<TApp>)
     type: 'string',
     description: 'Route path prefix (e.g., `/api/v2`)',
     isOptional: true,
-    defaultValue: "''",
+    defaultValue: "'/api'",
   },
   {
     name: 'openapiPath',
@@ -155,7 +155,7 @@ abstract getParams(
   request: TRequest
 ): Promise<{
   urlParams: Record<string, string>;
-  queryParams: Record<string, string>;
+  queryParams: Record<string, string | string[]>;
   body: unknown;
 }>
 ```

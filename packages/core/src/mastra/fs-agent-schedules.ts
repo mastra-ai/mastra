@@ -13,7 +13,7 @@ import { FS_AGENT_SCHEDULE_PREFIX, fsAgentScheduleRowId, parseFsAgentScheduleRow
 import type { AgentScheduleDefinition, AgentScheduleHandler, DeclaredAgentSchedule } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
-import { computeNextFireAt } from '../workflows/scheduler';
+import { computeNextFire } from '../workflows/scheduler/cron';
 
 /**
  * Mastra's registered agent map: registration key to agent. The key is not the
@@ -184,14 +184,26 @@ export async function syncFsAgentSchedules({
       const target = buildTarget(agentId, definition);
       const existing = rowsById.get(scheduleId);
 
+      // A declared cadence can outlive its final occurrence (e.g. a year-pinned
+      // cron that has already passed). Register the row as `completed` rather
+      // than skipping it, so boot stays self-consistent.
+      const computeTiming = () => {
+        const next = computeNextFire({ cron: definition.cron, timezone: definition.timezone, nextFireAt: now }, now);
+        return {
+          nextFireAt: next.nextFireAt,
+          status: next.completed ? 'completed' : (definition.status ?? 'active'),
+        } as const;
+      };
+
       if (!existing) {
+        const timing = computeTiming();
         await store.createSchedule({
           id: scheduleId,
           target,
           cron: definition.cron,
           timezone: definition.timezone,
-          status: definition.status ?? 'active',
-          nextFireAt: computeNextFireAt(definition.cron, { timezone: definition.timezone, after: now }),
+          status: timing.status,
+          nextFireAt: timing.nextFireAt,
           createdAt: now,
           updatedAt: now,
           metadata: definition.metadata,
@@ -211,9 +223,13 @@ export async function syncFsAgentSchedules({
       if (!metadataEqual(existing.metadata, definition.metadata)) patch.metadata = definition.metadata;
 
       // Cron or timezone change invalidates the stored nextFireAt — recompute
-      // from now so we don't fire on the old schedule.
+      // from now so we don't fire on the old schedule. An exhausted cadence
+      // completes the row; a live one re-arms a completed row.
       if (cronChanged || timezoneChanged) {
-        patch.nextFireAt = computeNextFireAt(definition.cron, { timezone: definition.timezone, after: now });
+        const timing = computeTiming();
+        patch.nextFireAt = timing.nextFireAt;
+        if (timing.status === 'completed') patch.status = 'completed';
+        else if (existing.status === 'completed') patch.status = 'active';
       }
 
       if (Object.keys(patch).length > 0) {

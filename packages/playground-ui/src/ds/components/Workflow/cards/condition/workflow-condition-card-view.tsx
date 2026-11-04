@@ -39,13 +39,13 @@ export function WorkflowConditionCardView({
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
     >
       <div className="flex h-[46px] items-center gap-2 px-2.5 text-meta text-muted-foreground">
-        <Badge size="xs" variant={type === 'else' ? 'neutral' : 'yellow'} emphasis="subtle" icon={<Icon aria-hidden />}>
+        <Badge size="xs" variant={type === 'else' ? 'neutral' : 'amber'} emphasis="subtle" icon={<Icon aria-hidden />}>
           {label}
         </Badge>
         {hasExpression && (
           <>
             <span className="ml-auto">Expression</span>
-            <CopyButton content={copyContent} tooltip="Copy expression" size="sm" className="nodrag nopan" />
+            <CopyButton content={copyContent} tooltip="Copy expression" className="nodrag nopan" />
           </>
         )}
       </div>

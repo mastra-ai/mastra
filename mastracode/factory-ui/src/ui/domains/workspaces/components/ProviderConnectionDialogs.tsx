@@ -3,6 +3,11 @@ import { AddApiKeyDialog } from '../../settings/components/AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../settings/components/ProviderOAuthDialog';
 import type { ActiveProviderOAuth, ProviderCredentialScope } from '../hooks/useProviderConnection';
 
+const SCOPED_SIGN_IN_ACCESS: Record<ProviderCredentialScope, string> = {
+  org: 'Everyone in your organization can use this provider connection.',
+  user: 'This provider connection is only for you. Shared organization access stays unchanged.',
+};
+
 export interface ProviderConnectionDialogsProps {
   keyProvider?: ProviderInfo;
   oauth?: ActiveProviderOAuth;
@@ -23,6 +28,9 @@ export function ProviderConnectionDialogs({
   onCloseOAuth,
   onCompleteOAuth,
 }: ProviderConnectionDialogsProps) {
+  const replacementNotice = oauth?.replaces
+    ? ' Completing sign-in replaces the existing connection for this provider at this scope.'
+    : '';
   return (
     <>
       {keyProvider && (
@@ -39,6 +47,7 @@ export function ProviderConnectionDialogs({
         <ProviderOAuthDialog
           provider={oauth.provider}
           session={oauth.session}
+          scopeNotice={authEnabled && fixedScope ? SCOPED_SIGN_IN_ACCESS[fixedScope] + replacementNotice : undefined}
           onClose={onCloseOAuth}
           onComplete={onCompleteOAuth}
         />

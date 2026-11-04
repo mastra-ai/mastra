@@ -1,0 +1,39 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Print the preview lines fixture.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_preview_lines_shell",
+            "name": "execute_command",
+            "arguments": {
+              "command": "printf 'preview-line-1\\npreview-line-2\\npreview-line-3\\npreview-line-4\\npreview-line-5\\npreview-line-6\\n'",
+              "description": "Printing six preview lines",
+              "timeout": 10,
+              "cwd": null,
+              "tail": 40,
+              "background": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_preview_lines_shell"
+      },
+      "response": {
+        "content": "Preview lines fixture complete."
+      }
+    }
+  ]
+}

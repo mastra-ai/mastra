@@ -17,15 +17,15 @@ export type FieldBlockErrorMsgProps = {
 export function FieldBlockErrorMsg({ children, name, className }: FieldBlockErrorMsgProps) {
   return (
     <Txt
-      variant="caption"
+      variant="body-sm"
       // `role="alert"` lives here rather than in a wrapper at every call site, so an
       // error announces itself wherever it is used instead of depending on each caller
       // remembering to wrap it.
       role="alert"
       id={name !== undefined ? `error-${name}` : undefined}
-      className={cn('flex gap-1 text-destructive-indicator', className)}
+      className={cn('flex gap-1 text-destructive-foreground', className)}
     >
-      <Icon size="xs" className="mt-0.75 shrink-0" aria-hidden>
+      <Icon size="xs" className="mt-1 shrink-0" aria-hidden>
         <CircleAlertIcon />
       </Icon>
       <span>{children}</span>

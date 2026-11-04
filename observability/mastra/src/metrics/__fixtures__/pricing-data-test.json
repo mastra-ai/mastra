@@ -1,0 +1,338 @@
+{
+  "openai": {
+    "models": {
+      "gpt-4o-mini": {
+        "cost": {
+          "cache_read": 0.075,
+          "input": 0.15,
+          "output": 0.6
+        }
+      },
+      "gpt-5-6": {
+        "cost": {
+          "input": 4,
+          "output": 20,
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "tiers": [
+            {
+              "input": 8,
+              "output": 30,
+              "cache_read": 0.8,
+              "cache_write": 10,
+              "tier": {
+                "type": "context",
+                "size": 272000
+              }
+            }
+          ]
+        }
+      },
+      "gpt-5-6-luna": {
+        "cost": {
+          "input": 0.2,
+          "output": 1.2,
+          "cache_read": 0.02,
+          "cache_write": 0.25,
+          "tiers": [
+            {
+              "input": 0.4,
+              "output": 1.8,
+              "cache_read": 0.04,
+              "cache_write": 0.5,
+              "tier": {
+                "type": "context",
+                "size": 272000
+              }
+            }
+          ]
+        }
+      },
+      "gpt-5-6-sol": {
+        "cost": {
+          "input": 4,
+          "output": 20,
+          "cache_read": 0.4,
+          "cache_write": 5,
+          "tiers": [
+            {
+              "input": 8,
+              "output": 30,
+              "cache_read": 0.8,
+              "cache_write": 10,
+              "tier": {
+                "type": "context",
+                "size": 272000
+              }
+            }
+          ]
+        }
+      },
+      "gpt-5-6-terra": {
+        "cost": {
+          "input": 2,
+          "output": 12,
+          "cache_read": 0.2,
+          "cache_write": 2.5,
+          "tiers": [
+            {
+              "input": 4,
+              "output": 18,
+              "cache_read": 0.4,
+              "cache_write": 5,
+              "tier": {
+                "type": "context",
+                "size": 272000
+              }
+            }
+          ]
+        }
+      },
+      "gpt-6-luna": {
+        "cost": {
+          "input": 0.1,
+          "output": 0.5,
+          "cache_read": 0.01,
+          "cache_write": 0.125,
+          "tiers": [
+            {
+              "input": 0.2,
+              "output": 0.75,
+              "cache_read": 0.02,
+              "cache_write": 0.25,
+              "tier": {
+                "type": "context",
+                "size": 272000
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "google": {
+    "models": {
+      "gemini-2-0-flash": {
+        "cost": {
+          "cache_read": 0.025,
+          "input": 0.1,
+          "output": 0.4
+        }
+      },
+      "gemini-2-5-pro": {
+        "cost": {
+          "cache_read": 0.125,
+          "input": 1.25,
+          "output": 10,
+          "tiers": [
+            {
+              "cache_read": 0.25,
+              "input": 2.5,
+              "output": 15,
+              "tier": {
+                "type": "context",
+                "size": 200000
+              }
+            }
+          ]
+        }
+      },
+      "gemini-3-5-flash": {
+        "cost": {
+          "input": 1.5,
+          "output": 9,
+          "cache_read": 0.15,
+          "input_audio": 1.5
+        }
+      }
+    }
+  },
+  "google-vertex": {
+    "models": {
+      "gemini-2-0-flash": {
+        "cost": {
+          "cache_read": 0.025,
+          "input": 0.15,
+          "output": 0.6
+        }
+      },
+      "deepseek-ai-deepseek-v3-1-maas": {
+        "cost": {
+          "input": 0.6,
+          "output": 1.7
+        }
+      }
+    }
+  },
+  "google-vertex-anthropic": {
+    "models": {
+      "claude-sonnet-4-5": {
+        "cost": {
+          "cache_read": 0.3,
+          "cache_write": 3.75,
+          "input": 3,
+          "output": 15
+        }
+      }
+    }
+  },
+  "anthropic": {
+    "models": {
+      "claude-sonnet-4-5": {
+        "cost": {
+          "cache_read": 0.3,
+          "cache_write": 3.75,
+          "input": 3,
+          "output": 15
+        }
+      },
+      "claude-haiku-4-5": {
+        "cost": {
+          "cache_read": 0.1,
+          "cache_write": 1.25,
+          "input": 1,
+          "output": 5
+        }
+      },
+      "claude-fable-5": {
+        "cost": {
+          "input": 10,
+          "output": 50,
+          "cache_read": 1,
+          "cache_write": 12.5
+        }
+      },
+      "claude-opus-4-8": {
+        "cost": {
+          "input": 5,
+          "output": 25,
+          "cache_read": 0.5,
+          "cache_write": 6.25
+        }
+      },
+      "claude-sonnet-5": {
+        "cost": {
+          "input": 2,
+          "output": 10,
+          "cache_read": 0.2,
+          "cache_write": 2.5
+        }
+      }
+    }
+  },
+  "vercel": {
+    "models": {
+      "claude-haiku-4-5": {
+        "cost": {
+          "cache_read": 0.1,
+          "cache_write": 1.25,
+          "input": 1,
+          "output": 5
+        }
+      },
+      "amazon-nova-micro": {
+        "cost": {
+          "cache_read": 0.00875,
+          "input": 0.035,
+          "output": 0.14
+        }
+      }
+    }
+  },
+  "openrouter": {
+    "models": {
+      "xiaomi-mimo-v2-pro": {
+        "cost": {
+          "cache_read": 0.2,
+          "input": 1,
+          "output": 3
+        }
+      },
+      "gpt-5-mini": {
+        "cost": {
+          "cache_read": 0.025,
+          "input": 0.25,
+          "output": 2
+        }
+      },
+      "claude-sonnet-4-6": {
+        "cost": {
+          "cache_read": 0.3,
+          "cache_write": 3.75,
+          "input": 3,
+          "output": 15
+        }
+      },
+      "gemini-2-5-flash": {
+        "cost": {
+          "input": 1,
+          "output": 3
+        }
+      }
+    }
+  },
+  "amazon-bedrock": {
+    "models": {
+      "claude-sonnet-4-6": {
+        "cost": {
+          "cache_read": 0.33,
+          "cache_write": 4.125,
+          "input": 3.3,
+          "output": 16.5
+        }
+      },
+      "claude-sonnet-4-5": {
+        "cost": {
+          "input": 3,
+          "output": 15
+        }
+      },
+      "amazon-nova-pro": {
+        "cost": {
+          "input": 0.8,
+          "output": 3.2
+        }
+      }
+    }
+  },
+  "xai": {
+    "models": {
+      "grok-4-5": {
+        "cost": {
+          "input": 2,
+          "output": 6,
+          "cache_read": 0.3,
+          "tiers": [
+            {
+              "input": 4,
+              "output": 12,
+              "cache_read": 0.6,
+              "tier": {
+                "type": "context",
+                "size": 200000
+              }
+            }
+          ]
+        }
+      },
+      "grok-build-0-1": {
+        "cost": {
+          "input": 1,
+          "output": 2,
+          "cache_read": 0.2,
+          "tiers": [
+            {
+              "input": 2,
+              "output": 4,
+              "cache_read": 0.4,
+              "tier": {
+                "type": "context",
+                "size": 200000
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const listChannelsInputSchema = z.object({
   guild_id: z.string().describe('Guild (server) ID to list channels from. Example: "41771983423143937"'),
@@ -23,7 +24,9 @@ const ChannelSchema = z.object({
   recipients: z.array(z.unknown()).optional(),
   icon: z.string().nullable().optional(),
   owner_id: z.string().optional(),
-  application_id: z.string().optional(),
+  // Voice channels return `application_id: null` (observed live); the field
+  // is nullable in Discord's channel object.
+  application_id: z.string().nullable().optional(),
   managed: z.boolean().optional(),
   parent_id: z.string().nullable().optional(),
   last_pin_timestamp: z.string().nullable().optional(),
@@ -50,8 +53,7 @@ export function listChannelsTool(proxy: PlatformProxy) {
     outputSchema: listChannelsOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof listChannelsOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken?: string }>();
-      const botToken = metadata?.botToken;
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       if (!botToken) {
         throw new platformProxy.ActionError({

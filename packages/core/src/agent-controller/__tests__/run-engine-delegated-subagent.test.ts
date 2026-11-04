@@ -30,11 +30,13 @@ function createHarness() {
   const machinery: SessionMachinery = {
     getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
     getRunScope: () => undefined,
+    releaseSuspendedRun: async () => {},
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these stream-folding tests');
     },
     buildStreamOptions: async () => ({}),
     buildSharedRunOptions: () => ({}),
+    resolveModeActiveTools: () => undefined,
     buildToolsets: async () => ({}),
     buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
     persistTokenUsage: vi.fn(async () => {}),

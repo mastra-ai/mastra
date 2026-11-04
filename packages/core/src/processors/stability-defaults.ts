@@ -1,6 +1,7 @@
 import { PrefillErrorHandler } from './prefill-error-handler';
 import { ProviderHistoryCompat } from './provider-history-compat';
 import { isBadRequestError, StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import { UnsupportedFileHandler } from './unsupported-file-handler';
 import type { ErrorProcessorOrWorkflow } from './index';
 
 /**
@@ -35,10 +36,35 @@ export function isECONNRESETError(error: unknown): boolean {
 }
 
 /**
+ * Retry policy for Gemini `MALFORMED_FUNCTION_CALL` finishes. The failure is
+ * model-side and intermittent rather than load-related, so the backoff is
+ * shorter than the connection-reset policy.
+ */
+export const MALFORMED_FUNCTION_CALL_MAX_RETRIES = 2;
+export const MALFORMED_FUNCTION_CALL_RETRY_INITIAL_DELAY_MS = 500;
+export const MALFORMED_FUNCTION_CALL_RETRY_MAX_DELAY_MS = 4000;
+
+/**
+ * Matcher for Gemini's `MALFORMED_FUNCTION_CALL` finish reason. Gemini returns
+ * it with HTTP 200 and the AI SDK maps it to finish reason `error`, so the loop
+ * surfaces it as a synthetic `AGENT_STREAM_ERROR` carrying
+ * `details.rawFinishReason`. No tool runs on that step, so resending it
+ * unchanged cannot repeat a side effect.
+ */
+export function isMalformedFunctionCallError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { id, details } = error as { id?: unknown; details?: unknown };
+  if (id !== 'AGENT_STREAM_ERROR' || !details || typeof details !== 'object') return false;
+
+  return (details as { rawFinishReason?: unknown }).rawFinishReason === 'MALFORMED_FUNCTION_CALL';
+}
+
+/**
  * The ids of the default stability error processors, in their default order.
  *
  * The order is load-bearing: error processors short-circuit on the first
- * `{ retry: true }`, so the two processors that repair a request must run
+ * `{ retry: true }`, so the three processors that repair a request must run
  * **before** `stream-error-retry-processor`, whose retry matchers resend the
  * request unchanged.
  *
@@ -49,6 +75,7 @@ export function isECONNRESETError(error: unknown): boolean {
 export const STABILITY_ERROR_PROCESSOR_IDS = [
   'provider-history-compat',
   'prefill-error-handler',
+  'unsupported-file-handler',
   'stream-error-retry-processor',
 ] as const;
 
@@ -56,18 +83,20 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * Builds the default stability error processors every agent gets when the
  * caller supplies no `errorProcessors`.
  *
- * Turning these on means a plain `new Agent({...})` recovers from three
+ * Turning these on means a plain `new Agent({...})` recovers from four
  * provider-side failure classes without any caller wiring:
  *
  * - provider history incompatibilities (e.g. another provider's tool calls or
  *   reasoning content in the history);
  * - assistant-prefill rejections from Anthropic/Qwen-style models;
+ * - files the provider SDK refuses because the model doesn't read their type;
  * - transient stream/connection failures — including a bare `500`/`isRetryable`
- *   error that would otherwise surface as an empty response.
+ *   error that would otherwise surface as an empty response — and Gemini's
+ *   intermittent `MALFORMED_FUNCTION_CALL` finish reason.
  *
  * The retry processor keeps `retryUnknownErrors` off by default and carries no
  * bad-request matcher. Transient failures carry provider `isRetryable`
- * metadata or match the connection-reset matcher, so the three classes above
+ * metadata or match the connection-reset matcher, so the four classes above
  * still recover, while a deterministic failure — a rejected structured-output
  * attempt, an invalid request, a validation error — surfaces immediately
  * instead of being replayed unchanged. Most `400`s are deterministic, so the
@@ -105,6 +134,7 @@ export function defaultStabilityErrorProcessors(
   return [
     new ProviderHistoryCompat(),
     new PrefillErrorHandler(),
+    new UnsupportedFileHandler(),
     new StreamErrorRetryProcessor({
       retryUnknownErrors: options.retryUnknownErrors ?? false,
       maxRetries: 2,
@@ -116,6 +146,15 @@ export function defaultStabilityErrorProcessors(
           maxRetries: ECONNRESET_MAX_RETRIES,
           delayMs: ({ retryCount }) =>
             Math.min(ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount), ECONNRESET_RETRY_MAX_DELAY_MS),
+        },
+        {
+          match: isMalformedFunctionCallError,
+          maxRetries: MALFORMED_FUNCTION_CALL_MAX_RETRIES,
+          delayMs: ({ retryCount }) =>
+            Math.min(
+              MALFORMED_FUNCTION_CALL_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+              MALFORMED_FUNCTION_CALL_RETRY_MAX_DELAY_MS,
+            ),
         },
       ],
     }),

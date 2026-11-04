@@ -16,6 +16,7 @@ import {
   ActivitySummary,
   ActivityTrailing,
   ActivityTrigger,
+  ActivityWorkingDirectory,
 } from './activity';
 import { ArrivalScope } from '@/ds/components/Arrival';
 import { ARRIVING_CLASS } from '@/ds/tokens';
@@ -58,6 +59,12 @@ const Example = ({
 
 afterEach(cleanup);
 
+function disclosureChevron() {
+  const chevron = screen.getByTestId('disclosure').querySelector('[data-slot="disclosure-chevron"]');
+  if (!chevron) throw new Error('ActivityDisclosure rendered no chevron');
+  return chevron;
+}
+
 describe('Activity', () => {
   it('renders composed custom content and forwards semantic props', () => {
     render(<Example defaultOpen />);
@@ -79,7 +86,6 @@ describe('Activity', () => {
     expect(screen.getByTestId('icon').textContent).toBe('$');
     expect(screen.getByText('Ran command').className).toContain('truncate');
     expect(screen.getByText('pnpm test').classList).toContain('truncate');
-    expect(screen.getByText('pnpm test').classList).toContain('font-mono');
     expect(screen.getByText('2 files').className).toContain('items-center');
     expect(screen.getByText('Done').className).toContain('shrink-0');
 
@@ -93,7 +99,7 @@ describe('Activity', () => {
     const trigger = screen.getByRole('button');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('Command output')).toBeNull();
-    expect(screen.getByTestId('disclosure').firstElementChild?.className).not.toContain('rotate-90');
+    expect(disclosureChevron().classList.contains('rotate-90')).toBe(false);
   });
 
   it('manages uncontrolled expansion', () => {
@@ -103,7 +109,7 @@ describe('Activity', () => {
 
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Command output')).toBeTruthy();
-    expect(screen.getByTestId('disclosure').firstElementChild?.className).toContain('rotate-90');
+    expect(disclosureChevron().classList.contains('rotate-90')).toBe(true);
   });
 
   it('uses a focusable native button for keyboard disclosure', () => {
@@ -370,5 +376,57 @@ describe('an Activity with nothing to fold', () => {
 
     expect(screen.getByRole('button', { name: /Read/ }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('arguments')).toBeTruthy();
+  });
+});
+
+describe('ActivityDetail inside a working directory', () => {
+  function renderDetail(detail: string, directory = '/sandboxes/7b45/mastra') {
+    render(
+      <ActivityWorkingDirectory path={directory}>
+        <Activity aria-label="Read">
+          <ActivityHeader>
+            <ActivityDetail>{detail}</ActivityDetail>
+          </ActivityHeader>
+        </Activity>
+      </ActivityWorkingDirectory>,
+    );
+  }
+
+  it('reads a path inside it relative to it, as the agent refers to it', () => {
+    renderDetail('/sandboxes/7b45/mastra/packages/core/package.json');
+
+    expect(screen.getByText('packages/core/package.json')).toBeTruthy();
+  });
+
+  it('names the directory itself `.` wherever a command mentions it', () => {
+    renderDetail('cd /sandboxes/7b45/mastra && git status');
+
+    expect(screen.getByText('cd . && git status')).toBeTruthy();
+  });
+
+  it('leaves a sibling directory that only shares its name prefix untouched', () => {
+    renderDetail('/sandboxes/7b45/mastra-docs/README.md');
+
+    expect(screen.getByText('/sandboxes/7b45/mastra-docs/README.md')).toBeTruthy();
+  });
+
+  it('leaves a path or URL that only contains the directory further in untouched', () => {
+    renderDetail('cp /tmp/sandboxes/7b45/mastra/a.ts https://host.dev/sandboxes/7b45/mastra/b');
+
+    expect(
+      screen.getByText('cp /tmp/sandboxes/7b45/mastra/a.ts https://host.dev/sandboxes/7b45/mastra/b'),
+    ).toBeTruthy();
+  });
+
+  it('reads a path after a flag or inside quotes relative to it', () => {
+    renderDetail('grep --root=/sandboxes/7b45/mastra/src "/sandboxes/7b45/mastra/docs"');
+
+    expect(screen.getByText('grep --root=src "docs"')).toBeTruthy();
+  });
+
+  it('keeps every path absolute when the agent works from the filesystem root', () => {
+    renderDetail('cat /etc/hosts', '/');
+
+    expect(screen.getByText('cat /etc/hosts')).toBeTruthy();
   });
 });

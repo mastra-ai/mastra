@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type * as XyFlowReact from '@xyflow/react';

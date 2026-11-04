@@ -29,7 +29,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   window.localStorage.clear();
-  delete (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS;
+  delete window.MASTRA_REQUEST_CONTEXT_PRESETS;
 });
 
 const renderWithProviders = (ui: React.ReactNode, entityType: 'agent' | 'workflow', entityId: string) => {
@@ -54,14 +54,15 @@ const open = async (name: string) => {
 describe('RequestContextPopover', () => {
   describe('when the user saves a preset from the JSON editor', () => {
     it('persists it for the entity, toasts and closes', async () => {
-      (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS =
-        JSON.stringify({ French: { locale: 'fr' } });
+      window.MASTRA_REQUEST_CONTEXT_PRESETS = JSON.stringify({ French: { locale: 'fr' } });
       renderWithProviders(<RequestContextPopover entityType="agent" entityId={AGENT_ID} />, 'agent', AGENT_ID);
 
       await open('Request context');
-      expect(await screen.findByText('Request Context (JSON)', undefined, { timeout: 10_000 })).not.toBeNull();
+      expect(
+        await screen.findByRole('textbox', { name: 'Request Context (JSON)' }, { timeout: 10_000 }),
+      ).not.toBeNull();
 
-      fireEvent.click(screen.getByRole('combobox'));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Request Context preset' }));
       const presetOption = await screen.findByRole('option', { name: 'French' });
       fireEvent.pointerDown(presetOption, { pointerType: 'mouse' });
       fireEvent.click(presetOption, { detail: 1 });

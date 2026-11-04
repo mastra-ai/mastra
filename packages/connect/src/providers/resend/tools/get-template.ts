@@ -13,7 +13,7 @@ const ProviderResponseSchema = z
     current_version_id: z.string().optional(),
     name: z.string().optional(),
     alias: z.string().optional(),
-    from: z.string().optional(),
+    from: z.string().nullable().optional(),
     subject: z.string().optional(),
     reply_to: z.array(z.string()).nullable().optional(),
     html: z.string().optional(),

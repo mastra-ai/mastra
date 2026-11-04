@@ -53,6 +53,7 @@ import { listRefundsTool } from './tools/list-refunds.js';
 import { listSetupIntentsTool } from './tools/list-setup-intents.js';
 import { listSubscriptionsTool } from './tools/list-subscriptions.js';
 import { retrieveBalanceTool } from './tools/retrieve-balance.js';
+import { searchCustomersTool } from './tools/search-customers.js';
 import { updateCustomerTool } from './tools/update-customer.js';
 import { updateInvoiceItemTool } from './tools/update-invoice-item.js';
 import { updateInvoiceTool } from './tools/update-invoice.js';
@@ -119,6 +120,7 @@ export function createStripeTools(options?: ProviderToolsOptions) {
     stripe_list_setup_intents: listSetupIntentsTool(platformProxy),
     stripe_list_subscriptions: listSubscriptionsTool(platformProxy),
     stripe_retrieve_balance: retrieveBalanceTool(platformProxy),
+    stripe_search_customers: searchCustomersTool(platformProxy),
     stripe_update_customer: updateCustomerTool(platformProxy),
     stripe_update_invoice_item: updateInvoiceItemTool(platformProxy),
     stripe_update_invoice: updateInvoiceTool(platformProxy),

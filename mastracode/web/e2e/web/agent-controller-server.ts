@@ -8,6 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { Mastra } from '@mastra/core/mastra';
+import { MockMemory } from '@mastra/core/memory';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { MastraCompositeStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -50,6 +51,8 @@ export interface ScenarioServerOptions {
   inheritStorageFromMastra?: boolean;
   /** Validate session state through the production MastraCode state schema. */
   useMastraCodeStateSchema?: boolean;
+  /** Give the agent memory so thread messages persist, as production agents do. */
+  memory?: boolean;
 }
 
 export interface ScenarioServer {
@@ -58,6 +61,8 @@ export interface ScenarioServer {
   baseUrl: string;
   /** The workspace root dir, when `workspace: true`. */
   workspaceRoot?: string;
+  /** Simulate a server restart: drop live sessions, keep stored threads and messages. */
+  restart: () => Promise<void>;
   stop: () => Promise<void>;
 }
 
@@ -106,6 +111,7 @@ export async function startAgentControllerServer(
     browser: browserProvider = false,
     inheritStorageFromMastra = false,
     useMastraCodeStateSchema = false,
+    memory = false,
   } = options;
   const openai = createOpenAI({ apiKey: 'scenario-key', baseURL: aimockBaseUrl });
 
@@ -155,6 +161,7 @@ export async function startAgentControllerServer(
   } as any);
 
   const browser = browserProvider ? createScenarioBrowser(browserProvider) : undefined;
+  const agentMemory = memory ? new MockMemory() : undefined;
   const agent = new Agent({
     id: 'code-agent',
     name: 'code-agent',
@@ -162,6 +169,7 @@ export async function startAgentControllerServer(
     model: openai('gpt-5.4-mini'),
     tools: { ...(tools ?? {}), request_access: requestAccessTool } as any,
     ...(browser ? { browser } : {}),
+    ...(agentMemory ? { memory: agentMemory } : {}),
   });
 
   // A registered AgentController always reads storage through its parent Mastra
@@ -173,23 +181,6 @@ export async function startAgentControllerServer(
   const controllerStore = inheritStorageFromMastra
     ? undefined
     : new LibSQLStore({ id: 'scenario-controller-storage', url: 'file::memory:?cache=shared' });
-  const controller = new AgentController({
-    id: CONTROLLER_ID,
-    ...(controllerStore ? { storage: controllerStore } : {}),
-    workspace,
-    ...(useMastraCodeStateSchema ? { stateSchema: mastraCodeStateSchema } : {}),
-    // Auto-approve tool calls (yolo) so scenarios exercise the full
-    // execute-and-suspend path for built-in interactive tools (ask_user,
-    // submit_plan) without a separate approval round-trip. Disable to test the
-    // tool-approval flow.
-    initialState: { yolo },
-    modes: [
-      { id: 'build', name: 'Build', default: true, agent },
-      { id: 'plan', name: 'Plan', agent, transitionsTo: 'build' },
-    ],
-    defaultModeId: 'build',
-  });
-
   const notifications = new InMemoryNotificationsStorage();
   const compositeStorage = new MastraCompositeStore({
     id: 'scenario-storage',
@@ -200,11 +191,35 @@ export async function startAgentControllerServer(
     default: new LibSQLStore({ id: 'scenario-mastra-storage', url: 'file::memory:?cache=shared' }),
     domains: { notifications },
   });
-  const mastra = new Mastra({ agentControllers: { [CONTROLLER_ID]: controller }, storage: compositeStorage });
+  // Memory writes must land in the store the controller reads threads through.
+  agentMemory?.setStorage(compositeStorage);
+  // Everything below is process-local and rebuilt by `restart()`; the stores above survive it.
+  async function boot() {
+    const controller = new AgentController({
+      id: CONTROLLER_ID,
+      ...(controllerStore ? { storage: controllerStore } : {}),
+      workspace,
+      ...(useMastraCodeStateSchema ? { stateSchema: mastraCodeStateSchema } : {}),
+      // Auto-approve tool calls (yolo) so scenarios exercise the full
+      // execute-and-suspend path for built-in interactive tools (ask_user,
+      // submit_plan) without a separate approval round-trip. Disable to test the
+      // tool-approval flow.
+      initialState: { yolo },
+      modes: [
+        { id: 'build', name: 'Build', default: true, agent },
+        { id: 'plan', name: 'Plan', agent, transitionsTo: 'build' },
+      ],
+      defaultModeId: 'build',
+    });
 
-  const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-  const adapter = new MastraServer({ app, mastra });
-  await adapter.init();
+    const mastra = new Mastra({ agentControllers: { [CONTROLLER_ID]: controller }, storage: compositeStorage });
+
+    const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+    const adapter = new MastraServer({ app, mastra });
+    await adapter.init();
+    return app;
+  }
+  let app = await boot();
 
   const BASE = 'http://scenario.local';
   return {
@@ -214,6 +229,9 @@ export async function startAgentControllerServer(
     },
     baseUrl: BASE,
     workspaceRoot,
+    restart: async () => {
+      app = await boot();
+    },
     stop: async () => {},
   };
 }

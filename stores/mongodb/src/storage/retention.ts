@@ -1,5 +1,12 @@
 import { parseDuration } from '@mastra/core/storage';
-import type { TABLE_NAMES, PruneOptions, PruneResult, TableRetentionPolicy } from '@mastra/core/storage';
+import type {
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_NAMES,
+  TABLE_WORKFLOW_RUN_OWNERS,
+  PruneOptions,
+  PruneResult,
+  TableRetentionPolicy,
+} from '@mastra/core/storage';
 
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 
@@ -17,10 +24,13 @@ export const DEFAULT_PRUNE_BATCH_SIZE = 1000;
  */
 export type AnchorEncoding = 'date' | 'iso' | 'epoch-ms';
 
+/** Collections `prune()` can target: the core tables plus the run fencing collections. */
+export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
+
 /** One collection to prune, resolved from a policy + the domain's descriptor. */
 export interface PruneTarget {
   /** Physical collection name. */
-  table: TABLE_NAMES;
+  table: PrunableTable;
   /** Anchor field for the age comparison. */
   column: string;
   /** Stored representation of the anchor field (decides the cutoff's type). */
@@ -86,8 +96,10 @@ export function cutoffFor(policy: TableRetentionPolicy, encoding: AnchorEncoding
  * Delete up to `limit` documents whose anchor field is older than `cutoff`.
  *
  * `deleteMany` has no limit clause, so each batch first collects `_id`s with a
- * bounded `find`, then deletes exactly that set — the Mongo equivalent of the
- * SQL stores' `DELETE ... WHERE rowid/ctid IN (SELECT ... LIMIT n)` pattern.
+ * bounded `find`, then deletes that set — the Mongo equivalent of the SQL
+ * stores' `DELETE ... WHERE rowid/ctid IN (SELECT ... LIMIT n)` pattern. The
+ * delete re-checks the anchor, so a document updated after the `find` (a
+ * renewed run ownership, a touched snapshot) survives.
  */
 export async function pruneCollectionBatch({
   connector,
@@ -97,7 +109,7 @@ export async function pruneCollectionBatch({
   limit,
 }: {
   connector: MongoDBConnector;
-  table: TABLE_NAMES;
+  table: PrunableTable;
   column: string;
   cutoff: Date | string | number;
   limit: number;
@@ -109,7 +121,7 @@ export async function pruneCollectionBatch({
     .limit(limit)
     .toArray();
   if (docs.length === 0) return 0;
-  const result = await collection.deleteMany({ _id: { $in: docs.map(doc => doc._id) } });
+  const result = await collection.deleteMany({ _id: { $in: docs.map(doc => doc._id) }, [column]: { $lt: cutoff } });
   return result.deletedCount;
 }
 
@@ -251,7 +263,7 @@ export function resolveTargets({
     const entry = descriptor[key];
     if (!policy || !entry) continue;
     targets.push({
-      table: entry.table as TABLE_NAMES,
+      table: entry.table as PrunableTable,
       column: entry.column,
       encoding: encodings?.[key] ?? (entry.anchorType === 'epoch-ms' ? 'epoch-ms' : 'date'),
       indexed: entry.indexed ?? true,

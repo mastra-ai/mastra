@@ -198,10 +198,11 @@ describe('agent-loop snapshot size', () => {
     // constant factor reflects the remaining live resume-state copies:
     // each `__streamState.messageList` encodes the conversation twice
     // (`content.content` + `content.parts[].text`), and a suspension is held
-    // in the tool-call step's suspendPayload, its foreach aggregation entry,
-    // and the parent loop row. Deduplicating those is a follow-up —
-    // measured: ~7.4× vs ~33× unpruned.
-    const ceiling = rawThreadSize * 9;
+    // once in the nested run's foreach aggregation entry and once in the
+    // parent loop row — the foreach step's own mirror of that entry is not
+    // persisted. Measured: ~5.1× (was ~7.4× with the mirror, ~33× unpruned).
+    expect(fillerCopiesFirst).toBeLessThanOrEqual(4);
+    const ceiling = rawThreadSize * 6;
     expect(sizeAtFirstSuspension).toBeLessThan(ceiling);
     expect(sizeAtSecondSuspension).toBeLessThan(ceiling);
 

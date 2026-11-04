@@ -189,6 +189,17 @@ await sandbox._start()
 const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
 ```
 
+By default (`reattach: 'best-effort'`), if the sandbox with that ID no longer exists or isn't running, `start()` provisions a replacement sandbox and reports `{ outcome: 'created' }`. When a replacement would silently lose state your app depends on, set `reattach: 'required'`:
+
+```typescript
+const sandbox = new RailwaySandbox({
+  sandboxId: 'existing-railway-sandbox-id',
+  reattach: 'required',
+})
+```
+
+With `reattach: 'required'`, a missing or stopped sandbox rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no new sandbox is created. The error's `details` include `provider`, `sandboxId`, and `logicalId` (the sandbox's logical `id`). Other errors, such as network or authentication failures, propagate unchanged. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -218,6 +229,14 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
     description:
       'Reattach to an existing Railway sandbox by its Railway ID instead of creating a new one. When set, start() calls Sandbox.connect().',
     isOptional: true,
+  },
+  {
+    name: 'reattach',
+    type: "'best-effort' | 'required'",
+    description:
+      "What start() does when sandboxId is set but that sandbox no longer exists or isn't running. 'best-effort' provisions a replacement sandbox. 'required' throws a SandboxError with code SANDBOX_REATTACH_FAILED instead of provisioning.",
+    isOptional: true,
+    defaultValue: "'best-effort'",
   },
   {
     name: 'checkpointName',

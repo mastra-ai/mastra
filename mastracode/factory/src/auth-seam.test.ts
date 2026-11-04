@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryRouteAuth,
   getWorkOSProvider,
@@ -334,6 +335,26 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     });
   });
 
+  it('SSO callback also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/callback?code=abc');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=abc', ...legacy]));
+  });
+
+  it('SSO logout also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/logout');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=; Path=/; Max-Age=0', ...legacy]));
+  });
+
   it('logout for a handler-shaped provider revokes the session and clears the cookie', async () => {
     const handleAuthRequest = vi.fn(
       async () => new Response(null, { status: 200, headers: { 'Set-Cookie': 'fake_session=revoked; Max-Age=0' } }),
@@ -368,5 +389,25 @@ describe('buildAuthRoutes', () => {
   it('a bare provider still gets /auth/me', () => {
     const routes = buildAuthRoutes(fakeProvider());
     expect(routes.map(r => r.path)).toEqual(['/auth/me']);
+  });
+});
+
+describe('buildAuthDisabledRoutes', () => {
+  it('registers only an unauthenticated GET /auth/me', () => {
+    const routes = buildAuthDisabledRoutes();
+    expect(routes.map(r => [r.method, r.path, r.requiresAuth])).toEqual([['GET', '/auth/me', false]]);
+  });
+
+  it('answers /auth/me with 404 JSON so the UI reads auth as disabled', async () => {
+    const [route] = buildAuthDisabledRoutes();
+    if (!route || !('handler' in route)) throw new Error('Missing /auth/me route');
+    const app = new Hono();
+    app.get(route.path, c => route.handler(c as never, async () => {}));
+
+    const res = await app.request('/auth/me');
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(await res.json()).toEqual({ authEnabled: false, authenticated: false });
   });
 });

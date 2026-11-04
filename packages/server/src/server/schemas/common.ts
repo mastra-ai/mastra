@@ -73,12 +73,11 @@ export const createPagePaginationSchema = (defaultPerPage?: number) => {
       ...baseSchema,
       perPage: paginationNumber().optional().default(defaultPerPage),
     });
-  } else {
-    return z.object({
-      ...baseSchema,
-      perPage: paginationNumber().optional(),
-    });
   }
+  return z.object({
+    ...baseSchema,
+    perPage: paginationNumber().optional(),
+  });
 };
 
 /**
@@ -114,6 +113,7 @@ export const tracingOptionsSchema = z.object({
   requestContextKeys: z.array(z.string()).optional(),
   traceId: z.string().optional(),
   parentSpanId: z.string().optional(),
+  nestUnderParent: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
   hideInput: z.boolean().optional(),
   hideOutput: z.boolean().optional(),

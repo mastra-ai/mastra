@@ -1,7 +1,7 @@
 import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
+import { useAgents } from '@mastra/react/hooks/agents';
 import { useParams } from 'react-router';
 import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 
 export function AgentCrumb() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -10,11 +10,6 @@ export function AgentCrumb() {
   if (isLoading) return <CrumbSkeleton />;
 
   return agents?.[agentId]?.name || agentId;
-}
-
-export function AgentToolCrumb() {
-  const { toolId } = useParams<{ toolId: string }>();
-  return toolId ?? null;
 }
 
 export function AgentSwitcher() {

@@ -3,9 +3,11 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { stageToggle } from './boardLayoutQueries';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -43,22 +45,12 @@ function stubBoardEndpoints() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -87,9 +79,7 @@ function stubBoardEndpoints() {
       return HttpResponse.json({ issues: [], nextPage: null });
     }),
     // Ambient workspace plumbing kicked off alongside the board queries.
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
 
   return { workItemsGate, issuesGate };
@@ -101,7 +91,7 @@ function renderWorkBoard() {
 }
 
 describe('Board loading states', () => {
-  it('shows every column with its own skeleton through both loading phases, then settles', async () => {
+  it('shows every group with its own skeleton through both loading phases, then settles', async () => {
     const { workItemsGate, issuesGate } = stubBoardEndpoints();
     renderWorkBoard();
 
@@ -117,13 +107,13 @@ describe('Board loading states', () => {
     expect(screen.queryByLabelText(/visible board tasks in Planning/)).not.toBeInTheDocument();
 
     // Phase 2: work items resolved, intake/triage feeds still resolving —
-    // settled empty workflow columns collapse while intake keeps its column
-    // skeleton.
+    // settled empty workflow groups remain expandable while intake keeps loading.
     workItemsGate.resolve();
     const planning = screen.getByTestId('board-column-planning');
-    await waitFor(() => expect(planning).toHaveAccessibleName('Planning, empty'));
-    expect(within(planning).queryByRole('status')).not.toBeInTheDocument();
-    expect(within(planning).queryByText('Nothing in planning')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(planning).queryByRole('status')).not.toBeInTheDocument());
+    expect(planning).toHaveAccessibleName('Planning');
+    expect(stageToggle('Planning', planning)).toHaveAttribute('aria-expanded', 'true');
+    expect(within(planning).getByText('Nothing in planning')).toBeInTheDocument();
     const intake = screen.getByTestId('board-column-intake');
     within(intake).getByRole('status', { name: 'Loading Intake column' });
     const triage = screen.getByTestId('board-column-triage');

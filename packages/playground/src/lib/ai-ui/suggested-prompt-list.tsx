@@ -33,7 +33,7 @@ export const SuggestedPromptList = ({ prompts }: SuggestedPromptListProps) => {
             variant="ghost"
             className="h-auto w-full justify-start py-2 text-left whitespace-normal"
             disabled={isDisabled}
-            onClick={() => send({ message: prompt })}
+            onClick={() => void send({ message: prompt })}
           >
             {prompt}
           </Button>

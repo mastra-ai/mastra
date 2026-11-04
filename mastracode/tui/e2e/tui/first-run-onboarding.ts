@@ -23,7 +23,7 @@ export const firstRunOnboardingScenario: McE2eScenario = {
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
-    await (expect(terminal.getByText(/›|>/gi, { full: true, strict: false })) as any).toBeVisible();
+    await (expect(terminal.getByText(/→|›|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     const screen = terminal.serialize().view;
     if (/Welcome to Mastra Code|Authentication|Model Packs/i.test(screen)) {

@@ -154,4 +154,11 @@ export type NotificationDeliveryDecision = {
    * needs to start a run.
    */
   streamOptions?: AgentExecutionOptions<unknown>;
+  /**
+   * Delivery time only: leave the notification pending, without counting a
+   * delivery attempt, so another process's dispatcher delivers it. For a
+   * process that shares the notification store but cannot run the target
+   * thread itself. Ignored when the notification is first sent.
+   */
+  hold?: boolean;
 };
