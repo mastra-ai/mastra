@@ -1,15 +1,18 @@
-import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
-import type { WorkItemsStorage, CreateWorkItemInput } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage, CreateWorkItemInput, WorkItemDbRow } from '../storage/domains/work-items/base.js';
 import { readBoardVersion } from '../storage/domains/work-items/board-version.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
+  FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
+  WORK_ITEMS_SCHEMA,
 } from '../storage/domains/work-items/work-item-schema.js';
 import type {
   BoardItemDbRecord,
@@ -17,7 +20,13 @@ import type {
   WorkItemSourceDbRecord,
 } from '../storage/domains/work-items/work-item-schema.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
-import { migrateWorkItemSplit } from './split-migration.js';
+import {
+  copyLegacyRows,
+  migrateWorkItemSplit,
+  readLegacyWatermark,
+  readWorkItemSplitMarker,
+  recordWorkItemSplitComplete,
+} from './split-migration.js';
 
 const ORG = 'org-split';
 const PROJECT = 'project-split';
@@ -283,7 +292,10 @@ async function createStorage(backend: string): Promise<{ storage: FactoryStorage
       ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
       : new LibSQLFactoryStorage({ id: 'split-test', url: ':memory:' });
   const { workItems } = await createFactoryStorageForTests(storage);
+  // Phase-one engine tests: the domain does not register these yet.
+  await storage.ensureCollections([WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA]);
   // The Postgres database is shared between runs; start every test from empty tables.
+  await storage.ops.deleteMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, {});
   await storage.ops.deleteMany('work_items', {});
   await workItems.dangerouslyClearAll();
   await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, {});
@@ -836,4 +848,176 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect(split.boardItems.size).toBe(0);
     expect(split.workItems.size).toBe(0);
   });
+
+  it('defers excluded cards without looking them up, and a later pass copies them', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    const later = new Set([cards.get('jira issue')!, cards.get('linear issue')!]);
+
+    const first = await migrateWorkItemSplit(storage, { include: row => !later.has(row.id) });
+
+    expect(first).toMatchObject({
+      cards: FIXTURES.length,
+      deferred: 2,
+      workItems: FIXTURES.length - 2,
+      skipped: [],
+      aborted: false,
+    });
+    const split = await readSplit(storage);
+    expect([...later].filter(id => split.boardItems.has(id))).toEqual([]);
+
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({
+      deferred: 0,
+      workItems: 2,
+      unchanged: FIXTURES.length - 2,
+      skipped: [],
+    });
+    expect((await readSplit(storage)).boardItems.size).toBe(FIXTURES.length);
+  });
+
+  it('invalidates cached boards after every page, not only at the end of the pass', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    await seed(workItems);
+    await seedLegacy(storage);
+    const before = await readBoardVersion(storage.ops, ORG, PROJECT);
+    const seen: Array<number | string | null> = [];
+    let transactions = 0;
+    const withTransaction: FactoryStorage['withTransaction'] = async callback => {
+      transactions += 1;
+      // Page one (two cards) committed; page two starts here.
+      if (transactions === 3) seen.push(await readBoardVersion(storage.ops, ORG, PROJECT));
+      return storage.withTransaction(callback);
+    };
+
+    await migrateWorkItemSplit({ ops: storage.ops, withTransaction }, { pageSize: 2 });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).not.toEqual(before);
+  });
+
+  it('records the newest legacy row as the completion watermark and rescans nothing after it', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    await seed(workItems);
+    await seedLegacy(storage);
+    const legacy = await storage.ops.findMany<{ id: string; updated_at: Date }>('work_items', {});
+    const newest = legacy.sort((a, b) => b.updated_at.getTime() - a.updated_at.getTime() || (a.id < b.id ? 1 : -1))[0]!;
+
+    const watermark = await readLegacyWatermark(storage.ops);
+    expect(watermark).toEqual({ updatedAt: newest.updated_at, id: newest.id });
+    expect(await readWorkItemSplitMarker(storage.ops)).toBeNull();
+    await migrateWorkItemSplit(storage);
+    await recordWorkItemSplitComplete(storage.ops, watermark);
+    expect(await readWorkItemSplitMarker(storage.ops)).toMatchObject({ watermark });
+
+    const counted = countingOps(storage.ops);
+    const report = await migrateWorkItemSplit(storage, { ops: counted.ops, since: watermark });
+
+    expect(report).toMatchObject({ cards: 0, workItems: 0, skipped: [] });
+    expect(counted.legacyQueries()).toBe(1);
+  });
+
+  it('recopies exactly the rows an older replica wrote after the watermark', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    await migrateWorkItemSplit(storage);
+    const watermark = await readLegacyWatermark(storage.ops);
+    await recordWorkItemSplitComplete(storage.ops, watermark);
+    const id = cards.get('jira issue')!;
+    await storage.ops.updateMany(
+      'work_items',
+      { id },
+      { stages: ['planning'], updated_at: new Date(watermark!.updatedAt.getTime() + 1_000) },
+    );
+
+    const report = await migrateWorkItemSplit(storage, { since: watermark });
+
+    expect(report).toMatchObject({ cards: 1, recopied: 1, skipped: [] });
+    expect((await readSplit(storage)).boardItems.get(id)?.stages).toEqual(['planning']);
+    expect(await readLegacyWatermark(storage.ops)).toMatchObject({ id });
+  });
+
+  it('copies nothing again over a database an earlier release already migrated', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    await migrateWorkItemSplit(storage);
+    const before = await readSplit(storage);
+    const open = new Set([cards.get('github issue')!]);
+
+    expect(await migrateWorkItemSplit(storage, { include: row => open.has(row.id) })).toMatchObject({
+      workItems: 0,
+      deferred: FIXTURES.length - 1,
+      skipped: [],
+    });
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 0, skipped: [] });
+    expect(await readSplit(storage)).toEqual(before);
+  });
+
+  it('stops before copying anything when the pass is aborted', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    await seed(workItems);
+    await seedLegacy(storage);
+    const controller = new AbortController();
+    controller.abort();
+
+    const report = await migrateWorkItemSplit(storage, { signal: controller.signal });
+
+    expect(report).toMatchObject({ aborted: true, workItems: 0 });
+    expect((await readSplit(storage)).boardItems.size).toBe(0);
+  });
+
+  it('copies a legacy card inside a caller transaction, skipping tombstones and held sources', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    const plain = cards.get('factory card')!;
+    const deleted = cards.get('jira issue')!;
+    const held = cards.get('github issue')!;
+    await storage.ops.insertOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, {
+      id: deleted,
+      org_id: ORG,
+      factory_project_id: PROJECT,
+    });
+    // A newer card already owns the GitHub issue under another id.
+    const { item: holder } = await workItems.upsert({
+      orgId: ORG,
+      userId: USER,
+      factoryProjectId: PROJECT,
+      input: FIXTURES[0]!.input,
+    });
+    const rows = await storage.ops.findMany<WorkItemDbRow>('work_items', { id: { in: [plain, deleted, held] } });
+
+    const copied = await storage.withTransaction(async tx => {
+      const ids = await copyLegacyRows(tx, rows);
+      // The caller's transaction must still be usable afterwards (Postgres aborts on a unique violation).
+      await tx.findOne(FACTORY_BOARD_ITEMS_SCHEMA.name, { id: plain });
+      return ids;
+    });
+
+    expect(copied).toEqual([plain]);
+    const split = await readSplit(storage);
+    expect(split.boardItems.has(plain)).toBe(true);
+    expect(split.boardItems.has(deleted)).toBe(false);
+    expect(split.boardItems.has(held)).toBe(false);
+    expect(split.boardItems.has(holder.id)).toBe(true);
+  });
 });
+
+function countingOps(ops: FactoryStorageOps) {
+  let legacy = 0;
+  const counted = new Proxy(ops, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (property !== 'findMany' || typeof value !== 'function') {
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+      return (collection: string, ...rest: unknown[]) => {
+        if (collection === 'work_items') legacy += 1;
+        return value.call(target, collection, ...rest);
+      };
+    },
+  });
+  return { ops: counted, legacyQueries: () => legacy };
+}
