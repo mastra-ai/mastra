@@ -6,8 +6,9 @@ import { observabilityAppTools } from '@mastra/mcp-apps-components/observability
 import { DASHBOARD_APP_URI, showObservabilityDashboard } from './dashboard-tools';
 
 const DASHBOARD_SERVER_ID = 'dashboard-mcp-server';
-// This Mastra server, which the agent reaches over HTTP like any MCP client.
-const MASTRA_SERVER_URL = process.env.MASTRA_BASE_URL ?? 'http://localhost:4111';
+// This Mastra server, which the agent reaches over HTTP like any MCP client. `mastra dev` falls back to
+// another port when 4111 is taken and passes the one it bound as PORT.
+const MASTRA_SERVER_URL = process.env.MASTRA_BASE_URL ?? `http://localhost:${process.env.PORT ?? 4111}`;
 
 // Serves the prebuilt dashboard renderer as an MCP App. Its iframe never reaches the network: it
 // reads metrics by calling app-only observability tools, which agents don't see.
