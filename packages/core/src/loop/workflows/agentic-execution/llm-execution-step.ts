@@ -2084,7 +2084,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             scopeCtx,
             SAVE_ACCEPTED_USER_SIGNALS_KEY,
             'saveAcceptedUserSignals',
-          )?.(messageList.get.input.db());
+          )?.(messageList.get.input.db(), currentStep.model);
 
           const omContinuation = messageList.get.all.db().find(message => message.id === 'om-continuation');
           const omContinuationText = omContinuation?.content.parts

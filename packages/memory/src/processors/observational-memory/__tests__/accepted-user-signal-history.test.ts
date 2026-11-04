@@ -206,4 +206,14 @@ describe('observational memory and messages a person sends', () => {
     await finish(second.accepted);
     expect(sentTexts(await stored())).toEqual(['build the login page', 'now add tests']);
   });
+
+  it('leaves storage to the Mastra gateway when it runs observational memory', async () => {
+    const { model } = scriptedModel([{ text: 'on it' }]);
+    const { agent, memory, thread, stored } = setup(Object.assign(model, { gatewayId: 'mastra' }));
+    await memory.createThread(thread);
+
+    await finish(agent.sendMessage({ contents: 'build the login page' }, thread).accepted);
+
+    expect(await stored()).toEqual([]);
+  });
 });

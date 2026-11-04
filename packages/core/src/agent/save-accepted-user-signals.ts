@@ -1,3 +1,5 @@
+import { isMastraGatewayModel } from '../llm/model/gateways/gateway-helpers';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
@@ -9,13 +11,14 @@ import { filterMessagesForPersistence } from './filter-messages-for-persistence'
 import type { MastraDBMessage, MessageList } from './message-list';
 import { isUserAuthoredMessage } from './signals';
 
-export type SaveAcceptedUserSignals = (messages: MastraDBMessage[]) => Promise<void>;
+export type SaveAcceptedUserSignals = (messages: MastraDBMessage[], model: MastraLanguageModel) => Promise<void>;
 
 /**
  * Saves messages a person sent (`user` signals) to the thread before the model request that
  * reads them, so a chat reloaded mid-run shows them; the turn's own save later overwrites the
  * rows by id. Undefined unless memory itself saves the turn to its own storage: a configured
- * MessageHistory or observational memory processor may save elsewhere.
+ * MessageHistory or observational memory processor may save elsewhere. Skipped for a Mastra
+ * gateway model under observational memory, which leaves the turn to the gateway.
  *
  * Best effort: a failure is logged and stops further early saves, and the turn's save still
  * writes the messages with its own checks.
@@ -44,15 +47,15 @@ export function createAcceptedUserSignalSaver({
     p => !isProcessorWorkflow(p) && (p.id === 'message-history' || p.id === 'observational-memory'),
   );
   if (hasConfiguredSaver) return;
+  const observationalMemorySavesTurn = isObservationalMemoryEnabled(config.observationalMemory);
   const memorySavesTurn =
-    isObservationalMemoryEnabled(config.observationalMemory) ||
-    normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory).enabled;
+    observationalMemorySavesTurn || normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory).enabled;
   if (!memorySavesTurn) return;
 
   const savedIds = new Set<string>();
   let failed = false;
-  return async messages => {
-    if (failed) return;
+  return async (messages, model) => {
+    if (failed || (observationalMemorySavesTurn && isMastraGatewayModel(model))) return;
     const unsaved = filterMessagesForPersistence(
       messages.filter(m => m.role === 'signal' && isUserAuthoredMessage(m) && !savedIds.has(m.id)),
     );
