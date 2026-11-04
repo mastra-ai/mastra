@@ -471,6 +471,39 @@ describe('restarting a nested run whose process died', () => {
       expect((await storedStates(storage))['outer/run-1']).toEqual({ status: 'success', state });
     });
 
+    it('does not apply again the changes a nested run made before it suspended', async () => {
+      const build = () => {
+        const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+          .then(appendItem('inner-a'))
+          .then(appendItem('inner-wait', { suspends: true }))
+          .then(appendItem('inner-b'))
+          .commit();
+        return createWorkflow({ id: 'outer', inputSchema: num, outputSchema: num, stateSchema: items })
+          .then(inner)
+          .commit();
+      };
+
+      const storage = new MockStore();
+      const first = build();
+      new Mastra({ logger: false, storage, workflows: { outer: first } });
+      const run = await first.createRun({ runId: 'run-1' });
+      expect((await run.start({ inputData: { n: 0 }, initialState: { items: [] } })).status).toBe('suspended');
+
+      // The first suspension hands back `inner-a:0`; the resume adds the rest, then the process dies.
+      const dead = dieAfterNestedSuccess(storage);
+      void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
+      await dead;
+
+      const outer = build();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const result = await (
+        await outer.createRun({ runId: 'run-1' })
+      ).restart({ outputOptions: { includeState: true } });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ items: ['inner-a:0', 'inner-wait:1', 'inner-b:2'] });
+    });
+
     it('keeps a key the nested run never touched at the value a sibling left it', async () => {
       const stateSchema = z.object({ items: z.array(z.string()), tag: z.string() });
       let childStarted!: () => void;
