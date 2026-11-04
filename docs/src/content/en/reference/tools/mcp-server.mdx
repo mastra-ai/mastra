@@ -819,6 +819,8 @@ export type MCPServerResourceContent = { text?: string } | { blob?: string }
 
 Every callback receives `extra`, the same protocol context tools see as `context.mcp.extra` (cancellation `signal`, `requestId`, `authInfo`, `_meta`), and `requestContext`, the trusted application context that carries `authInfo` and the user mapped by `mapAuthInfoToUser`. Use them to scope what a caller can list and read.
 
+A `resources/read` request resolves its URI against `listResources` first. When no listed resource matches, the URI is matched against the caller's `resourceTemplates`, and `getResourceContent` receives the expanded URI. The response uses the `mimeType` and `_meta` of the matching resource or template. A URI that matches neither fails with `Resource not found`.
+
 `getResourceContent` also receives `suspend`, `resumeData` and `suspendPayload` (the `MCPServerRequest` members). Declare `resumeSchema` to make `suspend` usable. It works exactly as it does for tools.
 
 Example:
@@ -834,11 +836,13 @@ import type {
 
 // Resources/resource templates will generally be dynamically fetched.
 const myResources: Resource[] = [
-  { uri: 'file://data/123.txt', name: 'Data File', mimeType: 'text/plain' },
+  { uri: 'file://data/readme', name: 'Readme', mimeType: 'text/plain' },
 ]
 
 const myResourceContents: Record<string, MCPServerResourceContent> = {
-  'file://data.txt/123': { text: 'This is the content of the data file.' },
+  'file://data/readme': { text: 'Read this first.' },
+  // Not listed; readable as an expansion of the `file://data/{id}` template
+  'file://data/123': { text: 'This is the content of data file 123.' },
 }
 
 const myResourceTemplates: ResourceTemplate[] = [
