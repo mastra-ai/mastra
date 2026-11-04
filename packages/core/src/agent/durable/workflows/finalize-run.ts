@@ -10,7 +10,7 @@ import { StructuredOutputProcessor } from '../../../processors/processors/struct
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
-import { persistProcessorDataChunk } from '../../../stream/base/output';
+import { persistProcessorDataChunk, resolveOutputMessageSkippingCompletionChecks } from '../../../stream/base/output';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
 import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
@@ -263,8 +263,7 @@ export async function runDurableFinishSideEffects({
   const responses = messageList.get.response.db();
   const replyMessageId = responses.some(message => message.id === messageId)
     ? messageId
-    : (responses.findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult)
-        ?.id ?? messageId);
+    : (resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? messageId);
 
   // This step has no pubsub (remote engines call it too), so chunks are buffered for the
   // caller. Non-transient ones go into the MessageList now so the flush below saves them.

@@ -171,48 +171,44 @@ describeForAllEngines('Support agent final-answer processors', engine => {
   });
 
   // Technical: a failed isTaskComplete check rotates the response message id, so the card must be
-  // saved with the retried answer, not the rejected one. The in-process loop still writes it to
-  // the run's first message id, so normal and fs are pinned as it.fails. (#29213)
-  (isDurableEngineVariant(engine) ? it : it.fails)(
-    'the card is saved with the answer that passed the completion check (#29213)',
-    async () => {
-      const memory = new MockMemory();
-      const suggester: Processor = {
-        id: 'suggester',
-        processOutputResult: async ({ messages, writer }) => {
-          await writer?.custom(orderCard);
-          return messages;
-        },
-      };
-      let checks = 0;
-      const answerCheck = {
-        id: 'answer-check',
-        name: 'Answer Check',
-        run: async () => (checks++ === 0 ? { score: 0, reason: 'No date given' } : { score: 1, reason: 'Answered' }),
-      };
+  // saved with the retried answer, not the rejected one. (#29213)
+  it('the card is saved with the answer that passed the completion check (#29213)', async () => {
+    const memory = new MockMemory();
+    const suggester: Processor = {
+      id: 'suggester',
+      processOutputResult: async ({ messages, writer }) => {
+        await writer?.custom(orderCard);
+        return messages;
+      },
+    };
+    let checks = 0;
+    const answerCheck = {
+      id: 'answer-check',
+      name: 'Answer Check',
+      run: async () => (checks++ === 0 ? { score: 0, reason: 'No date given' } : { score: 1, reason: 'Answered' }),
+    };
 
-      await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: QUESTION,
-        memory,
-        ...THREAD,
-        maxSteps: 4,
-        isTaskComplete: { scorers: [answerCheck as any] },
-        outputProcessors: [suggester],
-        fixtures: llm => {
-          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Let me check.' });
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Your order ships today.' });
-        },
-      });
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: QUESTION,
+      memory,
+      ...THREAD,
+      maxSteps: 4,
+      isTaskComplete: { scorers: [answerCheck as any] },
+      outputProcessors: [suggester],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Let me check.' });
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Your order ships today.' });
+      },
+    });
 
-      const withCard = (await memory.recall(THREAD)).messages.filter(m =>
-        m.content.parts.some(p => p.type === 'data-order-card'),
-      );
-      expect(withCard).toHaveLength(1);
-      expect(JSON.stringify(withCard[0]!.content.parts)).toContain('Your order ships today.');
-    },
-  );
+    const withCard = (await memory.recall(THREAD)).messages.filter(m =>
+      m.content.parts.some(p => p.type === 'data-order-card'),
+    );
+    expect(withCard).toHaveLength(1);
+    expect(JSON.stringify(withCard[0]!.content.parts)).toContain('Your order ships today.');
+  });
 
   // Technical: when the provider call fails, processOutputResult still runs and sees
   // finishReason 'error', so audit processors can record failed turns.
