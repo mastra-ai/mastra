@@ -72,7 +72,7 @@ To keep live observation but skip the replay cache, pass `streams: { cache: fals
 
 ### How long runs stay available
 
-After a run finishes, the executing process schedules cleanup of its events and ownership record after `cleanupTimeoutMs`. The timer allows the process to exit before cleanup. Shared data then remains until cache expiry or eviction. A run parked on a tool approval or suspension isn't cleared by that timer, because resuming it continues on the same topic.
+After a run finishes, the executing process schedules cleanup of its events and ownership record after `cleanupTimeoutMs`. The timer allows the process to exit before cleanup. Shared cache data then remains until expiry or eviction. Redis Streams retains its native topic data until `clearTopic()` succeeds or its idle TTL expires. The transport's default idle TTL is seven days. Configure `streamIdleTtlMs` to change it, or set it to `0` to disable transport expiry. A run parked on a tool approval or suspension isn't cleared by that timer, because resuming it continues on the same topic.
 
 The cache bounds everything else:
 
@@ -114,7 +114,7 @@ With streams on, a closed reader doesn't stop the run. When a client disconnects
 Stop a run explicitly with one of these:
 
 - `observe(runId)` returns an `abort()` function that asks a running run to stop wherever it executes. The request is best effort. It doesn't wait for confirmation, and a failed publish is only logged. Use the abort route below when you need confirmation. A run parked on an approval no longer listens for it, so stop a parked run with `agent.abortRunStream(runId)` in the process that holds it, or with `POST /agents/:agentId/threads/abort` for a run in a memory thread.
-- `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it. It returns `true` for a running run stopped in this process. A run parked on an approval outside a memory thread is cancelled here too, but the call returns `false`. A later approval fails. For a run elsewhere the request is best effort.
+- `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it. It returns `true` for a running run stopped in this process. A run parked on an approval outside a memory thread is cancelled here too, but the call returns `false`. A later approval in this process fails. The cancellation fence is process-local and leaves the shared snapshot intact. Another process can still approve that snapshot. For a run elsewhere the request is best effort.
 - The server's `POST /agents/:agentId/runs/:runId/abort` route stops a run on any server that shares the PubSub and cache, after checking the caller owns it. It returns `{ aborted: true }` only once the process executing the run confirms it stopped. It returns `{ aborted: false }` for a finished run, for a run parked on an approval (nothing is executing it), and when no process answers in time. Runs in a memory thread can also be stopped with `POST /agents/:agentId/threads/abort`.
 
 With `streams: false` on a non-durable agent, closing the HTTP request aborts the run, as before.
