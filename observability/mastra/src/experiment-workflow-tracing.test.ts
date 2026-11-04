@@ -52,7 +52,7 @@ function buildMastra(engine: Engine, exporter: TestExporter, sampled = true) {
     .then(approval)
     .commit();
 
-  const mastra = new Mastra({
+  const mastra: Mastra = new Mastra({
     logger: false,
     storage: new MockStore(),
     workflows: { 'experiment-tracing-workflow': workflow },
@@ -67,7 +67,7 @@ function buildMastra(engine: Engine, exporter: TestExporter, sampled = true) {
     }),
   });
 
-  return { mastra, workflow };
+  return mastra;
 }
 
 async function runItem(
@@ -76,11 +76,11 @@ async function runItem(
   experimentId?: string,
   { sampled = true, resume = true }: { sampled?: boolean; resume?: boolean } = {},
 ) {
-  const { mastra, workflow } = buildMastra(engine, exporter, sampled);
+  const mastra = buildMastra(engine, exporter, sampled);
   try {
     if (engine === 'evented') await mastra.startWorkers();
     return await executeTarget(
-      workflow,
+      mastra.getWorkflowById('experiment-tracing-workflow'),
       'workflow',
       { input: {}, ...(resume ? { resumeData: { approved: true } } : {}) },
       experimentId ? { experimentId } : undefined,
