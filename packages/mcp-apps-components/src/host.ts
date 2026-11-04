@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import type { z } from 'zod';
 import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, dashboardPinnedWidgetsSchema } from './apps/dashboard-renderer/pin';
 
@@ -61,9 +61,7 @@ export function useMcpAppHost({ dashboardPins }: McpAppHostOptions): McpAppHostV
   const pinnedIds = dashboardPins?.pinnedIds;
   // The handler only runs on app updates, so a new one shouldn't hand the apps new host context.
   const onPinnedChange = useRef(dashboardPins?.onPinnedChange);
-  useEffect(() => {
-    onPinnedChange.current = dashboardPins?.onPinnedChange;
-  });
+  onPinnedChange.current = dashboardPins?.onPinnedChange;
 
   return useMemo<McpAppHostValue>(() => {
     if (!pinnedIds) return {};
