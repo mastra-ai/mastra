@@ -344,6 +344,56 @@ describe('readKnowledgePageGraph', () => {
     expect(graph?.truncated).toBe(true);
     expect(await readKnowledgePageGraph(store, { read: supportOnly, rootId: roadmap.id })).toBeNull();
   });
+
+  it('reads a 300-page tree in a bounded number of store calls, batched by level', async () => {
+    const store = new InMemoryKnowledgePageStore();
+    const docs = (
+      await store.materializeScope({ address: 'docs:acme', declaration: 'docs:$orgId', name: 'Docs', provenance: host })
+    ).scope;
+    const outside = (
+      await store.materializeScope({ address: 'org:acme', declaration: 'org:$orgId', name: 'Acme', provenance: host })
+    ).scope;
+    const faq = await store.createPage({ parentId: outside.id, name: 'FAQ', provenance: host });
+    const sections = [];
+    for (let s = 0; s < 10; s++) {
+      const section = await store.createPage({ parentId: docs.id, name: `Section ${s}`, provenance: host });
+      sections.push(section);
+      for (let p = 0; p < 29; p++) {
+        const page = await store.createPage({ parentId: section.id, name: `Page ${s}.${p}`, provenance: host });
+        if (p === 0) {
+          await store.addNote({
+            pageId: page.id,
+            text: 'See the [[FAQ]]',
+            stampScopeIds: [docs.id],
+            mentions: [faq.id],
+            provenance: host,
+          });
+        }
+      }
+    }
+
+    const calls: Record<string, number> = {};
+    const target = store as unknown as Record<string, (...args: unknown[]) => unknown>;
+    for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(store))) {
+      const fn = target[name];
+      if (name === 'constructor' || typeof fn !== 'function') continue;
+      target[name] = (...args: unknown[]) => {
+        calls[name] = (calls[name] ?? 0) + 1;
+        return fn.apply(store, args);
+      };
+    }
+    const graph = await readKnowledgePageGraph(store, { read: 'all', rootId: docs.id, limits: { maxPages: 400 } });
+    const total = Object.values(calls).reduce((sum, count) => sum + count, 0);
+
+    expect(graph?.pages).toHaveLength(1 + 10 + 290 + 1);
+    expect(names(graph!.pages.slice(0, 11))).toEqual(['Docs', ...sections.map(section => section.name)]);
+    expect(graph?.outsideIds).toEqual([faq.id]);
+    expect(graph?.edges.filter(edge => edge.kind === 'mention')).toHaveLength(10);
+    expect(graph?.truncated).toBe(false);
+    // Was 1,221 sequential calls (a parent check, child scopes, child pages and child counts per walked page,
+    // then one listNotes per page); now 37: a level is one count plus a list per parent that has children.
+    expect(total, JSON.stringify(calls)).toBeLessThan(60);
+  });
 });
 
 describe('search and activity', () => {

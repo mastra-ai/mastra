@@ -10,7 +10,7 @@ import { useFactoryQuery } from './useFactories';
 import { useCardRepositorySlug } from '../ui/domains/factory/hooks/useCardRepositorySlug';
 import { repositoryMatchesCardSource } from '../ui/domains/factory/boardRepository';
 import { startFactoryRun, updateWorkItem } from '../ui/domains/factory/services/workItems';
-import type { WorkItemSource } from '../ui/domains/factory/services/workItems';
+import type { WorkItem, WorkItemSource } from '../ui/domains/factory/services/workItems';
 
 export interface StartFactoryRunWorkItem {
   id: string;
@@ -21,6 +21,7 @@ export interface StartFactoryRunWorkItem {
   title: string;
   url?: string | null;
   metadata?: Record<string, unknown>;
+  workItem?: WorkItem['workItem'];
 }
 
 export interface StartFactoryRunInput {
@@ -48,7 +49,8 @@ export function useStartFactoryRun() {
     mutationKey: startMutationKey,
     mutationFn: async ({ branch, threadTitle, workItem, repositorySlug }: StartFactoryRunInput) => {
       if (!factoryId) throw new Error('A Factory session needs a factory in the route');
-      const targetSlug = repositorySlug ?? (await repositorySlugFor(workItem.source, workItem.metadata));
+      const sourceMetadata = { ...workItem.metadata, ...workItem.workItem?.metadata };
+      const targetSlug = repositorySlug ?? (await repositorySlugFor(workItem.source, sourceMetadata));
       const repositoriesForSource = repositories.filter(candidate =>
         repositoryMatchesCardSource(candidate, workItem.source),
       );
@@ -58,7 +60,9 @@ export function useStartFactoryRun() {
           ? repositoriesForSource[0]
           : undefined;
       if (!repository) throw new Error('Choose a repository before starting this Factory run');
-      const metadata = { ...workItem.metadata, repository: repository.slug };
+      const metadata = workItem.workItem
+        ? { repository: repository.slug }
+        : { ...workItem.metadata, repository: repository.slug };
       if (workItem.metadata?.repository !== repository.slug) {
         await updateWorkItem(baseUrl, workItem.id, { metadata });
       }

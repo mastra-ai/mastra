@@ -4,13 +4,14 @@
  * lane's rule queues the reviewer. Cards filed on the Review board before this
  * stay there and keep their own board.
  */
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/base';
+import type { Card } from '@mastra/factory/storage/domains/work-items/base';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
@@ -19,9 +20,9 @@ import { reviewCandidate, reviewItem } from './fixtures/reviewCard';
 
 const FACTORY_ID = reviewItem.factoryProjectId;
 const projectUrl = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`;
-const workPullRequest: WorkItemRow = { ...reviewItem, id: 'work-pr', board: 'work' };
+const workPullRequest: Card = { ...reviewItem, id: 'work-pr', board: 'work' };
 
-function stubBoards({ items = [] as WorkItemRow[], candidates = [] as (typeof reviewCandidate)[] } = {}) {
+function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCandidate)[] } = {}) {
   const data = { items };
   const created: Array<Record<string, unknown>> = [];
   const transitions: Array<Record<string, unknown>> = [];
@@ -31,22 +32,12 @@ function stubBoards({ items = [] as WorkItemRow[], candidates = [] as (typeof re
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${projectUrl}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: 'repo-1',
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -74,7 +65,7 @@ function stubBoards({ items = [] as WorkItemRow[], candidates = [] as (typeof re
     http.post(`${projectUrl}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       created.push(body);
-      const filed: WorkItemRow = { ...reviewItem, id: 'filed-pr', board: String(body.board) };
+      const filed: Card = { ...reviewItem, id: 'filed-pr', board: String(body.board) };
       data.items = [filed];
       return HttpResponse.json({ workItem: filed });
     }),

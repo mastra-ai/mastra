@@ -2,6 +2,8 @@ import { MastraClientError } from '@mastra/client-js';
 import type {
   KnowledgeActivityResponse,
   KnowledgeGraphResponse,
+  KnowledgeLinkCountsResponse,
+  KnowledgePageLinksResponse,
   KnowledgePageResponse,
   KnowledgeSearchResponse,
   KnowledgeTreeResponse,
@@ -172,6 +174,48 @@ export function useKnowledgeTreeLevels(
       // A level's first chunk polls, so new children appear in the tree and the page's child list.
       refetchInterval: request.cursor ? false : pollUnless(live),
     })),
+  });
+}
+
+/** The most pages one link count request may ask about; the route rejects more. */
+const LINK_COUNT_BATCH = 200;
+/** A server with no link index answers 501 every time, and a refused caller the same; neither is retried. */
+const retryUnlessFinal = (failures: number, error: unknown) => !isFinal(error) && failures < 2;
+
+/** Exact link counts for the pages the graph holds, in batches. 501 (no link index) is an error the graph falls back from. */
+export function useKnowledgeLinkCounts(knowledgeKey: string | undefined, live: boolean, pageIds: string[]) {
+  const client = useMastraClient();
+  return useQuery<KnowledgeLinkCountsResponse['counts'], Error>({
+    queryKey: ['knowledge', knowledgeKey, 'link-counts', pageIds],
+    queryFn:
+      knowledgeKey && pageIds.length
+        ? async (): Promise<KnowledgeLinkCountsResponse['counts']> => {
+            const knowledge = client.getKnowledge(knowledgeKey);
+            const batches: string[][] = [];
+            for (let i = 0; i < pageIds.length; i += LINK_COUNT_BATCH)
+              batches.push(pageIds.slice(i, i + LINK_COUNT_BATCH));
+            const results = await Promise.all(batches.map(batch => knowledge.linkCounts(batch)));
+            return Object.assign({}, ...results.map(result => result.counts));
+          }
+        : skipToken,
+    // The graph loads more pages as the person explores; keep the counts already known meanwhile.
+    placeholderData: keepPreviousData,
+    retry: retryUnlessFinal,
+    refetchInterval: pollUnless(live),
+  });
+}
+
+/** One page's links, for the page under the pointer. Cached per page, so returning to it asks nothing. */
+export function useKnowledgePageLinks(knowledgeKey: string | undefined, pageId: string | null) {
+  const client = useMastraClient();
+  return useQuery<KnowledgePageLinksResponse, Error>({
+    queryKey: ['knowledge', knowledgeKey, 'page-links', pageId],
+    queryFn:
+      knowledgeKey && pageId
+        ? async (): Promise<KnowledgePageLinksResponse> => client.getKnowledge(knowledgeKey).pageLinks(pageId)
+        : skipToken,
+    staleTime: 30_000,
+    retry: retryUnlessFinal,
   });
 }
 

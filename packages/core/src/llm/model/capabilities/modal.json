@@ -32,12 +32,6 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "nvidia/GLM-5.3-Flash-NVFP4": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
@@ -48,6 +42,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "nvidia/GLM-5.3-Flash-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [

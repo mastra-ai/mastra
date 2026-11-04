@@ -10,6 +10,7 @@ import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { Cards } from '../storage/domains/work-items/cards.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
@@ -4650,7 +4651,12 @@ describe('FactoryDecisionDispatcher', () => {
     vi.spyOn(storage, 'commitRuleEvaluation').mockImplementation(async input => {
       if (input.ingress.triggerType === 'transition.message' && !raced) {
         raced = true;
-        await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { title: 'Raced' } });
+        await storage.update({
+          orgId: 'org-1',
+          id: item.id,
+          userId: 'user-1',
+          patch: { metadata: { reviewVerdict: 'approved' } },
+        });
       }
       return commit(input);
     });
@@ -5188,75 +5194,98 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.get({ orgId: 'org-1', id: card.id }))?.parentWorkItemId).toBeNull();
   });
 
-  it('backfills missing source metadata on an already-filed card without overwriting or adopting it', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { item: card } = await storage.upsert({
-      orgId: 'org-1',
-      userId: 'test',
-      factoryProjectId: PROJECT_ID,
-      input: {
-        externalSource: {
-          integrationId: 'github',
-          type: 'pull-request',
-          externalId: 'github-pr:3',
-          url: 'https://github.com/acme/repo/pull/3',
-        },
-        parentWorkItemId: null,
-        title: 'Linked PR',
-        stages: ['review'],
-        sessions: {},
-        metadata: { author: 'human-edited' },
-      },
-      reuseMode: 'preserve',
-    });
-    await storage.commitRuleEvaluation({
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: card.id,
-      ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
-      configVersion: 'rules-v1',
-      expectedRevision: card.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'upsertLinkedWorkItem',
-          idempotencyKey: 'linked-pr-backfill',
-          board: 'review',
-          source: 'github-pr',
-          sourceKey: 'github-pr:3',
+  it.each([false, true])(
+    'backfills missing source metadata without overwriting or adopting the card (racing refresh: %s)',
+    async racingRefresh => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item: card } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'test',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:3',
+            url: 'https://github.com/acme/repo/pull/3',
+          },
+          parentWorkItemId: null,
           title: 'Linked PR',
-          url: 'https://github.com/acme/repo/pull/3',
-          stage: 'intake',
-          metadata: { author: 'octocat', sourceCreatedAt: '2029-12-01T00:00:00Z' },
+          stages: ['review'],
+          sessions: {},
+          metadata: { author: 'human-edited' },
         },
-      ],
-      causalChain: [],
-      now: new Date('2030-01-01T00:00:00Z'),
-    });
-    const transitionService = new FactoryTransitionService({
-      storage,
-      configVersion: 'rules-v1',
-    });
-    const { controller } = createSession();
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      isAutoRunEnabled: async () => true,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-    });
+        reuseMode: 'preserve',
+      });
+      await storage.commitRuleEvaluation({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: card.id,
+        ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
+        configVersion: 'rules-v1',
+        expectedRevision: card.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-pr-backfill',
+            board: 'review',
+            source: 'github-pr',
+            sourceKey: 'github-pr:3',
+            title: 'Linked PR',
+            url: 'https://github.com/acme/repo/pull/3',
+            stage: 'intake',
+            metadata: { author: 'octocat', sourceCreatedAt: '2029-12-01T00:00:00Z' },
+          },
+        ],
+        causalChain: [],
+        now: new Date('2030-01-01T00:00:00Z'),
+      });
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+      });
+      const { controller } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
 
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      if (racingRefresh) {
+        const syncCard = storage.syncCard.bind(storage);
+        vi.spyOn(storage, 'syncCard').mockImplementationOnce(async params => {
+          // The arrival snapshot lacked the field; a provider refresh wins before backfill locks it.
+          await syncCard({
+            orgId: 'org-1',
+            id: card.id,
+            userId: 'provider-refresh',
+            patch: { metadata: { sourceCreatedAt: '2029-12-02T00:00:00Z' } },
+          });
+          return syncCard(params);
+        });
+      }
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
 
-    const pending = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(pending.map(record => record.status)).toEqual(['succeeded']);
-    const updated = await storage.get({ orgId: 'org-1', id: card.id });
-    expect(updated?.metadata).toMatchObject({ author: 'human-edited', sourceCreatedAt: '2029-12-01T00:00:00Z' });
-    expect(updated?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY]).toBeUndefined();
-    // Preserved: not re-entered into intake.
-    expect(updated?.stages).toEqual(['review']);
-  });
+      const pending = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(pending.map(record => record.status)).toEqual(['succeeded']);
+      const updated = await storage.get({ orgId: 'org-1', id: card.id });
+      expect(updated).toMatchObject({
+        workItem: {
+          metadata: {
+            author: 'human-edited',
+            sourceCreatedAt: racingRefresh ? '2029-12-02T00:00:00Z' : '2029-12-01T00:00:00Z',
+          },
+        },
+      });
+      expect(updated?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY]).toBeUndefined();
+      // Preserved: not re-entered into intake.
+      expect(updated?.stages).toEqual(['review']);
+    },
+  );
 
   it('recovers linked-item materialization after an upsert crash and fires Intake onEnter exactly once', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -5346,7 +5375,10 @@ describe('FactoryDecisionDispatcher', () => {
       },
     });
     // The other project's card was filed while claims were enforced and still holds the record's claim.
-    await seeded.storage.ops.updateMany('work_items', { id: elsewhere.item.id }, { claim_key: 'linear:issue:1' });
+    const legacy = (await new Cards(seeded.storage.ops).findOne({ id: elsewhere.item.id }))!;
+    delete legacy.work_item;
+    delete legacy.work_item_sources;
+    await seeded.storage.ops.insertOne('work_items', { ...legacy, claim_key: 'linear:issue:1' });
     const parent = await createItem(storage);
     const boards = createLifecycleTestRegistry({
       execute: {
@@ -5403,10 +5435,10 @@ describe('FactoryDecisionDispatcher', () => {
       item => item.externalSource?.externalId === 'linear:ENG-1',
     );
     expect(filedHere).toMatchObject([{ parentWorkItemId: parent.id, stages: ['intake'] }]);
-    const filedRow = await seeded.storage.ops.findOne<{ claim_key: string | null }>('work_items', {
+    const filedRow = await seeded.storage.ops.findOne('factory_board_items', {
       id: filedHere[0]!.id,
     });
-    expect(filedRow?.claim_key).toBeNull();
+    expect(filedRow).not.toHaveProperty('claim_key');
     expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
     expect(await storage.get({ orgId: 'org-1', id: elsewhere.item.id })).toEqual(elsewhere.item);
   });
@@ -5467,7 +5499,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
-      item => item.metadata?.linearIssueId === 'issue-1',
+      item => item.workItem.metadata?.linearIssueId === 'issue-1',
     );
     expect(cards.map(card => card.id)).toEqual([renamed.item.id]);
     expect(await decisionByKey(storage, 'linked-renamed')).toMatchObject({ status: 'succeeded' });
@@ -5492,7 +5524,8 @@ describe('FactoryDecisionDispatcher', () => {
           metadata: { linearIssueId: 'issue-1' },
         },
       });
-      await db.ops.updateMany('work_items', { id: item.id }, { created_at: new Date(createdAt) });
+      await db.ops.updateMany('factory_board_items', { id: item.id }, { created_at: new Date(createdAt) });
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.createdAt).toEqual(new Date(createdAt));
       return item;
     };
     const finished = await fileCard('OLD-1', 'done', finishedAt);
@@ -5538,7 +5571,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-03T00:00:00Z'));
 
     const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
-      item => item.metadata?.linearIssueId === 'issue-1',
+      item => item.workItem.metadata?.linearIssueId === 'issue-1',
     );
     expect(cards.map(card => card.id).sort()).toEqual([finished.id, live.id].sort());
     expect(await storage.get({ orgId: 'org-1', id: live.id })).toMatchObject({ parentWorkItemId: parent.id });
@@ -6039,6 +6072,206 @@ describe('FactoryDecisionDispatcher', () => {
       vi.useRealTimers();
     }
   });
+
+  describe('while idle', () => {
+    // An idle Factory must leave its database alone so serverless Postgres
+    // (e.g. Neon) can suspend; work arrives through wakes, not polling.
+    async function startIdle(options?: { reconcileToolResults?: () => Promise<void> }) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const claims = {
+        deferred: vi.spyOn(storage, 'claimDeferredDecisions'),
+        pending: vi.spyOn(storage, 'claimPendingStarts'),
+        nextClaimableAt: vi.spyOn(storage, 'nextClaimableAt'),
+      };
+      const { controller, delivered } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+        storage,
+        ownerId: 'worker-1',
+        reconcileToolResults: options?.reconcileToolResults,
+      });
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      return { storage, claims, delivered, dispatcher };
+    }
+
+    function storageCalls(claims: Awaited<ReturnType<typeof startIdle>>['claims']) {
+      return (
+        claims.deferred.mock.calls.length + claims.pending.mock.calls.length + claims.nextClaimableAt.mock.calls.length
+      );
+    }
+
+    it('makes no storage calls once the startup cycle finds nothing to do', async () => {
+      vi.useFakeTimers();
+      try {
+        const reconcileToolResults = vi.fn(async () => {});
+        const { claims, dispatcher } = await startIdle({ reconcileToolResults });
+        const afterStartup = storageCalls(claims);
+
+        await vi.advanceTimersByTimeAsync(15 * 60_000);
+
+        expect(storageCalls(claims)).toBe(afterStartup);
+        // Startup reconciles once; idle time never re-polls bound threads.
+        expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reconciles tool results after an interactive run on a bound thread ends', async () => {
+      vi.useFakeTimers();
+      try {
+        const reconcileToolResults = vi.fn(async () => {});
+        const { dispatcher } = await startIdle({ reconcileToolResults });
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+
+        // An interactive chat queues no work; its steps are the only signal.
+        for (let step = 0; step < 5; step++) {
+          dispatcher.noteBoundThreadRun();
+          await vi.advanceTimersByTimeAsync(10_000);
+        }
+        const duringRun = reconcileToolResults.mock.calls.length;
+        expect(duringRun).toBeGreaterThan(1);
+
+        // The run ends: one trailing pass within an interval, then quiet again.
+        await vi.advanceTimersByTimeAsync(2 * 30_000);
+        expect(reconcileToolResults.mock.calls.length).toBeGreaterThan(duringRun);
+        const afterRun = reconcileToolResults.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(30 * 60_000);
+        expect(reconcileToolResults).toHaveBeenCalledTimes(afterRun);
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('rechecks storage once an hour in case a wake was lost', async () => {
+      vi.useFakeTimers();
+      try {
+        const { storage, claims, delivered, dispatcher } = await startIdle();
+        const afterStartup = claims.pending.mock.calls.length;
+
+        // Drop the wake the write sends, as if it was lost in transit.
+        dispatcher.wake = () => {};
+        await preparePromptKickoff(storage);
+        await vi.advanceTimersByTimeAsync(59 * 60_000);
+        expect(claims.pending.mock.calls.length).toBe(afterStartup);
+        expect(delivered).not.toContain('factory-kickoff:kickoff-1');
+
+        Reflect.deleteProperty(dispatcher, 'wake');
+        await vi.advanceTimersByTimeAsync(2 * 60_000);
+        expect(claims.pending.mock.calls.length).toBeGreaterThan(afterStartup);
+        await vi.waitFor(() => expect(delivered).toContain('factory-kickoff:kickoff-1'));
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('dispatches a run start queued while it sleeps', async () => {
+      vi.useFakeTimers();
+      try {
+        const { storage, claims, delivered, dispatcher } = await startIdle();
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        const asleep = claims.pending.mock.calls.length;
+
+        await preparePromptKickoff(storage);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(claims.pending.mock.calls.length).toBeGreaterThan(asleep);
+        await vi.waitFor(() => expect(delivered).toContain('factory-kickoff:kickoff-1'));
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('sleeps until a delayed retry is due, then claims it', async () => {
+      vi.useFakeTimers();
+      try {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        await queueDecision(storage, {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Continue.',
+          idempotencyKey: 'delayed-retry',
+        });
+        const now = new Date();
+        const [claimed] = await storage.claimDeferredDecisions({
+          ownerId: 'other-worker',
+          now,
+          leaseExpiresAt: new Date(now.getTime() + 30_000),
+          limit: 1,
+        });
+        if (!claimed) throw new Error('Expected the queued decision');
+        const dueAt = new Date(now.getTime() + 5 * 60_000);
+        await storage.failDeferredDecision({
+          id: claimed.id,
+          orgId: claimed.orgId,
+          factoryProjectId: claimed.factoryProjectId,
+          ownerId: 'other-worker',
+          now,
+          availableAt: dueAt,
+          lastError: 'not yet',
+          failureCode: 'session_unavailable',
+          terminal: false,
+        });
+        const deferred = vi.spyOn(storage, 'claimDeferredDecisions');
+        const { controller } = createSession();
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          isAutoRunEnabled: async () => true,
+          transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+          storage,
+          ownerId: 'worker-1',
+        });
+
+        dispatcher.start();
+        await vi.advanceTimersByTimeAsync(0);
+        const startup = deferred.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(dueAt.getTime() - Date.now() - 1_000);
+        expect(deferred.mock.calls.length).toBe(startup);
+
+        await vi.advanceTimersByTimeAsync(2_000);
+        expect(deferred.mock.calls.length).toBeGreaterThan(startup);
+        await vi.waitFor(async () => expect((await decisionByKey(storage, 'delayed-retry'))?.attempts).toBe(2));
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('serializes a burst of wakes into a single cycle at a time', async () => {
+      vi.useFakeTimers();
+      try {
+        const { claims, dispatcher } = await startIdle();
+        const before = claims.pending.mock.calls.length;
+        let concurrent = 0;
+        let peak = 0;
+        claims.pending.mockImplementation(async () => {
+          concurrent += 1;
+          peak = Math.max(peak, concurrent);
+          await Promise.resolve();
+          concurrent -= 1;
+          return [];
+        });
+
+        for (let index = 0; index < 20; index += 1) dispatcher.wake();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(peak).toBe(1);
+        // The burst coalesces: the running cycle plus at most one re-run.
+        expect(claims.pending.mock.calls.length - before).toBeLessThanOrEqual(2);
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
 
 describe('custom-board deferred targets', () => {
@@ -6211,7 +6444,7 @@ describe('custom-board deferred targets', () => {
     expect(updated).toMatchObject({ board: 'work', stages: ['planning'] });
     // Placement leaves the card's own facts alone: the arrival decision's
     // metadata is not walked back onto it.
-    expect(updated?.metadata).toMatchObject({ labels: ['bug'] });
+    expect(updated).toMatchObject({ workItem: { metadata: { labels: ['bug'] } } });
     // The card left Intake for Planning without a governed transition.
     expect(updated?.stageHistory).toMatchObject([
       { stage: 'intake', exitedBy: 'factory-rule-dispatcher' },

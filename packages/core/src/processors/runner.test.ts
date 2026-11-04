@@ -3925,7 +3925,7 @@ describe('ProcessorRunner', () => {
   });
 });
 
-describe('ProcessorRunner workflow failure diagnostics', () => {
+describe.each([1, 2] as const)('ProcessorRunner workflow failure diagnostics (storage v%s)', storageVersion => {
   it('keeps the underlying processor error as the cause of PROCESSOR_WORKFLOW_FAILED', async () => {
     const original = new Error('processor exploded');
     const workflow = createWorkflow({
@@ -3933,7 +3933,7 @@ describe('ProcessorRunner workflow failure diagnostics', () => {
       inputSchema: ProcessorStepSchema,
       outputSchema: ProcessorStepSchema,
       type: 'processor',
-      options: { validateInputs: false },
+      options: { validateInputs: false, storageVersion },
     })
       .then(
         createStep({
@@ -3968,7 +3968,7 @@ describe('ProcessorRunner workflow failure diagnostics', () => {
       .catch((caught: unknown) => caught);
 
     expect(error).toMatchObject({ id: 'PROCESSOR_WORKFLOW_FAILED' });
-    expect((error as Error).message).toContain('processor exploded');
+    expect((error as Error).message).toContain('step exploding-processor: processor exploded');
     // The original error must stay reachable instead of being flattened into text.
     const cause = (error as { cause?: Error }).cause;
     expect(cause).toBe(original);

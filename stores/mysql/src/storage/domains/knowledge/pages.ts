@@ -25,6 +25,7 @@ import type {
   KnowledgeScopeDeclarationCount,
   KnowledgeScopeDeclarationRename,
   KnowledgePin,
+  KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
   MaterializeKnowledgeScopeInput,
@@ -76,6 +77,14 @@ const MISSING_PAGE_INDEX = `SELECT 1 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM i
 
 /** Upgrades for Knowledge databases created by an earlier alpha build; `needed` returns a row when `apply` must run. */
 export const KNOWLEDGE_PAGE_UPGRADES: ReadonlyArray<{ needed: string; args: string[]; apply: string[] }> = [
+  {
+    // Pins from before pin kinds: one pin per page. They stay page pins; a page then holds one pin per kind.
+    needed: `SELECT 1 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pins' AND column_name = 'kind')`,
+    args: [],
+    apply: [
+      "ALTER TABLE `mastra_knowledge_pins` ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'page', ADD COLUMN depth INT NULL, DROP INDEX idx_kpins_page, ADD UNIQUE KEY idx_kpins_page_kind (pageId, kind)",
+    ],
+  },
   {
     // Earlier alpha builds keyed liveKey on scopeId, which refuses sibling keys under different parents.
     needed: `SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pages' AND column_name = 'liveKey' AND generation_expression LIKE '%scopeId%'`,
@@ -176,11 +185,13 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
   `CREATE TABLE IF NOT EXISTS ${T.pins} (
     id VARCHAR(255) ${BIN} NOT NULL PRIMARY KEY,
     pageId VARCHAR(255) ${BIN} NOT NULL,
+    kind VARCHAR(16) NOT NULL DEFAULT 'page',
+    depth INT NULL,
     audience JSON NOT NULL,
     createdBy VARCHAR(255) NOT NULL,
     createdAt VARCHAR(32) NOT NULL,
     updatedAt VARCHAR(32) NOT NULL,
-    UNIQUE KEY idx_kpins_page (pageId)
+    UNIQUE KEY idx_kpins_page_kind (pageId, kind)
   )`,
   `CREATE TABLE IF NOT EXISTS ${T.pinAudiences} (
     audience VARCHAR(512) ${BIN} NOT NULL,
@@ -270,6 +281,8 @@ function toPin(row: Row): KnowledgePin {
   return {
     id: String(row.id),
     pageId: String(row.pageId),
+    kind: String(row.kind) as KnowledgePinKind,
+    ...(row.depth == null ? {} : { depth: Number(row.depth) }),
     audience: parseJsonList(row.audience),
     createdBy: String(row.createdBy),
     createdAt: new Date(String(row.createdAt)),
@@ -1054,9 +1067,8 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
         input.sourceId,
         input.targetId,
       ]);
-      const sourcePin = pins.find(pin => String(pin.pageId) === input.sourceId);
-      if (sourcePin) {
-        const targetPin = pins.find(pin => String(pin.pageId) === input.targetId);
+      for (const sourcePin of pins.filter(pin => String(pin.pageId) === input.sourceId)) {
+        const targetPin = pins.find(pin => String(pin.pageId) === input.targetId && pin.kind === sourcePin.kind);
         const audience = parseJsonList(sourcePin.audience);
         if (targetPin) {
           const merged = [...new Set([...parseJsonList(targetPin.audience), ...audience])];
@@ -1633,16 +1645,29 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
 
   // Pins
 
-  addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
+  addPinAudience(input: Parameters<KnowledgePageStore['addPinAudience']>[0]): Promise<KnowledgePin> {
+    const kind = input.kind ?? 'page';
+    const depth = kind === 'list' ? (input.depth ?? 1) : null;
     return this.#transaction(async tx => {
       const page = await this.#livePage(tx, input.pageId);
       const now = new Date().toISOString();
-      const existing = (await this.#query(tx, `SELECT * FROM ${T.pins} WHERE pageId = ?`, [input.pageId]))[0];
+      const existing = (
+        await this.#query(tx, `SELECT * FROM ${T.pins} WHERE pageId = ? AND kind = ?`, [input.pageId, kind])
+      )[0];
       if (!existing) {
         const id = createKnowledgeUlid();
         await tx.execute({
-          sql: `INSERT INTO ${T.pins} (id, pageId, audience, createdBy, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
-          args: [id, input.pageId, JSON.stringify([...new Set(input.audience)]), input.createdBy, now, now],
+          sql: `INSERT INTO ${T.pins} (id, pageId, kind, depth, audience, createdBy, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            id,
+            input.pageId,
+            kind,
+            depth,
+            JSON.stringify([...new Set(input.audience)]),
+            input.createdBy,
+            now,
+            now,
+          ],
         });
         await this.#indexAudience(tx, id, [...new Set(input.audience)]);
         await this.#logActivity(
@@ -1655,10 +1680,11 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
       }
       const current = parseJsonList(existing.audience);
       const merged = [...new Set([...current, ...input.audience])];
-      if (merged.length !== current.length) {
+      const depthChanged = (existing.depth == null ? null : Number(existing.depth)) !== depth;
+      if (merged.length !== current.length || depthChanged) {
         await tx.execute({
-          sql: `UPDATE ${T.pins} SET audience = ?, updatedAt = ? WHERE id = ?`,
-          args: [JSON.stringify(merged), now, String(existing.id)],
+          sql: `UPDATE ${T.pins} SET audience = ?, depth = ?, updatedAt = ? WHERE id = ?`,
+          args: [JSON.stringify(merged), depth, now, String(existing.id)],
         });
         await this.#indexAudience(tx, String(existing.id), merged);
         await this.#logActivity(
@@ -1672,9 +1698,14 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     });
   }
 
-  removePinAudience(input: { pageId: string; audience: string[]; removedBy: string }): Promise<KnowledgePin | null> {
+  removePinAudience(input: Parameters<KnowledgePageStore['removePinAudience']>[0]): Promise<KnowledgePin | null> {
     return this.#transaction(async tx => {
-      const existing = (await this.#query(tx, `SELECT * FROM ${T.pins} WHERE pageId = ?`, [input.pageId]))[0];
+      const existing = (
+        await this.#query(tx, `SELECT * FROM ${T.pins} WHERE pageId = ? AND kind = ?`, [
+          input.pageId,
+          input.kind ?? 'page',
+        ])
+      )[0];
       if (!existing) return null;
       const current = parseJsonList(existing.audience);
       const remove = new Set(input.audience);
@@ -1707,6 +1738,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
+    kind?: KnowledgePinKind;
     pageIds?: string[];
     excludePageIds?: string[];
     withBody?: boolean;
@@ -1724,16 +1756,21 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
       filters += ` AND pin.id IN (SELECT pa.pinId FROM (SELECT jv.v FROM JSON_TABLE(?, '$[*]' COLUMNS (v VARCHAR(512) ${BIN} PATH '$')) jv) aud STRAIGHT_JOIN ${T.pinAudiences} pa ON pa.audience = aud.v)`;
       args.push(jsonList(input.audience));
     }
+    if (input.kind) {
+      filters += ` AND pin.kind = ?`;
+      args.push(input.kind);
+    }
     if (input.pageIds) {
       filters += ` AND pin.pageId IN ${JV}`;
       args.push(jsonList(input.pageIds));
     }
+    // Page exclusions and the body check concern page pins; a listing pin stands for the tree below.
     if (input.excludePageIds?.length) {
-      filters += ` AND pin.pageId NOT IN ${JV}`;
+      filters += ` AND (pin.kind <> 'page' OR pin.pageId NOT IN ${JV})`;
       args.push(jsonList(input.excludePageIds));
     }
     if (input.withBody) {
-      filters += ` AND REGEXP_LIKE(p.body, '[^[:space:]]')`;
+      filters += ` AND (pin.kind <> 'page' OR REGEXP_LIKE(p.body, '[^[:space:]]'))`;
     }
     const from = `FROM ${T.pins} pin JOIN ${T.pages} p ON p.id = pin.pageId WHERE p.deletedAt IS NULL AND ${readable.sql}${filters}`;
     let total: number | undefined;

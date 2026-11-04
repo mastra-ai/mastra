@@ -1,5 +1,6 @@
+import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import type { WorkItem } from '../../../../factory/services/workItems';
-import type { FactoryProjectPayload } from '../../../services/github';
+import type { ListedFactoryProjectPayload } from '../../../services/github';
 import type { FactoryUserSession } from '../../../services/user-sessions';
 
 export const factoryId = 'fp-1';
@@ -65,7 +66,16 @@ function toWireWorkItem(item: WorkItem) {
 }
 
 export function createSessionHoverDetailsFixtures(updatedAt: string) {
-  const project: FactoryProjectPayload = { id: factoryId, name: 'Mastra' };
+  const project: ListedFactoryProjectPayload = {
+    id: factoryId,
+    name: 'Mastra',
+    repositories: [
+      listedRepository(projectRepositoryId, 'mastra-ai/mastra', {
+        branch: 'main',
+        sandboxWorkdir: '/workspace/mastra',
+      }),
+    ],
+  };
   const workWorkspace = createWorkspace({
     id: workSessionId,
     branch: 'factory/issue-42-authentication-regression',
@@ -106,7 +116,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       triageType: null,
       acceptedAt: null,
       commentCount: 0,
-      feedActivityAt: null,
       revision: 1,
       createdAt: updatedAt,
       updatedAt,
@@ -135,7 +144,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       triageType: null,
       acceptedAt: null,
       commentCount: 0,
-      feedActivityAt: null,
       revision: 1,
       createdAt: updatedAt,
       updatedAt,
@@ -143,22 +151,6 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
   ];
   return {
     projectsResponse: { projects: [project] },
-    connectionsResponse: {
-      connections: [
-        {
-          id: 'connection-1',
-          installationId: 'installation-1',
-          repositories: [
-            {
-              id: projectRepositoryId,
-              branch: 'main',
-              sandboxWorkdir: '/workspace/mastra',
-              repository: { slug: 'mastra-ai/mastra', defaultBranch: 'main' },
-            },
-          ],
-        },
-      ],
-    },
     sessionsResponse: { sessions: [workWorkspace, reviewWorkspace] },
     currentSessionResponse: { session: workWorkspace },
     workItemsResponse: { workItems: workItems.map(toWireWorkItem) },
