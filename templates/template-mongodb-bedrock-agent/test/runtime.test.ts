@@ -86,6 +86,7 @@ afterAll(async () => {
   }
 });
 
+/** Invoke the real HTTP entrypoint, allowing identity headers to be omitted for rejection regressions. */
 function invoke(user: string | undefined, session: string | undefined, payload: unknown) {
   return fetch(`${baseUrl}/invocations`, {
     method: 'POST',

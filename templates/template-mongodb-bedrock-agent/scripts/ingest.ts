@@ -40,6 +40,7 @@ function slug(url: string): string {
   return url.replace('https://mastra.ai/', '').replace(/[^a-zA-Z0-9]+/g, '_');
 }
 
+/** Ingest every selected page and reconcile old records only after all pages have been embedded and stored. */
 async function main() {
   if (!Number.isInteger(DOCS_LIMIT) || DOCS_LIMIT < 1) throw new Error('DOCS_LIMIT must be a positive integer.');
   if (!MONGODB_URI) throw new Error('MONGODB_URI is not set. Copy .env.example to .env first.');

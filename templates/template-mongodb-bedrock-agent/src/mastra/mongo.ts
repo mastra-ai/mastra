@@ -4,6 +4,7 @@
  */
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 
+/** Resolve the local URI first, otherwise read the configured plaintext secret with the runtime IAM role. */
 async function getMongoDBUri(): Promise<string> {
   if (process.env.MONGODB_URI) return process.env.MONGODB_URI;
   if (!process.env.MONGODB_SECRET_ARN) return '';

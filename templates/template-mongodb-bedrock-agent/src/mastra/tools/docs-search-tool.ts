@@ -30,6 +30,7 @@ export const docsSearchTool = createTool({
       }),
     ),
   }),
+  /** Embed the question at the corpus dimension and return linked passages from Atlas Vector Search. */
   execute: async ({ query, topK }, ctx) => {
     const writer = ctx?.writer;
 

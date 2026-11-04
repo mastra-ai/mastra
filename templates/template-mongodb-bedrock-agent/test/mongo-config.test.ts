@@ -6,6 +6,7 @@ import { expect, test } from 'vitest';
 const secretArn = 'arn:aws:secretsmanager:us-east-1:123456789012:secret:mastra-docs-mongodb-ABCDEF';
 const uri = 'mongodb://test-user:test-password@127.0.0.1:27017/docs';
 
+/** Load startup configuration in a fresh process against a local Secrets Manager HTTP endpoint. */
 async function loadMongoConfig(status: number, response: object, directUri?: string) {
   const requests: unknown[] = [];
   const server = createServer(async (req, res) => {

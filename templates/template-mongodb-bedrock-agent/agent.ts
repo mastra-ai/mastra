@@ -38,6 +38,7 @@ class InvocationError extends Error {
   }
 }
 
+/** Read a UTF-8 body within the byte limit and upload deadline, rejecting oversized or incomplete requests. */
 function readBody(req: IncomingMessage): Promise<string> {
   if (Number(req.headers['content-length']) > MAX_BODY_BYTES) {
     return Promise.reject(new InvocationError(413, 'Request body exceeds 64 KiB'));
@@ -46,6 +47,7 @@ function readBody(req: IncomingMessage): Promise<string> {
     const chunks: Buffer[] = [];
     let bytes = 0;
     const timer = setTimeout(() => finish(new InvocationError(408, 'Upload timed out')), UPLOAD_TIMEOUT_MS);
+    /** Settle the body read and release its deadline and data listeners on success or failure. */
     function finish(error?: Error) {
       clearTimeout(timer);
       req.off('data', onData);
@@ -58,6 +60,7 @@ function readBody(req: IncomingMessage): Promise<string> {
         resolve(Buffer.concat(chunks, bytes).toString('utf8'));
       }
     }
+    /** Count raw bytes before buffering so chunked uploads cannot bypass the size limit. */
     function onData(chunk: Buffer) {
       bytes += chunk.length;
       if (bytes > MAX_BODY_BYTES) finish(new InvocationError(413, 'Request body exceeds 64 KiB'));
@@ -76,6 +79,7 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+/** Validate trusted invocation context before reading uploads or accessing shared conversation memory. */
 export const server = createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/ping') {
     res.writeHead(200, { 'content-type': 'application/json' });

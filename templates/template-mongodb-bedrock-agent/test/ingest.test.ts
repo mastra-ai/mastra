@@ -8,6 +8,7 @@ import { expect, test } from 'vitest';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 
+/** Run a fresh ingestion or search process against local HTTP fixtures while retaining the real SDK and database. */
 async function runWithHttp(handler: RequestListener, env: Record<string, string> = {}, script = 'scripts/ingest.ts') {
   const server = createServer(handler);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));

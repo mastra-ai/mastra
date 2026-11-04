@@ -20,6 +20,7 @@ function toStackName(projectName: string, targetName: string): string {
   return `AgentCore-${sanitize(projectName)}-${sanitize(targetName)}`;
 }
 
+/** Synthesize one AgentCore stack per deployment target, resolving runtime configuration and deployed credentials. */
 async function main() {
   // Config root is parent of cdk/ directory. The CLI sets process.cwd() to agentcore/cdk/.
   const configRoot = path.resolve(process.cwd(), '..');
