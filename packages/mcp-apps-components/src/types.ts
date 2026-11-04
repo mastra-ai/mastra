@@ -4,5 +4,5 @@
 export type McpAppResource = {
   name: string;
   description: string;
-  htmlPath: string;
+  html: string;
 };

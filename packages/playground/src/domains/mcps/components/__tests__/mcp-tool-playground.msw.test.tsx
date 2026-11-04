@@ -71,7 +71,7 @@ describe('McpToolPlayground', () => {
       serveDashboardApp();
       server.use(
         // Any call to the viewed tool would hit MSW's unhandled-request error instead.
-        http.post(`${SERVER_URL}/tools/mastraApi/execute`, async ({ request }) => {
+        http.post(`${SERVER_URL}/tools/observabilityMetricAggregate/execute`, async ({ request }) => {
           onRelay(await request.json());
           return HttpResponse.json({ result: { status: 200, body: { value: 12 } } });
         }),
@@ -79,11 +79,11 @@ describe('McpToolPlayground', () => {
       const app = await renderPlaygroundApp();
 
       const result = await app.callServerTool({
-        name: 'mastraApi',
-        arguments: { method: 'POST', path: '/observability/metrics/aggregate' },
+        name: 'observabilityMetricAggregate',
+        arguments: { name: ['mastra_agent_duration_ms'], aggregation: 'count' },
       });
 
-      expect(onRelay).toHaveBeenCalledWith({ data: { method: 'POST', path: '/observability/metrics/aggregate' } });
+      expect(onRelay).toHaveBeenCalledWith({ data: { name: ['mastra_agent_duration_ms'], aggregation: 'count' } });
       expect(result.structuredContent).toEqual({ status: 200, body: { value: 12 } });
     });
   });

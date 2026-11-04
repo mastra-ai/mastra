@@ -53,8 +53,8 @@ export const dashboardAppResource: ReadMcpServerResourceResponse = {
 
 /** The dashboard app's data relay: callable by the app only. */
 export const relayTool: McpToolInfo = {
-  id: 'mastraApi',
-  name: 'mastraApi',
+  id: 'observabilityMetricAggregate',
+  name: 'observabilityMetricAggregate',
   description: 'Reads observability data for the app',
   inputSchema: JSON.stringify({ type: 'object', properties: {} }),
   _meta: { ui: { visibility: ['app'] } },

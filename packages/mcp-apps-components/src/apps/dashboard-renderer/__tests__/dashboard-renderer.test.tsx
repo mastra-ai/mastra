@@ -2,7 +2,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
-import { MASTRA_API_TOOL } from '../../../mastra-api-protocol';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
@@ -32,9 +31,9 @@ describe('dashboard renderer app', () => {
       expect(await screen.findByText('Agent runs')).toBeTruthy();
       expect(await screen.findByText('693')).toBeTruthy();
       // The iframe never reaches the network itself: MSW fails any request it didn't expect,
-      // and every read went through the server's tool.
+      // and every read went through the server's metrics tool.
       expect(host.toolCalls.length).toBeGreaterThan(0);
-      expect(host.toolCalls.every(name => name === MASTRA_API_TOOL)).toBe(true);
+      expect(host.toolCalls.every(name => name === 'observabilityMetricAggregate')).toBe(true);
     });
   });
 

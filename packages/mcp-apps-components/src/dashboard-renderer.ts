@@ -1,4 +1,6 @@
 import type { z } from 'zod';
+// Built by scripts/build-apps.ts, inlined by tsdown.config.ts.
+import html from '../apps-dist/dashboard-renderer.html?raw';
 import { dashboardRendererInputSchema } from './apps/dashboard-renderer/input';
 import { defineMcpAppResource } from './define-mcp-app-resource';
 
@@ -10,10 +12,10 @@ export type DashboardRendererStructuredContent = z.input<typeof dashboardRendere
 /**
  * Renders a Mastra dashboard definition with live metrics. Link a tool to its `ui://` URI and use
  * `dashboardRendererInputSchema` as the tool's output schema. The app reads metrics through
- * `mastraApiTool` from `@mastra/mcp-apps-components/mastra-api`, which must be registered on the
- * same server.
+ * `observabilityAppTools` from `@mastra/mcp-apps-components/observability-tools`, which must be
+ * registered on the same server.
  */
-export const dashboardRendererApp = defineMcpAppResource('dashboard-renderer', {
+export const dashboardRendererApp = defineMcpAppResource(html, {
   name: 'Mastra dashboard',
   description: 'Renders a Mastra dashboard definition with live metrics',
 });

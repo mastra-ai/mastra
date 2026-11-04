@@ -5,10 +5,10 @@ import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextproto
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { MASTRA_API_TOOL, mastraApiRequestSchema } from '../mastra-api-protocol';
+import { OBSERVABILITY_APP_TOOLS } from '../observability-protocol';
 import type { McpAppDefinition } from '../runtime/define-mcp-app';
 
-/** Where the test host's server answers `mastraApi` calls; MSW handlers mock its routes. */
+/** Where the test host's server answers the observability tools; MSW handlers mock its routes. */
 export const MASTRA_SERVER = 'http://mastra.test/api';
 
 const connections = new Set<{ app: App; bridge: AppBridge }>();
@@ -24,14 +24,18 @@ afterEach(async () => {
 const once = (bridge: AppBridge, event: 'initialized' | 'sizechange') =>
   new Promise<void>(resolve => bridge.addEventListener(event, () => resolve()));
 
-/** Answers `mastraApi` the way the server's tool does: by calling the route and returning its response. */
-async function relayToServer(args: unknown): Promise<CallToolResult> {
-  const { method, path, body } = mastraApiRequestSchema.parse(args);
-  const response = await fetch(`${MASTRA_SERVER}${path}`, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+/** Answers an observability tool the way the server does: by calling its route and returning the response. */
+async function relayToServer(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
+  const route = OBSERVABILITY_APP_TOOLS[name as keyof typeof OBSERVABILITY_APP_TOOLS];
+  if (!route) return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
+  const response =
+    route.method === 'GET'
+      ? await fetch(`${MASTRA_SERVER}${route.path}?${new URLSearchParams(args as Record<string, string>)}`)
+      : await fetch(`${MASTRA_SERVER}${route.path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(args),
+        });
   const structuredContent = { status: response.status, body: await response.json() };
   return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent };
 }
@@ -63,8 +67,7 @@ export async function renderWithHost<Input>(
   const chat: Array<'context' | 'message'> = [];
   bridge.oncalltool = async ({ name, arguments: args }) => {
     toolCalls.push(name);
-    if (name !== MASTRA_API_TOOL) return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
-    return relayToServer(args);
+    return relayToServer(name, args);
   };
   bridge.onupdatemodelcontext = async params => {
     chat.push('context');

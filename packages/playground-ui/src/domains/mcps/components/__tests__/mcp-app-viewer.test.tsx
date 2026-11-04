@@ -107,11 +107,14 @@ describe('McpAppViewer', () => {
     const app = await renderApp({ onToolCall });
 
     const result = await app.callServerTool({
-      name: 'mastraApi',
-      arguments: { method: 'POST', path: '/observability/metrics/aggregate' },
+      name: 'observabilityMetricAggregate',
+      arguments: { name: ['mastra_agent_duration_ms'], aggregation: 'count' },
     });
 
-    expect(onToolCall).toHaveBeenCalledWith('mastraApi', { method: 'POST', path: '/observability/metrics/aggregate' });
+    expect(onToolCall).toHaveBeenCalledWith('observabilityMetricAggregate', {
+      name: ['mastra_agent_duration_ms'],
+      aggregation: 'count',
+    });
     expect(result.structuredContent).toEqual({ status: 200, body: { value: 12 } });
   });
 

@@ -1,9 +1,13 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { createRequire } from 'node:module';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MCPServer } from '@mastra/mcp';
 // The built package, as consumers install it: the HTML artifacts only exist in dist/.
 import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 async function serveHTTP(server: MCPServer) {
@@ -95,11 +99,72 @@ describe('dashboardRendererApp', () => {
   });
 
   describe('when loaded from CommonJS', () => {
-    it('points at the same built HTML as the ESM entry', () => {
+    it('serves the same page as the ESM entry', () => {
       const require = createRequire(import.meta.url);
       const cjs: typeof import('@mastra/mcp-apps-components/dashboard-renderer') = require('@mastra/mcp-apps-components/dashboard-renderer');
 
-      expect(cjs.dashboardRendererApp().htmlPath).toBe(dashboardRendererApp().htmlPath);
+      expect(cjs.dashboardRendererApp().html).toBe(dashboardRendererApp().html);
+    });
+  });
+
+  describe('when a deployer bundles the package into the server output', () => {
+    // Cloud, Vercel, Netlify and Cloudflare inline npm packages into one output file, away from
+    // the package's dist/. Build a consumer the same way, into a folder holding nothing else.
+    let outDir: string;
+
+    beforeAll(async () => {
+      const packageDir = fileURLToPath(new URL('../..', import.meta.url));
+      // Under node_modules so the externals below still resolve when the output runs.
+      outDir = await mkdtemp(join(packageDir, 'node_modules', '.bundled-consumer-'));
+      const entry = join(outDir, 'entry.ts');
+      await writeFile(
+        entry,
+        "export { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';\n",
+      );
+      await build({
+        configFile: false,
+        logLevel: 'silent',
+        root: packageDir,
+        ssr: { noExternal: true },
+        build: {
+          ssr: entry,
+          outDir: join(outDir, 'out'),
+          rollupOptions: { external: [/^@mastra\/core/, 'zod'] },
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await rm(outDir, { recursive: true, force: true });
+    });
+
+    it('still boots an MCP server that serves the app', async () => {
+      const bundled: typeof import('@mastra/mcp-apps-components/dashboard-renderer') = await import(
+        pathToFileURL(join(outDir, 'out', 'entry.js')).href
+      );
+      const server = new MCPServer({
+        name: 'Dashboards',
+        version: '1.0.0',
+        tools: {},
+        appResources: { 'ui://mastra/dashboard': bundled.dashboardRendererApp() },
+      });
+      const served = await serveHTTP(server);
+      const client = new Client(
+        { name: 'test-client', version: '1.0.0' },
+        { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+      );
+      await client.connect(new StreamableHTTPClientTransport(served.url));
+
+      try {
+        const { contents } = await client.readResource({ uri: 'ui://mastra/dashboard' });
+        const html = contents[0] && 'text' in contents[0] ? contents[0].text : '';
+
+        expect(html).toBe(dashboardRendererApp().html);
+        expect(html).toContain('ui/notifications/initialized');
+      } finally {
+        await client.close();
+        await served.close();
+      }
     });
   });
 });
