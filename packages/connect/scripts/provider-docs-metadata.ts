@@ -30,6 +30,12 @@ export interface ProviderDocs {
   canonicalPage: string;
   ownership: Ownership;
   /**
+   * Integrations sidebar category that lists a generated page, used in its title
+   * ("<name> | <category>"). Required for emitted `generated-page` providers. The sidebar
+   * itself stays hand-maintained in docs/src/content/en/integrations/sidebars.js.
+   */
+  category?: string;
+  /**
    * What the provider's tools let an agent do, as a lowercase verb phrase that completes
    * "Give agents tools to …". Required for every emitted output.
    */
@@ -88,6 +94,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/fireflies.svg' },
     canonicalPage: 'providers/fireflies.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary:
       'read meeting transcripts and analytics, ask questions about meetings, create soundbites, and manage meeting sharing and privacy',
     emit: true,
@@ -106,6 +113,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'googlecalendar' },
     canonicalPage: 'providers/google-calendar.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'find, create, and update events, check availability, and manage calendars',
     emit: true,
   },
@@ -114,6 +122,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'googledocs' },
     canonicalPage: 'providers/google-docs.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'create documents, insert and replace text, and edit tables, headers, footers, and styles',
     emit: true,
   },
@@ -130,6 +139,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'gmail' },
     canonicalPage: 'providers/google-mail.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'read, send, and draft email, manage labels, filters, and threads, and update mailbox settings',
     emit: true,
   },
@@ -138,6 +148,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'googlesheets' },
     canonicalPage: 'providers/google-sheet.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'read, append, update, and clear cell values, and create spreadsheets, rows, and worksheets',
     emit: true,
   },
@@ -146,6 +157,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'hubspot' },
     canonicalPage: 'providers/hubspot.mdx',
     ownership: 'generated-page',
+    category: 'CRM',
     summary:
       'search, create, and update contacts, companies, deals, and tickets, and manage notes, tasks, and marketing emails',
     emit: true,
@@ -155,6 +167,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/incident-io.svg' },
     canonicalPage: 'providers/incident-io.mdx',
     ownership: 'generated-page',
+    category: 'Project management',
     summary:
       'create and update incidents, manage follow-ups and actions, and read alerts, schedules, and catalog entries',
     emit: true,
@@ -164,6 +177,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'jira' },
     canonicalPage: 'providers/jira.mdx',
     ownership: 'generated-page',
+    category: 'Project management',
     summary: 'search, create, update, and transition issues, and manage comments, worklogs, and issue links',
     emit: true,
   },
@@ -172,6 +186,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'linear' },
     canonicalPage: 'providers/linear.mdx',
     ownership: 'generated-page',
+    category: 'Project management',
     summary: 'search, create, and update issues, and manage projects, cycles, comments, and labels',
     emit: true,
   },
@@ -180,6 +195,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/microsoft-excel.svg' },
     canonicalPage: 'providers/microsoft-excel.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     note: 'Workbook operations, such as worksheets, ranges, tables, charts, and named items, require a work or school account. Personal Microsoft accounts can find, create, list, get, and delete workbook files, but Microsoft Graph rejects workbook operations on personal OneDrive.',
     summary: 'find and create workbooks, read and update ranges, and manage worksheets, tables, and charts',
     emit: true,
@@ -189,6 +205,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg' },
     canonicalPage: 'providers/microsoft-powerpoint.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'find, create, copy, and move presentations, read and update their content, and share them',
     emit: true,
   },
@@ -205,6 +222,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/microsoft-word.svg' },
     canonicalPage: 'providers/microsoft-word.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'find, create, copy, and move Word documents, read and update their content, and share them',
     emit: true,
   },
@@ -213,6 +231,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/outlook.svg' },
     canonicalPage: 'providers/outlook.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'read, send, draft, and reply to email, manage mail folders, and create and update calendar events',
     emit: true,
   },
@@ -221,6 +240,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'notion', mono: true },
     canonicalPage: 'providers/notion.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'search, read, create, and update pages, append blocks, and query databases and data sources',
     emit: true,
   },
@@ -229,6 +249,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/one-drive.svg' },
     canonicalPage: 'providers/one-drive.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'search, upload, copy, move, and share files and folders, and manage permissions and versions',
     emit: true,
   },
@@ -255,6 +276,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'resend', mono: true },
     canonicalPage: 'providers/resend.mdx',
     ownership: 'generated-page',
+    category: 'Other providers',
     summary: 'send email and broadcasts, and manage contacts, segments, domains, templates, and webhooks',
     note: "Connect Resend with an API key that has **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.",
     emit: true,
@@ -264,6 +286,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/sharepoint-online.svg' },
     canonicalPage: 'providers/sharepoint-online.mdx',
     ownership: 'generated-page',
+    category: 'Productivity',
     summary: 'search sites and files, manage lists, list items, and site pages, and share drive items',
     emit: true,
   },
@@ -280,6 +303,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'snowflake' },
     canonicalPage: 'providers/snowflake.mdx',
     ownership: 'generated-page',
+    category: 'Other providers',
     summary: 'run SQL statements and read their results, and list databases, schemas, tables, warehouses, and roles',
     emit: true,
   },
@@ -311,6 +335,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/attio.svg', mono: true },
     canonicalPage: 'providers/attio.mdx',
     ownership: 'generated-page',
+    category: 'CRM',
     summary: 'search and update CRM records, notes, tasks, and lists',
     emit: true,
     mcpDocsUrl: 'https://docs.attio.com/mcp/overview',
@@ -321,6 +346,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     logo: { src: 'https://svgl.app/library/canva.svg' },
     canonicalPage: 'providers/canva.mdx',
     ownership: 'generated-page',
+    category: 'Other providers',
     summary: 'create, edit, search, and export designs',
     emit: true,
     mcpDocsUrl: 'https://www.canva.dev/docs/apps/mcp/',
@@ -331,6 +357,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     logo: { src: 'https://app.nango.dev/images/template-logos/clay-mcp.svg' },
     canonicalPage: 'providers/clay.mdx',
     ownership: 'generated-page',
+    category: 'CRM',
     summary: 'find and research people and companies and run workflows',
     emit: true,
     mcpDocsUrl: 'https://university.clay.com/docs/mcp-settings',
@@ -362,6 +389,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     logo: { slug: 'robinhood' },
     canonicalPage: 'providers/robinhood.mdx',
     ownership: 'generated-page',
+    category: 'Other providers',
     summary: 'read account and market data and place trades',
     emit: true,
     mcpDocsUrl: 'https://robinhood.com/us/en/support/agentic-trading',
@@ -372,6 +400,7 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     logo: { slug: 'sanity', mono: true },
     canonicalPage: 'providers/sanity.mdx',
     ownership: 'generated-page',
+    category: 'Other providers',
     summary: 'query, create, and update content documents',
     emit: true,
     mcpDocsUrl: 'https://www.sanity.io/docs/ai/mcp-server',

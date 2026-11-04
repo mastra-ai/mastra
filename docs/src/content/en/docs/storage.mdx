@@ -13,7 +13,6 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
-import { getIntegrationItems } from '@site/src/components/integrations/data';
 
 # Storage
 
@@ -211,7 +210,7 @@ You can also route `observability` to a dedicated analytics backend. See the [ob
 
 Each provider page includes installation instructions, configuration parameters, and usage examples. libSQL is the fastest path for local development because it doesn't require running a separate database server.
 
-<IntegrationGrid section="Databases" additionalItems={getIntegrationItems('Providers', ['databases/neon'])} />
+<IntegrationGrid section="Databases" />
 
 ## Next steps
 

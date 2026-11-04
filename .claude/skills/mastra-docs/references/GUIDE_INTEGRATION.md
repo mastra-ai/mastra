@@ -100,7 +100,7 @@ Usually cover:
 
 ### Mastra Connect providers
 
-A provider with a Mastra Connect toolset or MCP server has one integration page. Put `## Connect` first, then `## Self-managed setup` when a supported alternative exists. Don't add a self-managed section for Connect-only providers.
+Each product has one integration page. When a vendor sells separate products, such as Neon Postgres, Neon Functions, and Neon Object Storage, keep separate pages and add the Connect section to the page for the product its tools manage. List each page in the sidebar category that matches what the product does; use **Other providers** only when no category fits. Put `## Connect` first, then `## Self-managed setup` when a supported alternative exists. On a page whose main topic isn't Connect, such as Neon Postgres storage, put `## Connect` at the end and link it from the introduction. Add new Connect pages to the Connect page's provider grid too. Don't add a self-managed section for Connect-only providers.
 
 `packages/connect/scripts/generate-provider-docs.ts` owns these pages:
 

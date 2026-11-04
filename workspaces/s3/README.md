@@ -34,7 +34,7 @@ const agent = new Agent({
 ## Documentation
 
 - [Amazon S3 integration guide](https://mastra.ai/integrations/file-storage/amazon-s3)
-- [Neon Object Storage integration guide](https://mastra.ai/integrations/databases/neon#object-storage)
+- [Neon Object Storage integration guide](https://mastra.ai/integrations/file-storage/neon)
 - [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
 ## Changelog

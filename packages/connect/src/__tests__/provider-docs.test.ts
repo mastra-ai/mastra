@@ -46,6 +46,7 @@ function meta(overrides: Partial<DocsMetadata> = {}): DocsMetadata {
         name: 'Acme Calendar',
         canonicalPage: 'providers/acme.mdx',
         ownership: 'generated-page',
+        category: 'Productivity',
         summary: 'schedule meetings',
         note: 'Shared accounts can only read events.',
         emit: true,
@@ -66,6 +67,7 @@ function meta(overrides: Partial<DocsMetadata> = {}): DocsMetadata {
         name: 'Remote',
         canonicalPage: 'providers/remote.mdx',
         ownership: 'generated-page',
+        category: 'Project management',
         summary: 'manage projects',
         mcpDocsUrl: 'https://remote.example/mcp',
         mcpDocsLabel: 'Remote MCP',
@@ -131,7 +133,7 @@ describe('Connect provider docs generation', () => {
     generate();
     const page = read(join(INTEGRATIONS_DIR, 'providers/acme.mdx'));
 
-    expect(page.startsWith('---\ntitle: "Acme Calendar | Providers"\n')).toBe(true);
+    expect(page.startsWith('---\ntitle: "Acme Calendar | Productivity"\n')).toBe(true);
     expect(page).toContain(GENERATED_MARKER);
     expect(page).toContain('[Connect setup](/docs/connect-guide#get-started)');
     expect(page).toContain('mastra connect add acme');
@@ -248,11 +250,16 @@ describe('Connect provider docs generation', () => {
     delete noSummary.toolProviders.acme!.summary;
     expect(() => generate(noSummary)).toThrow(/acme: emitted providers need a summary/);
 
+    const noCategory = meta();
+    delete noCategory.toolProviders.acme!.category;
+    expect(() => generate(noCategory)).toThrow(/acme: emitted generated pages need a sidebar category/);
+
     const missing = meta();
     missing.toolProviders.ghost = {
       name: 'Ghost',
       canonicalPage: 'providers/ghost.mdx',
       ownership: 'generated-page',
+      category: 'Productivity',
       summary: 'haunt',
       emit: true,
     };
@@ -288,6 +295,21 @@ describe('Connect provider docs metadata matches the published catalog', () => {
     for (const id of Object.keys(MCP_PROVIDERS)) {
       expect(id.endsWith('-mcp')).toBe(true);
       expect(TOOL_PROVIDERS[id]).toBeUndefined();
+    }
+  });
+
+  it('titles each generated page with the sidebar category that lists it', async () => {
+    const sidebarPath = join(packageDir, '../../docs/src/content/en/integrations/sidebars.js');
+    const { default: sidebars } = (await import(sidebarPath)) as {
+      default: { integrationsSidebar: Array<{ type: string; label?: string; items?: Array<{ id?: string }> }> };
+    };
+    const categoryOf = new Map<string, string>();
+    for (const entry of sidebars.integrationsSidebar) {
+      for (const item of entry.items ?? []) if (item.id) categoryOf.set(`${item.id}.mdx`, entry.label!);
+    }
+    for (const docs of [...Object.values(TOOL_PROVIDERS), ...Object.values(MCP_PROVIDERS)]) {
+      if (docs.ownership !== 'generated-page' || !docs.emit) continue;
+      expect([docs.canonicalPage, categoryOf.get(docs.canonicalPage)]).toEqual([docs.canonicalPage, docs.category]);
     }
   });
 

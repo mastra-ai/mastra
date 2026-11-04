@@ -6,6 +6,7 @@ packages:
 ---
 
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
+import { getIntegrationItems } from '@site/src/components/integrations/data';
 
 # Connect
 
@@ -184,7 +185,27 @@ A raw credential is different. `credential()` returns the secret to your applica
 
 Each integration page shows the provider ID, what the provider offers, and its setup steps. Some pages also cover setup without Connect.
 
-<IntegrationGrid section="Providers" />
+<IntegrationGrid
+  section="Productivity"
+  additionalItems={[
+  ...getIntegrationItems('Project management'),
+  ...getIntegrationItems('CRM'),
+  ...getIntegrationItems('Other providers'),
+  ...getIntegrationItems('Channels', [
+    'channels/discord',
+    'channels/github',
+    'channels/teams',
+    'channels/slack',
+    'channels/telegram',
+  ]),
+  ...getIntegrationItems('Auth', ['auth/clerk', 'auth/supabase', 'auth/workos']),
+  ...getIntegrationItems('Databases', ['databases/neon']),
+  ...getIntegrationItems('Deploy', ['deploy/render']),
+  ...getIntegrationItems('File storage', ['file-storage/google-drive']),
+  ...getIntegrationItems('Observability', ['observability/posthog']),
+  ...getIntegrationItems('Voice', ['voice/openai']),
+]}
+/>
 
 <a id="troubleshoot-a-connection" />
 

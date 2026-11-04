@@ -6,7 +6,6 @@ packages:
 ---
 
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
-import { getIntegrationItems } from '@site/src/components/integrations/data';
 
 # Filesystem
 
@@ -62,7 +61,6 @@ Use another provider when files live outside the application host or already exi
 <IntegrationGrid
   section="File storage"
   additionalItems={[
-  ...getIntegrationItems('Providers', ['file-storage/google-drive', 'databases/neon']),
   {
     type: 'link',
     href: '/reference/workspace/platform-filesystem',

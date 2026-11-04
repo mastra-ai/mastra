@@ -99,7 +99,7 @@ This also runs as part of the package `build` task. `generate-provider-docs.ts` 
 
 `provider-docs-metadata.ts` is the only place to change display names, logos, notes, summaries, canonical pages, and ownership. Every generated file starts with a marker comment. Don't edit generated files; change the metadata or the templates in `provider-docs-lib.ts` and regenerate. The generator refuses to overwrite an existing file without the marker, refuses paths outside the outputs above, and rejects two providers that claim the same page.
 
-When you add an emitted page, also add it to `docs/src/content/en/integrations/sidebars.js`. The generator doesn't edit sidebars.
+When you add an emitted page, set its `category` in the metadata, add it to that category in `docs/src/content/en/integrations/sidebars.js`, and add it to the provider grid on `docs/src/content/en/docs/mastra-platform/connect.mdx`. The generator doesn't edit sidebars, and a test checks that each page's `category` matches the sidebar.
 
 To give a generated page handwritten content, such as a self-managed setup section, change the provider's `ownership` to `'handwritten-with-partial'` and regenerate to create the partial. Then remove the marker comment from the existing page, replace its generated `### Connect an account` and `### Add tools to an agent` sections with the imported partial, and add your content.
 

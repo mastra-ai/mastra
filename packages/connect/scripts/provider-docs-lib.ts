@@ -216,7 +216,7 @@ export function renderProviderPage(id: string, docs: ProviderDocs, meta: DocsMet
   const note = mcp ? '' : noteBlock((docs as ToolProviderDocs).note);
 
   return `---
-title: ${yamlString(`${docs.name} | Providers`)}
+title: ${yamlString(`${docs.name} | ${docs.category}`)}
 description: ${yamlString(description)}
 packages:
   - "@mastra/connect"
@@ -293,6 +293,9 @@ export function validateMetadata(meta: DocsMetadata): void {
     pages.set(docs.canonicalPage, id);
     if (docs.emit) {
       if (!docs.summary) throw new Error(`${id}: emitted providers need a summary`);
+      if (docs.ownership === 'generated-page' && !docs.category) {
+        throw new Error(`${id}: emitted generated pages need a sidebar category`);
+      }
       if (UNSAFE_PROSE.test(docs.summary) || UNSAFE_PROSE.test(docs.name)) {
         throw new Error(`${id}: name and summary must not contain MDX syntax characters`);
       }

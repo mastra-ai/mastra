@@ -2284,16 +2284,6 @@
       "source": "/docs/mastra-platform/connect/channels",
       "destination": "/docs/mastra-platform/connect",
       "permanent": true
-    },
-    {
-      "source": "/integrations/deploy/neon",
-      "destination": "/integrations/databases/neon",
-      "permanent": true
-    },
-    {
-      "source": "/integrations/file-storage/neon",
-      "destination": "/integrations/databases/neon",
-      "permanent": true
     }
   ]
 }
