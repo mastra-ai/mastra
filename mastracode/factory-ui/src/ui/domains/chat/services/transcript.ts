@@ -313,10 +313,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'command_exit':
       return knownToolIndex(state.entries, event.toolCallId) === -1
         ? state
-        : withTool(state, event.toolCallId, t => ({
-            ...t,
-            exit: { exitCode: event.exitCode, killed: event.killed ?? false },
-          }));
+        : withTool(state, event.toolCallId, t => ({ ...t, exit: commandExit(event) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -467,8 +464,20 @@ function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
 const sandboxExitSchema = z.object({
   toolCallId: z.string(),
   exitCode: z.number(),
-  killed: z.boolean().default(false),
+  // These only describe the exit, so a malformed one is dropped rather than the whole exit and its ✕.
+  killed: z.boolean().optional().catch(undefined),
+  timedOut: z.boolean().optional().catch(undefined),
+  error: z.string().optional().catch(undefined),
 });
+
+/** One shape for an exit, whether it streamed as `command_exit` or was saved as `data-sandbox-exit`. */
+function commandExit({ exitCode, killed = false, timedOut = false, error }: ToolCallExit): ToolCallExit {
+  return error === undefined ? { exitCode, killed, timedOut } : { exitCode, killed, timedOut, error };
+}
+
+function sameExit(a: ToolCallExit, b: ToolCallExit | undefined): boolean {
+  return a.exitCode === b?.exitCode && a.killed === b.killed && a.timedOut === b.timedOut && a.error === b.error;
+}
 
 /** The exit shares its call's message, unless a sealed message pushed it into a later one. */
 function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, ToolCallExit> {
@@ -476,7 +485,7 @@ function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, ToolCall
   for (const part of messages.flatMap(message => message.content.parts)) {
     if (part.type !== 'data-sandbox-exit' || !('data' in part)) continue;
     const exit = sandboxExitSchema.safeParse(part.data);
-    if (exit.success) exits.set(exit.data.toolCallId, { exitCode: exit.data.exitCode, killed: exit.data.killed });
+    if (exit.success) exits.set(exit.data.toolCallId, commandExit(exit.data));
   }
   return exits;
 }
@@ -507,7 +516,7 @@ function exitedTools(
     if (!persisted) return [];
     const tool = entry.runtimeTools?.[persisted.toolCallId] ?? persisted;
     const exit = exits.get(tool.toolCallId);
-    if (exit === undefined || (exit.exitCode === tool.exit?.exitCode && exit.killed === tool.exit.killed)) return [];
+    if (exit === undefined || sameExit(exit, tool.exit)) return [];
     return [[tool.toolCallId, { ...tool, exit }] as const];
   });
 }

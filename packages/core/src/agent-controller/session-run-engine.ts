@@ -1603,6 +1603,7 @@ export class SessionRunEngine {
         const d = getDataRecord(chunk);
         const toolCallId = getString(d?.toolCallId);
         const exitCode = getOptionalNumber(d?.exitCode);
+        const error = getString(d?.error);
         if (toolCallId && exitCode !== undefined) {
           this.#session.emit({
             type: 'command_exit',
@@ -1611,6 +1612,8 @@ export class SessionRunEngine {
             exitCode,
             success: getBoolean(d?.success, exitCode === 0),
             killed: getBoolean(d?.killed, false),
+            timedOut: getBoolean(d?.timedOut, false),
+            ...(error !== undefined && { error }),
           });
         }
         break;

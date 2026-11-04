@@ -1,4 +1,5 @@
 import { stripAnsi, stripSerializedAnsi } from './ansi';
+import type { ToolCallExit } from './tool-call-exit-status';
 import { hasToolArguments, stringifyToolValue } from './tool-presentation';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 
@@ -12,6 +13,8 @@ export interface ToolCallView {
   /** What the call printed while it ran, such as a command's stdout and stderr. */
   output?: string;
   result?: unknown;
+  /** How the call's process ended, when it reported its exit. */
+  exit?: ToolCallExit;
 }
 
 export function toolCallResultText({ status, result }: ToolCallView): string | undefined {

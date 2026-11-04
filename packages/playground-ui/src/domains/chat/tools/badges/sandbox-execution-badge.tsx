@@ -56,6 +56,7 @@ export const SandboxExecutionBadge = ({
       (part.name === 'sandbox-stdout' || part.name === 'sandbox-stderr') &&
       part.data?.toolCallId === toolCallId,
   );
+  const exit = sandboxExit(dataParts, toolCallId);
   const view: ToolCallView = {
     toolName,
     args: parsedArgs,
@@ -63,8 +64,8 @@ export const SandboxExecutionBadge = ({
     command: command ?? originalCommand,
     output: outputChunks.map(part => part.data?.output ?? '').join(''),
     result,
+    exit,
   };
-  const exit = sandboxExit(dataParts, toolCallId);
   const workspace = workspaceMetadata(dataParts, toolCallId);
   const isRunning = status === 'running' && Boolean(workspace) && !exit;
   const toolCalled = toolCalledProp ?? (Boolean(workspace) || Boolean(exit) || typeof result === 'string');

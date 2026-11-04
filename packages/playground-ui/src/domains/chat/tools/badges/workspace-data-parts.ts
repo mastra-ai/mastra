@@ -55,5 +55,7 @@ export function sandboxExit(
   toolCallId: string,
 ): SandboxExit | undefined {
   const exit = toolDataParts(dataParts, 'sandbox-exit', toolCallId)[0]?.data;
-  return typeof exit?.exitCode === 'number' ? exit : undefined;
+  if (typeof exit?.exitCode !== 'number') return undefined;
+  // Any tool can write this part, so an error that is not text is left out rather than drawn.
+  return typeof exit.error === 'string' || exit.error === undefined ? exit : { ...exit, error: undefined };
 }

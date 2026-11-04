@@ -923,7 +923,16 @@ export type AgentControllerEvent =
         }
       | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
       | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-      | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean; killed?: boolean }
+      | {
+          type: 'command_exit';
+          toolCallId: string;
+          exitCode: number;
+          success: boolean;
+          killed?: boolean;
+          timedOut?: boolean;
+          /** Why the command could not run or be observed; its `exitCode` is then -1. */
+          error?: string;
+        }
     ))
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }

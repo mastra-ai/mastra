@@ -4,18 +4,29 @@ import { cn } from '@/lib/utils';
 export interface ToolCallExit {
   exitCode: number;
   killed?: boolean;
+  timedOut?: boolean;
+  /** Why the process could not run or be observed; its `exitCode` is then a placeholder. */
+  error?: string;
+}
+
+function exitLabel(exit: ToolCallExit): { text: string; stopped: boolean } {
+  if (exit.error !== undefined) return { text: 'error', stopped: false };
+  if (exit.timedOut) return { text: 'timed out', stopped: false };
+  if (exit.killed) return { text: 'killed', stopped: true };
+  return { text: `exit ${exit.exitCode}`, stopped: false };
 }
 
 /** How a process ended, shown only when it did not exit cleanly. */
 export function ToolCallExitStatus({ exit }: { exit: ToolCallExit | undefined }) {
   if (!exit || exit.exitCode === 0) return null;
+  const { text, stopped } = exitLabel(exit);
   return (
     <Txt
       as="span"
       variant="meta"
-      className={cn('px-1', exit.killed ? 'text-warning-foreground' : 'text-destructive-foreground')}
+      className={cn('px-1', stopped ? 'text-warning-foreground' : 'text-destructive-foreground')}
     >
-      {exit.killed ? 'killed' : `exit ${exit.exitCode}`}
+      {text}
     </Txt>
   );
 }

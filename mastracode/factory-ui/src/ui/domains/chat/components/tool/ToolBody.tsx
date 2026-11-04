@@ -31,6 +31,7 @@ function toolCallView(tool: ToolCall, command: string | undefined): ToolCallView
     command,
     output: tool.output,
     result: tool.result,
+    exit: tool.exit,
   };
 }
 
