@@ -24,7 +24,7 @@ export function WorkspaceSetupBlock({
 }) {
   return (
     <SettingsContainer>
-      <SettingsRow label="Working directory" description="Where repositories are cloned.">
+      <SettingsRow label="Working directory" description="Absolute path where repositories are cloned.">
         <CommittedInput
           label="Working directory"
           placeholder="/workspace"
