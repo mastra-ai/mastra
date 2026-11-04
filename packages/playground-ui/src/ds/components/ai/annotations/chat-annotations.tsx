@@ -13,6 +13,8 @@ export interface ChatAnnotation {
   comment?: string;
 }
 
+export const visibleComment = (annotation: ChatAnnotation) => annotation.comment?.trim() || undefined;
+
 export type NewChatAnnotation = Pick<ChatAnnotation, 'text' | 'source'>;
 
 export interface ChatAnnotationsApi {

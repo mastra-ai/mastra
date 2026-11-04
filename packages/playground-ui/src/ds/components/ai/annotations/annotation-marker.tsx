@@ -1,13 +1,12 @@
 import type { Ref } from 'react';
 
 import { annotationBubbleStyle } from './annotation-number';
-import type { ChatAnnotation } from './chat-annotations';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface AnnotationMarkerProps {
   ref: Ref<HTMLButtonElement>;
-  annotation: ChatAnnotation;
+  commented: boolean;
   number: number;
   active: boolean;
   expanded: boolean;
@@ -19,7 +18,7 @@ export interface AnnotationMarkerProps {
 /** Starts hidden: `AnnotationMarkers` shows it once the passage is laid out. */
 export function AnnotationMarker({
   ref,
-  annotation,
+  commented,
   number,
   active,
   expanded,
@@ -27,7 +26,6 @@ export function AnnotationMarker({
   onHoverEnd,
   onToggle,
 }: AnnotationMarkerProps) {
-  const commented = Boolean(annotation.comment?.trim());
   return (
     <button
       ref={ref}
