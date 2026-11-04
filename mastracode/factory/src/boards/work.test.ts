@@ -199,4 +199,20 @@ describe("Work's numbered default", () => {
       "Work's default changed: bump WORK_BOARD_DEFAULT_VERSION and update this hash.",
     ).toEqual(PINNED);
   });
+
+  it('keeps every phase key and kind, which upgrades rewrite without moving cards', () => {
+    expect(
+      Object.fromEntries(Object.entries(workBoard.phases).map(([key, phase]) => [key, phase.kind])),
+      "An upgrade can't remove or re-kind a phase cards may sit in: migrate those cards first, then update this list.",
+    ).toEqual({
+      intake: 'resting',
+      triage: 'working',
+      planning: 'working',
+      execute: 'working',
+      review: 'working',
+      'pr-review': 'working',
+      done: 'terminal',
+      canceled: 'terminal',
+    });
+  });
 });

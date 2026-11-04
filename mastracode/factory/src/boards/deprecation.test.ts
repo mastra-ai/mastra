@@ -9,7 +9,7 @@ import { createTestBoard } from './test-utils.js';
 // of these tests is part of what they check.
 
 const DEPRECATION =
-  '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions once. Store boards with factory.upsertBoard() or the boards API; see the README "Stored boards" section.';
+  '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions once. Manage boards through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.';
 
 function construct(config: Partial<ConstructorParameters<typeof MastraFactory>[0]> = {}) {
   return new MastraFactory({
