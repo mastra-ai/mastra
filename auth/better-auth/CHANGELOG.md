@@ -1,5 +1,11 @@
 # @mastra/auth-better-auth
 
+## 1.1.11-alpha.0
+
+### Patch Changes
+
+- Updated `better-auth` to `^1.7.15`. ([#29052](https://github.com/mastra-ai/mastra/pull/29052))
+
 ## 1.1.10
 
 ### Patch Changes
