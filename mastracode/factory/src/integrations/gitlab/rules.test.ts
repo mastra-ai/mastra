@@ -1610,6 +1610,34 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       },
     );
 
+    it("follows the project's closing-issue route: edited, it joins a planned issue", async () => {
+      const h = await harness();
+      const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+      const route = (await h.seeded.boards.listIntakeRoutes(scope)).find(entry => entry.target.joinClosedIssue)!;
+      await h.seeded.boards.updateIntakeRoute(
+        scope,
+        route.id,
+        {
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'author.trusted', operator: 'equals', value: true },
+              { field: 'closedIssue.phase', operator: 'equals', value: 'planning' },
+            ],
+          },
+        },
+        { expectedRevision: route.revision, actor: 'admin' },
+      );
+      const issue = await h.issueCard('planning');
+
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['planning'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+    });
+
     it('files a merge request on an issue still in Triage, which stays there', async () => {
       const h = await harness();
       const issue = await h.issueCard('triage');

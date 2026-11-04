@@ -1868,7 +1868,13 @@ export class FactoryDecisionDispatcher {
     const { card, phase } = attached;
     const stage = card.stages.length === 1 ? card.stages[0] : undefined;
     const board = boards.get(boardForWorkItem(card));
-    if (!phase || !stage || stage === phase || !board?.allowsTransition(stage, phase)) return true;
+    if (!phase || !stage || stage === phase) return true;
+    if (!board?.allowsTransition(stage, phase)) {
+      console.warn(
+        `[factory] attached a pull request to ${card.id}, which stays in ${stage}: its board has no move to ${phase}`,
+      );
+      return true;
+    }
     const moved = await this.#transitionService.transition({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
