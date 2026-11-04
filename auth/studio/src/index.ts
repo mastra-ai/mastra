@@ -875,13 +875,10 @@ export class MastraAuthStudio
   }
 
   /**
-   * Call the shared API as the request's signed-in user, forwarding their
-   * session cookie (e.g. Factory creating a Mastra Gateway key for the user's
-   * organization). A rotated cookie is queued for
-   * {@link consumePendingResponseHeaders} and sent by later calls for the same
-   * request. Returns `null` without a session.
-   *
-   * @param path Shared API path, e.g. `/gateway/organization/v2/keys`.
+   * Call the shared API as the request's signed-in user. The shared API acts on the
+   * session's active organization, not the pinned one. A renewed session cookie is
+   * queued for {@link consumePendingResponseHeaders} and sent by later calls for the
+   * same request. Returns `null` when the request has no session.
    */
   async fetchAsRequestUser(request: Request, path: string, init: RequestInit = {}): Promise<Response | null> {
     const sessionCookie = this.renewedSessionCookies.get(request) ?? this.getSessionIdFromRequest(request);
