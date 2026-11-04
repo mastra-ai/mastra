@@ -1,11 +1,32 @@
 import type { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
+import { CancelledFailure, WorkflowExecutionAlreadyStartedError, WorkflowFailedError } from '@temporalio/client';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createWorkflow } from './workflow';
 
 describe('TemporalRun', () => {
+  it('propagates workflow validateInputs to synchronous and asynchronous runs', async () => {
+    const start = vi.fn().mockResolvedValue({
+      result: async () => ({ status: 'success', result: undefined, state: undefined, steps: {} }),
+    });
+    const workflow = createWorkflow(
+      {
+        id: 'test-workflow',
+        inputSchema: z.unknown(),
+        outputSchema: z.unknown(),
+        options: { validateInputs: false },
+      },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+
+    await (await workflow.createRun({ runId: 'run-1' })).start({ inputData: {} });
+    await (await workflow.createRun({ runId: 'run-2' })).startAsync({ inputData: {} });
+
+    expect(start.mock.calls.map(([, options]) => options.args[0].validateInputs)).toEqual([false, false]);
+  });
+
   it('does not execute stream runs with the local workflow engine', async () => {
     const execute = vi.fn().mockResolvedValue({ value: 2 });
     const start = vi.fn();
@@ -454,6 +475,36 @@ describe('TemporalRun', () => {
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });
 
+    it.each(['start', 'startAsync'] as const)(
+      '%s reports canceled and does not run onError when the Temporal workflow is canceled',
+      async method => {
+        const failure = new WorkflowFailedError(
+          'Workflow execution cancelled',
+          new CancelledFailure('Workflow canceled'),
+          'NON_RETRYABLE_FAILURE',
+        );
+        const onFinish = vi.fn();
+        const onError = vi.fn();
+        const { workflow } = createHookedWorkflow({ onFinish, onError }, () => Promise.reject(failure));
+        const run = await workflow.createRun({ runId: 'run-1' });
+
+        const result = await run[method]({ inputData: { value: 1 } });
+
+        if (method === 'start') {
+          expect(result).toEqual({
+            status: 'canceled',
+            input: { value: 1 },
+            state: undefined,
+            steps: {},
+          });
+        } else {
+          expect(result).toEqual({ runId: 'run-1' });
+        }
+        await vi.waitFor(() => expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'canceled' })));
+        expect(onError).not.toHaveBeenCalled();
+      },
+    );
+
     it('runs onError when dispatching to Temporal fails', async () => {
       const failure = new Error('Temporal service unavailable');
       const onError = vi.fn();
@@ -466,6 +517,32 @@ describe('TemporalRun', () => {
       expect(result.status).toBe('failed');
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });
+
+    it.each(['start', 'startAsync'] as const)(
+      '%s does not run terminal hooks when Temporal rejects a duplicate workflow id',
+      async method => {
+        const failure = new WorkflowExecutionAlreadyStartedError(
+          'Workflow execution already started',
+          'run-1',
+          'hooked-workflow',
+        );
+        const onFinish = vi.fn();
+        const onError = vi.fn();
+        const start = vi.fn().mockRejectedValue(failure);
+        const { workflow } = createHookedWorkflow({ onFinish, onError }, async () => ({}), start);
+        const run = await workflow.createRun({ runId: 'run-1' });
+
+        if (method === 'start') {
+          const result = await run.start({ inputData: { value: 1 } });
+          expect(result.status).toBe('failed');
+        } else {
+          await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toBe(failure);
+        }
+
+        expect(onFinish).not.toHaveBeenCalled();
+        expect(onError).not.toHaveBeenCalled();
+      },
+    );
 
     it('runs terminal hooks when a resumed Temporal workflow fails', async () => {
       const failure = new Error('activity failed after resume');
