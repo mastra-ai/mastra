@@ -30,6 +30,8 @@ import {
   trackBoardWrites,
 } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
+import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
+import type { FactoryClaimableWorkScope } from './claimable-work.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
   WorkItemDbRecord,
@@ -45,8 +47,6 @@ import {
   FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   WORK_ITEMS_SCHEMA,
 } from './work-item-schema.js';
-import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
-import type { FactoryClaimableWorkScope } from './claimable-work.js';
 
 export type { FactoryClaimableWorkScope } from './claimable-work.js';
 
