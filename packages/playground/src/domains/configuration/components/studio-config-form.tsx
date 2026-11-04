@@ -14,7 +14,7 @@ import {
 } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
@@ -28,11 +28,13 @@ export interface StudioConfigFormProps {
 
 export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
-  // Each header keeps an id so removing one doesn't hand its inputs to the next.
-  const [headers, setHeaders] = useState<Array<HeaderListFormItem & { id: string }>>(() => {
+  // Each header keeps an id so removing one doesn't hand its inputs to the next. A counter, not
+  // `crypto.randomUUID`, which is missing when Studio is served over plain http.
+  const nextHeaderId = useRef(0);
+  const [headers, setHeaders] = useState<Array<HeaderListFormItem & { id: number }>>(() => {
     if (!initialConfig) return [];
 
-    return Object.entries(initialConfig.headers).map(([name, value]) => ({ id: crypto.randomUUID(), name, value }));
+    return Object.entries(initialConfig.headers).map(([name, value]) => ({ id: nextHeaderId.current++, name, value }));
   });
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -56,7 +58,8 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
   };
 
   const handleAddHeader = (header: HeaderListFormItem) => {
-    setHeaders(prev => [...prev, { ...header, id: crypto.randomUUID() }]);
+    const id = nextHeaderId.current++;
+    setHeaders(prev => [...prev, { ...header, id }]);
   };
 
   const handleRemoveHeader = (index: number) => {

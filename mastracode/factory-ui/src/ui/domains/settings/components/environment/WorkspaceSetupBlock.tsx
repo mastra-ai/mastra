@@ -33,7 +33,7 @@ export function WorkspaceSetupBlock({
           onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
         />
       </SettingsRow>
-      <SettingsRow label="Setup command" description="Runs once every repository is cloned.">
+      <SettingsRow label="Setup command" description="Runs from the working directory once every repository is cloned.">
         <CommittedInput
           label="Setup command"
           value={command ?? ''}
