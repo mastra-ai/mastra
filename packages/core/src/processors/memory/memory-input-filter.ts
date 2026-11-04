@@ -247,7 +247,7 @@ export class MemoryInputFilter implements Processor {
       const advanced = await this.advanceStoredToolCalls(boundaryAssistant, threadId);
       if (advanced) retainedInput = [advanced, ...retainedInput];
     } else if (retainedInput[0]) {
-      retainedInput = [answeringStoredCalls(retainedInput[0], stored.messages[0]!)];
+      retainedInput[0] = answeringStoredCalls(retainedInput[0], stored.messages[0]!);
     }
 
     messageList.clear.input.db();
