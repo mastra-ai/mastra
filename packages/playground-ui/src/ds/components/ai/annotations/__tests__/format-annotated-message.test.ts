@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { cleanup, render } from '@testing-library/react';
+import { createElement } from 'react';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { formatAnnotatedMessage, normalizeAnnotationText } from '../format-annotated-message';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+
+afterEach(cleanup);
+
+const renderMarkdown = (message: string) => render(createElement(MarkdownRenderer, null, message)).container;
+
+const annotationList = (message: string) => renderMarkdown(message).querySelector('ol')?.textContent;
 
 describe('formatAnnotatedMessage', () => {
   describe('when no annotations were added', () => {
@@ -62,6 +72,26 @@ describe('formatAnnotatedMessage', () => {
   describe('when a comment holds only whitespace', () => {
     it('sends the passage without an empty comment', () => {
       expect(formatAnnotatedMessage('Hi', [{ text: 'Open rows', comment: '  \n ' }])).toBe('1. > Open rows\n\nHi');
+    });
+  });
+
+  describe('when the typed message starts with a numbered item', () => {
+    const message = formatAnnotatedMessage('2. Do this first', [{ text: 'Open rows' }]);
+
+    it('keeps that item out of the annotation list', () => {
+      expect(annotationList(message)).not.toContain('Do this first');
+    });
+
+    it('shows nothing but the passage and the typed item', () => {
+      expect(renderMarkdown(message).textContent?.replace(/[\s\p{Cf}]/gu, '')).toBe('OpenrowsDothisfirst');
+    });
+  });
+
+  describe('when the typed message starts indented', () => {
+    it('keeps it out of the last annotation', () => {
+      const message = formatAnnotatedMessage('    indented note', [{ text: 'Open rows' }]);
+
+      expect(annotationList(message)).not.toContain('indented note');
     });
   });
 });

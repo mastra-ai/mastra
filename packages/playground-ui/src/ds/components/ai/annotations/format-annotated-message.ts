@@ -24,6 +24,10 @@ function formatListItem({ text, comment }: AnnotatedPassage, number: number): st
   return [quote, '', ...indentedNote].join('\n');
 }
 
+// CommonMark keeps a numbered or indented line that follows the list inside it; a zero-width-space paragraph ends the list unseen.
+const JOINS_LIST = /^(?:\s|\d{1,9}[.)](?:\s|$))/;
+const LIST_END = '\n\n\u200B\n\n';
+
 /**
  * The message the agent receives: the annotations as a numbered Markdown list, each holding its passage
  * as a blockquote and any comment on it, then what the person typed. The list keeps a comment on the
@@ -35,5 +39,7 @@ export function formatAnnotatedMessage(text: string, annotations: readonly Annot
     .filter(annotation => annotation.text);
   if (passages.length === 0) return text;
   const list = passages.map((passage, index) => formatListItem(passage, index + 1)).join('\n\n');
-  return text.trim() ? `${list}\n\n${text}` : list;
+  if (!text.trim()) return list;
+  const separator = JOINS_LIST.test(text.replace(/^\s*\n/, '')) ? LIST_END : '\n\n';
+  return `${list}${separator}${text}`;
 }
