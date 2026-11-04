@@ -66,7 +66,7 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     board_key: { type: 'text' },
     // Null lands the card in the board's first phase.
     phase_key: { type: 'text', nullable: true },
-    // The status events the route handles (`BoardEvent`s). Null on rows written before routes named
+    // The status events the route handles (`StatusEvent`s). Null on rows written before routes named
     // events: those place new cards, as `['work_item.created']`.
     on_events: { type: 'json', nullable: true },
     // Lets an event move an existing card into a working phase. Null on older rows: off.

@@ -3,18 +3,9 @@ import { CARD_RULE_FIELDS } from '../rules/rule-group.js';
 
 /**
  * What happened to a card's source, named the same for every provider. Integrations map their
- * webhooks onto these; intake routes name the ones they handle in `on`.
+ * webhooks onto these. Status events change where a card belongs: only these can move a card, so
+ * only these may be named in a route's `on`.
  */
-export const BOARD_EVENTS = [
-  'work_item.created',
-  'work_item.closed',
-  'work_item.reopened',
-  'work_item.commented',
-  'work_item.edited',
-] as const;
-export type BoardEvent = (typeof BOARD_EVENTS)[number];
-
-/** Events that change where a card belongs. Only these can move a card, so only these may be named in a route's `on`. */
 export const STATUS_EVENTS = ['work_item.created', 'work_item.closed', 'work_item.reopened'] as const;
 export type StatusEvent = (typeof STATUS_EVENTS)[number];
 

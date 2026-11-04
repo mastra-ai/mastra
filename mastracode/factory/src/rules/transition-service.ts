@@ -347,7 +347,6 @@ export class FactoryTransitionService {
           configVersion: this.#configVersion,
           ...(from ? { from } : {}),
           ...(request.reenter ? { reenter: true } : {}),
-          ...(request.eventRoute ? { intakeRouteId: request.eventRoute.routeId } : {}),
           ...detail,
         },
       })

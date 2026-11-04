@@ -2054,7 +2054,6 @@ export class FactoryDecisionDispatcher {
           kind: 'source-activity',
           summary: message,
           priority: 'medium',
-          payload: { message, event: decision.event, reference: decision.reference, url: decision.url },
           sourceId: record.id,
           dedupeKey: record.idempotencyKey,
           coalesceKey: `${record.workItemId}:${decision.event}`,

@@ -783,7 +783,7 @@ Every integration reports issue status changes with the same names: `work_item.c
 
 When one of these arrives for a card that already exists, the first enabled route on the card's board whose `on` names the event and whose `when` matches the card and the event moves the card to the route's phase:
 
-- The move is a system move made by the route, recorded in the card's history (`by: intake-route:<routeId>`) and in the audit log (`factory.work_item.stage_moved` with `cause: event_route` and the route's `intakeRouteId`).
+- The move is a system move made by the route, recorded in the card's history (`by: intake-route:<routeId>`) and in the audit log (`factory.work_item.stage_moved` with `cause: event_route`, made by actor `intake-route:<routeId>`).
 - It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue never lands in PR review).
 - It is refused with `approval_required` when the target is a working phase and the route doesn't set `allowWorkingPhase`.
 - A move into a working or resting phase waits for a run in flight on the card to end, then moves the card.

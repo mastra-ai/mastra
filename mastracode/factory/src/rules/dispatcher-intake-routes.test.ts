@@ -163,7 +163,7 @@ async function setup(
   const stageAudits = async (cardId: string) =>
     (await seeded.audit.list({ orgId: 'org-1' })).events
       .filter(event => event.targets.some(target => target.id === cardId))
-      .map(event => ({ action: event.action, metadata: event.metadata }));
+      .map(event => ({ action: event.action, actorId: event.actorId, metadata: event.metadata }));
   return {
     ...seeded,
     scope,
@@ -605,9 +605,9 @@ describe('intake routes moving existing cards on status events', () => {
     });
     expect(await stageAudits(second.id)).toContainEqual({
       action: 'factory.work_item.stage_moved',
+      actorId: `intake-route:${canceled.id}`,
       metadata: expect.objectContaining({
         cause: 'event_route',
-        intakeRouteId: canceled.id,
         from: 'intake',
         to: 'canceled',
       }),
@@ -658,6 +658,7 @@ describe('intake routes moving existing cards on status events', () => {
     expect(await routeDecisions(card.id)).toEqual(['succeeded']);
     expect(await stageAudits(card.id)).toContainEqual({
       action: 'factory.work_item.transition_rejected',
+      actorId: expect.stringMatching(/^intake-route:/),
       metadata: expect.objectContaining({ cause: 'event_route', code: 'approval_required', to: 'triage' }),
     });
 
