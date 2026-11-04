@@ -3,6 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "lint": {
+      "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/oxlint.config.ts", "$TURBO_ROOT$/packages/playground-ui/oxlint/**"]
     },
     "build:lib": {

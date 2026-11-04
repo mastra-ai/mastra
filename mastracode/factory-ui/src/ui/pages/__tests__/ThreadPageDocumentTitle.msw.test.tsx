@@ -1,8 +1,8 @@
 /**
  * `document.title` follows the current thread so browser tabs read at a
  * glance. Two shapes:
- *   - PR-backed factory sessions → `#<number> | Mastra Factory`
- *   - User sessions (and any non-PR thread) → `<thread title> | Mastra Factory`
+ *   - PR-backed factory sessions → `#<number>: Mastra Factory`
+ *   - User sessions (and any non-PR thread) → `<thread title>: Mastra Factory`
  * Everything else — loading, no linked work item, no title yet — leaves the
  * default `Mastra Factory` in place.
  */
@@ -154,7 +154,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('#1567 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('#1567: Mastra Factory'));
   });
 
   it('shows the thread title for user sessions', async () => {
@@ -164,7 +164,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/user/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('Investigate Pricing Bug | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('Investigate Pricing Bug: Mastra Factory'));
   });
 
   it('uses the thread title in the work-session sidebar while the document title shows the issue number', async () => {
@@ -203,7 +203,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('#42 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('#42: Mastra Factory'));
     expect(await screen.findByRole('link', { name: 'Fix flaky login' })).toBeInTheDocument();
   });
 
@@ -243,7 +243,7 @@ describe('ThreadPage document title', () => {
     });
     await renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`);
 
-    await waitFor(() => expect(document.title).toBe('COR-210 | Mastra Factory'));
+    await waitFor(() => expect(document.title).toBe('COR-210: Mastra Factory'));
   });
 
   it('keeps the branch label when a work-session thread has no title yet', async () => {
