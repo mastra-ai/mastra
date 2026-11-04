@@ -35,34 +35,32 @@ type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
-export const ACCOUNT_SETTINGS_GROUP = {
-  id: 'account',
-  label: 'Account',
-  items: [
-    {
-      id: 'account',
-      label: SETTINGS_SECTION_LABELS.account,
-      icon: CircleUserRound,
-      searchText: 'my account profile identity email authentication session log out sign out user',
-    },
-    {
-      id: 'preferences',
-      label: SETTINGS_SECTION_LABELS.preferences,
-      icon: Palette,
-      searchText: 'preferences general theme appearance color scheme completion sound',
-    },
-    {
-      id: 'connections',
-      label: SETTINGS_SECTION_LABELS.connections,
-      icon: Cable,
-      searchText:
-        'personal organization connections connected accounts slack integrations github gitlab tokens pat mcp claude chatgpt',
-    },
-  ],
-} satisfies SettingsNavGroup;
-
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  ACCOUNT_SETTINGS_GROUP,
+  {
+    id: 'account',
+    label: 'Account',
+    items: [
+      {
+        id: 'account',
+        label: SETTINGS_SECTION_LABELS.account,
+        icon: CircleUserRound,
+        searchText: 'my account profile identity email authentication session log out sign out user',
+      },
+      {
+        id: 'preferences',
+        label: SETTINGS_SECTION_LABELS.preferences,
+        icon: Palette,
+        searchText: 'preferences general theme appearance color scheme completion sound',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText:
+          'personal organization connections connected accounts slack integrations github gitlab tokens pat mcp claude chatgpt',
+      },
+    ],
+  },
   {
     id: 'agent',
     label: 'Agent',
