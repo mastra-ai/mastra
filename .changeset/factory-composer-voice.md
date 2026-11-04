@@ -2,7 +2,7 @@
 '@mastra/factory': patch
 ---
 
-Added voice input to the Factory composer. Click the mic button to dictate. The clip is transcribed server-side through `POST /web/voice/transcribe` and the text is appended to your draft. Supported speech-to-text providers are OpenAI, Mistral Voxtral, Groq, and Deepgram. OAuth subscriptions and deployment env keys are never used for transcription.
+Added voice input to the Factory composer. Click the mic button to dictate. The clip is transcribed server-side through `POST /web/voice/transcribe` and the text is appended to your draft. Supported speech-to-text providers are OpenAI, Mistral Voxtral, Groq, Deepgram, and the other OpenAI-compatible hosts in the Mastra Code speech-to-text registry. OAuth subscriptions and deployment env keys are never used for transcription.
 
 Configure it in **Settings → Models → Voice input**:
 
