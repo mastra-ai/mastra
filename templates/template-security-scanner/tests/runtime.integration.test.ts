@@ -95,6 +95,24 @@ afterEach(async () => {
 });
 
 describe('real local runtime', () => {
+  it('rejects unsupported discovery platforms before contacting Docker or writing runtime data', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'scanner-unsupported-platform-'));
+    roots.push(root);
+    const settings = loadSettings(
+      {
+        DOCKER_PLATFORM: 'linux/amd64',
+        DOCKER_SOCKET: join(root, 'absent-docker.sock'),
+        SCANNER_DISCOVERY_ENABLED: 'false',
+      },
+      root,
+    );
+    await expect(setup(settings)).rejects.toMatchObject({
+      code: 'DISCOVERY_PLATFORM_UNSUPPORTED',
+      message: expect.stringContaining('linux/arm64'),
+    });
+    expect(await readdir(root)).toEqual([]);
+  });
+
   it('checks parent isolation in standalone folders and preserves filesystem errors', async () => {
     const parent = await mkdtemp(join(tmpdir(), 'scanner-standalone-parent-'));
     roots.push(parent);

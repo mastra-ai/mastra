@@ -1,4 +1,4 @@
-import { loadSettings, morphModelDescriptor, type Settings } from '../config/settings.js';
+import { loadSettings, morphModelDescriptor, RuntimeDiagnostic, type Settings } from '../config/settings.js';
 import { buildLocalImage, preflight, reconcileOwnedSandboxes, releaseImage } from './docker.js';
 import { withSetupLock, writeReceipt } from './files.js';
 import { probeSandbox } from './sandbox.js';
@@ -8,6 +8,11 @@ import { acquireInstance } from '../discovery/instance.js';
 import { recoverInterruptedRestore } from './operations.js';
 
 export async function setup(settings: Settings = loadSettings(), signal?: AbortSignal) {
+  if (settings.DOCKER_PLATFORM !== 'linux/arm64')
+    throw new RuntimeDiagnostic(
+      'DISCOVERY_PLATFORM_UNSUPPORTED',
+      'Discovery requires a native linux/arm64 Docker daemon.',
+    );
   const environment = await preflight(settings);
   signal?.throwIfAborted();
   return withSetupLock(settings, async () => {
