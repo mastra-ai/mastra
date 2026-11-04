@@ -181,8 +181,8 @@ export class PgKnowledgeImporters implements KnowledgeImporterStore {
 
   async updateImportOwnedPages(input: {
     importerId: string;
-    add?: KnowledgeImportOwnedPage[];
-    remove?: KnowledgeImportOwnedPage[];
+    add?: readonly KnowledgeImportOwnedPage[];
+    remove?: readonly KnowledgeImportOwnedPage[];
   }): Promise<void> {
     await this.#client.tx(async tx => {
       for (const page of input.remove ?? []) {
