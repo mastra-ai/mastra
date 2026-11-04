@@ -575,6 +575,16 @@ describe('DashboardRenderer', () => {
     expect(columns('twelfth')).toEqual(['@3xl:col-span-1']);
   });
 
+  it('stretches every card to its row, so a row of cards shares one height', () => {
+    const { container } = renderDashboard({
+      schemaVersion: 1,
+      rows: [{ widgets: [note('short', 'x', { span: 6 }), note('narrow', 'x', { span: 2 })] }],
+    });
+    // jsdom lays nothing out; the cell sizing its card to the (stretched) grid row is what equalises them.
+    expect(cell(container, 'short').className.split(' ')).toContain('*:size-full');
+    expect(cell(container, 'narrow').className.split(' ')).toContain('*:size-full');
+  });
+
   it("adds the page's filters to every widget's queries", async () => {
     serveCapabilities(traceAggregateCapabilities);
     const traces: TraceAggregateRequest[] = [];

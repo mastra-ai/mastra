@@ -22,10 +22,13 @@ export function DashboardGridRow({ children }: { children: ReactNode }) {
   return <div className="grid gap-4 @3xl:grid-cols-12">{children}</div>;
 }
 
-/** A grid cell; the grid owns the width, so a card's own `min-w-*` is neutralised. */
+/**
+ * A grid cell; the grid owns the width, so a card's own `min-w-*` is neutralised. The cell stretches
+ * to its row and its card fills it, so a card whose title wraps doesn't stand taller than its neighbours.
+ */
 export function DashboardGridCell({ span, id, children }: { span: DashboardSpan; id?: string; children: ReactNode }) {
   return (
-    <div data-widget-id={id} data-span={span} className={cn('min-w-0 *:w-full *:min-w-0!', SPAN_CLASSES[span])}>
+    <div data-widget-id={id} data-span={span} className={cn('min-w-0 *:size-full *:min-w-0!', SPAN_CLASSES[span])}>
       {children}
     </div>
   );
