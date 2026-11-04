@@ -68,16 +68,35 @@ export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
 const TRAILING_TAIL_PIPE = /(?:^|[^|])\|\s*tail(?:\s[^|;&]*)?$/;
 
 /**
+ * Longest command re-run under bash. The command appears twice in the wrapped string, and Linux
+ * rejects a single `sh -c` argument over 128 KiB (E2BIG).
+ */
+const MAX_BASH_PIPEFAIL_COMMAND_LENGTH = 32 * 1024;
+
+/** Quote a string as one POSIX shell word. */
+function quoteShellWord(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
  * POSIX shells report a pipeline's status from its last command, so `cmd | tail -N` exits 0 even
- * when `cmd` fails. Enable `pipefail` (where the shell supports it) for pipelines ending in `tail`
- * so the upstream failure is reported. `tail` reads all of its input, so upstream commands are
- * not cut off by SIGPIPE. LocalSandbox on Windows runs commands through cmd.exe, which has no
- * `set -o`.
+ * when `cmd` fails. Enable `pipefail` for pipelines ending in `tail` so the upstream failure is
+ * reported. `tail` reads all of its input, so upstream commands are not cut off by SIGPIPE.
+ *
+ * dash (`/bin/sh` on Debian and Ubuntu before 26.04) rejects `set -o pipefail`. There the command
+ * is re-run with `exec bash -o pipefail -c`, which keeps the PID, environment, cwd and stdio.
+ * Without bash the command runs as written. The command stays on the same line as the guard, so
+ * shell error line numbers are unchanged. LocalSandbox on Windows runs commands through cmd.exe,
+ * which has no `set -o`.
  */
 function reportUpstreamPipelineFailure(command: string, sandboxProvider: string): string {
   if (sandboxProvider === 'local' && process.platform === 'win32') return command;
   if (!TRAILING_TAIL_PIPE.test(command.trim())) return command;
-  return `(set -o pipefail) 2>/dev/null && set -o pipefail; ${command}`;
+  const bashFallback =
+    command.length <= MAX_BASH_PIPEFAIL_COMMAND_LENGTH
+      ? ` elif command -v bash >/dev/null 2>&1; then exec bash -o pipefail -c ${quoteShellWord(command)};`
+      : '';
+  return `if (set -o pipefail) 2>/dev/null; then set -o pipefail;${bashFallback} fi; ${command}`;
 }
 
 const ABORTED_COMMAND_NOTE =
