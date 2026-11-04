@@ -177,11 +177,15 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  | { status: 'pending'; nextPollMs: number }
-  | { status: 'complete' }
-  | { status: 'failed'; error: string };
+  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
+}
+
+/** `GET`/`PUT /web/voice/settings`. `selected: null` means auto: the first provider with a key. */
+export interface VoiceSettingsResponse {
+  selected: { provider: string; model: string } | null;
+  models: Array<{ provider: string; model: string; label: string; available: boolean }>;
 }

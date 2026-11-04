@@ -53,6 +53,7 @@ import {
   SourceControlConnectionNotFoundError,
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
@@ -131,6 +132,7 @@ export interface FactoryApiRoutesDeps {
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
     skillOverrides: SkillOverridesStorage;
+    voiceSettings: VoiceSettingsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -803,6 +805,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
+      voiceSettings: deps.domains.voiceSettings,
     }).routes(),
     ...new SkillRoutes({
       auth: deps.auth,

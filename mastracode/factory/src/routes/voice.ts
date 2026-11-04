@@ -14,7 +14,7 @@
 import { Readable } from 'node:stream';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import { resolveSTTModel, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
+import { resolveSTTModel, STT_MODELS, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
 import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
@@ -22,6 +22,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 
 import type { CredentialRecord, ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteDependencies } from './route.js';
@@ -136,9 +137,59 @@ export interface VoiceRoutesDeps extends RouteDependencies {
   authStorage?: AuthStorage;
   /** Tenant credential domain; absent in local mode. */
   modelCredentials?: ModelCredentialsStorage;
+  /** The caller's chosen transcription model. Without it voice input stays on auto. */
+  voiceSettings?: VoiceSettingsStorage;
+}
+
+const settingsBodySchema = z.object({
+  provider: z.string().min(1).nullable(),
+  model: z.string().min(1).optional(),
+});
+
+/** What the caller can transcribe with: their API keys and their saved model choice. */
+interface VoiceCaller {
+  keyFor(provider: string): string | undefined;
+  settingsKey: { orgId: string; userId: string };
 }
 
 export class VoiceRoutes extends Route<VoiceRoutesDeps> {
+  async #caller(c: Context): Promise<VoiceCaller | { response: Response }> {
+    const ctx = await resolveCredentialContext({ c, auth: this.deps.auth, credentials: this.deps.modelCredentials });
+    if ('response' in ctx) return ctx;
+    if (ctx.mode === 'tenant') {
+      const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
+      return {
+        keyFor: provider => tenantApiKey(records, provider),
+        settingsKey: { orgId: ctx.orgId, userId: ctx.userId },
+      };
+    }
+    return {
+      keyFor: provider => localApiKey(provider, this.deps.authStorage),
+      settingsKey: { orgId: 'local', userId: 'local' },
+    };
+  }
+
+  async #savedModel(caller: VoiceCaller): Promise<STTModel | undefined> {
+    const storage = this.deps.voiceSettings;
+    if (!storage) return undefined;
+    await storage.ensureReady();
+    const saved = await storage.get(caller.settingsKey);
+    return saved ? STT_MODELS.find(m => m.provider === saved.provider && m.model === saved.model) : undefined;
+  }
+
+  async #settings(caller: VoiceCaller) {
+    const selected = await this.#savedModel(caller);
+    return {
+      selected: selected ? { provider: selected.provider, model: selected.model } : null,
+      models: STT_MODELS.map(m => ({
+        provider: m.provider,
+        model: m.model,
+        label: m.label,
+        available: caller.keyFor(m.provider) !== undefined,
+      })),
+    };
+  }
+
   routes() {
     // Base64 inflates the clip by a third; leave room for the JSON envelope.
     const limitBody = bodyLimit({
@@ -146,18 +197,51 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
       onError: c => c.json({ error: 'Recording is too long to transcribe.' }, 413),
     });
     return [
+      registerApiRoute('/web/voice/settings', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async context => {
+          const c = loose(context);
+          const caller = await this.#caller(c);
+          if ('response' in caller) return caller.response;
+          return c.json(await this.#settings(caller));
+        },
+      }),
+      registerApiRoute('/web/voice/settings', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async context => {
+          const c = loose(context);
+          const caller = await this.#caller(c);
+          if ('response' in caller) return caller.response;
+          const storage = this.deps.voiceSettings;
+          if (!storage) return c.json({ error: 'Voice settings storage is unavailable.' }, 503);
+
+          const parsed = settingsBodySchema.safeParse(await c.req.json().catch(() => undefined));
+          if (!parsed.success) return c.json({ error: 'Expected { provider, model }.' }, 400);
+          await storage.ensureReady();
+          const { provider, model } = parsed.data;
+          if (provider === null) {
+            await storage.clear(caller.settingsKey);
+            return c.json(await this.#settings(caller));
+          }
+          const entry = model
+            ? STT_MODELS.find(m => m.provider === provider && m.model === model)
+            : STT_MODELS.find(m => m.provider === provider);
+          if (!entry)
+            return c.json({ error: `${provider}/${model ?? ''} is not a supported speech-to-text model.` }, 400);
+          await storage.set({ ...caller.settingsKey, provider: entry.provider, model: entry.model });
+          return c.json(await this.#settings(caller));
+        },
+      }),
       registerApiRoute('/web/voice/transcribe', {
         method: 'POST',
         requiresAuth: false,
         middleware: (context, next) => limitBody(loose(context), next),
         handler: async context => {
           const c = loose(context);
-          const ctx = await resolveCredentialContext({
-            c,
-            auth: this.deps.auth,
-            credentials: this.deps.modelCredentials,
-          });
-          if ('response' in ctx) return ctx.response;
+          const caller = await this.#caller(c);
+          if ('response' in caller) return caller.response;
 
           const parsed = transcribeBodySchema.safeParse(await c.req.json().catch(() => undefined));
           if (!parsed.success) return c.json({ error: 'Expected { audio, mimeType }.' }, 400);
@@ -167,28 +251,27 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
             return c.json({ error: 'Recording is too long to transcribe.' }, 413);
           }
 
-          const records = ctx.mode === 'tenant' ? await ctx.storage.listCredentials(ctx.orgId, ctx.userId) : undefined;
-          const keyFor = (provider: string) =>
-            records ? tenantApiKey(records, provider) : localApiKey(provider, this.deps.authStorage);
-
           const requested = parsed.data.provider;
           if (requested && !sttProviders().includes(requested)) {
             return c.json({ error: `${requested} is not a supported speech-to-text provider.` }, 400);
           }
-          const provider = requested ?? sttProviders().find(p => keyFor(p) !== undefined);
-          const apiKey = provider ? keyFor(provider) : undefined;
+          // An explicit request wins, then the saved choice, then the first provider with a key.
+          const saved = requested ? undefined : await this.#savedModel(caller);
+          const chosen = requested ?? saved?.provider;
+          const provider = chosen ?? sttProviders().find(p => caller.keyFor(p) !== undefined);
+          const apiKey = provider ? caller.keyFor(provider) : undefined;
           if (!provider || !apiKey) {
             return c.json(
               {
-                error: requested
-                  ? `Voice input needs a ${requested} API key. Add one in Settings → Providers.`
+                error: chosen
+                  ? `Voice input needs a ${chosen} API key. Add one in Settings → Providers, or pick another model in Settings → Voice input.`
                   : 'Voice input needs a speech-to-text API key (for example OpenAI or Mistral). Add one in Settings → Providers.',
               },
               400,
             );
           }
 
-          const entry = resolveSTTModel(provider, parsed.data.model);
+          const entry = resolveSTTModel(provider, parsed.data.model ?? saved?.model);
           try {
             const voice = await buildVoice(entry, apiKey);
             const result = await voice.listen(Readable.from(audio), { filetype: audioFiletype(parsed.data.mimeType) });
