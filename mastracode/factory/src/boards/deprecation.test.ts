@@ -9,7 +9,7 @@ import { createTestBoard } from './test-utils.js';
 // of these tests is part of what they check.
 
 const DEPRECATION =
-  '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions once. Manage boards through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.';
+  '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Pass board definitions as seedBoards, write them into existing projects with factory.insertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.';
 
 function construct(config: Partial<ConstructorParameters<typeof MastraFactory>[0]> = {}) {
   return new MastraFactory({
@@ -33,6 +33,27 @@ describe('deprecating boards declared in code', () => {
     construct();
     construct({ includeDefaultBoards: true });
     expect(deprecationWarnings(warn)).toEqual([]);
+  });
+
+  it('says nothing for seedBoards, and refuses one the boards API would refuse', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const bugs = {
+      key: 'bugs',
+      name: 'Bugs',
+      phases: [
+        { key: 'reported', name: 'Reported', kind: 'resting' as const, nextPhases: ['fixed'] },
+        { key: 'fixed', name: 'Fixed', kind: 'terminal' as const },
+      ],
+    };
+    construct({ seedBoards: [bugs] });
+    expect(deprecationWarnings(warn)).toEqual([]);
+    expect(() => construct({ seedBoards: [{ ...bugs, key: 'work' }] })).toThrow(
+      'MastraFactory: seed board "work" uses the key of a built-in or app board.',
+    );
+    expect(() => construct({ seedBoards: [bugs, bugs] })).toThrow('MastraFactory: seed board "bugs" is listed twice.');
+    expect(() => construct({ seedBoards: [{ ...bugs, phases: [] }] })).toThrow(
+      /^MastraFactory: seed board is invalid: /,
+    );
   });
 
   it('warns once per process for an app that passes its own boards', () => {

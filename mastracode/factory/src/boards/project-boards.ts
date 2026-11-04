@@ -90,6 +90,8 @@ export interface ProjectBoardCacheOptions {
   /** Lists every project, to warm them at boot. */
   projects?: { listAll(): Promise<readonly { orgId: string; id: string }[]> };
   codeSkills?: readonly InlineSkill[];
+  /** Board definitions stored in every project once, after the Work and app boards. */
+  seedBoards?: readonly StoredBoardInput[];
   recheckMs?: number;
   now?: () => number;
   warn?: (message: string) => void;
@@ -147,7 +149,8 @@ export class ProjectBoardCache implements ProjectBoardSource {
     this.#seeds = new Map(
       [...this.codeRegistry.values()]
         .filter(isEditableCodeBoard)
-        .map(board => [board.id, boardDefinitionOf(board)] as const),
+        .map(board => [board.id, boardDefinitionOf(board)] as const)
+        .concat((options.seedBoards ?? []).map(board => [board.key, board] as const)),
     );
   }
 
@@ -321,6 +324,12 @@ export class ProjectBoardCache implements ProjectBoardSource {
         problems: [...merged.problems, ...this.#skillProblems(merged.board)],
       });
       boards.push(merged.board);
+    }
+    if (!this.#seeded.has(scopeKey(scope))) {
+      for (const key of this.#seeds.keys()) {
+        if (this.codeRegistry.has(key) || byKey.has(key)) continue;
+        problems.push(`Board "${key}" isn't stored in this project yet; Factory stores it on the next load.`);
+      }
     }
     for (const row of rows) {
       if (this.codeRegistry.has(row.key)) continue;

@@ -2,27 +2,28 @@
 '@mastra/factory': minor
 ---
 
-Each project's boards now live only in its database. Factory writes a copy of the built-in Work board and of every board passed to `MastraFactory({ boards })` when a project is created; existing projects get theirs the first time Factory loads them (including at startup). Factory then serves that stored copy, edited or not, so what you see in the database is the board that runs.
+Each project's boards now live only in its database. Factory stores the built-in Work board, every board passed to `MastraFactory({ boards })` and every definition passed as `seedBoards` in a project once: when the project is created, and in existing projects the first time Factory loads them (including at startup). Factory then serves the stored board, edited or not, so what you see in the database is the board that runs.
 
-**Default changes:** an unedited Work board moves to a newer Factory default only when a release ships one, and never back, so replicas on two versions during a deploy don't undo each other. Edited copies keep your changes. App boards are copied once: when your code for one changes, the project keeps its copy and the board shows `defaultChanged: true` until you reset it or write the new definition.
+**Behaviour change: releases no longer update existing projects' boards.** A newer Work default or a changed app board doesn't reach a project that already stored the board; reset the board (`POST …/boards/:boardKey/reset`) to take Factory's current definition, at the next revision. A board a project deleted is not stored again. Board responses no longer include `customized` or `defaultChanged`, and every editable board has a stored revision.
 
-**Boards that no longer fit the code** (edited copies a release no longer fits, older boards stored under a code board's key, copies of boards the app stopped defining) are now served instead of hidden, with the code behaviour that still fits and a `problems` entry for anything dropped.
+**Boards that no longer fit the code** (edited boards a release no longer fits, older boards stored under a code board's key, boards the app stopped defining) are now served instead of hidden, with the code behaviour that still fits and a `problems` entry for anything dropped. App boards and `seedBoards` boards can be deleted; the Work board can't.
 
-**Writing a board into a project:** added `factory.upsertBoard()`, which writes a board definition into an existing project, for example to push a changed app board into a copy that no longer follows its code. It creates or replaces the board with the same checks, cache refresh and audit as the boards API, one project per call; a board under a new key gets no code behaviour. An unchanged board writes nothing; a refused write throws `BoardWriteError` with the API's error code.
+**New board definitions in code:** `seedBoards` stores definitions in every project once, including projects created later, and `factory.insertBoard()` stores a board in existing projects that don't have it, never overwriting one they have:
 
 ```ts
-await factory.upsertBoard(
-  { orgId, factoryProjectId },
-  {
-    key: 'bugs',
-    name: 'Bugs',
-    phases: [
-      { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
-      { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
-      { key: 'fixed', name: 'Fixed', kind: 'terminal' },
-    ],
-  },
-);
+const bugs = {
+  key: 'bugs',
+  name: 'Bugs',
+  phases: [
+    { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+    { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
+    { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+  ],
+} satisfies StoredBoardInput;
+
+const factory = new MastraFactory({ storage, seedBoards: [bugs] });
+await factory.prepare();
+const { inserted, skipped } = await factory.insertBoard(bugs, { projects: 'all' });
 ```
 
-**Deprecated:** `defineBoard()` and the `boards` option of `MastraFactory`. They keep working; manage boards through the boards API instead. Removal is tracked in mastra-ai/mastra#28920.
+**Deprecated:** `defineBoard()` and the `boards` option of `MastraFactory`. They keep working; use `seedBoards`, `factory.insertBoard()` or the boards API instead. Removal is tracked in mastra-ai/mastra#28920.
