@@ -11,7 +11,8 @@
  * invocation to a trusted backend that authenticates users and owns sessions.
  */
 import { createHash } from 'node:crypto';
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { mastra } from './src/mastra/index.js';
 
@@ -21,6 +22,8 @@ process.on('unhandledRejection', err => console.error('[unhandledRejection]', er
 const PORT = Number(process.env.PORT ?? 8080);
 const SESSION_HEADER = 'x-amzn-bedrock-agentcore-runtime-session-id';
 const USER_HEADER = 'x-amzn-bedrock-agentcore-runtime-user-id';
+const MAX_BODY_BYTES = 64 * 1024;
+const UPLOAD_TIMEOUT_MS = 30_000;
 const invocationSchema = z
   .object({ prompt: z.string().min(1).optional(), message: z.string().min(1).optional() })
   .strict()
@@ -36,11 +39,40 @@ class InvocationError extends Error {
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
+  if (Number(req.headers['content-length']) > MAX_BODY_BYTES) {
+    return Promise.reject(new InvocationError(413, 'Request body exceeds 64 KiB'));
+  }
   return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', c => (data += c));
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    const timer = setTimeout(() => finish(new InvocationError(408, 'Upload timed out')), UPLOAD_TIMEOUT_MS);
+    function finish(error?: Error) {
+      clearTimeout(timer);
+      req.off('data', onData);
+      req.off('end', onEnd);
+      req.off('aborted', onAborted);
+      if (error) {
+        req.pause();
+        reject(error);
+      } else {
+        resolve(Buffer.concat(chunks, bytes).toString('utf8'));
+      }
+    }
+    function onData(chunk: Buffer) {
+      bytes += chunk.length;
+      if (bytes > MAX_BODY_BYTES) finish(new InvocationError(413, 'Request body exceeds 64 KiB'));
+      else chunks.push(chunk);
+    }
+    function onEnd() {
+      finish();
+    }
+    function onAborted() {
+      finish(new InvocationError(400, 'Upload aborted'));
+    }
+    req.on('data', onData);
+    req.once('end', onEnd);
+    req.once('aborted', onAborted);
+    req.once('error', finish);
   });
 }
 
@@ -84,6 +116,9 @@ export const server = createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ response: response.text, status: 'success' }));
     } catch (err) {
+      // Deliver the error before closing an unfinished or oversized upload.
+      res.setHeader('connection', 'close');
+      res.once('finish', () => req.destroy());
       res.writeHead(err instanceof InvocationError ? err.statusCode : 500, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: (err as Error).message, status: 'error' }));
     }
@@ -93,6 +128,8 @@ export const server = createServer(async (req, res) => {
   res.writeHead(404, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ error: 'not found' }));
 });
+
+server.headersTimeout = 10_000;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Mastra Docs Agent (AgentCore runtime) listening on 0.0.0.0:${PORT}`);

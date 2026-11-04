@@ -1,6 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, request } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { MongoClient } from 'mongodb';
@@ -14,9 +15,9 @@ const requests: unknown[] = [];
 
 // Only the paid Bedrock boundary is simulated; the real agent and MongoDB memory run below.
 const bedrock = createServer(async (req, res) => {
-  let body = '';
-  for await (const chunk of req) body += chunk;
-  requests.push(JSON.parse(body));
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk);
+  requests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
   const answer = 'Answer from the local Bedrock fixture.';
   res.setHeader('content-type', 'application/json');
   res.end(
@@ -96,6 +97,64 @@ function invoke(user: string | undefined, session: string | undefined, payload: 
     body: JSON.stringify(payload),
   });
 }
+
+test('rejects oversized uploads with and without Content-Length', async () => {
+  const body = JSON.stringify({ prompt: 'é'.repeat(32768) });
+  for (const chunked of [false, true]) {
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      const req = request(
+        `${baseUrl}/invocations`,
+        {
+          method: 'POST',
+          headers: {
+            [userHeader]: 'upload-test',
+            [sessionHeader]: randomUUID(),
+            ...(chunked ? {} : { 'content-length': Buffer.byteLength(body) }),
+          },
+        },
+        res => {
+          res.resume();
+          resolve(res.statusCode);
+        },
+      );
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+    expect(status).toBe(413);
+  }
+});
+
+test.skipIf(!process.env.TEST_MONGODB_URI)('accepts UTF-8 input exactly at the 64 KiB limit', async () => {
+  const prompt = 'é'.repeat(32761) + 'a';
+  expect(Buffer.byteLength(JSON.stringify({ prompt }))).toBe(65536);
+  const response = await invoke('boundary-test', randomUUID(), { prompt });
+  expect(response.status, await response.text()).toBe(200);
+  const received = requests.at(-1) as { messages: { content: { text: string }[] }[] };
+  const text = received.messages.at(-1)!.content[0].text;
+  expect(text === prompt).toBe(true);
+});
+
+test('closes a slow unfinished upload with HTTP 408', async () => {
+  const status = await new Promise<number | undefined>((resolve, reject) => {
+    const req = request(
+      `${baseUrl}/invocations`,
+      {
+        method: 'POST',
+        headers: { [userHeader]: 'slow-test', [sessionHeader]: randomUUID() },
+      },
+      res => {
+        res.resume();
+        resolve(res.statusCode);
+      },
+    );
+    const deadline = setTimeout(() => req.destroy(new Error('Upload was not bounded')), 35_000);
+    req.on('close', () => clearTimeout(deadline));
+    req.on('error', reject);
+    req.write('{');
+  });
+  expect(status).toBe(408);
+});
 
 test('rejects invocations without a platform session or trusted user context', async () => {
   const missingSession = await invoke('alice', undefined, { prompt: 'Hello' });

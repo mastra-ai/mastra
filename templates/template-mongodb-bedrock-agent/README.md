@@ -66,6 +66,8 @@ npx @aws/agentcore@0.31.1 invoke --user-id "$AGENTCORE_USER_ID" --prompt "How do
 
 `scripts/ask.sh "your question"` wraps that invoke call and renders the answer as markdown in your terminal.
 
+Invocation JSON is limited to 64 KiB (UTF-8 bytes), including requests without `Content-Length`. Larger uploads return HTTP 413; uploads that do not finish within 30 seconds return HTTP 408 and close the connection. These application limits apply independently of AgentCore service quotas.
+
 This deployment uses IAM authentication. Restrict `bedrock-agentcore:InvokeAgentRuntime` and `bedrock-agentcore:InvokeAgentRuntimeForUser` to trusted operators or your backend and the specific runtime ARN. The CLI example is an operator demo, not end-user authentication.
 
 For an app with multiple users, authenticate each user in your backend, derive `runtimeUserId` from that verified identity, and generate and store a separate `runtimeSessionId` for each conversation. Check ownership before reusing a session. Call `InvokeAgentRuntime` with those server-owned values; never forward user or session IDs supplied by a browser. Both AgentCore headers are required by this server, and identity fields in the JSON body are rejected. The memory key includes both IDs, so two users with the same session ID have separate histories.
