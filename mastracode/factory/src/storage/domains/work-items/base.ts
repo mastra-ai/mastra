@@ -1339,7 +1339,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /**
    * Fires after any committed write leaves a pending start or deferred decision
    * `pending` or `retry`, so an idle dispatcher can wake instead of polling.
-   * Listeners must not throw: they run after the write has committed.
+   * Listeners run after the write has committed, so a listener that throws is
+   * logged and skipped rather than failing the write or the other listeners.
    * Returns a function that removes the listener.
    */
   onClaimableWork(listener: (scope: FactoryClaimableWorkScope) => void): () => void {
@@ -1348,7 +1349,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   #claimableWork(scope: FactoryClaimableWorkScope): void {
-    for (const listener of this.#claimableWorkListeners) listener(scope);
+    for (const listener of this.#claimableWorkListeners) {
+      try {
+        listener(scope);
+      } catch (error) {
+        console.error('[factory] claimable-work listener failed', error instanceof Error ? error.message : error);
+      }
+    }
   }
 
   /**

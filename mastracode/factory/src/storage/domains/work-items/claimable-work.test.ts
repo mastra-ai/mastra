@@ -156,6 +156,24 @@ describe('claimable-work wakes', () => {
     expect(woken).toEqual([SCOPE]);
     expect(await Promise.all(visibleAtWake)).toEqual([1]);
   });
+
+  it('a throwing listener neither fails the committed write nor skips later listeners', async () => {
+    const { storage, woken } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    woken.length = 0;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    storage.onClaimableWork(() => {
+      throw new Error('publish failed');
+    });
+    const later: FactoryClaimableWorkScope[] = [];
+    storage.onClaimableWork(scope => later.push({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId }));
+
+    await expect(queueDecision(storage, workItemId, 'listener-throws')).resolves.toBeUndefined();
+    expect(woken).toEqual([SCOPE]);
+    expect(later).toEqual([SCOPE]);
+    expect(errorSpy).toHaveBeenCalledOnce();
+    errorSpy.mockRestore();
+  });
 });
 
 describe('nextClaimableAt', () => {
