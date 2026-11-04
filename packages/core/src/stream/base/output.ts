@@ -1590,6 +1590,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 resumeSchema: undefined,
               });
 
+              // The flush that normally runs onFinish never runs after terminate(), so run it here.
+              if (!self.#finishCallbackSent) {
+                self.#finishCallbackSent = true;
+                await options?.onFinish?.(self.#createTripwireOnFinishPayload());
+              }
+
               self.#closeTransportIfNeeded();
 
               // Emit the tripwire chunk for listeners
@@ -2803,6 +2809,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       ...(this.#generationReportedUsage && { generationReportedUsage: this.#generationReportedUsage }),
       object: undefined as OUTPUT,
     };
+  }
+
+  #createTripwireOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
+    return {
+      ...this.#createAbortedOnFinishPayload(),
+      finishReason: 'other',
+      steps: this.#bufferedSteps,
+      tripwire: this.#tripwire,
+    } as MastraOnFinishCallbackArgs<OUTPUT>;
   }
 
   #createSuspendedOnFinishPayload(
