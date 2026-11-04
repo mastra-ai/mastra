@@ -1438,10 +1438,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
     const [marker, newest] = await Promise.all([readWorkItemSplitMarker(super.ops), readLegacyWatermark(super.ops)]);
     const finished = !newest || (marker !== null && sameWatermark(marker.watermark, newest));
+    // The factory copies open cards once boards load, and the rest in the background.
     this.#split = { pending: !finished, since: marker?.watermark ?? null };
-    // Before anything reads cards: this replica serves them from the split tables only.
-    await this.migrateOpenLegacyCards(async () => false);
-    await this.backfillLegacyCards();
   }
 
   /**

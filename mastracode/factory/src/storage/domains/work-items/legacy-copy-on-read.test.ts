@@ -60,16 +60,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('legacy cards co
       }
     }
 
-    /** Re-read the split state at boot, without the boot copy, so legacy cards stay uncopied. */
+    /** A restart: init reads the split state and copies nothing; the factory runs the passes. */
     async function restart() {
-      const open = vi.spyOn(workItems, 'migrateOpenLegacyCards').mockResolvedValue(null);
-      const backfill = vi.spyOn(workItems, 'backfillLegacyCards').mockResolvedValue(null);
-      try {
-        await workItems.init();
-      } finally {
-        open.mockRestore();
-        backfill.mockRestore();
-      }
+      await workItems.init();
     }
 
     const copied = async (id: string) => storage.ops.findOne('factory_board_items', { id });
