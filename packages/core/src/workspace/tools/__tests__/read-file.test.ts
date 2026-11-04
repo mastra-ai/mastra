@@ -820,6 +820,24 @@ describe('workspace_read_file', () => {
       expect(result).toContain('<h1>429 Too Many Requests</h1>');
     });
 
+    it('reads a text file that mentions %PDF- as text, since it has no PDF version header', async () => {
+      const result = await read('notes.pdf', 'PDF files start with %PDF- and a version number.\n');
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('showing it as text');
+      expect(result).toContain('PDF files start with %PDF-');
+    });
+
+    it('returns metadata only when binary content follows a first KiB of text', async () => {
+      const content = Buffer.concat([Buffer.from('a'.repeat(1100)), Buffer.from([0x00, 0xff, 0xfe, 0x00])]);
+
+      const result = await read('report.pdf', content);
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('not sent as media');
+      expect(result).not.toContain('a'.repeat(100));
+    });
+
     it('returns metadata only for binary content named .png that is not a PNG', async () => {
       const result = await read('broken.png', Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe, 0x00]));
 

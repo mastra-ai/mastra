@@ -138,12 +138,19 @@ const startsWithBytes = (bytes: Uint8Array, prefix: number[], offset = 0) =>
 const MEDIA_SIGNATURES: [mediaType: string, matches: (bytes: Uint8Array) => boolean][] = [
   ['image/png', bytes => startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47])],
   ['image/jpeg', bytes => startsWithBytes(bytes, [0xff, 0xd8, 0xff])],
-  ['image/gif', bytes => startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38])],
+  // `GIF87a` or `GIF89a`.
+  [
+    'image/gif',
+    bytes =>
+      startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) ||
+      startsWithBytes(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]),
+  ],
   [
     'image/webp',
     bytes => startsWithBytes(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWithBytes(bytes, [0x57, 0x45, 0x42, 0x50], 8),
   ],
-  ['application/pdf', bytes => Buffer.from(bytes).includes('%PDF-')],
+  // A version header such as `%PDF-1.7`, which readers accept anywhere in the first 1 KiB.
+  ['application/pdf', bytes => /%PDF-\d\.\d/.test(Buffer.from(bytes).toString('latin1'))],
 ];
 
 const SIGNED_MEDIA_TYPES = new Set([...MEDIA_SIGNATURES.map(([mediaType]) => mediaType), 'image/jpg']);
@@ -159,12 +166,11 @@ function contentMediaType(head: Uint8Array, declared: string): string | undefine
   return MEDIA_SIGNATURES.find(([, matches]) => matches(head))?.[0];
 }
 
-/** Whether a file's first bytes look like UTF-8 text: no NUL bytes and no invalid sequences. */
-function looksLikeUtf8Text(head: Uint8Array): boolean {
-  if (head.includes(0)) return false;
+/** Whether a whole file is UTF-8 text: no NUL bytes and no invalid sequences. */
+function isUtf8Text(content: Uint8Array): boolean {
+  if (content.includes(0)) return false;
   try {
-    // `stream` leaves a multi-byte character cut off at the end of `head` undecoded rather than invalid.
-    new TextDecoder('utf-8', { fatal: true }).decode(head, { stream: true });
+    new TextDecoder('utf-8', { fatal: true }).decode(content);
     return true;
   } catch {
     return false;
@@ -262,7 +268,8 @@ export const readFileTool = createTool({
           // The extension says media but the content isn't. Never send it as media: show text
           // content as text, and only metadata for anything else, unless `encoding` was given.
           const mismatch = `the extension says ${stat.mimeType}, but the content is ${mediaType ?? 'not a valid file of that type'}`;
-          if (looksLikeUtf8Text(head)) {
+          // The whole file, not just its head: binary content can follow a first KiB of ASCII.
+          if (isUtf8Text(Buffer.from(base64, 'base64'))) {
             mislabeledNote = mismatch;
           } else if (!encoding) {
             span.end({ success: true }, { bytesTransferred: 0 });
