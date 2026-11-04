@@ -1,7 +1,7 @@
 import { isPullRequestCard, pullRequestReviewPhase, reviewsPullRequest } from '../../boards/index.js';
 import { hasRecordedVerdict } from '../../boards/pull-request-review.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import { isFactoryApproveVerdict } from './stale-reviews.js';
 
@@ -90,8 +90,9 @@ function issueOpened(context: FactoryGithubRuleContext) {
 
 function issueClosed(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.issue) return;
-  // The card's board decides where a closed source sends it; boards that declare no
-  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
   const closure = context.boardClosure;
   if (!context.board || !closure || closure.itemTerminal) return;
   // Issue closure is a repository fact, not third-party input — no actor trust
@@ -99,8 +100,7 @@ function issueClosed(context: FactoryGithubRuleContext) {
   // completed work.
   const canceled = context.issue.stateReason === 'not_planned' || context.issue.stateReason === 'duplicate';
   const target = canceled ? closure.canceled : closure.completed;
-  return {
-    type: 'transition',
+  return closedByRoutes(canceled, {
     idempotencyKey: `${context.ingress.id}:issue-closed`,
     board: context.board,
     stage: target.phase,
@@ -110,7 +110,7 @@ function issueClosed(context: FactoryGithubRuleContext) {
         `${context.issue.stateReason ? ` (${context.issue.stateReason})` : ''}; ` +
         `this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
-  } as const;
+  });
 }
 
 function materializePullRequestIntake(

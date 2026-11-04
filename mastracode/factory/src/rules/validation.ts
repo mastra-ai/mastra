@@ -1,10 +1,13 @@
 import { CLOSE_REASONS, STATUS_EVENTS } from '../boards/board-events.js';
+import type { BoardEventFacts } from '../boards/board-events.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
   FactoryRuleRejectionCode,
+  FactoryRouteEventDecision,
+  FactoryTransitionDecision,
   WorkItemSource,
 } from './types.js';
 
@@ -91,6 +94,15 @@ function boardIdentifier(value: unknown, label: string): string {
     throw new FactoryRuleValidationError(`${label} is invalid.`);
   }
   return value;
+}
+
+function boardEvent(value: unknown, label: string): BoardEventFacts {
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
+  assertExactKeys(value, ['type', 'reason'], `${label} event`);
+  const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
+  const reason =
+    value.reason === undefined ? undefined : enumValue(value.reason, CLOSE_REASONS, `${label} event reason`);
+  return { type, ...(reason ? { reason } : {}) };
 }
 
 export function assertFactoryDecisionTarget(
@@ -204,7 +216,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'transition': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
+        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter', 'event'],
         'Factory transition decision',
       );
       if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
@@ -232,23 +244,12 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         stage: boardIdentifier(value.stage, 'Factory transition stage'),
         ...(message ? { message } : {}),
         ...(value.reenter === true ? { reenter: true } : {}),
+        ...(value.event !== undefined ? { event: boardEvent(value.event, 'Factory transition') } : {}),
       };
     }
     case 'routeEvent': {
       assertExactKeys(value, ['type', 'idempotencyKey', 'event'], 'Factory routeEvent decision');
-      if (!isPlainObject(value.event))
-        throw new FactoryRuleValidationError('Factory routeEvent event must be an object.');
-      assertExactKeys(value.event, ['type', 'reason'], 'Factory routeEvent event');
-      const eventType = enumValue(value.event.type, STATUS_EVENTS, 'Factory routeEvent event type');
-      const reason =
-        value.event.reason === undefined
-          ? undefined
-          : enumValue(value.event.reason, CLOSE_REASONS, 'Factory routeEvent event reason');
-      return {
-        type,
-        ...commonCommitFields(value),
-        event: { type: eventType, ...(reason ? { reason } : {}) },
-      };
+      return { type, ...commonCommitFields(value), event: boardEvent(value.event, 'Factory routeEvent') };
     }
     case 'upsertLinkedWorkItem': {
       assertExactKeys(

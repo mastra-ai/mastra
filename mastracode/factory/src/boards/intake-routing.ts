@@ -110,6 +110,15 @@ export function landingPhase(board: InstalledBoard, phase: string | null | undef
   return usable ? phase : board.initialPhase;
 }
 
+/** Whether any route on the board, enabled or not, handles the event: then the routes own it. */
+export function routesHandleEvent(
+  routes: readonly Pick<IntakeRoute, 'on' | 'target'>[],
+  event: BoardEventFacts,
+  board: Pick<InstalledBoard, 'id'>,
+): boolean {
+  return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
+}
+
 /**
  * Where a status event moves an existing card: the first enabled route whose `on` names the
  * event, whose `when` matches the card and the event, and whose board is the card's own and can

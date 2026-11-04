@@ -612,6 +612,12 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
    * it has to start over.
    */
   reenter?: boolean;
+  /**
+   * The status event this move answers. The project's intake routes on the card's board then
+   * decide where the card goes instead, and this move applies only when no route on the board
+   * handles the event; a route that does, even a disabled one, owns it.
+   */
+  event?: BoardEventFacts;
 }
 
 /**

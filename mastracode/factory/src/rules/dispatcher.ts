@@ -4,6 +4,7 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
+import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardForWorkItem,
   cardRuleFacts,
@@ -21,6 +22,7 @@ import {
   placedByIntakeRoute,
   resolveEventRoute,
   resolveIntakePlacement,
+  routesHandleEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
@@ -1239,74 +1241,12 @@ export class FactoryDecisionDispatcher {
 
     switch (decision.type) {
       case 'transition': {
-        const item = await this.#requireItem(record);
-        const replay = await this.#storage.getTransitionResultByIngress(
-          record.orgId,
-          record.factoryProjectId,
-          `decision:${record.idempotencyKey}`,
-        );
-        if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
-        const result = await this.#transitionService.transition({
-          orgId: record.orgId,
-          factoryProjectId: record.factoryProjectId,
-          workItemId: item.id,
-          board: decision.board,
-          stage: decision.stage,
-          expectedRevision: item.revision,
-          actor: record.approvedBy
-            ? { type: 'human', id: record.approvedBy }
-            : { type: 'system', id: 'factory-rule-dispatcher' },
-          ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
-          cause: 'rule_decision',
-          causalChain: nextChain,
-          ...(decision.reenter ? { reenter: true } : {}),
-        });
-        if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
-        const transitionMessage = decision.message;
-        if (!transitionMessage) return;
-        // The message may wake an idle session and hold it for a whole agent
-        // run, so it is queued as its own sendMessage decision for the run
-        // pool; the stage change above never waits on run capacity. Keyed by
-        // this decision, so a retry replays rather than queueing it twice.
-        const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
-        if (!moved) return;
-        const messageKey = `${record.idempotencyKey}:message`;
-        // Keyed by revision so a retry after a concurrent write commits under a
-        // fresh identity at the item's new revision.
-        const queued = await this.#storage.commitRuleEvaluation({
-          orgId: record.orgId,
-          factoryProjectId: record.factoryProjectId,
-          workItemId: item.id,
-          ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
-          configVersion: this.#transitionService.configVersion,
-          expectedRevision: moved.revision,
-          actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
-          outcome: { status: 'accepted' },
-          decisions: [
-            {
-              type: 'sendMessage',
-              idempotencyKey: messageKey,
-              message: transitionMessage.text,
-              priority: 'high',
-              idleBehavior: 'wake',
-              ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
-            },
-          ],
-          causalChain: nextChain,
-          now: new Date(),
-        });
-        if (queued.status === 'missing') return;
-        if (queued.status === 'stale') {
-          throw new Error('Factory transition message was not queued: the work item changed concurrently.');
-        }
-        const queuedStatus = (queued.result as { status?: string }).status;
-        if (queuedStatus !== 'accepted') {
-          throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
-        }
+        if (decision.event) await this.#routeEvent(record, decision.event, nextChain, decision);
+        else await this.#applyTransition(record, decision, nextChain);
         return;
       }
       case 'routeEvent': {
-        await this.#routeEvent(record, decision, nextChain);
+        await this.#routeEvent(record, decision.event, nextChain);
         return;
       }
       case 'upsertLinkedWorkItem': {
@@ -1892,39 +1832,120 @@ export class FactoryDecisionDispatcher {
     if (!board || board.id === decision.board) return decision;
     return { ...decision, board: board.id, stage: board.initialPhase };
   }
+  /** Moves the card as a rule decided, then queues the decision's message for the card's session. */
+  async #applyTransition(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'transition' }>,
+    nextChain: FactoryRuleCausalEntry[],
+  ): Promise<void> {
+    const item = await this.#requireItem(record);
+    const replay = await this.#storage.getTransitionResultByIngress(
+      record.orgId,
+      record.factoryProjectId,
+      `decision:${record.idempotencyKey}`,
+    );
+    if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
+    const result = await this.#transitionService.transition({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: item.id,
+      board: decision.board,
+      stage: decision.stage,
+      expectedRevision: item.revision,
+      actor: record.approvedBy
+        ? { type: 'human', id: record.approvedBy }
+        : { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
+      cause: 'rule_decision',
+      causalChain: nextChain,
+      ...(decision.reenter ? { reenter: true } : {}),
+    });
+    if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
+    const transitionMessage = decision.message;
+    if (!transitionMessage) return;
+    // The message may wake an idle session and hold it for a whole agent
+    // run, so it is queued as its own sendMessage decision for the run
+    // pool; the stage change above never waits on run capacity. Keyed by
+    // this decision, so a retry replays rather than queueing it twice.
+    const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
+    if (!moved) return;
+    const messageKey = `${record.idempotencyKey}:message`;
+    // Keyed by revision so a retry after a concurrent write commits under a
+    // fresh identity at the item's new revision.
+    const queued = await this.#storage.commitRuleEvaluation({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: item.id,
+      ingress: { identity: `decision:${messageKey}@${moved.revision}`, triggerType: 'transition.message' },
+      configVersion: this.#transitionService.configVersion,
+      expectedRevision: moved.revision,
+      actor: record.actor ?? { type: 'system', id: 'factory-rule-dispatcher' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          idempotencyKey: messageKey,
+          message: transitionMessage.text,
+          priority: 'high',
+          idleBehavior: 'wake',
+          ...(transitionMessage.role !== undefined ? { role: transitionMessage.role } : {}),
+        },
+      ],
+      causalChain: nextChain,
+      now: new Date(),
+    });
+    if (queued.status === 'missing') return;
+    if (queued.status === 'stale') {
+      throw new Error('Factory transition message was not queued: the work item changed concurrently.');
+    }
+    const queuedStatus = (queued.result as { status?: string }).status;
+    if (queuedStatus !== 'accepted') {
+      throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
+    }
+  }
+
   /**
    * Moves a card where the project's intake routes send it on a status event, after the run in
-   * flight on the card ends. No matching route leaves the card where it is. The move is a system
-   * move by the route: recorded in the card's history and audit, keyed so a replayed delivery
-   * moves nothing twice.
+   * flight on the card ends. A close moves only an unfinished card and a reopen only a finished
+   * one. When no route on the card's board handles the event at all, the rule's own move (a
+   * board's `sourceClosed` phase) applies instead; when one does but none matches, the card stays. A route's move is a system move by the route: recorded in the card's
+   * history and audit, keyed so a replayed delivery moves nothing twice.
    */
   async #routeEvent(
     record: FactoryDeferredDecisionRecord,
-    decision: Extract<FactoryCommitDecision, { type: 'routeEvent' }>,
+    event: BoardEventFacts,
     causalChain: FactoryRuleCausalEntry[],
+    fallback?: Extract<FactoryCommitDecision, { type: 'transition' }>,
   ): Promise<void> {
-    if (!this.#intakeRoutes) return;
     const identity = `event-route:${record.idempotencyKey}`;
     if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) return;
     const resolve = async () => {
       const item = await this.#requireItem(record);
       const board = (await this.#boards.load(record)).get(boardForWorkItem(item));
       if (!board) return undefined;
-      const routes = await this.#intakeRoutes!.listIntakeRoutes({
-        orgId: record.orgId,
-        factoryProjectId: record.factoryProjectId,
-      });
-      const route = resolveEventRoute(routes, decision.event, cardRuleFacts(item), board);
-      if (!route || (item.stages.length === 1 && item.stages[0] === route.phase)) return undefined;
+      const stage = item.stages.length === 1 ? item.stages[0] : undefined;
+      const finished = stage !== undefined && board.isTerminal(stage);
+      if (event.type === 'work_item.closed' ? finished : !finished) return undefined;
+      const routes = this.#intakeRoutes
+        ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
+        : [];
+      if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
+      const route = resolveEventRoute(routes, event, cardRuleFacts(item), board);
+      if (!route || stage === route.phase) return undefined;
       return { item, board, route };
     };
-    if (!(await resolve())) return;
+    const first = await resolve();
+    if (!first) return;
+    if ('fallback' in first) {
+      if (fallback) await this.#applyTransition(record, fallback, causalChain);
+      return;
+    }
     const binding = await this.#findBinding(record);
     const session = binding ? await this.#findSession(binding) : undefined;
     if (binding && session) await this.#waitForOpenRun(session, binding, 'Factory run before an intake route move');
     // The card may have moved, or the routes changed, while the run finished.
     const target = await resolve();
-    if (!target) return;
+    if (!target || 'fallback' in target) return;
     const { item, board, route } = target;
     const result = await this.#transitionService.transition({
       orgId: record.orgId,

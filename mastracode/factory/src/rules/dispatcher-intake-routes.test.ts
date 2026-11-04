@@ -661,10 +661,12 @@ describe('intake routes moving existing cards on status events', () => {
       metadata: expect.objectContaining({ cause: 'event_route', code: 'approval_required', to: 'triage' }),
     });
 
-    await boards.updateIntakeRoute(scope, reopened.id, {
-      expectedRevision: reopened.revision,
-      allowWorkingPhase: true,
-    });
+    await boards.updateIntakeRoute(
+      scope,
+      reopened.id,
+      { allowWorkingPhase: true },
+      { expectedRevision: reopened.revision, actor: 'admin' },
+    );
     expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['triage'] });
   });
 

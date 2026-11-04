@@ -2266,7 +2266,8 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatch;
 
     expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['done'] });
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decisions.find(entry => entry.decision.type === 'routeEvent')).toMatchObject({ status: 'succeeded' });
   });
 
   describe('open-run ledger across dispatchers', () => {

@@ -5624,11 +5624,11 @@ describe('GithubRules board events', () => {
     ]);
   });
 
-  it('leaves a status event to routes only when no rule decided anything for it', async () => {
+  it('leaves a status event to routes only when the deployment does not answer it itself', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', {
       issueClosed: () => ({ type: 'transition', idempotencyKey: 'override-close', board: 'work', stage: 'canceled' }),
     });
-    await createLinkedIssue(workItems, project.id, ['planning']);
+    await createLinkedIssue(workItems, project.id, ['done']);
     const service = new GithubRules({
       github,
       sourceControl,
@@ -5666,5 +5666,140 @@ describe('GithubRules board events', () => {
       expect.objectContaining({ type: 'routeEvent', event: { type: 'work_item.reopened' } }),
     ]);
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'], revision: card.revision });
+  });
+});
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close and reopen routes on %s', backend => {
+  const release = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'queued',
+    sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+    phases: {
+      queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+      shipped: { title: 'Shipped', kind: 'terminal' },
+      dropped: { title: 'Dropped', kind: 'terminal' },
+    },
+  });
+
+  function reopened(deliveryId: string) {
+    const delivery = issueClosed(deliveryId);
+    return {
+      ...delivery,
+      payload: { ...delivery.payload, action: 'reopened', issue: { ...delivery.payload.issue, state: 'open' } },
+    };
+  }
+
+  async function harness(input: { board?: string; stages: string[] }) {
+    const seeded = await setup(
+      'write',
+      undefined,
+      backend === 'postgres'
+        ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+        : new LibSQLFactoryStorage({ id: 'github-close-routes', url: ':memory:' }),
+    );
+    const { github, sourceControl, integrationStorage, workItems, projects, project, boards: storedBoards } = seeded;
+    const boards = createBoardRegistry({ boards: [release] });
+    const configVersion = 'close-routes';
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards,
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion }),
+      storage: workItems,
+      boards,
+      intakeRoutes: storedBoards,
+      isAutoRunEnabled: async () => false,
+      ownerId: 'close-routes-worker',
+    });
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          ...(input.board ? { board: input.board } : {}),
+          stages: input.stages,
+          title: 'Issue 42',
+          sessions: {},
+          metadata: {},
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github-issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+        },
+      })
+    ).item;
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    let tick = 0;
+    const deliver = async (delivery: ReturnType<typeof issueClosed>) => {
+      await service.ingest(delivery);
+      await dispatcher.runOnce(new Date(Date.parse('2030-01-02T00:00:00Z') + 1000 * tick++));
+      return (await workItems.get({ orgId: 'org-1', id: card.id }))!;
+    };
+    const route = async (name: string) =>
+      (await storedBoards.listIntakeRoutes(scope)).find(candidate => candidate.name === name)!;
+    return { deliver, route, storedBoards, scope, workItems, project, card };
+  }
+
+  it('closes and reopens a Work card through the default routes, recorded as their moves', async () => {
+    const { deliver, route } = await harness({ stages: ['planning'] });
+    const canceledRoute = await route('Issues closed as not planned go to Canceled');
+    const reopenedRoute = await route('Reopened issues go back to Intake');
+    const doneRoute = await route('Closed issues go to Done');
+
+    expect((await deliver(issueClosed('routes-not-planned', 'not_planned'))).stages).toEqual(['canceled']);
+    expect((await deliver(reopened('routes-reopened'))).stages).toEqual(['intake']);
+    const closed = await deliver(issueClosed('routes-completed', 'completed'));
+    expect(closed.stages).toEqual(['done']);
+    expect(closed.stageHistory.slice(-3)).toMatchObject([
+      { stage: 'canceled', by: `intake-route:${canceledRoute.id}` },
+      { stage: 'intake', by: `intake-route:${reopenedRoute.id}` },
+      { stage: 'done', by: `intake-route:${doneRoute.id}` },
+    ]);
+    // A replayed delivery moves nothing twice.
+    expect((await deliver(issueClosed('routes-completed', 'completed'))).revision).toBe(closed.revision);
+  });
+
+  it('moves a closed card where an edited close route now points', async () => {
+    const { deliver, route, storedBoards, scope } = await harness({ stages: ['planning'] });
+    const done = await route('Closed issues go to Done');
+    await storedBoards.updateIntakeRoute(
+      scope,
+      done.id,
+      { target: { boardKey: 'work', phaseKey: 'canceled' } },
+      { expectedRevision: done.revision, actor: 'admin' },
+    );
+    expect((await deliver(issueClosed('edited-route', 'completed'))).stages).toEqual(['canceled']);
+  });
+
+  it("leaves a closed card where it is when the close routes are disabled, without the board's own close move", async () => {
+    const { deliver, route, storedBoards, scope, workItems, project } = await harness({ stages: ['planning'] });
+    for (const name of ['Closed issues go to Done', 'Issues closed as not planned go to Canceled']) {
+      const closeRoute = await route(name);
+      await storedBoards.updateIntakeRoute(
+        scope,
+        closeRoute.id,
+        { enabled: false },
+        { expectedRevision: closeRoute.revision, actor: 'admin' },
+      );
+    }
+    expect((await deliver(issueClosed('disabled-route', 'completed'))).stages).toEqual(['planning']);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => [entry.decision.type, entry.status])).toEqual([['transition', 'succeeded']]);
+  });
+
+  it("closes a card on a board no route handles closes for into the board's own closed phase", async () => {
+    const { deliver } = await harness({ board: 'release', stages: ['queued'] });
+    expect((await deliver(issueClosed('release-closed', 'not_planned'))).stages).toEqual(['dropped']);
   });
 });

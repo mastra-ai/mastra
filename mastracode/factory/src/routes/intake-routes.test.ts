@@ -155,8 +155,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [route, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
-    expect(rest).toEqual([]);
+    const [route, pullRequests, ...events] = await list(replicaA.send, base, MEMBER);
+    // Close and reopen routes target Done, Canceled and Intake, and none has a problem to report.
+    expect(events).toMatchObject([
+      { name: 'Closed issues go to Done', on: ['work_item.closed'], target: { phaseKey: 'done' }, problems: [] },
+      {
+        name: 'Issues closed as not planned go to Canceled',
+        on: ['work_item.closed'],
+        target: { phaseKey: 'canceled' },
+        problems: [],
+      },
+      {
+        name: 'Reopened issues go back to Intake',
+        on: ['work_item.reopened'],
+        target: { phaseKey: 'intake' },
+        problems: [],
+      },
+    ]);
+    expect(events).toHaveLength(3);
     expect(pullRequests).toMatchObject({
       name: PULL_REQUEST_INTAKE_ROUTE.name,
       position: 1,

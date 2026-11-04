@@ -172,9 +172,35 @@ export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
  * gets each one once: a new project gets them all, a project set up earlier gets a route added
  * since at the end of its list, and a route an admin deleted stays deleted.
  */
+/** A Work card whose issue was closed as done goes to Done. */
+export const CLOSED_COMPLETED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Closed issues go to Done',
+  on: ['work_item.closed'],
+  when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'completed' }] },
+  target: { boardKey: 'work', phaseKey: 'done' },
+};
+
+/** A Work card whose issue was closed as not planned, or as a duplicate, goes to Canceled. */
+export const CLOSED_CANCELED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Issues closed as not planned go to Canceled',
+  on: ['work_item.closed'],
+  when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'canceled' }] },
+  target: { boardKey: 'work', phaseKey: 'canceled' },
+};
+
+/** A finished Work card whose issue was reopened goes back to Intake, where a person picks it up again. */
+export const REOPENED_ROUTE: StoredIntakeRouteInput = {
+  name: 'Reopened issues go back to Intake',
+  on: ['work_item.reopened'],
+  target: { boardKey: 'work', phaseKey: 'intake' },
+};
+
 export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput }[] = [
   { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
   { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },
+  { key: 'closed-completed', route: CLOSED_COMPLETED_ROUTE },
+  { key: 'closed-canceled', route: CLOSED_CANCELED_ROUTE },
+  { key: 'reopened', route: REOPENED_ROUTE },
 ];
 
 /** The defaults a project whose lock row predates `seeded_defaults` was set up with. */

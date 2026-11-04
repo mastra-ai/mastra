@@ -50,6 +50,7 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
       boards,
       configVersion: 'factory-config-v1',
     }),
+    intakeRoutes: seeded.boards,
     isAutoRunEnabled: async () => false,
     ownerId: 'jira-rules-test',
   });
@@ -59,7 +60,16 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
     (await seeded.workItems.list({ orgId: 'org-1', factoryProjectId })).filter(
       item => item.externalSource?.externalId === issue.id,
     );
-  return { project, other, service, workItems: seeded.workItems, storage: seeded.storage, drain, cardsFor };
+  return {
+    project,
+    other,
+    service,
+    workItems: seeded.workItems,
+    storage: seeded.storage,
+    storedBoards: seeded.boards,
+    drain,
+    cardsFor,
+  };
 }
 
 describe('JiraRules', () => {
@@ -246,6 +256,40 @@ describe('JiraRules', () => {
         },
       },
     ]);
+  });
+
+  it.each([
+    { stateType: 'completed', stage: 'done', route: 'Closed issues go to Done' },
+    { stateType: 'canceled', stage: 'canceled', route: 'Issues closed as not planned go to Canceled' },
+  ])('moves a card whose Jira issue is $stateType by the default close route', async ({ stateType, stage, route }) => {
+    const { project, service, workItems, storedBoards, drain } = await setup();
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: issue.title,
+          stages: ['planning'],
+          sessions: {},
+          externalSource: { integrationId: 'jira', type: 'issue', externalId: issue.id, url: issue.url },
+        },
+      })
+    ).item;
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, stateType }],
+    });
+    await drain();
+    const routes = await storedBoards.listIntakeRoutes({ orgId: 'org-1', factoryProjectId: project.id });
+    const moved = (await workItems.get({ orgId: 'org-1', id: card.id }))!;
+    expect(moved.stages).toEqual([stage]);
+    expect(moved.stageHistory.at(-1)).toMatchObject({
+      stage,
+      by: `intake-route:${routes.find(candidate => candidate.name === route)!.id}`,
+    });
   });
 
   it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {

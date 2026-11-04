@@ -14,7 +14,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { selectEventRule, routeEventDecision } from '../../rules/event-rules.js';
+import { selectEventRule, routeEventDecision, deploymentOwnsEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -852,7 +852,12 @@ export class GithubRules {
       const boardEvent = boardEventFor(context);
       if (boardEvent) context.boardEvent = boardEvent;
 
-      const rule = selectEventRule(
+      const ownedByDeployment = deploymentOwnsEvent(
+        this.options.github.rules,
+        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        event,
+      );
+const rule = selectEventRule(
         this.options.github.rules,
         boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
         event,
@@ -882,7 +887,7 @@ export class GithubRules {
               : 'Factory GitHub rule failed.',
         };
       }
-      if (!decision && outcome.status === 'accepted') {
+      if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
         const routed = routeEventDecision(context);
         if (routed) decisions = [{ ...routed }];
       }

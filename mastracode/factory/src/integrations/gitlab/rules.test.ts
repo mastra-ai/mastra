@@ -1250,6 +1250,7 @@ describe('GitLab board events', () => {
       }),
       storage: base.seeded.workItems,
       boards: createBoardRegistry(),
+      intakeRoutes: base.seeded.boards,
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1287,24 +1288,31 @@ describe('GitLab board events', () => {
     ]);
   });
 
-  it('files a card for a reopened issue that has none, and hands a reopen of an existing card to intake routes', async () => {
+  it('files a card for a reopened issue that has none, and moves an existing card by the default close and reopen routes', async () => {
     const { deliver, cards, seeded, project } = await harness();
     await deliver(issueHook('reopen-flow-first', 'reopen'));
     const [filed] = await cards();
     expect(filed).toBeDefined();
     await deliver(issueHook('reopen-flow-close', 'close'));
+    const routes = await seeded.boards.listIntakeRoutes({ orgId: 'org-1', factoryProjectId: project.id });
+    const routeId = (name: string) => routes.find(route => route.name === name)!.id;
     expect((await cards()).map(card => card.stages)).toEqual([['done']]);
     await deliver(issueHook('reopen-flow-reopen', 'reopen'));
-    // One card per issue; with no route for reopens the card stays where the close put it.
-    expect((await cards()).map(card => [card.id, card.stages])).toEqual([[filed!.id, ['done']]]);
+    // One card per issue, moved by the routes and recorded as their moves.
+    const [card] = await cards();
+    expect([card!.id, card!.stages]).toEqual([filed!.id, ['intake']]);
+    expect(card!.stageHistory.slice(-2)).toMatchObject([
+      { stage: 'done', by: `intake-route:${routeId('Closed issues go to Done')}` },
+      { stage: 'intake', by: `intake-route:${routeId('Reopened issues go back to Intake')}` },
+    ]);
     const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.map(entry => [entry.decision.type, entry.status])).toEqual([
       ['upsertLinkedWorkItem', 'succeeded'],
       ['transition', 'succeeded'],
-      ['sendMessage', 'succeeded'],
       ['routeEvent', 'succeeded'],
     ]);
-    expect(decisions.at(-1)?.decision).toMatchObject({ event: { type: 'work_item.reopened' } });
+    expect(decisions[1]?.decision).toMatchObject({ event: { type: 'work_item.closed', reason: 'completed' } });
+    expect(decisions[2]?.decision).toMatchObject({ event: { type: 'work_item.reopened' } });
   });
 
   it('lets an override of issueReopened apply without changing how opens are handled', async () => {
