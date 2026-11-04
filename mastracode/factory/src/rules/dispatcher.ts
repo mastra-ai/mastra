@@ -983,11 +983,7 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  /**
-   * Startup repair and terminal cleanup already settle a failed effect on a done or canceled
-   * card as superseded; a failure landing after the card settled would otherwise page a person
-   * until the next restart.
-   */
+  /** Terminal cleanup ran before this failure landed, so it never saw this row. */
   async #supersedeFailureOnSettledCard(record: FactoryDeferredDecisionRecord): Promise<void> {
     if (!record.workItemId) return;
     try {
@@ -1000,7 +996,7 @@ export class FactoryDecisionDispatcher {
         supersededAt: new Date(),
       });
     } catch (error) {
-      // Best-effort: the row is already failed, and the next restart repairs it.
+      // Best-effort: the row stays failed until someone clears it from the card.
       console.error('Factory settled-card supersede failed', sanitizeDispatchError(error));
     }
   }

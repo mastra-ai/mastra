@@ -116,7 +116,7 @@ describe('Workspace session hover details', () => {
         'src',
         'https://example.com/ada.png',
       );
-      expect(within(card).getByRole('link', { name: 'Open in GitHub: #42' })).toHaveAttribute(
+      expect(within(card).getByRole('link', { name: /^Open in GitHub: .*#42\b/ })).toHaveAttribute(
         'href',
         'https://github.com/mastra-ai/mastra/issues/42',
       );
@@ -218,7 +218,7 @@ describe('Workspace session hover details', () => {
       const card = await screen.findByLabelText(`${reviewName} session details`);
       expect(within(card).getByText(reviewName)).toBeInTheDocument();
       expect(within(card).getByText('Ada Lovelace')).toBeInTheDocument();
-      expect(within(card).getByRole('link', { name: 'Open in GitHub: #99' })).toHaveAttribute(
+      expect(within(card).getByRole('link', { name: /^Open in GitHub: .*#99\b/ })).toHaveAttribute(
         'href',
         'https://github.com/mastra-ai/mastra/pull/99',
       );
