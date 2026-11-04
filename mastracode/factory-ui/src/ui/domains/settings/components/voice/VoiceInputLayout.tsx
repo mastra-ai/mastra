@@ -10,7 +10,7 @@ type VoiceScope = VoiceSettings['scope'];
 const MODEL_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'factory', user: 'personal' };
 const KEYS_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'org', user: 'personal' };
 
-const DESCRIPTION = 'Speech-to-text for the composer mic.';
+const DESCRIPTION = 'Speech-to-text for the composer mic and Slack voice clips.';
 const SCOPE_DESCRIPTION: Record<VoiceScope, string> = {
   factory: `${DESCRIPTION} Like chats in this Factory, it uses the Factory's model and organization keys.`,
   user: `${DESCRIPTION} Like chats in this Factory, it uses your own model and keys.`,
