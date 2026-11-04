@@ -143,38 +143,34 @@ function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills
 /** A phase's skill while the skills catalog is loading or failed to load: we cannot tell whether it exists. */
 function UncheckedSkillCard({ title, name }: { title: string; name: string }) {
   return (
-    <SettingsContainer>
-      <div className="px-4 py-3">
+    <div className="px-4 py-3">
+      <Txt tone="ink" as="span" variant="body">
+        {title}
+        <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
+          {name}
+        </Txt>
+      </Txt>
+    </div>
+  );
+}
+
+function MissingSkillCard({ title, name }: { title: string; name: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 px-4 py-3">
+      <span className="flex items-center gap-2">
         <Txt tone="ink" as="span" variant="body">
           {title}
           <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
             {name}
           </Txt>
         </Txt>
-      </div>
-    </SettingsContainer>
-  );
-}
-
-function MissingSkillCard({ title, name }: { title: string; name: string }) {
-  return (
-    <SettingsContainer>
-      <div className="flex flex-col gap-0.5 px-4 py-3">
-        <span className="flex items-center gap-2">
-          <Txt tone="ink" as="span" variant="body">
-            {title}
-            <Txt font="mono" tone="muted" as="span" variant="caption" className="ml-2">
-              {name}
-            </Txt>
-          </Txt>
-          <Badge variant="destructive">Not found</Badge>
-        </span>
-        <Txt as="span" variant="caption" className="text-destructive-foreground">
-          This phase runs a skill the server does not have, so cards entering it fail to start. Add it with
-          MastraFactory(&#123; skills &#125;) or a factory-skills/{name}/SKILL.md file.
-        </Txt>
-      </div>
-    </SettingsContainer>
+        <Badge variant="destructive">Not found</Badge>
+      </span>
+      <Txt as="span" variant="caption" className="text-destructive-foreground">
+        This phase runs a skill the server does not have, so cards entering it fail to start. Add it with
+        MastraFactory(&#123; skills &#125;) or a factory-skills/{name}/SKILL.md file.
+      </Txt>
+    </div>
   );
 }
 
@@ -199,13 +195,17 @@ function CustomBoardPhases({
   ];
   return (
     <div className="flex flex-col gap-3">
-      {withSkill.map(phase => {
-        const title = phase.name ?? phase.title;
-        const skill = skills.find(s => s.name === phase.skill);
-        if (skill) return <SkillCard key={phase.id} title={title} skill={skill} />;
-        if (!skillsLoaded) return <UncheckedSkillCard key={phase.id} title={title} name={phase.skill} />;
-        return <MissingSkillCard key={phase.id} title={title} name={phase.skill} />;
-      })}
+      {withSkill.length > 0 && (
+        <SettingsContainer>
+          {withSkill.map(phase => {
+            const title = phase.name ?? phase.title;
+            const skill = skills.find(s => s.name === phase.skill);
+            if (skill) return <SkillCard key={phase.id} title={title} skill={skill} />;
+            if (!skillsLoaded) return <UncheckedSkillCard key={phase.id} title={title} name={phase.skill} />;
+            return <MissingSkillCard key={phase.id} title={title} name={phase.skill} />;
+          })}
+        </SettingsContainer>
+      )}
       {(withSkill.length === 0 || roles.length > 0) && (
         <SettingsContainer>
           <div className="flex flex-col gap-2 px-4 py-3">
@@ -270,11 +270,11 @@ function OtherAppSkills({ skills, boards }: { skills: FactorySkillInfo[]; boards
       <Txt tone="ink" as="h4" variant="body" className="m-0">
         App skills
       </Txt>
-      <div className="flex flex-col gap-3">
+      <SettingsContainer>
         {other.map(skill => (
           <SkillCard key={skill.name} title={skill.name} skill={skill} />
         ))}
-      </div>
+      </SettingsContainer>
     </section>
   );
 }
