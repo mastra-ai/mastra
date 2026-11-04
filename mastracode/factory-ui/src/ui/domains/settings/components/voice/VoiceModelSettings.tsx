@@ -4,7 +4,7 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 
 import { useUpdateVoiceSettings } from '../../../../../hooks/use-voice-settings';
 import type { UpdateVoiceSettingsArgs, VoiceModel, VoiceSettings } from '../../../../../hooks/use-voice-settings';
-import { VoiceModelPicker, voiceModelLabel } from './VoiceModelPicker';
+import { VoiceModelPicker, offeredVoiceModels, voiceModelLabel } from './VoiceModelPicker';
 
 const FACTORY_MODEL_HINT = {
   editable: 'Auto uses the first provider with a key',
@@ -15,6 +15,17 @@ const PERSONAL_MODEL_HINT = {
   user: 'Transcribed with your personal keys',
   hybrid: 'Your personal key is tried first',
 };
+
+const NO_KEY_HINT = {
+  personal: 'Add a speech-to-text key below to pick a model',
+  org: 'Add an organization speech-to-text key below to pick a model',
+};
+
+function factoryModelHint(settings: VoiceSettings, needsKey: boolean): string {
+  if (!settings.canEditFactory) return FACTORY_MODEL_HINT.readOnly;
+  if (!needsKey) return FACTORY_MODEL_HINT.editable;
+  return settings.modelScope === 'user' ? NO_KEY_HINT.personal : NO_KEY_HINT.org;
+}
 
 const IN_USE_HINT = {
   factory: 'This Factory transcribes with organization keys',
@@ -27,6 +38,9 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
   const { modelScope, models } = settings;
   const orgKeys = new Set(settings.keys.filter(k => k.org).map(k => k.provider));
   const factoryHasKey = (m: VoiceModel) => (modelScope === 'user' ? m.available : orgKeys.has(m.provider));
+  const personalHasKey = (m: VoiceModel) => m.available;
+  const factoryNeedsKey = offeredVoiceModels(models, factoryHasKey, settings.factory).length === 0;
+  const personalNeedsKey = offeredVoiceModels(models, personalHasKey, settings.personal).length === 0;
   const factoryLabel = voiceModelLabel(models, settings.factory) ?? 'Auto';
 
   const save = (args: UpdateVoiceSettingsArgs) =>
@@ -34,29 +48,29 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
 
   return (
     <SettingsContainer>
-      <SettingsRow
-        label="Factory model"
-        description={settings.canEditFactory ? FACTORY_MODEL_HINT.editable : FACTORY_MODEL_HINT.readOnly}
-      >
+      <SettingsRow label="Factory model" description={factoryModelHint(settings, factoryNeedsKey)}>
         <VoiceModelPicker
           label="Factory voice model"
           unsetLabel="Auto"
           selected={settings.factory}
           models={models}
           hasKey={factoryHasKey}
-          disabled={!settings.canEditFactory || update.isPending}
+          disabled={!settings.canEditFactory || factoryNeedsKey || update.isPending}
           onPick={choice => save({ target: 'factory', choice })}
         />
       </SettingsRow>
       {modelScope !== 'factory' && (
-        <SettingsRow label="Your model" description={PERSONAL_MODEL_HINT[modelScope]}>
+        <SettingsRow
+          label="Your model"
+          description={personalNeedsKey ? NO_KEY_HINT.personal : PERSONAL_MODEL_HINT[modelScope]}
+        >
           <VoiceModelPicker
             label="Your voice model"
             unsetLabel={`Use Factory's (${factoryLabel})`}
             selected={settings.personal}
             models={models}
-            hasKey={m => m.available}
-            disabled={update.isPending}
+            hasKey={personalHasKey}
+            disabled={personalNeedsKey || update.isPending}
             onPick={choice => save({ target: 'personal', choice })}
           />
         </SettingsRow>

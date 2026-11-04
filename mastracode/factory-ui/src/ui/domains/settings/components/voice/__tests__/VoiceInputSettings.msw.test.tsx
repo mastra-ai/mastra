@@ -202,6 +202,7 @@ describe('VoiceInputSettings', () => {
 
     expect(await screen.findByRole('combobox', { name: 'Factory voice model' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Your voice model' })).toBeDisabled();
+    expect(screen.getAllByText('Add a speech-to-text key below to pick a model')).toHaveLength(2);
     expect(screen.queryByRole('button', { name: /actions$/ })).not.toBeInTheDocument();
   });
 });
