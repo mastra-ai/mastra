@@ -24,7 +24,9 @@ export function GlobalSearchWorkItemResults({
           subtitle={
             <Metadata singleLine>
               {result.context.map((part, index) => (
-                <Metadata.Item key={index}>{part}</Metadata.Item>
+                <Metadata.Item key={index} className={index === 0 ? 'shrink-0' : undefined}>
+                  {part}
+                </Metadata.Item>
               ))}
             </Metadata>
           }

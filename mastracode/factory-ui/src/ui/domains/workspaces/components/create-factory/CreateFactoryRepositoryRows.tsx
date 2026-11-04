@@ -165,7 +165,7 @@ function GithubRepositoryResults({
           title={repo.fullName}
           subtitle={
             <Metadata singleLine>
-              <Metadata.Item>{repo.private ? 'Private' : 'Public'}</Metadata.Item>
+              <Metadata.Item className="shrink-0">{repo.private ? 'Private' : 'Public'}</Metadata.Item>
               <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
             </Metadata>
           }
@@ -208,7 +208,7 @@ function GitLabRepositoryResults({
             title={repo.fullName}
             subtitle={
               <Metadata singleLine>
-                <Metadata.Item>GitLab</Metadata.Item>
+                <Metadata.Item className="shrink-0">GitLab</Metadata.Item>
                 <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
               </Metadata>
             }

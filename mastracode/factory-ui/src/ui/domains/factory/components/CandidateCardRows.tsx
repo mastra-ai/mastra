@@ -33,7 +33,9 @@ export function CandidateCardRows({
         <Txt as="span" variant="meta" tone="faint" className="truncate pr-16">
           <Metadata singleLine>
             {candidate.meta.map((part, index) => (
-              <Metadata.Item key={index}>{part}</Metadata.Item>
+              <Metadata.Item key={index} className={index === 0 ? 'shrink-0' : undefined}>
+                {part}
+              </Metadata.Item>
             ))}
           </Metadata>
         </Txt>

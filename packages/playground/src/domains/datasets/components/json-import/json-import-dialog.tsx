@@ -200,8 +200,8 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
       break;
     case 'ready':
       message = (
-        <Metadata>
-          <Metadata.Item>
+        <Metadata singleLine>
+          <Metadata.Item className="shrink-0">
             <span>
               <Txt as="b" variant="label" tone="ink">
                 {validation.total}
