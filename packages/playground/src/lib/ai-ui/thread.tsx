@@ -59,18 +59,7 @@ import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
 import type { VoiceCallControls } from '@/domains/voice';
 import { startViewTransition } from '@/lib/routing';
 
-const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
-
-/** Waits `SKELETON_DELAY_MS` before showing, so the indicator doesn't flash on fast (local) responses. */
-const DelayedPendingIndicator = () => {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setShown(true), SKELETON_DELAY_MS);
-    return () => clearTimeout(id);
-  }, []);
-  return shown ? <PendingIndicator /> : null;
-};
 
 /**
  * Detects whether the last assistant message has a part that is actively
@@ -273,7 +262,9 @@ const ThreadContent = ({
                               />
                             </MessageScrollerItem>
                           ))}
-                          {isLiveTurn && showPending && <DelayedPendingIndicator />}
+                          {isLiveTurn && showPending && (
+                            <PendingIndicator className="animate-in delay-300 duration-200 fade-in-0 fill-mode-backwards" />
+                          )}
                         </ChatShell.Turn>
                       );
                     })}
