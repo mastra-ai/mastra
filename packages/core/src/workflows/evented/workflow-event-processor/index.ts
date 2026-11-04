@@ -399,6 +399,15 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * The workflow's `pruneSnapshot` option, except on storage v2 runs, which skip it as on the
+   * default engine: their later steps load earlier results from storage, so pruning a stored
+   * result would change what those steps read.
+   */
+  #pruneSnapshotOf(workflow: Workflow | undefined) {
+    return currentStorageVersion() === 2 ? undefined : workflow?.options?.pruneSnapshot;
+  }
+
+  /**
    * Applies the workflow's `pruneSnapshot` option to an already-persisted snapshot.
    *
    * The evented engine persists suspensions via merge operations
@@ -416,7 +425,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflowId: string;
     runId: string;
   }): Promise<void> {
-    const pruneSnapshot = workflow?.options?.pruneSnapshot;
+    const pruneSnapshot = this.#pruneSnapshotOf(workflow);
     if (!pruneSnapshot) return;
     try {
       const runStorage = this.#runStorage(workflowId, runId);
@@ -468,7 +477,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath: number[];
     activeStepsPath: Record<string, number[]>;
   }): StepResult<any, any, any, any> {
-    const pruneSnapshot = workflow?.options?.pruneSnapshot;
+    const pruneSnapshot = this.#pruneSnapshotOf(workflow);
     if (!pruneSnapshot) return storedResult;
     try {
       const snapshot: WorkflowRunState = {
@@ -797,10 +806,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         value: initialState,
       };
+      const pruneSnapshot = this.#pruneSnapshotOf(workflow);
       await runStorage.writeSnapshot(
-        workflow?.options?.pruneSnapshot
-          ? workflow.options.pruneSnapshot({ snapshot: runningSnapshot, workflowStatus: 'running' })
-          : runningSnapshot,
+        pruneSnapshot ? pruneSnapshot({ snapshot: runningSnapshot, workflowStatus: 'running' }) : runningSnapshot,
         resourceId,
       );
 
@@ -2057,10 +2065,9 @@ export class WorkflowEventProcessor extends EventProcessor {
             error: undefined,
             timestamp: Date.now(),
           };
+          const pruneSnapshot = this.#pruneSnapshotOf(nestedWorkflow);
           await this.#runStorage(nestedWorkflow.id, nestedRunId).writeSnapshot(
-            nestedWorkflow?.options?.pruneSnapshot
-              ? nestedWorkflow.options.pruneSnapshot({ snapshot: pendingSnapshot, workflowStatus: 'pending' })
-              : pendingSnapshot,
+            pruneSnapshot ? pruneSnapshot({ snapshot: pendingSnapshot, workflowStatus: 'pending' }) : pendingSnapshot,
             parentResourceId,
           );
         }

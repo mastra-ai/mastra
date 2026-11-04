@@ -2051,7 +2051,7 @@ export class EventedRun<
       timestamp: Date.now(),
     };
     await this.runStorage.writeSnapshot(
-      this.executionEngine.options?.pruneSnapshot
+      this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
         ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
         : initialRunSnapshot,
       this.resourceId,
@@ -2187,7 +2187,7 @@ export class EventedRun<
       timestamp: Date.now(),
     };
     await this.runStorage.writeSnapshot(
-      this.executionEngine.options?.pruneSnapshot
+      this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
         ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
         : initialRunSnapshot,
       this.resourceId,

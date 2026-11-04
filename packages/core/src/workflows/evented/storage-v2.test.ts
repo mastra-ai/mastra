@@ -71,8 +71,9 @@ async function runWorkflow(workflow: { createRun: () => Promise<any> }, storage 
   const mastra = new Mastra({ logger: false, storage, workflows: { wf: workflow as any }, pubsub });
   await mastra.startWorkers();
   try {
-    const result = await (await workflow.createRun()).start({ inputData: {} });
-    return { result, messages };
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: {} });
+    return { result, run, messages };
   } finally {
     await mastra.stopWorkers();
   }
@@ -388,6 +389,102 @@ describe('evented step messages on storage v2', () => {
 
   // A branch's write returns only its own result on v2, so it loads its siblings' as of its write:
   // of two branches that both wrote before either loaded, only the later writer joins.
+  it.each([1, 2] as const)(
+    "keep parallel branches' state changes out of step results, and under later changes (v%i)",
+    async storageVersion => {
+      const arm = (id: string) =>
+        createStep({
+          id,
+          inputSchema: looseObject,
+          outputSchema: looseObject,
+          execute: async ({ setState }) => {
+            await setState({ [id]: true, last: id });
+            return { [id]: true };
+          },
+        });
+      const after = createStep({
+        id: 'after',
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        execute: async ({ setState }) => {
+          await setState({ last: 'after' });
+          return { after: true };
+        },
+      });
+      const read = createStep({
+        id: 'read',
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        execute: async ({ getState, getStepResultAsync }) => ({
+          state: await getState(),
+          left: await getStepResultAsync('left'),
+        }),
+      });
+      const workflow = createWorkflow({
+        id: `branch-state-v${storageVersion}`,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        stateSchema: looseObject,
+        options: { storageVersion },
+      })
+        .parallel([arm('left'), arm('right')])
+        .then(after)
+        .then(read)
+        .commit();
+
+      const { result, run } = await runWorkflow(workflow);
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ state: { left: true, right: true, last: 'after' }, left: { left: true } });
+      const stored = await (workflow as any).getWorkflowRunById(run.runId);
+      expect(JSON.stringify([result.steps, stored])).not.toContain('__stateDelta');
+    },
+  );
+
+  it("skip a nested workflow's pruneSnapshot on v2, so its later steps read whole results", async () => {
+    // As on the default engine: a v2 run's steps load earlier results from storage, so a pruned
+    // stored result would change what they read.
+    const pruned: string[] = [];
+    const a = createStep({
+      id: 'a',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async () => ({ keep: 1, heavy: BIG }),
+    });
+    const b = createStep({
+      id: 'b',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ getStepResultAsync }) => ({ fromA: await getStepResultAsync('a') }),
+    });
+    const inner = createWorkflow({
+      id: 'prune-inner',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: {
+        pruneSnapshot: ({ snapshot, workflowStatus }) => {
+          pruned.push(workflowStatus);
+          return { ...snapshot, context: {} };
+        },
+      },
+    })
+      .then(a)
+      .then(b)
+      .commit();
+    const workflow = createWorkflow({
+      id: 'prune-outer',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion: 2 },
+    })
+      .then(inner)
+      .commit();
+
+    const { result } = await runWorkflow(workflow);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ fromA: { keep: 1, heavy: BIG } });
+    expect(pruned).toEqual([]);
+  });
+
   it('join parallel branches once when both write before either loads the other', async () => {
     let joins = 0;
     const arm = (id: string) =>
