@@ -107,7 +107,7 @@ export function compileStoredBoard(board: StoredBoardInput, code?: InstalledBoar
 }
 
 /** A board served from a stored row, and what of its code board's behaviour it runs without. */
-export interface MergedStoredBoard {
+interface MergedStoredBoard {
   board: InstalledBoard;
   /** One per piece of code behaviour the row can't run with; empty when it runs with all of it. */
   problems: string[];
@@ -303,7 +303,7 @@ function storedBoardConfig(board: StoredBoardInput, behaviour?: BoardBehaviour):
 }
 
 /** What a code board's behaviour holds fixed on each of its phases; the rest of the phase is editable. */
-export interface CodePhaseBehaviour {
+interface CodePhaseBehaviour {
   /** Code handlers run on entering or leaving it, so its runner context and skill are fixed. */
   handlers: boolean;
   /** The exit tool its code behaviour waits for, if any. */

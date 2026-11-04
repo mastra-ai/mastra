@@ -398,14 +398,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
    * never rewritten. A project stored before the list was kept counts the boards it has as stored.
    * Reads one row when every key was stored before. Returns the keys it inserted.
    */
-  async seedBoards(
-    scope: StoredBoardScope,
-    boards: readonly StoredBoardInput[],
-    actor: string = DEFAULT_INTAKE_ROUTE_ACTOR,
-  ): Promise<string[]> {
+  async seedBoards(scope: StoredBoardScope, boards: readonly StoredBoardInput[]): Promise<string[]> {
     const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
     if (marker?.seeded_boards && boards.every(board => marker.seeded_boards!.includes(board.key))) return [];
-    return this.#insertOnce(scope, boards, { actor, skipSeeded: true });
+    return this.#insertOnce(scope, boards, { actor: DEFAULT_INTAKE_ROUTE_ACTOR, skipSeeded: true });
   }
 
   /**

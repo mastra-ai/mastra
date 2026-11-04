@@ -34,7 +34,7 @@ export interface StoredBoardDetails {
  * Code boards Factory stores in each project: every code board except the legacy Review board,
  * which is being retired and is served from code.
  */
-export function isEditableCodeBoard(board: InstalledBoard): boolean {
+function isEditableCodeBoard(board: InstalledBoard): boolean {
   return codeBoardOf(board) !== reviewBoard;
 }
 
