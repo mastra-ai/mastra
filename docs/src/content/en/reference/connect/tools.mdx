@@ -168,6 +168,20 @@ Every field except `fetch` and `resourceId` falls back to an environment variabl
     isOptional: true,
   },
   {
+    name: 'projectId',
+    type: 'string',
+    description:
+      'Project ID, sent as the x-mastra-project-id header so the platform can attribute proxy activity to the project. Falls back to MASTRA_PROJECT_ID; the header is omitted when absent.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      "End-user resource key the client acts for, sent as the x-mastra-resource-id header. Connection listings are scoped to global connections plus that resource's connections. Has no environment variable fallback.",
+    isOptional: true,
+  },
+  {
     name: 'baseUrl',
     type: 'string',
     description:

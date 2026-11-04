@@ -249,6 +249,8 @@ selected_score = |llm_score - calculated_score| > discrepancy_threshold
 Final Score = max(0, selected_score - issues_penalty)
 ```
 
+The final score is rounded to two decimal places.
+
 Where:
 
 - `llm_score` = Direct robustness score from LLM analysis

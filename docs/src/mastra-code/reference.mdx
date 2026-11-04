@@ -128,7 +128,7 @@ Subagent definitions for spawning focused child agents.
 | `id` | `string` | Yes | Unique identifier (e.g., `"explore"`) |
 | `name` | `string` | Yes | Display name in tool output |
 | `description` | `string` | Yes | What this subagent does |
-| `instructions` | `DynamicArgument<AgentInstructions>` | Yes | System prompt for the subagent. Accepts a string, array of strings, system message object, array of system messages, or a function that returns any of these |
+| `instructions` | `DynamicArgument<AgentInstructions>` | Yes | System prompt for the subagent. Accepts a string, array of strings, system message object, array of system messages, or a function that returns any of these (or a promise of one) |
 | `tools` | `ToolsInput` | No | Tools available to this subagent |
 | `allowedControllerTools` | `string[]` | No | Tool IDs from controller tools this subagent can use |
 | `defaultModelId` | `string` | No | Default model for this subagent type |
