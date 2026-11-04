@@ -134,6 +134,7 @@ export class PlatformMemory extends MastraMemory {
 
   listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any, any, any>> {
     if (this.workingMemoryMode !== 'tool' || config?.readOnly) return {};
+    this.assertResourceScopedWorkingMemory(config);
     const client = this.client;
     return {
       updateWorkingMemory: createTool({
@@ -323,7 +324,24 @@ export class PlatformMemory extends MastraMemory {
     };
   }
 
-  async getWorkingMemory({ threadId, resourceId }: { threadId: string; resourceId?: string }): Promise<string | null> {
+  // Hosted working memory is keyed by resource only, so thread scope would silently be shared
+  // across every thread of the same resource.
+  private assertResourceScopedWorkingMemory(config?: MemoryConfig | MemoryConfigInternal): void {
+    if (this.getMergedThreadConfig(config ?? {}).workingMemory?.scope === 'thread') {
+      throw new Error('PlatformMemory does not support thread-scoped working memory');
+    }
+  }
+
+  async getWorkingMemory({
+    threadId,
+    resourceId,
+    memoryConfig,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<string | null> {
+    this.assertResourceScopedWorkingMemory(memoryConfig);
     return this.client.getWorkingMemory(resourceId ?? threadId);
   }
 
@@ -335,11 +353,14 @@ export class PlatformMemory extends MastraMemory {
     threadId,
     resourceId,
     workingMemory,
+    memoryConfig,
   }: {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<void> {
+    this.assertResourceScopedWorkingMemory(memoryConfig);
     await this.client.updateWorkingMemory(resourceId ?? threadId, workingMemory);
   }
 
@@ -347,6 +368,7 @@ export class PlatformMemory extends MastraMemory {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }> {
     await this.updateWorkingMemory(args);
     return { success: true, reason: 'replaced' };

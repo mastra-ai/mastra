@@ -274,6 +274,31 @@ describe('PlatformMemory', () => {
     const put = api.requests.find(r => r.path === '/working-memory')!;
     expect(put.body).toEqual({ resourceId: 'user_1', workingMemory: '# User\n- Name: Ada' });
   });
+
+  it('rejects thread-scoped working memory instead of sharing it across threads', async () => {
+    const opts = { accessToken: 'tok_1', instanceId: 'mem_1', apiUrl: 'https://platform.test', fetch: api.fetchImpl };
+    const memory = new PlatformMemory({ ...opts, workingMemory: 'tool' });
+    const threadScope = { workingMemory: { enabled: true, scope: 'thread' as const } };
+    const before = api.requests.length;
+
+    expect(() => memory.listTools(threadScope)).toThrow('thread-scoped working memory');
+    await expect(
+      memory.getWorkingMemory({ threadId: 't', resourceId: 'u', memoryConfig: threadScope }),
+    ).rejects.toThrow('thread-scoped working memory');
+    await expect(
+      memory.updateWorkingMemory({ threadId: 't', resourceId: 'u', workingMemory: 'x', memoryConfig: threadScope }),
+    ).rejects.toThrow('thread-scoped working memory');
+    expect(api.requests.length).toBe(before);
+
+    const resourceScope = { workingMemory: { enabled: true, scope: 'resource' as const } };
+    await memory.updateWorkingMemory({
+      threadId: 't',
+      resourceId: 'u',
+      workingMemory: 'x',
+      memoryConfig: resourceScope,
+    });
+    expect(api.requests.at(-1)!.body).toEqual({ resourceId: 'u', workingMemory: 'x' });
+  });
 });
 
 describe('PlatformMemoryClient', () => {
