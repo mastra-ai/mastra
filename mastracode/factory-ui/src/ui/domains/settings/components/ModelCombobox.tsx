@@ -35,7 +35,7 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
     value: AUTO_VALUE,
     label: 'Auto',
     description: effectiveName ? `Currently ${effectiveName}` : 'Picked for you',
-    displayLabel: effectiveName ? `Auto · ${effectiveName}` : 'Auto',
+    displayLabel: effectiveName ? `Auto (${effectiveName})` : 'Auto',
     start: (
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
         <Sparkles className="text-muted-foreground size-4" />
@@ -106,7 +106,7 @@ export function ModelCombobox({
       onValueChange={onValueChange}
       placeholder={
         fallbackModelId
-          ? `${formatModelName(fallbackModelId)} · ${DEFAULT_SOURCE_LABELS['built-in']}`
+          ? `${formatModelName(fallbackModelId)} (${DEFAULT_SOURCE_LABELS['built-in']})`
           : (placeholder ?? 'Select model')
       }
       searchPlaceholder="Search models"

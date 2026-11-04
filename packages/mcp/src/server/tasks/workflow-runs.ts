@@ -38,6 +38,15 @@ export interface WorkflowRunView {
   error?: unknown;
 }
 
+/**
+ * A run's result with its step results read: a storage v2 result's `steps` is a loader that reads
+ * them from storage, so a view, and the text a tool answers with, gets them as for v1.
+ */
+export async function withLoadedSteps<T extends { steps?: unknown }>(result: T): Promise<T> {
+  const steps: unknown = result.steps;
+  return typeof steps === 'function' ? { ...result, steps: await steps() } : result;
+}
+
 /** Statuses a run never leaves. */
 const FINAL_STATUSES: ReadonlySet<WorkflowRunStatus> = new Set(['success', 'failed', 'tripwire', 'canceled', 'bailed']);
 

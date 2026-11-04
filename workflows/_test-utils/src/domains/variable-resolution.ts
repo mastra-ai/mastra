@@ -1167,26 +1167,29 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
     });
 
     describe('getStepResultAsync', () => {
-      it('resolves to the same values as getStepResult in a step execute', async () => {
-        if (!useRegistry) return;
-        const { workflow } = registry!['var-step-result-async-execute']!;
-        const result = await execute(workflow, {});
+      it.skipIf(skipTests.getStepResultSync)(
+        'resolves to the same values as getStepResult in a step execute',
+        async () => {
+          if (!useRegistry) return;
+          const { workflow } = registry!['var-step-result-async-execute']!;
+          const result = await execute(workflow, {});
 
-        expect(result.status).toBe('success');
-        expect(result.steps['read-step']).toMatchObject({
-          status: 'success',
-          output: {
-            asyncByRef: { value: 'step1-result' },
-            asyncById: { value: 'step1-result' },
-            asyncNotRun: null,
-            asyncUnknownId: null,
-            syncByRef: { value: 'step1-result' },
-            syncById: { value: 'step1-result' },
-            syncNotRun: null,
-            syncUnknownId: null,
-          },
-        });
-      });
+          expect(result.status).toBe('success');
+          expect(result.steps['read-step']).toMatchObject({
+            status: 'success',
+            output: {
+              asyncByRef: { value: 'step1-result' },
+              asyncById: { value: 'step1-result' },
+              asyncNotRun: null,
+              asyncUnknownId: null,
+              syncByRef: { value: 'step1-result' },
+              syncById: { value: 'step1-result' },
+              syncNotRun: null,
+              syncUnknownId: null,
+            },
+          });
+        },
+      );
 
       it('is available in branch conditions', async () => {
         if (!useRegistry) return;

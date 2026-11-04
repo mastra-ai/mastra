@@ -12,6 +12,7 @@ import { answersById, exprRefs } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { kpiFigures } from './options';
 import type { KpisOptions } from './options';
+import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
 
 const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: MessagesSquareIcon } as const;
@@ -19,12 +20,20 @@ const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: Message
 const FORMAT = { count: formatCount, usd: formatUsd };
 const change = (pct: number | undefined) => (pct !== undefined && Number.isFinite(pct) ? pct : undefined);
 
-export function KpisWidget({ views }: WidgetKindProps<KpisOptions>) {
+export function KpisWidget({ views, dragHandle }: WidgetKindProps<KpisOptions>) {
   const [view] = views;
-  return (
+  const gate = (
     <ViewGate queries={view.queries} pending={() => null}>
       {page => <KpisView view={view} page={page} />}
     </ViewGate>
+  );
+  if (!dragHandle) return gate;
+  // The group has no title of its own, so the grip sits beside it, there even before the figures load.
+  return (
+    <div className="flex items-center gap-1.5 *:last:min-w-0 *:last:flex-1">
+      <MetricsCard.DragHandle {...dragHandle} />
+      {gate}
+    </div>
   );
 }
 

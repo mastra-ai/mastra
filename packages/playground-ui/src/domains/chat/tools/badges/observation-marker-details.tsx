@@ -9,6 +9,7 @@ import { ObservationRenderer } from './observation-renderer';
 import { ActivityItem } from '@/ds/components/ai/activity';
 import { Code } from '@/ds/components/Code';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 import { formatDuration } from '@/utils/duration';
 
@@ -31,7 +32,11 @@ export const ObservationStats = ({ inputTokens, outputTokens, durationMs }: Obse
 
   return (
     <Txt as="p" variant="meta" tone="muted" className="tabular-nums">
-      {stats.join(' · ')}
+      <Metadata>
+        {stats.map(stat => (
+          <Metadata.Item key={stat}>{stat}</Metadata.Item>
+        ))}
+      </Metadata>
     </Txt>
   );
 };
@@ -92,7 +97,7 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
     extractionFailures.length > 0 ? `${extractionFailures.length} failed` : undefined,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(', ');
 
   return (
     <ActivityItem icon={<Braces />} label="Extractions" detail={detail} aria-label="Extractions">
