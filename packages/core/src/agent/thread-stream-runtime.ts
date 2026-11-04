@@ -6,7 +6,7 @@ import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
@@ -26,6 +26,7 @@ import type { AgentExecutionOptions } from './agent.types';
 import { DurableStepIds } from './durable/constants';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
+import { restoreRequestContext, snapshotRequestContextEntries } from './request-context-snapshot';
 import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSettle } from './run-lease-fence';
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
@@ -346,6 +347,17 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
     .catch(() => {})
     .then(() => pubsub.clearTopic(replyTopic))
     .catch(() => {});
+}
+
+/**
+ * The caller's request context as it crosses to a claimed owner in another process. Scopes are
+ * dropped: they don't cross processes (a message naming scopes is refused before it gets here).
+ */
+function snapshotWireRequestContext(requestContext: RequestContext | undefined): Record<string, unknown> | undefined {
+  const entries = snapshotRequestContextEntries(requestContext);
+  if (!entries) return undefined;
+  const { [MASTRA_SCOPES_KEY]: _scopes, ...rest } = entries;
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 /** Unions scope lists, dropping duplicates. */
@@ -860,6 +872,12 @@ type AgentThreadStreamRuntimeEvent =
        * sender can't see that run, so `signal` carries its `ifIdle` attributes.
        */
       joinSignal?: SerializableAgentSignal;
+      /**
+       * JSON-safe snapshot of the caller's request context (see `snapshotRequestContextEntries`), so the owner's
+       * run resolves request-scoped model, instructions and memory as the caller's would. Absent from senders
+       * before this field, and when the caller passed no context.
+       */
+      requestContextEntries?: Record<string, unknown>;
     };
 
 type AgentThreadIdleSignalAcceptanceEvent =
@@ -2516,6 +2534,8 @@ export class AgentThreadStreamRuntime {
           data.joinActiveRun === true && data.joinSignal?.id === data.signal.id
             ? createSignal(data.joinSignal)
             : undefined,
+          undefined,
+          data.requestContextEntries,
         );
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
         if (!accepted) {
@@ -2827,6 +2847,7 @@ export class AgentThreadStreamRuntime {
     waitForIdle = false,
     joinSignal?: CreatedAgentSignal,
     messageScopes?: string[],
+    remoteRequestContextEntries?: Record<string, unknown>,
   ): Promise<{ runId: string; error?: string; blocked?: boolean; output?: MastraModelOutput<OUTPUT> } | undefined> {
     // A message naming scopes joins only a run started with exactly those scopes; otherwise
     // it falls through to the queued idle start below, which runs after the run in flight.
@@ -2928,10 +2949,16 @@ export class AgentThreadStreamRuntime {
       //
       // Scopes cross over with the request context for the same reason: they say
       // what the caller acts as. They are unioned with any owner scopes.
+      //
+      // A caller in another process sends a snapshot instead of the live context.
+      // It never holds an auth token, so the owner's own token is kept.
+      const incomingRequestContext = remoteRequestContextEntries
+        ? restoreRequestContext(remoteRequestContextEntries, ownerStreamOptions?.requestContext)
+        : incomingStreamOptions?.requestContext;
       streamOptions =
-        incomingStreamOptions?.requestContext === undefined
+        incomingRequestContext === undefined
           ? ownerStreamOptions
-          : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
+          : { ...ownerStreamOptions, requestContext: incomingRequestContext };
       if (incomingStreamOptions?.scopes?.length) {
         streamOptions = {
           ...streamOptions,
@@ -3247,8 +3274,10 @@ export class AgentThreadStreamRuntime {
     targetSourceId: string,
     waitForIdle: boolean,
     joinSignal?: CreatedAgentSignal,
+    requestContext?: RequestContext,
   ): Promise<string> {
     const requestId = globalThis.crypto.randomUUID();
+    const requestContextEntries = snapshotWireRequestContext(requestContext);
     const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
 
     return new Promise<string>((resolve, reject) => {
@@ -3281,12 +3310,13 @@ export class AgentThreadStreamRuntime {
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
       );
 
-      // This event can reach a claimed owner in another process. It carries the
-      // signal, the request/reply ids and the timeout — not `requestContext`,
-      // which is an open map that may hold non-serializable values and has no
-      // wire contract. A remote owner therefore starts the run with its own
-      // options, so the caller-context handling in `#startClaimedIdleRun` covers
-      // a locally claimed owner only.
+      // This event can reach a claimed owner in another process. Besides the
+      // signal, the request/reply ids and the timeout, it carries a JSON-safe
+      // snapshot of the caller's request context, so the owner's run sees the
+      // caller's request-scoped values as a locally claimed owner's does (see
+      // `#startClaimedIdleRun`). The live context is an open map that may hold
+      // non-serializable values; the snapshot keeps only what survives JSON and
+      // never the auth token.
       void pubsub
         .subscribe(replyTopic, onReply)
         .then(() => {
@@ -3311,6 +3341,7 @@ export class AgentThreadStreamRuntime {
             expiresAt,
             ...(waitForIdle ? {} : { joinActiveRun: true }),
             ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
+            ...(requestContextEntries ? { requestContextEntries } : {}),
           });
         })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
@@ -3325,6 +3356,7 @@ export class AgentThreadStreamRuntime {
     discovery: Promise<string | undefined>,
     waitForIdle = false,
     joinSignal?: CreatedAgentSignal,
+    requestContext?: RequestContext,
   ): Promise<SendAgentSignalAccepted<OUTPUT>> {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
@@ -3340,6 +3372,7 @@ export class AgentThreadStreamRuntime {
       claimedOwnerSourceId,
       waitForIdle,
       joinSignal,
+      requestContext,
     );
     return { action: 'deliver', runId: acceptedRunId };
   }
@@ -7813,6 +7846,9 @@ export class AgentThreadStreamRuntime {
             globalThis.crypto.randomUUID(),
             signal,
             claimedOwnerDiscovery,
+            false,
+            undefined,
+            target.ifIdle?.streamOptions?.requestContext,
           );
           void accepted.catch(() => {});
           return { signal, accepted };
@@ -7988,6 +8024,7 @@ export class AgentThreadStreamRuntime {
             discovery,
             waitForIdle,
             joinSignal,
+            target.ifIdle?.streamOptions?.requestContext,
           );
         } finally {
           if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {

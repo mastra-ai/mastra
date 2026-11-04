@@ -12,14 +12,14 @@ import type {
   LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
+import { RequestContext } from '../../../request-context';
 import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
+import { restoreRequestContext } from '../../request-context-snapshot';
 import { SaveQueueManager } from '../../save-queue';
-import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
@@ -104,38 +104,7 @@ export interface ResolveRuntimeOptions {
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }
 
-/**
- * Restore a RequestContext from the JSON-safe `requestContextEntries`
- * snapshot serialized onto the workflow input (see preparation.ts).
- *
- * `entries` is absent on a step input even when the run itself has a context:
- * the snapshot is propagated at the run level, not copied onto every step.
- * `runLevel` is that run-level context, which the execution engine has already
- * rebuilt in the step's scope — falling back to it is what keeps request-scoped
- * resolution (tenant/user, workspace, dynamic model/memory) working for tools
- * rebuilt on a cross-process worker, including a delegated subagent's.
- */
-export function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
-  if (entries) {
-    // Drop any persisted token from legacy snapshots written before the token
-    // was excluded from persistence — a stale bearer token must never be restored.
-    const restored: RequestContext = new RequestContext<unknown>(
-      Object.entries(entries).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
-    );
-    // The framework-managed bearer token is deliberately never persisted into
-    // `requestContextEntries` (see preparation.ts), so carry the *live* token
-    // over from the run-level context when one exists. Without this, tools
-    // that forward auth (e.g. same-auth MCP servers) would lose the token on
-    // any path where the snapshot takes precedence during an authenticated run.
-    const liveToken = runLevel?.getRaw?.(MASTRA_AUTH_TOKEN_KEY);
-    if (liveToken !== undefined) {
-      restored.setRaw(MASTRA_AUTH_TOKEN_KEY, liveToken);
-    }
-    restoreRunAgentScopes(restored);
-    return restored;
-  }
-  return runLevel ?? new RequestContext();
-}
+export { restoreRequestContext };
 
 /**
  * Thrown when the per-request processor pipeline cannot be rebuilt during
