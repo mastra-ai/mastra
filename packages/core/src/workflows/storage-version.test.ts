@@ -527,7 +527,8 @@ describe('storageVersion per run', () => {
         const results = [];
         for (const { gate, done } of executions) {
           gate();
-          results.push(await done);
+          // Read this execution's steps before the other execution writes a newer result.
+          results.push(await withLoadedSteps(await done));
         }
 
         // The snapshot resume, restart and time travel continue from.
