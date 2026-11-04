@@ -208,15 +208,15 @@ export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metada
   );
 }
 
-export function workItemMeta(item: WorkItem): string {
+export function workItemMeta(item: WorkItem): readonly string[] {
   const metadata = sourceMetadata(item);
   const author = typeof metadata.author === 'string' ? metadata.author : undefined;
   const assignee = typeof metadata.assignee === 'string' ? metadata.assignee : undefined;
   const age = relativeTime(sourceCreatedAt(metadata) ?? item.createdAt);
   const key = workItemKey(item);
-  if (key === undefined) return `${SOURCE_LABELS[item.source]} · ${age}`;
+  if (key === undefined) return [SOURCE_LABELS[item.source], age];
   const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
-  return `${key}${owner ? ` · ${owner}` : ''} · ${age}`;
+  return [key, ...(owner ? [owner] : []), age];
 }
 
 /** Free-text card match over what names it on the board: its title and its issue key. */

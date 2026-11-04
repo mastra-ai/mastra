@@ -46,8 +46,8 @@ export function DisconnectedLinearWorkspaces({
                   </Badge>
                 </span>
                 <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                  {count === 1 ? '1 project or team' : `${count} projects and teams`} paused · reconnect to resume
-                  intake
+                  {count === 1 ? '1 project or team' : `${count} projects and teams`} paused. Reconnect to resume
+                  intake.
                 </Txt>
               </div>
             </div>

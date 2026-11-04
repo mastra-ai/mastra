@@ -211,7 +211,7 @@
     "nanoid": "^5.1.16",
     "prettier": "^3.9.10",
     "prism-react-renderer": "^2.4.1",
-    "react-day-picker": "^8.10.2",
+    "react-day-picker": "^9.14.0",
     "react-hook-form": "^7.91.0",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.15.0",

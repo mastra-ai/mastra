@@ -108,7 +108,7 @@ export function ProviderConnectControl({
       if (connection) {
         toast.success(`${meta.displayName} connected`);
       } else {
-        toast.success(`${meta.displayName} authorization completed — the connection is activating`);
+        toast.success(`${meta.displayName} authorization completed. The connection is activating.`);
       }
       onCompleted?.();
     } catch (err) {
