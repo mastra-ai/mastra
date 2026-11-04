@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { SpanType } from '@mastra/core/observability';
 import { EntityType, InMemoryStore } from '@mastra/core/storage';
-import type { ObservabilityStorage } from '@mastra/core/storage';
+import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 export interface ObservabilitySignalWriteTestConfig {
@@ -103,7 +103,11 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       },
     );
 
-    const writeSpan = async (spanId: string, parentSpanId: string | null = null) => {
+    const writeSpan = async (
+      spanId: string,
+      parentSpanId: string | null = null,
+      overrides: Partial<CreateSpanRecord> = {},
+    ) => {
       await store.createSpan({
         span: {
           traceId: 'trace-123',
@@ -119,6 +123,7 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
           userId: 'span-user',
           tags: parentSpanId ? ['child-tag'] : ['root-tag'],
           metadata: { inherited: true, override: 'stored', userId: 'metadata-user' },
+          ...overrides,
         },
       });
     };
@@ -212,6 +217,38 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       expect(row).not.toHaveProperty('contextMode');
     });
 
+    it.each([undefined, 'older-root', 'child'])(
+      'uses the target ancestor root, or latest root without a target, for span %j',
+      async spanId => {
+        await writeSpan('older-root', null, { tags: ['older'] });
+        await writeSpan('parent', 'older-root');
+        await writeSpan('child', 'parent');
+        await writeSpan('newer-root', null, {
+          endedAt: new Date('2026-01-01T00:00:02Z'),
+          tags: ['newer'],
+        });
+        const response = await post({ ...payload, traceId: 'trace-123', spanId }, 'resolve');
+        expect(response.status, await response.clone().text()).toBe(200);
+        const [row] = await list();
+        expect(row).toMatchObject({
+          rootEntityId: spanId ? 'older-root' : 'newer-root',
+          tags: spanId ? ['older'] : ['newer'],
+          entityId: spanId ?? 'newer-root',
+        });
+        if (spanId === 'child') expect(row!.parentEntityId).toBe('parent');
+      },
+    );
+
+    it.each(['missing', 'cycle'] as const)('rejects a target with a %s ancestor chain', async chain => {
+      await writeSpan('unrelated-root');
+      await writeSpan('child', 'parent');
+      await writeSpan('parent', chain === 'cycle' ? 'child' : 'missing-root');
+      const response = await post({ ...payload, traceId: 'trace-123', spanId: 'child' }, 'resolve');
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ code: 'TRACE_NOT_FOUND' });
+      expect(await list()).toEqual([]);
+    });
+
     it('enforces trusted organization scope and authenticated feedback attribution', async () => {
       trustedScope = { organizationId: 'trusted-org', mastra__user: { id: 'authenticated-reviewer' } };
       const response = await post(
@@ -232,6 +269,43 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       const resolved = await post({ ...payload, traceId: 'trace-123', organizationId: 'trusted-org' }, 'resolve');
       expect(resolved.status).toBe(404);
       expect(await resolved.json()).toMatchObject({ code: 'TRACE_NOT_FOUND' });
+    });
+
+    it.each([
+      { field: 'organizationId', contextKey: 'organizationId' },
+      { field: 'resourceId', contextKey: 'mastra__resourceId' },
+    ] as const)('does not let a caller override trusted $field during resolution', async ({ field, contextKey }) => {
+      trustedScope = { [contextKey]: 'trusted' };
+      await writeSpan('trusted-root', null, { [field]: 'trusted' });
+      await writeSpan('foreign-root', null, { [field]: 'foreign' });
+      const rejected = await post(
+        { ...payload, traceId: 'trace-123', spanId: 'foreign-root', [field]: 'foreign' },
+        'resolve',
+      );
+      expect(rejected.status).toBe(404);
+      expect(await rejected.json()).toMatchObject({ code: 'SPAN_NOT_FOUND' });
+      expect(await list()).toEqual([]);
+
+      const accepted = await post(
+        { ...payload, traceId: 'trace-123', spanId: 'trusted-root', [field]: 'foreign' },
+        'resolve',
+      );
+      expect(accepted.status, await accepted.clone().text()).toBe(200);
+      expect(await list()).toEqual([
+        expect.objectContaining({ [field]: 'trusted', entityId: 'trusted-root', rootEntityId: 'trusted-root' }),
+      ]);
+    });
+
+    it('allows self-hosted resolution without configured tenant scope', async () => {
+      await writeSpan('root', null, { organizationId: 'stored-org', resourceId: 'stored-resource' });
+      const response = await post(
+        { ...payload, traceId: 'trace-123', organizationId: 'caller-org', resourceId: 'caller-resource' },
+        'resolve',
+      );
+      expect(response.status, await response.clone().text()).toBe(200);
+      expect(await list()).toEqual([
+        expect.objectContaining({ organizationId: 'stored-org', resourceId: 'stored-resource', rootEntityId: 'root' }),
+      ]);
     });
 
     it('still reads historical feedback and scores with no trace', async () => {

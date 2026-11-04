@@ -30,7 +30,9 @@ export async function resolveSignalContext(
   };
   if (mode === 'provided') return { ...contextSchema.parse(record), ...scope, metadata: record.metadata };
 
-  // getTrace has no tenant-scope argument. Never enrich from rows outside trusted scope.
+  // Like trace queries, absent trusted scope means unscoped self-hosted access.
+  // getTrace has no scope argument, so enforce every configured scope field here.
+  // Caller-supplied context must never establish or widen that trusted scope.
   const trace = await store.getTrace({ traceId: record.traceId });
   const spans = (trace?.spans ?? []).filter(
     span =>
@@ -45,8 +47,17 @@ export async function resolveSignalContext(
   if (!root) missingAnchor('TRACE_NOT_FOUND');
   const target = record.spanId == null ? root : spans.find(span => span.spanId === record.spanId);
   if (!target) missingAnchor('SPAN_NOT_FOUND');
-  const selectedRoot = target.parentSpanId == null ? target : root;
-  const parent = spans.find(span => span.spanId === target.parentSpanId);
+  const spansById = new Map(spans.map(span => [span.spanId, span]));
+  let selectedRoot = target;
+  const visited = new Set<string>();
+  while (selectedRoot.parentSpanId != null) {
+    if (visited.has(selectedRoot.spanId)) missingAnchor('TRACE_NOT_FOUND');
+    visited.add(selectedRoot.spanId);
+    const ancestor = spansById.get(selectedRoot.parentSpanId);
+    if (!ancestor) missingAnchor('TRACE_NOT_FOUND');
+    selectedRoot = ancestor;
+  }
+  const parent = target.parentSpanId == null ? undefined : spansById.get(target.parentSpanId);
   // Null out absent fields so caller-supplied context cannot survive resolution.
   const context = contextSchema.parse(Object.fromEntries(Object.keys(contextFields).map(key => [key, null])));
   return {
