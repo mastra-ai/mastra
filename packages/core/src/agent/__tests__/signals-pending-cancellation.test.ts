@@ -1987,6 +1987,44 @@ describe('Agent signals: pending cancellation', () => {
       }
     });
 
+    it('keeps checking the lease after a read that never returns', async () => {
+      // The read deadline is a timer too; time also runs on its own so the pubsub's zero-delay deliveries go out.
+      vi.useFakeTimers({
+        toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
+        shouldAdvanceTime: true,
+      });
+      const { scope, pubsub, model, getStreamCount, deliver, releaseFollowUp, cleanup } = await forwardToFollowUpRun(
+        'hung-lease-read',
+        { silentRunEnds: true },
+      );
+      const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
+      try {
+        releaseFollowUp();
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+        deliver();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(getStreamCount()).toBe(2);
+        // The first lease read hangs forever; later reads answer.
+        let hung = false;
+        pubsub.getLeaseOwner = key => {
+          if (!hung) {
+            hung = true;
+            return new Promise<string | undefined>(() => {});
+          }
+          return getLeaseOwner(key);
+        };
+        for (let tick = 0; tick < 5 && getStreamCount() < 3; tick++) {
+          await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        }
+        expect(hung).toBe(true);
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
+      } finally {
+        pubsub.getLeaseOwner = getLeaseOwner;
+        cleanup();
+      }
+    });
+
     it('keeps counting a forwarded message while it waits for the owner', async () => {
       const counts: number[] = [];
       const { getStreamCount, deliver, releaseFollowUp, cleanup } = await forwardToFollowUpRun('counted-forward', {

@@ -3236,7 +3236,8 @@ export class AgentThreadStreamRuntime {
     const checkLease = async () => {
       const forwarded = state.forwardedIdleSignalsByThread.get(key);
       if (!forwarded) return;
-      const owner = await provider.getLeaseOwner(key);
+      // Bounded, so a read that never returns frees the in-flight guard and the next tick retries.
+      const owner = await this.#readLeaseOwnerInTime(provider, key);
       const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
       const ended = new Set<string>();
       for (const entry of forwarded.values()) {
