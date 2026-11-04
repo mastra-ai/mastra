@@ -50,6 +50,8 @@ import { markNewChannelSession } from './channel-session-link-processor.js';
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
 import { slackRunErrorCard } from './run-error-card.js';
+import { transcribeVoiceClips } from './voice-clips.js';
+import type { VoiceClipDeps } from './voice-clips.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -64,7 +66,7 @@ const SLACK_REQUEST_TIMEOUT_MS = 15_000;
 class SlackSessionStartError extends Error {}
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
-interface SlackChannelDeps {
+interface SlackChannelDeps extends VoiceClipDeps {
   /**
    * The factory's reverse-index store mapping a Slack sender to a Mastra
    * tenant. When provided, inbound messages from an unlinked sender are not
@@ -115,6 +117,11 @@ interface SlackChannelDeps {
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
+  /**
+   * Slack channel ids (`C…`/`G…`) where every new top-level message starts a
+   * session without tagging the bot, e.g. a dedicated voice-notes channel.
+   */
+  listenChannels?: readonly string[];
 }
 
 function configuredSourceControls(deps: SlackChannelDeps): readonly SourceControlStorageHandle[] {
@@ -832,6 +839,8 @@ async function gateDispatch(
   ctx: ChannelHandlerContext,
   options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
 ): Promise<{
+  /** The linked sender, whose speech-to-text key transcribes their voice clips. */
+  link?: ChannelAccountLink;
   routed?: { link: ChannelAccountLink; factoryProjectId: string };
 } | null> {
   const { accountLinks, projects } = deps;
@@ -875,8 +884,9 @@ async function gateDispatch(
         ctx.requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: sender.link.userId, orgId: sender.link.orgId });
         ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
       }
-      return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
+      return { link: sender.link, routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
     }
+    return { link: sender.link };
   }
   return {};
 }
@@ -984,7 +994,9 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
     try {
-      if (!(await gateDispatch(thread, message, deps, ctx))) return;
+      const gate = await gateDispatch(thread, message, deps, ctx);
+      if (!gate) return;
+      await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.routed?.factoryProjectId);
       // A mention on a not-yet-subscribed thread is a NEW session. The default
       // handler auto-subscribes, so once subscribed this is a follow-up — the
       // thread already carries its link. Factory posts nothing of its own:
@@ -1056,6 +1068,7 @@ async function ingestAside(
 
 export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
+  const listenChannels = new Set(deps.listenChannels ?? []);
 
   return {
     onSubscribedMessage: async (thread, message, defaultHandler, ctx) => {
@@ -1076,6 +1089,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       try {
         const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true, internalThread });
         if (!gate) return;
+        await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.routed?.factoryProjectId);
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);
         return;
@@ -1092,8 +1106,29 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       await newSessionChatHandler(thread, message, defaultHandler, ctx);
     },
     onDirectMessage: newSessionChatHandler,
+    // Registered only with listening channels: an `onMessage` handler also takes
+    // the unmentioned sender runs of a batch that holds a mention.
+    ...(listenChannels.size > 0
+      ? {
+          onMessage: async (thread, message, defaultHandler, ctx) => {
+            if (!listenChannels.has(slackChannelId(thread)) || !isTopLevelMessage(message)) return;
+            await newSessionChatHandler(thread, message, defaultHandler, ctx);
+          },
+        }
+      : {}),
   };
 };
+
+/** `slack:C123` → `C123`. */
+function slackChannelId(thread: HandlerThread): string {
+  return thread.channelId.split(':').pop() ?? '';
+}
+
+/** A thread reply in a listening channel only runs once the bot is in that thread. */
+function isTopLevelMessage(message: HandlerMessage): boolean {
+  const raw = message.raw as { ts?: unknown; thread_ts?: unknown } | undefined;
+  return raw?.thread_ts === undefined || raw.thread_ts === raw.ts;
+}
 
 /** Thread metadata key; one Factory runs one Slack app, so this is per bot. */
 const MUTED_KEY = 'factory_muted';

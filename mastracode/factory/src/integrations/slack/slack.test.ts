@@ -41,7 +41,7 @@ import type { SlackStartedSessions } from './slack.js';
  * real one — a bare `{}` throws once the sender resolves as linked.
  */
 function handlerCtx(mastra?: unknown) {
-  return { mastra: mastra as any, requestContext: new RequestContext() };
+  return { mastra: mastra as any, requestContext: new RequestContext(), skipped: [] };
 }
 
 function chatOnlyMastra() {
@@ -70,6 +70,7 @@ function makeMessage(teamId?: string) {
   return {
     author: { userId: 'U-sender', userName: 'caleb' },
     text: 'hello bot',
+    attachments: [],
     raw: teamId ? { team_id: teamId } : {},
   } as any;
 }
@@ -745,6 +746,75 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(chatOnlyMastra()));
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
+  });
+
+  describe('listening channels', () => {
+    function unsubscribedThread(channelId = 'slack:C-VOICE') {
+      const thread = makeThread();
+      thread.channelId = channelId;
+      thread.isSubscribed = vi.fn().mockResolvedValue(false);
+      return thread;
+    }
+
+    function topLevel(raw: Record<string, unknown> = {}) {
+      const message = makeMessage('T-1');
+      message.raw = { team_id: 'T-1', ts: '171.1', ...raw };
+      return message;
+    }
+
+    const linked = () => ({
+      accountLinks: fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
+      projects: makeProjects([{ id: 'fp-1' }]),
+    });
+
+    it('does not take unmentioned messages without listening channels', () => {
+      expect(createHandlers(linked()).onMessage).toBeUndefined();
+      expect(createHandlers({ ...linked(), listenChannels: [] }).onMessage).toBeUndefined();
+    });
+
+    it('starts a session from an untagged top-level message in a listening channel', async () => {
+      const handlers = createHandlers({ ...linked(), listenChannels: ['C-VOICE'] });
+      const defaultHandler = vi.fn();
+      const ctx = handlerCtx(chatOnlyMastra());
+
+      await handlers.onMessage!(unsubscribedThread(), topLevel(), defaultHandler, ctx);
+
+      expect(defaultHandler).toHaveBeenCalledTimes(1);
+      expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    });
+
+    it('ignores other channels and thread replies the bot was not part of', async () => {
+      const handlers = createHandlers({ ...linked(), listenChannels: ['C-VOICE'] });
+      const defaultHandler = vi.fn();
+
+      await handlers.onMessage!(unsubscribedThread('slack:C-OTHER'), topLevel(), defaultHandler, handlerCtx());
+      await handlers.onMessage!(unsubscribedThread(), topLevel({ thread_ts: '170.9' }), defaultHandler, handlerCtx());
+
+      expect(defaultHandler).not.toHaveBeenCalled();
+    });
+
+    it('attaches a note to a voice clip before dispatch when the sender has no speech-to-text key', async () => {
+      const handlers = createHandlers({
+        ...linked(),
+        listenChannels: ['C-VOICE'],
+        modelCredentials: { listCredentials: vi.fn().mockResolvedValue([]) } as any,
+      });
+      const message = topLevel();
+      message.text = '';
+      message.attachments = [{ type: 'audio', mimeType: 'audio/mp4', name: 'audio_message.m4a' }];
+      const defaultHandler = vi.fn();
+
+      await handlers.onMessage!(unsubscribedThread(), message, defaultHandler, handlerCtx(chatOnlyMastra()));
+
+      expect(defaultHandler).toHaveBeenCalledTimes(1);
+      const dispatched = defaultHandler.mock.calls[0]![1];
+      expect(dispatched.attachments.map((a: { name?: string }) => a.name)).toEqual([
+        'audio_message.m4a',
+        'audio_message.m4a (transcript)',
+      ]);
+      const note = await dispatched.attachments[1].fetchData();
+      expect(note.toString('utf8')).toMatch(/^Not transcribed: .*API key/);
+    });
   });
 });
 
@@ -2226,6 +2296,7 @@ describe('Slack aside ingest', () => {
       id: '1700.99',
       author: { userId: 'U-sender', userName: 'caleb', fullName: 'Caleb Stone', isBot: false },
       text,
+      attachments: [],
       metadata: { dateSent: new Date('2026-08-30T10:00:00.000Z'), edited: false },
       raw: { team_id: 'T-1' },
     } as any;
