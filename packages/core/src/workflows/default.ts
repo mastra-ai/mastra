@@ -36,7 +36,7 @@ import type { ExecuteSleepParams, ExecuteSleepUntilParams } from './handlers/sle
 import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepUntilHandler } from './handlers/sleep';
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
-import { rebaseNestedState } from './nested-state';
+import { rebaseNestedState, withoutNestedRunStartState } from './nested-state';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type {
@@ -596,23 +596,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     error?: Error | unknown,
     stepExecutionPath?: string[],
   ): Promise<TOutput> {
-    // Strip nestedRunId from metadata (internal tracking for nested workflow retrieval)
+    // Strip internals from the step results: nestedRunId from metadata (internal tracking for nested
+    // workflow retrieval), and the base a re-driven nested run is rebased against from its metadata.
     const cleanStepResults: Record<string, StepResult<any, any, any, any>> = {};
     for (const [stepId, stepResult] of Object.entries(stepResults)) {
+      // `input` holds the caller's data, not a step result: it is returned as `input` and `steps.input`.
+      if (stepId === 'input') {
+        cleanStepResults.input = stepResult;
+        continue;
+      }
       if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult) && 'metadata' in stepResult) {
         const { metadata, ...rest } = stepResult as any;
         if (metadata) {
           const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
           if (Object.keys(userMetadata).length > 0) {
-            cleanStepResults[stepId] = { ...rest, metadata: userMetadata };
+            cleanStepResults[stepId] = withoutNestedRunStartState({ ...rest, metadata: userMetadata });
           } else {
-            cleanStepResults[stepId] = rest;
+            cleanStepResults[stepId] = withoutNestedRunStartState(rest);
           }
         } else {
-          cleanStepResults[stepId] = stepResult;
+          cleanStepResults[stepId] = withoutNestedRunStartState(stepResult);
         }
       } else {
-        cleanStepResults[stepId] = stepResult;
+        cleanStepResults[stepId] = withoutNestedRunStartState(stepResult);
       }
     }
 

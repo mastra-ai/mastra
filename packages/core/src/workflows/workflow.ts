@@ -3478,6 +3478,11 @@ export class Workflow<
     if (res.state) {
       await (handBackBase && handBackState ? handBackState(res.state, handBackBase) : setState(res.state));
     }
+    // What this nested run has handed back so far. A suspended nested run may have changed state
+    // before parking, and the hand-back above already merged those changes into the parent. If the
+    // parent crashes and re-executes this step, the finished run's state is rebased onto the
+    // parent's current state from here, so the changes it already handed back aren't applied twice.
+    const handedBack = handBackBase ? toJsonState(res.state) : undefined;
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
@@ -3503,6 +3508,11 @@ export class Workflow<
             __workflow_meta: {
               ...nestedMeta,
               ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+              // The state this nested run had already handed back when it parked. If the parent
+              // crashes and re-executes this step, the finished nested run's state is rebased onto
+              // the parent's current state with this base, so keys a sibling changed meanwhile are
+              // not overwritten and nothing this nested run already handed back is applied twice.
+              ...(handedBack ? { startState: handedBack } : {}),
               runId: run.runId,
               path: suspendPath,
             },
