@@ -579,8 +579,8 @@ export default defineConfig({
 | `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
 | `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
 | `playground-ui/no-barrel-imports`      | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
-| `playground-ui/no-text-separators`     | Decorative pipes, middots, double hyphens, and em dashes in authored UI copy                     |
-| `playground-ui/no-text-layout-spacing` | Repeated spaces or nonbreaking spaces used to lay out UI copy                                    |
+| `playground-ui/no-text-separators`     | Decorative pipes, middots, bullets, spaced or double hyphens, and em dashes in authored UI copy  |
+| `playground-ui/no-text-layout-spacing` | Repeated spaces, tabs, or nonbreaking spaces used to lay out UI copy                             |
 
 Turn rules off per glob in `overrides`, for example for tests and stories.
 
@@ -588,9 +588,9 @@ Turn rules off per glob in `overrides`, for example for tests and stories.
 
 Use separate elements for metadata fields and normal punctuation for sentences. Parentheses such as `(current)` and standalone missing-value placeholders such as `—` are allowed.
 
-The copy rules inspect JSX text, copy props, copy-named fields and helpers such as `label`, `title`, `description`, and `meta`, toast messages, and assignments to copy fields such as `document.title`. They follow local bindings and helper returns within the same file. Imported helper implementations and dynamic user content are not inspected.
+The copy rules inspect JSX text, copy props, copy-named fields and helpers such as `label`, `title`, `description`, and `meta`, toast messages, and assignments to copy fields such as `element.title`. They follow local bindings and helper returns within the same file. Imported helper implementations and dynamic user content are not inspected.
 
-Code, preformatted content, Markdown sources, agent prompts, tool descriptions, and technical style or schema fields are excluded. JSX source indentation is normalized before checking whitespace. The rules report without automatic fixes because a metadata row and a sentence need different replacements.
+Code, preformatted content, Markdown sources, agent prompts, tool descriptions, browser tab titles assigned to `document.title`, and technical style or schema fields are excluded. JSX source indentation is normalized before checking whitespace. The rules report without automatic fixes because a metadata row and a sentence need different replacements.
 
 In this workspace, the copy rules apply only to the `src` trees in Playground, Playground UI, and Factory UI. Tests, stories, fixtures, and generated source are excluded.
 

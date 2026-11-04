@@ -21,7 +21,6 @@ function excludedSyntax(node) {
     if (current.type === 'VariableDeclarator' && technicalName.test(nameOf(current.id))) return true;
     if (functionTypes.has(current.type) && technicalName.test(nameOf(current.id))) return true;
     if (current.type === 'CallExpression' && nameOf(current.callee) === 'createTool') return true;
-    if (current.type === 'JSXOpeningElement' && codeElement.test(nameOf(current.name))) return true;
     if (current.type === 'AssignmentExpression' && isDocumentTitle(current.left)) return true;
     if (
       current.type === 'AssignmentExpression' &&
@@ -114,7 +113,8 @@ export function copySources(context, check) {
   function resolve(identifier) {
     for (let scope = context.sourceCode.getScope(identifier); scope; scope = scope.upper) {
       const variable = scope.set.get(identifier.name);
-      if (variable) return variable.defs.map(definition => definition.node);
+      if (variable)
+        return variable.defs.filter(definition => definition.type !== 'Parameter').map(definition => definition.node);
     }
     return [];
   }

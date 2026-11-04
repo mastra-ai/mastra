@@ -68,10 +68,16 @@ tester.run('no-text-separators', noTextSeparators, {
       name: 'ignores a binding used only as Markdown source',
       code: 'const content = "| Field | Value |"; <MarkdownRenderer content={content} />;',
     },
-    { name: 'ignores user content', code: '<p>{message.content}</p>;' },
-    { name: 'ignores agent prompts', code: 'const instructions = "Role — help the user";' },
+    {
+      name: 'ignores agent prompts',
+      code: 'const instructions = "Role — help the user"; <Textarea placeholder={instructions} />;',
+    },
     { name: 'ignores tool descriptions', code: 'createTool({ description: "Call this — omit other fields" });' },
-    { name: 'ignores CLI option text inside code', code: '<InlineCode>--model</InlineCode>;' },
+    { name: 'ignores separators inside inline code', code: '<InlineCode>a | b</InlineCode>;' },
+    {
+      name: 'ignores copy-named parameters of technical helpers',
+      code: 'function cacheKey({ title, id }) { return `${id}|${title}`; }',
+    },
   ],
   invalid: [
     {
@@ -198,7 +204,7 @@ tester.run('no-text-layout-spacing', noTextLayoutSpacing, {
       name: 'allows source indentation around children',
       code: '<p>\n  <span>Name</span>\n  <span>Status</span>\n</p>;',
     },
-    { name: 'allows spaces in code examples', code: '<CodeBlock code="const x =  1;" />;' },
+    { name: 'allows spaces in code examples', code: '<CodeBlock>{"const x =  1;"}</CodeBlock>;' },
     { name: 'allows preformatted content', code: '<pre>Column A  Column B</pre>;' },
     {
       name: 'allows a binding used only as preformatted content',
@@ -209,8 +215,7 @@ tester.run('no-text-layout-spacing', noTextLayoutSpacing, {
       name: 'allows source indentation in template prose',
       code: 'const description = `Choose a model.\n  It can be changed later.`;',
     },
-    { name: 'ignores command output alignment', code: 'const commandOutput = "Name  Status";' },
-    { name: 'ignores user text', code: '<p>{item.text}</p>;' },
+    { name: 'ignores command output alignment', code: 'const commandOutput = "Name  Status"; toast(commandOutput);' },
   ],
   invalid: [
     {
