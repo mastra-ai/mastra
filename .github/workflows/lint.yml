@@ -186,7 +186,9 @@ jobs:
     needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
-    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
+    # Lint is a required check. A skipped job reports its name unevaluated, so the job always runs and a PR
+    # without code changes skips its steps instead, still reporting a passing Lint.
+    if: github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -198,12 +200,15 @@ jobs:
 
     steps:
       - name: Checkout repo
+        if: needs.changes.outputs.has_code == 'true'
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
 
       - name: Setup pnpm and Node.js
+        if: needs.changes.outputs.has_code == 'true'
         uses: ./.github/actions/setup-pnpm-node
       - name: Run lint and format checks
+        if: needs.changes.outputs.has_code == 'true'
         run: pnpm lint
 
   check-bundle:
