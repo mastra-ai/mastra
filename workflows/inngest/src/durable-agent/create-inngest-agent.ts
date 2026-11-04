@@ -177,10 +177,14 @@ const RESUME_SNAPSHOT_POLL_MS = 100;
 /** runId -> toolCallId -> token of the resume of that tool call in flight in this process. */
 const inFlightToolCallResumes = new Map<string, Map<string, symbol>>();
 
-/** Marks a resume of `toolCallId` as in flight. The returned release only clears its own mark. */
-function markToolCallResume(runId: string, toolCallId: string): () => void {
+/**
+ * Marks a resume of `toolCallId` as in flight. Returns `undefined` when another resume already
+ * holds the mark. The returned release only clears its own mark.
+ */
+function markToolCallResume(runId: string, toolCallId: string): (() => void) | undefined {
   const token = Symbol(toolCallId);
   const marks = inFlightToolCallResumes.get(runId) ?? new Map<string, symbol>();
+  if (marks.has(toolCallId)) return undefined;
   marks.set(toolCallId, token);
   inFlightToolCallResumes.set(runId, marks);
   return () => {
@@ -190,16 +194,21 @@ function markToolCallResume(runId: string, toolCallId: string): () => void {
   };
 }
 
-/** A second approval of a tool call this process is already resuming fails right away (#27485). */
-function assertToolCallResumeNotInFlight(agentName: string, runId: string, toolCallId: string | undefined): void {
-  if (!toolCallId || !inFlightToolCallResumes.get(runId)?.has(toolCallId)) return;
-  throw new MastraError({
+function resumeAlreadyClaimedError(agentName: string, runId: string, toolCallId: string | undefined): MastraError {
+  return new MastraError({
     id: 'AGENT_RESUME_ALREADY_CLAIMED',
     domain: ErrorDomain.AGENT,
     category: ErrorCategory.USER,
     text: `InngestAgent "${agentName}" resume(${runId}) cannot resume the run because another resume of it is already running.`,
-    details: { agentName, runId, toolCallId },
+    details: { agentName, runId, ...(toolCallId ? { toolCallId } : {}) },
   });
+}
+
+/** A second approval of a tool call this process is already resuming fails right away (#27485). */
+function assertToolCallResumeNotInFlight(agentName: string, runId: string, toolCallId: string | undefined): void {
+  if (toolCallId && inFlightToolCallResumes.get(runId)?.has(toolCallId)) {
+    throw resumeAlreadyClaimedError(agentName, runId, toolCallId);
+  }
 }
 
 /**
@@ -1682,6 +1691,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
       const { hasStore, snapshot: suspendedSnapshot, nestedSnapshot } = await resumableSnapshot;
+      // Another resume's claim keeps the suspension paths; a run that never suspended has none. The
+      // wait is bounded because a worker that died mid-segment never releases the claim.
+      if (suspendedSnapshot?.status === 'running' && Object.keys(suspendedSnapshot.suspendedPaths ?? {}).length) {
+        throw resumeAlreadyClaimedError(agent.name, runId, resumeOptions?.toolCallId);
+      }
       if (hasStore && suspendedSnapshot?.status !== 'suspended') {
         throw new NonRetriableError(
           `Cannot resume run ${runId}: it is not suspended` +
@@ -1740,6 +1754,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         return proxyRef!.resume(runId, resumeData, resumeOptions);
       }
       const releaseToolCallMarker = toolCallId ? markToolCallResume(runId, toolCallId) : () => {};
+      if (!releaseToolCallMarker) {
+        // Only reachable when the store cannot claim atomically and the same call was approved twice.
+        await releaseClaim();
+        throw resumeAlreadyClaimedError(agent.name, runId, toolCallId);
+      }
 
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when

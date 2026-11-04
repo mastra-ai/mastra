@@ -87,7 +87,7 @@ describeForAllEngines(
             for await (const _ of resumed.fullStream) {
               // drain
             }
-            expect(committed).not.toContain('B');
+            expect(committed).toEqual(['A']);
           }
           const ids =
             order === 'reverse' ? ['call-b', 'call-a'] : order === 'one-by-one' ? ['call-b'] : ['call-a', 'call-b'];
