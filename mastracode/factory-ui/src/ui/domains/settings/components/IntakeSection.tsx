@@ -85,7 +85,10 @@ export function IntakeSection() {
     gitlab.isError || gitlab.data?.reason === 'unavailable',
   );
   const linearListing = sourceListing(
-    Boolean(linear.data?.connected || linear.data?.workspaces?.length || props.config.linear.sourceIds?.length),
+    Boolean(
+      linear.data?.enabled &&
+      (linear.data.connected || linear.data.workspaces?.length || props.config.linear.sourceIds?.length),
+    ),
     linear.isError || linear.data?.reason === 'unavailable',
   );
   const jiraListing = sourceListing(Boolean(jira.data?.configured || jira.data?.connections?.length), jira.isError);
