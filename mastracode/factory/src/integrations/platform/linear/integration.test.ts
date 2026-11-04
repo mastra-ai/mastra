@@ -185,20 +185,42 @@ describe('PlatformLinearIntegration', () => {
       expect((await app.request('/auth/linear/connect?workspace_id=another-org')).status).toBe(404);
     });
 
+    it('returns to the requested page when the workspace lookup fails before reconnecting', async () => {
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => new HttpResponse(null, { status: 503 })),
+      );
+      const { app } = await recoveryApp();
+      const connect = await app.request(
+        `/auth/linear/connect?${new URLSearchParams({ workspace_id: 'old', return_to: '/factories/fp-1/settings/intake' })}`,
+      );
+      expect(connect.status).toBe(302);
+      expect(connect.headers.get('location')).toBe(
+        '/factories/fp-1/settings/intake?linear_reconnect=unavailable&linear_workspace_id=old',
+      );
+    });
+
     it.each([
       'https://example.org/steal',
       '//example.org/steal',
       '/\\example.org/steal',
       '/.//factory.example//example.org/steal',
+      '/%2e//example.org/steal',
     ])(
-      'keeps the reconnect return on the Factory host for %s',
+      'keeps the authorization return on the Factory host for %s',
       async returnTo => {
+        let authorizationReturnTo: string | null = null;
         provider.use(
           http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
             HttpResponse.json({ workspaces: [workspace] }),
           ),
+          http.get(`${config.baseUrl}/v1/server/linear/authorize`, ({ request }) => {
+            authorizationReturnTo = new URL(request.url).searchParams.get('return_to');
+            return new HttpResponse(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } });
+          }),
         );
         const { app } = await recoveryApp();
+        await app.request(`/auth/linear/connect?${new URLSearchParams({ return_to: returnTo })}`);
+        expect(authorizationReturnTo).toBe('/');
         const result = await app.request(
           `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: 'workspace-1', return_to: returnTo })}`,
         );

@@ -469,12 +469,17 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
         const returnUrl = localReturnUrl(c.req.query('return_to'));
-        const returnTo = `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
+        const returnTo = localPath(returnUrl);
         const originator = routeBaseUrl(ctx, c.req.url);
         const workspaceId = c.req.query('workspace_id');
         let authorizationReturnTo = returnTo;
         if (workspaceId) {
-          const workspaces = await this.#listAllWorkspaces();
+          const workspaces = await this.#listAllWorkspaces().catch(() => null);
+          if (!workspaces) {
+            returnUrl.searchParams.set('linear_reconnect', 'unavailable');
+            returnUrl.searchParams.set('linear_workspace_id', workspaceId);
+            return c.redirect(localPath(returnUrl));
+          }
           if (!workspaces.some(workspace => workspace.linearWorkspaceId === workspaceId)) {
             return c.json({ error: 'linear_workspace_not_found' }, 404);
           }
@@ -511,7 +516,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           destination.searchParams.set('linear_reconnect', 'unavailable');
         }
         if (workspaceId) destination.searchParams.set('linear_workspace_id', workspaceId);
-        return c.redirect(`${destination.pathname}${destination.search}${destination.hash}`);
+        return c.redirect(localPath(destination));
       },
     });
   }
@@ -1130,6 +1135,10 @@ function collectWorkspaceListings<T>(
 }
 
 const LOCAL_RETURN_ORIGIN = 'https://factory.invalid';
+
+function localPath(url: URL): string {
+  return `${url.pathname}${url.search}${url.hash}`;
+}
 
 /** OAuth may only return to a path on this Factory host. */
 function localReturnUrl(value: string | undefined): URL {
