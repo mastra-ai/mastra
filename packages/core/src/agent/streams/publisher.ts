@@ -112,11 +112,21 @@ export function createAgentStreamPublisher({
     stopListening = undefined;
   };
 
+  let runningRetryTimer: ReturnType<typeof setTimeout> | undefined;
   const writeRecord = (status: 'running' | 'suspended' | 'finished') => async () => {
     if (!record) return;
     const { cache, ...owner } = record;
     await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now() }).catch(error => {
       logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
+      if (status === 'running' && !ended && !runningRetryTimer) {
+        runningRetryTimer = setTimeout(() => {
+          runningRetryTimer = undefined;
+          void enqueue(async () => {
+            if (!ended) await writeRecord('running')();
+          });
+        }, 1000);
+        runningRetryTimer.unref?.();
+      }
     });
   };
 
@@ -148,6 +158,8 @@ export function createAgentStreamPublisher({
   const end = async (fallbackError: () => unknown) => {
     if (ended) return queue;
     ended = true;
+    if (runningRetryTimer) clearTimeout(runningRetryTimer);
+    runningRetryTimer = undefined;
     void stopAbortListener();
     onEnd?.();
     if (!finished) {
