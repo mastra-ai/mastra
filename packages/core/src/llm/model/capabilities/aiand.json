@@ -36,22 +36,22 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "qwen/qwen3.6-27b": [
+    "deepseek-ai/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "deepseek-ai/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "meta/muse-spark-open": [
+    "deepseek-ai/deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["none", "high", "max"]
       }
     ],
     "zai-org/glm-5.3": [
@@ -66,10 +66,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshotai/kimi-k3": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "meta/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "motif-technologies/motif-3": [
@@ -78,22 +84,16 @@
         "values": ["none", "high"]
       }
     ],
-    "deepseek-ai/deepseek-v4-pro": [
+    "qwen/qwen3.6-27b": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "deepseek-ai/deepseek-v4.1-flash-1017": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "google/gemma-4-31b-it": [
@@ -102,10 +102,10 @@
         "values": ["none", "high"]
       }
     ],
-    "openai/gpt-oss-120b": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

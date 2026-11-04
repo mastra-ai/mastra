@@ -122,6 +122,7 @@ import {
   isWorkflowTaskContext,
   runErrorMessage,
   runSummary,
+  withLoadedSteps,
 } from './tasks/workflow-runs';
 import type { AnsweredSuspension, WorkflowRunView, WorkflowTaskContext } from './tasks/workflow-runs';
 import type {
@@ -465,11 +466,13 @@ export class MCPServer extends MCPServerBase {
           mcp: { toolType: 'workflow' },
           execute: async (inputData, context) => {
             const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
-            return run.start({
-              inputData,
-              requestContext: context?.requestContext,
-              tracingContext: context?.tracingContext,
-            });
+            return withLoadedSteps(
+              await run.start({
+                inputData,
+                requestContext: context?.requestContext,
+                tracingContext: context?.tracingContext,
+              }),
+            );
           },
         }),
       );
@@ -1531,8 +1534,8 @@ export class MCPServer extends MCPServerBase {
     // The run's span persists with its snapshot, so its resumes and restarts can join the same trace.
     const start = (runTracing: TracingContext) => {
       const run = workflow.createRun({ runId: context.runId });
-      const result: Promise<WorkflowRunView> = run.then(started =>
-        started.start({ inputData: input.data, requestContext, tracingContext: runTracing }),
+      const result: Promise<WorkflowRunView> = run.then(async started =>
+        withLoadedSteps(await started.start({ inputData: input.data, requestContext, tracingContext: runTracing })),
       );
       const cancel = () =>
         void run
@@ -1725,14 +1728,16 @@ export class MCPServer extends MCPServerBase {
           .catch(error => this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error })),
     );
     try {
-      view = await run.resume({
-        step: answered.step,
-        resumeData: answer.content ?? {},
-        requestContext,
-        // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
-        // Without a span, core falls back to the trace the run's snapshot recorded.
-        ...(span && { tracingContext: { currentSpan: span } }),
-      });
+      view = await withLoadedSteps(
+        await run.resume({
+          step: answered.step,
+          resumeData: answer.content ?? {},
+          requestContext,
+          // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
+          // Without a span, core falls back to the trace the run's snapshot recorded.
+          ...(span && { tracingContext: { currentSpan: span } }),
+        }),
+      );
     } catch (error) {
       // Resumed already, by another instance or an earlier try of this attempt: follow that.
       if (isResumeClaimLost(error)) return this.watchWorkflowRun(workflow, context, attempt.signal);

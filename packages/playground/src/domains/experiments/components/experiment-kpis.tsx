@@ -1,4 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
 import { KpiCard } from '@mastra/playground-ui/domains/metrics/components';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
@@ -56,9 +57,14 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
   const usage = usageById[experiment.id]?.summary;
   const tokens = totalTokens(usage);
   const tokensDetail =
-    usage?.inputTokens === undefined && usage?.outputTokens === undefined
-      ? 'input + output'
-      : `${formatTokenCount(usage.inputTokens ?? 0)} in · ${formatTokenCount(usage.outputTokens ?? 0)} out`;
+    usage?.inputTokens === undefined && usage?.outputTokens === undefined ? (
+      'input + output'
+    ) : (
+      <Metadata singleLine>
+        <Metadata.Item>{formatTokenCount(usage.inputTokens ?? 0)} in</Metadata.Item>
+        <Metadata.Item>{formatTokenCount(usage.outputTokens ?? 0)} out</Metadata.Item>
+      </Metadata>
+    );
   const avgItemDuration = metrics?.isEnabled ? metrics.data?.avgAgentDurationMs : undefined;
   const formattedAvgItemDuration = avgItemDuration == null ? undefined : formatDuration(Math.round(avgItemDuration));
 

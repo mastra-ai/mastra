@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import getPort from 'get-port';
@@ -1756,7 +1756,116 @@ class AliasDeployer extends Deployer {
     );
   });
 
+  describe('app without "type": "module" running under tsx (#28491)', { concurrent: false }, () => {
+    // `mastra dev` and `mastra build` import options extracted from the Mastra config. Chunks split from them were
+    // written as `.js`, which an app without "type": "module" treats as CommonJS, and tsx 4.21 then loads them
+    // without their named exports. Newer tsx releases load them on Node 24, so the app pins tsx 4.21.0.
+    const tsxEnv = { NODE_OPTIONS: '--import tsx', LOAD_OPTIONAL: 'true' };
+    const getAppDir = () => join(fixturePath, 'apps', 'typeless');
+
+    it(
+      'applies the bundler options during `mastra build`',
+      async () => {
+        const buildResult = await execa('mastra', ['build'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          env: { ...tsxEnv, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+        });
+        expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+        const outputFiles = await readdir(join(getAppDir(), '.mastra', 'output'));
+        expect(outputFiles, buildResult.stdout).toContain('index.mjs.map');
+      },
+      timeout,
+    );
+
+    it(
+      'serves api routes from `mastra dev`',
+      async () => {
+        const port = await getPort();
+        const controller = new AbortController();
+        const proc = execa('mastra', ['dev'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          cancelSignal: controller.signal,
+          gracefulCancel: true,
+          env: { ...tsxEnv, PORT: port.toString() },
+        });
+        activeProcesses.push({ controller, proc });
+
+        let output = '';
+        proc.stderr?.on('data', data => {
+          output += data.toString();
+        });
+        const started = new Promise<void>(resolve => {
+          proc.stdout?.on('data', data => {
+            output += data.toString();
+            if (output.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
+        });
+
+        try {
+          const outcome = await Promise.race([started.then(() => 'started'), proc.then(() => 'exited')]);
+          expect(outcome, output).toBe('started');
+
+          const res = await fetch(`http://localhost:${port}/typeless`);
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toEqual({ message: 'typeless app (optional)' });
+        } finally {
+          controller.abort();
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(getAppDir());
+        }
+      },
+      timeout,
+    );
+  });
+
   describe('workspace subpath externals', { concurrent: false }, () => {
+    it(
+      'should copy the pnpm lockfile unchanged when packing workspace packages for an app outside the workspace root',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-lockfile-copy-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Skip only the output install, so the lockfile copy stays as the deployer wrote it.
+          // pnpm rewrites it on install and drops the importers outside the output directory.
+          const binDir = join(isolatedFixturePath, 'stub-bin');
+          await mkdir(binDir);
+          const realPackageManager = (await execa('which', [pkgManager])).stdout;
+          await writeFile(
+            join(binDir, pkgManager),
+            `#!/bin/sh\nif [ "$1" = install ]; then exit 0; fi\nexec "${realPackageManager}" "$@"\n`,
+          );
+          await chmod(join(binDir, pkgManager), 0o755);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const buildResult = await execa(join(appDir, 'node_modules', '.bin', 'mastra'), ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          expect(await readdir(join(outputDir, 'workspace-module'))).toContain('inner-subpath-only-1.0.0.tgz');
+          // An edited lockfile makes pnpm 11 recheck every entry against the registry, which fails
+          // without credentials for private registries (#29279).
+          expect(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).toBe(
+            await readFile(join(isolatedFixturePath, 'pnpm-lock.yaml'), 'utf-8'),
+          );
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
     it(
       'should package an external workspace dependency without an optimized workspace parent',
       async () => {

@@ -3,16 +3,16 @@
   "temperature": ["gpt-oss-120b", "qwen-3.8-27b"],
   "structuredOutput": ["gpt-oss-120b", "qwen-3.8-27b"],
   "reasoning": {
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "qwen-3.8-27b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

@@ -96,6 +96,7 @@ import {
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { loadedStepResults, residentStepResults } from './run-journal';
 import type { ParentStateLink, StateBase } from './run-journal';
 import { claimWorkflowRunOwnership } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
@@ -137,6 +138,7 @@ import type {
   WorkflowOptions,
   WorkflowStateTracingContext,
   WorkflowResult,
+  WorkflowStepResults,
   WorkflowType,
   WorkflowRunState,
   NestedWorkflowParent,
@@ -392,7 +394,7 @@ async function loadRunForCancel(
       return {
         header: v2Header,
         storageVersion: 2,
-        loadSteps: async () => (stepIds.length ? store.loadWorkflowRunSteps({ ...run, stepIds }) : {}),
+        loadSteps: async () => (stepIds.length ? ((await store.loadWorkflowRunSteps({ ...run, stepIds })) ?? {}) : {}),
       };
     }
     if (storageVersion === 2) return null;
@@ -2010,6 +2012,7 @@ export class Workflow<
   TOutput = unknown,
   TPrevSchema = TInput,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TStorageVersion extends 1 | 2 = any,
 >
   extends MastraBase
   implements Step<TWorkflowId, TState, TInput, TOutput | undefined, any, any, DefaultEngineType, TRequestContext>
@@ -2053,8 +2056,8 @@ export class Workflow<
     return this.executionEngine.options.resumeTracingContext;
   }
   protected executionGraph: ExecutionGraph;
-  #options: Omit<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'> &
-    Required<Pick<WorkflowOptions, 'shouldPersistSnapshot' | 'validateInputs'>>;
+  #options: Omit<WorkflowOptions<TStorageVersion>, 'shouldPersistSnapshot' | 'validateInputs'> &
+    Required<Pick<WorkflowOptions<TStorageVersion>, 'shouldPersistSnapshot' | 'validateInputs'>>;
   public retryConfig: {
     attempts?: number;
     delay?: number;
@@ -2062,7 +2065,7 @@ export class Workflow<
 
   #mastra?: Mastra;
 
-  #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
+  #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> = new Map();
 
   #schedules: WorkflowScheduleConfig[];
 
@@ -2081,7 +2084,7 @@ export class Workflow<
     options = {},
     type,
     schedule,
-  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext, TStorageVersion>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     // Stored type-erased: the scheduler reads these as plain records.
     const schedules = (!schedule ? [] : Array.isArray(schedule) ? schedule : [schedule]) as WorkflowScheduleConfig[];
@@ -2325,7 +2328,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2342,7 +2346,8 @@ export class Workflow<
     TInput,
     TOutput,
     ClassifierStepOutput<QUESTIONS>,
-    TRequestContext
+    TRequestContext,
+    TStorageVersion
   >;
   classifier<const QUESTIONS extends ClassifierQuestions = ClassifierQuestions>(
     classifierId: string,
@@ -2356,7 +2361,8 @@ export class Workflow<
     TInput,
     TOutput,
     ClassifierStepOutput<QUESTIONS>,
-    TRequestContext
+    TRequestContext,
+    TStorageVersion
   >;
   classifier(
     classifierOrId: Classifier<any> | string,
@@ -2403,7 +2409,17 @@ export class Workflow<
       metadata?: StepMetadata;
     },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    { text: string },
+    TRequestContext,
+    TStorageVersion
+  >;
   agent<TStepId extends string, TStepOutput>(
     agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
     options: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
@@ -2413,7 +2429,7 @@ export class Workflow<
       metadata?: StepMetadata;
     },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TStepOutput, TRequestContext>;
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TStepOutput, TRequestContext, TStorageVersion>;
   agent(
     agentId: string,
     options?: AgentStepOptions<any> & {
@@ -2422,7 +2438,17 @@ export class Workflow<
       metadata?: StepMetadata;
     },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    { text: string },
+    TRequestContext,
+    TStorageVersion
+  >;
   agent(agentOrId: any, options?: any, stepOptions?: { id?: string }): any {
     const isId = typeof agentOrId === 'string';
     const agentId = isId ? agentOrId : agentOrId.id;
@@ -2470,12 +2496,12 @@ export class Workflow<
     >,
     options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext, TStorageVersion>;
   tool(
     toolId: string,
     options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
     stepOptions?: { id?: string },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext>;
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext, TStorageVersion>;
   tool(toolOrId: any, options?: any, stepOptions?: { id?: string }): any {
     const isId = typeof toolOrId === 'string';
     const toolId = isId ? toolOrId : toolOrId.id;
@@ -2540,7 +2566,8 @@ export class Workflow<
       TInput,
       TOutput,
       TPrevSchema,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2589,7 +2616,8 @@ export class Workflow<
       TInput,
       TOutput,
       TPrevSchema,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2645,7 +2673,7 @@ export class Workflow<
         }
       | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null; description?: string; metadata?: StepMetadata },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext, TStorageVersion> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
     // interpreted at execution time by `createMappingStep`, not baked in here.
     // Mapping ids must be stable across process restarts: they are recorded in
@@ -2703,7 +2731,8 @@ export class Workflow<
         TInput,
         TOutput,
         any,
-        TRequestContext
+        TRequestContext,
+        TStorageVersion
       >;
     }
 
@@ -2777,7 +2806,8 @@ export class Workflow<
       TInput,
       TOutput,
       MappedOutputSchema,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2820,7 +2850,8 @@ export class Workflow<
           StepsRecord<TParallelSteps>[K]['outputSchema']
         >;
       },
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2886,7 +2917,8 @@ export class Workflow<
           StepsRecord<ExtractedSteps[]>[K]['outputSchema']
         >;
       },
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2939,7 +2971,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -2992,7 +3025,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -3052,7 +3086,8 @@ export class Workflow<
       TInput,
       TOutput,
       TSchemaOut[],
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -3083,7 +3118,8 @@ export class Workflow<
       TInput,
       TOutput,
       TOutput,
-      TRequestContext
+      TRequestContext,
+      TStorageVersion
     >;
   }
 
@@ -3118,7 +3154,7 @@ export class Workflow<
     /** Overrides the workflow-wide tracing policy for this run only. */
     tracingPolicy?: TracingPolicy;
     parentWorkflow?: NestedWorkflowParent;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> {
     // Taken before the first await: concurrent parent runs share this workflow
     // instance, so a later execute() would otherwise swap in its own input and state.
     const nestedRunStart = this.#nestedRunStart;
@@ -3492,7 +3528,7 @@ export class Workflow<
       (requestContext as RequestContext).set('__mastraWorflowInputData', inputData);
     }
 
-    let res: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    let res: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
 
     // The parent and nested snapshots are written separately, so a crash can leave them out of
     // sync. Trust the nested run's status: an active nested run must be restarted, and a nested
@@ -3592,7 +3628,10 @@ export class Workflow<
       unwatch();
     }
 
-    const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
+    // On storage v2 `res.steps` is a loader. The suspended and failed results read here are never
+    // evicted, so the ones it holds are enough.
+    const nestedSteps = residentStepResults(res.steps) ?? res.steps;
+    const suspendedSteps = Object.entries(nestedSteps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
     });
@@ -3608,7 +3647,6 @@ export class Workflow<
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
-        // @ts-expect-error - context type mismatch
         const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
         // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
@@ -3647,7 +3685,7 @@ export class Workflow<
     }
 
     if (res.status === 'failed') {
-      const isNonRetryable = Object.values(res.steps).some(stepResult => {
+      const isNonRetryable = Object.values(nestedSteps).some(stepResult => {
         const result = stepResult as StepResult<any, any, any, any>;
         return result.status === 'failed' && result.nonRetryable;
       });
@@ -4052,6 +4090,7 @@ export class Run<
   TInput = unknown,
   TOutput = unknown,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TStorageVersion extends 1 | 2 = any,
 > {
   #abortController?: AbortController;
   protected workflowRunSpan?: Span<SpanType.WORKFLOW_RUN>;
@@ -4158,9 +4197,9 @@ export class Run<
     return this.#mastra;
   }
 
-  streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+  streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>;
   protected closeStreamAction?: () => Promise<void>;
-  protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+  protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>;
   protected stateSchema?: StandardSchemaWithJSON<TState>;
   protected inputSchema?: StandardSchemaWithJSON<TInput>;
   protected requestContextSchema?: StandardSchemaWithJSON<any>;
@@ -4508,7 +4547,7 @@ export class Run<
         actor?: ActorSignal;
       } & Partial<ObservabilityContext>,
     onDispatched?: () => void,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const inheritedState = this.inheritedState;
     this.inheritedState = undefined;
@@ -4599,7 +4638,7 @@ export class Run<
     }
 
     const result = await this.#executeOwned(() =>
-      this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
         workflowId: this.workflowId,
         runId: this.runId,
         parentWorkflow: this.parentWorkflow,
@@ -4655,7 +4694,7 @@ export class Run<
           }) & {
         requestContext?: RequestContext<TRequestContext>;
       } & WorkflowRunStartOptions,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._start(args);
   }
 
@@ -4739,7 +4778,7 @@ export class Run<
     } & Partial<ObservabilityContext>,
   ): {
     stream: ReadableStream<StreamEvent>;
-    getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+    getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>;
   } {
     const observabilityContext = resolveObservabilityContext(rest);
     if (this.closeStreamAction) {
@@ -4904,7 +4943,9 @@ export class Run<
       };
       perStep?: boolean;
       actor?: ActorSignal;
-    } & Partial<ObservabilityContext>): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    } & Partial<ObservabilityContext>): WorkflowRunOutput<
+    WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+  > {
     const observabilityContext = resolveObservabilityContext(rest);
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
@@ -4982,7 +5023,7 @@ export class Run<
 
           if (self.streamOutput) {
             self.streamOutput.updateResults(
-              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>,
+              executionResults as unknown as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>,
             );
           }
 
@@ -5000,7 +5041,7 @@ export class Run<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -5126,7 +5167,7 @@ export class Run<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -5242,7 +5283,7 @@ export class Run<
       perStep?: boolean;
       actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._resume(params);
   }
 
@@ -5308,7 +5349,7 @@ export class Run<
       };
       actor?: ActorSignal;
     } & Partial<ObservabilityContext> = {},
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._restart(args);
   }
 
@@ -5487,7 +5528,7 @@ export class Run<
       claimedSnapshot?: WorkflowRunState;
       onExecutionStarted?: () => void;
     } & Partial<ObservabilityContext>,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(params);
     const fgaProvider = this.#mastra?.getServer()?.fga;
     if (fgaProvider && !this.isInternalWorkflow) {
@@ -5728,7 +5769,7 @@ export class Run<
     params.onExecutionStarted?.();
     if (params.skipParentWorkflowClaim) this.resumedFromState = toJsonState(snapshot?.value);
     const executionResultPromise = this.#executeOwned(() =>
-      this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
         workflowId: this.workflowId,
         runId: this.runId,
         parentWorkflow: this.parentWorkflow,
@@ -5809,7 +5850,9 @@ export class Run<
     this.executionResults = executionResultPromise;
 
     return executionResultPromise.then(result => {
-      this.streamOutput?.updateResults(result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>);
+      this.streamOutput?.updateResults(
+        result as unknown as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>,
+      );
 
       return result;
     });
@@ -5831,14 +5874,17 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const allowedEngines = ['default', 'evented'];
     if (!allowedEngines.includes(this.workflowEngineType)) {
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const snapshot = await this.runStorage.loadFull();
+    let snapshot =
+      this.storageVersion === 2
+        ? await this.runStorage.loadForResume({ wait: false })
+        : await this.runStorage.loadFull();
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
@@ -5856,15 +5902,38 @@ export class Run<
       this.cleanup?.();
       // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
       // is also surfaced as a top-level field on the returned WorkflowResult.
-      const hydratedSteps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
       // Strip internal bookkeeping (__state, metadata.nestedRunId) from step results so the
       // reconstructed result matches what a live run would have returned via fmtReturnValue.
-      const steps = Object.fromEntries(
-        Object.entries(hydratedSteps).map(([stepId, stepResult]) => [stepId, cleanStepResult(stepResult)]),
-      ) as typeof hydratedSteps;
+      const clean = <T extends Record<string, any>>(context: T): T =>
+        Object.fromEntries(
+          Object.entries(hydrateSerializedStepErrors({ ...context }) ?? {}).map(([stepId, stepResult]) => [
+            stepId,
+            cleanStepResult(stepResult),
+          ]),
+        ) as T;
+      const steps = clean(snapshot.context ?? {});
       const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
+      // On storage v2 the result holds the successful results as stubs, read again by `steps()`.
+      const v2Store =
+        this.storageVersion === 2
+          ? await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows')
+          : undefined;
+      const storedState = this.runStorage.storedState(snapshot);
+      const lastSeq = storedState?.seq;
       const base = {
-        steps,
+        steps: (v2Store && lastSeq !== undefined
+          ? loadedStepResults(
+              {
+                store: v2Store,
+                workflowName: this.workflowId,
+                runId: this.runId,
+                lastSeq,
+                runToken: storedState?.runToken,
+              },
+              snapshot.context ?? {},
+              clean,
+            )
+          : steps) as WorkflowStepResults<typeof steps, TStorageVersion>,
         input,
         runId: this.runId,
         ...(snapshot.value && Object.keys(snapshot.value).length > 0 ? { state: snapshot.value as TState } : {}),
@@ -5877,7 +5946,8 @@ export class Run<
           TState,
           TInput,
           TOutput,
-          TSteps
+          TSteps,
+          TStorageVersion
         >;
       }
       if (snapshot.status === 'failed') {
@@ -5885,14 +5955,22 @@ export class Run<
           ...base,
           status: 'failed',
           error: getErrorFromUnknown(snapshot.error, { serializeStack: false }),
-        } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+        } as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
       }
       return { ...base, status: 'tripwire', tripwire: snapshot.tripwire } as WorkflowResult<
         TState,
         TInput,
         TOutput,
-        TSteps
+        TSteps,
+        TStorageVersion
       >;
+    }
+
+    if (this.storageVersion === 2) {
+      snapshot = await this.runStorage.loadFull();
+      if (!snapshot) {
+        throw new Error(`Snapshot not found for run ${this.runId}`);
+      }
     }
 
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
@@ -5942,9 +6020,13 @@ export class Run<
     const traceId = workflowSpan?.externalTraceId;
     const spanId = workflowSpan?.id;
 
-    let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
     try {
-      result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      result = await this.executionEngine.execute<
+        TState,
+        TInput,
+        WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+      >({
         workflowId: this.workflowId,
         runId: this.runId,
         parentWorkflow: this.parentWorkflow,
@@ -6015,7 +6097,7 @@ export class Run<
     };
     perStep?: boolean;
     actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const inheritedState = this.inheritedState;
     this.inheritedState = undefined;
@@ -6138,10 +6220,10 @@ export class Run<
       }
     };
 
-    let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
     try {
       result = await this.#executeOwned(() =>
-        this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+        this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
           workflowId: this.workflowId,
           runId: this.runId,
           parentWorkflow: this.parentWorkflow,
@@ -6203,7 +6285,7 @@ export class Run<
       perStep?: boolean;
       actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
-  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     return this._timeTravel(args);
   }
 
@@ -6312,7 +6394,7 @@ export class Run<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -6325,7 +6407,7 @@ export class Run<
    * @access private
    * @returns The execution results of the workflow run
    */
-  _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> | undefined {
+  _getExecutionResults(): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> | undefined {
     return this.executionResults ?? this.streamOutput?.result;
   }
 }

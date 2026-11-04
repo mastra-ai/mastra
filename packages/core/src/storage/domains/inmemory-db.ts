@@ -58,6 +58,7 @@ export class InMemoryDB {
       resourceId?: string;
       header: WorkflowRunHeader;
       lastSeq: number;
+      runToken: string;
       /** See `StoredWorkflowRunHeader.startStateSeq`. */
       startStateSeq: number;
       /** Set once another run's `state-base`, or a draft, builds on this run's state: its checkpoints then keep the earlier state entries. */

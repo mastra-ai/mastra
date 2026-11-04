@@ -29,25 +29,34 @@
     "text-standard"
   ],
   "reasoning": {
-    "glm-latest": [
+    "code-standard": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-latest": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "kimi-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "gemini-pro-latest": [
+    "deepseek-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "code-prime": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "text-standard": [
+    "gpt-sol-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -68,13 +77,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-latest": [
-      {
-        "type": "toggle"
-      },
+    "glm-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "agent-max": [
@@ -86,13 +92,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bytedance-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "agent-prime": [
+    "code-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -104,19 +104,19 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "code-standard": [
+    "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-pro-latest": [
+    "gemini-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "text-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -128,7 +128,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-sol-latest": [
+    "agent-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
