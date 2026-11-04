@@ -20,7 +20,13 @@ import type {
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
-import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
+import type {
+  DataChunkType,
+  LanguageModelUsage,
+  LLMStepResult,
+  ObservedUsage,
+  ProviderMetadata,
+} from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
@@ -151,6 +157,8 @@ export interface OutputResult {
   text: string;
   /** Token usage (cumulative across all steps) */
   usage: LanguageModelUsage;
+  /** The sum of the token counts that were reported, readable when `usage` has unknown counts. `agent.generate()` and `agent.stream()` set it. */
+  observedUsage?: ObservedUsage;
   /** Why the generation finished (e.g. 'stop', 'tool-calls', 'length') */
   finishReason: string;
   /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */

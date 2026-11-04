@@ -462,6 +462,7 @@ function createGenerateResult({
       dbMessages: responseMessages,
     },
     totalUsage: EMPTY_USAGE,
+    observedUsage: { ...EMPTY_USAGE, incomplete: true },
     object: undefined,
     usedFallbackValue: false,
     error: undefined,

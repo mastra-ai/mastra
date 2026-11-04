@@ -38,6 +38,7 @@ const PLAIN_FULL_OUTPUT_KEYS = [
   'finishReason',
   'messages',
   'object',
+  'observedUsage',
   'providerMetadata',
   'reasoning',
   'reasoningText',

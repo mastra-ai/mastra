@@ -260,6 +260,7 @@ const PLAIN_FINISH_KEYS = [
   'messages',
   'model',
   'object',
+  'observedUsage',
   'providerMetadata',
   'reasoning',
   'reasoningText',

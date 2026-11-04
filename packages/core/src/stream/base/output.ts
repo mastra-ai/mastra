@@ -10,6 +10,7 @@ import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
+import { calculateObservedUsage, resolveObservedUsage } from '../../observability/usage';
 import type { OutputResult } from '../../processors';
 // Inlined to avoid importing structured-output.ts which pulls in the agent
 // barrel and creates an ESM init-time cycle.
@@ -26,6 +27,7 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  ObservedUsage,
   ProviderMetadata,
   StreamTransport,
   StepTripwireData,
@@ -56,13 +58,15 @@ const detailUsageCountKeys = [
 ] as const satisfies ReadonlyArray<keyof LanguageModelUsage>;
 const usageCountKeys = [...primaryUsageCountKeys, ...detailUsageCountKeys] as const;
 
+type PrimaryUsageCountKey = (typeof primaryUsageCountKeys)[number];
+
 function hasTokenCounts(usage: Partial<LanguageModelUsage> | undefined) {
   return primaryUsageCountKeys.some(key => usage?.[key] !== undefined);
 }
 
 function accumulateUsage(
   target: Partial<LanguageModelUsage>,
-  missing: Set<(typeof primaryUsageCountKeys)[number]>,
+  withheld: Map<PrimaryUsageCountKey, number | undefined>,
   usage: Partial<LanguageModelUsage>,
 ) {
   // Primary totals describe the whole request, so any omitted contribution
@@ -70,9 +74,11 @@ function accumulateUsage(
   for (const key of primaryUsageCountKeys) {
     const value = usage[key];
     if (value === undefined) {
-      missing.add(key);
+      if (!withheld.has(key)) withheld.set(key, target[key]);
       target[key] = undefined;
-    } else if (!missing.has(key)) {
+    } else if (withheld.has(key)) {
+      withheld.set(key, (withheld.get(key) ?? 0) + value);
+    } else {
       target[key] = (target[key] ?? 0) + value;
     }
   }
@@ -90,6 +96,13 @@ function accumulateUsage(
   if (usage.raw !== undefined) {
     target.raw = usage.raw;
   }
+}
+
+function toObservedUsage(
+  total: LanguageModelUsage,
+  withheld: Map<PrimaryUsageCountKey, number | undefined>,
+): ObservedUsage {
+  return resolveObservedUsage(total, [{ usage: { ...total, ...Object.fromEntries(withheld) } }]);
 }
 
 /**
@@ -215,6 +228,8 @@ export type FullOutput<OUTPUT = undefined> = {
   response: PromiseResults<OUTPUT>['response'];
   /** Total token usage across all steps */
   totalUsage: PromiseResults<OUTPUT>['totalUsage'];
+  /** The sum of the token counts that were reported, readable when `totalUsage` has unknown counts */
+  observedUsage: ObservedUsage;
   /** The structured object output (when using structured output) */
   object: OUTPUT;
   /**
@@ -667,7 +682,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     outputTokens: undefined,
     totalTokens: undefined,
   };
-  #usageCountMissing = new Set<(typeof primaryUsageCountKeys)[number]>();
+  /** Primary counts `#usageCount` no longer shows, with the sum reported for each. */
+  #usageCountWithheld = new Map<PrimaryUsageCountKey, number | undefined>();
   /**
    * Usage of the most recently completed step. Kept apart from `#bufferedSteps`
    * because goal truncation clears that buffer while usage keeps accumulating.
@@ -1695,9 +1711,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 delete self.#usageCount.cacheCreationInputTokens;
                 delete self.#usageCount.cacheCreationInputTokens5m;
                 delete self.#usageCount.cacheCreationInputTokens1h;
-                self.#usageCountMissing.clear();
+                self.#usageCountWithheld.clear();
               }
               this.populateUsageCount(chunk.payload.output.usage as Partial<LanguageModelUsage>);
+              if (self.#finishUsageIsTotal) {
+                // The run total cannot show a sum once a count was omitted, but its steps still can.
+                const reported = calculateObservedUsage(chunk.payload.output.steps ?? []);
+                for (const key of primaryUsageCountKeys) {
+                  if (self.#usageCount[key] === undefined) self.#usageCountWithheld.set(key, reported[key]);
+                }
+              }
 
               chunk.payload.output.usage = {
                 inputTokens: self.#usageCount.inputTokens,
@@ -1756,6 +1779,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const outputResult: OutputResult = {
                     text: self.#bufferedText.join(''),
                     usage: chunk.payload.output.usage as LanguageModelUsage,
+                    observedUsage: self.#getObservedUsage(),
                     finishReason: self.#status === 'failed' ? 'error' : self.#finishReason || 'unknown',
                     steps: [...self.#bufferedSteps] as LLMStepResult[],
                   };
@@ -2019,6 +2043,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   },
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
+                  observedUsage: self.#getObservedUsage(),
                   ...(self.#generationReportedUsage && { generationReportedUsage: self.#generationReportedUsage }),
                   ...(self.#generationReportedStepCount > 0 && {
                     generationStepProviderMetadata: self.#bufferedSteps
@@ -2395,7 +2420,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     if (!usage) {
       return;
     }
-    accumulateUsage(this.#usageCount, this.#usageCountMissing, usage);
+    accumulateUsage(this.#usageCount, this.#usageCountWithheld, usage);
   }
 
   populateUsageCount(usage: Partial<LanguageModelUsage>) {
@@ -2407,7 +2432,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // counter already known to be incomplete from an earlier contributing step.
     for (const key of primaryUsageCountKeys) {
       const value = usage[key];
-      if (value !== undefined && this.#usageCount[key] === undefined && !this.#usageCountMissing.has(key)) {
+      if (value !== undefined && this.#usageCount[key] === undefined && !this.#usageCountWithheld.has(key)) {
         this.#usageCount[key] = value;
       }
     }
@@ -2520,6 +2545,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       files: await this.files,
       response: await this.response,
       totalUsage: await this.totalUsage,
+      observedUsage: await this.observedUsage,
       object: await this.object,
       usedFallbackValue: this.#usedFallbackValue,
       error: this.error,
@@ -2552,6 +2578,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   get totalUsage() {
     return this.#getDelayedPromise(this.#delayedPromises.totalUsage);
+  }
+
+  /**
+   * The sum of the token counts that were reported, readable when `totalUsage` has unknown counts.
+   * `incomplete` is true when `totalUsage` has an unknown input, output, or total count.
+   */
+  get observedUsage(): Promise<ObservedUsage> {
+    return this.totalUsage.then(() => this.#getObservedUsage());
   }
 
   get content(): Promise<LLMStepResult['content']> {
@@ -2770,8 +2804,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   ): LLMStepResult<OUTPUT>['usage'] {
     if (!suspendedStepUsage) return this.#usageCount;
     const usageCount = { ...this.#usageCount };
-    accumulateUsage(usageCount, new Set(this.#usageCountMissing), suspendedStepUsage);
+    accumulateUsage(usageCount, new Map(this.#usageCountWithheld), suspendedStepUsage);
     return usageCount;
+  }
+
+  #getObservedUsage(): ObservedUsage {
+    const usageCount = { ...this.#usageCount };
+    const withheld = new Map(this.#usageCountWithheld);
+    if (this.#suspendedStepUsage) accumulateUsage(usageCount, withheld, this.#suspendedStepUsage);
+    return toObservedUsage(this.#getTotalUsage(usageCount), withheld);
   }
 
   #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
@@ -2779,6 +2820,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // chunks after cancellation, but those chunks cannot extend this terminal snapshot.
     const emptyUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
     // Steps that completed before the abort were already billed by the provider, so keep their usage.
+    const totalUsage = this.#lastStepUsage ? this.#getTotalUsage() : emptyUsage;
     return {
       finishReason: 'aborted',
       text: this.#bufferedText.join(''),
@@ -2799,7 +2841,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       request: {},
       response: {},
       steps: [],
-      totalUsage: this.#lastStepUsage ? this.#getTotalUsage() : emptyUsage,
+      totalUsage,
+      observedUsage: toObservedUsage(totalUsage, this.#usageCountWithheld),
       ...(this.#generationReportedUsage && { generationReportedUsage: this.#generationReportedUsage }),
       object: undefined as OUTPUT,
     };
@@ -2854,6 +2897,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       response: {},
       steps: [],
       totalUsage,
+      observedUsage: this.#getObservedUsage(),
       ...(generationReportedUsage && { generationReportedUsage }),
       generationStepProviderMetadata,
       object: undefined as OUTPUT,
@@ -3083,7 +3127,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       finishReason: this.#finishReason,
       request: this.#request,
       usageCount: this.#usageCount,
-      usageCountMissing: [...this.#usageCountMissing],
+      // Keys only, so an older worker can still read a snapshot from this one.
+      usageCountMissing: [...this.#usageCountWithheld.keys()],
+      usageCountReported: Object.fromEntries(this.#usageCountWithheld),
       lastStepUsage: this.#lastStepUsage,
       suspendedStepUsage,
       generationReportedUsage,
@@ -3117,6 +3163,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#finishReason = state.finishReason;
     this.#request = state.request;
     this.#usageCount = state.usageCount;
+    let missingKeys: readonly PrimaryUsageCountKey[];
 
     if (state.usageCountMissing === undefined) {
       const hasPriorUsage =
@@ -3126,15 +3173,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       // Legacy snapshots do not record which completed steps omitted primary
       // usage counters, so existing primary aggregates must fail closed. An
       // empty snapshot taken before the first step can still accumulate them.
-      this.#usageCountMissing = hasPriorUsage ? new Set(primaryUsageCountKeys) : new Set();
+      missingKeys = hasPriorUsage ? primaryUsageCountKeys : [];
       if (hasPriorUsage) {
         for (const key of primaryUsageCountKeys) {
           this.#usageCount[key] = undefined;
         }
       }
     } else {
-      this.#usageCountMissing = new Set(state.usageCountMissing);
+      missingKeys = state.usageCountMissing;
     }
+
+    // Older snapshots hold no reported sums, so the best remaining record is their steps.
+    const reported: Partial<LanguageModelUsage> =
+      state.usageCountReported ?? calculateObservedUsage(state.bufferedSteps ?? []);
+    this.#usageCountWithheld = new Map(missingKeys.map(key => [key, reported[key]]));
 
     this.#tripwire = state.tripwire;
     this.#lastStepUsage = state.lastStepUsage ?? state.bufferedSteps?.at(-1)?.usage;

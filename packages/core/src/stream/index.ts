@@ -9,6 +9,7 @@ export type {
   ProviderMetadata,
   StreamTransport,
   LanguageModelUsage,
+  ObservedUsage,
 
   // Chunk Types
   AgentChunkType,

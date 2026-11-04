@@ -438,7 +438,7 @@ describe('runDurableFinishSideEffects', () => {
         },
       } as unknown as DurableAgenticWorkflowInput,
       messageListState: list.serialize(),
-      outputResult: { text, finishReason: 'stop' } as any,
+      outputResult: { text, finishReason: 'stop', steps: [] } as any,
     });
 
     expect(seenByProcessor).toEqual({ name: 'Alice', age: 30 });
