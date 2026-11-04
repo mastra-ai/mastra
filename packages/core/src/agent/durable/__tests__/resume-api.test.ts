@@ -1000,7 +1000,8 @@ describe('Resume with CachingPubSub Event Replay', () => {
     ] as const) {
       const write = (workflows[method] as (args: any) => Promise<unknown>).bind(workflows);
       (workflows[method] as (args: any) => Promise<unknown>) = async args => {
-        if (args.header?.status === 'suspended') await new Promise(resolve => setTimeout(resolve, 300));
+        const status = method === 'updateWorkflowRunHeader' ? args.opts?.status : args.header?.status;
+        if (status === 'suspended') await new Promise(resolve => setTimeout(resolve, 300));
         return write(args);
       };
     }
