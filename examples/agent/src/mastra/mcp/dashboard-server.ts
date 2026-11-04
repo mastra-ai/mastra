@@ -2,8 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import { MCPClient, MCPServer } from '@mastra/mcp';
 import { Memory } from '@mastra/memory';
 import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
-import { observabilityAppTools } from '@mastra/mcp-apps-components/observability-tools';
 import { DASHBOARD_APP_URI, showObservabilityDashboard } from './dashboard-tools';
+import { observabilityAppTools } from './observability-tools';
 
 const DASHBOARD_SERVER_ID = 'dashboard-mcp-server';
 // This Mastra server, which the agent reaches over HTTP like any MCP client. `mastra dev` falls back to
