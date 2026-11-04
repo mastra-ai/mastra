@@ -64,7 +64,7 @@ describe('observational memory for gateway agents with a v2 key', () => {
       scope: 'thread',
       config: {},
     });
-    return { mastra, record, waitForBuffering, fetchMock: vi.spyOn(globalThis, 'fetch') };
+    return { mastra, store: store!, record, waitForBuffering, fetchMock: vi.spyOn(globalThis, 'fetch') };
   }
 
   it.each([
@@ -105,7 +105,8 @@ describe('observational memory for gateway agents with a v2 key', () => {
     ['GET_OBSERVATIONAL_MEMORY_ROUTE', GET_OBSERVATIONAL_MEMORY_ROUTE],
     ['AWAIT_BUFFER_STATUS_ROUTE', AWAIT_BUFFER_STATUS_ROUTE],
   ] as const)('%s reads with the trusted resource ID, not the caller-supplied one', async (_name, route) => {
-    const { mastra, record, waitForBuffering } = await setupLocalOM();
+    const { mastra, store, record, waitForBuffering } = await setupLocalOM();
+    const getRecord = vi.spyOn(store, 'getObservationalMemory');
     const context = createTestServerContext({ mastra });
     context.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-1');
 
@@ -117,8 +118,32 @@ describe('observational memory for gateway agents with a v2 key', () => {
     });
 
     expect(result.record?.id).toBe(record.id);
+    expect(getRecord).toHaveBeenCalledWith('thread-1', 'resource-1');
     if (route === AWAIT_BUFFER_STATUS_ROUTE) {
       expect(waitForBuffering).toHaveBeenCalledWith('thread-1', 'resource-1');
     }
+  });
+
+  it.each([
+    ['GET_OBSERVATIONAL_MEMORY_ROUTE', GET_OBSERVATIONAL_MEMORY_ROUTE],
+    ['AWAIT_BUFFER_STATUS_ROUTE', AWAIT_BUFFER_STATUS_ROUTE],
+  ] as const)('%s does not return a thread-scoped record whose thread is gone', async (_name, route) => {
+    const { mastra, store, waitForBuffering } = await setupLocalOM();
+    await store.initializeObservationalMemory({
+      threadId: 'deleted-thread',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    const result = await (route.handler as any)({
+      ...createTestServerContext({ mastra }),
+      agentId: 'gateway-agent',
+      resourceId: 'resource-2',
+      threadId: 'deleted-thread',
+    });
+
+    expect(result.record).toBeNull();
+    expect(waitForBuffering).not.toHaveBeenCalled();
   });
 });

@@ -724,6 +724,10 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       if (threadId) {
         const thread = await memory.getThreadById({ threadId });
         await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+        // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
+        if (!thread && omConfig.scope !== 'resource') {
+          return { record: null, history: undefined };
+        }
       }
 
       // For resource-scoped OM, lookup by resourceId only (threadId=null)
@@ -823,6 +827,10 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       if (threadId) {
         const thread = await memory.getThreadById({ threadId });
         await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+        // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
+        if (!thread && omConfig.scope !== 'resource') {
+          return { record: null };
+        }
       }
 
       // Block until buffering completes (30s timeout)
