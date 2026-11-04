@@ -28,6 +28,7 @@ export async function resolveSignalContext(
     ...(typeof organizationId === 'string' && organizationId ? { organizationId } : {}),
     ...(typeof resourceId === 'string' && resourceId ? { resourceId } : {}),
   };
+  // Configured scope fields override input; other provided context stays caller-supplied.
   if (mode === 'provided') return { ...contextSchema.parse(record), ...scope, metadata: record.metadata };
 
   // Like trace queries, absent trusted scope means unscoped self-hosted access.
@@ -74,6 +75,8 @@ export async function resolveSignalContext(
     parentEntityName: parent?.entityName ?? target.parentEntityName ?? null,
     parentEntityVersionId: parent?.entityVersionId ?? target.parentEntityVersionId ?? null,
     ...scope,
+    // Like buildRecordedScoreEventFromTrace/buildRecordedFeedbackEventFromTrace,
+    // inherit target-span metadata and let caller metadata override matching keys.
     metadata: { ...target.metadata, ...record.metadata },
   };
 }

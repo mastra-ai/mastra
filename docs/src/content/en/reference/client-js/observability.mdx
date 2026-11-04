@@ -453,7 +453,7 @@ Both create methods accept an optional top-level `contextMode` alongside the `fe
 - `"provided"` uses the record's flattened context fields without looking up spans. Missing context fields aren't enriched.
 - `"resolve"` derives context from the stored root and optional target span. Root tags are inherited. Record metadata overrides matching stored metadata keys. A missing root returns `TRACE_NOT_FOUND`. A missing target returns `SPAN_NOT_FOUND`.
 
-Omitting `contextMode` uses the server's default: `"provided"` on OSS and `"resolve"` on Platform. The client preserves omission. Select a mode explicitly when the same behavior is required on both servers. Trusted authentication scope takes precedence over supplied context.
+Omitting `contextMode` uses the server's default: `"provided"` on OSS and `"resolve"` on Platform. The client preserves omission. Select a mode explicitly when the same behavior is required on both servers. On OSS, each configured trusted scope field overrides caller input. In provided mode, other context fields remain caller-supplied. For example, a trusted organization ID overrides `organizationId` but doesn't clear `resourceId` when no trusted resource scope is configured.
 
 ```typescript
 const result = await mastraClient.createFeedback({
