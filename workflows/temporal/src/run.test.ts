@@ -454,6 +454,37 @@ describe('TemporalRun', () => {
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });
 
+    it.each(['start', 'startAsync'] as const)(
+      '%s reports canceled and does not run onError when the Temporal workflow is canceled',
+      async method => {
+        const cancellation = Object.assign(new Error('Workflow canceled'), {
+          [Symbol.for('__temporal_isCancelledFailure')]: true,
+        });
+        const failure = Object.assign(new Error('Workflow execution cancelled', { cause: cancellation }), {
+          [Symbol.for('__temporal_isWorkflowFailedError')]: true,
+        });
+        const onFinish = vi.fn();
+        const onError = vi.fn();
+        const { workflow } = createHookedWorkflow({ onFinish, onError }, () => Promise.reject(failure));
+        const run = await workflow.createRun({ runId: 'run-1' });
+
+        const result = await run[method]({ inputData: { value: 1 } });
+
+        if (method === 'start') {
+          expect(result).toEqual({
+            status: 'canceled',
+            input: { value: 1 },
+            state: undefined,
+            steps: {},
+          });
+        } else {
+          expect(result).toEqual({ runId: 'run-1' });
+        }
+        await vi.waitFor(() => expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'canceled' })));
+        expect(onError).not.toHaveBeenCalled();
+      },
+    );
+
     it('runs onError when dispatching to Temporal fails', async () => {
       const failure = new Error('Temporal service unavailable');
       const onError = vi.fn();
