@@ -1,5 +1,5 @@
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
-import { useCallback, useContext } from 'react';
+import { useCallback, useContext, useMemo } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge';
@@ -12,7 +12,12 @@ import { suspendedMcpInputRequest } from './mcp-input-request';
 import { SubmitPlanTool } from './submit-plan-tool';
 import { ToolResultMedia } from './tool-result-media';
 import type { MessageMetadata } from '@/domains/chat';
-import { ChatAgentContext, useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
+import {
+  ChatAgentContext,
+  useChatModelContext,
+  useChatRunning,
+  useChatSend,
+} from '@/domains/chat/context/chat-context';
 import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
 import { ObservationMarkerBadge } from '@/domains/chat/tools/badges/observation-marker-badge';
@@ -93,6 +98,11 @@ export const ToolCardInner = ({
       void send({ message: content });
     },
     [send],
+  );
+  const setModelContext = useChatModelContext();
+  const handleMcpAppModelContext = useMemo(
+    () => setModelContext && ((context: string | undefined) => setModelContext(toolCallId, context)),
+    [setModelContext, toolCallId],
   );
   useWorkflowStream(output);
 
@@ -351,6 +361,7 @@ export const ToolCardInner = ({
             toolArgs={input}
             toolResult={output}
             onSendMessage={handleMcpAppSendMessage}
+            onUpdateModelContext={handleMcpAppModelContext}
             readOnly={readOnly}
           />
         )}

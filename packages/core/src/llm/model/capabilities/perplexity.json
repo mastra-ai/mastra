@@ -2,13 +2,13 @@
   "attachment": ["sonar-pro", "sonar-reasoning-pro"],
   "temperature": ["sonar", "sonar-pro", "sonar-reasoning-pro"],
   "reasoning": {
-    "sonar-reasoning-pro": [
+    "sonar-deep-research": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "sonar-deep-research": [
+    "sonar-reasoning-pro": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
