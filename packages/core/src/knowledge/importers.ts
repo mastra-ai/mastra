@@ -22,6 +22,7 @@ import type {
   KnowledgeUpsertPageInput,
   KnowledgeUpsertPageResult,
 } from './host-writes';
+import type { Knowledge } from './index';
 
 /**
  * Brings content from an outside source (a ticket tracker, a wiki, a CRM) into Knowledge pages and
@@ -117,8 +118,7 @@ export interface KnowledgeImporterHost extends KnowledgeHostWriter {
   log(level: 'info' | 'warn', message: string, data?: Record<string, unknown>): void;
 }
 
-/** @internal Runs one importer; `Knowledge.runImporter` owns registration and the busy lock. */
-export async function runKnowledgeImporter<TOptions>(
+async function executeKnowledgeImporter<TOptions>(
   host: KnowledgeImporterHost,
   importer: KnowledgeImporter<TOptions>,
   input: KnowledgeRunImporterOptions<TOptions>,
@@ -383,4 +383,49 @@ async function previewUpsert(
 
 function dryRunNote(text: string): KnowledgeNote {
   return { id: `dry-run:${randomUUID()}`, text } as KnowledgeNote;
+}
+
+const running = new WeakMap<Knowledge, Set<string>>();
+
+/**
+ * Runs an importer against an existing Knowledge instance and returns its finished run. Nothing is
+ * registered: pass the importer each time. A failing or canceled importer doesn't throw: the run says
+ * `failed` or `canceled` with the error, keeps the writes it made, removes no stale pages and saves no
+ * state (state keys are saved one at a time, so a storage error while saving them can leave some
+ * saved). Throws {@link KnowledgeImporterBusyError} when the same importer id is already running on
+ * this instance; runs aren't locked across processes, so schedule each importer on one worker.
+ * Scheduling is up to you.
+ *
+ * Writes are host writes made as `importer:<id>`. **Host-only**, like `Knowledge.upsertPage`.
+ *
+ * @experimental
+ */
+export async function runKnowledgeImporter<TOptions>(
+  knowledge: Knowledge,
+  importer: KnowledgeImporter<TOptions>,
+  options: KnowledgeRunImporterOptions<TOptions> = {},
+): Promise<KnowledgeImportRun> {
+  assertKnowledgeImporter(importer);
+  let ids = running.get(knowledge);
+  if (!ids) running.set(knowledge, (ids = new Set()));
+  if (ids.has(importer.id)) throw new KnowledgeImporterBusyError(importer.id);
+  ids.add(importer.id);
+  try {
+    return await executeKnowledgeImporter(knowledge.importerHost(), importer, options);
+  } finally {
+    ids.delete(importer.id);
+  }
+}
+
+/** @experimental */
+export async function getKnowledgeImportRun(knowledge: Knowledge, runId: string): Promise<KnowledgeImportRun | null> {
+  return (await knowledge.getStorage()).getImportRun({ id: runId });
+}
+
+/** Newest first; 20 by default. @experimental */
+export async function listKnowledgeImportRuns(
+  knowledge: Knowledge,
+  input: { importerId?: string; limit?: number } = {},
+): Promise<KnowledgeImportRun[]> {
+  return (await knowledge.getStorage()).listImportRuns(input);
 }

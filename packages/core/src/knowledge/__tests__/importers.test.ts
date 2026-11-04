@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryStore } from '../../storage';
 import { InMemoryKnowledgeImporterStore } from '../../storage/domains/knowledge/importers';
 import { knowledgeMemoryScopes } from '../declarations';
-import { Knowledge, KnowledgeImporterBusyError } from '../index';
-import type { KnowledgeImporter } from '../index';
+import {
+  getKnowledgeImportRun,
+  Knowledge,
+  KnowledgeImporterBusyError,
+  listKnowledgeImportRuns,
+  runKnowledgeImporter,
+} from '../index';
+import type { KnowledgeImporter, KnowledgeRunImporterOptions } from '../index';
 
 type Item = { id: string; title: string; body: string };
 
@@ -20,14 +26,17 @@ function docsImporter(source: Map<string, Item>, id = 'docs'): KnowledgeImporter
 }
 
 function setup(importers: KnowledgeImporter<any>[] = []) {
-  const knowledge = new Knowledge({ storage: new InMemoryStore(), scopes: knowledgeMemoryScopes(), importers });
+  const knowledge = new Knowledge({ storage: new InMemoryStore(), scopes: knowledgeMemoryScopes() });
+  const byId = new Map(importers.map(importer => [importer.id, importer]));
+  const runImporter = (id: string, options?: KnowledgeRunImporterOptions<any>) =>
+    runKnowledgeImporter(knowledge, byId.get(id)!, options);
   const page = async (path: string) => {
     const storage = await knowledge.getStorage();
     const [scope] = await storage.getScopesByAddress(['org:acme']);
     if (!scope) return null;
     return storage.getPageByPath({ scopeId: scope.id, path: path.split('/'), read: 'all' });
   };
-  return { knowledge, page };
+  return { knowledge, page, runImporter };
 }
 
 const items = (...list: Item[]) => new Map(list.map(item => [item.id, item]));
@@ -75,22 +84,25 @@ describe('InMemoryKnowledgeImporterStore', () => {
 describe('Knowledge importers', () => {
   it('creates pages, then reports them unchanged on a rerun', async () => {
     const source = items({ id: 'a', title: 'A', body: 'alpha' }, { id: 'b', title: 'B', body: 'beta' });
-    const { knowledge, page } = setup([docsImporter(source)]);
+    const { knowledge, page, runImporter } = setup([docsImporter(source)]);
 
-    const first = await knowledge.runImporter('docs');
+    const first = await runImporter('docs');
     expect(first).toMatchObject({ status: 'succeeded', counts: { created: 2, updated: 0, unchanged: 0 } });
     expect((await page('docs/a'))?.body).toBe('alpha');
 
     source.get('b')!.body = 'beta 2';
-    const second = await knowledge.runImporter('docs');
+    const second = await runImporter('docs');
     expect(second.counts).toMatchObject({ created: 0, updated: 1, unchanged: 1, removed: 0 });
-    expect((await knowledge.listImportRuns({ importerId: 'docs' })).map(run => run.id)).toEqual([second.id, first.id]);
-    expect(await knowledge.getImportRun(first.id)).toMatchObject({ id: first.id, status: 'succeeded' });
+    expect((await listKnowledgeImportRuns(knowledge, { importerId: 'docs' })).map(run => run.id)).toEqual([
+      second.id,
+      first.id,
+    ]);
+    expect(await getKnowledgeImportRun(knowledge, first.id)).toMatchObject({ id: first.id, status: 'succeeded' });
   });
 
   it('writes as importer:<id>', async () => {
-    const { knowledge, page } = setup([docsImporter(items({ id: 'a', title: 'A', body: 'alpha' }))]);
-    await knowledge.runImporter('docs');
+    const { knowledge, page, runImporter } = setup([docsImporter(items({ id: 'a', title: 'A', body: 'alpha' }))]);
+    await runImporter('docs');
     const storage = await knowledge.getStorage();
     const created = await page('docs/a');
     const activity = await storage.listPageActivity({ pageId: created!.id, read: 'all' });
@@ -99,11 +111,11 @@ describe('Knowledge importers', () => {
 
   it('removes pages the source no longer has after a full run', async () => {
     const source = items({ id: 'a', title: 'A', body: 'alpha' }, { id: 'b', title: 'B', body: 'beta' });
-    const { knowledge, page } = setup([docsImporter(source)]);
-    await knowledge.runImporter('docs');
+    const { knowledge, page, runImporter } = setup([docsImporter(source)]);
+    await runImporter('docs');
 
     source.delete('b');
-    const run = await knowledge.runImporter('docs');
+    const run = await runImporter('docs');
     expect(run.counts).toMatchObject({ unchanged: 1, removed: 1 });
     expect(await page('docs/b')).toBeNull();
     expect(await page('docs/a')).not.toBeNull();
@@ -123,24 +135,24 @@ describe('Knowledge importers', () => {
         }
       },
     };
-    const { knowledge, page } = setup([docsImporter(docs), docsImporter(other, 'other'), keeper]);
-    await knowledge.runImporter('docs');
-    await knowledge.runImporter('other');
-    await knowledge.runImporter('keeper');
+    const { knowledge, page, runImporter } = setup([docsImporter(docs), docsImporter(other, 'other'), keeper]);
+    await runImporter('docs');
+    await runImporter('other');
+    await runImporter('keeper');
 
     docs.clear();
-    expect((await knowledge.runImporter('docs')).counts.removed).toBe(1);
+    expect((await runImporter('docs')).counts.removed).toBe(1);
     expect(await page('docs/z')).not.toBeNull();
-    expect((await knowledge.runImporter('keeper')).counts.removed).toBe(0);
+    expect((await runImporter('keeper')).counts.removed).toBe(0);
     expect(await page('kept')).not.toBeNull();
   });
 
   it('keeps unwritten pages on an incremental run', async () => {
     const source = items({ id: 'a', title: 'A', body: 'alpha' }, { id: 'b', title: 'B', body: 'beta' });
-    const { knowledge, page } = setup([docsImporter(source)]);
-    await knowledge.runImporter('docs');
+    const { knowledge, page, runImporter } = setup([docsImporter(source)]);
+    await runImporter('docs');
     source.delete('b');
-    const run = await knowledge.runImporter('docs', { incremental: true });
+    const run = await runImporter('docs', { incremental: true });
     expect(run).toMatchObject({ incremental: true, counts: { removed: 0 } });
     expect(await page('docs/b')).not.toBeNull();
   });
@@ -155,10 +167,10 @@ describe('Knowledge importers', () => {
         if (fail) throw new Error('source returned 500');
       },
     };
-    const { knowledge, page } = setup([importer]);
-    await knowledge.runImporter('flaky');
+    const { knowledge, page, runImporter } = setup([importer]);
+    await runImporter('flaky');
     fail = true;
-    const run = await knowledge.runImporter('flaky');
+    const run = await runImporter('flaky');
     expect(run).toMatchObject({ status: 'failed', error: 'source returned 500', counts: { removed: 0 } });
     expect(run.completedAt).toBeInstanceOf(Date);
     expect(await page('docs/b')).not.toBeNull();
@@ -167,12 +179,12 @@ describe('Knowledge importers', () => {
   it('rejects a second run of the same importer while one is running', async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => (release = resolve));
-    const { knowledge } = setup([{ id: 'slow', run: () => gate }]);
-    const first = knowledge.runImporter('slow');
-    await expect(knowledge.runImporter('slow')).rejects.toBeInstanceOf(KnowledgeImporterBusyError);
+    const { knowledge, runImporter } = setup([{ id: 'slow', run: () => gate }]);
+    const first = runImporter('slow');
+    await expect(runImporter('slow')).rejects.toBeInstanceOf(KnowledgeImporterBusyError);
     release();
     expect((await first).status).toBe('succeeded');
-    expect((await knowledge.runImporter('slow')).status).toBe('succeeded');
+    expect((await runImporter('slow')).status).toBe('succeeded');
   });
 
   it('writes nothing in a dry run but counts what it would do', async () => {
@@ -186,19 +198,19 @@ describe('Knowledge importers', () => {
         expect(await ctx.state.get('cursor')).toBe(7);
       },
     };
-    const { knowledge, page } = setup([importer]);
+    const { knowledge, page, runImporter } = setup([importer]);
 
-    const preview = await knowledge.runImporter('docs', { dryRun: true });
+    const preview = await runImporter('docs', { dryRun: true });
     expect(preview).toMatchObject({ status: 'succeeded', dryRun: true, counts: { created: 2, notes: 1 } });
     expect(await page('docs/a')).toBeNull();
     const storage = await knowledge.getStorage();
     expect(await storage.getImportState({ importerId: 'docs', key: 'cursor' })).toBeUndefined();
     expect(await storage.listImportOwnedPages({ importerId: 'docs' })).toEqual([]);
 
-    await knowledge.runImporter('docs');
+    await runImporter('docs');
     source.delete('b');
     source.get('a')!.body = 'alpha 2';
-    const second = await knowledge.runImporter('docs', { dryRun: true });
+    const second = await runImporter('docs', { dryRun: true });
     expect(second.counts).toMatchObject({ created: 0, updated: 1, removed: 1 });
     expect((await page('docs/a'))?.body).toBe('alpha');
     expect(await page('docs/b')).not.toBeNull();
@@ -215,17 +227,17 @@ describe('Knowledge importers', () => {
         await ctx.pages.upsert({ scope: 'org:acme', path: 'docs/c', name: 'C', body: 'gamma' });
       },
     };
-    const { knowledge, page } = setup([docsImporter(source), { ...importer, id: 'abortable' }]);
-    await knowledge.runImporter('abortable');
-    const run = await knowledge.runImporter('abortable', { options: 'abort', signal: controller.signal });
+    const { knowledge, page, runImporter } = setup([docsImporter(source), { ...importer, id: 'abortable' }]);
+    await runImporter('abortable');
+    const run = await runImporter('abortable', { options: 'abort', signal: controller.signal });
     expect(run.status).toBe('canceled');
     expect(await page('docs/c')).not.toBeNull();
   });
 
   it('finishes a started removal when aborted mid-way and records success', async () => {
     const source = items({ id: 'a', title: 'A', body: 'a' }, { id: 'b', title: 'B', body: 'b' });
-    const { knowledge, page } = setup([docsImporter(source)]);
-    await knowledge.runImporter('docs');
+    const { knowledge, page, runImporter } = setup([docsImporter(source)]);
+    await runImporter('docs');
     source.clear();
     const controller = new AbortController();
     const storage = await knowledge.getStorage();
@@ -234,7 +246,7 @@ describe('Knowledge importers', () => {
       controller.abort();
       return deletePage(input);
     };
-    const run = await knowledge.runImporter('docs', { signal: controller.signal });
+    const run = await runImporter('docs', { signal: controller.signal });
     expect(run.status).toBe('succeeded');
     expect(run.counts.removed).toBe(2);
     expect(await page('docs/a')).toBeNull();
@@ -252,8 +264,8 @@ describe('Knowledge importers', () => {
         expect(await ctx.pages.removeNote({ id: note.id })).toBe(false);
       },
     };
-    const { knowledge, page } = setup([importer]);
-    const run = await knowledge.runImporter('notes');
+    const { knowledge, page, runImporter } = setup([importer]);
+    const run = await runImporter('notes');
     expect(run).toMatchObject({ status: 'succeeded', counts: { notes: 2 } });
     const storage = await knowledge.getStorage();
     const notes = await storage.listNotes({ pageId: (await page('ticket'))!.id, read: 'all' });
@@ -261,16 +273,16 @@ describe('Knowledge importers', () => {
     expect(JSON.stringify(notes)).not.toContain('first');
   });
 
-  it('validates ids and registration', () => {
-    const { knowledge } = setup([{ id: 'one', run: async () => {} }]);
-    expect(() => knowledge.registerImporter({ id: 'one', run: async () => {} })).toThrow(/already registered/);
-    expect(() => knowledge.registerImporter({ id: 'bad id', run: async () => {} })).toThrow(/may only use/);
-    expect(knowledge.listImporters().map(importer => importer.id)).toEqual(['one']);
-    return expect(knowledge.runImporter('missing')).rejects.toThrow(/No Knowledge importer/);
+  it('validates importers before running', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore(), scopes: knowledgeMemoryScopes() });
+    await expect(runKnowledgeImporter(knowledge, { id: 'bad id', run: async () => {} })).rejects.toThrow(
+      /may only use/,
+    );
+    await expect(runKnowledgeImporter(knowledge, { id: 'x' } as any)).rejects.toThrow(/needs an `id` and a `run`/);
   });
   it('never removes a page it did not create, even after writing to it', async () => {
     const source = items({ id: 'faq', title: 'FAQ', body: 'imported' });
-    const { knowledge, page } = setup([docsImporter(source)]);
+    const { knowledge, page, runImporter } = setup([docsImporter(source)]);
     await knowledge.upsertPage({
       scope: 'org:acme',
       path: 'docs/faq',
@@ -278,9 +290,9 @@ describe('Knowledge importers', () => {
       body: 'by a person',
       author: 'user:1',
     });
-    await knowledge.runImporter('docs');
+    await runImporter('docs');
     source.clear();
-    const run = await knowledge.runImporter('docs');
+    const run = await runImporter('docs');
     expect(run.counts.removed).toBe(0);
     expect(await page('docs/faq')).not.toBeNull();
   });
@@ -293,8 +305,8 @@ describe('Knowledge importers', () => {
         throw new Error('source down');
       },
     };
-    const { knowledge } = setup([importer]);
-    const run = await knowledge.runImporter('cursor', { incremental: true });
+    const { knowledge, runImporter } = setup([importer]);
+    const run = await runImporter('cursor', { incremental: true });
     expect(run.status).toBe('failed');
     const storage = await knowledge.getStorage();
     expect(await storage.getImportState({ importerId: 'cursor', key: 'since' })).toBeUndefined();
@@ -302,14 +314,14 @@ describe('Knowledge importers', () => {
 
   it('records the run failed when a stale page cannot be removed', async () => {
     const source = items({ id: 'a', title: 'A', body: 'a' });
-    const { knowledge } = setup([docsImporter(source)]);
-    await knowledge.runImporter('docs');
+    const { knowledge, runImporter } = setup([docsImporter(source)]);
+    await runImporter('docs');
     const storage = await knowledge.getStorage();
     storage.deletePage = async () => {
       throw new Error('storage down');
     };
     source.clear();
-    const run = await knowledge.runImporter('docs');
+    const run = await runImporter('docs');
     expect(run.status).toBe('failed');
     expect(run.error).toContain('storage down');
   });
@@ -323,14 +335,14 @@ describe('Knowledge importers', () => {
         await ctx.state.set('since', source.size);
       },
     };
-    const { knowledge } = setup([importer]);
-    await knowledge.runImporter('docs');
+    const { knowledge, runImporter } = setup([importer]);
+    await runImporter('docs');
     const storage = await knowledge.getStorage();
     storage.deletePage = async () => {
       throw new Error('storage down');
     };
     source.clear();
-    expect((await knowledge.runImporter('docs')).status).toBe('failed');
+    expect((await runImporter('docs')).status).toBe('failed');
     expect(await storage.getImportState({ importerId: 'docs', key: 'since' })).toBe(1);
   });
 });

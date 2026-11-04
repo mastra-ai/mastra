@@ -336,7 +336,7 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('listPins'));
   }
 
-  // Importer storage (see ./importers.ts). Adapters without it refuse, and `runImporter` explains why.
+  // Importer storage (see ./importers.ts). Adapters without it refuse, and `runKnowledgeImporter` explains why.
   getImportState(_input: Parameters<KnowledgeImporterStore['getImportState']>[0]): Promise<unknown> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('importer storage'));
   }

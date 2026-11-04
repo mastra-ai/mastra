@@ -72,13 +72,6 @@ export const knowledge = new Knowledge({
     isOptional: true,
   },
   {
-    name: 'importers',
-    type: 'KnowledgeImporter[]',
-    description:
-      'Importers to register, as with [`registerImporter()`](#registerimporter). See [Sync with an importer](/docs/knowledge/load-your-content#sync-with-an-importer).',
-    isOptional: true,
-  },
-  {
     name: 'tools',
     type: 'boolean | { read?: boolean | { maxTokens?: number }; write?: boolean }',
     description:
@@ -327,18 +320,12 @@ interface KnowledgeImporter<TOptions = unknown> {
 
 `run()` gets `ctx` with `runId`, `importerId`, `options`, `dryRun`, `incremental` and a `signal` that aborts when the run is canceled. `ctx.pages` has `upsert()`, `remove()`, `addNote()`, `updateNote()` and `removeNote()`, which take the same input as the host writes without `author`, plus `keep({ scope, path })` to keep a page from an earlier run without rewriting it. `ctx.state.get(key)` and `ctx.state.set(key, value)` save JSON values, such as a cursor, for the next run. Setting `undefined` deletes the value. `ctx.log()` writes to the Knowledge logger.
 
-#### `registerImporter()`
+Importers aren't registered on `Knowledge`. Import these functions from `@mastra/core/knowledge` and pass the instance to import into.
+
+#### `runKnowledgeImporter()`
 
 ```typescript oxfmt:false
-registerImporter(importer: KnowledgeImporter): void
-```
-
-Adds an importer. `id` may only use letters, digits, `-`, `_`, `.` and `:`. Throws `Knowledge importer "<id>" is already registered.` for a duplicate. `getImporter(id)` and `listImporters()` return registered importers.
-
-#### `runImporter()`
-
-```typescript oxfmt:false
-runImporter(id: string, input?: {
+runKnowledgeImporter(knowledge: Knowledge, importer: KnowledgeImporter, input?: {
   options?: TOptions
   dryRun?: boolean
   incremental?: boolean
@@ -346,18 +333,18 @@ runImporter(id: string, input?: {
 }): Promise<KnowledgeImportRun>
 ```
 
-Runs the importer and resolves to its run: `{ id, importerId, status, dryRun, incremental, counts, error?, startedAt, completedAt? }`. `status` is `succeeded`, `failed` or `canceled`. A failing importer doesn't make this throw; the run records the error. `counts` has `created`, `updated`, `unchanged`, `removed` and `notes`. After a successful run that isn't `incremental` or `dryRun`, pages the importer created before and neither wrote nor kept this run are removed, children first. Pages it didn't create are never removed. A page that gained child pages stays and is no longer the importer's. Once removal starts it finishes, even if `signal` aborts; a page that can't be removed marks the run `failed`. `ctx.state` saves are written, one key at a time, only after the run and its removals succeed. `ctx.pages.remove()` is a plain host write: it removes the page whoever created it. A `dryRun` writes nothing and drops state saves. Throws `KnowledgeImporterBusyError` while the same importer is already running on this instance. Runs aren't locked across processes.
+Checks the importer (`id` may only use letters, digits, `-`, `_`, `.` and `:`), runs it and resolves to its run: `{ id, importerId, status, dryRun, incremental, counts, error?, startedAt, completedAt? }`. `status` is `succeeded`, `failed` or `canceled`. A failing importer doesn't make this throw; the run records the error. `counts` has `created`, `updated`, `unchanged`, `removed` and `notes`. After a successful run that isn't `incremental` or `dryRun`, pages the importer created before and neither wrote nor kept this run are removed, children first. Pages it didn't create are never removed. A page that gained child pages stays and is no longer the importer's. Once removal starts it finishes, even if `signal` aborts; a page that can't be removed marks the run `failed`. `ctx.state` saves are written, one key at a time, only after the run and its removals succeed. `ctx.pages.remove()` is a plain host write: it removes the page whoever created it. A `dryRun` writes nothing and drops state saves. Throws `KnowledgeImporterBusyError` while an importer with the same id is already running on this instance. Runs aren't locked across processes.
 
-#### `getImportRun()`
+#### `getKnowledgeImportRun()`
 
 ```typescript oxfmt:false
-getImportRun(runId: string): Promise<KnowledgeImportRun | null>
+getKnowledgeImportRun(knowledge: Knowledge, runId: string): Promise<KnowledgeImportRun | null>
 ```
 
-#### `listImportRuns()`
+#### `listKnowledgeImportRuns()`
 
 ```typescript oxfmt:false
-listImportRuns(input?: { importerId?: string; limit?: number }): Promise<KnowledgeImportRun[]>
+listKnowledgeImportRuns(knowledge: Knowledge, input?: { importerId?: string; limit?: number }): Promise<KnowledgeImportRun[]>
 ```
 
 Lists runs newest first, 20 by default.

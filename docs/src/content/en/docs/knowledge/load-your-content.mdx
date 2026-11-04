@@ -116,15 +116,14 @@ export const docsImporter: KnowledgeImporter<{ orgId: string }> = {
 }
 ```
 
-Register it on Knowledge, then run it from a job or an admin route:
+Run it against an existing Knowledge instance from a job, a workflow or an admin route. When it runs is up to you: importers have no schedule of their own.
 
-```typescript title="src/mastra/knowledge.ts"
-export const knowledge = new Knowledge({
-  // ...
-  importers: [docsImporter],
-})
+```typescript title="src/mastra/jobs/import-docs.ts"
+import { runKnowledgeImporter } from '@mastra/core/knowledge'
+import { knowledge } from '../knowledge'
+import { docsImporter } from '../docs-importer'
 
-const run = await knowledge.runImporter('docs', { options: { orgId: 'acme' } })
+const run = await runKnowledgeImporter(knowledge, docsImporter, { options: { orgId: 'acme' } })
 console.log(run.status, run.counts) // succeeded { created: 12, updated: 0, unchanged: 0, removed: 0, notes: 0 }
 ```
 
@@ -138,7 +137,7 @@ const since = await ctx.state.get<string>('since')
 await ctx.state.set('since', new Date().toISOString())
 ```
 
-Pass `dryRun: true` to see what a run would change. It writes no pages and saves no state, and its counts say what it would have done. Importers need LibSQL, PostgreSQL or in-memory storage. Only one run of an importer happens at a time on a `Knowledge` instance. A second call throws `KnowledgeImporterBusyError`, so schedule each importer on one worker.
+Pass `dryRun: true` to see what a run would change. It writes no pages and saves no state, and its counts say what it would have done. Importers need LibSQL, PostgreSQL or in-memory storage. Only one run of an importer id happens at a time on a `Knowledge` instance. A second call throws `KnowledgeImporterBusyError`, so schedule each importer on one worker.
 
 ## Next steps
 
