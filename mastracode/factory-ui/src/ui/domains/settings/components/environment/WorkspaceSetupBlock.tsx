@@ -24,7 +24,7 @@ export function WorkspaceSetupBlock({
 }) {
   return (
     <SettingsContainer>
-      <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">
+      <SettingsRow label="Working directory" description="Where repositories are cloned.">
         <CommittedInput
           label="Working directory"
           placeholder="/workspace"
@@ -35,7 +35,7 @@ export function WorkspaceSetupBlock({
       </SettingsRow>
       <SettingsRow
         label="Setup command"
-        description="Runs in the working directory once every repository is cloned and its own setup command has finished, while the template builds."
+        description="Runs once every repository is cloned."
       >
         <CommittedInput
           label="Setup command"

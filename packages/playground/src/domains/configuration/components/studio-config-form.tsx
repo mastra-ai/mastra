@@ -66,6 +66,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
     {
       name: 'url',
       label: 'Mastra instance URL',
+      description: 'The server this studio talks to.',
       placeholder: 'e.g: http://localhost:4111',
       required: true,
       defaultValue: initialConfig?.baseUrl,
@@ -73,6 +74,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
     {
       name: 'apiPrefix',
       label: 'API prefix',
+      description: 'Path in front of every API route.',
       placeholder: 'e.g: /api (default)',
       defaultValue: initialConfig?.apiPrefix || '',
     },
@@ -95,8 +97,8 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
               </SettingsTitle>
             </SettingsHeader>
             <SettingsContainer>
-              {connectionFields.map(({ label, ...field }) => (
-                <SettingsRow key={field.name} label={label}>
+              {connectionFields.map(({ label, description, ...field }) => (
+                <SettingsRow key={field.name} label={label} description={description}>
                   <Input {...field} />
                 </SettingsRow>
               ))}
@@ -134,7 +136,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
   return (
     <TooltipProvider delayDuration={0}>
       <Form onSubmit={handleSubmit} className="gap-6">
-        {connectionFields.map(({ label, ...field }) => (
+        {connectionFields.map(({ label, description: _description, ...field }) => (
           <Field key={field.name}>
             <FieldLabel required={field.required}>{label}</FieldLabel>
             <Input {...field} />

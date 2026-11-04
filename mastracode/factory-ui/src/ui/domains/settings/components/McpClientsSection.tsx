@@ -36,7 +36,7 @@ export function McpClientsSection() {
       description="Use this Factory from Claude, ChatGPT and other MCP clients. They sign in as you."
     >
       <SettingsContainer>
-        <SettingsRow label="MCP URL">
+        <SettingsRow label="MCP URL" description="Add it as a custom connector. You sign in as you.">
           <CopyInput value={url} label="MCP URL" />
         </SettingsRow>
         <SettingsRow label="Claude">

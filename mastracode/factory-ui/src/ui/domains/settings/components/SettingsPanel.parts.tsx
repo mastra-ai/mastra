@@ -27,10 +27,10 @@ export function GeneralSettings() {
   return (
     <SettingsSubsection scope="personal" title="General" description="Stored in this browser.">
       <SettingsContainer>
-        <SettingsRow label="Theme" description="Color scheme for the interface">
+        <SettingsRow label="Theme" description="Color scheme for the interface.">
           <ThemeToggle />
         </SettingsRow>
-        <SettingsRow label="Completion sound" description="Played when an agent run finishes in a workspace">
+        <SettingsRow label="Completion sound" description="Played when an agent run finishes.">
           <SoundPicker value={doneSound} onChange={changeDoneSound} />
         </SettingsRow>
       </SettingsContainer>
@@ -60,7 +60,7 @@ export function BehaviorSettings({
         description="Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
       >
         <SettingsContainer>
-          <SettingsRow label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
+          <SettingsRow label="Auto-approve tools" description="Run tool calls without asking.">
             <Toggle
               ariaLabel="Auto-approve tools"
               checked={!!settings?.yolo}
@@ -68,7 +68,7 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
-          <SettingsRow label="Smart editing" description="Use AST-aware edits when available">
+          <SettingsRow label="Smart editing" description="Use AST-aware edits when available.">
             <Toggle
               ariaLabel="Smart editing"
               checked={!!settings?.smartEditing}
@@ -76,7 +76,7 @@ export function BehaviorSettings({
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
-          <SettingsRow label="Notifications" description="How completion alerts are delivered">
+          <SettingsRow label="Notifications" description="How completion alerts are delivered.">
             <SegmentedControl
               aria-label="Notifications"
               value={notificationMode}
@@ -97,11 +97,11 @@ export function BehaviorSettings({
 }
 
 const TOOL_CATEGORIES: { value: ToolCategory; label: string; hint: string }[] = [
-  { value: 'read', label: 'Read', hint: 'View files and inspect the workspace' },
-  { value: 'edit', label: 'Edit', hint: 'Create, modify, or delete files' },
-  { value: 'execute', label: 'Execute', hint: 'Run shell commands' },
-  { value: 'mcp', label: 'MCP', hint: 'Call tools from MCP servers' },
-  { value: 'other', label: 'Other', hint: 'Anything not in the above categories' },
+  { value: 'read', label: 'Read', hint: 'View files and inspect the workspace.' },
+  { value: 'edit', label: 'Edit', hint: 'Create, change or delete files.' },
+  { value: 'execute', label: 'Execute', hint: 'Run shell commands.' },
+  { value: 'mcp', label: 'MCP', hint: 'Call tools from MCP servers.' },
+  { value: 'other', label: 'Other', hint: 'Anything not covered above.' },
 ];
 function PermissionsSection({
   permissions,

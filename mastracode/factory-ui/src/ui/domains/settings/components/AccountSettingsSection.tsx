@@ -93,13 +93,13 @@ export function AccountSettingsSection() {
         description="Your signed-in identity for this MastraCode deployment."
       >
         <SettingsContainer>
-          <SettingsRow label="Name">
+          <SettingsRow label="Name" description="From your sign-in provider.">
             <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
           </SettingsRow>
-          <SettingsRow label="Email">
+          <SettingsRow label="Email" description="From your sign-in provider.">
             <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
           </SettingsRow>
-          <SettingsRow label="Authentication">
+          <SettingsRow label="Authentication" description="How you signed in.">
             <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
           </SettingsRow>
           {user?.userId && (
@@ -116,7 +116,7 @@ export function AccountSettingsSection() {
       </SettingsSubsection>
       <SettingsSubsection scope="personal" title="Session">
         <SettingsContainer>
-          <SettingsRow label="Log out" description="End your MastraCode session on this device.">
+          <SettingsRow label="Log out" description="End your session on this device.">
             <Button type="button" size="sm" aria-label="Log out of MastraCode" onClick={logOut}>
               <LogOut aria-hidden="true" />
               Log out

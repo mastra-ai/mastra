@@ -26,7 +26,7 @@ export const StudioSettingsPage = () => {
             <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
           </SettingsHeader>
           <SettingsContainer>
-            <SettingsRow label="Theme" description="Customize the appearance of the studio.">
+            <SettingsRow label="Theme" description="Color scheme for the interface.">
               <ThemeToggle />
             </SettingsRow>
           </SettingsContainer>
