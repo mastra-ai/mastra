@@ -76,7 +76,7 @@ function stubFactory(features: { knowledge: boolean } = { knowledge: true }) {
     ),
     http.get(`${TEST_BASE_URL}/web/config/features`, () => HttpResponse.json(features)),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory', repositories: [] }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-records`, () =>
       HttpResponse.json({ workRecords: [] }),

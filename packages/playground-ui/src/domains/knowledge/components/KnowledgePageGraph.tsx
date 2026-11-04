@@ -48,6 +48,7 @@ import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 import { KnowledgePageCard } from './KnowledgePageCard';
 
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 
 import './knowledge.css';
@@ -237,7 +238,7 @@ function DotNode({ data }: { data: PageNodeData }) {
     !hint && page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const linkText = links && (links.in > 0 || links.out > 0) ? linkCountsText(links, notShown) : null;
-  const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(' · ');
+  const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(', ');
   // Pick the side that covers the least: not another page or dot, not the highlighted lines, not the legend or Back.
   useLayoutEffect(() => {
     const dot = dotRef.current;
@@ -332,7 +333,10 @@ function DotNode({ data }: { data: PageNodeData }) {
                 {page.name}
               </Txt>
               <Txt as="span" variant="meta" tone="muted">
-                {group ? `${path} · ${hint}` : hint}
+                <Metadata>
+                  {group && <Metadata.Item>{path}</Metadata.Item>}
+                  <Metadata.Item>{hint}</Metadata.Item>
+                </Metadata>
               </Txt>
             </>
           ) : (
@@ -379,15 +383,15 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       style={{ width: size, height: size }}
       title={
         placeholder
-          ? `${kind} · ${page.address} · nothing written to it yet`
+          ? `${kind}: ${page.address}. Nothing written to it yet.`
           : rest
             ? `Show ${Math.min(REST_BATCH, page.childCount ?? REST_BATCH)} more of ${page.childCount ?? 'the rest'}`
             : group
               ? `${page.name}: click to show them`
               : page.isScope && page.address
-                ? `${kind} · ${page.address}`
+                ? `${kind}: ${page.address}`
                 : data.links && data.links.in + data.links.out > 0
-                  ? `${page.name} · ${linkCountsText(data.links, data.notShown)}`
+                  ? `${page.name}: ${linkCountsText(data.links, data.notShown)}`
                   : page.name
       }
     >

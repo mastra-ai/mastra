@@ -18,11 +18,11 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 The onboarding Setup step offers three equal choices, one per existing `modelScope` creation value:
 
-| Choice                           | Scope     | Factory work                                  | Interactive sessions                             |
-| -------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------ |
-| Company account                  | `factory` | Organization credentials and Factory default  | Organization credentials and Factory default     |
-| Company work · personal sessions | `hybrid`  | Organization credentials and Factory default  | Session owner's personal credentials and default |
-| Personal accounts                | `user`    | Work owner's personal credentials and default | Session owner's personal credentials and default |
+| Choice                             | Scope     | Factory work                                  | Interactive sessions                             |
+| ---------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------ |
+| Company account                    | `factory` | Organization credentials and Factory default  | Organization credentials and Factory default     |
+| Company work and personal sessions | `hybrid`  | Organization credentials and Factory default  | Session owner's personal credentials and default |
+| Personal accounts                  | `user`    | Work owner's personal credentials and default | Session owner's personal credentials and default |
 
 There is no fallback between account scopes. Each teammate configures their own personal account. Onboarding asks for one connection in `factory` or `user`, and a separate connection for each scope in `hybrid`. Existing scoped connections can be reused. Only organization key admins can add shared credentials; members can use connections already configured by an admin. When no company connection exists and the member cannot add one, Setup only offers personal accounts. Scope changes happen only in Setup, never as a side effect of a later step. Local servers without web authentication skip Setup and create a `factory` Factory, so sessions and Factory work share the model chosen in their single connection step.
 

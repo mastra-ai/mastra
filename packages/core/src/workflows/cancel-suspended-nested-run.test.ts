@@ -7,8 +7,12 @@ import { createWorkflow } from './create';
 import { createWorkflow as createEventedWorkflow, createStep as createEventedStep } from './evented';
 import { createStep } from './workflow';
 
+const createWorkflowOnV2 = (params: Parameters<typeof createWorkflow>[0]) =>
+  createWorkflow({ ...params, options: { ...params.options, storageVersion: 2 } });
+
 const engines = [
   ['default', createWorkflow, createStep],
+  ['default (storage v2)', createWorkflowOnV2, createStep],
   ['evented', createEventedWorkflow, createEventedStep],
 ] as const;
 
@@ -16,7 +20,7 @@ const schema = z.object({ value: z.string() });
 
 // Regression coverage for https://github.com/mastra-ai/mastra/issues/24780: canceling a parent left its
 // suspended nested runs suspended, because only running nested runs hear the parent's abort signal.
-describe.each(engines)('cancel() with suspended nested runs on the %s engine', (_engine, makeWorkflow, makeStep) => {
+describe.each(engines)('cancel() with suspended nested runs on the %s engine', (engine, makeWorkflow, makeStep) => {
   const topologies = {
     // parent -> child -> grandchild suspends, next to a nested workflow that completes
     nested: () => {
@@ -86,7 +90,10 @@ describe.each(engines)('cancel() with suspended nested runs on the %s engine', (
       await first.mastra.stopWorkers();
       if (parentAlreadyCanceled) {
         // The state a cancel() without this fix left behind: parent canceled, nested runs still suspended.
-        await store.updateWorkflowState({ workflowName: 'parent', runId: 'parent-run', opts: { status: 'canceled' } });
+        const parentRun = { workflowName: 'parent', runId: 'parent-run', opts: { status: 'canceled' as const } };
+        await (engine === 'default (storage v2)'
+          ? store.updateWorkflowRunHeader(parentRun)
+          : store.updateWorkflowState(parentRun));
       }
 
       const before = await statuses();

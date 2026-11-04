@@ -45,14 +45,10 @@ function summarize(calls: readonly WordedCall[]): string {
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
-export function callPose(toolName: string): AgentIndicatorState {
-  return presentTool(toolName, undefined).pose;
-}
-
 export function stretchPose(calls: readonly WordedCall[], live: boolean): AgentIndicatorState {
   if (!live) return 'idle';
   const running = calls.findLast(call => call.status === 'running');
-  return running ? callPose(running.toolName) : 'thinking';
+  return running ? presentTool(running.toolName, running.args).pose : 'thinking';
 }
 
 /** What the stretch is doing now: the latest running call, or thinking between calls. */
@@ -71,7 +67,7 @@ export function settledWords(calls: readonly WordedCall[], elapsedMs?: number): 
   if (!first) return { icon: agentGlyph('idle'), label: duration ? `Thought for ${duration}` : 'Thought' };
   const { icon, label, detail } = presentTool(first.toolName, first.args);
   if (calls.length === 1) return { icon, label: toolPhrases(label).done, detail, duration };
-  const oneKind = new Set(calls.map(call => callPose(call.toolName))).size === 1;
+  const oneKind = new Set(calls.map(call => presentTool(call.toolName, call.args).pose)).size === 1;
   return { icon: oneKind ? icon : agentGlyph('tool'), label: summarize(calls), duration };
 }
 
@@ -88,7 +84,7 @@ export function callsOutcome(calls: readonly WordedCall[]): CallsOutcome {
   };
 }
 
-/** "1 failed · 2 incomplete" for several calls; a lone call only says it never finished. */
+/** "1 failed and 2 incomplete" for several calls; a lone call only says it never finished. */
 export function outcomeText({ failed, incomplete }: CallsOutcome, callCount: number): string {
   if (callCount <= 1) return incomplete > 0 ? 'incomplete' : '';
   const counts = [
@@ -98,5 +94,5 @@ export function outcomeText({ failed, incomplete }: CallsOutcome, callCount: num
   return counts
     .filter(({ count }) => count > 0)
     .map(({ count, word }) => `${count} ${word}`)
-    .join(' · ');
+    .join(' and ');
 }
