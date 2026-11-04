@@ -88,6 +88,13 @@ const processor = new SemanticRecall({
             isOptional: true,
           },
           {
+            name: 'filter',
+            type: 'VectorFilter',
+            description:
+              "Metadata filter for the vector query, combined with the scope filter using `$and`. While a filter is set, messages are stored with their thread's metadata, so the filter can match thread metadata. For example, `{ projectId: { $eq: 'project-a' } }`",
+            isOptional: true,
+          },
+          {
             name: 'indexName',
             type: 'string',
             description: 'Index name for the vector store. If not provided, auto-generated based on embedder model',
