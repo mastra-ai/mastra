@@ -1,0 +1,136 @@
+import type {
+  KnowledgeImporterDefinition,
+  KnowledgeImporterHandlerContext,
+  KnowledgeImporterState,
+  StaticKnowledgeImporterOperations,
+  StaticKnowledgeNodeHandle,
+  StaticKnowledgeNodeInput,
+  StaticKnowledgeRecordInput,
+} from '@mastra/core/knowledge';
+
+/**
+ * In-memory fake of the static-importer operations. Only the shape importer
+ * handlers actually consume is emulated — nodes are keyed by address, records
+ * live under nodes, and node/record raw objects are stubbed as `never` casts
+ * because handlers never inspect them.
+ */
+export interface FakeRecord {
+  id: string;
+  text: string;
+  metadata?: unknown;
+}
+export interface FakeNode {
+  /** Storage node id — deliberately distinct from the provider address, as in core. */
+  id: string;
+  address: string;
+  input: StaticKnowledgeNodeInput;
+  records: Map<string, FakeRecord>;
+}
+
+export interface FakeImporter extends StaticKnowledgeImporterOperations {
+  readonly nodes: Map<string, FakeNode>;
+  role: 'owner' | 'edit';
+}
+
+export function createFakeImporter(role: 'owner' | 'edit' = 'owner', scope = 'resource:project-1'): FakeImporter {
+  const nodes = new Map<string, FakeNode>();
+  let nextNodeId = 0;
+  const makeHandle = (node: FakeNode): StaticKnowledgeNodeHandle => ({
+    node: { id: node.id, name: node.input.name, metadata: node.input.metadata } as never,
+    id: node.id,
+    async appendKnowledge(input: StaticKnowledgeRecordInput) {
+      const id = input.id ?? `auto-${node.records.size}`;
+      node.records.set(id, { id, text: input.text, metadata: input.metadata });
+      return { id, text: input.text } as never;
+    },
+    async listKnowledge() {
+      return [...node.records.values()].map(r => ({ id: r.id, text: r.text, metadata: r.metadata }) as never);
+    },
+    async removeKnowledge(id: string) {
+      // Mirrors core: removal requires owner authority over the binding.
+      if (importer.role !== 'owner') throw new Error('Knowledge importer requires owner authority to remove knowledge');
+      const record = node.records.get(id);
+      if (!record) return null;
+      node.records.delete(id);
+      return record as never;
+    },
+  });
+  const importer: FakeImporter = {
+    nodes,
+    role,
+    scope,
+    async getNode(address) {
+      const n = nodes.get(address);
+      return n ? makeHandle(n) : null;
+    },
+    async listNodes() {
+      return [...nodes.values()].map(makeHandle);
+    },
+    async upsertNode(address, input) {
+      // Mirrors core: every node needs at least one scope, and each must be the binding scope.
+      if (input.scopes.length === 0 || input.scopes.some(s => s !== scope)) {
+        throw new Error(`Knowledge importer node ${address} must live under the binding scope ${scope}`);
+      }
+      let node = nodes.get(address);
+      if (!node) {
+        node = { id: `node-${++nextNodeId}`, address, input, records: new Map() };
+        nodes.set(address, node);
+      } else {
+        node.input = input;
+      }
+      return makeHandle(node);
+    },
+    async removeNode(address) {
+      const node = nodes.get(address);
+      if (!node) return null;
+      // Mirrors core: removal requires owner authority, and only the binding's records go — the node stays.
+      if (importer.role !== 'owner') throw new Error('Knowledge importer requires owner authority to remove nodes');
+      const recordsRemoved = node.records.size;
+      node.records.clear();
+      return { node: {} as never, recordsRemoved };
+    },
+  };
+  return importer;
+}
+
+export function createFakeState(initial: Record<string, string> = {}): KnowledgeImporterState & {
+  readonly entries: Map<string, string>;
+} {
+  const entries = new Map<string, string>(Object.entries(initial));
+  return {
+    entries,
+    async get(key) {
+      return entries.get(key);
+    },
+    async set(key, value) {
+      entries.set(key, value);
+    },
+  };
+}
+
+export interface RunImporterOptions {
+  payload?: unknown;
+  signal?: AbortSignal;
+}
+
+/**
+ * Invokes a definition's handler against fake importer operations and durable
+ * state. Returns both so tests can assert on the imported graph and the
+ * committed watermark independently.
+ */
+export async function runImporter(
+  definition: KnowledgeImporterDefinition,
+  fixtures: { importer: FakeImporter; state: ReturnType<typeof createFakeState> },
+  options: RunImporterOptions = {},
+): Promise<void> {
+  const signal = options.signal ?? new AbortController().signal;
+  const ctx: KnowledgeImporterHandlerContext = {
+    knowledge: {} as never,
+    payload: options.payload,
+    run: {} as never,
+    signal,
+    state: fixtures.state,
+    importer: async () => fixtures.importer,
+  };
+  await definition.handler(ctx);
+}
