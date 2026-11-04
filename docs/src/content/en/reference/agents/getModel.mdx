@@ -21,13 +21,13 @@ await agent.getModel()
   content={[
   {
     name: 'options',
-    type: '{ requestContext?: RequestContext; modelConfig?: MastraModelConfig | ModelWithRetries[] | ModelFallbacks }',
+    type: '{ requestContext?: RequestContext; modelConfig?: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks }',
     isOptional: true,
     defaultValue: '{}',
     description: 'Optional configuration object containing request context and an optional model override.',
     properties: [
       {
-        type: '{ requestContext?: RequestContext; modelConfig?: MastraModelConfig | ModelWithRetries[] | ModelFallbacks }',
+        type: '{ requestContext?: RequestContext; modelConfig?: DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks }',
         parameters: [
           {
             name: 'requestContext',
@@ -38,7 +38,7 @@ await agent.getModel()
           },
           {
             name: 'modelConfig',
-            type: 'MastraModelConfig | ModelWithRetries[] | ModelFallbacks',
+            type: 'DynamicArgument<MastraModelConfig | ModelWithRetries[]> | ModelFallbacks',
             isOptional: true,
             defaultValue: 'The agent model',
             description:

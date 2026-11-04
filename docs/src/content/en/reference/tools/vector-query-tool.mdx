@@ -281,7 +281,7 @@ The tool returns an object with:
 {
   id: string;         // Unique chunk/document identifier
   metadata?: any;     // All metadata fields (document ID, etc.)
-  vector?: number[];  // Embedding vector (if available)
+  vector: number[];   // Embedding vector, or [] when unavailable
   score: number;      // Similarity score for this retrieval
   document: string;   // Full chunk/document text (if available)
 }

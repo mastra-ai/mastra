@@ -488,8 +488,8 @@ Return [`notScorable()`](/reference/evals/not-scorable) instead of a number to f
 ]}
 />
 
-Returns: `number`\
-The method must return a numerical score.
+Returns: `number | NotScorable`\
+Return a numerical score, or `notScorable()` to finish the run without a score.
 
 **Prompt Object Mode:**
 

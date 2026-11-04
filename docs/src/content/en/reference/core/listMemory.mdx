@@ -62,7 +62,7 @@ const mastra = new Mastra({
 })
 
 // List all registered memory instances
-const allMemory = mastra.listMemory()
+const allMemory = mastra.listMemory() ?? {}
 console.log(Object.keys(allMemory)) // ["conversationMemory", "analyticsMemory"]
 ```
 
