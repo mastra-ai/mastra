@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AWAIT_BUFFER_STATUS_ROUTE, GET_OBSERVATIONAL_MEMORY_ROUTE } from './memory';
 import { createTestServerContext } from './test-utils';
@@ -98,5 +99,26 @@ describe('observational memory for gateway agents with a v2 key', () => {
       }),
     ).rejects.toThrow('Access denied');
     expect(waitForBuffering).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['GET_OBSERVATIONAL_MEMORY_ROUTE', GET_OBSERVATIONAL_MEMORY_ROUTE],
+    ['AWAIT_BUFFER_STATUS_ROUTE', AWAIT_BUFFER_STATUS_ROUTE],
+  ] as const)('%s reads with the trusted resource ID, not the caller-supplied one', async (_name, route) => {
+    const { mastra, record, waitForBuffering } = await setupLocalOM();
+    const context = createTestServerContext({ mastra });
+    context.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-1');
+
+    const result = await (route.handler as any)({
+      ...context,
+      agentId: 'gateway-agent',
+      resourceId: 'resource-2',
+      threadId: 'thread-1',
+    });
+
+    expect(result.record?.id).toBe(record.id);
+    if (route === AWAIT_BUFFER_STATUS_ROUTE) {
+      expect(waitForBuffering).toHaveBeenCalledWith('thread-1', 'resource-1');
+    }
   });
 });
