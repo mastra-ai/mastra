@@ -1,7 +1,7 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import { TextQuote } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import type { RefObject } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 
 import type { NewChatAnnotation } from './chat-annotations';
 import { useAnnotationSelection } from './use-annotation-selection';
@@ -22,27 +22,17 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
   const container = usePortalContainer();
   const addRef = useRef<HTMLElement>(null);
   const actionsRef = useRef<PopoverPrimitive.Root.Actions>(null);
+  const originRef = useRef<HTMLElement>(undefined);
 
   useEffect(() => {
     if (!open) return;
-    let origin: HTMLElement | undefined;
+    // Focus sits on the scroller around the transcript, outside anything this component renders.
     const onKeyDown = (event: KeyboardEvent) => {
       const add = addRef.current;
       const transcript = containerRef.current;
+      const { target } = event;
       if (!add || !transcript || event.altKey || event.ctrlKey || event.metaKey) return;
-      const focused = document.activeElement;
-      // Without a trigger Base UI cannot route focus out of the toolbar, so it goes back to the scroller it came from.
-      if (focused === add) {
-        if (!origin || (event.key !== 'Tab' && event.key !== 'Escape')) return;
-        if (event.key === 'Tab') {
-          event.preventDefault();
-          actionsRef.current?.close();
-        }
-        origin.focus();
-        return;
-      }
-      const holdsTranscript =
-        focused instanceof HTMLElement && focused !== document.body && focused.contains(transcript);
+      const holdsTranscript = target instanceof HTMLElement && target !== document.body && target.contains(transcript);
       if (event.key !== 'Tab' || event.shiftKey || !holdsTranscript) return;
       add.focus();
       if (document.activeElement !== add) {
@@ -50,12 +40,26 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
         return;
       }
       event.preventDefault();
-      origin = focused;
+      originRef.current = target;
     };
-    // Capture: Base UI handles Escape on the way up and stops it there.
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => document.removeEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      originRef.current = undefined;
+    };
   }, [open, containerRef]);
+
+  // Without a trigger Base UI cannot route focus out of the toolbar, so it goes back to the scroller it came from.
+  const returnFocus = (event: ReactKeyboardEvent) => {
+    const origin = originRef.current;
+    if (!origin || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key !== 'Tab' && event.key !== 'Escape') return;
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      actionsRef.current?.close();
+    }
+    origin.focus();
+  };
 
   const addToChat = () => {
     if (!selection) return;
@@ -99,7 +103,15 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
               'motion-safe:data-[open]:animate-in motion-safe:data-[open]:fade-in-0 motion-safe:data-[open]:zoom-in-95',
             )}
           >
-            <Button ref={addRef} type="button" variant="ghost" size="sm" icon={<TextQuote />} onClick={addToChat}>
+            <Button
+              ref={addRef}
+              type="button"
+              variant="ghost"
+              size="sm"
+              icon={<TextQuote />}
+              onClick={addToChat}
+              onKeyDown={returnFocus}
+            >
               Add to chat
             </Button>
           </PopoverPrimitive.Popup>
