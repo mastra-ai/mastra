@@ -885,7 +885,11 @@ export class MastraAuthStudio
     if (!sessionCookie) return null;
     const headers = new Headers(init.headers);
     headers.set('Cookie', `${COOKIE_NAME}=${sessionCookie}`);
-    const res = await fetch(`${this.sharedApiUrl}${path}`, { ...init, headers });
+    const res = await fetch(`${this.sharedApiUrl}${path}`, {
+      ...init,
+      headers,
+      signal: init.signal ?? AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
+    });
     const cacheKey = await this.verificationKey('cookie', sessionCookie);
     this.captureRotatedCookie(res, sessionCookie, cacheKey, request);
     return res;

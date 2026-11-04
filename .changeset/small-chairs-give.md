@@ -2,7 +2,7 @@
 '@mastra/auth-studio': minor
 ---
 
-Added `fetchAsRequestUser(request, path, init)` to `MastraAuthStudio`. It calls the Mastra platform API as the signed-in user of an incoming request, so your server can act on the organization that user's session is on without its own platform token. It resolves to `null` when the request has no Mastra session.
+Added `fetchAsRequestUser(request, path, init)` to `MastraAuthStudio`. It calls the Mastra platform API as the signed-in user of an incoming request, so your server can act on the organization that user's session is on without its own platform token. It resolves to `null` when the request has no Mastra session, and gives up after 15 seconds unless you pass your own `signal`.
 
 ```ts
 import { MastraAuthStudio } from '@mastra/auth-studio';
