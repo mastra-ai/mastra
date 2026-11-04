@@ -13,8 +13,6 @@ export function storedWorkBoard(board: Partial<StoredBoardInfo> = {}, canEdit = 
       revision: 1,
       source: 'builtin',
       editable: true,
-      customized: false,
-      defaultChanged: false,
       codeBehaviour: codeBehaviourOf(workBoard),
       problems: [],
       ...board,

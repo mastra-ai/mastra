@@ -22,6 +22,7 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { ProjectBoardCache } from './project-boards.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -400,6 +401,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
     describe('editing the built-in Work board', () => {
       const TRIAGE_NOTE = 'Shipyard: check the changelog.';
+      const NEW_DEFAULT = 'A later release: triage by the new default.';
       const PLAN_NOTE = 'Shipyard: keep plans short.';
       const EFFORT_LOW = {
         operator: 'AND',
@@ -526,7 +528,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           expectedRevision: work.revision,
         });
         expect(saved.status, JSON.stringify(saved.json)).toBe(200);
-        return saved.json.board as { revision: number; customized: boolean };
+        return saved.json.board as { revision: number };
       }
 
       /** Shipyard's configuration: what it sets on Work, then its intake route for trusted issues. */
@@ -549,7 +551,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
               return phase;
           }
         });
-        expect(board.customized).toBe(true);
+        expect(board.revision).toBe(2);
         const route = await replica.send('POST', `/web/factory/projects/${projectId}/intake-routes`, {
           name: 'Trusted issues go to Triage',
           when: {
@@ -691,7 +693,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
         const workOn = async () =>
           (await catalog(replica, projectId)).find(board => board.id === 'work') as {
-            customized?: boolean;
             phases: { id: string; autoStart?: boolean }[];
           };
         await vi.waitFor(
@@ -699,7 +700,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             expect((await workOn()).phases.find(phase => phase.id === 'triage')).toMatchObject({ autoStart: true }),
           { timeout: 5_000 },
         );
-        expect(await workOn()).toMatchObject({ customized: false });
+        expect((await replica.boards.get({ orgId, factoryProjectId: projectId }, 'work'))!.revision).toBe(1);
 
         const card = await githubIssue(replica, projectId, 'Straight from the row', { trusted: true, labels: [] });
         expect(card.stages).toEqual(['triage']);
@@ -707,6 +708,50 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           timeout: 20_000,
         });
         expect(runsOf(requests, 'factory-triage', card.title)[0]).toContain(TRIAGE_NOTE);
+      }, 60_000);
+
+      it("keeps a project's edited Work board when Factory restarts on a release with a different Work default", async () => {
+        const requests = stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const newStorage = database();
+        const before = await boot(newStorage, orgId);
+        const projectId = await runnableProject(before, orgId);
+        const scope = { orgId, factoryProjectId: projectId };
+        await configureShipyard(before, projectId);
+        const version = await before.boards.readVersion(scope);
+
+        // The next release ships a different Work default.
+        const seeds = ProjectBoardCache.prototype.seeds;
+        const release = vi
+          .spyOn(ProjectBoardCache.prototype, 'seeds')
+          .mockImplementation(function (this: ProjectBoardCache) {
+            return seeds.call(this).map(board =>
+              board.key === 'work'
+                ? {
+                    ...board,
+                    name: 'Work v2',
+                    phases: board.phases.map(phase =>
+                      phase.key === 'triage'
+                        ? { ...phase, runner: { ...phase.runner, instructions: NEW_DEFAULT } }
+                        : phase,
+                    ),
+                  }
+                : board,
+            );
+          });
+        onTestFinished(() => release.mockRestore());
+        const after = await boot(newStorage, orgId);
+
+        expect(release).toHaveBeenCalled();
+        expect(await after.boards.readVersion(scope)).toBe(version);
+        expect((await after.boards.get(scope, 'work'))!).toMatchObject({ name: 'Work', revision: 2 });
+        const card = await githubIssue(after, projectId, 'After the release', { trusted: true, labels: [] });
+        expect(card.stages).toEqual(['triage']);
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', card.title)).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-triage', card.title)[0]).toContain(TRIAGE_NOTE);
+        expect(runsOf(requests, 'factory-triage', card.title)[0]).not.toContain(NEW_DEFAULT);
       }, 60_000);
 
       it('applies an edit made on one replica to the runs another replica starts, until the board is reset', async () => {
@@ -720,14 +765,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
         // Replica B serves the edit once its recheck window passes, then files a card and runs
         // Triage as replica A edited it.
-        // Whether the replica serves Triage starting on its own, as the edit makes it.
-        const triageStartsOn = async (replica: Awaited<ReturnType<typeof boot>>) =>
-          (
-            (await catalog(replica, projectId))
-              .find(board => board.id === 'work')!
-              .phases.find(phase => phase.id === 'triage') as { autoStart?: boolean }
-          ).autoStart === true;
-        await vi.waitFor(async () => expect(await triageStartsOn(b)).toBe(true), { timeout: 5_000 });
+        const workOn = async (replica: Awaited<ReturnType<typeof boot>>) =>
+          (await catalog(replica, projectId))
+            .find(board => board.id === 'work')
+            ?.phases.find(phase => phase.id === 'triage') as { autoStart?: boolean } | undefined;
+        await vi.waitFor(async () => expect(await workOn(b)).toMatchObject({ autoStart: true }), { timeout: 5_000 });
         const before = await githubIssue(b, projectId, 'Before reset', { trusted: true, labels: [] });
         expect(before.stages).toEqual(['triage']);
         await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', before.title)).not.toEqual([]), {
@@ -741,11 +783,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           expectedRevision: work.json.board.revision,
         });
         expect(reset.status, JSON.stringify(reset.json)).toBe(200);
-        expect(reset.json.board).toMatchObject({ revision: work.json.board.revision + 1, defaultChanged: false });
+        // Reset rewrites the row at the next revision rather than deleting it.
+        expect(reset.json.board).toMatchObject({ name: 'Work', revision: work.json.board.revision + 1 });
 
         // After its recheck window, replica B's Triage waits for a person again, and the run a
         // person starts carries no Shipyard instructions.
-        await vi.waitFor(async () => expect(await triageStartsOn(b)).toBe(false), { timeout: 5_000 });
+        await vi.waitFor(async () => expect((await workOn(b))?.autoStart).toBeFalsy(), { timeout: 5_000 });
         const after = await githubIssue(b, projectId, 'After reset', { trusted: true, labels: [] });
         expect(after.stages).toEqual(['triage']);
         const triage = await vi.waitFor(

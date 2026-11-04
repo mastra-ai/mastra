@@ -2,7 +2,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 
 import { findBoardSkillProblems } from '../skills/app-skills.js';
 import type {
-  CodeBoardSeed,
+  StoredBoardInput,
   StoredBoardRecord,
   StoredBoardScope,
   StoredBoardsStorage,
@@ -11,8 +11,7 @@ import { codeBoardOf } from './define-board.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
-import { boardDefinitionOf, codeBoardHash, compileStoredBoard, mergeCodeBehaviour } from './stored-board.js';
-import { WORK_BOARD_DEFAULT_VERSION, workBoard } from './work.js';
+import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from './stored-board.js';
 
 const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
@@ -28,16 +27,12 @@ export interface StoredBoardDetails {
    * which is being retired, stays read-only.
    */
   editable: boolean;
-  /** A code board's copy the project edited, or one stored before code boards could be edited. */
-  customized?: boolean;
-  /** A code board's copy whose code definition changed since the project copied it; reset adopts it. */
-  defaultChanged?: boolean;
   problems: string[];
 }
 
 /**
- * Code boards each project gets an editable stored copy of: every code board except the legacy
- * Review board, which is being retired and is never copied.
+ * Code boards Factory stores in each project: every code board except the legacy Review board,
+ * which is being retired and is served from code.
  */
 export function isEditableCodeBoard(board: InstalledBoard): boolean {
   return codeBoardOf(board) !== reviewBoard;
@@ -105,13 +100,14 @@ function scopeKey(scope: StoredBoardScope): string {
 }
 
 /**
- * The per-project board cache. A project's boards are its copies of the code boards, in code
- * order, followed by the boards the project stored. Each copy is served from its row, with the
- * code behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}); only
- * the legacy Review board, and a copy not stored yet, are served from code. The first load of each
- * project in a process writes its missing copies and forward Work upgrades. Loads recheck the
- * project's board version at most every `recheckMs` and recompile when it changed, so stored
- * edits on other replicas arrive within that delay.
+ * The per-project board cache. A project's boards are its rows: the Work and app boards Factory
+ * stored in it, in code order, then the others. A Work or app board's row runs with the code
+ * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}); only the
+ * legacy Review board is served from code. The first load of each project in a process stores the
+ * boards Factory hasn't stored in it yet, each once ({@link StoredBoardsStorage.seedBoards}); a
+ * release never rewrites them. Loads recheck the project's board version at most every
+ * `recheckMs` and recompile when it changed, so stored edits on other replicas arrive within that
+ * delay.
  */
 export class ProjectBoardCache implements ProjectBoardSource {
   readonly [PROJECT_BOARD_SOURCE] = true;
@@ -128,7 +124,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
   readonly #warned = new Set<string>();
   readonly #seeded = new Set<string>();
   readonly #codeSkills: readonly InlineSkill[];
-  readonly #seeds: ReadonlyMap<string, CodeBoardSeed>;
+  readonly #seeds: ReadonlyMap<string, StoredBoardInput>;
 
   constructor(options: ProjectBoardCacheOptions) {
     this.codeRegistry = options.codeRegistry;
@@ -144,31 +140,24 @@ export class ProjectBoardCache implements ProjectBoardSource {
         {
           source: defaultBoards.includes(board) ? 'builtin' : 'app',
           editable: isEditableCodeBoard(board),
-          ...(isEditableCodeBoard(board) ? { customized: false, defaultChanged: false } : {}),
           problems: this.#skillProblems(board),
         },
       ]),
     );
     this.#seeds = new Map(
-      [...this.codeRegistry.values()].filter(isEditableCodeBoard).map(board => [
-        board.id,
-        {
-          definition: boardDefinitionOf(board),
-          hash: codeBoardHash(board),
-          // Only the built-in Work board has a numbered default; app boards are copied once.
-          ...(board === workBoard ? { version: WORK_BOARD_DEFAULT_VERSION } : {}),
-        },
-      ]),
+      [...this.codeRegistry.values()]
+        .filter(isEditableCodeBoard)
+        .map(board => [board.id, boardDefinitionOf(board)] as const),
     );
   }
 
-  /** The stored copy each editable code board starts from, for project loads to seed and the boards API to reset. */
-  seeds(): CodeBoardSeed[] {
+  /** The boards Factory stores in each project once, in order. */
+  seeds(): StoredBoardInput[] {
     return [...this.#seeds.values()];
   }
 
-  /** The seed for one editable code board, or undefined when `key` isn't one. */
-  seedFor(key: string): CodeBoardSeed | undefined {
+  /** Factory's current definition for `key`, which reset restores; undefined when Factory has none. */
+  seedFor(key: string): StoredBoardInput | undefined {
     return this.#seeds.get(key);
   }
 
@@ -271,18 +260,18 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   /**
-   * Writes the project's missing code-board copies and forward Work upgrades, once per process.
-   * A failure is logged and retried on the next load; the project is read as it is meanwhile.
+   * Stores the boards Factory hasn't stored in the project yet, once per process. A failure is
+   * logged and retried on the next load; the boards it didn't store aren't served meanwhile.
    */
   async #seed(scope: StoredBoardScope, key: string): Promise<void> {
     if (this.#seeded.has(key)) return;
     try {
-      if (this.#seeds.size > 0) await this.#storage.seedCodeBoards(scope, this.seeds());
+      if (this.#seeds.size > 0) await this.#storage.seedBoards(scope, this.seeds());
       this.#seeded.add(key);
     } catch (error) {
       this.#warnOnce(
         `seed:${key}`,
-        `Boards for project ${scope.factoryProjectId} could not be stored; Factory serves their defaults until they are: ${error instanceof Error ? error.message : String(error)}`,
+        `Boards for project ${scope.factoryProjectId} could not be stored; Factory stores them on the next load: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -301,20 +290,20 @@ export class ProjectBoardCache implements ProjectBoardSource {
       }
     };
     const boards: InstalledBoard[] = [];
-    // Code boards keep their code order; each is served from the project's copy of it.
+    // Work and app boards keep their code order, each served from its row.
     for (const code of this.codeRegistry.values()) {
       const row = byKey.get(code.id);
-      const seed = this.#seeds.get(code.id);
-      if (!seed) {
+      if (!this.#seeds.has(code.id)) {
         if (row) problems.push(`Stored board "${row.key}" is hidden by the code board with the same key.`);
         boards.push(code);
         continue;
       }
       if (!row) {
-        const message = `Board "${code.id}" isn't stored in this project yet; Factory serves its default until it is.`;
-        problems.push(message);
-        details.set(code.id, { ...details.get(code.id)!, problems: [...details.get(code.id)!.problems, message] });
-        boards.push(code);
+        details.delete(code.id);
+        // Stored once and deleted since, or not stored because storing failed.
+        if (!this.#seeded.has(scopeKey(scope))) {
+          problems.push(`Board "${code.id}" isn't stored in this project yet; Factory stores it on the next load.`);
+        }
         continue;
       }
       let merged: ReturnType<typeof mergeCodeBehaviour>;
@@ -327,12 +316,8 @@ export class ProjectBoardCache implements ProjectBoardSource {
         continue;
       }
       report(row, merged.problems);
-      // A row from before code boards could be edited counts as the project's own edit.
-      const customized = row.customized || row.seedHash === null;
       details.set(code.id, {
         ...details.get(code.id)!,
-        customized,
-        defaultChanged: row.seedHash !== seed.hash,
         problems: [...merged.problems, ...this.#skillProblems(merged.board)],
       });
       boards.push(merged.board);
@@ -348,19 +333,8 @@ export class ProjectBoardCache implements ProjectBoardSource {
         ]);
         continue;
       }
-      const orphaned =
-        row.seedHash !== null
-          ? [
-              `Stored board "${row.key}" was copied from a code board this Factory no longer defines; it runs without code behaviour.`,
-            ]
-          : [];
-      problems.push(...orphaned);
       boards.push(board);
-      details.set(row.key, {
-        source: 'stored',
-        editable: true,
-        problems: [...orphaned, ...this.#skillProblems(board)],
-      });
+      details.set(row.key, { source: 'stored', editable: true, problems: this.#skillProblems(board) });
     }
     return {
       registry: createBoardRegistry({ boards, includeDefaultBoards: false }),

@@ -184,8 +184,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       revision: number | null;
       source: string;
       editable: boolean;
-      customized: boolean;
-      defaultChanged: boolean;
       problems: string[];
     };
   }
@@ -209,7 +207,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     return (response.body.boards as Array<Record<string, any>>).find(board => board.id === key);
   }
 
-  it('refuses creating over or deleting a built-in or app board, and changing the legacy Review board, and stores nothing else', async () => {
+  it('refuses creating over a built-in or app board, deleting the Work board, and changing the legacy Review board, and stores nothing else', async () => {
     const { a, scope, base, replicaA } = await setup();
     const refused = (key: string, message: string) => ({ status: 409, body: { error: 'code_board', message } });
     const deleteMessage = (key: string) =>
@@ -218,9 +216,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     expect(await replicaA.send('DELETE', `${base}/work?expectedRevision=1`)).toEqual(
       refused('work', deleteMessage('work')),
-    );
-    expect(await replicaA.send('DELETE', `${base}/release?expectedRevision=1`)).toEqual(
-      refused('release', deleteMessage('release')),
     );
     expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'release' })).toEqual(
       refused('release', createMessage('release')),
@@ -249,7 +244,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect((await catalogBoard(replicaA.send, base, 'review'))!.editable).toBe(false);
   });
 
-  it("serves a stored board created under a code key before it could be edited as the project's own edit, leaves that row alone, and adopts it on edit", async () => {
+  it("deletes an app board like the project's own boards, and doesn't store it again on a later load or restart", async () => {
+    const { a, orgId, scope, base, replicaA } = await setup();
+    await getBoard(replicaA.send, base, 'release');
+
+    expect(await replicaA.send('DELETE', `${base}/release?expectedRevision=1`)).toEqual({ status: 204, body: null });
+    expect((await a.audit.list({ orgId, actions: ['factory.board.deleted'] })).events).toHaveLength(1);
+
+    replicaA.clock.now += RECHECK_MS;
+    const restarted = replica(a, orgId);
+    for (const send of [replicaA.send, restarted.send]) {
+      const catalog = await send('GET', base);
+      expect((catalog.body.boards as Array<{ id: string }>).map(board => board.id)).toEqual(['work', 'review']);
+      expect(catalog.body.problems).toBeUndefined();
+      expect(await send('GET', `${base}/release`)).toMatchObject({ status: 404, body: { error: 'board_not_found' } });
+    }
+    expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['work']);
+  });
+
+  it("serves a board stored under an app board's key before Factory stored it as that app board, leaves the row alone, and edits it", async () => {
     const { a, scope, base, replicaA } = await setup();
     const legacy = { ...boardDefinitionOf(releaseBoard()), name: 'Old release' };
     await a.boards.create(scope, legacy, ADMIN);
@@ -261,27 +274,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       revision: 1,
       source: 'app',
       editable: true,
-      customized: true,
-      defaultChanged: true,
       problems: [],
-    });
-    expect(await replicaA.send('DELETE', `${base}/release?expectedRevision=1`)).toMatchObject({
-      status: 409,
-      body: { error: 'code_board' },
     });
     const catalog = await replicaA.send('GET', base);
     expect(catalog.body.problems).toBeUndefined();
     expect((await catalogBoard(replicaA.send, base, 'release'))!.name).toBe('Old release');
-    expect(await a.boards.get(scope, 'release')).toMatchObject({ name: 'Old release', revision: 1, seedHash: null });
+    expect(await a.boards.get(scope, 'release')).toMatchObject({ name: 'Old release', revision: 1 });
 
-    const adopted = await replicaA.send('PATCH', `${base}/release`, {
-      name: read.name,
+    const edited = await replicaA.send('PATCH', `${base}/release`, {
+      name: 'Newer release',
       phases: read.phases,
       expectedRevision: 1,
     });
-    expect(adopted.status).toBe(200);
-    expect(adopted.body.board).toMatchObject({ revision: 2, customized: true, defaultChanged: false, problems: [] });
-    expect((await catalogBoard(replicaA.send, base, 'release'))!.name).toBe('Old release');
+    expect(edited.status).toBe(200);
+    expect(edited.body.board).toMatchObject({ revision: 2, source: 'app', problems: [] });
+    expect((await catalogBoard(replicaA.send, base, 'release'))!.name).toBe('Newer release');
     expect((await replicaA.send('GET', base)).body.problems).toBeUndefined();
   });
 
@@ -292,16 +299,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     expect(created.status).toBe(201);
     const scope = { orgId, factoryProjectId: created.body.project.id as string };
-    expect((await a.boards.list(scope)).map(row => [row.key, row.revision, row.customized])).toEqual([
-      ['work', 1, false],
-      ['release', 1, false],
+    expect((await a.boards.list(scope)).map(row => [row.key, row.revision])).toEqual([
+      ['work', 1],
+      ['release', 1],
     ]);
     expect(await a.boards.readVersion(scope)).not.toBeNull();
   });
 
   it('still creates a project when its boards could not be stored, and stores them on its first load', async () => {
     const { a, orgId, replicaA } = await setup();
-    const seeding = vi.spyOn(a.boards, 'seedCodeBoards').mockRejectedValueOnce(new Error('storage unavailable'));
+    const seeding = vi.spyOn(a.boards, 'seedBoards').mockRejectedValueOnce(new Error('storage unavailable'));
 
     const created = await replicaA.send('POST', '/web/factory/projects', { name: 'Shipyard' });
 
@@ -329,7 +336,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     ]);
   });
 
-  it('copies the Work and app boards into the project on first read and returns them editable at revision 1, and the Review board read-only', async () => {
+  it('returns the Work and app boards the project stored, editable at revision 1, and the Review board read-only', async () => {
     const { a, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
     const { description, ...definition } = boardDefinitionOf(workBoard);
@@ -340,13 +347,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       revision: 1,
       source: 'builtin',
       editable: true,
-      customized: false,
-      defaultChanged: false,
       problems: [],
     });
-    expect((await a.boards.list(scope)).map(row => [row.key, row.revision, row.customized])).toEqual([
-      ['work', 1, false],
-      ['release', 1, false],
+    expect((await a.boards.list(scope)).map(row => [row.key, row.revision])).toEqual([
+      ['work', 1],
+      ['release', 1],
     ]);
     const version = await a.boards.readVersion(scope);
     await getBoard(replicaA.send, base, 'work');
@@ -355,8 +360,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       revision: null,
       source: 'builtin',
       editable: false,
-      customized: false,
-      defaultChanged: false,
     });
     expect(work.phases.map(phase => [phase.key, phase.name, phase.kind])).toEqual(
       Object.entries(workBoard.phases).map(([key, phase]) => [key, phase.name, phase.kind]),
@@ -414,8 +417,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       revision: 2,
       source: 'builtin',
       editable: true,
-      customized: true,
-      defaultChanged: false,
     });
     const planning = (board: Record<string, any> | undefined) => board!.phases.find((p: any) => p.id === 'planning');
     expect(planning(await catalogBoard(replicaA.send, base, 'work'))).toMatchObject({
@@ -423,7 +424,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       autoStartWhen: EFFORT_LOW,
       exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: EFFORT_LOW },
     });
-    expect(await catalogBoard(replicaA.send, base, 'work')).toMatchObject({ customized: true, defaultChanged: false });
 
     expect(planning(await catalogBoard(replicaB.send, base, 'work')).autoStart).toBe(false);
     replicaB.clock.now += RECHECK_MS;
@@ -433,10 +433,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     const trail = await a.audit.list({ orgId, actions: ['factory.board.updated'] });
     expect(trail.events.map(event => event.targets?.[0]?.id ?? event.action)).toHaveLength(1);
-    expect((await a.boards.get(scope, 'work'))!.customized).toBe(true);
+    expect((await a.boards.get(scope, 'work'))!.revision).toBe(2);
   });
 
-  it('writes nothing when the Work board is saved unchanged, so it keeps following its code default', async () => {
+  it('writes nothing when the Work board is saved unchanged', async () => {
     const { a, orgId, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
     const version = await a.boards.readVersion(scope);
@@ -448,8 +448,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     const saved = await replicaA.send('PATCH', `${base}/work`, body);
     expect(saved.status).toBe(200);
-    expect(saved.body.board).toMatchObject({ revision: 1, customized: false, defaultChanged: false });
-    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1, customized: false });
+    expect(saved.body.board).toMatchObject({ revision: 1 });
+    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1 });
     expect(await a.boards.readVersion(scope)).toBe(version);
     expect((await a.audit.list({ orgId, actions: ['factory.board.updated'] })).events).toEqual([]);
 
@@ -502,24 +502,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     }));
     expect((await replicaA.send('PATCH', `${base}/work`, both)).body.conflicts).toHaveLength(2);
 
-    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1, customized: false });
+    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1 });
     expect(await a.boards.readVersion(scope)).toBe(version);
   });
 
-  it("turns an app board's copy into a stored board when it is edited after the app stops defining it", async () => {
+  it("serves an app board's row as the project's own board once the app stops defining it", async () => {
     const { a, orgId, scope, base, replicaA } = await setup();
     await getBoard(replicaA.send, base, 'release');
     const gone = replica(a, orgId, { release: null });
 
     const before = (await gone.send('GET', base)).body;
-    const orphaned =
-      'Stored board "release" was copied from a code board this Factory no longer defines; it runs without code behaviour.';
     expect((before.boards as Array<Record<string, unknown>>).find(board => board.id === 'release')).toMatchObject({
       name: 'Release',
       source: 'stored',
       editable: true,
     });
-    expect(before.problems).toContain(orphaned);
+    expect(before.problems).toBeUndefined();
 
     const copy = await getBoard(gone.send, base, 'release');
     const renamed = await gone.send('PATCH', `${base}/release`, {
@@ -529,7 +527,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       expectedRevision: copy.revision,
     });
     expect(renamed.status).toBe(200);
-    expect(await a.boards.get(scope, 'release')).toMatchObject({ name: 'Shipped stuff', seedHash: null });
+    expect(await a.boards.get(scope, 'release')).toMatchObject({ name: 'Shipped stuff' });
     expect(await catalogBoard(gone.send, base, 'release')).toMatchObject({
       name: 'Shipped stuff',
       source: 'stored',
@@ -537,7 +535,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     });
   });
 
-  it('resets an edited Work board to its code default, refusing a stale revision and a board with no code default', async () => {
+  it("resets an edited Work board to Factory's definition at the next revision, refusing a stale revision and a board with no default", async () => {
     const { a, orgId, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
     await replicaA.send(
@@ -552,12 +550,28 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     const reset = await replicaA.send('POST', `${base}/work/reset`, { expectedRevision: 2 });
     expect(reset.status).toBe(200);
-    expect(reset.body.board).toMatchObject({ revision: 3, customized: false, defaultChanged: false });
+    // Reset rewrites the row at the next revision; it never deletes it.
+    expect(reset.body.board).toMatchObject({ revision: 3 });
     expect(reset.body.board.phases).toMatchObject(boardDefinitionOf(workBoard).phases);
     expect((await catalogBoard(replicaA.send, base, 'work'))!.phases.find((p: any) => p.id === 'planning').name).toBe(
       'Planning',
     );
-    expect(await a.boards.get(scope, 'work')).toMatchObject({ customized: false, revision: 3 });
+    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 3 });
+
+    // So a save made before the reset can't overwrite an edit made after it.
+    const fresh = await replicaA.send(
+      'PATCH',
+      `${base}/work`,
+      editPhase(await getBoard(replicaA.send, base, 'work'), 'planning', phase => ({ ...phase, name: 'Edit B' })),
+    );
+    expect(fresh.body.board).toMatchObject({ revision: 4 });
+    const stale = await replicaA.send(
+      'PATCH',
+      `${base}/work`,
+      editPhase({ ...work, revision: 2 }, 'planning', phase => ({ ...phase, name: 'Stale overwrite' })),
+    );
+    expect(stale).toMatchObject({ status: 409, body: { error: 'revision_mismatch' } });
+    expect((await a.boards.get(scope, 'work'))!.phases.find(phase => phase.key === 'planning')!.name).toBe('Edit B');
 
     await replicaA.send('POST', base, bugsBoard);
     expect(await replicaA.send('POST', `${base}/bugs/reset`, { expectedRevision: 1 })).toMatchObject({
@@ -569,7 +583,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(trail.events.map(event => event.action)).toEqual(['factory.board.reset']);
   });
 
-  it('flags an edited board whose code default changed since the edit, and reset adopts the new default', async () => {
+  it("keeps an edited app board when the app's code changes, and reset writes the app's current definition at the next revision", async () => {
     const { a, orgId, base, replicaA } = await setup();
     const release = await getBoard(replicaA.send, base, 'release');
     await replicaA.send('PATCH', `${base}/release`, {
@@ -582,17 +596,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const restarted = replica(a, orgId, { release: releaseBoard('Waiting') });
     expect(await getBoard(restarted.send, base, 'release')).toMatchObject({
       name: 'Our release',
-      customized: true,
-      defaultChanged: true,
     });
     expect(await catalogBoard(restarted.send, base, 'release')).toMatchObject({
       name: 'Our release',
-      customized: true,
-      defaultChanged: true,
     });
 
     const reset = await restarted.send('POST', `${base}/release/reset`, { expectedRevision: 2 });
-    expect(reset.body.board).toMatchObject({ name: 'Release', customized: false, defaultChanged: false });
+    expect(reset.body.board).toMatchObject({ name: 'Release', revision: 3 });
     expect((await catalogBoard(restarted.send, base, 'release'))!.phases[0].name).toBe('Waiting');
   });
 
@@ -612,7 +622,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       status: 403,
       body: { error: 'organization_admin_required' },
     });
-    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1, customized: false });
+    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1 });
   });
 
   it('lets an app board be edited within its code behaviour, the same way as Work', async () => {
@@ -637,7 +647,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       ),
       expectedRevision: 1,
     });
-    expect(edited.body.board).toMatchObject({ source: 'app', revision: 2, customized: true });
+    expect(edited.body.board).toMatchObject({ source: 'app', revision: 2 });
   });
 
   it('accepts a phase added to the Work board, and refuses removing it while a card sits in it', async () => {

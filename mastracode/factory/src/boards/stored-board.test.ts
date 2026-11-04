@@ -14,7 +14,6 @@ import { reviewBoard } from './review.js';
 import {
   boardDefinitionOf,
   codeBehaviourConflicts,
-  codeBoardHash,
   compileStoredBoard,
   mergeCodeBehaviour,
   storedBoardInputSchema,
@@ -491,29 +490,6 @@ describe('stored boards with code behaviour', () => {
         workBoard,
       ),
     ).toThrow(BoardDefinitionError);
-  });
-
-  it('fingerprints a code board by its definition, not by key order', () => {
-    const hash = codeBoardHash(workBoard);
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(codeBoardHash(compileStoredBoard(boardDefinitionOf(workBoard), workBoard))).toBe(hash);
-
-    const definition = boardDefinitionOf(workBoard);
-    const reordered = compileStoredBoard(
-      {
-        phases: definition.phases.map(phase => Object.fromEntries(Object.entries(phase).reverse()) as StoredPhaseInput),
-        name: definition.name,
-        key: definition.key,
-      },
-      workBoard,
-    );
-    expect(codeBoardHash(reordered)).toBe(hash);
-
-    const renamed = compileStoredBoard(
-      editWork('planning', phase => ({ ...phase, name: 'Plan' })),
-      workBoard,
-    );
-    expect(codeBoardHash(renamed)).not.toBe(hash);
   });
 
   it('merges an app board with outcomes and exit handlers the same way', async () => {

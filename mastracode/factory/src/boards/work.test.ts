@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
-import { codeBoardHash } from './stored-board.js';
-import { openApprovedChangeRequest, WORK_BOARD_DEFAULT_VERSION, workBoard } from './work.js';
+import { openApprovedChangeRequest, workBoard } from './work.js';
 
 function executeContext(source: FactoryRuleItemContext['source']): FactoryStageRuleContext {
   return {
@@ -185,34 +184,5 @@ describe('work board self-review', () => {
     expect(result({ selfReviewVerdict: 'request changes' })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve', openPullRequestNumber: 7 })).toBeUndefined();
     expect(result({ selfReviewVerdict: 'approve' }, 'work')).toBeUndefined();
-  });
-});
-
-describe("Work's numbered default", () => {
-  // Unedited project copies upgrade only to a higher WORK_BOARD_DEFAULT_VERSION, so the default
-  // can't change under the same number.
-  const PINNED = { version: 1, hash: '231dd353e9652dfddb3d09c6d81cc591a86fcaf1136dd3eaa9b2d1f8a12f3dfa' };
-
-  it('changes only with a new version number', () => {
-    expect(
-      { version: WORK_BOARD_DEFAULT_VERSION, hash: codeBoardHash(workBoard) },
-      "Work's default changed: bump WORK_BOARD_DEFAULT_VERSION and update this hash.",
-    ).toEqual(PINNED);
-  });
-
-  it('keeps every phase key and kind, which upgrades rewrite without moving cards', () => {
-    expect(
-      Object.fromEntries(Object.entries(workBoard.phases).map(([key, phase]) => [key, phase.kind])),
-      "An upgrade can't remove or re-kind a phase cards may sit in: migrate those cards first, then update this list.",
-    ).toEqual({
-      intake: 'resting',
-      triage: 'working',
-      planning: 'working',
-      execute: 'working',
-      review: 'working',
-      'pr-review': 'working',
-      done: 'terminal',
-      canceled: 'terminal',
-    });
   });
 });

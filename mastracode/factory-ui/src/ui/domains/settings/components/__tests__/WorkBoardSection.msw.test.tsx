@@ -46,9 +46,7 @@ describe('WorkBoardSection', () => {
         // Read the body the way the server does.
         const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
         saved(body);
-        return HttpResponse.json(
-          storedWorkBoard({ name: body.name, phases: body.phases, revision: 2, customized: true }),
-        );
+        return HttpResponse.json(storedWorkBoard({ name: body.name, phases: body.phases, revision: 2 }));
       }),
     );
     const user = userEvent.setup();
@@ -90,8 +88,7 @@ describe('WorkBoardSection', () => {
     expect(body.phases.filter(p => p.key !== 'planning')).toEqual(
       storedWorkBoard().board.phases.filter(p => p.key !== 'planning'),
     );
-    expect(await screen.findByText('Edited')).toBeInTheDocument();
-    expect(screen.getByText('Revision 2')).toBeInTheDocument();
+    expect(await screen.findByText('Revision 2')).toBeInTheDocument();
   });
 
   it('holds back a rule the server would refuse, and shows the conflicts the server lists for an edit code behaviour cannot honour', async () => {
@@ -128,8 +125,8 @@ describe('WorkBoardSection', () => {
     expect(within(alert).getByText(/leave runner\.skill unset/)).toBeInTheDocument();
   });
 
-  it('resets an edited board to its default and warns when the default changed since the edit', async () => {
-    serve(storedWorkBoard({ revision: 3, customized: true, defaultChanged: true, name: 'Shipyard work' }));
+  it('resets an edited board to its default, at the next revision', async () => {
+    serve(storedWorkBoard({ revision: 3, name: 'Shipyard work' }));
     const reset = vi.fn<(body: unknown) => void>();
     server.use(
       http.post(`${BOARD_URL}/reset`, async ({ request }) => {
@@ -140,16 +137,12 @@ describe('WorkBoardSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<WorkBoardSection factoryId="fp-1" />);
 
-    expect(await screen.findByText('The built-in default changed')).toBeInTheDocument();
-    expect(screen.getByText('Edited')).toBeInTheDocument();
-    expect(screen.getByLabelText('Board name')).toHaveValue('Shipyard work');
+    expect(await screen.findByLabelText('Board name')).toHaveValue('Shipyard work');
     await user.click(screen.getByRole('button', { name: 'Reset to default' }));
 
     await waitFor(() => expect(reset).toHaveBeenCalledWith({ expectedRevision: 3 }));
     await waitFor(() => expect(screen.getByLabelText('Board name')).toHaveValue('Work'));
-    expect(screen.queryByText('Edited')).not.toBeInTheDocument();
-    expect(screen.queryByText('The built-in default changed')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument();
+    expect(screen.getByText('Revision 4')).toBeInTheDocument();
   });
 
   it('keeps an edit someone else overtook unsaved, and reloads the latest board on request', async () => {
@@ -157,7 +150,7 @@ describe('WorkBoardSection', () => {
     const read = serve(() => latest);
     server.use(
       http.patch(BOARD_URL, () => {
-        latest = storedWorkBoard({ name: 'Renamed elsewhere', revision: 2, customized: true });
+        latest = storedWorkBoard({ name: 'Renamed elsewhere', revision: 2 });
         return HttpResponse.json(
           {
             error: 'revision_mismatch',

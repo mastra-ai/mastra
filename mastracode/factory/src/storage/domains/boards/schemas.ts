@@ -17,15 +17,8 @@ export const FACTORY_BOARDS_SCHEMA: CollectionSchema = {
     created_at: { type: 'timestamp' },
     updated_by: { type: 'text' },
     updated_at: { type: 'timestamp' },
-    // On a copy of a code board (built-in or app): the fingerprint of the code definition it was
-    // seeded or last reset from. Null on a board created through the API.
+    // Unused. Earlier builds fingerprinted copies of code boards here.
     seed_hash: { type: 'text', nullable: true },
-    // Whether an admin edited the board since it was seeded or reset. Only an unedited seed
-    // follows a changed code definition.
-    customized: { type: 'boolean', default: false },
-    // The numbered code default this copy was written from; only a higher one replaces an
-    // unedited copy. Null on app-board copies, which have no numbered default.
-    seed_version: { type: 'integer', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_boards_project_key', columns: ['org_id', 'factory_project_id', 'board_key'] }],
   indexes: [{ name: 'factory_boards_project', columns: ['org_id', 'factory_project_id'] }],
@@ -119,6 +112,9 @@ export const FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA: CollectionSchema = {
     factory_project_id: { type: 'text' },
     version: { type: 'text' },
     updated_at: { type: 'timestamp' },
+    // Keys of the boards Factory stored in the project (Work, app and seed boards); each is stored
+    // once, so one the project deleted stays deleted. Null on projects stored before the list.
+    seeded_boards: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_board_definition_versions_project', columns: ['org_id', 'factory_project_id'] }],
 };

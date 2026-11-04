@@ -1309,12 +1309,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "editable": {
                 "type": "boolean"
               },
-              "customized": {
-                "type": "boolean"
-              },
-              "defaultChanged": {
-                "type": "boolean"
-              },
               "problems": {
                 "type": "array",
                 "items": {
@@ -1774,12 +1768,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "editable": {
               "type": "boolean"
             },
-            "customized": {
-              "type": "boolean"
-            },
-            "defaultChanged": {
-              "type": "boolean"
-            },
             "codeBehaviour": {
               "anyOf": [
                 {
@@ -1833,8 +1821,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "revision",
             "source",
             "editable",
-            "customized",
-            "defaultChanged",
             "problems"
           ]
         },
@@ -3415,7 +3401,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "expectedRevision": {
           "type": "integer",
-          "minimum": 0,
+          "minimum": 1,
           "maximum": 9007199254740991
         }
       },
@@ -3845,12 +3831,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "editable": {
               "type": "boolean"
             },
-            "customized": {
-              "type": "boolean"
-            },
-            "defaultChanged": {
-              "type": "boolean"
-            },
             "codeBehaviour": {
               "anyOf": [
                 {
@@ -3904,8 +3884,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "revision",
             "source",
             "editable",
-            "customized",
-            "defaultChanged",
             "problems"
           ]
         },
@@ -4782,7 +4760,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "__schema12": {
           "type": "integer",
-          "minimum": 0,
+          "minimum": 1,
           "maximum": 9007199254740991
         }
       }
@@ -6070,12 +6048,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "editable": {
               "type": "boolean"
             },
-            "customized": {
-              "type": "boolean"
-            },
-            "defaultChanged": {
-              "type": "boolean"
-            },
             "codeBehaviour": {
               "anyOf": [
                 {
@@ -6129,8 +6101,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "revision",
             "source",
             "editable",
-            "customized",
-            "defaultChanged",
             "problems"
           ]
         },
@@ -6335,7 +6305,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "expectedRevision": {
           "type": "integer",
-          "minimum": 0,
+          "minimum": 1,
           "maximum": 9007199254740991
         }
       },
@@ -6492,12 +6462,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "editable": {
               "type": "boolean"
             },
-            "customized": {
-              "type": "boolean"
-            },
-            "defaultChanged": {
-              "type": "boolean"
-            },
             "codeBehaviour": {
               "anyOf": [
                 {
@@ -6551,8 +6515,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "revision",
             "source",
             "editable",
-            "customized",
-            "defaultChanged",
             "problems"
           ]
         },

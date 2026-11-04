@@ -458,7 +458,7 @@ function BoardEditor({
   const error = save.error ?? reset.error;
   const stale = error?.code === 'revision_mismatch';
   const pending = save.isPending || reset.isPending;
-  // Only the read-only Review board has no revision; editable boards start at 0.
+  // Only the read-only Review board has no revision, and it can't be saved or reset.
   const revision = board.revision ?? 0;
 
   const setPhase = (phase: StoredPhaseInfo) =>
@@ -478,12 +478,6 @@ function BoardEditor({
             : 'This board is defined in code and is read-only.'}
         </Notice>
       )}
-      {board.defaultChanged && (
-        <Notice variant="warning" title="The built-in default changed">
-          Factory&apos;s default Work board changed since this board was edited. Reset to default to adopt it; your
-          edits are replaced.
-        </Notice>
-      )}
       {board.problems.map(problem => (
         <Notice key={problem} variant="warning">
           {problem}
@@ -499,7 +493,6 @@ function BoardEditor({
             onChange={event => setDraft(current => ({ ...current, name: event.target.value }))}
           />
         </Field>
-        {board.customized && <Badge>Edited</Badge>}
         <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
           Revision {board.revision}
         </Txt>
@@ -539,17 +532,15 @@ function BoardEditor({
       )}
       {!readOnly && (
         <div className="flex justify-end gap-2">
-          {board.customized && (
-            <Button
-              disabled={pending}
-              onClick={() => {
-                save.reset();
-                reset.mutate(revision);
-              }}
-            >
-              Reset to default
-            </Button>
-          )}
+          <Button
+            disabled={pending}
+            onClick={() => {
+              save.reset();
+              reset.mutate(revision);
+            }}
+          >
+            Reset to default
+          </Button>
           <Button
             variant="primary"
             disabled={!changed || blocked || pending || instructionsTooLong(draft)}

@@ -1,11 +1,12 @@
 /**
  * Mastra `apiRoutes` for managing a project's stored boards.
  *
- * Reads need project membership; writes need an organization admin in tenant mode. The built-in
- * Work board and app boards are stored in each project and edited under their own key; their code
- * behaviour stays attached, so an edit it can't honour is refused (`code_behaviour`), and reset
- * restores the code definition. They can't be created over or deleted. The legacy Review board
- * stays read-only. The writes themselves are `BoardWrites`, shared with `MastraFactory#upsertBoard()`.
+ * Reads need project membership; writes need an organization admin in tenant mode. Factory stores
+ * the built-in Work board and app boards in each project once, and they are edited under their own
+ * key; their code behaviour stays attached, so an edit it can't honour is refused
+ * (`code_behaviour`), and reset rewrites Factory's current definition at the next revision. They
+ * can't be created over, and Work can't be deleted. The legacy Review board stays read-only. The
+ * writes themselves are `BoardWrites`.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
@@ -112,8 +113,6 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
             revision: null,
             source: details?.source ?? 'app',
             editable: false,
-            customized: false,
-            defaultChanged: false,
             codeBehaviour: codeBehaviourOf(code),
             problems: details?.problems ?? [],
           },
@@ -137,10 +136,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
           description: row.description,
           phases: row.phases.map(({ position: _position, ...phase }) => phase),
           revision: row.revision,
-          source: seed ? (details?.source ?? 'app') : 'stored',
+          source: details?.source ?? 'stored',
           editable: true,
-          customized: details?.customized ?? false,
-          defaultChanged: details?.defaultChanged ?? false,
           codeBehaviour: code ? codeBehaviourOf(code) : null,
           problems: [...(details?.problems ?? []), ...rowProblems.filter(p => !details?.problems.includes(p))],
         },

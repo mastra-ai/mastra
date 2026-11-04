@@ -19,6 +19,7 @@ import type {
   StoredPhaseInput,
 } from '../storage/domains/boards/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { codeBoardOf } from './define-board.js';
 import type { ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
 import { boardForWorkItem } from './semantics.js';
@@ -28,6 +29,7 @@ import {
   sameBoardDefinition,
   storedBoardInputSchema,
 } from './stored-board.js';
+import { workBoard } from './work.js';
 
 export interface BoardWritesDeps {
   storage: StoredBoardsStorage;
@@ -84,15 +86,21 @@ async function stored<T>(write: () => Promise<T>): Promise<T> {
 export class BoardWrites {
   constructor(private readonly deps: BoardWritesDeps) {}
 
-  /** Code boards can't be created over; the legacy Review board can't be changed at all. */
+  /**
+   * Code boards can't be created over, and Work can't be deleted while its code handlers run by its
+   * key; the legacy Review board can't be changed at all.
+   */
   refuseCodeBoard(key: string, action: 'create' | 'edit' | 'delete'): void {
     const { boards } = this.deps;
-    if (!boards.codeRegistry.has(key)) return;
-    if (action === 'edit' && boards.seedFor(key)) return;
+    const code = boards.codeRegistry.get(key);
+    if (!code) return;
+    const stored = boards.seedFor(key) !== undefined;
+    if (action === 'edit' && stored) return;
+    if (action === 'delete' && stored && codeBoardOf(code) !== workBoard) return;
     throw new BoardWriteError(409, {
       error: 'code_board',
       message:
-        action === 'delete' && boards.seedFor(key)
+        action === 'delete' && stored
           ? `Board "${key}" is defined in code and can't be deleted; reset it to its default instead.`
           : `Board "${key}" is defined in code and can't be ${action === 'create' ? 'created over' : 'changed'} here.`,
     });
@@ -143,8 +151,8 @@ export class BoardWrites {
   }
 
   /**
-   * Replaces a board's definition at `expectedRevision`. Saving it unchanged writes nothing, so an
-   * unedited copy stays unedited and keeps its default; `written` says whether anything was stored.
+   * Replaces a board's definition at `expectedRevision`. Saving it unchanged writes nothing;
+   * `written` says whether anything was stored.
    */
   async replace(
     scope: StoredBoardScope,
@@ -155,24 +163,17 @@ export class BoardWrites {
     const { storage, boards } = this.deps;
     this.refuseCodeBoard(key, 'edit');
     const seed = boards.seedFor(key);
-    // The project's first load stores its code boards' copies.
+    // The project's first load stores Factory's boards.
     if (seed) await boards.describe(scope);
     const row = await this.existing(scope, key);
     const input = this.validate({ key, ...definition });
-    // A row that would change hands (a legacy row adopted, an orphaned copy forgotten) still writes.
-    const keepsSeed = seed ? row.seedHash !== null : row.seedHash === null;
-    if (row.revision === expectedRevision && keepsSeed && sameBoardDefinition(row, input)) {
+    if (row.revision === expectedRevision && sameBoardDefinition(row, input)) {
       return { row, written: false };
     }
     await this.#checkPhasesFree(scope, row, input.phases);
     const { key: _key, ...replacement } = input;
     const replaced = await stored(() =>
-      storage.replace(scope, key, replacement, {
-        expectedRevision,
-        actor: writer.id,
-        // A copy of a code board this Factory no longer defines becomes a plain stored board.
-        ...(seed ? { adoptSeedHash: seed.hash } : { forgetSeed: true }),
-      }),
+      storage.replace(scope, key, replacement, { expectedRevision, actor: writer.id }),
     );
     boards.invalidate(scope);
     await this.#audit(scope, writer, 'updated', input);
@@ -186,6 +187,8 @@ export class BoardWrites {
     { expectedRevision, writer }: { expectedRevision: number; writer: BoardWriter },
   ): Promise<void> {
     this.refuseCodeBoard(key, 'delete');
+    // The project's first load stores Factory's boards.
+    if (this.deps.boards.seedFor(key)) await this.deps.boards.describe(scope);
     const row = await this.existing(scope, key);
     const { cards } = await this.#occupancy(scope, key);
     if (cards > 0) {
@@ -200,7 +203,7 @@ export class BoardWrites {
     await this.#audit(scope, writer, 'deleted', row);
   }
 
-  /** Restores a code board's copy to its code default. */
+  /** Rewrites a board Factory stores to Factory's current definition of it, at the next revision. */
   async reset(
     scope: StoredBoardScope,
     key: string,
@@ -213,13 +216,13 @@ export class BoardWrites {
       await this.existing(scope, key);
       throw new BoardWriteError(409, {
         error: 'not_code_board',
-        message: `Board "${key}" was created in this project and has no code default to reset to.`,
+        message: `Board "${key}" was created in this project and has no default to reset to.`,
       });
     }
     await boards.describe(scope);
     const row = await this.existing(scope, key);
-    await this.#checkPhasesFree(scope, row, seed.definition.phases);
-    const reset = await stored(() => storage.resetToSeed(scope, key, seed, { expectedRevision, actor: writer.id }));
+    await this.#checkPhasesFree(scope, row, seed.phases);
+    const reset = await stored(() => storage.resetTo(scope, key, seed, { expectedRevision, actor: writer.id }));
     boards.invalidate(scope);
     await this.#audit(scope, writer, 'reset', row);
     return reset;

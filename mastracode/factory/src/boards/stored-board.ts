@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { z } from 'zod';
 
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
@@ -406,13 +404,6 @@ function phaseShapeConflicts(
     conflicts.push(`${label} code handlers move cards on without an exit tool; leave exitTool unset.`);
   }
   return conflicts;
-}
-
-/** A fingerprint of a code board's storable definition; it changes when the code default does. */
-export function codeBoardHash(board: InstalledBoard): string {
-  return createHash('sha256')
-    .update(canonicalJson(boardDefinitionOf(board)))
-    .digest('hex');
 }
 
 /** Whether two storable definitions describe the same board once unset fields and defaults are resolved. */
