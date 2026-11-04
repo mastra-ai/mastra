@@ -112,6 +112,11 @@ describe('runtime script process boundaries', () => {
           'allow-running-insecure-content',
           'allow-insecure-localhost',
           'ignore-certificate-errors-spki-list',
+          'single-process',
+          'no-zygote',
+          'renderer-cmd-prefix',
+          'utility-cmd-prefix',
+          'gpu-launcher',
         ])
           for (const value of ['', '=true'])
             await expect(invoke([`${prefix}${flag}${value}`])).rejects.toMatchObject({ code: 77, stdout: '' });
