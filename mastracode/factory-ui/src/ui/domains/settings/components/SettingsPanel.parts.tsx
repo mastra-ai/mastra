@@ -111,7 +111,7 @@ function PermissionsSection({
     <SettingsSubsection
       scope="factory"
       title="Tool permissions"
-      description="Whether agents run each kind of tool without asking, ask first, or never run it. Auto-approve sets them all to Allow."
+      description="Whether agents run each kind of tool without asking, ask first, or never run it. Auto-approve sets them all to Allow. Shared by everyone in this Factory, and reset when the server restarts."
     >
       <SettingsContainer>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (

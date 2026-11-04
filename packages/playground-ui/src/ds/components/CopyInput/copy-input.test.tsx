@@ -14,4 +14,11 @@ describe('CopyInput', () => {
     expect(input.readOnly).toBe(true);
     expect(screen.getByRole('button', { name: 'Copy project ID' })).toBeDefined();
   });
+
+  it('disables the copy button with the input', () => {
+    render(<CopyInput label="project ID" value="9141280b" disabled />);
+
+    expect((screen.getByRole('textbox', { name: 'project ID' }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Copy project ID' }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

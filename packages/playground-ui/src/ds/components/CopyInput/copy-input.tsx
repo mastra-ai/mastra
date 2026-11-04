@@ -9,12 +9,12 @@ export type CopyInputProps = Omit<InputGroupInputProps, 'value' | 'readOnly' | '
 };
 
 /** A read-only value people copy, like an ID or a URL: shown in an input so it reads and selects like one. */
-export function CopyInput({ value, label, className, ...props }: CopyInputProps) {
+export function CopyInput({ value, label, className, disabled, ...props }: CopyInputProps) {
   return (
     <InputGroup className={className}>
-      <InputGroupInput aria-label={label} value={value} readOnly spellCheck={false} {...props} />
+      <InputGroupInput aria-label={label} value={value} readOnly spellCheck={false} disabled={disabled} {...props} />
       <InputGroupAddon align="inline-end">
-        <CopyButton content={value} tooltip={`Copy ${label}`} variant="ghost" />
+        <CopyButton content={value} tooltip={`Copy ${label}`} variant="ghost" disabled={disabled} />
       </InputGroupAddon>
     </InputGroup>
   );

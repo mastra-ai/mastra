@@ -28,10 +28,11 @@ export interface StudioConfigFormProps {
 
 export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
-  const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
+  // Each header keeps an id so removing one doesn't hand its inputs to the next.
+  const [headers, setHeaders] = useState<Array<HeaderListFormItem & { id: string }>>(() => {
     if (!initialConfig) return [];
 
-    return Object.entries(initialConfig.headers).map(([name, value]) => ({ name, value }));
+    return Object.entries(initialConfig.headers).map(([name, value]) => ({ id: crypto.randomUUID(), name, value }));
   });
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -55,7 +56,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
   };
 
   const handleAddHeader = (header: HeaderListFormItem) => {
-    setHeaders(prev => [...prev, header]);
+    setHeaders(prev => [...prev, { ...header, id: crypto.randomUUID() }]);
   };
 
   const handleRemoveHeader = (index: number) => {
@@ -116,7 +117,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
                 <SettingsEmptyRow>No request headers</SettingsEmptyRow>
               ) : (
                 headers.map((header, index) => (
-                  <div key={index} className="px-4 py-3">
+                  <div key={header.id} className="px-4 py-3">
                     <HeaderFieldsRow index={index} header={header} onRemove={() => handleRemoveHeader(index)} />
                   </div>
                 ))
