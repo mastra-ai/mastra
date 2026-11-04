@@ -246,7 +246,6 @@ export class PlatformMemoryClient {
     return res.record;
   }
 
-  /** Runs observation/reflection now instead of waiting for the background worker. */
   /** Runs the instance's memory processors for one agent phase on a serialized message list. */
   runProcessors(threadId: string, body: RunMemoryProcessorsInput) {
     return this.request<MemoryProcessorsResult>('POST', `/threads/${encodeURIComponent(threadId)}/processors`, {

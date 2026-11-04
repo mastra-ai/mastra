@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PlatformMemoryClient } from './client';
 import { PlatformMemory } from './platform-memory';
@@ -268,38 +268,43 @@ describe('PlatformMemory', () => {
 });
 
 describe('PlatformMemoryClient', () => {
+  const envNames = [
+    'MASTRA_PLATFORM_ACCESS_TOKEN',
+    'MASTRA_PLATFORM_SECRET_KEY',
+    'MASTRA_MEMORY_INSTANCE_ID',
+    'MASTRA_MEMORY_API_URL',
+    'MASTRA_MEMORY_SERVICE_URL',
+    'MASTRA_PROJECT_ID',
+    'MASTRA_ENVIRONMENT_ID',
+  ];
+  beforeEach(() => {
+    for (const name of envNames) vi.stubEnv(name, '');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('falls back to Platform env vars', () => {
-    process.env.MASTRA_PLATFORM_SECRET_KEY = 'sk_env';
-    process.env.MASTRA_MEMORY_INSTANCE_ID = 'mem_env';
-    process.env.MASTRA_MEMORY_API_URL = 'https://api.example/';
-    try {
-      const client = new PlatformMemoryClient();
-      expect(client.instanceId).toBe('mem_env');
-      expect(client.mcpUrl).toBe('https://api.example/v1/memory/mem_env/mcp');
-      expect(new PlatformMemoryClient({ apiUrl: 'http://localhost:8080/' }).mcpUrl).toBe(
-        'http://localhost:8080/v1/memory/mem_env/mcp',
-      );
-    } finally {
-      delete process.env.MASTRA_PLATFORM_SECRET_KEY;
-      delete process.env.MASTRA_MEMORY_INSTANCE_ID;
-      delete process.env.MASTRA_MEMORY_API_URL;
-    }
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_env');
+    vi.stubEnv('MASTRA_MEMORY_INSTANCE_ID', 'mem_env');
+    vi.stubEnv('MASTRA_MEMORY_API_URL', 'https://api.example/');
+    const client = new PlatformMemoryClient();
+    expect(client.instanceId).toBe('mem_env');
+    expect(client.mcpUrl).toBe('https://api.example/v1/memory/mem_env/mcp');
+    expect(new PlatformMemoryClient({ apiUrl: 'http://localhost:8080/' }).mcpUrl).toBe(
+      'http://localhost:8080/v1/memory/mem_env/mcp',
+    );
   });
 
   it('ignores MASTRA_MEMORY_SERVICE_URL; only MASTRA_MEMORY_API_URL overrides the default', () => {
-    process.env.MASTRA_MEMORY_SERVICE_URL = 'http://injected.local/';
-    try {
-      expect(new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' }).mcpUrl).toBe(
-        'https://memory-api.mastra.ai/v1/memory/mem_1/mcp',
-      );
-      process.env.MASTRA_MEMORY_API_URL = 'https://api.example/';
-      expect(new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' }).mcpUrl).toBe(
-        'https://api.example/v1/memory/mem_1/mcp',
-      );
-    } finally {
-      delete process.env.MASTRA_MEMORY_SERVICE_URL;
-      delete process.env.MASTRA_MEMORY_API_URL;
-    }
+    vi.stubEnv('MASTRA_MEMORY_SERVICE_URL', 'http://injected.local/');
+    expect(new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' }).mcpUrl).toBe(
+      'https://memory-api.mastra.ai/v1/memory/mem_1/mcp',
+    );
+    vi.stubEnv('MASTRA_MEMORY_API_URL', 'https://api.example/');
+    expect(new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' }).mcpUrl).toBe(
+      'https://api.example/v1/memory/mem_1/mcp',
+    );
   });
 
   it('defaults to the hosted Memory API', () => {

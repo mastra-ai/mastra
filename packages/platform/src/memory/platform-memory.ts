@@ -118,9 +118,9 @@ async function applyResult(
 /**
  * Mastra memory backed by a hosted Platform Memory instance.
  *
- * Observation and reflection run on the Platform; this class loads the rendered
- * observations plus the unobserved message tail before each generation and writes
- * new messages back afterwards. Only text content is stored.
+ * Observation and reflection run on the Platform: on each input step and on the final output this
+ * class sends the serialized message list to the instance's memory processors and applies the
+ * result. Messages are stored with all their parts (text, tool calls, reasoning, files).
  */
 export class PlatformMemory extends MastraMemory {
   readonly client: PlatformMemoryClient;

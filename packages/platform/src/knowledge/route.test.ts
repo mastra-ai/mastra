@@ -1,5 +1,9 @@
 import { createServer } from 'node:http';
-import { KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
+import {
+  KnowledgeConflictError,
+  KnowledgeNotFoundError,
+  KnowledgeUnsupportedCapabilityError,
+} from '@mastra/core/storage';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PlatformKnowledge } from './index';
 
@@ -80,10 +84,11 @@ it('defaults to the hosted Knowledge API and accepts an env or explicit URL over
 });
 
 it('forwards the page-link and child-scope operations instead of rejecting them locally', async () => {
-  const operations: string[] = [];
+  const operations: { operation: string; body: string }[] = [];
   const server = createServer(async (req, res) => {
-    for await (const _chunk of req);
-    operations.push(req.url!.split('/').pop()!);
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    operations.push({ operation: req.url!.split('/').pop()!, body });
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ result: [] }));
   });
@@ -98,14 +103,34 @@ it('forwards the page-link and child-scope operations instead of rejecting them 
   }).getStorage();
   await store.countChildScopes({ parentIds: ['a'], read: 'all' });
   await store.countPageLinks({ pageIds: ['a'], read: 'all' });
-  await store.listPageLinks({ pageId: 'a', read: 'all' } as never);
-  await store.replacePageBodyLinks({ pageId: 'a', targets: [] } as never);
-  await store.listPageBodyLinkSources({ targetPageId: 'a', read: 'all' } as never);
+  await store.listPageLinks({ pageIds: ['a'], read: 'all' });
+  await store.replacePageBodyLinks({ pageId: 'a', links: [] });
+  await store.listPageBodyLinkSources({ refs: ['b'], toPageIds: ['a'] });
   expect(operations).toEqual([
-    'countChildScopes',
-    'countPageLinks',
-    'listPageLinks',
-    'replacePageBodyLinks',
-    'listPageBodyLinkSources',
+    { operation: 'countChildScopes', body: JSON.stringify({ input: { parentIds: ['a'], read: 'all' } }) },
+    { operation: 'countPageLinks', body: JSON.stringify({ input: { pageIds: ['a'], read: 'all' } }) },
+    { operation: 'listPageLinks', body: JSON.stringify({ input: { pageIds: ['a'], read: 'all' } }) },
+    { operation: 'replacePageBodyLinks', body: JSON.stringify({ input: { pageId: 'a', links: [] } }) },
+    { operation: 'listPageBodyLinkSources', body: JSON.stringify({ input: { refs: ['b'], toPageIds: ['a'] } }) },
   ]);
+});
+
+it('rejects scope declaration renames locally because the rename check cannot cross the wire', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  try {
+    const knowledge = new PlatformKnowledge({
+      apiUrl: 'http://localhost',
+      instanceId: 'instance',
+      accessToken: 'token',
+    });
+    const store = await knowledge.getStorage();
+    const check = vi.fn();
+    await expect(store.renameScopeDeclaration({ from: 'a', to: 'b', check })).rejects.toBeInstanceOf(
+      KnowledgeUnsupportedCapabilityError,
+    );
+    expect(check).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  } finally {
+    fetchSpy.mockRestore();
+  }
 });
