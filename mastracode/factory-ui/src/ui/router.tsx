@@ -11,7 +11,8 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
+import { isValidElement } from 'react';
+import { createBrowserRouter, matchRoutes, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
@@ -208,4 +209,21 @@ export function createAppRoutes(): RouteObject[] {
 
 export function createAppRouter() {
   return createBrowserRouter(createAppRoutes());
+}
+
+function isLazyPage(component: unknown): component is ReturnType<typeof lazyPage> {
+  return typeof component === 'function' && 'preload' in component;
+}
+
+/**
+ * Start loading the code of the page at `pathname`, so it downloads during the
+ * sign-in and Factory checks instead of after them. Pages in the startup bundle
+ * and redirects have nothing to load.
+ */
+export function preloadRoutePage(routes: RouteObject[], pathname: string) {
+  for (const { route } of matchRoutes(routes, pathname) ?? []) {
+    if (!isValidElement(route.element) || !isLazyPage(route.element.type)) continue;
+    // A failed preload retries on the visit.
+    route.element.type.preload().catch(() => undefined);
+  }
 }

@@ -2,10 +2,12 @@ import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { FactoryWebTelemetry } from '../../telemetry/FactoryWebTelemetry';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { factoriesQuery, useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useApiConfig } from '../../../../api/config';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { usePrefetchQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SessionExpiredDialog } from './SessionExpiredDialog';
 
@@ -20,7 +22,14 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
+  const { baseUrl } = useApiConfig();
   const { isPending, isError, data } = useFactoryAuth({ monitorSession: true });
+  // Load the Factory list alongside the sign-in check instead of after it;
+  // OnboardingGuard reads the same query. The page request already passed the
+  // server's auth gate, which renews an expired session cookie, so both
+  // requests carry the fresh cookie. A signed-out visitor's failed list stays
+  // cached as an error, which OnboardingGuard fetches again once they sign in.
+  usePrefetchQuery(factoriesQuery(baseUrl));
   const location = useLocation();
   const [wasSignedIn, setWasSignedIn] = useState(false);
 

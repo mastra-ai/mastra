@@ -9,7 +9,7 @@ import { RouterProvider } from 'react-router/dom';
 import { ApiConfigProvider } from '../api/config';
 import { createQueryClient } from '../query-client';
 import { PwaInstallBanner } from './lib/pwa';
-import { createAppRouter } from './router';
+import { createAppRouter, preloadRoutePage } from './router';
 import '@fontsource-variable/mona-sans/standard.css';
 import '@fontsource-variable/mona-sans/standard-italic.css';
 import './tailwind.css';
@@ -23,6 +23,7 @@ import './tailwind.css';
 // implementation.
 const queryClient = createQueryClient();
 const router = createAppRouter();
+preloadRoutePage(router.routes, window.location.pathname);
 
 if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
   void import('react-grab');

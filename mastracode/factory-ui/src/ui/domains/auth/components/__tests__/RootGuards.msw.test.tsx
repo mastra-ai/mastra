@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -124,6 +124,54 @@ describe('Factory session expiry', () => {
     expect(new URLSearchParams(router.state.location.search).get('returnTo')).toBe(CURRENT_PATH);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Draft' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Factory startup', () => {
+  it('loads the factory list while the sign-in check is still running', async () => {
+    let finishSignInCheck = () => {};
+    const signInCheck = new Promise<void>(resolve => {
+      finishSignInCheck = resolve;
+    });
+    onTestFinished(finishSignInCheck);
+    server.use(
+      http.get(AUTH_ME_URL, async () => {
+        await signInCheck;
+        return HttpResponse.json(signedIn);
+      }),
+    );
+    const listRequested = vi.fn(() => HttpResponse.json({ projects: [{ ...factory, repositories: [] }] }));
+    renderApp({ projects: listRequested });
+
+    await waitFor(() => expect(listRequested).toHaveBeenCalled());
+    finishSignInCheck();
+
+    expect(await screen.findByRole('textbox', { name: 'Draft' })).toBeInTheDocument();
+    // The guard renders the list loaded during the check instead of asking again.
+    expect(listRequested).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the factories once a visitor who opened the app signed out signs in from another tab', async () => {
+    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
+    let signedInElsewhere = false;
+    const listRequested = vi.fn(() =>
+      signedInElsewhere
+        ? HttpResponse.json({ projects: [{ ...factory, repositories: [] }] })
+        : new HttpResponse(undefined, { status: 401 }),
+    );
+    const { router } = renderApp({ projects: listRequested });
+
+    await screen.findByRole('button', { name: 'Continue with GitHub' });
+    // The list went out with the sign-in check and was refused.
+    expect(listRequested).toHaveBeenCalledTimes(1);
+
+    signedInElsewhere = true;
+    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedIn)));
+    returnToTab();
+
+    expect(await screen.findByRole('textbox', { name: 'Draft' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/factory-1/work');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 
