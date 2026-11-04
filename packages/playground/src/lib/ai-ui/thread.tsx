@@ -62,21 +62,14 @@ import { startViewTransition } from '@/lib/routing';
 const SKELETON_DELAY_MS = 300;
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
 
-/**
- * Returns true only after `flag` has stayed true for `delayMs` continuously, so
- * the pending indicator doesn't flash on fast (local) responses.
- */
-const useDelayedFlag = (flag: boolean, delayMs: number) => {
-  const [delayed, setDelayed] = useState(false);
+/** Waits `SKELETON_DELAY_MS` before showing, so the indicator doesn't flash on fast (local) responses. */
+const DelayedPendingIndicator = () => {
+  const [shown, setShown] = useState(false);
   useEffect(() => {
-    if (!flag) {
-      setDelayed(false);
-      return;
-    }
-    const id = setTimeout(() => setDelayed(true), delayMs);
+    const id = setTimeout(() => setShown(true), SKELETON_DELAY_MS);
     return () => clearTimeout(id);
-  }, [flag, delayMs]);
-  return delayed;
+  }, []);
+  return shown ? <PendingIndicator /> : null;
 };
 
 /**
@@ -172,7 +165,6 @@ const ThreadContent = ({
   const isEmpty = messages.length === 0;
   const lastMessage = messages[messages.length - 1];
   const showPending = isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
-  const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
   const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
   const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
   // Keyed by the opening message's client key: `data-user-message` reconciliation
@@ -281,7 +273,7 @@ const ThreadContent = ({
                               />
                             </MessageScrollerItem>
                           ))}
-                          {isLiveTurn && delayedPending && <PendingIndicator />}
+                          {isLiveTurn && showPending && <DelayedPendingIndicator />}
                         </ChatShell.Turn>
                       );
                     })}
