@@ -62,7 +62,7 @@ describe('createDashboardDataFetch', () => {
           name: DASHBOARD_DATA_TOOL_NAME,
           arguments: {
             operation: 'getMetricAggregate',
-            args: {
+            body: {
               ...args,
               filters: { timestamp: { start: '2026-11-01T00:00:00.000Z', end: '2026-11-02T00:00:00.000Z' } },
             },
@@ -73,7 +73,7 @@ describe('createDashboardDataFetch', () => {
   });
 
   describe('when MastraClient lists scores', () => {
-    it('sends the query parameters as the operation arguments', async () => {
+    it('sends the query parameters with the operation', async () => {
       const scores = { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
       const { client, calls } = await clientBehindHost({ status: 200, body: scores });
 
@@ -81,7 +81,10 @@ describe('createDashboardDataFetch', () => {
 
       expect(response).toEqual(scores);
       expect(calls).toEqual([
-        { name: DASHBOARD_DATA_TOOL_NAME, arguments: { operation: 'listScores', args: { page: '0', perPage: '100' } } },
+        {
+          name: DASHBOARD_DATA_TOOL_NAME,
+          arguments: { operation: 'listScores', query: { page: '0', perPage: '100' } },
+        },
       ]);
     });
   });

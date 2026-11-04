@@ -76,7 +76,7 @@ export const dashboardServer = new MCPServer({
 
 The dashboard app sends each read its `MastraClient` makes, such as `getMetricAggregate`, to one tool named `DASHBOARD_DATA_TOOL_NAME`, exported from `@mastra/mcp-apps-components/dashboard-renderer`. Define that tool on the server that serves the app:
 
-- Take `dashboardDataInputSchema` as input: an `operation` from `DASHBOARD_DATA_OPERATIONS`, named after the `MastraClient` method, and its `args`. `listScores` carries query parameters; every other operation carries the method's JSON body.
+- Take `dashboardDataInputSchema` as input: an `operation` from `DASHBOARD_DATA_OPERATIONS`, named after the `MastraClient` method, with its arguments. `listScores` carries them as `query` parameters; every other operation carries them as a JSON `body`.
 - Answer with a status and body, matching `dashboardDataOutputSchema`.
 - Mark it app-only with `mcp: { _meta: { ui: { visibility: ['app'] } } }`, so hosts keep it away from the model.
 - Type the handler map as `Record<DashboardDataOperation, ...>`, so TypeScript flags an operation you don't answer.

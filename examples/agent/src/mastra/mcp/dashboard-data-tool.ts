@@ -48,7 +48,8 @@ export const dashboardDataTool = createTool({
       mastra,
       // Without the caller's context, a server with auth refuses the call.
       requestContext: requestContext ?? new RequestContext(),
-      ...(call.operation === 'listScores' ? { query: call.args } : { body: call.args }),
+      ...(call.query && { query: call.query }),
+      ...(call.body && { body: call.body }),
       abortSignal,
     });
   },

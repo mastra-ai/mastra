@@ -49,8 +49,8 @@ export function createDashboardDataFetch(app: App): typeof fetch {
 
     const call: DashboardDataInput =
       operation === 'listScores'
-        ? { operation, args: queryArguments(url.searchParams) }
-        : { operation, args: typeof init?.body === 'string' ? JSON.parse(init.body) : {} };
+        ? { operation, query: queryArguments(url.searchParams) }
+        : { operation, body: typeof init?.body === 'string' ? JSON.parse(init.body) : {} };
     const result = await app.callServerTool(
       { name: DASHBOARD_DATA_TOOL_NAME, arguments: call },
       { signal: init?.signal ?? undefined },
