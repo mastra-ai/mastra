@@ -139,7 +139,7 @@ export const ToolkitConnectionControl = ({
   const { setValue } = useFormContext<AgentBuilderEditFormValues>();
   const queryClient = useQueryClient();
   const authorize = useAuthorize();
-  const connectionsQuery = useExistingConnections({ providerId: providerId, toolkit: toolkit, scopeToSelf: true });
+  const connectionsQuery = useExistingConnections({ providerId, toolkit, scopeToSelf: true });
 
   const [manageOpen, setManageOpen] = useState(false);
 

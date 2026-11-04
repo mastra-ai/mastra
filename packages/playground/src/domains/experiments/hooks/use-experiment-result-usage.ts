@@ -9,7 +9,7 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
  */
 export function useExperimentResultUsage(traceId: string | null | undefined) {
   const { data: trace, isLoading: isTraceLoading } = useTraceSpans({
-    traceId: traceId,
+    traceId,
     queryOptions: { enabled: !!traceId },
   });
   const rootSpan = trace?.spans.find(span => !span.parentSpanId);

@@ -75,7 +75,7 @@ function openConnectUrl(url: string, tab: Window | null, sameTab: boolean): void
  * after a `deep_link` or `immediate` result (used by the publish dialog).
  */
 export const useConnectChannelAction = (platform: string, opts: { onClose?: () => void } = {}) => {
-  const { mutateAsync, isPending } = useConnectChannel({ platform: platform });
+  const { mutateAsync, isPending } = useConnectChannel({ platform });
   const { onClose } = opts;
 
   const connect = useCallback(

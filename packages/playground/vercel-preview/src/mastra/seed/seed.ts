@@ -34,7 +34,7 @@ async function runSeed(now: number): Promise<void> {
   if (memory) {
     try {
       for (const thread of data.threads) {
-        await memory.saveThread({ thread: thread });
+        await memory.saveThread({ thread });
       }
       await memory.saveMessages({
         messages: data.messages,
@@ -88,7 +88,7 @@ async function runSeed(now: number): Promise<void> {
         if (record?.id) {
           await datasets.batchInsertItems({
             datasetId: record.id,
-            items: items,
+            items,
           });
         }
       }

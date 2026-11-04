@@ -145,7 +145,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
 // dedupes the underlying requests across instances — see client-request-dedupe.
 function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
   const { data: memory, isLoading } = useMemory({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -174,7 +174,7 @@ function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
 
 function EditorCapability({ agentId, view }: AgentCapabilityProps) {
   const { data: agent, isLoading: isAgentLoading } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -182,7 +182,7 @@ function EditorCapability({ agentId, view }: AgentCapabilityProps) {
   const enabled = isEditorAvailable(agent, isCmsAvailable);
   const locked = agent?.editor === false;
   const versionsQuery = useAgentVersions({
-    agentId: agentId,
+    agentId,
     params: { orderBy: { field: 'createdAt', direction: 'DESC' } },
     queryOptions: { enabled: Boolean(agentId) && enabled },
   });
@@ -214,7 +214,7 @@ function EditorCapability({ agentId, view }: AgentCapabilityProps) {
 
 function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
   const { data: agent, isLoading } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -236,7 +236,7 @@ function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
 
 function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
   const { data: agent, isLoading } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -260,7 +260,7 @@ function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
 
 function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
   const { data: agent, isLoading } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -286,7 +286,7 @@ function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
 
 function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
   const { data: agent, isLoading } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -312,12 +312,12 @@ function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
 
 function CapabilitiesSummary({ agentId }: { agentId: string }) {
   const { data: memory } = useMemory({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
   const { data: agent } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });

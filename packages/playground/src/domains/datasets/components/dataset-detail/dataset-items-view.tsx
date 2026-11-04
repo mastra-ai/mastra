@@ -51,7 +51,7 @@ export function DatasetItemsView({
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
 
-  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
+  const { data: dataset } = useDataset({ datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const {
     data: items = [],
     isLoading: isItemsLoading,
@@ -59,10 +59,10 @@ export function DatasetItemsView({
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems({
-    datasetId: datasetId,
+    datasetId,
     search: debouncedSearch || undefined,
     version: activeDatasetVersion,
-    orderBy: orderBy,
+    orderBy,
     queryOptions: { enabled: Boolean(datasetId) },
   });
   const { deleteItems } = useDatasetMutations();

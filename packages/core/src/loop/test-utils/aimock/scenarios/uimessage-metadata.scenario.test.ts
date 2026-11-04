@@ -40,7 +40,7 @@ describeForAllEngines('AIMock loop scenario: UI messages with metadata', engine 
     llm.on({ endpoint: 'chat' }, { content: 'Response acknowledging metadata' });
     const memory = new MockMemory();
     const { agent } = await createSharedAgent(llm, { engine, memory });
-    return { llm, memory, agent, memoryOption: { memory: { resource: RESOURCE, thread: thread } } };
+    return { llm, memory, agent, memoryOption: { memory: { resource: RESOURCE, thread } } };
   }
 
   async function streamText(agent: any, messages: unknown[], options: unknown) {

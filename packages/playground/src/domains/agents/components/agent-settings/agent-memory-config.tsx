@@ -124,7 +124,7 @@ function MemoryConfigFields({ items }: Pick<MemoryConfigSection, 'items'>) {
 
 export function AgentMemoryConfig({ agentId }: { agentId: string }) {
   const { data, isLoading, isError, isFetching, refetch } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -144,12 +144,13 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
     );
   }
 
-  if (!data?.config)
+  if (!data?.config) {
     return (
       <Txt variant="caption" tone="muted">
         No memory configuration available
       </Txt>
     );
+  }
 
   return (
     <div className="flex flex-col gap-3">

@@ -35,8 +35,8 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback, variant }: E
   const result = useMemo(() => (itemId ? results.find(r => r.itemId === itemId) : undefined), [results, itemId]);
 
   const { data: scoresByItemId } = useScoresByExperimentId({
-    experimentId: experimentId,
-    experimentStatus: experimentStatus,
+    experimentId,
+    experimentStatus,
     queryOptions: { enabled: Boolean(experimentId) },
   });
   const { updateExperimentResult } = useDatasetMutations();

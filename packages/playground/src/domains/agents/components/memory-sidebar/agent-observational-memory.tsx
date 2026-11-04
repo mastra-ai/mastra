@@ -335,7 +335,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
 
   const { data: configData } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -364,9 +364,9 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isOMActive = isObserving || isReflecting;
 
   const { data: omData, isLoading: isOMLoading } = useObservationalMemoryWithHistory({
-    agentId: agentId,
-    resourceId: resourceId,
-    threadId: threadId,
+    agentId,
+    resourceId,
+    threadId,
     isActive: isOMActive,
     queryOptions: {
       enabled:

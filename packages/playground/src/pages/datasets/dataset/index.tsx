@@ -59,12 +59,12 @@ function DatasetPage() {
     data: dataset,
     error,
     isLoading: isDatasetLoading,
-  } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
+  } = useDataset({ datasetId, queryOptions: { enabled: Boolean(datasetId) } });
 
   // Unfiltered items query — gates the data-dependent header actions. React Query
   // dedupes this with the same call inside DatasetItemsView.
   const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems({
-    datasetId: datasetId,
+    datasetId,
     search: undefined,
     version: activeVersion,
     queryOptions: { enabled: Boolean(datasetId) },

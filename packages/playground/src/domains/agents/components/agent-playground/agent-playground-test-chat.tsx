@@ -80,7 +80,7 @@ export function AgentPlaygroundTestChat({
 
   const editFormCtx = useOptionalAgentEditFormContext();
   const { data: agent } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });

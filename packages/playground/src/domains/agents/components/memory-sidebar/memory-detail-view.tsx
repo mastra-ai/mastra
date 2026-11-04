@@ -36,8 +36,8 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
   const { data: thread } = useThread({
-    threadId: threadId,
-    agentId: agentId,
+    threadId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId) },
   });
@@ -45,7 +45,7 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
 
   // Config thresholds, read the same way the OM sidebar section does.
   const { data: configData } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });

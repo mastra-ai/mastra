@@ -74,7 +74,7 @@ export default function Datasets() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteDatasets({ filter: { targetType, targetId }, orderBy: orderBy });
+  } = useInfiniteDatasets({ filter: { targetType, targetId }, orderBy });
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
 
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);

@@ -93,7 +93,7 @@ export function formValuesToSaveParams(
     tools,
     agents,
     workflows,
-    skills: skills,
+    skills,
     workspace,
     browser,
     visibility: values.visibility,

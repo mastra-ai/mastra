@@ -202,8 +202,8 @@ const ModelSelectionHarness = () => {
  * hooks) so the test can observe whether OM stream events trigger a refetch.
  */
 const PanelQueriesConsumer = ({ agentId, threadId }: { agentId: string; threadId: string }) => {
-  useObservationalMemory({ agentId: agentId, threadId: threadId });
-  useMemoryThreadMessages({ threadId: threadId });
+  useObservationalMemory({ agentId, threadId });
+  useMemoryThreadMessages({ threadId });
   return null;
 };
 
@@ -324,8 +324,9 @@ describe('ChatProvider', () => {
               fireEvent.click(screen.getByRole('button', { name: 'Start approval run' }));
               await waitFor(() => expect(sent).toBe(true));
               await act(async () => {
-                for (const chunk of approvalChunks(kind))
+                for (const chunk of approvalChunks(kind)) {
                   stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                }
               });
             }
             await waitFor(() => expect(screen.getAllByRole('button', { name: `Approve ${toolName}` })).toHaveLength(2));
@@ -335,9 +336,9 @@ describe('ChatProvider', () => {
               fireEvent.click(within(cards[index]).getByRole('button', { name: `${action} ${toolName}` }));
               await waitFor(() => expect(requests).toHaveLength(index + 1));
               expect(requests[index].body).toMatchObject({ toolCallId: id });
-              if (signals)
+              if (signals) {
                 expect(requests[index].body).toMatchObject({ approved: action === 'Approve', threadId: 'thread-1' });
-              else expect(requests[index].body).toMatchObject({ runId: 'parent-run' });
+              } else expect(requests[index].body).toMatchObject({ runId: 'parent-run' });
               expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
               await act(async () => gates[index].resolve());
               await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
@@ -357,12 +358,13 @@ describe('ChatProvider', () => {
                 expect(cardAfterResume).toBe(cards[index]);
                 expect(within(cardAfterResume).getByRole('status').textContent).toBe(`${action}d`);
               }
-              if (index === 0)
+              if (index === 0) {
                 expect(
                   within(cards[1])
                     .getByRole('button', { name: `${action} ${toolName}` })
                     .hasAttribute('disabled'),
                 ).toBe(false);
+              }
             }
             stream?.close();
             rendered.unmount();
@@ -426,8 +428,9 @@ describe('ChatProvider', () => {
         );
         const emit = (index: number, chunks: ReturnType<typeof toolRunChunks>) =>
           act(() => {
-            for (const chunk of chunks)
+            for (const chunk of chunks) {
               streams[index].enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            }
           });
         fireEvent.click(screen.getByRole('button', { name: 'Run tools' }));
         await waitFor(() => expect(requests).toBe(1));

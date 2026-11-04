@@ -87,7 +87,7 @@ export default function Experiments() {
   } = useInfiniteExperiments({
     datasetId: datasetFilter === 'all' ? undefined : datasetFilter,
     target: { targetType, targetId },
-    orderBy: orderBy,
+    orderBy,
   });
   const { data: reviewSummary } = useReviewSummary();
   const { supportsMetrics } = useObservabilityStorageCapabilities();
@@ -122,8 +122,9 @@ export default function Experiments() {
       // Drop ids whose experiment disappeared so they don't occupy a compare slot.
       const prev = current.filter(id => knownIds.has(id));
       if (prev.includes(experimentId)) return prev.filter(id => id !== experimentId);
-      if (prev.length >= MAX_COMPARED_EXPERIMENTS)
+      if (prev.length >= MAX_COMPARED_EXPERIMENTS) {
         return [...prev.slice(0, MAX_COMPARED_EXPERIMENTS - 1), experimentId];
+      }
       return [...prev, experimentId];
     });
   };

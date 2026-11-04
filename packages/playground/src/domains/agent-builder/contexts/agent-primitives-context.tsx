@@ -49,7 +49,7 @@ export const AgentPrimitivesProvider = ({ agentId, children }: AgentPrimitivesPr
   const initialUserMessage = useStarterUserMessage();
 
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent({
-    agentId: agentId,
+    agentId,
     status: 'draft',
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -92,7 +92,7 @@ export const AgentPrimitivesProvider = ({ agentId, children }: AgentPrimitivesPr
 
   const value = useMemo<AgentPrimitivesValue>(
     () => ({
-      agentId: agentId,
+      agentId,
       storedAgent: storedAgent ?? undefined,
       toolsData: toolsData ?? {},
       agentsData: agentsData ?? {},

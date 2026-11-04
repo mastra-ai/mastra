@@ -40,10 +40,10 @@ export const AgentChat = ({
     hasNextPage,
     isFetchingNextPage,
   } = useAgentMessages({
-    agentId: agentId,
+    agentId,
     threadId: isNewThread ? undefined : threadId,
     memory: memory ?? false,
-    requestContext: requestContext,
+    requestContext,
   });
 
   // Handle scrolling to message after navigation

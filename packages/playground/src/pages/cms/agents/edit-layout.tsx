@@ -141,7 +141,7 @@ function EditLayoutWrapper() {
 
   // Fetch the code/merged agent (GET /agents/:id) to determine source
   const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId!)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -156,7 +156,7 @@ function EditLayoutWrapper() {
   // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
   const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
   const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent({
-    agentId: agentId,
+    agentId,
     status: 'draft',
     queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });

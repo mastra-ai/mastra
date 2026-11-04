@@ -15,7 +15,7 @@ export interface MemoryFeatureFlags {
  */
 export function useMemoryFeatureFlags(agentId: string): MemoryFeatureFlags {
   const { data: memoryConfig } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });

@@ -68,7 +68,7 @@ function ExperimentPage() {
     isLoading: experimentLoading,
     error: datasetExperimentError,
   } = useDatasetExperiment({
-    datasetId: datasetId,
+    datasetId,
     experimentId: experimentId ?? '',
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) },
   });

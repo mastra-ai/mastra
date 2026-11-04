@@ -52,7 +52,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
   // itself "traces" or "schedules" doesn't get the wrong tab highlighted.
   const tabMatch = useMatch('/workflows/:workflowId/:tab/*');
   const { isLoading: isWorkflowLoading } = useWorkflow({
-    workflowId: workflowId,
+    workflowId,
     requestContext: useEntityRequestContext('workflow', workflowId!)[0],
     queryOptions: { enabled: Boolean(workflowId) },
   });

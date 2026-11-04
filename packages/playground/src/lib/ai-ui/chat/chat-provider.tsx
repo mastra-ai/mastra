@@ -136,7 +136,7 @@ export function ChatProvider({
   const baseClient = useMastraClient();
 
   const { data: memoryConfigData } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });

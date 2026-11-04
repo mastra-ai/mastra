@@ -53,8 +53,8 @@ export function ExperimentResultsSection({
   );
 
   const { data: scoresByExperimentId } = useScoresByExperimentId({
-    experimentId: experimentId,
-    experimentStatus: experimentStatus,
+    experimentId,
+    experimentStatus,
     queryOptions: { enabled: Boolean(experimentId) },
   });
 

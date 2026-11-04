@@ -69,8 +69,9 @@ test.describe('Trace query filtering', () => {
         if (
           request.method() === 'GET' &&
           /\/observability\/(traces(?:\/light)?|branches)$/.test(new URL(request.url()).pathname)
-        )
+        ) {
           legacyRequests++;
+        }
       });
       await page.goto('/traces?filterServiceName=preview-service');
       await expect(page.getByText('Studio preview agent', { exact: true })).toBeVisible();

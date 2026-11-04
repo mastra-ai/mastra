@@ -19,7 +19,7 @@ export const useAllModels = (providers: Provider[]): ModelInfo[] => {
       provider.models.map(model => ({
         provider: provider.id,
         providerName: provider.name,
-        model: model,
+        model,
         releaseDate: provider.modelReleaseDates?.[model],
       })),
     );

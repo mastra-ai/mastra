@@ -23,7 +23,7 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 export default function AgentBuilderAgentView() {
   const { id: agentId } = useParams<{ id: string }>();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent({
-    agentId: agentId,
+    agentId,
     status: 'draft',
     queryOptions: { enabled: Boolean(agentId) },
   });

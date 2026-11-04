@@ -81,8 +81,9 @@ const AttachmentPreview = ({
 }: { attachment: ComposerAttachment } & AttachmentPreviewProps) => {
   if (attachment.kind === 'image') return <ImageAttachmentThumbnail attachment={attachment} {...previewProps} />;
   if (attachment.kind === 'pdf') return <ComposerPdfAttachment attachment={attachment} {...previewProps} />;
-  if (attachment.kind === 'text' && !attachment.isUrl)
+  if (attachment.kind === 'text' && !attachment.isUrl) {
     return <ComposerTxtAttachment file={attachment.file} {...previewProps} />;
+  }
 
   return (
     <FileChipEntry

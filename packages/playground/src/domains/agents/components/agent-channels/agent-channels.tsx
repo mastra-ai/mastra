@@ -50,7 +50,7 @@ interface ChannelRowProps {
 function ChannelRow({ platform, agentId }: ChannelRowProps) {
   const { data: installations, isLoading } = useChannelInstallations({
     platform: platform.id,
-    agentId: agentId,
+    agentId,
     queryOptions: { enabled: Boolean(platform.id && agentId) },
   });
   const { connect, isConnecting } = useConnectChannelAction(platform.id);

@@ -36,8 +36,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
   const { data: thread } = useThread({
-    threadId: threadId,
-    agentId: agentId,
+    threadId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId) },
   });
@@ -45,7 +45,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
   // Get memory config to check if semantic recall is enabled
   const { data, isLoading: isConfigLoading } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -67,7 +67,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
     agentId: agentId || '',
     resourceId: effectiveResourceId || '',
-    threadId: threadId,
+    threadId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
   });
 

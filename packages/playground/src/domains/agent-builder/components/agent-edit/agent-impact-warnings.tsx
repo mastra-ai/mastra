@@ -36,7 +36,7 @@ interface AgentImpactWarningsProps {
 
 export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentImpactWarningsProps) => {
   const { data, isLoading, isError } = useStoredAgentDependents({
-    agentId: agentId,
+    agentId,
     queryOptions: { enabled: Boolean(agentId) && enabled },
   });
 

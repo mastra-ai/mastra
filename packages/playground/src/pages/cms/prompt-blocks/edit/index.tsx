@@ -67,7 +67,7 @@ function CmsPromptBlocksEditForm({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: blockId });
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
@@ -227,7 +227,7 @@ function CmsPromptBlocksEditPage() {
 
   const { isCmsAvailable } = useIsCmsAvailable();
   const { data: block, isLoading } = useStoredPromptBlock({
-    blockId: blockId,
+    blockId,
     status: 'draft',
     queryOptions: { enabled: Boolean(blockId) },
   });

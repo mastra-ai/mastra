@@ -60,12 +60,12 @@ export default function Template() {
   const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
   const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
   const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
-  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall({ workflowInfo: workflowInfo });
+  const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall({ workflowInfo });
   const {
     observeInstall,
     streamResult: observeStreamResult,
     isStreaming: isObserving,
-  } = useObserveStreamTemplateInstall({ workflowInfo: workflowInfo });
+  } = useObserveStreamTemplateInstall({ workflowInfo });
 
   // Check for completed runs after hot reload recovery
   useEffect(() => {

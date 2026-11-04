@@ -64,7 +64,7 @@ function CmsScorersEditForm({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredScorer } = useStoredScorerMutations({ scorerId: scorerId });
+  const { updateStoredScorer } = useStoredScorerMutations({ scorerId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -224,7 +224,7 @@ function CmsScorersEditPage() {
   const selectedVersionId = searchParams.get('versionId');
 
   const { data: scorer, isLoading } = useStoredScorer({
-    scorerId: scorerId,
+    scorerId,
     status: 'draft',
     queryOptions: { enabled: Boolean(scorerId) },
   });
