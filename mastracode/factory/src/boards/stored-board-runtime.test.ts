@@ -674,9 +674,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
         // Replica B serves the edit once its recheck window passes, then files a card and runs
         // Triage as replica A edited it.
-        const workOn = async (replica: Awaited<ReturnType<typeof boot>>) =>
-          (await catalog(replica, projectId)).find(board => board.id === 'work') as { customized?: boolean };
-        await vi.waitFor(async () => expect(await workOn(b)).toMatchObject({ customized: true }), { timeout: 5_000 });
+        // Whether the replica serves Triage starting on its own, as the edit makes it.
+        const triageStartsOn = async (replica: Awaited<ReturnType<typeof boot>>) =>
+          (
+            (await catalog(replica, projectId))
+              .find(board => board.id === 'work')!
+              .phases.find(phase => phase.id === 'triage') as { autoStart?: boolean }
+          ).autoStart === true;
+        await vi.waitFor(async () => expect(await triageStartsOn(b)).toBe(true), { timeout: 5_000 });
         const before = await githubIssue(b, projectId, 'Before reset', { trusted: true, labels: [] });
         expect(before.stages).toEqual(['triage']);
         await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', before.title)).not.toEqual([]), {
@@ -690,11 +695,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           expectedRevision: work.json.board.revision,
         });
         expect(reset.status, JSON.stringify(reset.json)).toBe(200);
-        expect(reset.json.board).toMatchObject({ customized: false, defaultChanged: false });
+        expect(reset.json.board).toMatchObject({ revision: work.json.board.revision + 1, defaultChanged: false });
 
         // After its recheck window, replica B's Triage waits for a person again, and the run a
         // person starts carries no Shipyard instructions.
-        await vi.waitFor(async () => expect(await workOn(b)).toMatchObject({ customized: false }), { timeout: 5_000 });
+        await vi.waitFor(async () => expect(await triageStartsOn(b)).toBe(false), { timeout: 5_000 });
         const after = await githubIssue(b, projectId, 'After reset', { trusted: true, labels: [] });
         expect(after.stages).toEqual(['triage']);
         const triage = await vi.waitFor(

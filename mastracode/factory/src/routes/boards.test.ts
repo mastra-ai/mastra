@@ -499,7 +499,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     });
   });
 
-  it('resets an edited Work board to its code default, refusing a stale revision and a board with no code default', async () => {
+  it('resets an edited Work board to its code default at the next revision, refusing a stale revision and a board with no code default', async () => {
     const { a, orgId, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
     await replicaA.send(
@@ -514,17 +514,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     const reset = await replicaA.send('POST', `${base}/work/reset`, { expectedRevision: 1 });
     expect(reset.status).toBe(200);
-    expect(reset.body.board).toMatchObject({ revision: 0, customized: false, defaultChanged: false });
+    expect(reset.body.board).toMatchObject({ revision: 2, defaultChanged: false });
     expect(reset.body.board.phases).toMatchObject(boardDefinitionOf(workBoard).phases);
     expect((await catalogBoard(replicaA.send, base, 'work'))!.phases.find((p: any) => p.id === 'planning').name).toBe(
       'Planning',
     );
-    // Reset deletes the project's copy; resetting a board already at its default writes nothing.
-    expect(await a.boards.get(scope, 'work')).toBeNull();
-    expect(await replicaA.send('POST', `${base}/work/reset`, { expectedRevision: 0 })).toMatchObject({
-      status: 200,
-      body: { board: { revision: 0, customized: false } },
-    });
+    // Reset keeps the copy and moves it to the next revision, so revisions never go back.
+    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 2 });
+
+    // A fresh edit after the reset, then an editor still holding revision 1 is refused, not
+    // written over the fresh edit.
+    const fresh = await replicaA.send(
+      'PATCH',
+      `${base}/work`,
+      editPhase(reset.body.board, 'planning', phase => ({ ...phase, name: 'Edit B' })),
+    );
+    expect(fresh.body.board).toMatchObject({ revision: 3 });
+    const stale = await replicaA.send(
+      'PATCH',
+      `${base}/work`,
+      editPhase({ ...work, revision: 1 }, 'planning', phase => ({ ...phase, name: 'Stale overwrite' })),
+    );
+    expect(stale).toMatchObject({ status: 409, body: { error: 'revision_mismatch' } });
+    expect((await a.boards.get(scope, 'work'))!.phases.find(phase => phase.key === 'planning')!.name).toBe('Edit B');
 
     await replicaA.send('POST', base, bugsBoard);
     expect(await replicaA.send('POST', `${base}/bugs/reset`, { expectedRevision: 1 })).toMatchObject({
@@ -559,7 +571,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     });
 
     const reset = await restarted.send('POST', `${base}/release/reset`, { expectedRevision: 1 });
-    expect(reset.body.board).toMatchObject({ name: 'Release', customized: false, defaultChanged: false });
+    expect(reset.body.board).toMatchObject({ name: 'Release', revision: 2, defaultChanged: false });
     expect((await catalogBoard(restarted.send, base, 'release'))!.phases[0].name).toBe('Waiting');
   });
 

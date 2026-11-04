@@ -649,7 +649,7 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const factoryBoard = factory
     .command('board')
-    .description("Manage a Factory project's boards; built-in and app boards are read-only");
+    .description("Manage a Factory project's boards; the built-in Work board and app boards are edited per project");
   addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
     description: "Get a board's definition and, for a board the project stored, its revision",
     routePlacement: 'origin',
@@ -666,7 +666,8 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
   addAction(factoryBoard, 'update', FACTORY_API_ROUTE_CATALOG.boardReplace, {
-    description: "Replace a stored board's definition using its expected revision",
+    description:
+      "Replace a board's definition using its expected revision; the first edit of the Work board or an app board stores the project's copy, at expectedRevision 0",
     input: 'required',
     routePlacement: 'origin',
   });
@@ -683,7 +684,7 @@ export function registerApiCommand(program: CommanderCommand): void {
   });
   addAction(factoryBoard, 'reset', FACTORY_API_ROUTE_CATALOG.boardReset, {
     description:
-      "Reset a project's edited copy of a built-in or app board to its code default, using its expected revision",
+      "Reset a project's edited copy of the Work board or an app board to its code default at the next revision, using its expected revision",
     input: 'required',
     routePlacement: 'origin',
     examples: [
