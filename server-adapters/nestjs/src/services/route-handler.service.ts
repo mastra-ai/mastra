@@ -281,13 +281,16 @@ export class RouteHandlerService {
 
     const data = await route.handler(handlerParams);
 
-    return {
+    const result: RouteHandlerResult = {
       data,
       responseType: route.responseType,
       streamFormat: route.streamFormat,
       sseFlushOnConnect: route.sseFlushOnConnect,
-      requestContext: params.requestContext,
     };
+    // Non-enumerable so the caller's token, user and permissions never end up in
+    // a response if this result is ever serialized.
+    Object.defineProperty(result, 'requestContext', { value: params.requestContext, enumerable: false });
+    return result;
   }
 
   /**

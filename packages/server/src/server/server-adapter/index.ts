@@ -5,16 +5,29 @@ import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInp
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
-import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
+import type {
+  ApiRoute,
+  HttpLoggingConfig,
+  MastraAuthConfig,
+  ValidationErrorContext,
+  ValidationErrorResponse,
+} from '@mastra/core/server';
 import type { ExecutionContext } from 'hono';
 import { Hono } from 'hono';
 import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware, findMatchingCustomRoute, isCustomRoutePublic, pathMatchesPattern } from '../auth/helpers';
+import {
+  authorizeAuthenticatedUser,
+  coreAuthMiddleware,
+  findMatchingCustomRoute,
+  isCustomRoutePublic,
+  pathMatchesPattern,
+} from '../auth/helpers';
 import {
   MASTRA_AUTH_MODE_KEY,
+  MASTRA_AUTH_TOKEN_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_USER_KEY,
@@ -210,6 +223,11 @@ export interface MCPOptions {
    * When omitted, the principal resolved by `server.auth` is bridged
    * automatically. Provide this hook when your own middleware performs the
    * verification and you want full control over the resulting `AuthInfo`.
+   *
+   * The hook only controls `authInfo`. Tools still receive the user,
+   * permissions, roles and other reserved values Mastra server auth resolved
+   * in their `requestContext`, even when the hook's `authInfo` names a
+   * different principal.
    */
   setRequestAuth?: SetMcpRequestAuth;
 }
@@ -1593,9 +1611,10 @@ export interface InvokeRouteResult {
 
 /**
  * Runs a server route in-process as the caller, with the checks its HTTP
- * endpoint applies on every adapter: authentication, input validation, RBAC
- * permission and FGA. Lets code outside an HTTP request (such as an MCP tool)
- * reuse a route without proxying through the HTTP server.
+ * endpoint applies on every adapter: authentication, auth's `authorizeUser`,
+ * `authorize` and `rules` (against the route's path under `apiPrefix`), input
+ * validation, RBAC permission and FGA. Lets code outside an HTTP request (such
+ * as an MCP tool) reuse a route without proxying through the HTTP server.
  *
  * Authentication is not re-run: when server or studio auth is configured, the
  * request context must already carry the user Mastra server auth resolved
@@ -1615,9 +1634,39 @@ export async function invokeRoute(route: ServerRoute, options: InvokeRouteOption
 
   const { mastra, requestContext } = options;
 
-  const authConfigured = Boolean(mastra.getStudio?.()?.auth || mastra.getServer()?.auth);
-  if (authConfigured && route.requiresAuth !== false && !requestContext.get(MASTRA_USER_KEY)) {
-    return { status: 401, body: { error: 'Authentication required' } };
+  const studioAuth = mastra.getStudio?.()?.auth;
+  const serverAuth = mastra.getServer()?.auth;
+  const authConfigured = Boolean(studioAuth || serverAuth);
+  if (authConfigured && route.requiresAuth !== false) {
+    const user = requestContext.get(MASTRA_USER_KEY);
+    if (!user) {
+      return { status: 401, body: { error: 'Authentication required' } };
+    }
+
+    const authConfig = requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio' && studioAuth ? studioAuth : serverAuth;
+    if (authConfig) {
+      // Server auth's authorization hooks see the route's own HTTP path, not the
+      // path of whatever request (such as an MCP call) is invoking it.
+      const prefix = normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api');
+      const path = `${prefix}${route.path.replace(/:(\w+)/g, (_, name: string) =>
+        encodeURIComponent(options.pathParams?.[name] ?? ''),
+      )}`;
+      const token = requestContext.get(MASTRA_AUTH_TOKEN_KEY);
+      const authorizationError = await authorizeAuthenticatedUser({
+        path,
+        method: route.method,
+        user,
+        mastra,
+        authConfig: authConfig as MastraAuthConfig,
+        requestContext,
+        rawRequest: new Request(`http://localhost${path}`, {
+          method: route.method,
+          headers: typeof token === 'string' && token ? { authorization: `Bearer ${token}` } : undefined,
+        }),
+        buildAuthorizeContext: () => null,
+      });
+      if (authorizationError) return authorizationError;
+    }
   }
 
   const parse = async <T>(context: ValidationErrorContext, run: () => Promise<T>) => {

@@ -28,6 +28,11 @@ export interface McpAuthInfo {
  * request context, which carries whatever server auth or your own middleware
  * resolved for this request. Setting `req.auth` is the caller's job; leaving it
  * unset is an explicit opt-out of the default bridge.
+ *
+ * The hook only owns `authInfo`. Whenever `req.auth` ends up set, the reserved
+ * request context values (user, permissions, roles, resource, organization)
+ * are still attached to it, so tools' `requestContext` reflects Mastra server
+ * auth even if the hook's `authInfo` names a different principal.
  */
 export type SetMcpRequestAuth = (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
 

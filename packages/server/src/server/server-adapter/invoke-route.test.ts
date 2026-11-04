@@ -31,12 +31,16 @@ const failingRoute = createRoute({
   },
 });
 
-function securedMastra() {
+function securedMastra(
+  auth: Record<string, unknown> = { authorize: async () => true },
+  server: Record<string, unknown> = {},
+) {
   return new Mastra({
     logger: false,
     server: {
-      auth: { authenticateToken: async () => null, authorize: async () => true },
+      auth: { authenticateToken: async () => null, ...auth },
       rbac: { getPermissions: async () => [], getRoles: async () => [] } as any,
+      ...server,
     },
   });
 }
@@ -132,6 +136,49 @@ describe('invokeRoute', () => {
     });
 
     expect(result).toEqual({ status: 422, body: { error: 'Unsupported query' } });
+  });
+
+  describe("server auth's authorization hooks", () => {
+    it('asks authorize about the route itself, under the server API prefix', async () => {
+      const authorize = vi.fn(async () => true);
+      const route = createRoute({
+        method: 'GET',
+        path: '/observability/traces/:traceId',
+        responseType: 'json',
+        requiresPermission: 'observability:read',
+        handler: async () => ({ ok: true }),
+      });
+
+      const result = await invokeRoute(route, {
+        mastra: securedMastra({ authorize }, { apiPrefix: '/mastra' }),
+        requestContext: callerContext(['observability:read']),
+        pathParams: { traceId: 'trace 1' },
+      });
+
+      expect(result.status).toBe(200);
+      expect(authorize).toHaveBeenCalledWith(
+        '/mastra/observability/traces/trace%201',
+        'GET',
+        { id: 'user-1' },
+        expect.anything(),
+      );
+    });
+
+    it.each([
+      ['authorize', { authorize: async (path: string) => !path.includes('/observability') }],
+      ['authorizeUser', { authorizeUser: async () => false }],
+      ['rules', { rules: [{ path: '/api/agents/*', allow: true }] }],
+    ])('refuses the call when %s denies the route, without running it', async (_, auth) => {
+      handler.mockClear();
+      const result = await invokeRoute(greetRoute, {
+        mastra: securedMastra(auth),
+        requestContext: callerContext(['observability:read']),
+        body: { name: 'Ada' },
+      });
+
+      expect(result).toEqual({ status: 403, body: { error: 'Access denied' } });
+      expect(handler).not.toHaveBeenCalled();
+    });
   });
 
   it('runs without a user when the server has no auth configured', async () => {

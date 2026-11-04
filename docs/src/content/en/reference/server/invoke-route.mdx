@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # invokeRoute()
 
-The `invokeRoute()` function runs a server route in-process as the calling user and returns what the route would have answered over HTTP. It applies the same checks as the route's HTTP endpoint on every adapter: authentication, schema validation, RBAC permission, and fine-grained authorization (FGA).
+The `invokeRoute()` function runs a server route in-process as the calling user and returns what the route would have answered over HTTP. It applies the same checks as the route's HTTP endpoint on every adapter: authentication, your auth provider's `authorize`, `authorizeUser`, and `rules`, schema validation, RBAC permission, and fine-grained authorization (FGA).
 
 Use it to expose a route through another channel, such as an MCP tool, without proxying through the HTTP server and without the two drifting apart.
 
@@ -126,6 +126,7 @@ Failed checks and errors thrown by the handler are returned as a status and body
 ## Behavior
 
 - **Authentication isn't re-run.** When server or Studio auth is configured, the request context must already carry the user Mastra server auth resolved. Otherwise `invokeRoute()` returns `401` without running the handler. Requests reaching an MCP tool through a Mastra server adapter carry this context.
+- **Authorization hooks see the HTTP path.** `authorize()` and `rules` receive the route's path under the server's `apiPrefix` (`/api` by default), with path parameters filled in, and the route's method. `authorize()` gets no adapter-specific request context.
 - **Only JSON routes are supported.** `invokeRoute()` throws for routes with any other `responseType`, such as streaming or MCP transport routes.
 - **HTTP-only handler parameters aren't supplied.** The handler receives the parsed parameters, `mastra`, `requestContext`, and `abortSignal`, but not `request`, `registeredTools`, `taskStore`, or `routePrefix`. Routes that read those aren't suitable.
 

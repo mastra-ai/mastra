@@ -109,6 +109,28 @@ describe('applyMcpRequestAuth', () => {
     expect(req.auth).toEqual({ token: 'custom', clientId: 'hook', scopes: ['admin'] });
   });
 
+  it("keeps a hook's auth info but still hands tools the caller Mastra server auth resolved", async () => {
+    const req = makeReq();
+    const trusted = Symbol.for('mastra.mcp.trustedRequestContext');
+
+    await applyMcpRequestAuth({
+      req,
+      requestContext: makeContext({
+        [MASTRA_USER_KEY]: { id: 'mastra-user' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['observability:read'],
+      }),
+      setRequestAuth: r => {
+        (r as any).auth = { token: 'custom', clientId: 'hook-principal', scopes: [] };
+      },
+    });
+
+    expect(req.auth.clientId).toBe('hook-principal');
+    expect(req.auth[trusted]).toEqual({
+      [MASTRA_USER_KEY]: { id: 'mastra-user' },
+      [MASTRA_USER_PERMISSIONS_KEY]: ['observability:read'],
+    });
+  });
+
   it('treats a hook that sets nothing as an explicit opt-out', async () => {
     const req = makeReq();
 
