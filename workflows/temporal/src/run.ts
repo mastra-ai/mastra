@@ -102,6 +102,7 @@ export class TemporalRun<
     input: unknown,
     initialState: unknown,
     requestContext: RequestContext,
+    previousSuspension?: { stepId: string; suspendedAt?: number },
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const terminal = this.resolveResult(handle, input, initialState);
 
@@ -119,6 +120,15 @@ export class TemporalRun<
       const status =
         typeof handle.query === 'function' ? await handle.query('mastra.status').catch(() => undefined) : undefined;
       if (isSuspendedWorkflowResult(status)) {
+        const previousStep = previousSuspension ? status.steps[previousSuspension.stepId] : undefined;
+        const isPreviousSuspension =
+          previousSuspension !== undefined &&
+          isSuspendedStepResult(previousStep) &&
+          previousStep.suspendedAt === previousSuspension.suspendedAt;
+        if (isPreviousSuspension) {
+          continue;
+        }
+
         const suspended = {
           ...status,
           steps: normalizeStepResults(status.steps),
@@ -259,8 +269,18 @@ export class TemporalRun<
     const requestContext = (params.requestContext ?? new RequestContext()) as RequestContext;
     const handle = this.client.workflow.getHandle(this.runId);
     const payload = await this.resumePayload(params);
+    const status =
+      typeof handle.query === 'function' ? await handle.query('mastra.status').catch(() => undefined) : undefined;
+    const stepId = isSuspendedWorkflowResult(status)
+      ? (payload.step ??
+        (payload.label ? status.resumeLabels?.[payload.label]?.stepId : undefined) ??
+        (status.suspended?.length === 1 && status.suspended[0]?.length === 1 ? status.suspended[0][0] : undefined))
+      : undefined;
+    const previousStep = stepId && isSuspendedWorkflowResult(status) ? status.steps[stepId] : undefined;
+    const previousSuspension =
+      stepId && isSuspendedStepResult(previousStep) ? { stepId, suspendedAt: previousStep.suspendedAt } : undefined;
     await handle.signal('mastra.resume', payload);
-    return this.awaitResult(handle, undefined, undefined, requestContext);
+    return this.awaitResultOrSuspended(handle, undefined, undefined, requestContext, previousSuspension);
   }
 
   override async resumeAsync<TResume>(params: {
@@ -331,7 +351,22 @@ export class TemporalRun<
   }
 }
 
-function isSuspendedWorkflowResult(value: unknown): value is { status: 'suspended'; steps: unknown } {
+function isSuspendedWorkflowResult(value: unknown): value is {
+  status: 'suspended';
+  steps: Record<string, unknown>;
+  suspended?: string[][];
+  resumeLabels?: Record<string, { stepId: string }>;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { status?: unknown }).status === 'suspended' &&
+    typeof (value as { steps?: unknown }).steps === 'object' &&
+    (value as { steps?: unknown }).steps !== null
+  );
+}
+
+function isSuspendedStepResult(value: unknown): value is { status: 'suspended'; suspendedAt?: number } {
   return typeof value === 'object' && value !== null && (value as { status?: unknown }).status === 'suspended';
 }
 

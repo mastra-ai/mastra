@@ -46,28 +46,154 @@ describe('TemporalRun', () => {
     },
   );
 
-  it('signals the matching Temporal workflow when resuming and waits for the result', async () => {
-    const result = {
+  it('returns each repeated suspension before the final resumed result and runs lifecycle hooks once per call', async () => {
+    const firstSuspension = {
+      status: 'suspended',
+      input: { value: 1 },
+      state: {},
+      steps: {
+        firstApproval: {
+          __temporalStepResult: true,
+          status: 'suspended',
+          payload: { value: 1 },
+          suspendPayload: { reason: 'first approval' },
+          suspendedAt: 1,
+        },
+      },
+      suspended: [['firstApproval']],
+      suspendPayload: { firstApproval: { reason: 'first approval' } },
+    };
+    const secondSuspension = {
+      status: 'suspended',
+      input: { value: 1 },
+      state: {},
+      steps: {
+        firstApproval: {
+          __temporalStepResult: true,
+          status: 'success',
+          payload: { value: 1 },
+          output: { approved: true },
+          resumeData: { approved: true },
+          startedAt: 1,
+          endedAt: 2,
+        },
+        secondApproval: {
+          __temporalStepResult: true,
+          status: 'suspended',
+          payload: { approved: true },
+          suspendPayload: { reason: 'second approval' },
+          suspendedAt: 3,
+        },
+      },
+      suspended: [['secondApproval']],
+      suspendPayload: { secondApproval: { reason: 'second approval' } },
+    };
+    const finalResult = {
       status: 'success',
       input: { value: 1 },
       result: { approved: true },
       state: {},
-      steps: {},
+      steps: secondSuspension.steps,
     };
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const handleResult = vi.fn().mockResolvedValue(result);
-    const getHandle = vi.fn().mockReturnValue({ signal, result: handleResult });
+    let status: unknown = firstSuspension;
+    let resolveResult: (result: typeof finalResult) => void;
+    const terminalResult = new Promise<typeof finalResult>(resolve => {
+      resolveResult = resolve;
+    });
+    const result = vi.fn(() => terminalResult);
+    const query = vi.fn().mockImplementation(async () => status);
+    const signal = vi.fn().mockImplementation(async (_name, payload) => {
+      if (payload.step === 'firstApproval') {
+        status = secondSuspension;
+      } else {
+        resolveResult(finalResult);
+      }
+    });
+    const handle = { signal, result, query };
+    const start = vi.fn().mockResolvedValue(handle);
+    const getHandle = vi.fn().mockReturnValue(handle);
+    const onFinish = vi.fn();
+    const onError = vi.fn();
     const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
-      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+      {
+        id: 'test-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.unknown(),
+        options: { onFinish, onError },
+      },
+      { client: { workflow: { start, getHandle } } as unknown as Client, taskQueue: 'test-queue' },
     );
     const run = await workflow.createRun({ runId: 'test-run' });
 
-    await expect(run.resume({ step: 'approval', resumeData: { approved: true } })).resolves.toEqual(result);
+    await expect(run.start({ inputData: { value: 1 } })).resolves.toEqual({
+      ...firstSuspension,
+      steps: {
+        firstApproval: {
+          status: 'suspended',
+          payload: { value: 1 },
+          suspendPayload: { reason: 'first approval' },
+          suspendedAt: 1,
+        },
+      },
+    });
+    await expect(
+      Promise.race([
+        run.resume({ step: 'firstApproval', resumeData: { approved: true } }),
+        new Promise(resolve => setTimeout(() => resolve('timed out'), 500)),
+      ]),
+    ).resolves.toEqual({
+      ...secondSuspension,
+      steps: {
+        firstApproval: {
+          status: 'success',
+          payload: { value: 1 },
+          output: { approved: true },
+          resumeData: { approved: true },
+          startedAt: 1,
+          endedAt: 2,
+        },
+        secondApproval: {
+          status: 'suspended',
+          payload: { approved: true },
+          suspendPayload: { reason: 'second approval' },
+          suspendedAt: 3,
+        },
+      },
+    });
+    await expect(run.resume({ step: 'secondApproval', resumeData: { approved: true } })).resolves.toEqual({
+      ...finalResult,
+      steps: {
+        firstApproval: {
+          status: 'success',
+          payload: { value: 1 },
+          output: { approved: true },
+          resumeData: { approved: true },
+          startedAt: 1,
+          endedAt: 2,
+        },
+        secondApproval: {
+          status: 'suspended',
+          payload: { approved: true },
+          suspendPayload: { reason: 'second approval' },
+          suspendedAt: 3,
+        },
+      },
+    });
 
-    expect(getHandle).toHaveBeenCalledWith('test-run');
-    expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
-    expect(handleResult).toHaveBeenCalledOnce();
+    expect(getHandle).toHaveBeenCalledTimes(2);
+    expect(signal).toHaveBeenNthCalledWith(1, 'mastra.resume', {
+      step: 'firstApproval',
+      resumeData: { approved: true },
+    });
+    expect(signal).toHaveBeenNthCalledWith(2, 'mastra.resume', {
+      step: 'secondApproval',
+      resumeData: { approved: true },
+    });
+    expect(onFinish).toHaveBeenCalledTimes(3);
+    expect(onFinish).toHaveBeenNthCalledWith(1, expect.objectContaining({ status: 'suspended' }));
+    expect(onFinish).toHaveBeenNthCalledWith(2, expect.objectContaining({ status: 'suspended' }));
+    expect(onFinish).toHaveBeenNthCalledWith(3, expect.objectContaining({ status: 'success' }));
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it('returns suspended from start when the Temporal workflow stays open waiting for resume', async () => {
