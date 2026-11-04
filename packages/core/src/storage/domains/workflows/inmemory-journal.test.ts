@@ -940,12 +940,21 @@ describe('materializeWorkflowRun', () => {
     expect(materializeWorkflowRun({ runId: 'r1' } as any, [])).toMatchObject({ context: {}, value: {} });
   });
 
-  it('applies patches to the parent state only without a full state entry, never mutating it', () => {
-    const parentState = { p: { n: 1 } };
+  it('applies patches to the parent state only after a state-base entry, never mutating it', () => {
+    const parentState = { p: { n: 1 }, inherited: true };
+    const stateBase = {
+      seq: 0,
+      kind: 'state-base' as const,
+      base: { workflowName: 'parent', runId: 'p1', seq: 3 },
+    };
     const patch = { seq: 1, kind: 'state-patch' as const, ops: [{ op: 'set' as const, path: ['p', 'n'], value: 2 }] };
 
+    expect(materializeWorkflowRun({ runId: 'r1' } as any, [stateBase, patch], parentState).value).toEqual({
+      p: { n: 2 },
+      inherited: true,
+    });
+    expect(parentState).toEqual({ p: { n: 1 }, inherited: true });
     expect(materializeWorkflowRun({ runId: 'r1' } as any, [patch], parentState).value).toEqual({ p: { n: 2 } });
-    expect(parentState).toEqual({ p: { n: 1 } });
     expect(
       materializeWorkflowRun({ runId: 'r1' } as any, [{ seq: 0, kind: 'state', state: { own: 1 } }, patch], parentState)
         .value,
