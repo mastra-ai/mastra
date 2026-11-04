@@ -11,6 +11,7 @@ import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import { GatewayManager } from '../llm/model/gateways';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
@@ -28,6 +29,7 @@ import type { DynamicArgument } from '../types';
 import type { Workspace } from '../workspace/workspace';
 
 import { SessionNotStartedError } from './errors';
+import { ModelCatalogCache } from './model-catalog-cache';
 import {
   MODEL_PERSISTENCE_VERSION,
   MODEL_PERSISTENCE_VERSION_KEY,
@@ -251,8 +253,6 @@ export class AgentController<TState = {}> {
       retained: boolean;
     }
   >();
-  private availableModelsCache: AvailableModel[] | null = null;
-  private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   /** The application's event bus the backing agents share when the controller has none of its own. */
@@ -265,6 +265,7 @@ export class AgentController<TState = {}> {
    */
   #externalMastra: Mastra | undefined = undefined;
   #gatewayManager: GatewayManager | undefined = undefined;
+  readonly #modelCatalog: ModelCatalogCache;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
   /** Chat channels running this controller inside messaging threads (from `config.channels`). */
   #channels: AgentControllerChannels | null = null;
@@ -283,6 +284,10 @@ export class AgentController<TState = {}> {
     // (custom takes precedence). Shared by listAvailableModels,
     // getCurrentModelAuthStatus, and the OM model resolver.
     this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
+    // The router defaults serve public catalogs over the network (models.dev,
+    // Netlify), so they refresh in the background on a slower schedule.
+    const remoteGateways = new Set<MastraModelGatewayInterface>(defaultGateways);
+    this.#modelCatalog = new ModelCatalogCache(this.#gatewayManager, gateway => remoteGateways.has(gateway));
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -1860,39 +1865,30 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Get available models from the app-provided catalog hook with use counts applied.
+   * Get available models from the configured gateways with use counts applied.
+   *
+   * Remote catalogs (models.dev, Netlify) are refreshed in the background every
+   * few minutes and their last good result is served meanwhile. Configured
+   * gateways and auth are checked again after a few seconds, or on the next
+   * call after {@link invalidateAvailableModelsCache}.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
-    const now = Date.now();
-    if (this.availableModelsCache && now - this.availableModelsCacheTime < 10_000) {
-      return this.availableModelsCache;
-    }
-
+    const catalog = await this.#modelCatalog.list();
     const useCounts = this.config.modelUseCountProvider?.() ?? {};
     const modelsById = new Map<string, AvailableModel>();
-
-    const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
-      if (!model.id || !model.provider || !model.modelName) return;
-      modelsById.set(model.id, {
-        ...model,
-        useCount: useCounts[model.id] ?? 0,
-      });
-    };
-
-    const catalog = await this.#gatewayManager!.listAvailableModels();
     for (const model of catalog) {
-      upsertModel(model);
+      if (!model.id || !model.provider || !model.modelName) continue;
+      modelsById.set(model.id, { ...model, useCount: useCounts[model.id] ?? 0 });
     }
-
-    const result = [...modelsById.values()];
-    this.availableModelsCache = result;
-    this.availableModelsCacheTime = Date.now();
-    return result;
+    return [...modelsById.values()];
   }
 
+  /**
+   * Make the next {@link listAvailableModels} call check configured gateways and
+   * auth again. Call it after credentials or custom providers change.
+   */
   invalidateAvailableModelsCache(): void {
-    this.availableModelsCache = null;
-    this.availableModelsCacheTime = 0;
+    this.#modelCatalog.invalidate();
   }
 
   // ===========================================================================
