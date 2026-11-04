@@ -883,7 +883,13 @@ describe('executeCommandTool data chunks', () => {
       );
     });
 
-    it('skips the bash fallback for a command too long to pass twice', async () => {
+    // The fallback quotes the command and repeats it, so its size is measured in UTF-8 bytes of the
+    // whole wrapped argument: quotes and non-ASCII text grow it beyond `command.length`.
+    it.each([
+      ['a long command', `echo ${'x'.repeat(40_000)} | tail -1`],
+      ['a command full of single quotes', `echo "${"'".repeat(16_000)}" | tail -1`],
+      ['a command full of non-ASCII text', `echo ${'é'.repeat(20_000)} | tail -1`],
+    ])('skips the bash fallback for %s too large to pass twice', async (_label, command) => {
       let receivedCommand = '';
 
       const { context } = createMockContext({
@@ -893,7 +899,6 @@ describe('executeCommandTool data chunks', () => {
         },
       });
 
-      const command = `echo ${'x'.repeat(40_000)} | tail -1`;
       await execute({ command, timeout: null, cwd: null, tail: null }, context);
 
       expect(receivedCommand).toBe(`if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ${command}`);

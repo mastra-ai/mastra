@@ -68,10 +68,11 @@ export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
 const TRAILING_TAIL_PIPE = /(?:^|[^|])\|\s*tail(?:\s[^|;&]*)?$/;
 
 /**
- * Longest command re-run under bash. The command appears twice in the wrapped string, and Linux
- * rejects a single `sh -c` argument over 128 KiB (E2BIG).
+ * Largest wrapped command, in UTF-8 bytes, that gets the bash fallback. The fallback quotes the
+ * command and repeats it, and Linux rejects a single `sh -c` argument over 128 KiB (E2BIG), so
+ * this keeps half of that limit as headroom.
  */
-const MAX_BASH_PIPEFAIL_COMMAND_LENGTH = 32 * 1024;
+const MAX_BASH_PIPEFAIL_WRAPPED_BYTES = 64 * 1024;
 
 /** Quote a string as one POSIX shell word. */
 function quoteShellWord(value: string): string {
@@ -92,11 +93,13 @@ function quoteShellWord(value: string): string {
 function reportUpstreamPipelineFailure(command: string, sandboxProvider: string): string {
   if (sandboxProvider === 'local' && process.platform === 'win32') return command;
   if (!TRAILING_TAIL_PIPE.test(command.trim())) return command;
-  const bashFallback =
-    command.length <= MAX_BASH_PIPEFAIL_COMMAND_LENGTH
-      ? ` elif command -v bash >/dev/null 2>&1; then exec bash -o pipefail -c ${quoteShellWord(command)};`
-      : '';
-  return `if (set -o pipefail) 2>/dev/null; then set -o pipefail;${bashFallback} fi; ${command}`;
+  const withBashFallback =
+    `if (set -o pipefail) 2>/dev/null; then set -o pipefail; ` +
+    `elif command -v bash >/dev/null 2>&1; then exec bash -o pipefail -c ${quoteShellWord(command)}; fi; ${command}`;
+  // Measure the whole argument: quoting grows each `'` to four characters, and non-ASCII text
+  // takes more UTF-8 bytes than UTF-16 code units.
+  if (new TextEncoder().encode(withBashFallback).length <= MAX_BASH_PIPEFAIL_WRAPPED_BYTES) return withBashFallback;
+  return `if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi; ${command}`;
 }
 
 const ABORTED_COMMAND_NOTE =
