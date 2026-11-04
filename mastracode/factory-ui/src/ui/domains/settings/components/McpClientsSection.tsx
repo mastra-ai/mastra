@@ -1,4 +1,4 @@
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useParams } from 'react-router';
@@ -36,19 +36,8 @@ export function McpClientsSection() {
       description="Use this Factory from Claude, ChatGPT and other MCP clients. They sign in as you."
     >
       <SettingsContainer>
-        <SettingsRow label="MCP URL" className="group/mcp-url">
-          <div className="relative min-w-0">
-            <Txt tone="muted" as="span" variant="caption" font="mono" className="block truncate">
-              {url}
-            </Txt>
-            <CopyButton
-              content={url}
-              size="icon-sm"
-              variant="default"
-              tooltip="Copy MCP URL"
-              className="absolute top-1/2 right-0 -translate-y-1/2 opacity-0 group-focus-within/mcp-url:opacity-100 group-hover/mcp-url:opacity-100 [@media(hover:none)]:opacity-100"
-            />
-          </div>
+        <SettingsRow label="MCP URL">
+          <CopyInput value={url} label="MCP URL" />
         </SettingsRow>
         <SettingsRow label="Claude">
           <ConnectStep>Settings → Connectors → Add custom connector, paste the URL</ConnectStep>

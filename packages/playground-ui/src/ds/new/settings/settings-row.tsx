@@ -15,15 +15,23 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   viewOnly?: boolean;
   required?: boolean;
   errorMsg?: ReactNode;
+  /**
+   * `side` (default): the control sits on the right. Text inputs and selects fill a shared
+   * 16rem column, so their left edges line up row to row; switches and buttons end at the right edge.
+   * `below`: the control goes under the label at full width, for forms with several controls.
+   */
+  controlPlacement?: 'side' | 'below';
 };
 
 type SettingsRowLayoutProps = SettingsRowProps & {
   layout: 'factory' | 'section';
 };
 
-const factoryRowClassName = 'gap-2 px-4 py-3 sm:justify-between sm:gap-4';
-const factoryRowSideControlWidthClassName = 'sm:[--field-shrink:0] sm:[--field-width:16rem]';
+const factoryRowClassName = 'gap-2 px-4 py-3 sm:justify-between sm:gap-8';
 const factoryRowHeadingClassName = 'flex min-w-0 flex-col gap-0.5';
+/** The right-hand control column: at least 16rem, and inputs inside fill it. */
+const factoryRowSideControlClassName =
+  'flex min-w-0 items-center gap-2 [--field-width:100%] sm:min-w-64 sm:shrink-0 sm:justify-end';
 
 export function SettingsRowLayout({
   label,
@@ -37,9 +45,11 @@ export function SettingsRowLayout({
   required = false,
   errorMsg,
   disabled,
+  controlPlacement = 'side',
   ...props
 }: SettingsRowLayoutProps) {
   const isSectionLayout = layout === 'section';
+  const controlBelow = !isSectionLayout && controlPlacement === 'below';
   const control = viewOnly ? (
     <>
       <LockKeyholeIcon className="size-4 shrink-0" aria-hidden />
@@ -52,7 +62,7 @@ export function SettingsRowLayout({
 
   return (
     <Field
-      orientation="responsive"
+      orientation={controlBelow ? 'vertical' : 'responsive'}
       invalid={Boolean(errorMsg)}
       disabled={disabled || viewOnly}
       data-slot={isSectionLayout ? 'section-row' : 'settings-row'}
@@ -61,7 +71,7 @@ export function SettingsRowLayout({
           ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
           : 'min-w-0',
         layout === 'factory' && factoryRowClassName,
-        layout === 'factory' && factoryRowSideControlWidthClassName,
+        controlBelow && 'gap-3',
         className,
       )}
       {...props}
@@ -84,21 +94,19 @@ export function SettingsRowLayout({
         )}
         <FieldError className={cn('mt-0', isSectionLayout && 'mt-1')}>{errorMsg}</FieldError>
       </div>
-      {children != null &&
-        (isSectionLayout || viewOnly ? (
-          <div
-            data-slot={isSectionLayout ? 'section-control' : undefined}
-            className={cn(
-              'min-w-0',
-              isSectionLayout && 'sm:justify-self-end',
-              viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
-            )}
-          >
-            {control}
-          </div>
-        ) : (
-          control
-        ))}
+      {children != null && (
+        <div
+          data-slot={isSectionLayout ? 'section-control' : 'settings-row-control'}
+          className={cn(
+            'min-w-0',
+            isSectionLayout && 'sm:justify-self-end',
+            !isSectionLayout && !controlBelow && factoryRowSideControlClassName,
+            viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
+          )}
+        >
+          {control}
+        </div>
+      )}
     </Field>
   );
 }
@@ -131,7 +139,11 @@ export function SettingsFieldsetRow({ label, description, children, className, .
           </div>
         )}
       </div>
-      {children}
+      {children != null && (
+        <div data-slot="settings-row-control" className={factoryRowSideControlClassName}>
+          {children}
+        </div>
+      )}
     </Fieldset>
   );
 }

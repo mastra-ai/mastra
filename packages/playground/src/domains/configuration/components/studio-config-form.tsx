@@ -3,14 +3,22 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsAddRow,
+  SettingsContainer,
+  SettingsEmptyRow,
+  SettingsGroup,
+  SettingsHeader,
+  SettingsRow,
+  SettingsTitle,
+} from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
-import { HeaderListForm } from './header-list-form';
+import { HeaderFieldsRow, HeaderListForm } from './header-list-form';
 
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
@@ -19,8 +27,6 @@ export interface StudioConfigFormProps {
 }
 
 export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }: StudioConfigFormProps) => {
-  const isFactoryLayout = variant === 'factory';
-  const FieldsContainer = isFactoryLayout ? SettingsContainer : Fragment;
   const { setConfig } = useStudioConfig();
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
@@ -72,48 +78,71 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
     },
   ];
 
-  const headersEditor = (
-    <HeaderListForm
-      headers={headers}
-      onAddHeader={handleAddHeader}
-      onRemoveHeader={handleRemoveHeader}
-      showHeading={!isFactoryLayout}
-    />
+  const saveButton = (
+    <Button type="submit" className={variant === 'factory' ? 'ml-auto' : 'mt-4 ml-auto'} icon={<SaveIcon />}>
+      Save configuration
+    </Button>
   );
+
+  if (variant === 'factory') {
+    return (
+      <TooltipProvider delayDuration={0}>
+        <Form onSubmit={handleSubmit} className="gap-8">
+          <SettingsGroup>
+            <SettingsHeader>
+              <SettingsTitle info="The Mastra instance the studio talks to, and the path in front of its API routes.">
+                Mastra connection
+              </SettingsTitle>
+            </SettingsHeader>
+            <SettingsContainer>
+              {connectionFields.map(({ label, ...field }) => (
+                <SettingsRow key={field.name} label={label}>
+                  <Input {...field} />
+                </SettingsRow>
+              ))}
+            </SettingsContainer>
+          </SettingsGroup>
+
+          <SettingsGroup>
+            <SettingsHeader>
+              <SettingsTitle info="Sent with every request the studio makes, for auth or routing.">
+                Request headers
+              </SettingsTitle>
+            </SettingsHeader>
+            <SettingsContainer>
+              {headers.length === 0 ? (
+                <SettingsEmptyRow>No request headers</SettingsEmptyRow>
+              ) : (
+                headers.map((header, index) => (
+                  <div key={index} className="px-4 py-3">
+                    <HeaderFieldsRow index={index} header={header} onRemove={() => handleRemoveHeader(index)} />
+                  </div>
+                ))
+              )}
+              <SettingsAddRow type="button" onClick={() => handleAddHeader({ name: '', value: '' })}>
+                Add header
+              </SettingsAddRow>
+            </SettingsContainer>
+          </SettingsGroup>
+
+          {saveButton}
+        </Form>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
-      <Form onSubmit={handleSubmit} className={isFactoryLayout ? undefined : 'gap-6'}>
-        <FieldsContainer>
-          {connectionFields.map(({ label, ...field }) => {
-            if (isFactoryLayout) {
-              return (
-                <SettingsRow key={field.name} label={label}>
-                  <Input {...field} className="w-full lg:max-w-96" />
-                </SettingsRow>
-              );
-            }
-
-            return (
-              <Field key={field.name}>
-                <FieldLabel required={field.required}>{label}</FieldLabel>
-                <Input {...field} />
-                <FieldError />
-              </Field>
-            );
-          })}
-          {isFactoryLayout ? (
-            <SettingsFieldsetRow label="Headers">
-              <div className="w-full lg:max-w-96">{headersEditor}</div>
-            </SettingsFieldsetRow>
-          ) : (
-            headersEditor
-          )}
-        </FieldsContainer>
-
-        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-4 ml-auto'} icon={<SaveIcon />}>
-          Save configuration
-        </Button>
+      <Form onSubmit={handleSubmit} className="gap-6">
+        {connectionFields.map(({ label, ...field }) => (
+          <Field key={field.name}>
+            <FieldLabel required={field.required}>{label}</FieldLabel>
+            <Input {...field} />
+            <FieldError />
+          </Field>
+        ))}
+        <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
+        {saveButton}
       </Form>
     </TooltipProvider>
   );

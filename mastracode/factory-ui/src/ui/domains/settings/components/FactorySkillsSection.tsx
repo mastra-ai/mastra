@@ -74,7 +74,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
   const editable = factoryId !== undefined && canEdit;
 
   return (
-    <SettingsContainer>
+    <div>
       <Collapsible>
         <div className="flex items-center gap-2 pr-4">
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center justify-between gap-4 py-3 pl-4 text-left">
@@ -125,18 +125,18 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
           onClose={() => setEditing(false)}
         />
       )}
-    </SettingsContainer>
+    </div>
   );
 }
 
 function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills: FactorySkillInfo[] }) {
   return (
-    <div className="flex flex-col gap-3">
+    <SettingsContainer>
       {displayed.flatMap(({ name, title }) => {
         const skill = skills.find(s => s.name === name);
         return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
       })}
-    </div>
+    </SettingsContainer>
   );
 }
 

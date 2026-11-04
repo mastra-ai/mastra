@@ -1,0 +1,21 @@
+import { CopyButton } from '../CopyButton';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
+import type { InputGroupInputProps } from '../InputGroup';
+
+export type CopyInputProps = Omit<InputGroupInputProps, 'value' | 'readOnly' | 'defaultValue'> & {
+  value: string;
+  /** What's being copied, e.g. "organization ID": names the input and the copy button. */
+  label: string;
+};
+
+/** A read-only value people copy, like an ID or a URL: shown in an input so it reads and selects like one. */
+export function CopyInput({ value, label, className, ...props }: CopyInputProps) {
+  return (
+    <InputGroup className={className}>
+      <InputGroupInput aria-label={label} value={value} readOnly spellCheck={false} {...props} />
+      <InputGroupAddon align="inline-end">
+        <CopyButton content={value} tooltip={`Copy ${label}`} variant="ghost" />
+      </InputGroupAddon>
+    </InputGroup>
+  );
+}

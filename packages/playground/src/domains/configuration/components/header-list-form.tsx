@@ -30,7 +30,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader, showHeadi
           <ul className="space-y-4">
             {headers.map((header, index) => (
               <li key={index}>
-                <HeaderListFormItem index={index} header={header} onRemove={() => onRemoveHeader(index)} />
+                <HeaderFieldsRow index={index} header={header} onRemove={() => onRemoveHeader(index)} />
               </li>
             ))}
           </ul>
@@ -58,7 +58,7 @@ interface HeaderListFormItemProps {
   onRemove: () => void;
 }
 
-const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps) => (
+export const HeaderFieldsRow = ({ index, header, onRemove }: HeaderListFormItemProps) => (
   <div className="grid grid-cols-[1fr_1fr_auto] gap-x-4">
     <Field className="row-span-3 grid-rows-subgrid gap-y-0">
       <FieldLabel required className="mb-2">

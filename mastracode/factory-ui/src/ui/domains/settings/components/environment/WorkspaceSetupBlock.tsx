@@ -25,29 +25,25 @@ export function WorkspaceSetupBlock({
   return (
     <SettingsContainer>
       <SettingsRow label="Working directory" description="Absolute path the repositories are cloned under.">
-        <div className="w-full lg:max-w-96">
-          <CommittedInput
-            label="Working directory"
-            placeholder="/workspace"
-            value={workdir ?? ''}
-            disabled={disabled}
-            onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
-          />
-        </div>
+        <CommittedInput
+          label="Working directory"
+          placeholder="/workspace"
+          value={workdir ?? ''}
+          disabled={disabled}
+          onCommit={raw => onSave({ sandboxWorkingDirectory: raw || null })}
+        />
       </SettingsRow>
       <SettingsRow
         label="Setup command"
         description="Runs in the working directory once every repository is cloned and its own setup command has finished, while the template builds."
       >
-        <div className="w-full lg:max-w-96">
-          <CommittedInput
-            label="Setup command"
-            value={command ?? ''}
-            placeholder="e.g. ./scripts/bootstrap.sh"
-            disabled={disabled}
-            onCommit={next => onSave({ workspaceSetupCommand: next || null })}
-          />
-        </div>
+        <CommittedInput
+          label="Setup command"
+          value={command ?? ''}
+          placeholder="e.g. ./scripts/bootstrap.sh"
+          disabled={disabled}
+          onCommit={next => onSave({ workspaceSetupCommand: next || null })}
+        />
       </SettingsRow>
       {children}
     </SettingsContainer>

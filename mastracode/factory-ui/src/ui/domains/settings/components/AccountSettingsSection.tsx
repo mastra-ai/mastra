@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { CopyInput } from '@mastra/playground-ui/components/CopyInput';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -29,20 +29,11 @@ function authProviderLabel(provider: string | undefined): string {
   );
 }
 
-function AccountValue({ children, mono = false }: { children: string; mono?: boolean }) {
+function AccountValue({ children }: { children: string }) {
   return (
-    <Txt tone="muted" as="span" variant="caption" font={mono ? 'mono' : undefined} className="truncate">
+    <Txt tone="muted" as="span" variant="caption" className="truncate">
       {children}
     </Txt>
-  );
-}
-
-function CopyableAccountValue({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="flex min-w-0 items-center gap-1">
-      <AccountValue mono>{value}</AccountValue>
-      <CopyButton content={value} size="icon-sm" variant="ghost" tooltip={`Copy ${label}`} />
-    </div>
   );
 }
 
@@ -113,12 +104,12 @@ export function AccountSettingsSection() {
           </SettingsRow>
           {user?.userId && (
             <SettingsRow label="Account ID" description="Useful when contacting support.">
-              <CopyableAccountValue value={user.userId} label="account ID" />
+              <CopyInput value={user.userId} label="account ID" />
             </SettingsRow>
           )}
           {user?.organizationId && (
             <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
-              <CopyableAccountValue value={user.organizationId} label="organization ID" />
+              <CopyInput value={user.organizationId} label="organization ID" />
             </SettingsRow>
           )}
         </SettingsContainer>

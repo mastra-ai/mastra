@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsAddRow, SettingsContainer, SettingsEmptyRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Check, Link2, Plus, RotateCcw } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -42,33 +42,24 @@ export function OrganizationConnectionsSection() {
   const [adding, setAdding] = useState(() => searchParams.has('add'));
   const connectionsId = useId();
   return (
-    <SettingsSubsection
-      scope="org"
-      title="Organization connections"
-      action={
-        <Button
-          size="sm"
+    <SettingsSubsection scope="org" title="Organization connections">
+      <SettingsContainer id={connectionsId}>
+        <GithubInstallationRow showAvailable={adding} />
+        <GitLabConnectionRows showAvailable={adding} />
+        <LinearConnectionRow showAvailable={adding} />
+        <JiraConnectionRows showAvailable={adding} />
+        <IncidentioConnectionRows showAvailable={adding} />
+        {/* Only shows while no connection row rendered before it. */}
+        <SettingsEmptyRow className="not-first:hidden">No organization connections</SettingsEmptyRow>
+        <SettingsAddRow
           icon={adding ? <Check /> : <Plus />}
           aria-expanded={adding}
           aria-controls={connectionsId}
           onClick={() => setAdding(!adding)}
         >
           {adding ? 'Done' : 'Add connection'}
-        </Button>
-      }
-    >
-      <div id={connectionsId} className="flex flex-col gap-3">
-        <SettingsContainer className="peer empty:hidden">
-          <GithubInstallationRow showAvailable={adding} />
-          <GitLabConnectionRows showAvailable={adding} />
-          <LinearConnectionRow showAvailable={adding} />
-          <JiraConnectionRows showAvailable={adding} />
-          <IncidentioConnectionRows showAvailable={adding} />
-        </SettingsContainer>
-        <Txt as="p" variant="caption" tone="muted" className="hidden peer-empty:block">
-          No organization connections.
-        </Txt>
-      </div>
+        </SettingsAddRow>
+      </SettingsContainer>
     </SettingsSubsection>
   );
 }

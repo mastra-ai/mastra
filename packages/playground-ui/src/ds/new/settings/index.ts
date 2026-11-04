@@ -2,3 +2,4 @@ export { SettingsContainer, type SettingsContainerProps, type SettingsContainerV
 export { SettingsDescription, SettingsGroup, SettingsHeader, SettingsTitle } from './settings-header';
 export { SettingsFieldsetRow, SettingsRow, type SettingsFieldsetRowProps, type SettingsRowProps } from './settings-row';
 export { SettingsLayout, type SettingsLayoutProps } from './settings-layout';
+export { SettingsAddRow, SettingsEmptyRow, type SettingsAddRowProps } from './settings-list-rows';

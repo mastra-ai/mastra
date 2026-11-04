@@ -78,7 +78,7 @@ export function SettingsPageLayout({
 
   return (
     <PageLayout
-      variant="narrow"
+      variant="form"
       header={header}
       breadcrumbs={
         breadcrumbs ??
