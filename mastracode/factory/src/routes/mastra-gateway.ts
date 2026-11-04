@@ -1,16 +1,8 @@
-/**
- * One-click Mastra Gateway for Factory: the server creates a gateway key for
- * the signed-in user's Mastra organization on the platform API, as that user,
- * and stores it as the tenant's `mastra-gateway` credential. Models then run
- * as `mastra/<provider>/<model>` on the organization's gateway credits, which
- * Factory reads and tops up on the platform as the same user.
- */
-
 import type { Context } from 'hono';
+import { z } from 'zod';
 
 import type { RouteAuth } from './route.js';
 
-/** Platform dashboard, where an organization buys gateway credits. */
 const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects.mastra.ai';
 
 /** The Starter plan's gateway credit pool and its top-up plan, used when the customer names none. */
@@ -23,17 +15,10 @@ const PLATFORM_TIMEOUT_MS = 15_000;
 
 const PLATFORM_UNREACHABLE = 'Could not reach Mastra. Try again.';
 
-export type MastraGatewayErrorCode =
-  | 'mastra_sign_in_required'
-  | 'mastra_organization_mismatch'
-  | 'mastra_org_write_required'
-  | 'mastra_billing_admin_required'
-  | 'mastra_billing_rejected'
-  | 'mastra_platform_unavailable';
+export const MASTRA_SIGN_IN_REQUIRED = 'The Mastra Gateway needs a Factory signed in with a Mastra account.';
 
 export class MastraGatewayError extends Error {
   constructor(
-    readonly code: MastraGatewayErrorCode,
     readonly status: 400 | 403 | 409 | 502,
     message: string,
   ) {
@@ -42,81 +27,60 @@ export class MastraGatewayError extends Error {
 }
 
 function platformUnavailable(message: string): MastraGatewayError {
-  return new MastraGatewayError('mastra_platform_unavailable', 502, message);
+  return new MastraGatewayError(502, message);
 }
 
-async function platformFetch(auth: RouteAuth, c: Context, path: string, init: RequestInit = {}): Promise<Response> {
-  if (!auth.fetchPlatformAsUser) {
-    throw new MastraGatewayError(
-      'mastra_sign_in_required',
-      400,
-      'The Mastra Gateway needs a Factory signed in with a Mastra account.',
-    );
-  }
+async function platformFetch(
+  auth: RouteAuth,
+  c: Context,
+  path: string,
+  init: RequestInit = {},
+  unreachable = PLATFORM_UNREACHABLE,
+): Promise<Response> {
+  if (!auth.fetchPlatformAsUser) throw new MastraGatewayError(400, MASTRA_SIGN_IN_REQUIRED);
   let res: Response | null;
   try {
     res = await auth.fetchPlatformAsUser(c, path, { ...init, signal: AbortSignal.timeout(PLATFORM_TIMEOUT_MS) });
   } catch {
-    throw platformUnavailable(PLATFORM_UNREACHABLE);
+    throw platformUnavailable(unreachable);
   }
-  if (!res || res.status === 401) {
-    throw new MastraGatewayError('mastra_sign_in_required', 400, 'Your Mastra sign-in expired. Sign in again.');
-  }
+  if (!res || res.status === 401) throw new MastraGatewayError(400, 'Your Mastra sign-in expired. Sign in again.');
   return res;
 }
 
-async function readJson(res: Response, failure: string): Promise<unknown> {
-  try {
-    return await res.json();
-  } catch {
-    throw platformUnavailable(failure);
-  }
+async function readJson<T>(res: Response, schema: z.ZodType<T>, failure: string): Promise<T> {
+  const parsed = schema.safeParse(await res.json().catch(() => undefined));
+  if (!parsed.success) throw platformUnavailable(failure);
+  return parsed.data;
 }
 
-interface PlatformMember {
-  email: string | undefined;
-  isAdmin: boolean;
-}
+const PlatformMe = z.object({
+  organizationId: z.string().nullish(),
+  role: z.string().nullish(),
+  user: z.object({ email: z.string().nullish() }).nullish(),
+});
 
 /**
  * The signed-in user on Mastra, once their session is confirmed to be on this
  * Factory's organization. Platform keys and billing follow the session's
  * active organization, which differs from a Factory pinned to another one.
  */
-async function platformMember(auth: RouteAuth, c: Context, orgId: string): Promise<PlatformMember> {
+async function platformMember(auth: RouteAuth, c: Context, orgId: string) {
   const res = await platformFetch(auth, c, '/auth/me');
   if (!res.ok) throw platformUnavailable(PLATFORM_UNREACHABLE);
-  const me = (await readJson(res, PLATFORM_UNREACHABLE)) as {
-    organizationId?: unknown;
-    role?: unknown;
-    user?: { email?: unknown };
-  } | null;
-  if (me?.organizationId !== orgId) {
+  const me = await readJson(res, PlatformMe, PLATFORM_UNREACHABLE);
+  if (me.organizationId !== orgId) {
     throw new MastraGatewayError(
-      'mastra_organization_mismatch',
       409,
       'Your Mastra sign-in is on a different organization than this Factory. Sign in again with this Factory’s organization.',
     );
   }
-  return {
-    email: typeof me.user?.email === 'string' ? me.user.email : undefined,
-    isAdmin: me.role === 'admin',
-  };
+  return { email: me.user?.email ?? undefined, isAdmin: me.role === 'admin' };
 }
 
-export interface MastraGatewayKey {
-  apiKey: string;
-  /** Platform id of the key, to revoke it when Factory removes the credential. */
-  keyId?: string;
-}
+const CreatedGatewayKey = z.object({ apiKey: z.string().min(1), keyId: z.string().nullish() });
 
-/** Create an organization gateway key (`msk_…`) as the signed-in user, labelled by the scope it serves. */
-export async function createGatewayKey(
-  auth: RouteAuth,
-  c: Context,
-  orgId: string,
-  scope: 'org' | 'user',
-): Promise<MastraGatewayKey> {
+export async function createGatewayKey(auth: RouteAuth, c: Context, orgId: string, scope: 'org' | 'user') {
   const { email } = await platformMember(auth, c, orgId);
   const res = await platformFetch(auth, c, GATEWAY_KEYS_PATH, {
     method: 'POST',
@@ -125,24 +89,18 @@ export async function createGatewayKey(
   });
   if (res.status === 403) {
     throw new MastraGatewayError(
-      'mastra_org_write_required',
       403,
       'Your Mastra role cannot create gateway keys for this organization. Ask an admin to connect it.',
     );
   }
   const failure = 'Could not create a Mastra Gateway key. Try again.';
   if (!res.ok) throw platformUnavailable(failure);
-  const body = (await readJson(res, failure)) as { keyId?: unknown; apiKey?: unknown } | null;
-  if (typeof body?.apiKey !== 'string' || !body.apiKey) throw platformUnavailable(failure);
-  return {
-    apiKey: body.apiKey,
-    ...(typeof body.keyId === 'string' && body.keyId ? { keyId: body.keyId } : {}),
-  };
+  const { apiKey, keyId } = await readJson(res, CreatedGatewayKey, failure);
+  return { apiKey, keyId: keyId || undefined };
 }
 
-/** Revoke a gateway key Factory created. A key the platform no longer has counts as revoked. */
-export async function revokeGatewayKey(auth: RouteAuth, c: Context, orgId: string, keyId: string): Promise<void> {
-  await platformMember(auth, c, orgId);
+/** A key the platform no longer has counts as revoked. */
+export async function revokeGatewayKey(auth: RouteAuth, c: Context, keyId: string): Promise<void> {
   const res = await platformFetch(auth, c, `${GATEWAY_KEYS_PATH}/${encodeURIComponent(keyId)}`, {
     method: 'DELETE',
   });
@@ -151,24 +109,27 @@ export async function revokeGatewayKey(auth: RouteAuth, c: Context, orgId: strin
   }
 }
 
-interface CustomerBalance {
-  featureId?: string;
-  remaining?: number | null;
-  granted?: number | null;
-  usage?: number | null;
-  unlimited?: boolean;
-}
+const CustomerBalance = z.object({
+  featureId: z.string().nullish(),
+  remaining: z.number().nullish(),
+  granted: z.number().nullish(),
+  usage: z.number().nullish(),
+  unlimited: z.boolean().nullish(),
+});
 
-interface BillingCustomer {
-  balances?: Record<string, CustomerBalance | undefined>;
-  creditPool?: { featureId?: string | null; topupPlanId?: string | null } | null;
-}
+const BillingCustomer = z.object({
+  customer: z
+    .object({
+      balances: z.record(z.string(), CustomerBalance.nullish()).nullish(),
+      creditPool: z.object({ featureId: z.string().nullish(), topupPlanId: z.string().nullish() }).nullish(),
+    })
+    .nullish(),
+});
 
-async function billingCustomer(auth: RouteAuth, c: Context, failure: string): Promise<BillingCustomer | undefined> {
+async function billingCustomer(auth: RouteAuth, c: Context, failure: string) {
   const res = await platformFetch(auth, c, '/billing/customer');
   if (!res.ok) throw platformUnavailable(failure);
-  const body = (await readJson(res, failure)) as { customer?: BillingCustomer | null } | null;
-  return body?.customer ?? undefined;
+  return (await readJson(res, BillingCustomer, failure)).customer ?? undefined;
 }
 
 function addCreditsUrl(orgId: string): string {
@@ -176,22 +137,21 @@ function addCreditsUrl(orgId: string): string {
 }
 
 export interface MastraGatewayCredits {
-  /** Remaining credits in dollars (1 credit = $1); `null` when the platform reports no balance for the pool. */
-  remaining: number | null;
+  /** Dollars (1 credit = $1); absent when the platform reports no balance for the pool. */
+  remaining?: number;
   unlimited: boolean;
   /** Mastra lets only organization admins buy credits. */
   canAddCredits: boolean;
-  /** The platform page where the organization adds credits. */
   addCreditsUrl: string;
 }
 
-function remainingCredits(balance: CustomerBalance | undefined): number | null {
+function remainingCredits(balance: z.infer<typeof CustomerBalance> | null | undefined): number | undefined {
   if (balance?.remaining != null) return Math.max(0, balance.remaining);
   if (balance?.granted != null) return Math.max(0, balance.granted - (balance.usage ?? 0));
-  return null;
+  return undefined;
 }
 
-/** The organization's gateway credit balance, read like the platform dashboard's `useCreditBalance`. */
+/** Read like the platform dashboard's `useCreditBalance`. */
 export async function getGatewayCredits(auth: RouteAuth, c: Context, orgId: string): Promise<MastraGatewayCredits> {
   const member = await platformMember(auth, c, orgId);
   const customer = await billingCustomer(auth, c, 'Could not read Mastra Gateway credits. Try again.');
@@ -210,11 +170,18 @@ export async function getGatewayCredits(auth: RouteAuth, c: Context, orgId: stri
 
 export type GatewayCreditPurchase = { status: 'added' } | { status: 'payment_required'; paymentUrl: string };
 
-/**
- * Buy `amount` dollars of gateway credits on the organization's credit pool,
- * as the signed-in user. A saved card settles at once; otherwise Mastra returns
- * the page where the user pays, which lands back on the platform credits page.
- */
+const PlatformProblem = z.object({
+  detail: z.string().min(1).optional().catch(undefined),
+  error: z.string().min(1).optional().catch(undefined),
+});
+
+const AttachResult = z.object({
+  paymentUrl: z.string().nullish(),
+  requiredAction: z.unknown().optional(),
+  invoice: z.object({ hostedInvoiceUrl: z.string().nullish() }).nullish(),
+});
+
+/** A saved card settles at once; otherwise Mastra returns the page where the user pays. */
 export async function purchaseGatewayCredits(
   auth: RouteAuth,
   c: Context,
@@ -225,9 +192,11 @@ export async function purchaseGatewayCredits(
   const pool = (await billingCustomer(auth, c, 'Could not add Mastra Gateway credits. Try again.'))?.creditPool;
   const unconfirmed =
     'Mastra did not confirm the purchase, and the payment may have gone through. Check your balance before you try again.';
-  let res: Response;
-  try {
-    res = await platformFetch(auth, c, '/billing/attach', {
+  const res = await platformFetch(
+    auth,
+    c,
+    '/billing/attach',
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -236,44 +205,24 @@ export async function purchaseGatewayCredits(
         successUrl: `${addCreditsUrl(orgId)}?credits_added=1`,
         redirectMode: 'if_required',
       }),
-    });
-  } catch (error) {
-    if (error instanceof MastraGatewayError && error.code === 'mastra_platform_unavailable') {
-      throw platformUnavailable(unconfirmed);
-    }
-    throw error;
-  }
+    },
+    unconfirmed,
+  );
   if (res.status === 403) {
     throw new MastraGatewayError(
-      'mastra_billing_admin_required',
       403,
       'Only admins of your Mastra organization can add credits. Ask an admin to add them.',
     );
   }
   if (res.status >= 400 && res.status < 500) {
-    const problem = (await res.json().catch(() => null)) as { detail?: unknown; error?: unknown } | null;
-    const detail = problem?.detail ?? problem?.error;
-    throw new MastraGatewayError(
-      'mastra_billing_rejected',
-      409,
-      typeof detail === 'string' && detail ? detail : 'Mastra could not add the credits.',
-    );
+    const problem = PlatformProblem.safeParse(await res.json().catch(() => undefined)).data;
+    throw new MastraGatewayError(409, problem?.detail ?? problem?.error ?? 'Mastra could not add the credits.');
   }
   if (!res.ok) throw platformUnavailable(unconfirmed);
-  const result = (await readJson(res, unconfirmed)) as {
-    paymentUrl?: unknown;
-    requiredAction?: unknown;
-    invoice?: { hostedInvoiceUrl?: unknown } | null;
-  } | null;
-  if (typeof result?.paymentUrl === 'string' && result.paymentUrl) {
-    return { status: 'payment_required', paymentUrl: result.paymentUrl };
-  }
-  if (result?.requiredAction) {
-    const invoiceUrl = result.invoice?.hostedInvoiceUrl;
-    return {
-      status: 'payment_required',
-      paymentUrl: typeof invoiceUrl === 'string' && invoiceUrl ? invoiceUrl : addCreditsUrl(orgId),
-    };
+  const result = await readJson(res, AttachResult, unconfirmed);
+  if (result.paymentUrl) return { status: 'payment_required', paymentUrl: result.paymentUrl };
+  if (result.requiredAction) {
+    return { status: 'payment_required', paymentUrl: result.invoice?.hostedInvoiceUrl || addCreditsUrl(orgId) };
   }
   return { status: 'added' };
 }

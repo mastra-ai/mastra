@@ -42,6 +42,7 @@ import { THINKING_LEVELS } from './contracts.js';
 import {
   createGatewayKey,
   getGatewayCredits,
+  MASTRA_SIGN_IN_REQUIRED,
   MastraGatewayError,
   purchaseGatewayCredits,
   revokeGatewayKey,
@@ -845,7 +846,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       listProviders({ controller, tenantCredentials: records, deploymentProviders, connectWithMastraAccount });
     const gatewayFailure = (c: Context, error: unknown) =>
       error instanceof MastraGatewayError
-        ? c.json({ error: error.code, message: error.message }, error.status)
+        ? c.json({ error: error.message }, error.status)
         : c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
@@ -1092,23 +1093,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      // One click: create a Mastra Gateway key for the caller's Mastra organization
-      // (as the caller, on the platform API) and store it in the requested scope.
       registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
         method: 'POST',
         requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
           if ('response' in ctx) return ctx.response;
-          if (ctx.mode !== 'tenant') {
-            return c.json(
-              {
-                error: 'mastra_sign_in_required',
-                message: 'The Mastra Gateway needs a Factory signed in with a Mastra account.',
-              },
-              400,
-            );
-          }
+          if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
           let body: { scope?: unknown };
           try {
             body = await c.req.json();
@@ -1123,11 +1114,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             if (!(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
               const { apiKey, keyId } = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
-              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, {
-                type: 'api_key',
-                key: apiKey,
-                ...(keyId ? { keyId } : {}),
-              });
+              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key: apiKey, keyId });
               onCredentialsChanged(tenant);
             }
             const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
@@ -1144,7 +1131,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
           if ('response' in ctx) return ctx.response;
-          if (ctx.mode !== 'tenant') return c.json({ error: 'mastra_sign_in_required' }, 400);
+          if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
           try {
             return c.json(await getGatewayCredits(auth, loose(c), ctx.orgId));
           } catch (error) {
@@ -1159,7 +1146,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
           if ('response' in ctx) return ctx.response;
-          if (ctx.mode !== 'tenant') return c.json({ error: 'mastra_sign_in_required' }, 400);
+          if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
           let body: unknown;
           try {
             body = await c.req.json();
@@ -1204,12 +1191,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
               const credentialId = getAuthProviderId(provider);
               const stored =
-                credentialId === MASTRA_GATEWAY_PROVIDER && connectWithMastraAccount
+                credentialId === MASTRA_GATEWAY_PROVIDER
                   ? await ctx.storage.getCredential(tenant, credentialId)
                   : undefined;
               if (stored?.type === 'api_key' && stored.keyId) {
                 const keyId = stored.keyId;
-                await revokeGatewayKey(auth, loose(c), ctx.orgId, keyId).catch(error => {
+                await revokeGatewayKey(auth, loose(c), keyId).catch(error => {
                   console.warn('[factory] Mastra Gateway key left unrevoked on Mastra', {
                     keyId,
                     error: error instanceof Error ? error.message : String(error),
@@ -1226,7 +1213,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
-            return gatewayFailure(loose(c), error);
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
         },
       }),

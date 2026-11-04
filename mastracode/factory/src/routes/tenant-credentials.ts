@@ -318,11 +318,11 @@ export async function resolveTenantProviderDefaultModel(
   const providerDefault = Object.entries(PROVIDER_DEFAULT_MODELS).find(
     ([provider]) => store.get(provider) !== undefined,
   )?.[1];
-  return providerDefault ?? (store.get(MASTRA_GATEWAY_PROVIDER) ? MASTRA_GATEWAY_DEFAULT_MODEL : undefined);
+  if (providerDefault) return providerDefault;
+  return store.get(MASTRA_GATEWAY_PROVIDER)
+    ? `${MASTRA_GATEWAY_PREFIX}${PROVIDER_DEFAULT_MODELS.anthropic}`
+    : undefined;
 }
-
-/** Default model for a Factory that only has a Mastra Gateway key: the Anthropic default, through the gateway. */
-const MASTRA_GATEWAY_DEFAULT_MODEL = `${MASTRA_GATEWAY_PREFIX}${PROVIDER_DEFAULT_MODELS.anthropic}`;
 
 /** Test hook: clear registration and cached tenant snapshots. */
 export function resetTenantCredentialResolverForTests(): void {

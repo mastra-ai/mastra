@@ -708,7 +708,6 @@ describe('Mastra Gateway routes with a tenant', () => {
     const res = await connect(buildApp(platform), 'org');
 
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toBe('mastra_organization_mismatch');
     expect(platform.requests.map(r => r.path)).toEqual(['/auth/me']);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
   });
@@ -719,39 +718,26 @@ describe('Mastra Gateway routes with a tenant', () => {
     const res = await connect(buildApp(platform), 'org');
 
     expect(res.status).toBe(403);
-    expect((await res.json()).error).toBe('mastra_org_write_required');
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
   });
 
-  it("revokes the Factory's gateway key on Mastra when its credential is removed", async () => {
-    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
-      type: 'api_key',
-      key: 'msk_factory',
-      keyId: 'key_1',
-    });
-    const platform = fakePlatform({ [`DELETE ${KEYS}/key_1`]: () => new Response(null, { status: 204 }) });
+  it.each([204, 403])(
+    "revokes the Factory's gateway key on Mastra and removes its credential (Mastra answers %i)",
+    async status => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
+        type: 'api_key',
+        key: 'msk_factory',
+        keyId: 'key_1',
+      });
+      const platform = fakePlatform({ [`DELETE ${KEYS}/key_1`]: () => new Response(null, { status }) });
 
-    const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
+      const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
 
-    expect(res.status).toBe(200);
-    expect(platform.requests).toContainEqual({ method: 'DELETE', path: `${KEYS}/key_1` });
-    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
-  });
-
-  it('still removes the credential when Mastra refuses to revoke its key', async () => {
-    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
-      type: 'api_key',
-      key: 'msk_factory',
-      keyId: 'key_1',
-    });
-    const platform = fakePlatform({ [`DELETE ${KEYS}/key_1`]: () => new Response(null, { status: 403 }) });
-
-    const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
-
-    expect(res.status).toBe(200);
-    expect(platform.requests).toContainEqual({ method: 'DELETE', path: `${KEYS}/key_1` });
-    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
-  });
+      expect(res.status).toBe(200);
+      expect(platform.requests).toContainEqual({ method: 'DELETE', path: `${KEYS}/key_1` });
+      expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
+    },
+  );
 
   it('reports the remaining gateway credits and where to add more', async () => {
     const platform = fakePlatform({
@@ -790,7 +776,7 @@ describe('Mastra Gateway routes with a tenant', () => {
 
     const res = await buildApp(platform).request('/web/config/providers/mastra/credits');
 
-    expect(await res.json()).toMatchObject({ remaining: null });
+    expect(await res.json()).not.toHaveProperty('remaining');
   });
 
   const buyCredits = (app: Hono, amount: unknown) =>
@@ -856,7 +842,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(await res.json()).toEqual({ status: 'payment_required', paymentUrl: 'https://invoice.stripe.com/i/inv_1' });
   });
 
-  it('explains that only Mastra admins can buy credits when the platform refuses the member', async () => {
+  it('refuses a member the platform does not let buy credits', async () => {
     const platform = fakePlatform(
       {
         'GET /billing/customer': teamsCustomer,
@@ -868,10 +854,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     const res = await buyCredits(buildApp(platform), 20);
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({
-      error: 'mastra_billing_admin_required',
-      message: 'Only admins of your Mastra organization can add credits. Ask an admin to add them.',
-    });
+    expect((await res.json()).error).toMatch(/Only admins/);
   });
 
   it("passes on the platform's reason when it rejects the purchase", async () => {
@@ -887,10 +870,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     const res = await buyCredits(buildApp(platform), 20);
 
     expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({
-      error: 'mastra_billing_rejected',
-      message: 'Another billing change is in progress. Try again in a moment.',
-    });
+    expect(await res.json()).toEqual({ error: 'Another billing change is in progress. Try again in a moment.' });
   });
 
   it('warns that the payment may have gone through when Mastra does not answer the purchase', async () => {
@@ -904,11 +884,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     const res = await buyCredits(buildApp(platform), 20);
 
     expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({
-      error: 'mastra_platform_unavailable',
-      message:
-        'Mastra did not confirm the purchase, and the payment may have gone through. Check your balance before you try again.',
-    });
+    expect((await res.json()).error).toMatch(/may have gone through/);
   });
 
   it('charges nothing for an amount the platform does not sell', async () => {
