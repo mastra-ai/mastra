@@ -915,4 +915,49 @@ describe('MCPClient app-only tools', () => {
       await close();
     }
   });
+
+  it('drops app-only tools from a catalog cached before they were filtered out', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const definitions = JSON.parse(JSON.stringify(await client.listToolDefinitions()));
+      definitions.apps.appOnly = { ...definitions.apps.plain, name: 'appOnly', _meta: { ui: { visibility: ['app'] } } };
+
+      expect(Object.keys(await client.toolsFromDefinitions({ definitions })).sort()).toEqual([
+        'apps_plain',
+        'apps_shared',
+      ]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('never hands app-only tools to the per-server discovery callback', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const seen: Record<string, string[]> = {};
+      await client.listToolsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`tools:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+      await client.listToolsetsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`toolsets:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+      await client.listToolDefinitionsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`definitions:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+
+      expect(seen).toEqual({
+        'tools:apps': ['plain', 'shared'],
+        'toolsets:apps': ['plain', 'shared'],
+        'definitions:apps': ['plain', 'shared'],
+      });
+    } finally {
+      await close();
+    }
+  });
 });

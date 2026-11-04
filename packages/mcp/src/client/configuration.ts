@@ -1225,7 +1225,7 @@ To fix this you have three different options:
     const durations: Record<string, number> = {};
 
     const settled = await this.discoverAcrossServers(
-      serverName => this.getToolsForServer(serverName),
+      async serverName => modelVisibleTools(await this.getToolsForServer(serverName)),
       {
         errorId: 'MCP_CLIENT_GET_TOOLS_FAILED',
         logMessage: 'Failed to list tools from server:',
@@ -1240,7 +1240,7 @@ To fix this you have three different options:
         errorDetails[serverName] = error;
         continue;
       }
-      for (const [toolName, toolConfig] of Object.entries(modelVisibleTools(value))) {
+      for (const [toolName, toolConfig] of Object.entries(value)) {
         connectedTools[`${serverName}_${toolName}`] = toolConfig;
       }
     }
@@ -1313,7 +1313,7 @@ To fix this you have three different options:
     const durations: Record<string, number> = {};
 
     const settled = await this.discoverAcrossServers(
-      serverName => this.getToolsForServer(serverName),
+      async serverName => modelVisibleTools(await this.getToolsForServer(serverName)),
       {
         errorId: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
         logMessage: 'Failed to list toolsets from server:',
@@ -1328,7 +1328,7 @@ To fix this you have three different options:
         errorDetails[serverName] = error;
         continue;
       }
-      connectedToolsets[serverName] = modelVisibleTools(value);
+      connectedToolsets[serverName] = value;
     }
 
     const result = { toolsets: connectedToolsets, errors, errorDetails };
@@ -1388,7 +1388,7 @@ To fix this you have three different options:
     const settled = await this.discoverAcrossServers(
       async serverName => {
         const client = await this.getConnectedClientForServer(serverName);
-        return client.toolDefinitions();
+        return modelVisibleDefinitions(await client.toolDefinitions());
       },
       {
         errorId: 'MCP_CLIENT_GET_TOOL_DEFINITIONS_FAILED',
@@ -1404,7 +1404,7 @@ To fix this you have three different options:
         errorDetails[serverName] = error;
         continue;
       }
-      definitions[serverName] = modelVisibleDefinitions(value);
+      definitions[serverName] = value;
     }
 
     const result = { definitions, errors, errorDetails };
@@ -1473,7 +1473,7 @@ To fix this you have three different options:
         continue;
       }
 
-      for (const [toolName, definition] of Object.entries(definitions)) {
+      for (const [toolName, definition] of Object.entries(modelVisibleDefinitions(definitions))) {
         try {
           tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
         } catch (error) {
