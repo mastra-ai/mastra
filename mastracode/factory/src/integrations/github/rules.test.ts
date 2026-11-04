@@ -6330,6 +6330,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(sourceTypes(cards.find(card => card.id === fresh.id)!)).toEqual(['issue']);
     });
 
+    it('gives a pull request its own card when the issue it fixes was canceled', async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'canceled');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      expect(cards.find(card => card.id === issue.id)).toMatchObject({ stages: ['canceled'] });
+      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+    });
+
     it('files a pull request on an issue still in Triage, which stays there: Work has no Triage → PR review move', async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'triage');

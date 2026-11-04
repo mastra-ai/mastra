@@ -186,6 +186,59 @@ function placed(card: { board?: string | null; stages: string[] } | undefined) {
 }
 
 describe('intake routes placing linked cards', () => {
+  describe('a route that joins a pull request to the card of the issue it closes', () => {
+    const joinRoute = (enabled = true) => ({
+      name: 'Anything joins',
+      enabled,
+      when: null,
+      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
+    });
+    const pullRequest = (issueId: string, authorTrusted: boolean) => ({
+      sourceKey: 'github-pr:17',
+      source: 'github-pr' as const,
+      title: 'PR 17',
+      closesIssue: { workItemId: issueId },
+      metadata: { authorTrusted, state: 'open' },
+    });
+    const sourceTypes = async (seeded: Awaited<ReturnType<typeof setup>>, id: string) =>
+      (await seeded.workItems.get({ orgId: 'org-1', id }))!.workItem.sources.map(source => source.sourceType);
+
+    it("joins a trusted author's pull request, and moves the waiting card to PR review", async () => {
+      const seeded = await setup();
+      await seeded.route(joinRoute());
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+
+      expect(await seeded.deliver(pullRequest(issue.id, true))).toBeUndefined();
+
+      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue', 'pull-request']);
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!.stages).toEqual(['pr-review']);
+    });
+
+    it("never joins an untrusted author's pull request, even when a route matches every card", async () => {
+      const seeded = await setup();
+      await seeded.route(joinRoute());
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+
+      const own = await seeded.deliver(pullRequest(issue.id, false));
+
+      expect(own).toBeDefined();
+      expect(own!.id).not.toBe(issue.id);
+      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue']);
+    });
+
+    it('falls through to the next route when the joining route is disabled', async () => {
+      const seeded = await setup();
+      await seeded.route(joinRoute(false));
+      await seeded.route({ name: 'To PR review', when: null, target: { boardKey: 'work', phaseKey: 'pr-review' } });
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+
+      const own = await seeded.deliver(pullRequest(issue.id, true));
+
+      expect(placed(own)).toEqual({ board: 'work', stages: ['pr-review'] });
+      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue']);
+    });
+  });
+
   it('leaves every arrival where its decision says when the project has no routes', async () => {
     const { deliver } = await setup();
     expect(placed(await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: true } }))).toEqual({

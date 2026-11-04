@@ -212,7 +212,7 @@ export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
       { field: 'source.kind', operator: 'equals', value: 'pull_request' },
       { field: 'author.trusted', operator: 'equals', value: true },
       { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
-      { field: 'closedIssue.phase', operator: 'in', value: ['intake', 'triage', 'canceled'] },
+      { field: 'closedIssue.phase', operator: 'in', value: ['intake', 'triage'] },
       { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
     ],
   },
