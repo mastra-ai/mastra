@@ -52,3 +52,61 @@ export async function validateSchema<S extends StandardSchemaV1>(
 ): Promise<GenUIValidationResult<InferSchemaOutput<S>>> {
   return toResult((await schema['~standard'].validate(value)) as StandardSchemaV1Result<InferSchemaOutput<S>>);
 }
+
+type Issues = ReadonlyArray<{ readonly path?: ReadonlyArray<unknown> }>;
+
+const pathKey = (segment: unknown) =>
+  typeof segment === 'object' && segment !== null ? (segment as { key: PropertyKey }).key : segment;
+
+/**
+ * Strict-mode providers (e.g. OpenAI structured outputs) make every optional
+ * field required-but-nullable, so the model sends `null` for "not set". Drop
+ * the `null`s the schema rejected so the original optional field validates.
+ * Returns undefined when no rejected `null` was found.
+ */
+function dropRejectedNulls(value: unknown, issues: Issues): unknown {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const copy = structuredClone(value) as Record<PropertyKey, unknown>;
+  let changed = false;
+  for (const issue of issues) {
+    const path = issue.path?.map(pathKey);
+    if (!path?.length) continue;
+    let parent: unknown = copy;
+    for (const key of path.slice(0, -1)) parent = (parent as Record<PropertyKey, unknown> | null)?.[key as PropertyKey];
+    const key = path[path.length - 1] as PropertyKey;
+    if (
+      typeof parent === 'object' &&
+      parent !== null &&
+      !Array.isArray(parent) &&
+      (parent as Record<PropertyKey, unknown>)[key] === null
+    ) {
+      delete (parent as Record<PropertyKey, unknown>)[key];
+      changed = true;
+    }
+  }
+  return changed ? copy : undefined;
+}
+
+/** Validate model-generated input, treating rejected `null`s as omitted optional fields. */
+export function validateModelInputSync<S extends StandardSchemaV1>(
+  schema: S,
+  value: unknown,
+): GenUIValidationResult<InferSchemaOutput<S>> {
+  const result = schema['~standard'].validate(value);
+  if (result instanceof Promise) return { ok: false, error: 'schema requires async validation' };
+  if (!result.issues) return toResult(result as StandardSchemaV1Result<InferSchemaOutput<S>>);
+  const retry = dropRejectedNulls(value, result.issues);
+  const second = retry === undefined ? undefined : validateSchemaSync(schema, retry);
+  return second?.ok ? second : toResult(result as StandardSchemaV1Result<InferSchemaOutput<S>>);
+}
+
+export async function validateModelInput<S extends StandardSchemaV1>(
+  schema: S,
+  value: unknown,
+): Promise<GenUIValidationResult<InferSchemaOutput<S>>> {
+  const result = await schema['~standard'].validate(value);
+  if (!result.issues) return toResult(result as StandardSchemaV1Result<InferSchemaOutput<S>>);
+  const retry = dropRejectedNulls(value, result.issues);
+  const second = retry === undefined ? undefined : await validateSchema(schema, retry);
+  return second?.ok ? second : toResult(result as StandardSchemaV1Result<InferSchemaOutput<S>>);
+}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http } from 'msw';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,10 +12,12 @@ import { MessageFactory } from '../../ui/MessageFactory';
 import type { GenUIChatActionHandler } from '../controller';
 import {
   createGenUI,
+  createGenUIController,
   defineGenUIChatAction,
   defineGenUIComponent,
   defineGenUIToolRenderer,
   GenUIProvider,
+  GenUISurfaceOutlet,
   useGenUIAction,
   useGenUIChat,
   useGenUILocalState,
@@ -48,10 +50,12 @@ function GenUIChat({
   genUI,
   actions,
   initialMessages,
+  outlet,
 }: {
   genUI: GenUIRegistry;
   actions?: Record<string, GenUIChatActionHandler<any>>;
   initialMessages?: MastraDBMessage[];
+  outlet?: boolean;
 }) {
   const chat = useGenUIChat({
     agentId: 'agent-1',
@@ -72,6 +76,11 @@ function GenUIChat({
           {...chat.genUI.renderers}
         />
       ))}
+      {outlet && (
+        <div data-testid="panel">
+          <GenUISurfaceOutlet controller={chat.genUI.controller} placement="panel" />
+        </div>
+      )}
     </div>
   );
 }
@@ -312,6 +321,60 @@ describe('useGenUIChat — tool UI', () => {
     expect(bodies).toHaveLength(1);
   });
 
+  it('treats the nulls strict-mode models send for optional fields as omitted', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.post(STREAM_URL, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        if (bodies.length === 1) {
+          return sseResponse([
+            chunk('start'),
+            chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_Product', args: { name: 'Lamp', tagline: null } }),
+            chunk('tool-result', { toolCallId: 'c1', toolName: 'ui_Product', result: { acknowledged: true } }),
+            chunk('tool-call', { toolCallId: 'c2', toolName: 'search', args: { query: 'lamps', limit: null } }),
+            chunk('tool-result', { toolCallId: 'c2', toolName: 'search', result: { hits: 3 } }),
+            chunk('tool-call', { toolCallId: 'c3', toolName: 'ui_Pick', args: { label: 'Colour', hint: null } }),
+            finish('tool-calls'),
+          ]);
+        }
+        return sseResponse([finish('stop')]);
+      }),
+    );
+    const Product = defineGenUIComponent({
+      schema: z.object({ name: z.string(), tagline: z.string().optional() }),
+      tool: true,
+      component: ({ props }) => <p data-testid="product">{props.tagline ?? `${props.name} (no tagline)`}</p>,
+    });
+    const Pick = defineGenUIComponent({
+      schema: z.object({ label: z.string(), hint: z.string().optional() }),
+      tool: { mode: 'interactive', responseSchema: z.object({ choice: z.string() }) },
+      component: ({ props }) => {
+        const { canRespond, respond } = useGenUIToolResponse();
+        return (
+          <button disabled={!canRespond} onClick={() => void respond({ choice: 'oak' })}>
+            Pick {props.label}
+          </button>
+        );
+      },
+    });
+    const search = defineGenUIToolRenderer({
+      argsSchema: z.object({ query: z.string(), limit: z.number().optional() }),
+      component: ({ args, validationError }) => (
+        <p data-testid="search">{validationError ?? `${args?.query} limit=${String(args?.limit)}`}</p>
+      ),
+    });
+    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { Product, Pick }, tools: { search } })} />);
+    await send('Show me a lamp');
+
+    expect((await screen.findByTestId('product')).textContent).toBe('Lamp (no tagline)');
+    expect((await screen.findByTestId('search')).textContent).toBe('lamps limit=undefined');
+    const pick = await screen.findByRole('button', { name: 'Pick Colour' });
+    await waitFor(() => expect((pick as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(pick);
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(JSON.stringify(bodies[1])).toContain('"choice":"oak"');
+  });
+
   it('an interactive frontend tool waits for the user and sends their answer back to the agent', async () => {
     const bodies: Record<string, unknown>[] = [];
     server.use(
@@ -397,6 +460,126 @@ describe('useGenUIChat — surface tool', () => {
     expect(tool.description).toContain('Current weather for a city');
     expect(JSON.stringify(bodies[1]!.messages)).toContain('"ok":true');
     expect(document.querySelector('[data-genui-surface="weather"]')?.getAttribute('data-genui-status')).toBe('ready');
+  });
+
+  it('a strict-mode model can build a surface from the advertised schema alone', async () => {
+    type Schema = {
+      type?: string;
+      properties?: Record<string, Schema>;
+      items?: Schema;
+      anyOf?: Schema[];
+      enum?: unknown[];
+    };
+    // Strict structured outputs close every object: undeclared keys never reach the browser and
+    // every declared key is sent, as null when the model has nothing to say.
+    const asStrictModelSends = (schema: Schema, value: unknown): unknown => {
+      if (schema.anyOf) {
+        const branch =
+          schema.anyOf.find(b =>
+            Object.entries(b.properties ?? {}).some(
+              ([k, p]) => p.enum?.length === 1 && (value as Record<string, unknown>)?.[k] === p.enum[0],
+            ),
+          ) ?? schema.anyOf.find(b => b.type === (Array.isArray(value) ? 'array' : typeof value));
+        return branch ? asStrictModelSends(branch, value) : null;
+      }
+      if (Array.isArray(value)) return value.map(v => asStrictModelSends(schema.items ?? {}, v));
+      if (value && typeof value === 'object') {
+        const record = value as Record<string, unknown>;
+        return Object.fromEntries(
+          Object.entries(schema.properties ?? {}).map(([k, s]) => [
+            k,
+            record[k] === undefined ? null : asStrictModelSends(s, record[k]),
+          ]),
+        );
+      }
+      return value;
+    };
+
+    const bodies: Record<string, unknown>[] = [];
+    server.use(
+      http.post(STREAM_URL, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        if (bodies.length === 1) {
+          const tools = bodies[0]!.clientTools as Record<string, { inputSchema: Schema }>;
+          const args = asStrictModelSends(tools.ui_surface!.inputSchema, {
+            surfaceId: 'weather',
+            operations: [
+              { op: 'createSurface', placement: 'inline' },
+              {
+                op: 'upsertNodes',
+                nodes: [{ id: 'card', component: 'WeatherCard', props: { city: 'Rome', temp: 30 } }],
+              },
+              { op: 'setRoot', rootId: 'card' },
+            ],
+          });
+          return sseResponse([
+            chunk('start'),
+            chunk('tool-call', { toolCallId: 'c1', toolName: 'ui_surface', args }),
+            finish('tool-calls'),
+          ]);
+        }
+        return sseResponse([finish('stop')]);
+      }),
+    );
+    renderWithProviders(<GenUIChat genUI={createGenUI({ components: { WeatherCard }, surfaceTool: true })} />);
+    await send('Weather in Rome?');
+
+    expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 30°');
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(JSON.stringify(bodies[1]!.messages)).toContain('"ok":true');
+  });
+
+  // A model asked for a big layout picked `standalone`; with no outlet for it the surface was
+  // accepted with ok:true and shown nowhere.
+  it('only lets the model place a surface where the app renders it', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const surfaceCall = (toolCallId: string, placement: string, city: string) => [
+      chunk('start'),
+      chunk('tool-call', {
+        toolCallId,
+        toolName: 'ui_surface',
+        args: {
+          surfaceId: `weather-${city}`,
+          operations: [
+            { op: 'createSurface', rootId: 'card', placement },
+            { op: 'upsertNodes', nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 20 } }] },
+          ],
+        },
+      }),
+      finish('tool-calls'),
+    ];
+    server.use(
+      http.post(STREAM_URL, async ({ request }) => {
+        bodies.push((await request.json()) as Record<string, unknown>);
+        if (bodies.length === 1) return sseResponse(surfaceCall('c1', 'standalone', 'Oslo'));
+        if (bodies.length === 2) return sseResponse(surfaceCall('c2', 'panel', 'Rome'));
+        return sseResponse([finish('stop')]);
+      }),
+    );
+    const genUI = createGenUI({ components: { WeatherCard }, surfaceTool: { placements: ['inline', 'panel'] } });
+    renderWithProviders(<GenUIChat genUI={genUI} outlet />);
+    await send('Weather?');
+
+    const tools = bodies[0]!.clientTools as Record<string, { inputSchema: unknown; description: string }>;
+    const createSurface = JSON.stringify(tools.ui_surface!.inputSchema).match(/"placement":\{[^}]*\}/)?.[0];
+    expect(createSurface).toContain('["inline","panel"]');
+    expect(tools.ui_surface!.description).not.toContain('standalone');
+
+    await waitFor(() => expect(bodies).toHaveLength(3));
+    expect(JSON.stringify(bodies[1]!.messages)).toMatch(
+      /placement \\"standalone\\" is not available[^"]*inline, panel/,
+    );
+    expect(JSON.stringify(bodies[2]!.messages)).toContain('"ok":true,"surfaceId":"weather-Rome"');
+    expect((await screen.findByTestId('weather')).textContent).toBe('Rome: 20°');
+    expect(within(screen.getByTestId('panel')).getByTestId('weather')).toBeTruthy();
+    expect(screen.queryByText('Oslo: 20°')).toBeNull();
+  });
+
+  it('offers only inline surfaces when the app declares no other placements', async () => {
+    const genUI = createGenUI({ components: { WeatherCard }, surfaceTool: true });
+    const controller = createGenUIController({ registry: genUI });
+    const schema = JSON.stringify((controller.clientTools.ui_surface as { inputSchema: unknown }).inputSchema);
+    expect(schema.match(/"placement":\{[^}]*\}/)?.[0]).toContain('"enum":["inline"]');
   });
 
   it('rejects a surface built from unregistered components, tells the model why, and accepts its retry', async () => {

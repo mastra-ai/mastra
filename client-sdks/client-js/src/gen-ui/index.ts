@@ -54,7 +54,13 @@ export type {
 } from './actions';
 export { parsePartialJSON } from './partial-json';
 export type { PartialJSONResult } from './partial-json';
-export { isStandardSchema, validateSchema, validateSchemaSync } from './standard-schema';
+export {
+  isStandardSchema,
+  validateModelInput,
+  validateModelInputSync,
+  validateSchema,
+  validateSchemaSync,
+} from './standard-schema';
 export type {
   GenUIValidationResult,
   InferSchemaOutput,
