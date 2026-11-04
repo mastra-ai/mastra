@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { Sandboxes } from '@docker/sandboxes';
 import type { Sandbox } from '@docker/sandboxes';
-import { MastraSandbox, validateSandboxFileMode } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError, validateSandboxFileMode } from '@mastra/core/workspace';
 import type {
   ProviderStatus,
   CommandOptions,
@@ -63,9 +63,11 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
   }
 
   protected async connect(sandbox: Sandbox): Promise<void> {
-    if (sandbox.status === 'stopped') sandbox = await sandbox.start();
+    this.sandbox = sandbox;
+    this.remoteId = sandbox.name;
+    if (sandbox.status === 'stopped') this.sandbox = sandbox = await sandbox.start();
     this.sandbox = await sandbox.waitUntilRunning();
-    this.remoteId = this.sandbox.name;
+    if (this.sandbox.status !== 'running') throw new SandboxNotReadyError(`${this.id} (${this.sandbox.status})`);
     this.createdAt = this.sandbox.resource.core.createdAt ?? this.createdAt;
   }
 
@@ -111,18 +113,36 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
     options.abortSignal?.addEventListener('abort', onAbort, { once: true });
     if (options.abortSignal?.aborted) controller.abort();
 
-    const output = { stdout: '', stderr: '' };
+    const retained = { stdout: [] as Buffer[], stderr: [] as Buffer[] };
+    const head = { stdout: 0, stderr: 0 };
+    const size = { stdout: 0, stderr: 0 };
     const dropped = { stdout: 0, stderr: 0 };
     const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
+    const discard = (stream: 'stdout' | 'stderr', count: number) => {
+      while (count > 0) {
+        const chunks = retained[stream];
+        const first = chunks[head[stream]]!;
+        const removed = Math.min(count, first.length);
+        if (removed === first.length) head[stream]++;
+        else chunks[head[stream]] = first.subarray(removed);
+        size[stream] -= removed;
+        dropped[stream] += removed;
+        count -= removed;
+      }
+      if (head[stream] > 64 && head[stream] * 2 > retained[stream].length) {
+        retained[stream].splice(0, head[stream]);
+        head[stream] = 0;
+      }
+    };
     const append = (stream: 'stdout' | 'stderr', data: string) => {
       if (!data) return;
       (stream === 'stdout' ? options.onStdout : options.onStderr)?.(data);
-      const bytes = Buffer.from(output[stream] + data);
-      if (limit !== Infinity && bytes.length > limit) {
-        dropped[stream] += bytes.length - limit;
-        output[stream] = bytes.subarray(bytes.length - limit).toString('utf8');
-      } else {
-        output[stream] += data;
+      const chunk = Buffer.from(data);
+      retained[stream].push(chunk);
+      size[stream] += chunk.length;
+      if (limit !== Infinity && size[stream] > limit) {
+        discard(stream, size[stream] - limit);
+        while (size[stream] && (retained[stream][head[stream]]![0]! & 0xc0) === 0x80) discard(stream, 1);
       }
     };
     let process: Awaited<ReturnType<Sandbox['processes']['start']>> | undefined;
@@ -175,7 +195,8 @@ export class DockerSandboxesSandbox extends MastraSandbox<Sandbox> {
     return {
       success: exitCode === 0 && !controller.signal.aborted,
       exitCode,
-      ...output,
+      stdout: Buffer.concat(retained.stdout.slice(head.stdout)).toString('utf8'),
+      stderr: Buffer.concat(retained.stderr.slice(head.stderr)).toString('utf8'),
       executionTimeMs: Date.now() - started,
       timedOut,
       killed: controller.signal.aborted,
