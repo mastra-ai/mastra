@@ -1005,6 +1005,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
           {
             pubsub: this.#pubsub,
+            runStorage: this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId),
             stepExecutor: this.stepExecutor,
             step,
             stepResult: prevResult,
@@ -2360,6 +2361,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         {
           pubsub: this.#pubsub,
+          runStorage: this.#runStorage(workflowId, runId),
           stepExecutor: this.stepExecutor,
           step,
           stepResult,

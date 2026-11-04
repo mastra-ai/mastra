@@ -222,6 +222,32 @@ describe('evented step messages on storage v2', () => {
     expect(nested.result.result).toEqual(expected);
   });
 
+  // A loop's next iteration takes the body's iteration count from the stored run on v2.
+  it.each([1, 2] as const)('count loop iterations (v%i)', async storageVersion => {
+    const counts: number[] = [];
+    const body = createStep({
+      id: 'body',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async () => ({}),
+    });
+    const workflow = createWorkflow({
+      id: `loop-v${storageVersion}`,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion },
+    })
+      .dountil(body, async ({ iterationCount }) => {
+        counts.push(iterationCount);
+        return iterationCount >= 3 || counts.length >= 5;
+      })
+      .commit();
+
+    const { result } = await runWorkflow(workflow);
+    expect(result.status).toBe('success');
+    expect(counts).toEqual([1, 2, 3]);
+  });
+
   // A branch's write returns only its own result on v2, so it loads its siblings' as of its write:
   // of two branches that both wrote before either loaded, only the later writer joins.
   it('join parallel branches once when both write before either loads the other', async () => {

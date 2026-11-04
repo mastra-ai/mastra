@@ -7,6 +7,7 @@ import { resolveForeachConcurrency } from '../../utils';
 import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
+import { currentStorageVersion } from './storage-scope';
 import type { ProcessorArgs } from '.';
 
 const FOREACH_QUEUED = '__mastra_foreach_queued__';
@@ -35,11 +36,13 @@ export async function processWorkflowLoop(
   }: ProcessorArgs,
   {
     pubsub,
+    runStorage,
     stepExecutor,
     step,
     stepResult,
   }: {
     pubsub: PubSub;
+    runStorage: RunStorage;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
@@ -72,6 +75,23 @@ export async function processWorkflowLoop(
     iterationCount,
   });
 
+  const countedBody = {
+    ...stepResults[getEntryId(step.step)],
+    metadata: { ...stepResults[getEntryId(step.step)]?.metadata, iterationCount },
+  };
+  const loopAgain = async () => {
+    // On storage v2 the body's dispatch loads step results from the stored run, not this message.
+    // (Before the body's first result is stored this is only the count, as on the v1 message.)
+    if (currentStorageVersion() === 2) {
+      await runStorage.writeStepResult({
+        stepId: getEntryId(step.step),
+        result: countedBody as StepResult<any, any, any, any>,
+        requestContext: withoutAuthToken(requestContext),
+      });
+    }
+    await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+  };
+
   // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
   // resume metadata. Otherwise the body would keep receiving the same resumeData on every
   // iteration (and e.g. never re-suspend).
@@ -88,13 +108,7 @@ export async function processWorkflowLoop(
     // condition is always evaluated with iterationCount === 1 (an infinite loop when
     // termination depends on the count). Mirrors the default engine, which stamps
     // metadata.iterationCount onto the step result. See handlers/step.ts.
-    stepResults: {
-      ...stepResults,
-      [getEntryId(step.step)]: {
-        ...stepResults[getEntryId(step.step)],
-        metadata: { ...stepResults[getEntryId(step.step)]?.metadata, iterationCount },
-      },
-    },
+    stepResults: { ...stepResults, [getEntryId(step.step)]: countedBody },
     prevResult: stepResult,
     resumeData: undefined,
     activeStepsPath,
@@ -126,11 +140,11 @@ export async function processWorkflowLoop(
     if (loopCondition) {
       await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     } else {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+      await loopAgain();
     }
   } else {
     if (loopCondition) {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+      await loopAgain();
     } else {
       await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     }
