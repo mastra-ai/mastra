@@ -75,6 +75,7 @@ import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import { VoiceRoutes } from './voice.js';
 import { WorkItemRoutes } from './work-items.js';
 
 const MATERIALIZE_FAILURE_CODE = {
@@ -797,6 +798,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
+    }).routes(),
+    ...new VoiceRoutes({
+      auth: deps.auth,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
     }).routes(),
     ...new SkillRoutes({
       auth: deps.auth,

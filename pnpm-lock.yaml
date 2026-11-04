@@ -2438,6 +2438,15 @@ importers:
       '@mastra/slack':
         specifier: workspace:*
         version: link:../../channels/slack
+      '@mastra/voice-deepgram':
+        specifier: workspace:*
+        version: link:../../voice/deepgram
+      '@mastra/voice-mistral':
+        specifier: workspace:*
+        version: link:../../voice/mistral
+      '@mastra/voice-openai':
+        specifier: workspace:*
+        version: link:../../voice/openai
       '@octokit/auth-app':
         specifier: ^8.3.1
         version: 8.3.1

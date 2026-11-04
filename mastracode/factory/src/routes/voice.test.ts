@@ -1,0 +1,232 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { Hono } from 'hono';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import { audioFiletype, MAX_TRANSCRIBE_AUDIO_BYTES, VoiceRoutes } from './voice.js';
+import type { VoiceRoutesDeps } from './voice.js';
+
+const OPENAI_URL = 'https://api.openai.com/v1/audio/transcriptions';
+const MISTRAL_URL = 'https://api.mistral.ai/v1/audio/transcriptions';
+
+interface ProviderCall {
+  authorization: string | null;
+  model: FormDataEntryValue | null;
+  filename: string | undefined;
+}
+
+const calls: { openai: ProviderCall[]; mistral: ProviderCall[] } = { openai: [], mistral: [] };
+
+async function record(request: Request): Promise<ProviderCall> {
+  const form = await request.formData();
+  const file = form.get('file');
+  return {
+    authorization: request.headers.get('authorization'),
+    model: form.get('model'),
+    filename: file instanceof File ? file.name : undefined,
+  };
+}
+
+const server = setupServer(
+  http.post(OPENAI_URL, async ({ request }) => {
+    calls.openai.push(await record(request));
+    return HttpResponse.json({ text: '  hello from whisper  ' });
+  }),
+  http.post(MISTRAL_URL, async ({ request }) => {
+    calls.mistral.push(await record(request));
+    return HttpResponse.json({ model: 'voxtral-mini-latest', text: 'hello from voxtral', language: 'en', usage: {} });
+  }),
+);
+
+const ENV_KEYS = ['OPENAI_API_KEY', 'MISTRAL_API_KEY', 'GROQ_API_KEY', 'DEEPGRAM_API_KEY'] as const;
+const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string>> = {};
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+afterAll(() => server.close());
+beforeEach(() => {
+  calls.openai = [];
+  calls.mistral = [];
+  for (const key of ENV_KEYS) {
+    savedEnv[key] = process.env[key];
+    delete process.env[key];
+  }
+});
+afterEach(() => {
+  server.resetHandlers();
+  for (const key of ENV_KEYS) {
+    if (savedEnv[key] === undefined) delete process.env[key];
+    else process.env[key] = savedEnv[key];
+  }
+});
+
+function localAuthStorage(keys: Record<string, string>): AuthStorage {
+  return { getStoredApiKey: (provider: string) => keys[provider] } as unknown as AuthStorage;
+}
+
+function mount(deps: Omit<VoiceRoutesDeps, 'auth'> & { auth?: VoiceRoutesDeps['auth'] }, user?: { org: string }) {
+  const app = new Hono();
+  if (user) {
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-a', organizationId: user.org } as never);
+      await next();
+    });
+  }
+  mountApiRoutes(
+    app as never,
+    new VoiceRoutes({ auth: deps.auth ?? fakeRouteAuth({ enabled: false }), ...deps }).routes(),
+  );
+  return app;
+}
+
+function transcribe(app: Hono, body: Record<string, unknown>) {
+  return app.request('/web/voice/transcribe', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+const clip = Buffer.from('fake opus bytes').toString('base64');
+
+describe('POST /web/voice/transcribe (local mode)', () => {
+  it('transcribes with the first provider that has a key and returns trimmed text', async () => {
+    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm;codecs=opus' });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ text: 'hello from whisper', provider: 'openai', model: 'whisper-1' });
+    expect(calls.openai).toEqual([{ authorization: 'Bearer sk-local', model: 'whisper-1', filename: 'audio.webm' }]);
+  });
+
+  it('prefers the provider env var over a stored key', async () => {
+    process.env.MISTRAL_API_KEY = 'env-mistral';
+    const app = mount({ authStorage: localAuthStorage({ mistral: 'stored-mistral' }) });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4', provider: 'mistral' });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ text: 'hello from voxtral', provider: 'mistral', model: 'voxtral-mini-latest' });
+    expect(calls.mistral).toHaveLength(1);
+    expect(calls.mistral[0]!.authorization).toBe('Bearer env-mistral');
+    expect(calls.mistral[0]!.model).toBe('voxtral-mini-latest');
+  });
+
+  it('explains how to fix a missing key without calling any provider', async () => {
+    const app = mount({ authStorage: localAuthStorage({}) });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/speech-to-text API key/);
+    expect(calls.openai).toHaveLength(0);
+    expect(calls.mistral).toHaveLength(0);
+  });
+
+  it('rejects an unknown provider', async () => {
+    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', provider: 'anthropic' });
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/not a supported speech-to-text provider/);
+  });
+
+  it('rejects a malformed body', async () => {
+    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
+
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a recording over the size cap', async () => {
+    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
+    const tooBig = Buffer.alloc(MAX_TRANSCRIBE_AUDIO_BYTES + 1).toString('base64');
+
+    const res = await transcribe(app, { audio: tooBig, mimeType: 'audio/webm' });
+
+    expect(res.status).toBe(413);
+    expect(calls.openai).toHaveLength(0);
+  });
+
+  it('surfaces provider failures as 502', async () => {
+    server.use(http.post(OPENAI_URL, () => HttpResponse.json({ error: { message: 'bad key' } }, { status: 401 })));
+    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-bad' }) });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/^Transcription failed:/);
+  });
+});
+
+describe('POST /web/voice/transcribe (tenant mode)', () => {
+  it("uses the caller's personal key over the organization's", async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'mistral', { type: 'api_key', key: 'org-mistral' });
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'mistral', {
+      type: 'api_key',
+      key: 'personal-mistral',
+    });
+    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4', provider: 'mistral' });
+
+    expect(res.status).toBe(200);
+    expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
+  });
+
+  it('falls back to an organization-shared key', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+
+    expect(res.status).toBe(200);
+    expect(calls.openai[0]!.authorization).toBe('Bearer sk-org');
+  });
+
+  it('ignores OAuth subscriptions and deployment env keys', async () => {
+    process.env.OPENAI_API_KEY = 'deployment-key';
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+
+    expect(res.status).toBe(400);
+    expect(calls.openai).toHaveLength(0);
+  });
+
+  it('requires a signed-in user', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials });
+
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('audioFiletype', () => {
+  it.each([
+    ['audio/webm;codecs=opus', 'webm'],
+    ['audio/mp4', 'm4a'],
+    ['audio/mpeg', 'mp3'],
+    ['audio/wav', 'wav'],
+    ['audio/ogg;codecs=opus', 'ogg'],
+    ['application/octet-stream', 'webm'],
+  ])('maps %s to %s', (mimeType, expected) => {
+    expect(audioFiletype(mimeType)).toBe(expected);
+  });
+});

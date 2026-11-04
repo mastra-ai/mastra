@@ -41,9 +41,11 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
+import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
+import { useVoiceDictation, voiceDictationSupported } from './useVoiceDictation';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
@@ -109,6 +111,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendTitle = chatPreparing ? 'Initializing session…' : startingDraft ? 'Starting session…' : undefined;
 
   const updateDraft = setComposerDraft;
+
+  const [canDictate] = useState(voiceDictationSupported);
+  const dictation = useVoiceDictation({
+    onTranscript: text => {
+      updateDraft(draft.trim() ? `${draft.trimEnd()} ${text}` : text);
+      inputRef.current?.focus();
+    },
+    onError: message => pushNotice(message, 'error'),
+  });
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -305,6 +316,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
+              {canDictate && (
+                <ComposerVoiceButton
+                  state={dictation.state}
+                  disabled={textareaDisabled || preview !== undefined}
+                  onStart={() => void dictation.start()}
+                  onStop={dictation.stop}
+                />
+              )}
               <ComposerPrimaryAction
                 showAbort={liveRun && !hasSubmittableDraft}
                 sendDisabled={sendDisabled || !hasSubmittableDraft}
