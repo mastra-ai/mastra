@@ -44,6 +44,8 @@ export interface RouteHandlerResult {
   streamFormat?: 'sse' | 'stream';
   /** Whether to flush an SSE comment on connect before stream data arrives */
   sseFlushOnConnect?: boolean;
+  /** The request context the route ran with; MCP transports hand it to their tools */
+  requestContext?: RequestContext;
 }
 
 type ValidationErrorContext = 'query' | 'body' | 'path';
@@ -284,6 +286,7 @@ export class RouteHandlerService {
       responseType: route.responseType,
       streamFormat: route.streamFormat,
       sseFlushOnConnect: route.sseFlushOnConnect,
+      requestContext: params.requestContext,
     };
   }
 

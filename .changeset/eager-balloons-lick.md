@@ -15,4 +15,6 @@ const { status, body } = await invokeRoute(GET_METRIC_AGGREGATE, {
 });
 ```
 
+`invokeRoute` only runs routes that answer with JSON and throws for streaming or MCP transport routes. The handler receives the parsed params, `mastra`, `requestContext` and `abortSignal`, but not the HTTP-only `request`, `registeredTools`, `taskStore` or `routePrefix`.
+
 MCP tools served over HTTP now also see the caller that Mastra server auth resolved (user, permissions, roles, resource and organization), the same as Mastra routes do.

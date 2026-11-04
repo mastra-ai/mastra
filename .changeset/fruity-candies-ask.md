@@ -3,6 +3,7 @@
 '@mastra/fastify': patch
 '@mastra/koa': patch
 '@mastra/elysia': patch
+'@mastra/nestjs': patch
 ---
 
-MCP servers mounted on Express, Fastify, Koa and Elysia now pass the authenticated caller to MCP tools, like Hono already did. Tools can read the user and permissions from `requestContext`, and a custom `setRequestAuth` hook is honored on every adapter.
+MCP servers mounted on Express, Fastify, Koa, Elysia and NestJS now pass the authenticated caller to MCP tools, like Hono already did. Tools can read the user and permissions from `requestContext`. A custom `setRequestAuth` hook is honored on Express, Fastify, Koa and Elysia.

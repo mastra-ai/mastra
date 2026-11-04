@@ -2,14 +2,14 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createRoute } from './routes/route-builder';
 import { invokeRoute } from './index';
 
 const handler = vi.fn(async ({ name, requestContext }: { name: string; requestContext: RequestContext }) => ({
   greeting: `hello ${name}`,
-  caller: (requestContext.get('user') as { id: string }).id,
+  caller: (requestContext.get(MASTRA_USER_KEY) as { id: string }).id,
 }));
 
 const greetRoute = createRoute({
@@ -44,6 +44,7 @@ function securedMastra() {
 /** The request context Mastra server auth leaves behind for an authenticated caller. */
 function callerContext(permissions: string[]) {
   const requestContext = new RequestContext();
+  requestContext.set(MASTRA_USER_KEY, { id: 'user-1' });
   requestContext.set('user', { id: 'user-1' });
   requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
   return requestContext;
@@ -70,6 +71,32 @@ describe('invokeRoute', () => {
 
     expect(result.status).toBe(401);
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('refuses a user that did not come from Mastra server auth', async () => {
+    handler.mockClear();
+    // `@mastra/mcp` writes the legacy `user` key from the MCP server's own auth mapper.
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'mapped-user' });
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['observability:read']);
+
+    const result = await invokeRoute(greetRoute, { mastra: securedMastra(), requestContext, body: { name: 'Ada' } });
+
+    expect(result.status).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('refuses routes that do not answer with JSON', async () => {
+    const streamRoute = createRoute({
+      method: 'POST',
+      path: '/observability/stream',
+      responseType: 'stream',
+      handler: async () => new ReadableStream(),
+    });
+
+    await expect(
+      invokeRoute(streamRoute, { mastra: securedMastra(), requestContext: callerContext(['observability:read']) }),
+    ).rejects.toThrow(/only runs JSON routes/);
   });
 
   it('refuses a caller missing the route permission, without running the route', async () => {

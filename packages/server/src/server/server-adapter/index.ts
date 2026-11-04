@@ -17,6 +17,7 @@ import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
+  MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
@@ -1597,14 +1598,25 @@ export interface InvokeRouteResult {
  * reuse a route without proxying through the HTTP server.
  *
  * Authentication is not re-run: when server or studio auth is configured, the
- * request context must already carry the user Mastra resolved, otherwise the
- * call is refused with 401.
+ * request context must already carry the user Mastra server auth resolved
+ * (`MASTRA_USER_KEY`), otherwise the call is refused with 401.
+ *
+ * Only JSON routes are supported; other response types throw. The handler gets
+ * the parsed params, `mastra`, `requestContext` and `abortSignal`, but not the
+ * HTTP-only `request`, `registeredTools`, `taskStore` or `routePrefix`, so
+ * routes that read those are not suitable.
  */
 export async function invokeRoute(route: ServerRoute, options: InvokeRouteOptions): Promise<InvokeRouteResult> {
+  if (route.responseType !== 'json') {
+    throw new Error(
+      `invokeRoute only runs JSON routes; ${route.method} ${route.path} answers with '${route.responseType}'`,
+    );
+  }
+
   const { mastra, requestContext } = options;
 
   const authConfigured = Boolean(mastra.getStudio?.()?.auth || mastra.getServer()?.auth);
-  if (authConfigured && route.requiresAuth !== false && !requestContext.get('user')) {
+  if (authConfigured && route.requiresAuth !== false && !requestContext.get(MASTRA_USER_KEY)) {
     return { status: 401, body: { error: 'Authentication required' } };
   }
 
