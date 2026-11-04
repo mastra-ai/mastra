@@ -12,22 +12,24 @@ export interface ToolCallBodyProps extends ToolCallView {
   showFullArguments?: boolean;
 }
 
-/**
- * How a failed command ended, from the close of its result: the exit code, after any note on why it
- * stopped. When it could not run, the error is in that closing paragraph, and its message can hold
- * blank lines of its own, so the paragraph is found from where the error starts.
- */
-function commandEnding(result: string, exit: ToolCallExit | undefined): string {
-  const settled = result.trimEnd();
-  const errorStart = exit?.error === undefined ? -1 : settled.lastIndexOf(`Error: ${stripAnsi(exit.error)}`);
-  const endingStart = settled.lastIndexOf('\n\n', errorStart === -1 ? settled.length : errorStart);
-  return endingStart === -1 ? settled : settled.slice(endingStart + 2);
+function lastParagraph(text: string): string {
+  const settled = text.trimEnd();
+  const start = settled.lastIndexOf('\n\n');
+  return start === -1 ? settled : settled.slice(start + 2);
+}
+
+function exitText({ exitCode, error }: ToolCallExit, result: string | undefined): string {
+  if (error !== undefined) return `Error: ${stripAnsi(error)}\nExit code: ${exitCode}`;
+  // An exit saved before core sent `error` left why the command could not run only in its result.
+  if (exitCode === -1 && result) return lastParagraph(result);
+  return `Exit code: ${exitCode}`;
 }
 
 function commandOutput(view: ToolCallView, result: string | undefined): string | undefined {
-  if (view.status !== 'error' || !result || !view.output) return view.output || result;
-  // The result is cut to what the model saw, so it only adds how the command ended to what it streamed.
-  return `${view.output.trimEnd()}\n\n${commandEnding(result, view.exit)}`;
+  if (view.status !== 'error' || !view.output) return view.output || result;
+  // The result is a truncated copy of the stream, so only how the command ended is new.
+  const ending = view.exit ? exitText(view.exit, result) : result;
+  return ending ? `${view.output.trimEnd()}\n\n${ending}` : view.output;
 }
 
 function CommandBody({ command, output }: { command: string; output?: string }) {
