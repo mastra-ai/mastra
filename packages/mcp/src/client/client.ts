@@ -385,7 +385,9 @@ function errorKind(error: unknown): string {
   if (error instanceof MastraError) return error.id;
   if (error instanceof Error) {
     const code = (error as { code?: unknown }).code;
-    return code === undefined ? error.name : `${error.name} (${String(code)})`;
+    // Only fixed codes (JSON-RPC numbers, Node-style constants like ECONNRESET) are safe to log.
+    const isFixedCode = typeof code === 'number' || (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/.test(code));
+    return isFixedCode ? `${error.name} (${code})` : error.name;
   }
   return typeof error;
 }
