@@ -24,41 +24,25 @@ beforeEach(() => {
 });
 
 describe('createGatewayApiKey', () => {
-  it('creates an organization key', async () => {
+  it('provisions a Gateway project key instead of an organization v2 key', async () => {
     const signal = new AbortController().signal;
-    vi.mocked(platformFetch).mockResolvedValueOnce(respond(201, { keyId: 'key-1', apiKey: 'msk_org' }));
+    vi.mocked(platformFetch).mockResolvedValueOnce(
+      respond(201, { project: { id: 'p1', name: 'my-app' }, apiKey: 'msk_project' }),
+    );
 
     await expect(createGatewayApiKey('token', 'org-1', 'my-app', signal)).resolves.toEqual({
-      apiKey: 'msk_org',
-      keyId: 'key-1',
+      apiKey: 'msk_project',
     });
 
+    expect(platformFetch).toHaveBeenCalledOnce();
     expect(platformFetch).toHaveBeenCalledWith(
-      'https://platform.test/v1/gateway/organization/v2/keys',
+      'https://platform.test/v1/gateway/projects/provision',
       expect.objectContaining({ method: 'POST', signal }),
     );
-    expect(requestBody(0)).toEqual({ label: 'my-app' });
+    expect(requestBody(0)).toEqual({ name: 'my-app', keyLabel: 'my-app' });
   });
 
-  it('provisions a Gateway project key where the organization key service does not exist', async () => {
-    vi.mocked(platformFetch)
-      .mockResolvedValueOnce(respond(404, { error: 'Not found' }))
-      .mockResolvedValueOnce(respond(201, { project: { id: 'p1', name: 'my-app' }, apiKey: 'msk_project' }));
-
-    await expect(createGatewayApiKey('token', 'org-1', 'my-app')).resolves.toEqual({ apiKey: 'msk_project' });
-
-    expect(vi.mocked(platformFetch).mock.calls[1]![0]).toBe('https://platform.test/v1/gateway/projects/provision');
-    expect(requestBody(1)).toEqual({ name: 'my-app', keyLabel: 'my-app' });
-  });
-
-  it('surfaces a failing organization key service instead of provisioning a project', async () => {
-    vi.mocked(platformFetch).mockResolvedValueOnce(respond(503, { error: 'Gateway v2 key service unavailable' }));
-
-    await expect(createGatewayApiKey('token', 'org-1', 'my-app')).rejects.toThrow('Request failed (503)');
-    expect(platformFetch).toHaveBeenCalledOnce();
-  });
-
-  it('surfaces other failures without falling back', async () => {
+  it('surfaces failures', async () => {
     vi.mocked(platformFetch).mockResolvedValueOnce(respond(403, { detail: 'Read-only role' }));
 
     await expect(createGatewayApiKey('token', 'org-1', 'my-app')).rejects.toThrow('Read-only role');
