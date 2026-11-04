@@ -32,15 +32,21 @@ export type DashboardRendererProps = {
    * widget's title. No grips without it.
    */
   dragHandle?: (widgetId: string) => MetricsCardDragHandleProps | undefined;
-  /**
-   * Pins or unpins a widget, called with the widget and the state the user asked for. The host
-   * owns that state and passes it back through `isPinned`. No pin buttons without it.
-   */
-  onPin?: (widget: DashboardWidget, isPinned: boolean) => void;
-  /** Whether the host has a widget pinned, by widget id. None are without it. */
-  isPinned?: (widgetId: string) => boolean;
   className?: string;
-};
+} & DashboardPinProps;
+
+/** Both or neither: a host that pins widgets says which are pinned, so a pinned one can be unpinned. */
+type DashboardPinProps =
+  | {
+      /**
+       * Pins or unpins a widget, called with the widget and the state the user asked for. The host
+       * owns that state and passes it back through `isPinned`. No pin buttons without it.
+       */
+      onPin: (widget: DashboardWidget, isPinned: boolean) => void;
+      /** Whether the host has a widget pinned, by widget id. */
+      isPinned: (widgetId: string) => boolean;
+    }
+  | { onPin?: never; isPinned?: never };
 
 /** Whether a stored widget's `span` is one the grid lays out. */
 const isDashboardSpan = (span: unknown): span is DashboardSpan => DASHBOARD_WIDGET_SPANS.some(s => s === span);
@@ -100,8 +106,9 @@ export function DashboardRenderer({
             const pin =
               onPin && prepared.ok
                 ? {
-                    isPinned: isPinned?.(widget.id) ?? false,
+                    isPinned: isPinned(widget.id),
                     onPin: (next: boolean) => onPin(prepared.widget, next),
+                    name: prepared.widget.title?.trim() || 'widget',
                   }
                 : undefined;
             return (

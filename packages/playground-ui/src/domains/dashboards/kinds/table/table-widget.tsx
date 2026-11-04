@@ -1,6 +1,6 @@
 import { ChartCard } from '../../../metrics/components/chart-card';
 import { ViewGate } from '../../components/view-gate';
-import { PinAction } from '../../components/widget-controls';
+import { pinActions } from '../../lib/pin-actions';
 import type { TableOptions } from '../../lib/table';
 import type { WidgetKindProps } from '../../widget-kind';
 import { TableTabs } from './table-tabs';
@@ -19,7 +19,7 @@ export function TableWidget(props: WidgetKindProps<TableOptions>) {
         <ChartCard
           title={props.widget.title ?? ''}
           dragHandle={props.dragHandle}
-          actions={props.pin && <PinAction {...props.pin} />}
+          {...pinActions(props.pin)}
           bodyHeight="fit"
         >
           <MetricsCard.Loading />

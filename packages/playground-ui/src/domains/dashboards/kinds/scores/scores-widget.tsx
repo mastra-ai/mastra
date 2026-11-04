@@ -6,12 +6,13 @@ import { BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { CHART_COLORS } from '../../../metrics/lib/chart-colors';
 import { bucketPlan, intervalHours } from '../../../metrics/lib/metrics-buckets';
 import { ViewGate } from '../../components/view-gate';
-import { PinAction } from '../../components/widget-controls';
+import { PendingChartCard } from '../../components/widget-chrome';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { useScorers } from '../../hooks/use-scorers';
 import { viewTitle } from '../../lib/chrome';
 import type { ViewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
+import { pinActions } from '../../lib/pin-actions';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeScores, withScorer } from '../../lib/scores';
@@ -35,10 +36,11 @@ export function ScoresWidget({ widget, views, expand, dragHandle, pin }: WidgetK
   const heading = {
     ...viewTitle(widget, [view], 0, () => {}, expand),
     dragHandle,
-    actions: pin && <PinAction {...pin} />,
+    ...pinActions(pin),
   };
   return (
-    <ViewGate queries={view.queries} pending={() => null}>
+    // The card, and its pin, stay while the view waits, so a pinned widget can still be unpinned.
+    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
       {page => <ScoresView heading={heading} view={view} page={page} />}
     </ViewGate>
   );

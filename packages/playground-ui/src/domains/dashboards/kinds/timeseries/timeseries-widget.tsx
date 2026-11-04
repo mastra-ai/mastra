@@ -5,11 +5,12 @@ import { BUCKET_AXIS, EDGE_BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { bucketPlan, bucketWindow } from '../../../metrics/lib/metrics-buckets';
 import { ViewGate } from '../../components/view-gate';
 import { PendingChartCard } from '../../components/widget-chrome';
-import { DrilldownAction, PinAction } from '../../components/widget-controls';
+import { DrilldownAction } from '../../components/widget-controls';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
+import { pinActions } from '../../lib/pin-actions';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeTimeseries } from '../../lib/timeseries';
@@ -31,7 +32,7 @@ type ViewProps = Props & {
 export function TimeseriesWidget(props: Props) {
   const menu = useViewMenu(props.widget, props.views, 0, props.expand);
   const { view } = menu;
-  const heading = { ...menu.heading, dragHandle: props.dragHandle, actions: props.pin && <PinAction {...props.pin} /> };
+  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
   return (
     <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
       {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}

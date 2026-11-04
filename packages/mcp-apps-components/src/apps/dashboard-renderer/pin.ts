@@ -1,10 +1,11 @@
-import type { DashboardWidget } from '@mastra/core/storage/dashboards';
-import type { DashboardRendererInput } from './input';
+import { DASHBOARD_SCOPES, dashboardDefaultsSchema, dashboardWidgetSchema } from '@mastra/core/storage/dashboards';
+import { z } from 'zod';
 
 /**
  * The host context key a host sets to the ids of the widgets it has pinned from this dashboard
- * (`[]` for none). The app shows a pin button on each widget only when the host sets it, and
- * follows its value.
+ * (`[]` for none). The app shows a pin button on each widget only while it holds an array, and
+ * follows its value. Set it to `null` to turn pinning off: deleting the key leaves the app with
+ * the last ids it got.
  */
 export const DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY = 'mastra.ai/dashboard-pinned-widgets';
 
@@ -15,11 +16,16 @@ export const DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY = 'mastra.ai/dashboard-pinned-
 export const DASHBOARD_WIDGET_PIN_NOTIFICATION = 'mastra.ai/dashboard-widget-pin';
 
 /**
- * The params of `DASHBOARD_WIDGET_PIN_NOTIFICATION`: the widget as the dashboard renders it and
- * the dashboard's scope, so the host can show the pinned widget on its own.
+ * The params of `DASHBOARD_WIDGET_PIN_NOTIFICATION`: the widget as the dashboard renders it, the
+ * dashboard's scope, and the range and filters the user had on when they pinned it, as dashboard
+ * `defaults`. Together they render the widget on its own as the user saw it. They come from the
+ * app's iframe, so hosts parse them before storing or rendering anything.
  */
-export type DashboardWidgetPinNotificationParams = {
-  widget: DashboardWidget;
-  scope: DashboardRendererInput['scope'];
-  isPinned: boolean;
-};
+export const dashboardWidgetPinNotificationParamsSchema = z.object({
+  widget: dashboardWidgetSchema,
+  scope: z.enum(DASHBOARD_SCOPES),
+  defaults: dashboardDefaultsSchema,
+  isPinned: z.boolean(),
+});
+
+export type DashboardWidgetPinNotificationParams = z.input<typeof dashboardWidgetPinNotificationParamsSchema>;

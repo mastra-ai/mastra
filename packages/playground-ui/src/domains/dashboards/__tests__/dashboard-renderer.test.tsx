@@ -104,15 +104,16 @@ function renderDashboard(
     onDrilldown,
     expand,
     dragHandle,
-    onPin,
-    isPinned,
+    pin,
   }: {
     kinds?: AnyWidgetKind[];
     onDrilldown?: OnDashboardDrilldown;
     expand?: DashboardExpand;
     dragHandle?: DashboardRendererProps['dragHandle'];
-    onPin?: DashboardRendererProps['onPin'];
-    isPinned?: DashboardRendererProps['isPinned'];
+    pin?: {
+      onPin: NonNullable<DashboardRendererProps['onPin']>;
+      isPinned: NonNullable<DashboardRendererProps['isPinned']>;
+    };
     scope?: { metrics: MetricsScope; dashboard: DashboardScope };
     environment?: string;
     filterTokens?: { fieldId: string; value: string }[];
@@ -138,8 +139,7 @@ function renderDashboard(
         onDrilldown={onDrilldown}
         expand={expand}
         dragHandle={dragHandle}
-        onPin={onPin}
-        isPinned={isPinned}
+        {...pin}
       />,
     ),
   );
@@ -512,6 +512,11 @@ describe('DashboardRenderer', () => {
       );
     }
 
+    /** The pin button's name: the widget's title, or "widget" for an untitled one like the KPI group. */
+    const pinLabel = (verb: 'Pin' | 'Unpin', widget: DashboardWidget) => `${verb} ${widget.title?.trim() || 'widget'}`;
+    /** Whether the button only shows while the card is hovered. */
+    const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0') !== null;
+
     it.each([
       ['a timeseries card', metricsWidget('agent-runs')],
       ['a table card', models()],
@@ -522,58 +527,80 @@ describe('DashboardRenderer', () => {
       const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={onPin} />);
       const card = cell(container, widget.id);
 
-      fireEvent.click(await within(card).findByRole('button', { name: 'Pin widget' }, { timeout: 5000 }));
+      fireEvent.click(await within(card).findByRole('button', { name: pinLabel('Pin', widget) }, { timeout: 5000 }));
       expect(onPin).toHaveBeenLastCalledWith(expect.objectContaining({ id: widget.id, kind: widget.kind }), true);
 
-      fireEvent.click(within(card).getByRole('button', { name: 'Unpin widget' }));
+      fireEvent.click(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }));
       expect(onPin).toHaveBeenLastCalledWith(expect.objectContaining({ id: widget.id }), false);
-      expect(within(card).getByRole('button', { name: 'Pin widget' })).toBeDefined();
+      expect(within(card).getByRole('button', { name: pinLabel('Pin', widget) })).toBeDefined();
+    });
+
+    it('names each pin button after its widget', async () => {
+      const { container } = renderWithProviders(
+        <PinningHost widgets={[metricsWidget('agent-runs'), metricsWidget('token-usage')]} onPin={() => {}} />,
+      );
+      expect(
+        await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Pin Agent runs' }),
+      ).toBeDefined();
+      expect(within(cell(container, 'token-usage')).getByRole('button', { name: 'Pin Token usage' })).toBeDefined();
     });
 
     it('pins only the widget clicked', async () => {
       const { container } = renderWithProviders(
         <PinningHost widgets={[metricsWidget('agent-runs'), metricsWidget('token-usage')]} onPin={() => {}} />,
       );
-      fireEvent.click(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Pin widget' }));
-      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Unpin widget' })).toBeDefined();
-      expect(within(cell(container, 'token-usage')).getByRole('button', { name: 'Pin widget' })).toBeDefined();
+      fireEvent.click(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Pin Agent runs' }));
+      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Unpin Agent runs' })).toBeDefined();
+      expect(within(cell(container, 'token-usage')).getByRole('button', { name: 'Pin Token usage' })).toBeDefined();
+    });
+
+    it.each([
+      ['a timeseries card', metricsWidget('agent-runs')],
+      ['a table card', models()],
+      ['a scores card', scoresWidget],
+    ])('keeps the unpin button of a pinned %s in view, and the pin of an unpinned one for hover', async (_, widget) => {
+      const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={() => {}} />);
+      const card = cell(container, widget.id);
+      const pin = await within(card).findByRole('button', { name: pinLabel('Pin', widget) }, { timeout: 5000 });
+      expect(waitsForHover(pin)).toBe(true);
+
+      fireEvent.click(pin);
+      expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
     });
 
     it("shows the host's pinned widgets without a click", async () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), metricsWidget('token-usage')), {
-        onPin: () => {},
-        isPinned: id => id === 'token-usage',
+        pin: { onPin: () => {}, isPinned: id => id === 'token-usage' },
       });
-      expect(await within(cell(container, 'token-usage')).findByRole('button', { name: 'Unpin widget' })).toBeDefined();
-      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Pin widget' })).toBeDefined();
+      expect(
+        await within(cell(container, 'token-usage')).findByRole('button', { name: 'Unpin Token usage' }),
+      ).toBeDefined();
+      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Pin Agent runs' })).toBeDefined();
     });
 
     it('keeps the pin on a widget that breaks while rendering, so it can still be unpinned', () => {
       const onPin = vi.fn();
-      const { container } = renderDashboard(definition({ ...note('boom', 'x'), kind: 'broken' }), {
-        onPin,
-        isPinned: () => true,
+      const { container } = renderDashboard(definition({ ...note('boom', 'x', { title: 'Boom' }), kind: 'broken' }), {
+        pin: { onPin, isPinned: () => true },
       });
       const card = cell(container, 'boom');
       expect(within(card).getByText('Render failed.')).toBeDefined();
-      fireEvent.click(within(card).getByRole('button', { name: 'Unpin widget' }));
+      fireEvent.click(within(card).getByRole('button', { name: 'Unpin Boom' }));
       expect(onPin).toHaveBeenCalledWith(expect.objectContaining({ id: 'boom' }), false);
     });
 
     it("offers no pin on a widget that can't be read", () => {
       const { container } = renderDashboard(definition({ ...note('gone', 'x'), kind: 'heatmap' }), {
-        onPin: () => {},
+        pin: { onPin: () => {}, isPinned: () => true },
       });
       expect(within(cell(container, 'gone')).getByText('This widget needs a newer version.')).toBeDefined();
-      expect(screen.queryByRole('button', { name: /pin widget/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /pin/i })).toBeNull();
     });
 
-    it('shows no pin buttons without onPin, even for pinned widgets', async () => {
-      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget), {
-        isPinned: () => true,
-      });
+    it('shows no pin buttons for a host that does not pin', async () => {
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
       expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
-      expect(screen.queryByRole('button', { name: /pin widget/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /pin/i })).toBeNull();
     });
   });
 

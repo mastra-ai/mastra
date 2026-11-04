@@ -27,6 +27,8 @@ export type WidgetPin = {
   isPinned: boolean;
   /** Called with the state the user asked for. */
   onPin: (isPinned: boolean) => void;
+  /** The widget's name in the button's label ("Pin Agent runs"), so each card's button is told apart. */
+  name: string;
 };
 
 /**

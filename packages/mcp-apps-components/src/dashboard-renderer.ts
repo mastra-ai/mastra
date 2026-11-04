@@ -5,7 +5,11 @@ import { dashboardRendererInputSchema } from './apps/dashboard-renderer/input';
 import { defineMcpAppResource } from './define-mcp-app-resource';
 
 export { dashboardRendererInputSchema };
-export { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, DASHBOARD_WIDGET_PIN_NOTIFICATION } from './apps/dashboard-renderer/pin';
+export {
+  DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
+  DASHBOARD_WIDGET_PIN_NOTIFICATION,
+  dashboardWidgetPinNotificationParamsSchema,
+} from './apps/dashboard-renderer/pin';
 export type { DashboardWidgetPinNotificationParams } from './apps/dashboard-renderer/pin';
 
 /** The `structuredContent` a tool returns to drive the dashboard app. */

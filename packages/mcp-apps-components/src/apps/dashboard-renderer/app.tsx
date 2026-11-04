@@ -60,14 +60,18 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
 
   // The host owns the pinned widgets: the app asks it to change, and shows what it sends back.
   const pinnedWidgets = useHostPinnedWidgets(app);
-  const onPin: DashboardRendererProps['onPin'] = pinnedWidgets
-    ? (widget, next) => {
-        const params: DashboardWidgetPinNotificationParams = { widget, scope: input.scope, isPinned: next };
-        app
-          .notification({ method: DASHBOARD_WIDGET_PIN_NOTIFICATION, params })
-          .catch(error => console.error('[Mastra dashboard] Pin failed', error));
-      }
-    : undefined;
+  const onPin: NonNullable<DashboardRendererProps['onPin']> = (widget, next) => {
+    const params: DashboardWidgetPinNotificationParams = {
+      widget,
+      scope: input.scope,
+      defaults: { datePreset: preset, filters: filterTokens },
+      isPinned: next,
+    };
+    app
+      .notification({ method: DASHBOARD_WIDGET_PIN_NOTIFICATION, params })
+      .catch(error => console.error('[Mastra dashboard] Pin failed', error));
+  };
+  const pin = pinnedWidgets ? { onPin, isPinned: (widgetId: string) => pinnedWidgets.includes(widgetId) } : {};
 
   return (
     <MastraServerProvider>
@@ -77,13 +81,7 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
         filterTokens={filterTokens}
         onFilterTokensChange={setFilterTokens}
       >
-        <DashboardRenderer
-          definition={input.definition}
-          scope={input.scope}
-          onDrilldown={onDrilldown}
-          onPin={onPin}
-          isPinned={widgetId => pinnedWidgets?.includes(widgetId) ?? false}
-        />
+        <DashboardRenderer definition={input.definition} scope={input.scope} onDrilldown={onDrilldown} {...pin} />
       </MetricsProvider>
     </MastraServerProvider>
   );

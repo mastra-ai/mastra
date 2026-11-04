@@ -13,15 +13,10 @@ import type { WidgetPin } from '../widget-kind';
 import { Button } from '@/ds/components/Button';
 
 /** Pins or unpins the widget; it shows the host's state, not the click. */
-export function PinAction({ isPinned, onPin }: WidgetPin) {
+export function PinAction({ isPinned, onPin, name }: WidgetPin) {
+  const label = `${isPinned ? 'Unpin' : 'Pin'} ${name}`;
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      tooltip={isPinned ? 'Unpin widget' : 'Pin widget'}
-      aria-label={isPinned ? 'Unpin widget' : 'Pin widget'}
-      onClick={() => onPin(!isPinned)}
-    >
+    <Button variant="ghost" size="icon-sm" tooltip={label} aria-label={label} onClick={() => onPin(!isPinned)}>
       {isPinned ? <PinOffIcon /> : <PinIcon />}
     </Button>
   );
