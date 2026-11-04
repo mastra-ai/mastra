@@ -61,6 +61,30 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 </Button>
 ```
 
+### Tool icons
+
+`presentTool` from `@mastra/playground-ui/components/ai/tool-call` gives a tool call its label,
+detail, static icon, and animated `AgentIndicator` pose. Use it wherever a tool call is shown, so a
+running call and its finished card look the same.
+
+```tsx
+import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+const { pose, label, detail } = presentTool(call.toolName, call.args);
+
+<AgentIndicator state={pose} />;
+```
+
+Always pass the call's arguments. Tools such as `knowledge_page` take an operation (`op` or
+`action`), and the icon and label follow it, so deleting a page does not look like editing one.
+Workspace prefixes (`mastra_workspace_`), MCP names (`mcp__server__tool`), `namespace.tool` names,
+and known aliases resolve to the tool they wrap. Unknown tools and ambiguous names such as
+`mcp__catalog__search` keep the generic tool icon.
+
+The **AI / Activity / Tool Icon Families** Storybook story shows every family and lets you switch
+actions to watch the morph.
+
 ### Tool approvals
 
 `ToolApproval` renders a standalone approval request in the shared activity layout: the tool name

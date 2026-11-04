@@ -29,6 +29,9 @@ interface ConnectionRowsProps {
 
 const SKELETON_ROWS = [0, 1, 2];
 
+/** Bar widths that stand in for each column's content; the actions column stays empty. */
+const SKELETON_WIDTHS = ['w-40', 'w-28', 'w-14', null];
+
 function ConnectionRows({
   label,
   connections,
@@ -50,10 +53,8 @@ function ConnectionRows({
       {loading ? (
         SKELETON_ROWS.map(index => (
           <Table.Row key={index}>
-            {Array.from({ length: columnCount }, (_, cell) => (
-              <Table.Cell key={cell}>
-                <SkeletonText />
-              </Table.Cell>
+            {SKELETON_WIDTHS.map((width, cell) => (
+              <Table.Cell key={cell}>{width ? <SkeletonText className={width} /> : null}</Table.Cell>
             ))}
           </Table.Row>
         ))

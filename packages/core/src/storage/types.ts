@@ -48,6 +48,11 @@ export interface WorkflowRun {
   createdAt: Date;
   updatedAt: Date;
   resourceId?: string;
+  /**
+   * Set to 2 for runs stored as a header plus entries. Absent for v1 runs.
+   * @experimental
+   */
+  storageVersion?: 2;
 }
 
 export type PaginationInfo = {

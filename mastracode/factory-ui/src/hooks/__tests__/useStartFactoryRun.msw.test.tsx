@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { providerFactsCard } from '../../ui/__tests__/fixtures/providerFactsCard';
@@ -30,23 +31,21 @@ function stubEndpoints(
   let started: Record<string, unknown> | undefined;
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: repositories.map(repository => ({
-          id: `conn-${repository.id}`,
-          installationId: `inst-${repository.id}`,
-          integrationId: repository.provider ?? 'github',
-          repositories: [
-            {
-              id: repository.id,
-              branch: 'main',
-              sandboxWorkdir: '/repo',
-              repository: { externalId: repository.externalId, slug: repository.slug, defaultBranch: 'main' },
-            },
-          ],
-        })),
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: repositories.map(repository =>
+              listedRepository(repository.id, repository.slug, {
+                integrationId: repository.provider ?? 'github',
+                externalId: repository.externalId,
+                branch: 'main',
+                sandboxWorkdir: '/repo',
+              }),
+            ),
+          },
+        ],
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>

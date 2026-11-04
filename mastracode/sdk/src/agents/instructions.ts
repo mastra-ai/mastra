@@ -12,6 +12,7 @@ export async function getDynamicInstructions({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  plansDir,
   disabledTools,
 }: {
   requestContext: { get(key: string): unknown };
@@ -19,6 +20,7 @@ export async function getDynamicInstructions({
   coAuthor?: { name?: string; email?: string };
   hasSubagents?: boolean;
   disabledBuiltinTools?: readonly string[];
+  plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
   disabledTools?: readonly string[];
 }): Promise<string> {
@@ -29,6 +31,7 @@ export async function getDynamicInstructions({
       coAuthor,
       hasSubagents,
       disabledBuiltinTools,
+      plansDir,
       disabledTools,
     }),
   );
@@ -45,6 +48,7 @@ export async function getDynamicInstructionSections({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  plansDir,
   disabledTools,
 }: {
   requestContext: { get(key: string): unknown };
@@ -53,6 +57,8 @@ export async function getDynamicInstructionSections({
   hasSubagents?: boolean;
   /** Controller built-in tools removed via `disableBuiltinTools`; their prompt guidance is omitted. */
   disabledBuiltinTools?: readonly string[];
+  /** Host-configured workspace-relative plans directory; overrides the per-session default. */
+  plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
   disabledTools?: readonly string[];
 }): Promise<PromptSection[]> {
@@ -88,6 +94,7 @@ export async function getDynamicInstructionSections({
     hostInstructions,
     hasSubagents,
     disabledBuiltinTools,
+    plansDir,
     disabledTools,
     requestContext,
   };
