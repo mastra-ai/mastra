@@ -13,7 +13,11 @@ import { createBoardRegistry } from '../boards/registry.js';
 import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
-import { DEFAULT_INTAKE_ROUTE, StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import {
+  DEFAULT_INTAKE_ROUTE,
+  PULL_REQUEST_INTAKE_ROUTE,
+  StoredBoardsStorage,
+} from '../storage/domains/boards/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { BoardRoutes } from './boards.js';
@@ -119,7 +123,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     return { send };
   }
 
-  /** Pass `seeded` to keep the default route every project starts with; tests otherwise start with none. */
+  /** Pass `seeded` to keep the default routes every project starts with; tests otherwise start with none. */
   async function setup({ seeded = false } = {}) {
     let url = ':memory:';
     if (backend === 'libsql') {
@@ -135,8 +139,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const base = `${projectPath}/intake-routes`;
     const scope = { orgId, factoryProjectId: project.id };
     if (!seeded) {
-      const [route] = await a.boards.listIntakeRoutes(scope);
-      await a.boards.deleteIntakeRoute(scope, route!.id, { expectedRevision: route!.revision });
+      // Last first, so no delete moves (and re-revisions) a route still to delete.
+      for (const route of (await a.boards.listIntakeRoutes(scope)).toReversed()) {
+        await a.boards.deleteIntakeRoute(scope, route.id, { expectedRevision: route.revision });
+      }
     }
     return { a, b, orgId, scope, projectPath, base, replicaA: replica(a, orgId) };
   }
@@ -147,10 +153,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     return response.body.intakeRoutes;
   }
 
-  it('lists the default route a new project starts with, and lets an admin edit it like any other', async () => {
+  it('lists the default routes a new project starts with, and lets an admin edit them like any other', async () => {
     const { base, replicaA } = await setup({ seeded: true });
-    const [route, ...rest] = await list(replicaA.send, base, MEMBER);
+    const [route, pullRequests, ...rest] = await list(replicaA.send, base, MEMBER);
     expect(rest).toEqual([]);
+    expect(pullRequests).toMatchObject({
+      name: PULL_REQUEST_INTAKE_ROUTE.name,
+      position: 1,
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+      createdBy: 'factory',
+      problems: [],
+    });
     expect(route).toMatchObject({
       name: DEFAULT_INTAKE_ROUTE.name,
       enabled: true,

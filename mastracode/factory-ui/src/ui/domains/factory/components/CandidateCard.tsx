@@ -26,6 +26,7 @@ export function CandidateCard({
   candidate,
   projectRepositoryId,
   factoryProjectId,
+  board,
   onRun,
   layout,
 }: {
@@ -34,6 +35,8 @@ export function CandidateCard({
   projectRepositoryId: string;
   /** Factory project id resolving Linear descriptions in the detail panel. */
   factoryProjectId: string;
+  /** Board the candidate is filed on. */
+  board?: string;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
   layout: BoardLayout;
@@ -41,7 +44,7 @@ export function CandidateCard({
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
-  const moves = cardMoves(candidate, candidate.column);
+  const moves = cardMoves(board === undefined ? candidate : { ...candidate, board }, candidate.column);
   const [defaultMove] = moves;
   const { status } = boardCardState({});
 

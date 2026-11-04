@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
-import { cancelNestedRun } from './nested-run-recovery';
+import { cancelNestedRun, createNestedRunParentStatusLookup } from './nested-run-recovery';
 import { createStep } from './workflow';
 
 const num = z.object({ n: z.number() });
@@ -40,5 +40,30 @@ describe('canceling a nested run its parent left behind', () => {
     await cancelNestedRun({ store, workflowName: 'wf', runId: 'r1', expectedStatus: 'running' });
 
     expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'r1' })).toBe('success');
+  });
+});
+
+describe('parent status lookups within one sweep', () => {
+  it('reads each parent once, however many nested runs point at it', async () => {
+    const reads: string[] = [];
+    const store = {
+      loadWorkflowRunStatus: async ({ workflowName, runId }: { workflowName: string; runId: string }) => {
+        reads.push(`${workflowName}/${runId}`);
+        return 'success' as const;
+      },
+    };
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: store as any });
+
+    const leftovers = Array.from({ length: 3 }, () => ({ workflowName: 'outer', runId: 'run-1' }));
+    const statuses = await Promise.all([...leftovers, { workflowName: 'outer', runId: 'run-2' }].map(parentStatusOf));
+
+    expect(statuses).toEqual(['success', 'success', 'success', 'success']);
+    expect(reads).toEqual(['outer/run-1', 'outer/run-2']);
+  });
+
+  it('reports no parent status when the sweep has no storage', async () => {
+    const parentStatusOf = createNestedRunParentStatusLookup({});
+
+    await expect(parentStatusOf({ workflowName: 'outer', runId: 'run-1' })).resolves.toBeNull();
   });
 });

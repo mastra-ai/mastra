@@ -20,7 +20,7 @@
     "qwen/qwen3.8-27b"
   ],
   "reasoning": {
-    "openai/gpt-oss-120b": [
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -32,7 +32,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

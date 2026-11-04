@@ -138,7 +138,23 @@ const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema }
 
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
-const workItemResponseSchema = z.object({ workItem: entitySchema });
+const cardSchema = z
+  .object({
+    workItem: z
+      .object({
+        provider: z.string(),
+        key: z.string().nullable(),
+        url: z.string().nullable(),
+        title: z.string(),
+        state: z.string().nullable(),
+        labels: z.array(z.string()),
+        author: z.string().nullable(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
 export const createProjectBodySchema = z.object({
@@ -155,6 +171,7 @@ export const updateProjectBodySchema = z
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
@@ -367,7 +384,6 @@ export const updateWorkItemBodySchema = z
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
-    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 
@@ -839,7 +855,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
     responseSchema: z.object({
-      workItems: z.array(entitySchema),
+      workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
     }),

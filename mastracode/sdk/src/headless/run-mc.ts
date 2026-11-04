@@ -72,9 +72,9 @@ function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
     }
     case 'usage_update':
       acc.usage = {
-        inputTokens: event.usage.promptTokens,
-        outputTokens: event.usage.completionTokens,
-        totalTokens: event.usage.totalTokens,
+        inputTokens: (acc.usage?.inputTokens ?? 0) + event.usage.promptTokens,
+        outputTokens: (acc.usage?.outputTokens ?? 0) + event.usage.completionTokens,
+        totalTokens: (acc.usage?.totalTokens ?? 0) + event.usage.totalTokens,
       };
       break;
     case 'error':
