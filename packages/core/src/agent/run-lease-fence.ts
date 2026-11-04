@@ -22,6 +22,13 @@ export async function verifyRunLease(runId: string | undefined): Promise<void> {
   if (runId) await fences.get(runId)?.();
 }
 
+const stepOwners = new WeakMap<object, object>();
+
+/** A derived abort signal belongs to the same run as the signal it wraps. */
+export function setRunStepOwner(owner: object, parent: object): void {
+  stepOwners.set(owner, stepOwners.get(parent) ?? parent);
+}
+
 /**
  * The steps (model requests and tool calls) each run has running now, keyed by an object owned by that one run
  * instance: the abort signal the thread runtime prepared for it, or a durable run's registry entry. Runs that share
@@ -34,6 +41,7 @@ const lastStepSettledAt = new WeakMap<object, number>();
 /** Marks a step of the run this object owns as running. Call the returned function once the step has settled. */
 export function startRunStep(owner: object | undefined): () => void {
   if (!owner) return () => {};
+  owner = stepOwners.get(owner) ?? owner;
   const entry = runningSteps.get(owner) ?? { count: 0, onSettled: [] };
   entry.count++;
   runningSteps.set(owner, entry);
@@ -50,6 +58,7 @@ export function startRunStep(owner: object | undefined): () => void {
 
 /** Calls `callback` once no step of the run this object owns is running: right away when none is. */
 export function whenRunStepsSettle(owner: object | undefined, callback: () => void): void {
+  if (owner) owner = stepOwners.get(owner) ?? owner;
   const entry = owner ? runningSteps.get(owner) : undefined;
   if (entry) entry.onSettled.push(callback);
   else callback();
@@ -63,6 +72,7 @@ export function isRunStepActive(owner: object | undefined, withinMs: number): bo
   if (!owner) return false;
   const signal = owner instanceof AbortSignal ? owner : (owner as { abortSignal?: unknown }).abortSignal;
   if (signal instanceof AbortSignal && signal.aborted) return false;
+  owner = stepOwners.get(owner) ?? owner;
   if (runningSteps.has(owner)) return true;
   const settledAt = lastStepSettledAt.get(owner);
   return settledAt !== undefined && Date.now() - settledAt < withinMs;

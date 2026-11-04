@@ -3,6 +3,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import type { ChunkType } from '../../stream/types';
 import type { AgentSuspendedEventData } from '../durable/types';
+import { setRunStepOwner } from '../run-lease-fence';
 import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
@@ -77,6 +78,7 @@ export function createAgentStreamPublisher({
   record,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
   const controller = new AbortController();
+  if (callerSignal) setRunStepOwner(controller.signal, callerSignal);
   const abort = (reason?: unknown) => {
     if (!controller.signal.aborted) controller.abort(reason ?? new Error('Aborted'));
   };
