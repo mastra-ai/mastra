@@ -169,17 +169,22 @@ export class PlatformMemory extends MastraMemory {
           model,
           writer,
           abort,
+          abortSignal,
           rotateResponseMessageId,
         }: ProcessInputStepArgs) {
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx || ctx.readOnly) return messageList;
-          const result = await client.runProcessors(ctx.threadId, {
-            phase: 'inputStep',
-            resourceId: ctx.resourceId,
-            stepNumber,
-            messageList: messageList.serialize(),
-            model: model ? { provider: model.provider, modelId: model.modelId } : undefined,
-          });
+          const result = await client.runProcessors(
+            ctx.threadId,
+            {
+              phase: 'inputStep',
+              resourceId: ctx.resourceId,
+              stepNumber,
+              messageList: messageList.serialize(),
+              model: model ? { provider: model.provider, modelId: model.modelId } : undefined,
+            },
+            abortSignal,
+          );
           return applyResult(result, { messageList, writer, abort, rotateResponseMessageId });
         },
       },
@@ -195,6 +200,7 @@ export class PlatformMemory extends MastraMemory {
         async processOutputResult({ messageList, requestContext, result, writer, abort }: ProcessOutputResultArgs) {
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx || ctx.readOnly) return messageList;
+          // No abortSignal here: this call saves the turn's messages, and aborting mid-save can lose them.
           const res = await client.runProcessors(ctx.threadId, {
             phase: 'output',
             resourceId: ctx.resourceId,

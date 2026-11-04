@@ -37,6 +37,23 @@ it.each([
   await expect(storage.listPages({ read: 'all' })).rejects.toThrow('specific knowledge failure');
 });
 
+it('prefers the nested error message over a generic title', async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ title: 'Bad Request', error: { message: 'pageKey is required' } }));
+  });
+  servers.push(server);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP port');
+  const storage = await new PlatformKnowledge({
+    apiUrl: `http://127.0.0.1:${address.port}`,
+    instanceId: 'instance',
+    accessToken: 'token',
+  }).getStorage();
+  await expect(storage.listPages({ read: 'all' })).rejects.toThrow('pageKey is required');
+});
+
 it('returns an HTTP status error rather than a SyntaxError for non-JSON gateway failures', async () => {
   const server = createServer((_req, res) => {
     res.writeHead(502, { 'content-type': 'text/html' });
@@ -51,5 +68,24 @@ it('returns an HTTP status error rather than a SyntaxError for non-JSON gateway 
     instanceId: 'instance',
     accessToken: 'token',
   }).getStorage();
-  await expect(storage.listPages({ read: 'all' })).rejects.toThrow('Knowledge request failed (502)');
+  await expect(storage.listPages({ read: 'all' })).rejects.toThrow(
+    'Knowledge request failed (502): <html>Bad gateway</html>',
+  );
+});
+
+it('keeps the HTTP status when the error body is JSON null', async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(500, { 'content-type': 'application/json' });
+    res.end('null');
+  });
+  servers.push(server);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP port');
+  const storage = await new PlatformKnowledge({
+    apiUrl: `http://127.0.0.1:${address.port}`,
+    instanceId: 'instance',
+    accessToken: 'token',
+  }).getStorage();
+  await expect(storage.listPages({ read: 'all' })).rejects.toThrow('Knowledge request failed (500): null');
 });

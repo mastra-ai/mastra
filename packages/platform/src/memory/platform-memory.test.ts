@@ -230,6 +230,85 @@ describe('PlatformMemory', () => {
     expect(api.requests.every(r => r.headers.get('authorization') === 'Bearer tok_1')).toBe(true);
   });
 
+  it('cancels an in-flight processor request when the run is aborted', async () => {
+    const controller = new AbortController();
+    let abortedInFlight: boolean | undefined;
+    const fetchImpl = api.fetchImpl;
+    api.fetchImpl = async (input, init) => {
+      if (
+        new URL(String(input)).pathname.endsWith('/processors') &&
+        JSON.parse(String(init?.body)).phase === 'inputStep'
+      ) {
+        controller.abort();
+        abortedInFlight = init?.signal?.aborted;
+      }
+      return fetchImpl(input, init);
+    };
+    const { agent } = agentWith([]);
+
+    await agent
+      .generate('Hello', { memory: { thread: 'thread_1', resource: 'user_1' }, abortSignal: controller.signal })
+      .catch(() => {});
+    expect(abortedInFlight).toBe(true);
+  });
+
+  it('times out a hosted request that never responds', async () => {
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+    try {
+      const client = new PlatformMemoryClient({
+        accessToken: 'tok_1',
+        instanceId: 'mem_1',
+        apiUrl: 'https://platform.test',
+        fetch: (_input, init) =>
+          new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))),
+      });
+      const pending = client.getThread('thread_1');
+      expect(timeout).toHaveBeenCalledWith(30_000);
+      deadline.abort(new DOMException('timed out', 'TimeoutError'));
+      await expect(pending).rejects.toThrow('timed out');
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it('gives processor runs a 5-minute bound and never aborts the output-phase save', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const controller = new AbortController();
+    const outputSignals: AbortSignal[] = [];
+    const fetchImpl = api.fetchImpl;
+    api.fetchImpl = async (input, init) => {
+      if (
+        new URL(String(input)).pathname.endsWith('/processors') &&
+        JSON.parse(String(init?.body)).phase === 'output'
+      ) {
+        controller.abort();
+        outputSignals.push(init!.signal!);
+      }
+      return fetchImpl(input, init);
+    };
+    try {
+      const { agent } = agentWith([]);
+      await agent
+        .generate('Hello', { memory: { thread: 'thread_1', resource: 'user_1' }, abortSignal: controller.signal })
+        .catch(() => {});
+      expect(timeout).toHaveBeenCalledWith(5 * 60_000);
+      timeout.mockClear();
+      await new PlatformMemoryClient({
+        accessToken: 'tok_1',
+        instanceId: 'mem_1',
+        apiUrl: 'https://platform.test',
+        fetch: async () => new Response('{}'),
+      }).runProcessors('thread_1', { phase: 'output', resourceId: 'user_1', messageList: {} as never });
+      expect(timeout.mock.calls).toEqual([[5 * 60_000]]);
+      expect(outputSignals).toHaveLength(1);
+      expect(outputSignals[0]!.aborted).toBe(false);
+      expect(api.messages.get('thread_1')?.length).toBeGreaterThan(0);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it('injects server-side observations as a system message', async () => {
     const prompts: any[] = [];
     const { agent } = agentWith(prompts);

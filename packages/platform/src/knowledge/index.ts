@@ -117,12 +117,18 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     if (!response.ok) {
       let body: { name?: string; detail?: string; title?: string; error?: { name?: string; message?: string } } = {};
       try {
-        body = JSON.parse(text);
+        const parsed: unknown = JSON.parse(text);
+        if (parsed && typeof parsed === 'object') body = parsed;
       } catch {
         // Gateways can return non-JSON error pages.
       }
       const message =
-        body.detail ?? body.title ?? body.error?.message ?? `Knowledge request failed (${response.status})`;
+        body.detail ||
+        body.error?.message ||
+        body.title ||
+        (text
+          ? `Knowledge request failed (${response.status}): ${text}`
+          : `Knowledge request failed (${response.status})`);
       const name = body.name ?? body.error?.name;
       if (name === 'KnowledgeNotFoundError') {
         const error = new KnowledgeNotFoundError('record', operation);

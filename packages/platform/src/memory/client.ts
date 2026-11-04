@@ -121,6 +121,9 @@ export interface MemoryObservationRun {
 }
 
 const DEFAULT_API_URL = 'https://memory-api.mastra.ai';
+const REQUEST_TIMEOUT_MS = 30_000;
+// Processor runs execute the hosted observer/reflector (LLM calls) inside the request.
+const PROCESSOR_TIMEOUT_MS = 5 * 60_000;
 
 function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
@@ -247,9 +250,11 @@ export class PlatformMemoryClient {
   }
 
   /** Runs the instance's memory processors for one agent phase on a serialized message list. */
-  runProcessors(threadId: string, body: RunMemoryProcessorsInput) {
+  runProcessors(threadId: string, body: RunMemoryProcessorsInput, signal?: AbortSignal) {
     return this.request<MemoryProcessorsResult>('POST', `/threads/${encodeURIComponent(threadId)}/processors`, {
       body,
+      signal,
+      timeoutMs: PROCESSOR_TIMEOUT_MS,
     });
   }
 
@@ -324,7 +329,11 @@ export class PlatformMemoryClient {
     return `${this.opts.apiUrl}/v1/memory/${encodeURIComponent(this.opts.instanceId)}`;
   }
 
-  private async request<T>(method: string, path: string, init: { query?: Query; body?: unknown } = {}): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    init: { query?: Query; body?: unknown; signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<T> {
     const url = new URL(this.base + path);
     for (const [key, value] of Object.entries(init.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -335,10 +344,12 @@ export class PlatformMemoryClient {
     if (this.opts.environmentId) headers['x-mastra-environment-id'] = this.opts.environmentId;
     if (init.body !== undefined) headers['content-type'] = 'application/json';
 
+    const deadline = AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS);
     const res = await this.opts.fetch(url, {
       method,
       headers,
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: init.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
     });
     if (!res.ok) throw new PlatformMemoryApiError(res.status, await res.text().catch(() => ''));
     if (res.status === 204) return undefined as T;
