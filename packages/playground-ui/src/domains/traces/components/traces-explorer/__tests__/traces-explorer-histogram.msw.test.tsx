@@ -218,7 +218,7 @@ describe('TracesExplorer.Histogram', () => {
       await renderExplorer();
 
       const region = await screen.findByRole('region', { name: 'Traces over time' });
-      await waitFor(() => expect(within(region).getByText('8 traces · 2 errors')).toBeTruthy());
+      await waitFor(() => expect(within(region).getByText('8 traces, 2 errors')).toBeTruthy());
     });
 
     it('sends the same time range and filters as the list query', async () => {

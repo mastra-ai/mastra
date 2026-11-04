@@ -156,7 +156,7 @@ function navInteractiveRow({
 
 function navTooltipLabel(link: SidebarLink | undefined, isCollapsed: boolean) {
   if (!link) return undefined;
-  if (link.tooltipMsg) return isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg;
+  if (link.tooltipMsg) return isCollapsed ? `${link.name}: ${link.tooltipMsg}` : link.tooltipMsg;
   return isCollapsed ? link.name : undefined;
 }
 

@@ -158,7 +158,7 @@ export const PopupWidth: Story = {
       'moonshotai/kimi-k3.1-pro',
       'cognitivecomputations/dolphin-mistral-24b-venice-edition',
     ].map(id => ({ label: id, value: id })),
-    placeholder: 'Select a model',
+    placeholder: 'Select model',
     searchPlaceholder: 'Search models',
     variant: 'ghost',
     popupWidth: 'lg',

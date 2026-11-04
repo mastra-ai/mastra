@@ -53,8 +53,8 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
           mode="single"
           selected={selectedDate}
           defaultMonth={selectedDate}
-          fromMonth={firstDate}
-          toMonth={lastDate}
+          startMonth={firstDate}
+          endMonth={lastDate}
           disabled={firstDate && lastDate ? { before: firstDate, after: lastDate } : undefined}
           onSelect={handleSelect}
         />
