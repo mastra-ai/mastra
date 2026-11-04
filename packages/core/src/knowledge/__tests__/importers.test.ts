@@ -313,4 +313,24 @@ describe('Knowledge importers', () => {
     expect(run.status).toBe('failed');
     expect(run.error).toContain('storage down');
   });
+  it('keeps the old cursor when removing a stale page fails', async () => {
+    const source = items({ id: 'a', title: 'A', body: 'a' });
+    const base = docsImporter(source);
+    const importer: KnowledgeImporter = {
+      id: 'docs',
+      async run(ctx) {
+        await base.run(ctx);
+        await ctx.state.set('since', source.size);
+      },
+    };
+    const { knowledge } = setup([importer]);
+    await knowledge.runImporter('docs');
+    const storage = await knowledge.getStorage();
+    storage.deletePage = async () => {
+      throw new Error('storage down');
+    };
+    source.clear();
+    expect((await knowledge.runImporter('docs')).status).toBe('failed');
+    expect(await storage.getImportState({ importerId: 'docs', key: 'since' })).toBe(1);
+  });
 });

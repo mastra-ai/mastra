@@ -181,7 +181,7 @@ export async function runKnowledgeImporter<TOptions>(
     async upsert(page) {
       checkAbort();
       const result = dryRun ? await previewUpsert(storage, page) : await upsertKnowledgePage(host, { ...page, author });
-      if (dryRun && result.status === 'created') dryCreated.add(`${page.scope}#${page.path}`);
+      if (dryRun && result.status === 'created') dryCreated.add(ownedKey(await ownedPage(page.scope, page.path)));
       counts[result.status]++;
       const ownedEntry = await ownedPage(page.scope, page.path);
       const key = ownedKey(ownedEntry);
@@ -217,7 +217,10 @@ export async function runKnowledgeImporter<TOptions>(
     async addNote(note) {
       checkAbort();
       if (dryRun) {
-        if (!dryCreated.has(`${note.scope}#${note.path}`) && !(await pageExists(storage, note.scope, note.path))) {
+        if (
+          !dryCreated.has(ownedKey(await ownedPage(note.scope, note.path))) &&
+          !(await pageExists(storage, note.scope, note.path))
+        ) {
           throw new Error(`No page at ${note.scope}#${note.path}: upsert it first.`);
         }
         counts.notes++;
@@ -280,11 +283,6 @@ export async function runKnowledgeImporter<TOptions>(
     owned = new Set((await storage.listImportOwnedPages({ importerId: importer.id })).map(ownedKey));
     await importer.run(ctx);
     checkAbort();
-    if (!dryRun) {
-      for (const [key, value] of pendingState) {
-        await storage.setImportState({ importerId: importer.id, key, value });
-      }
-    }
     if (!incremental) {
       for (const page of keeps) {
         const owned = await ownedPage(page.scope, page.path);
@@ -295,6 +293,10 @@ export async function runKnowledgeImporter<TOptions>(
     if (sweepFailures.length > 0) {
       status = 'failed';
       error = `Could not remove ${sweepFailures.length} page(s): ${sweepFailures.join('; ')}`;
+    } else if (!dryRun) {
+      for (const [key, value] of pendingState) {
+        await storage.setImportState({ importerId: importer.id, key, value });
+      }
     }
   } catch (caught) {
     status = controller.signal.aborted ? 'canceled' : 'failed';
@@ -310,6 +312,7 @@ export async function runKnowledgeImporter<TOptions>(
     const stale = (await storage.listImportOwnedPages({ importerId: importer.id }))
       .filter(page => !touched.has(ownedKey(page)))
       .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
+    const failed: KnowledgeImportOwnedPage[] = [];
     // Not abortable once started: a canceled run must not have removed anything.
     for (const page of stale) {
       if (dryRun) {
@@ -321,14 +324,14 @@ export async function runKnowledgeImporter<TOptions>(
         await storage.updateImportOwnedPages({ importerId: importer.id, remove: [page] });
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : String(caught);
-        if (
-          (caught as Error | undefined)?.name === 'KnowledgePageHasChildrenError' ||
-          /has child pages/.test(message)
-        ) {
+        // A child of ours that failed to go keeps the parent owned, so a later run retries both.
+        const ownChildLeft = failed.some(child => child.scope === page.scope && child.path.startsWith(`${page.path}/`));
+        if (/has child pages/.test(message) && !ownChildLeft) {
           // Someone added child pages under it: the page is theirs to keep now, so stop owning it.
           await storage.updateImportOwnedPages({ importerId: importer.id, remove: [page] });
           host.log('info', `[knowledge importer ${importer.id}] kept ${page.scope}#${page.path}: it has child pages`);
         } else {
+          failed.push(page);
           sweepFailures.push(`${page.scope}#${page.path}: ${message}`);
         }
       }
