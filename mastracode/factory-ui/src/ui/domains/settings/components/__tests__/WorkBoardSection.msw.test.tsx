@@ -125,6 +125,37 @@ describe('WorkBoardSection', () => {
     expect(within(alert).getByText(/leave runner\.skill unset/)).toBeInTheDocument();
   });
 
+  it('lets a board be saved after JSON that never parsed is dropped for the rule builder', async () => {
+    serve(storedWorkBoard());
+    const saved = vi.fn<(body: ReplaceBoardBody) => void>();
+    server.use(
+      http.patch(BOARD_URL, async ({ request }) => {
+        const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
+        saved(body);
+        return HttpResponse.json(storedWorkBoard({ name: body.name, phases: body.phases, revision: 2 }));
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<WorkBoardSection factoryId="fp-1" />);
+
+    await screen.findByRole('region', { name: 'Planning phase' });
+    await user.click(phase('Planning').getByRole('switch', { name: 'Planning: start on its own' }));
+    await user.click(phase('Planning').getByRole('button', { name: 'Edit as JSON' }));
+    await user.click(phase('Planning').getByLabelText('Planning: start only when JSON'));
+    await user.paste('{"operator":');
+    expect(await phase('Planning').findByText('Not valid JSON.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+    await user.click(phase('Planning').getByRole('button', { name: 'Use rule builder' }));
+    expect(phase('Planning').queryByText('Not valid JSON.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
+    expect(saved.mock.calls[0][0].phases.find(p => p.key === 'planning')).toMatchObject({ autoStart: true });
+    expect(saved.mock.calls[0][0].phases.find(p => p.key === 'planning')?.autoStartWhen ?? null).toBeNull();
+  });
+
   it('resets an edited board to its default, at the next revision', async () => {
     serve(storedWorkBoard({ revision: 3, name: 'Shipyard work' }));
     const reset = vi.fn<(body: unknown) => void>();

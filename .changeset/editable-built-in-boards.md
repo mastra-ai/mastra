@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Each project's boards now live in its database, and admins can edit them. Factory stores the built-in Work board, every board passed to `MastraFactory({ boards })` in a project once: when the project is created, and in existing projects the first time Factory loads them (including at startup). Factory then serves the stored board, so what you see in the database is the board that runs. Work and app boards keep their code behaviour, so edits can't break the work their code runs.
+Each project's boards now live in its database, and admins can edit them. Factory stores the built-in Work board and every board passed to `MastraFactory({ boards })` in a project once: when the project is created, and in existing projects the first time Factory loads them (including at startup). Factory then serves the stored board, so what you see in the database is the board that runs. Work and app boards keep their code behaviour, so edits can't break the work their code runs.
 
 ```bash
 # Edit the project's Work board (the whole board, with its revision)

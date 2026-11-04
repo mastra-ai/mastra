@@ -147,7 +147,13 @@ function RuleEditor({
           disabled={disabled}
           onClick={() => {
             setRawProblem(undefined);
-            setRaw(raw === undefined ? (rule ? JSON.stringify(rule, null, 2) : '') : undefined);
+            if (raw === undefined) {
+              setRaw(rule ? JSON.stringify(rule, null, 2) : '');
+              return;
+            }
+            setRaw(undefined);
+            // The builder edits the last valid rule, so JSON that never parsed no longer holds the save.
+            onChange(rule ?? null, ruleProblem(rule));
           }}
         >
           {raw === undefined ? 'Edit as JSON' : 'Use rule builder'}
