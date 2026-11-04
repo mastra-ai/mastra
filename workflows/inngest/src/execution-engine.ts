@@ -788,10 +788,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           const resumedCallFinished = isResume && !!resume?.label && !(result as any).resumeLabels?.[resume.label];
           if (resumedCallFinished && agentInput?.__workflowKind === 'durable-agent' && agentInput.runId) {
             const parked = (suspendedSteps[0]?.[1] as any)?.suspendPayload;
+            // An approval requested during execution (e.g. by a sub-agent) nests the call here.
+            const approval = parked?.requireToolApproval;
             await emitSuspendedEvent(pubsub, agentInput.runId, {
-              toolCallId: parked?.toolCallId,
-              toolName: parked?.toolName,
-              args: parked?.args,
+              toolCallId: parked?.toolCallId ?? approval?.toolCallId,
+              toolName: approval?.toolName ?? parked?.toolName,
+              args: approval?.args ?? parked?.args,
               suspendPayload: parked?.toolCallSuspended,
               type: parked?.type === 'approval' ? 'approval' : 'suspension',
             });

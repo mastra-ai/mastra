@@ -1994,6 +1994,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           : undefined;
 
         await inngest.send({
+          // A send can fail after Inngest accepted the event, and the claim is then handed back. The
+          // id names this resume of this suspension, so Inngest drops a retry of an accepted event.
+          ...(snapshot?.timestamp ? { id: `${runId}:resume:${snapshot.timestamp}:${toolCallId ?? ''}` } : {}),
           name: eventName,
           data: buildDurableResumeEventData({
             inputData: resumeData,
@@ -2030,7 +2033,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // subscription, otherwise a later resume of the same runId is blocked.
         streamCleanup();
         finalizeResumeRegistry();
-        // The event was never sent, so hand the suspension back. The dispatch error is the one to report.
+        // Hand the suspension back; the event id keeps a retry from running it twice. The dispatch
+        // error is the one to report.
         await releaseClaim().catch(() => {});
         throw error;
       }
