@@ -409,10 +409,10 @@ describe('DashboardRenderer', () => {
       LinkComponent: RouterLink,
     };
 
-    it("links the card's title to the host's page in place of its views menu", async () => {
+    it("links the card to the host's page in place of its views menu", async () => {
       const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand });
       const card = cell(container, 'token-usage');
-      const link = await within(card).findByRole('link', { name: 'Token usage' });
+      const link = await within(card).findByRole('link', { name: 'Expand Token usage' });
       expect(link.getAttribute('href')).toBe('/app/query?metric=token-usage');
       expect(within(card).queryByRole('button', { name: 'Token usage' })).toBeNull();
     });
@@ -421,7 +421,9 @@ describe('DashboardRenderer', () => {
       const { container } = renderDashboard(definition({ ...metricsWidget('token-usage'), title: '  ' }), {
         expand,
       });
-      expect(await within(cell(container, 'token-usage')).findByRole('link', { name: 'Token usage' })).toBeDefined();
+      expect(
+        await within(cell(container, 'token-usage')).findByRole('link', { name: 'Expand Token usage' }),
+      ).toBeDefined();
     });
 
     it('links a scores card the same way', async () => {
@@ -462,11 +464,11 @@ describe('DashboardRenderer', () => {
       expect(onDragStart).toHaveBeenCalledTimes(1);
     });
 
-    it('puts the handle before a linked title', async () => {
+    it('puts the handle before the title of a linked card', async () => {
       const expand: DashboardExpand = { href: () => '/query', LinkComponent: props => <a {...props} /> };
       const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand, dragHandle });
       const card = cell(container, 'token-usage');
-      await within(card).findByRole('link', { name: 'Token usage' });
+      await within(card).findByRole('link', { name: 'Expand Token usage' });
       expect(firstControl(card)).toBe(within(card).getByRole('button', { name: 'Move token-usage' }));
     });
 

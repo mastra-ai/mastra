@@ -137,7 +137,7 @@ export function ChartCard<V extends string = string>({
                 variant="ghost"
                 size="icon-sm"
                 tooltip="Expand"
-                aria-label={title}
+                aria-label={`Expand ${title}`}
                 render={<Anchor href={href} />}
               >
                 <Maximize2Icon />

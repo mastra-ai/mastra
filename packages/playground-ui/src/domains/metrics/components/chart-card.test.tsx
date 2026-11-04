@@ -127,7 +127,7 @@ describe('ChartCard', () => {
         <div />
       </ChartCard>,
     );
-    const link = screen.getByRole('link', { name: 'Spend by model' });
+    const link = screen.getByRole('link', { name: 'Expand Spend by model' });
     expect(link.getAttribute('href')).toBe('/app/query?metric=spend');
     // The title stays plain text; the link is the button beside it.
     expect(screen.getByRole('heading', { name: 'Spend by model' }).contains(link)).toBe(false);
