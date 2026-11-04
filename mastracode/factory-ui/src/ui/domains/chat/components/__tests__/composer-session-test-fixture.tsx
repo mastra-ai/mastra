@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { Link, MemoryRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { expect } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
@@ -106,7 +107,20 @@ export function stubPreparingSession({
       HttpResponse.json({ authenticated: true, user: { userId: 'user-1', email: 'user@example.com' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Preparing' }] }),
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Preparing',
+            repositories: [
+              listedRepository(PROJECT_REPOSITORY_ID, 'octo/hello', {
+                branch: 'main',
+                sandboxWorkdir: '/workspace/preparing',
+              }),
+            ],
+          },
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({
@@ -137,24 +151,6 @@ export function stubPreparingSession({
       }
       return HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: PROJECT_REPOSITORY_ID,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/preparing',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () => {
       result.sessionLookups += 1;
       return HttpResponse.json({

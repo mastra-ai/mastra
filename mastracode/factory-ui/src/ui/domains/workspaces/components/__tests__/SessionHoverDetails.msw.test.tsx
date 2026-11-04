@@ -30,9 +30,6 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
 
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
-      HttpResponse.json(fixtures.connectionsResponse),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json(fixtures.sessionsResponse),
     ),
