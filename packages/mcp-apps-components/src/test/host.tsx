@@ -5,11 +5,12 @@ import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextproto
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { REQUEST_TOOL_NAME, requestToolInputSchema } from '../request-tool';
-import type { RequestToolInput } from '../request-tool';
+import { DASHBOARD_DATA_TOOL_NAME, dashboardDataInputSchema } from '../apps/dashboard-renderer/data';
+import type { DashboardDataInput } from '../apps/dashboard-renderer/data';
+import { DASHBOARD_DATA_REQUESTS } from '../apps/dashboard-renderer/data-fetch';
 import type { McpAppDefinition } from '../runtime/define-mcp-app';
 
-/** Where the test host's server answers the observability tools; MSW handlers mock its routes. */
+/** Where the test host's Mastra server answers the dashboard's reads; MSW handlers mock its routes. */
 export const MASTRA_SERVER = 'http://mastra.test/api';
 
 const connections = new Set<{ app: App; bridge: AppBridge }>();
@@ -25,17 +26,25 @@ afterEach(async () => {
 const once = (bridge: AppBridge, event: 'initialized' | 'sizechange') =>
   new Promise<void>(resolve => bridge.addEventListener(event, () => resolve()));
 
-/** Answers the request tool the way a server does: by calling the route and returning its response. */
+/** Answers the data tool the way a Mastra server does: by calling the operation's route. */
 async function relayToServer(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
-  if (name !== REQUEST_TOOL_NAME) return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
-  const { method, path, query, body } = requestToolInputSchema.parse(args);
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(query ?? {})) {
-    for (const item of [value].flat()) search.append(key, item);
+  if (name !== DASHBOARD_DATA_TOOL_NAME) {
+    return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
   }
-  const response = await fetch(`${MASTRA_SERVER}${path}${search.size > 0 ? `?${search}` : ''}`, {
+  const call = dashboardDataInputSchema.parse(args);
+  const [method, path] = DASHBOARD_DATA_REQUESTS[call.operation].split(' ');
+  const url = new URL(`${MASTRA_SERVER}${path}`);
+  if (call.operation === 'listScores') {
+    for (const [key, value] of Object.entries(call.args)) {
+      for (const item of [value].flat()) url.searchParams.append(key, item);
+    }
+  }
+  const response = await fetch(url, {
     method,
-    ...(body !== undefined && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    ...(call.operation !== 'listScores' && {
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(call.args),
+    }),
   });
   const structuredContent = { status: response.status, body: await response.json() };
   return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent };
@@ -61,15 +70,15 @@ export async function renderWithHost<Input>(
 ) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
-  // The tool calls the app made, with the request each one carried.
-  const toolCalls: Array<{ name: string; request?: RequestToolInput }> = [];
+  // The tool calls the app made, with the read each one carried.
+  const toolCalls: Array<{ name: string; call?: DashboardDataInput }> = [];
   const messages: string[] = [];
   const modelContexts: unknown[] = [];
   // What the app asked of the host's chat, in order: a model context update or a message.
   const chat: Array<'context' | 'message'> = [];
   bridge.oncalltool = async ({ name, arguments: args }) => {
-    const request = requestToolInputSchema.safeParse(args);
-    toolCalls.push({ name, ...(request.success && { request: request.data }) });
+    const call = dashboardDataInputSchema.safeParse(args);
+    toolCalls.push({ name, ...(call.success && { call: call.data }) });
     return relayToServer(name, args);
   };
   bridge.onupdatemodelcontext = async params => {

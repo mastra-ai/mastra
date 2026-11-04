@@ -11,15 +11,22 @@ export {
   dashboardWidgetPinNotificationParamsSchema,
 } from './apps/dashboard-renderer/pin';
 export type { DashboardWidgetPinNotificationParams } from './apps/dashboard-renderer/pin';
+export {
+  DASHBOARD_DATA_TOOL_NAME,
+  DASHBOARD_DATA_OPERATIONS,
+  dashboardDataInputSchema,
+  dashboardDataOutputSchema,
+} from './apps/dashboard-renderer/data';
+export type { DashboardDataOperation, DashboardDataInput, DashboardDataOutput } from './apps/dashboard-renderer/data';
 
 /** The `structuredContent` a tool returns to drive the dashboard app. */
 export type DashboardRendererStructuredContent = z.input<typeof dashboardRendererInputSchema>;
 
 /**
  * Renders a Mastra dashboard definition with live metrics. Link a tool to its `ui://` URI and use
- * `dashboardRendererInputSchema` as the tool's output schema. The app reads metrics through the
- * `REQUEST_TOOL_NAME` tool from `@mastra/mcp-apps-components/request-tool`, which must be registered
- * on the same server and answer the read-only `/observability/*` routes.
+ * `dashboardRendererInputSchema` as the tool's output schema. The app reads its data through the
+ * `DASHBOARD_DATA_TOOL_NAME` tool, which must be registered on the same server and answer each
+ * operation in `DASHBOARD_DATA_OPERATIONS`.
  */
 export const dashboardRendererApp = defineMcpAppResource(html, {
   name: 'Mastra dashboard',

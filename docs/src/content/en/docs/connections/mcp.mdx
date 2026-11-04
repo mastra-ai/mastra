@@ -425,64 +425,65 @@ The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps that render
 npm install @mastra/mcp-apps-components @mastra/server
 ```
 
-The app never reaches the network from its iframe. Each request its dashboard makes, such as `POST /observability/metrics/aggregate`, travels as a call to one app-only tool over the host's MCP connection, so register that tool on the same `MCPServer` as the app. `REQUEST_TOOL_NAME` names the tool, `requestToolInputSchema` describes the request it receives (`method`, `path`, and an optional `query` and `body`), and `requestToolOutputSchema` describes the route's status and body it returns.
+The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to one app-only data tool over the host's MCP connection, so register that tool on the same `MCPServer` as the app. `DASHBOARD_DATA_TOOL_NAME` names the tool, `DASHBOARD_DATA_OPERATIONS` lists the reads it answers, `dashboardDataInputSchema` describes the call it receives (an `operation` and its `args`), and `dashboardDataOutputSchema` describes the status and body it returns.
 
-App-only visibility keeps the tool away from the model, but doesn't stop a direct call, so allow only the routes the app needs. This example answers the read-only observability routes the dashboard uses and runs each one in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks:
+Each operation has the same name as the `MastraClient` method the dashboard calls. This example answers each one with its read-only observability route and runs it in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks:
 
-```typescript title="src/mastra/mcp/request-tool.ts"
+```typescript title="src/mastra/mcp/dashboard-data-tool.ts"
 import type { Mastra } from '@mastra/core/mastra'
 import { RequestContext } from '@mastra/core/request-context'
 import { createTool } from '@mastra/core/tools'
 import {
-  REQUEST_TOOL_NAME,
-  requestToolInputSchema,
-  requestToolOutputSchema,
-} from '@mastra/mcp-apps-components/request-tool'
+  DASHBOARD_DATA_TOOL_NAME,
+  dashboardDataInputSchema,
+  dashboardDataOutputSchema,
+} from '@mastra/mcp-apps-components/dashboard-renderer'
+import type { DashboardDataOperation } from '@mastra/mcp-apps-components/dashboard-renderer'
 import { SERVER_ROUTES, invokeRoute } from '@mastra/server/server-adapter'
 
-const ALLOWED_ROUTES = new Set([
-  'POST /observability/traces/aggregate',
-  'POST /observability/spans/aggregate',
-  'POST /observability/metrics/aggregate',
-  'POST /observability/metrics/breakdown',
-  'POST /observability/metrics/timeseries',
-  'POST /observability/metrics/percentiles',
-  'GET /observability/scores',
-  'POST /observability/scores/aggregate',
-  'POST /observability/scores/breakdown',
-  'POST /observability/scores/timeseries',
-  'POST /observability/scores/percentiles',
-])
-
-const routes = SERVER_ROUTES.filter(route => ALLOWED_ROUTES.has(`${route.method} ${route.path}`))
+const ROUTES = {
+  aggregateTraces: 'POST /observability/traces/aggregate',
+  aggregateSpans: 'POST /observability/spans/aggregate',
+  getMetricAggregate: 'POST /observability/metrics/aggregate',
+  getMetricBreakdown: 'POST /observability/metrics/breakdown',
+  getMetricTimeSeries: 'POST /observability/metrics/timeseries',
+  getMetricPercentiles: 'POST /observability/metrics/percentiles',
+  listScores: 'GET /observability/scores',
+  getScoreAggregate: 'POST /observability/scores/aggregate',
+  getScoreBreakdown: 'POST /observability/scores/breakdown',
+  getScoreTimeSeries: 'POST /observability/scores/timeseries',
+  getScorePercentiles: 'POST /observability/scores/percentiles',
+} satisfies Record<DashboardDataOperation, string>
 
 const isMastra = (value: unknown): value is Mastra =>
   typeof (value as Partial<Mastra> | undefined)?.getServer === 'function'
 
-export const mastraRequestTool = createTool({
-  id: REQUEST_TOOL_NAME,
-  description: 'Runs a read-only observability route for the dashboard app.',
-  inputSchema: requestToolInputSchema,
-  outputSchema: requestToolOutputSchema,
+export const dashboardDataTool = createTool({
+  id: DASHBOARD_DATA_TOOL_NAME,
+  description: 'Reads observability data for the dashboard app.',
+  inputSchema: dashboardDataInputSchema,
+  outputSchema: dashboardDataOutputSchema,
   mcp: { _meta: { ui: { visibility: ['app'] } } },
-  execute: async ({ method, path, query, body }, { mastra, requestContext, abortSignal }) => {
-    const route = routes.find(route => route.method === method && route.path === path)
-    if (!route) return { status: 404, body: { error: `${method} ${path} is not available.` } }
+  execute: async (call, { mastra, requestContext, abortSignal }) => {
+    const key = ROUTES[call.operation]
+    const route = SERVER_ROUTES.find(route => `${route.method} ${route.path}` === key)
+    if (!route) return { status: 404, body: { error: `No ${key} route.` } }
     if (!isMastra(mastra)) return { status: 503, body: { error: 'No Mastra instance.' } }
     return invokeRoute(route, {
       mastra,
       requestContext: requestContext ?? new RequestContext(),
-      ...(query && { query }),
-      ...(body !== undefined && { body }),
+      ...(call.operation === 'listScores' ? { query: call.args } : { body: call.args }),
       abortSignal,
     })
   },
 })
 ```
 
+The `satisfies` check fails to compile when the tool misses an operation. `listScores` sends its `args` as query parameters, and every other operation sends them as a JSON body. The tool only runs the routes in `ROUTES`, because app-only visibility keeps the tool away from the model but doesn't stop a direct call.
+
 Setting `visibility: ['app']` marks the tool app-only, so `MCPClient.listTools()` hides it from agents.
 
-Register the app and the request tool on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI:
+Register the app and the data tool on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI:
 
 ```typescript title="src/mastra/mcp/dashboard-server.ts"
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards'
@@ -493,7 +494,7 @@ import {
   dashboardRendererInputSchema,
 } from '@mastra/mcp-apps-components/dashboard-renderer'
 import { z } from 'zod'
-import { mastraRequestTool } from './request-tool'
+import { dashboardDataTool } from './dashboard-data-tool'
 
 const DASHBOARD_APP_URI = 'ui://mastra/dashboard'
 
@@ -543,7 +544,7 @@ export const dashboardServer = new MCPServer({
   name: 'Dashboard Server',
   version: '1.0.0',
   appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
-  tools: { showAgentRuns, [mastraRequestTool.id]: mastraRequestTool },
+  tools: { showAgentRuns, [dashboardDataTool.id]: dashboardDataTool },
 })
 ```
 

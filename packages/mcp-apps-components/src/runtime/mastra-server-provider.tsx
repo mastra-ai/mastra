@@ -1,23 +1,29 @@
 import { MastraReactProvider } from '@mastra/react';
+import type { App } from '@modelcontextprotocol/ext-apps';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMcpApp } from './mcp-app-context';
-import { createRequestToolFetch } from './request-tool-fetch';
 
 /**
- * Points playground-ui's data hooks at the Mastra server behind the app's MCP server. Requests
- * go through its app-only request tool, so the iframe never connects to the server itself.
+ * Points playground-ui's data hooks at the server behind the app's MCP server. `createFetch` sends
+ * their requests over the host's MCP connection, so the iframe never connects to the server itself.
  */
-export function MastraServerProvider({ children }: { children: ReactNode }) {
+export function MastraServerProvider({
+  createFetch,
+  children,
+}: {
+  createFetch: (app: App) => typeof fetch;
+  children: ReactNode;
+}) {
   const app = useMcpApp();
   const [queryClient] = useState(() => new QueryClient());
-  const [fetchThroughTool] = useState(() => createRequestToolFetch(app));
+  const [fetchThroughHost] = useState(() => createFetch(app));
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* The tool gets route paths, without the server's prefix. */}
-      <MastraReactProvider apiPrefix="" customFetch={fetchThroughTool}>
+      {/* Requests carry route paths, without the server's prefix. */}
+      <MastraReactProvider apiPrefix="" customFetch={fetchThroughHost}>
         {children}
       </MastraReactProvider>
     </QueryClientProvider>
