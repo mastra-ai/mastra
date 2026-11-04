@@ -78,6 +78,7 @@ export type {
   DataOmActivationPart,
   DataOmPart,
 } from './types';
+export type { OmProviderError } from './error';
 
 // Observer Agent
 export {
