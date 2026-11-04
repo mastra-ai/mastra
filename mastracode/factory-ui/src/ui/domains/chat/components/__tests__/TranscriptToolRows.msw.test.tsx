@@ -177,7 +177,7 @@ describe('TranscriptEntries tool rows', () => {
 
     const line = screen.getByRole('group', { name: 'Read a file, ran a command, wrote a file' });
     expect(within(line).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
-    expect(within(line).getByText('1 failed · 1 incomplete')).toBeInTheDocument();
+    expect(within(line).getByText('1 failed and 1 incomplete')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Tool: view' })).not.toBeInTheDocument();
 
     await expand(line);
@@ -341,7 +341,7 @@ describe('TranscriptEntries tool rows', () => {
     ]);
 
     const line = screen.getByRole('group', { name: 'Read a.ts, 1m 12s' });
-    expect(within(line).getByText('· 1m 12s')).toBeVisible();
+    expect(within(line).getByText('1m 12s')).toBeVisible();
   });
 
   it('keeps calls the reader opened in view, on the row they scrolled to, when a thought joins them', async () => {

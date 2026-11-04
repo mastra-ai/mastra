@@ -116,8 +116,8 @@ export function ActivityFold({
                   <ActivityDetail className={cn(prominent && 'text-body', UNTRUNCATED)}>{words.detail}</ActivityDetail>
                 )}
                 {words.duration && (
-                  <ActivityLabel className={cn(prominent && 'text-body font-medium', '-ml-1 tabular-nums')}>
-                    · {words.duration}
+                  <ActivityLabel className={cn(prominent && 'text-body font-medium', 'tabular-nums')}>
+                    {words.duration}
                   </ActivityLabel>
                 )}
                 {failed && (
