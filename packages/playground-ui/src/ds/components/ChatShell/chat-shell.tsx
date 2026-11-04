@@ -1,5 +1,5 @@
 import type { ComponentProps, ComponentPropsWithoutRef } from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import {
   MessageScroller,
@@ -124,9 +124,7 @@ export function ChatShellColumn({ className, ...props }: ComponentProps<'div'>) 
 /** The conversation's reading column. Positioned, so overlays such as `TranscriptAnnotations` travel with the text. */
 export function ChatShellTranscript({ className, ref, ...props }: ComponentProps<'div'>) {
   const { transcriptRef } = useChatShellRegions();
-  const columnRef = useMemo(() => mergeRefs(transcriptRef, ref), [transcriptRef, ref]);
-
-  return <ChatShellColumn ref={columnRef} className={cn('relative', className)} {...props} />;
+  return <ChatShellColumn ref={mergeRefs(transcriptRef, ref)} className={cn('relative', className)} {...props} />;
 }
 
 export interface ChatShellTurnProps extends ComponentPropsWithoutRef<'div'> {

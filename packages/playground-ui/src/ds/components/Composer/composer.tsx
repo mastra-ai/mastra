@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react';
-import { forwardRef, useContext, useMemo } from 'react';
+import { forwardRef, useContext } from 'react';
 
 import { ChatShellComposerInputContext } from '../ChatShell/chat-shell-context';
 import { ScrollArea } from '../ScrollArea';
@@ -105,12 +105,10 @@ ComposerAttachments.displayName = 'ComposerAttachments';
 export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
   ({ className, variant = 'inline', maxHeight, autoComplete, ...props }, ref) => {
     const shellInputRef = useContext(ChatShellComposerInputContext);
-    const inputRef = useMemo(() => mergeRefs(ref, shellInputRef), [ref, shellInputRef]);
-
     return (
       <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
         <textarea
-          ref={inputRef}
+          ref={mergeRefs(ref, shellInputRef)}
           data-slot="composer-input"
           className={cn(
             'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
