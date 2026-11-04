@@ -54,7 +54,7 @@ describe('getInputPreview', () => {
       { role: 'user', content: 'Second question' },
     ];
 
-    expect(getInputPreview(input)).toBe('First question | Second question');
+    expect(getInputPreview(input)).toBe('First question; Second question');
   });
 
   it('unwraps the legacy { messages } envelope of agent_run spans', () => {
