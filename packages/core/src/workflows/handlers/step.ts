@@ -15,11 +15,18 @@ import type { ObservabilityContext, Span } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { HAND_BACK_STATE_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
+import {
+  HAND_BACK_STATE_SYMBOL,
+  PARENT_STATE_SYMBOL,
+  PUBSUB_SYMBOL,
+  STREAM_FORMAT_SYMBOL,
+  WORKFLOW_CANCELLED_SYMBOL,
+} from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
+import { buildStepResultAccessors } from '../run-journal';
+import type { ParentStateLink } from '../run-journal';
 import type { Step, SuspendOptions } from '../step';
-import { getStepResult, getStepResultAsync } from '../step';
 import type {
   ExecutionContext,
   OutputWriter,
@@ -105,6 +112,8 @@ export async function executeStep(
   } = params;
   const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
+
+  const journal = engine.getRunJournal(runId);
 
   const stepCallId = globalThis.crypto.randomUUID();
   const persistedNestedRunId =
@@ -257,6 +266,11 @@ export async function executeStep(
       requestContext,
       phase: 'start',
       recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+      // A foreach's iterations all run this step, so their writes would name the same step at the
+      // same time. Its result is written when the foreach ends. A loop runs one iteration at a time
+      // and can't be a parallel or branch arm, so nothing else of the run is in flight here: the
+      // write is a boundary write and stores the state each iteration starts from, as v1 does.
+      stepIds: executionContext.foreachIndex !== undefined ? [] : iterationCount !== undefined ? undefined : [step.id],
     });
   }
 
@@ -418,12 +432,25 @@ export async function executeStep(
       let completedNestedOutput: { found: boolean; value?: unknown; state?: unknown } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
-        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: step.id,
-          runId: persistedNestedRunId,
-        });
-        if (nestedSnapshot?.status === 'success') {
-          completedNestedOutput = { found: true, value: nestedSnapshot.result, state: nestedSnapshot.value };
+        // The nested workflow's own option: it can differ from this run's.
+        const nestedStorageVersion = (step as { options?: { storageVersion?: 1 | 2 } }).options?.storageVersion ?? 1;
+        if (nestedStorageVersion === 2) {
+          const nestedRun = { workflowName: step.id, runId: persistedNestedRunId };
+          const stored = await workflowsStore?.loadWorkflowRunHeader(nestedRun);
+          if (stored?.header.status === 'success') {
+            // The header alone has no state; read it only once the run is known to be finished.
+            const run = await workflowsStore?.loadWorkflowRun({ ...nestedRun, successfulSteps: 'summary' });
+            completedNestedOutput = { found: true, value: stored.header.result, state: run?.state };
+          }
+        } else {
+          const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+            workflowName: step.id,
+            runId: persistedNestedRunId,
+            storageVersion: 1,
+          });
+          if (snapshot?.status === 'success') {
+            completedNestedOutput = { found: true, value: snapshot.result, state: snapshot.value };
+          }
         }
       }
 
@@ -489,8 +516,7 @@ export async function executeStep(
         suspendData: suspendDataToUse,
         ...createObservabilityContext({ currentSpan: stepSpan }),
         getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(null, stepResults),
-        getStepResultAsync: getStepResultAsync.bind(null, stepResults),
+        ...buildStepResultAccessors(engine, runId, stepResults),
         suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
@@ -559,6 +585,10 @@ export async function executeStep(
             : undefined,
         [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
+        [PARENT_STATE_SYMBOL]:
+          isNestedWorkflow && journal
+            ? (((state: unknown) => journal.baseFor(state)) satisfies ParentStateLink)
+            : undefined,
         [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,

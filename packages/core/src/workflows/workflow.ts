@@ -71,6 +71,7 @@ import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
+import type { WorkflowRunHeader } from '../storage/domains/workflows/journal';
 import type { RunOwnershipRecord } from '../storage/run-fencing';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -79,7 +80,7 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { HAND_BACK_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
+import { HAND_BACK_STATE_SYMBOL, PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
@@ -95,8 +96,11 @@ import {
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import type { ParentStateLink, StateBase } from './run-journal';
 import { claimWorkflowRunOwnership } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
+import { createRunStorage } from './run-storage';
+import type { RunStorage } from './run-storage';
 import { validateCron } from './scheduler/cron';
 import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
@@ -109,6 +113,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
+import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -154,7 +159,6 @@ import {
   createTimeTravelExecutionParams,
   getSingleStepEntryId,
   hydrateSerializedStepErrors,
-  waitForSuspendedSnapshot,
 } from './utils';
 
 // Re-exported so the public `@mastra/core/workflows` surface (and existing
@@ -213,12 +217,20 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * conditional/loop entries from stored predicates.
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
+  const stepRefs = collectPredicateStepRefs(predicate);
   return async (params: any) => {
+    // Resolve every referenced step up front. Passing the sync getStepResult
+    // instead would let the predicate's fail-quiet lookup swallow its throw on
+    // runs that can't serve it, and silently take the wrong branch.
+    const stepResults =
+      typeof params?.getStepResultAsync === 'function'
+        ? Object.fromEntries(await resolveStepOutputs(stepRefs, id => params.getStepResultAsync(id)))
+        : {};
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
       inputData: params?.inputData,
       state: params?.state,
-      getStepResult: typeof params?.getStepResult === 'function' ? (id: string) => params.getStepResult(id) : undefined,
+      stepResults,
     });
   };
 }
@@ -353,18 +365,54 @@ function getNestedWorkflowId(graph: SerializedStepFlowEntry[], stepId: string): 
   return undefined;
 }
 
+/** A stored run as the cancel cascade reads it: its header, and a read of the step results to look through. */
+type RunForCancel = {
+  header: WorkflowRunHeader;
+  storageVersion: 1 | 2;
+  loadSteps(): Promise<Record<string, unknown>>;
+};
+
 /**
- * Cancels the suspended nested runs reachable from `snapshot`. A suspended nested run has no live execution for
+ * A run as the cancel cascade reads it. A storage v2 run's header names its suspended steps, so only those
+ * that run a nested workflow are read. A v1 run is one snapshot. Without `storageVersion`, a run with a
+ * storage v2 header is a storage v2 run. `header` is a storage v2 header already read.
+ */
+async function loadRunForCancel(
+  store: WorkflowsStorage,
+  run: { workflowName: string; runId: string },
+  storageVersion?: 1 | 2,
+  header?: WorkflowRunHeader,
+): Promise<RunForCancel | null> {
+  if (storageVersion !== 1 && store.supportsRunJournal()) {
+    const v2Header = header ?? (await store.loadWorkflowRunHeader(run))?.header;
+    if (v2Header) {
+      const stepIds = Object.keys(v2Header.suspendedPaths ?? {}).filter(stepId =>
+        getNestedWorkflowId(v2Header.serializedStepGraph, stepId),
+      );
+      return {
+        header: v2Header,
+        storageVersion: 2,
+        loadSteps: async () => (stepIds.length ? store.loadWorkflowRunSteps({ ...run, stepIds }) : {}),
+      };
+    }
+    if (storageVersion === 2) return null;
+  }
+  const snapshot = await store.loadWorkflowSnapshot({ ...run, storageVersion: 1 });
+  return snapshot && { header: snapshot, storageVersion: 1, loadSteps: async () => snapshot.context };
+}
+
+/**
+ * Cancels the suspended nested runs reachable from `run`. A suspended nested run has no live execution for
  * its parent's abort signal to reach, so only its persisted status changes. Descendants are canceled before their
  * parent, so a nested run left suspended by a failed write is found again when cancel() is retried.
  */
-async function cancelSuspendedNestedRuns(store: WorkflowsStorage, snapshot: WorkflowRunState): Promise<void> {
-  for (const [stepId, result] of Object.entries(snapshot.context)) {
+async function cancelSuspendedNestedRuns(store: WorkflowsStorage, run: RunForCancel): Promise<void> {
+  for (const [stepId, result] of Object.entries(await run.loadSteps())) {
     if ((result as StepResult<any, any, any, any>)?.status !== 'suspended') {
       continue;
     }
 
-    const workflowName = getNestedWorkflowId(snapshot.serializedStepGraph, stepId);
+    const workflowName = getNestedWorkflowId(run.header.serializedStepGraph, stepId);
 
     if (!workflowName) {
       continue;
@@ -387,18 +435,17 @@ async function cancelSuspendedNestedRuns(store: WorkflowsStorage, snapshot: Work
         continue;
       }
 
-      const nested = await store.loadWorkflowSnapshot({ workflowName, runId });
+      const nested = await loadRunForCancel(store, { workflowName, runId });
 
-      if (nested?.status !== 'suspended') {
+      if (nested?.header.status !== 'suspended') {
         continue;
       }
 
       await cancelSuspendedNestedRuns(store, nested);
-      await store.updateWorkflowState({
-        workflowName,
-        runId,
-        opts: { status: 'canceled', expectedStatus: 'suspended' },
-      });
+      const opts = { status: 'canceled', expectedStatus: 'suspended' } as const;
+      await (nested.storageVersion === 2
+        ? store.updateWorkflowRunHeader({ workflowName, runId, opts })
+        : store.updateWorkflowState({ workflowName, runId, storageVersion: 1, opts }));
     }
   }
 }
@@ -1983,7 +2030,7 @@ export class Workflow<
   public origin: 'code' | 'dynamic' = 'code';
   public isInternal = false;
   /** Handed from execute() to the createRun() call right after it; see createRun. */
-  #nestedRunStart?: { input: TInput; state: TState };
+  #nestedRunStart?: { input: TInput; state: TState; inheritedState?: StateBase };
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
@@ -2082,6 +2129,7 @@ export class Workflow<
       isForeignExecution: options.isForeignExecution,
       watchExecutionLoss: options.watchExecutionLoss,
       pruneSnapshot: options.pruneSnapshot,
+      storageVersion: options.storageVersion,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
       onFinish: options.onFinish,
@@ -2089,6 +2137,15 @@ export class Workflow<
       sharePubsub: options.sharePubsub,
       autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
+
+    if (options.storageVersion === 2 && options.pruneSnapshot) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_PRUNE_SNAPSHOT',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${id}" sets both storageVersion: 2 and pruneSnapshot. Storage version 2 doesn't support pruneSnapshot.`,
+      });
+    }
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -2127,6 +2184,15 @@ export class Workflow<
   }
 
   __registerMastra(mastra: Mastra) {
+    // Checked here rather than in the constructor: other engines set engineType after super().
+    if (this.#options.storageVersion === 2 && this.engineType !== 'default') {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default engine or storageVersion: 1.`,
+      });
+    }
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
   }
@@ -3065,6 +3131,18 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
+    const storageVersion = this.#options.storageVersion ?? 1;
+    if (storageVersion === 2) {
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      if (workflowsStore && !workflowsStore.supportsRunJournal()) {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
+        });
+      }
+    }
     const runIdToUse =
       options?.runId ||
       this.#mastra?.generateId({
@@ -3102,6 +3180,7 @@ export class Workflow<
         validateInputs: this.#options?.validateInputs,
         workflowEngineType: this.engineType,
         pubsub: options?.pubsub,
+        storageVersion,
         recoverable:
           this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
       });
@@ -3117,29 +3196,71 @@ export class Workflow<
       stepResults: {},
     });
 
+    // Continuing a run under a different version would leave two incomplete copies of it.
+    const throwVersionMismatch = (storedVersion: 1 | 2): never => {
+      if (this.#runs.get(runIdToUse) === run) this.#runs.delete(runIdToUse);
+      this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_VERSION_MISMATCH',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Run "${runIdToUse}" of workflow "${this.id}" was created with storageVersion: ${storedVersion}, but the workflow now sets storageVersion: ${run.storageVersion}. Restore storageVersion: ${storedVersion} to continue this run.`,
+      });
+    };
+
     // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
     // transient processor workflows from #17344) cannot have a stored row, so this
     // existence read would be a guaranteed miss. Skipping it removes one storage
     // round trip per streamed chunk on the agent output-processor hot path (#19015).
-    const existingRun =
-      shouldPersistSnapshot || options?.runId
+    const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
+    let existsInStorage = false;
+
+    if (run.storageVersion === 2) {
+      // The header holds the status and parent this reads, so one header read replaces the
+      // existence check and the snapshot load.
+      const header = lookUpStoredRun ? await run.runStorage.loadHeader() : null;
+      if (header) {
+        existsInStorage = true;
+        run.workflowRunStatus = header.status;
+        run.parentWorkflow = header.parentWorkflow ?? run.parentWorkflow;
+      } else if (options?.runId) {
+        // A generated id can't name a stored run, so only a caller-given one is probed.
+        const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+        const v1Snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: this.id,
+          runId: runIdToUse,
+          storageVersion: 1,
+        });
+        if (v1Snapshot) throwVersionMismatch(1);
+      }
+    } else {
+      const existingRun = lookUpStoredRun
         ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
         : undefined;
 
-    // Check if run exists in persistent storage (not just in-memory)
-    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+      // Check if run exists in persistent storage (not just in-memory)
+      existsInStorage = !!existingRun && !existingRun.isFromInMemory;
 
-    // If a run exists in storage, update the run's status to reflect the actual state
-    // This fixes the issue where createRun checks storage but doesn't use the stored data
-    if (existsInStorage && existingRun.status) {
-      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse });
-      run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
+      // If a run exists in storage, update the run's status to reflect the actual state
+      // This fixes the issue where createRun checks storage but doesn't use the stored data
+      if (existsInStorage && existingRun?.status) {
+        const storedSnapshot = await run.runStorage.loadHeader();
+        if (!storedSnapshot) {
+          // The lookup above found the run in both stores, so it may be a storage v2 run.
+          const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+          if (
+            workflowsStore?.supportsRunJournal() &&
+            (await workflowsStore.loadWorkflowRunHeader({ workflowName: this.id, runId: runIdToUse }))
+          ) {
+            throwVersionMismatch(2);
+          }
+        }
+        run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+        run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
+      }
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       const initialSnapshot: WorkflowRunState = {
         runId: runIdToUse,
         status: 'pending',
@@ -3159,16 +3280,17 @@ export class Workflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        snapshot: this.#options.pruneSnapshot
+      await run.runStorage.writeInitial(
+        this.#options.pruneSnapshot
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
-      });
+        options?.resourceId,
+        // The nested run starts from exactly that version of the parent's state.
+        { stateBase: nestedRunStart?.inheritedState?.ref },
+      );
     }
 
+    run.inheritedState = nestedRunStart?.inheritedState;
     return run;
   }
 
@@ -3215,6 +3337,7 @@ export class Workflow<
     timeTravel,
     parentWorkflow,
     [PUBSUB_SYMBOL]: pubsub,
+    [PARENT_STATE_SYMBOL]: parentState,
     [HAND_BACK_STATE_SYMBOL]: handBackState,
     mastra,
     requestContext,
@@ -3255,6 +3378,7 @@ export class Workflow<
       forEachIndex?: number;
     };
     [PUBSUB_SYMBOL]: PubSub;
+    [PARENT_STATE_SYMBOL]?: ParentStateLink;
     [HAND_BACK_STATE_SYMBOL]?: (state: TState, base: Record<string, unknown>) => Promise<void>;
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
@@ -3331,8 +3455,11 @@ export class Workflow<
       // State that isn't JSON is shared and handed back whole, as before.
       if (startedFrom) startState = copyState(state);
     }
+    // Only storage v2 stores a nested run's state as its changes to a version of the parent's.
+    const inheritedState =
+      this.#options.storageVersion === 2 && !restart && !isResume ? await parentState?.(startState) : undefined;
     // Nothing may await between this and createRun(), which takes it synchronously.
-    this.#nestedRunStart = !restart && !isResume ? { input: inputData, state: startState } : undefined;
+    this.#nestedRunStart = !restart && !isResume ? { input: inputData, state: startState, inheritedState } : undefined;
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
@@ -3370,18 +3497,14 @@ export class Workflow<
     // The parent and nested snapshots are written separately, so a crash can leave them out of
     // sync. Trust the nested run's status: an active nested run must be restarted, and a nested
     // run that never claimed its resume must be resumed. See https://github.com/mastra-ai/mastra/issues/25187
-    // What the nested run's hand-back is relative to. A nested run a restarting parent restarts or
-    // resumes may have changes its parent never received, so it hands back its whole state.
+    // What the nested run's hand-back is relative to. A nested run a restarting parent resumes may
+    // have changes its parent never received, so it hands back its whole state.
     let handBackBase: Record<string, unknown> | undefined;
     try {
       let restartNested = !!restart;
       let resumeNested = isResume;
       if ((restart || isResume) && !isTimeTravel) {
-        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.id,
-          runId: run.runId,
-        });
+        const nestedSnapshot = await run.runStorage.loadHeader();
         let nestedStatus = nestedSnapshot?.status;
         // A crash between the nested run's resume claim and its resumed step starting leaves a
         // `running` snapshot that still only has suspended steps. Restarting it would drop the
@@ -3394,11 +3517,7 @@ export class Workflow<
         ) {
           // The resume claim is only written by stores with atomic updates, so a claim-only
           // snapshot implies one; compare-and-set so a concurrent caller's claim is not re-armed.
-          const released = await workflowsStore!.updateWorkflowState({
-            workflowName: this.id,
-            runId: run.runId,
-            opts: { status: 'suspended', expectedStatus: nestedStatus },
-          });
+          const released = await run.runStorage.updateHeader({ status: 'suspended', expectedStatus: nestedStatus });
           if (released) {
             nestedStatus = 'suspended';
             restartNested = false;
@@ -3430,6 +3549,9 @@ export class Workflow<
         });
         handBackBase = startedFrom;
       } else if (restartNested) {
+        // The changes since the drive started are the ones the parent hasn't received: from a fresh
+        // start, none of them; from a resume, those after the suspension the parent took in.
+        handBackBase = await run.runStorage.loadDriveStartState();
         res = await run.restart({
           requestContext,
           actor,
@@ -3996,14 +4118,32 @@ export class Run<
 
   parentWorkflow?: NestedWorkflowParent;
 
+  readonly workflowEngineType: WorkflowEngineType;
+
+  /**
+   * How this run is stored, taken from the workflow's `storageVersion` option when the run is created.
+   * @experimental
+   */
+  readonly storageVersion: 1 | 2;
+
+  /**
+   * For the next start or time travel of a storage v2 nested run: the stored version of its parent's
+   * state it starts from and stores only its changes to. Set by `createRun`, taken by `_start` and
+   * `_timeTravel`.
+   * @internal
+   */
+  inheritedState?: StateBase;
   /**
    * For a nested run its parent resumes: the state it resumed from, as JSON. Its parent already
    * holds that state, so it takes only the changes after it. Set by `_resume`, taken by the parent's step.
    * @internal
    */
   resumedFromState?: Record<string, unknown>;
-
-  readonly workflowEngineType: WorkflowEngineType;
+  /**
+   * The store calls this run makes, for its `storageVersion`.
+   * @internal
+   */
+  readonly runStorage: RunStorage;
 
   /**
    * The storage for this run
@@ -4057,6 +4197,8 @@ export class Run<
     workflowEngineType: WorkflowEngineType;
     /** Optional pubsub instance. If not provided, a new EventEmitterPubSub is created. */
     pubsub?: PubSub;
+    /** @experimental Defaults to 1. */
+    storageVersion?: 1 | 2;
     /** Whether the boot-time recovery sweep may restart this run, so it must hold an ownership lease while it executes. */
     recoverable?: boolean;
   }) {
@@ -4081,6 +4223,16 @@ export class Run<
     this.requestContextSchema = params.requestContextSchema;
     this.workflowRunStatus = 'pending';
     this.workflowEngineType = params.workflowEngineType;
+    this.storageVersion = params.storageVersion ?? 1;
+    this.runStorage = createRunStorage({
+      storageVersion: this.storageVersion,
+      workflowName: this.workflowId,
+      runId: this.runId,
+      // Use the store the engine writes to. The engine follows the workflow's latest Mastra
+      // registration, while `#mastra` is fixed when the run is created (a run created before
+      // `__registerInternalWorkflow`, or reused across registrations, would miss its stored run).
+      getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+    });
     this.#recoverable = params.recoverable ?? false;
   }
 
@@ -4146,12 +4298,8 @@ export class Run<
   protected async hasReachedTerminalStatus(): Promise<boolean> {
     if (TERMINAL_WORKFLOW_RUN_STATUSES.has(this.workflowRunStatus)) return true;
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: this.workflowId,
-        runId: this.runId,
-      });
-      return !!snapshot && TERMINAL_WORKFLOW_RUN_STATUSES.has(snapshot.status);
+      const header = await this.runStorage.loadHeader();
+      return !!header && TERMINAL_WORKFLOW_RUN_STATUSES.has(header.status);
     } catch {
       return false;
     }
@@ -4159,12 +4307,19 @@ export class Run<
 
   /**
    * Cancels a canceled run's suspended nested runs. Running nested runs are canceled through the abort signal.
-   * @throws When reading this run's snapshot, or reading or updating a nested run's snapshot, fails.
+   * `header` is the storage v2 header the cancel just stored, so it isn't read again.
+   * @throws When reading this run, or reading or updating a nested run, fails.
    */
-  protected async cancelSuspendedNestedRuns(): Promise<void> {
+  protected async cancelSuspendedNestedRuns(header?: WorkflowRunHeader): Promise<void> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
-    if (workflowsStore && snapshot?.status === 'canceled') await cancelSuspendedNestedRuns(workflowsStore, snapshot);
+    if (!workflowsStore) return;
+    const run = await loadRunForCancel(
+      workflowsStore,
+      { workflowName: this.workflowId, runId: this.runId },
+      this.storageVersion,
+      this.storageVersion === 2 ? header : undefined,
+    );
+    if (run?.header.status === 'canceled') await cancelSuspendedNestedRuns(workflowsStore, run);
   }
 
   /**
@@ -4196,15 +4351,9 @@ export class Run<
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
+    let header: WorkflowRunHeader | null;
     try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      await workflowsStore?.updateWorkflowState({
-        workflowName: this.workflowId,
-        runId: this.runId,
-        opts: {
-          status: 'canceled',
-        },
-      });
+      header = await this.runStorage.updateHeader({ status: 'canceled' });
     } catch {
       // Storage errors should not prevent cancellation from succeeding
       // The abort signal and in-memory status are already updated
@@ -4212,7 +4361,7 @@ export class Run<
       return;
     }
 
-    await this.cancelSuspendedNestedRuns();
+    await this.cancelSuspendedNestedRuns(header ?? undefined);
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
@@ -4361,6 +4510,8 @@ export class Run<
     onDispatched?: () => void,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
+    const inheritedState = this.inheritedState;
+    this.inheritedState = undefined;
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -4417,7 +4568,6 @@ export class Run<
         this.workflowRunStatus === 'pending' &&
         shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} })
       ) {
-        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const initialRunSnapshot: WorkflowRunState = {
           runId: this.runId,
           status: 'waiting',
@@ -4433,14 +4583,12 @@ export class Run<
           timestamp: Date.now(),
         };
         try {
-          await workflowsStore?.persistWorkflowSnapshot({
-            workflowName: this.workflowId,
-            runId: this.runId,
-            resourceId: this.resourceId,
-            snapshot: this.executionEngine.options.pruneSnapshot
+          await this.runStorage.writeInitial(
+            this.executionEngine.options.pruneSnapshot
               ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
               : initialRunSnapshot,
-          });
+            this.resourceId,
+          );
         } catch (error) {
           workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
           throw error;
@@ -4471,6 +4619,8 @@ export class Run<
         format,
         outputOptions,
         perStep,
+        storageVersion: this.storageVersion,
+        inheritedState,
       }),
     );
 
@@ -5259,11 +5409,7 @@ export class Run<
       return;
     }
 
-    const claimed = await workflowsStore.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: { status: 'running', expectedStatus },
-    });
+    const claimed = await this.runStorage.updateHeader({ status: 'running', expectedStatus });
 
     if (claimed) {
       return;
@@ -5271,10 +5417,7 @@ export class Run<
 
     // The compare-and-set found a status other than the expected one. Re-read so the error names the
     // status the run actually landed in rather than guessing.
-    const current = await workflowsStore.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const current = await this.runStorage.loadHeader();
 
     if (!current) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
@@ -5367,8 +5510,7 @@ export class Run<
     }
 
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot =
-      params.claimedSnapshot ?? (await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId));
+    const snapshot = params.claimedSnapshot ?? (await this.runStorage.loadForResume({ wait: true }));
 
     if (!snapshot) {
       throw new Error('No snapshot found for this workflow run: ' + this.workflowId + ' ' + this.runId);
@@ -5519,39 +5661,11 @@ export class Run<
       // else is left alone: a stuck `running` run is strictly safer than silently re-arming a
       // suspension whose downstream steps already fired.
       try {
-        const current = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-
-        const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
-        const currentPaths = Object.keys(current?.suspendedPaths ?? {});
-        const claimedStepIds = Object.keys(snapshot.context ?? {});
-        const currentStepIds = Object.keys(current?.context ?? {});
-        const resumedStepId = steps?.[0] ?? '';
-        const resumedStepResult = current?.context?.[resumedStepId] as { status?: string } | undefined;
-
-        // Every one of these must still look exactly as it did at claim time. The status alone
-        // is not enough evidence: the engine deliberately suppresses `running` step persists
-        // while the last persisted status is `suspended`, so a run that failed midway can still
-        // read back as `running`.
-        const engineNeverStarted =
-          current?.status === 'running' &&
-          currentPaths.length === claimedPaths.length &&
-          claimedPaths.every(path => currentPaths.includes(path)) &&
-          currentStepIds.length === claimedStepIds.length &&
-          claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
-          resumedStepResult?.status === 'suspended';
-
-        if (!engineNeverStarted) {
+        if (!(await this.runStorage.isClaimUnused(snapshot, steps?.[0] ?? ''))) {
           return;
         }
 
-        await workflowsStore?.updateWorkflowState({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
-        });
+        await this.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
       } catch (releaseError) {
         this.#mastra
           ?.getLogger()
@@ -5563,7 +5677,6 @@ export class Run<
       | {
           run: Run<any, any, any, any, any, any>;
           snapshot: WorkflowRunState;
-          store: WorkflowsStorage;
         }
       | undefined;
 
@@ -5574,10 +5687,15 @@ export class Run<
         throw new Error(`Parent workflow ${this.parentWorkflow.workflowId} is not registered`);
       }
 
-      const parentSnapshot = await workflowsStore.loadWorkflowSnapshot({
+      // The parent's storage version can differ from this run's. This load seeds the parent's
+      // resume (`claimedSnapshot`), so it loads the way the parent's own resume would. The parent
+      // `Run` can't load it itself: creating it first would write a pending snapshot.
+      const parentSnapshot = await createRunStorage({
+        storageVersion: parentWorkflow.options.storageVersion ?? 1,
         workflowName: this.parentWorkflow.workflowId,
         runId: this.parentWorkflow.runId,
-      });
+        getStore: async () => workflowsStore,
+      }).loadForResume({ wait: false });
       if (!parentSnapshot) {
         await releaseClaimIfUnused();
         throw new Error(`No snapshot found for parent workflow run: ${this.parentWorkflow.runId}`);
@@ -5590,17 +5708,13 @@ export class Run<
         await releaseClaimIfUnused();
         throw error;
       }
-      claimedParent = { run: parentRun, snapshot: parentSnapshot, store: workflowsStore };
+      claimedParent = { run: parentRun, snapshot: parentSnapshot };
     }
 
     const releaseParentClaim = async () => {
       if (!claimedParent) return;
       try {
-        await claimedParent.store.updateWorkflowState({
-          workflowName: claimedParent.run.workflowId,
-          runId: claimedParent.run.runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
-        });
+        await claimedParent.run.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
       } catch (releaseError) {
         this.#mastra
           ?.getLogger()
@@ -5642,6 +5756,8 @@ export class Run<
         outputOptions: params.outputOptions,
         outputWriter: params.outputWriter,
         perStep: params.perStep,
+        storageVersion: this.storageVersion,
+        storedState: this.runStorage.storedState(snapshot),
       }),
     )
       .then(async result => {
@@ -5722,11 +5838,7 @@ export class Run<
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const snapshot = await this.runStorage.loadFull();
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
@@ -5849,6 +5961,8 @@ export class Run<
         outputWriter,
         outputOptions,
         workflowSpan,
+        storageVersion: this.storageVersion,
+        storedState: this.runStorage.storedState(snapshot),
       });
     } finally {
       await ownership.release();
@@ -5903,15 +6017,14 @@ export class Run<
     actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
+    const inheritedState = this.inheritedState;
+    this.inheritedState = undefined;
     if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
 
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const snapshot = await this.runStorage.loadFull();
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
@@ -5999,10 +6112,7 @@ export class Run<
       // The reload and the release are not one atomic operation; closing that window fully needs
       // a per-snapshot revision in every storage adapter.
       try {
-        const current = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
+        const current = await this.runStorage.loadFull();
         const claimedStepIds = Object.keys(snapshot.context);
         const currentStepIds = Object.keys(current?.context ?? {});
         const engineNeverStarted =
@@ -6017,11 +6127,7 @@ export class Run<
           return;
         }
 
-        await workflowsStore?.updateWorkflowState({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          opts: { status: snapshot.status, expectedStatus: 'running' },
-        });
+        await this.runStorage.updateHeader({ status: snapshot.status, expectedStatus: 'running' });
       } catch (releaseError) {
         this.#mastra
           ?.getLogger()
@@ -6053,6 +6159,8 @@ export class Run<
           workflowSpan,
           outputOptions,
           perStep,
+          storageVersion: this.storageVersion,
+          inheritedState,
         }),
       );
     } catch (error) {
