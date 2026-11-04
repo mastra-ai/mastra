@@ -5,6 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { GithubIssue } from '../domains/factory/services/factory';
@@ -14,6 +15,7 @@ import type { LinearIssue } from '../domains/factory/services/linear';
 import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
+import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -151,22 +153,12 @@ function stubBoardEndpoints() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -588,6 +580,52 @@ describe('Board card pending states', () => {
     expect(within(unstarted).queryByRole('link', { name: 'Open session' })).toBeNull();
   });
 
+  it('starts a normalized Linear card session on its provider branch rather than an item-id fallback', async () => {
+    stubBoardEndpoints();
+    const item = {
+      ...providerFactsCard,
+      id: ITEM_ID,
+      title: 'ENG-42: Repair source facts',
+      stages: ['done'],
+      sessions: {},
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+      metadata: { repository: 'acme/app', authorTrusted: true },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        key: 'ENG-42',
+        title: 'ENG-42: Repair source facts',
+        metadata: {},
+      },
+    };
+    const requests: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [item] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'factory/linear-eng-42' } });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+    await user.click(await screen.findByRole('button', { name: `Details for ${item.title}` }));
+    const dialog = await screen.findByRole('dialog', { name: item.title });
+    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ branch: 'factory/linear-eng-42' });
+    await waitForMutationsIdle(client);
+  });
+
   it('acknowledges a session start from the card details while it is still resolving the session', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
@@ -647,15 +685,15 @@ describe('Board card pending states', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],
@@ -1353,15 +1391,15 @@ describe('Board card pending states', () => {
     const { transitionGate, transitionRequests } = stubBoardEndpoints();
     const configGate = deferred();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],

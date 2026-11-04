@@ -406,13 +406,30 @@ const scores = await mastraClient.listScoresBySpan({
 })
 ```
 
+## Creating scores
+
+Create a score for a trace, optionally identifying a span within it:
+
+```typescript
+const response = await mastraClient.createScore({
+  score: {
+    traceId: 'trace-123',
+    spanId: 'span-456',
+    scorerId: 'accuracy',
+    score: 0.95,
+  },
+})
+```
+
+`createScore()` requires a nonblank `score.traceId`, with an optional `spanId`. The server generates `scoreId` when omitted, sets `timestamp` on receipt, and returns `{ success: true }`.
+
 ## Feedback
 
 Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform Feedback API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
 
 ### Creating feedback
 
-Create a feedback record linked to a trace or span:
+Create a feedback record for a trace, optionally identifying a span within it:
 
 ```typescript
 const response = await mastraClient.createFeedback({
@@ -426,6 +443,8 @@ const response = await mastraClient.createFeedback({
   },
 })
 ```
+
+`createFeedback()` requires a nonblank `feedback.traceId`, with an optional `spanId`. The server generates `feedbackId` when omitted, sets `timestamp` on receipt, and returns `{ success: true }`.
 
 ### Deleting feedback and scores
 

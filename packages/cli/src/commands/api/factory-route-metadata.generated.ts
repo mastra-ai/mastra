@@ -92,7 +92,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectList",
     "method": "GET",
     "path": "/web/factory/projects",
-    "description": "List Factory projects for the current organization",
+    "description": "List Factory projects for the current organization, each with its linked repositories",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [],
@@ -989,11 +989,81 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "projects": {
           "type": "array",
           "items": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {}
+            "allOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "repositories": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "projectRepositoryId": {
+                          "type": "string"
+                        },
+                        "connectionId": {
+                          "type": "string"
+                        },
+                        "integrationId": {
+                          "type": "string"
+                        },
+                        "repositoryId": {
+                          "type": "string"
+                        },
+                        "externalId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "slug": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "defaultBranch": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "branch": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sandboxWorkdir": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "projectRepositoryId",
+                        "connectionId",
+                        "integrationId",
+                        "repositoryId",
+                        "externalId",
+                        "slug",
+                        "defaultBranch",
+                        "branch",
+                        "sandboxWorkdir"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "repositories"
+                ]
+              }
+            ]
           }
         }
       },
@@ -2995,8 +3065,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "array",
           "items": {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
+            "properties": {
+              "workItem": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "author": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "provider",
+                  "key",
+                  "url",
+                  "title",
+                  "state",
+                  "labels",
+                  "author"
+                ],
+                "additionalProperties": {}
+              }
             },
             "additionalProperties": {}
           }
@@ -4933,8 +5053,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "workItem": {
           "type": "object",
-          "propertyNames": {
-            "type": "string"
+          "properties": {
+            "workItem": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "key",
+                "url",
+                "title",
+                "state",
+                "labels",
+                "author"
+              ],
+              "additionalProperties": {}
+            }
           },
           "additionalProperties": {}
         }
@@ -7272,8 +7442,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "workItem": {
           "type": "object",
-          "propertyNames": {
-            "type": "string"
+          "properties": {
+            "workItem": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "key",
+                "url",
+                "title",
+                "state",
+                "labels",
+                "author"
+              ],
+              "additionalProperties": {}
+            }
           },
           "additionalProperties": {}
         }

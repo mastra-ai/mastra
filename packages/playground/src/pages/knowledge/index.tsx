@@ -14,6 +14,8 @@ import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import {
   useKnowledgeActivity,
+  useKnowledgeLinkCounts,
+  useKnowledgePageLinks,
   useKnowledgeInstances,
   useKnowledgeLiveUpdates,
   useKnowledgePage,
@@ -59,6 +61,8 @@ function Explorer({
       usePage: (pageId, noteCursor) => useKnowledgePage(knowledgeKey, live, pageId, noteCursor),
       useSearch: query => useKnowledgeSearch(knowledgeKey, query),
       useTreeLevels: requests => useKnowledgeTreeLevels(knowledgeKey, live, requests),
+      useLinkCounts: pageIds => useKnowledgeLinkCounts(knowledgeKey, live, pageIds),
+      usePageLinks: pageId => useKnowledgePageLinks(knowledgeKey, pageId),
       useLinkedPages: keys => useKnowledgeLinkedPages(knowledgeKey, keys),
       useActivity: pageId => useKnowledgeActivity(knowledgeKey, live, pageId),
     }),

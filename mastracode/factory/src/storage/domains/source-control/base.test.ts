@@ -318,6 +318,67 @@ describe('SourceControlStorage', () => {
     ).rejects.toThrow(/does not belong to the connection installation/);
   });
 
+  it.each<[string, () => SourceControlStorageHandle]>([
+    ['LibSQL', () => github],
+    ['the in-memory handle', () => new SourceControlStorageInMemory('github')],
+  ])(
+    'lists the requested Factories with their linked repositories on %s, without uninstalled apps or other orgs',
+    async (_backend, handleFor) => {
+      const handle = handleFor();
+      const installation = await createInstallation(handle);
+      const uninstalled = await createInstallation(handle, { externalId: 'uninstalled' });
+      const [platform, docs, unrequested] = [
+        await createProject({ name: 'Platform' }),
+        await createProject({ name: 'Docs' }),
+        await createProject({ name: 'Unrequested' }),
+      ];
+      const connect = (factoryProjectId: string, installationId = installation.id) =>
+        handle.connections.create({ orgId: 'org-1', factoryProjectId, installationId, createdByUserId: 'user-1' });
+      const link = async (connectionId: string, slug: string) => {
+        const repository = await handle.repositories.upsert({
+          orgId: 'org-1',
+          input: { ...repositoryInput, installationId: installation.id, externalId: slug, slug },
+        });
+        return handle.projectRepositories.link({
+          orgId: 'org-1',
+          connectionId,
+          repositoryId: repository.id,
+          ...projectRepositoryInput,
+        });
+      };
+      const platformConnection = await connect(platform.id);
+      await link(platformConnection.id, 'acme/api');
+      await link(platformConnection.id, 'acme/web');
+      await link((await connect(docs.id)).id, 'acme/docs');
+      await link((await connect(unrequested.id)).id, 'acme/unrequested');
+      await connect(platform.id, uninstalled.id);
+      await handle.installations.delete({ orgId: 'org-1', id: uninstalled.id });
+
+      const listed = await handle.connections.listWithRepositories({
+        orgId: 'org-1',
+        factoryProjectIds: [platform.id, docs.id, platform.id],
+      });
+      expect(
+        Object.fromEntries(
+          listed.map(connection => [
+            connection.factoryProjectId,
+            {
+              installation: connection.installation.externalId,
+              slugs: connection.repositories.map(({ repository }) => repository?.slug).sort(),
+            },
+          ]),
+        ),
+      ).toEqual({
+        [platform.id]: { installation: installation.externalId, slugs: ['acme/api', 'acme/web'] },
+        [docs.id]: { installation: installation.externalId, slugs: ['acme/docs'] },
+      });
+      expect(listed).toHaveLength(2);
+      expect(
+        await handle.connections.listWithRepositories({ orgId: 'org-2', factoryProjectIds: [platform.id] }),
+      ).toEqual([]);
+    },
+  );
+
   it('round-trips nullable session titles', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

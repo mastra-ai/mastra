@@ -9,7 +9,7 @@ import { advanceApprovedPlan } from './work-tool-rules.js';
 const INCIDENTIO_SOURCE_KEY_PREFIX = 'incidentio:issue:';
 
 function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
-  const identifier = item.metadata?.identifier;
+  const identifier = item.workItem.key;
   return typeof identifier === 'string' ? identifier : undefined;
 }
 
@@ -20,7 +20,7 @@ function sourceRef(item: FactoryRuleItemContext): string {
     return identifier ? `GitLab issue ${identifier}${link}` : `GitLab issue${link}`;
   }
   if (item.source === 'gitlab-pr') {
-    const number = workItemNumber(item);
+    const number = workItemNumber({ source: item.source, metadata: item.workItem.metadata });
     return number === undefined ? `GitLab merge request${link}` : `GitLab merge request !${number}${link}`;
   }
   if (item.source === 'linear-issue') {
@@ -45,7 +45,7 @@ function sourceRef(item: FactoryRuleItemContext): string {
   }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
-  const number = workItemNumber(item);
+  const number = workItemNumber({ source: item.source, metadata: item.workItem.metadata });
   if (number === undefined) return item.url ? `${noun}${link}` : item.title;
   return `${noun} #${number}${link}`;
 }
@@ -337,7 +337,7 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       kind: 'working',
       // Planning and Building share one session, so the builder keeps the plan's context.
       runner: { context: 'work' },
-      nextPhases: ['execute', 'intake', 'done', 'canceled'],
+      nextPhases: ['execute', 'triage', 'intake', 'done', 'canceled'],
       // Its success moves the card into Building (advanceApprovedPlan); an agent cannot move it there itself.
       exitTool: { id: 'submit_plan', autoApprove: false },
       onEnter: {

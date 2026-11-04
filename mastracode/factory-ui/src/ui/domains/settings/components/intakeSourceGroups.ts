@@ -1,6 +1,6 @@
 import type { GitLabProject } from '../../factory/services/gitlab';
 import type { JiraProject } from '../../factory/services/jira';
-import { linearTeamSourceId } from '../../factory/services/linear';
+import { linearSourceWorkspaceId, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearTeam } from '../../factory/services/linear';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 
@@ -101,4 +101,39 @@ export function groupLinearSourcesByTeam(
     });
   }
   return groups;
+}
+
+export interface DisconnectedLinearWorkspace {
+  workspaceId: string;
+  sourceIds: string[];
+}
+
+/**
+ * Split saved Linear sources into ones the picker can show and ones from a
+ * workspace that is no longer connected. Connected workspaces are read off the
+ * live project and team IDs; a saved ID from any other workspace has no name
+ * to show, so it is collapsed into one row per workspace instead.
+ */
+export function partitionLinearSources(
+  selectedIds: string[] | null,
+  groups: SourcePickerGroup[],
+): { selectedIds: string[]; disconnected: DisconnectedLinearWorkspace[] } {
+  const listedIds = new Set(groups.flatMap(group => group.items.map(item => item.id)));
+  const connectedWorkspaces = new Set(
+    [...listedIds].map(linearSourceWorkspaceId).filter((id): id is string => id !== null),
+  );
+  const visible: string[] = [];
+  const byWorkspace = new Map<string, string[]>();
+  for (const id of selectedIds ?? []) {
+    const workspaceId = listedIds.has(id) ? null : linearSourceWorkspaceId(id);
+    if (workspaceId === null || connectedWorkspaces.has(workspaceId)) {
+      visible.push(id);
+      continue;
+    }
+    byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), id]);
+  }
+  return {
+    selectedIds: visible,
+    disconnected: [...byWorkspace].map(([workspaceId, sourceIds]) => ({ workspaceId, sourceIds })),
+  };
 }
