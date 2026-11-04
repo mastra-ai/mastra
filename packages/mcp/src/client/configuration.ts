@@ -1228,7 +1228,7 @@ To fix this you have three different options:
     const durations: Record<string, number> = {};
 
     const settled = await this.discoverAcrossServers(
-      serverName => this.getToolsForServer(serverName),
+      async serverName => modelVisibleTools(await this.getToolsForServer(serverName)),
       {
         errorId: 'MCP_CLIENT_GET_TOOLS_FAILED',
         logMessage: 'Failed to list tools from server:',
@@ -1317,7 +1317,7 @@ To fix this you have three different options:
     const durations: Record<string, number> = {};
 
     const settled = await this.discoverAcrossServers(
-      serverName => this.getToolsForServer(serverName),
+      async serverName => modelVisibleTools(await this.getToolsForServer(serverName)),
       {
         errorId: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
         logMessage: 'Failed to list toolsets from server:',
@@ -1392,7 +1392,7 @@ To fix this you have three different options:
     const settled = await this.discoverAcrossServers(
       async serverName => {
         const client = await this.getConnectedClientForServer(serverName);
-        return client.toolDefinitions();
+        return modelVisibleDefinitions(await client.toolDefinitions());
       },
       {
         errorId: 'MCP_CLIENT_GET_TOOL_DEFINITIONS_FAILED',
@@ -1478,7 +1478,7 @@ To fix this you have three different options:
         continue;
       }
 
-      for (const [toolName, definition] of Object.entries(definitions)) {
+      for (const [toolName, definition] of Object.entries(modelVisibleDefinitions(definitions))) {
         try {
           const tool = await this.toolFromDefinition({ serverName, definition });
           this.setNamespacedTool(tools, keySources, serverName, toolName, tool);
@@ -1883,4 +1883,25 @@ To fix this you have three different options:
 
     return {};
   }
+}
+
+/**
+ * Whether a tool may be handed to the model. MCP App servers mark helpers their app calls itself
+ * with `_meta.ui.visibility` lacking `'model'`; per the MCP Apps spec, hosts must not give those
+ * to the model. They stay callable by the app through the server.
+ */
+function isModelVisible(meta: Record<string, unknown> | undefined): boolean {
+  const ui = meta?.ui;
+  const visibility = ui && typeof ui === 'object' && 'visibility' in ui ? ui.visibility : undefined;
+  return !Array.isArray(visibility) || visibility.includes('model');
+}
+
+function modelVisibleTools(tools: Record<string, Tool<any, any, any, any>>): Record<string, Tool<any, any, any, any>> {
+  return Object.fromEntries(Object.entries(tools).filter(([, tool]) => isModelVisible(tool.mcp?._meta)));
+}
+
+function modelVisibleDefinitions(
+  definitions: Record<string, SerializableMCPToolDefinition>,
+): Record<string, SerializableMCPToolDefinition> {
+  return Object.fromEntries(Object.entries(definitions).filter(([, definition]) => isModelVisible(definition._meta)));
 }

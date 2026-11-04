@@ -17,12 +17,6 @@
     "kimi-k3"
   ],
   "reasoning": {
-    "glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "gemma4-31b": [
       {
         "type": "effort",
@@ -30,6 +24,12 @@
       }
     ],
     "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5-3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
