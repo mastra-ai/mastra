@@ -13,6 +13,24 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'providers/attio',
+          label: 'Attio',
+          customProps: { icon: 'https://app.nango.dev/images/template-logos/attio.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'providers/canva',
+          label: 'Canva',
+          customProps: { icon: 'https://svgl.app/library/canva.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'providers/clay',
+          label: 'Clay',
+          customProps: { icon: 'https://app.nango.dev/images/template-logos/clay-mcp.svg' },
+        },
+        {
+          type: 'doc',
           id: 'providers/fireflies',
           label: 'Fireflies.ai',
           customProps: { icon: 'https://app.nango.dev/images/template-logos/fireflies.svg' },
@@ -111,6 +129,21 @@ const sidebars = {
           customProps: {
             icon: 'https://cdn.simpleicons.org/resend/black?viewbox=auto&size=28',
             iconDark: 'https://cdn.simpleicons.org/resend/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'providers/robinhood',
+          label: 'Robinhood',
+          customProps: { icon: 'https://cdn.simpleicons.org/robinhood?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'providers/sanity',
+          label: 'Sanity',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/sanity/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/sanity/white?viewbox=auto&size=28',
           },
         },
         {
