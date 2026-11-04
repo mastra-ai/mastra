@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import type { VoiceSettingsResponse } from '../../../../../api/types';
 import { FACTORY_ID, renderThread, stubPreparingSession } from './composer-session-test-fixture';
 
 /** The slice of a mic stream the recorder touches: stopping its tracks releases the microphone. */
@@ -47,11 +48,25 @@ function acceptTranscribe(reply: () => Response): unknown[] {
   return bodies;
 }
 
+function stubVoiceSettings(effective: VoiceSettingsResponse['effective']) {
+  const response: VoiceSettingsResponse = {
+    modelScope: 'user',
+    personal: null,
+    factory: null,
+    canEditFactory: true,
+    effective,
+    models: [],
+    keys: [],
+  };
+  server.use(http.get(`${TEST_BASE_URL}/web/voice/settings`, () => HttpResponse.json(response)));
+}
+
 async function composerReady() {
   stubPreparingSession({ materialized: true });
   renderThread();
   const message = await screen.findByRole('textbox', { name: 'Message' });
   await waitFor(() => expect(message).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled());
   return message;
 }
 
@@ -60,6 +75,7 @@ describe('Composer voice dictation', () => {
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
     getUserMedia.mockResolvedValue(micStream());
+    stubVoiceSettings({ provider: 'openai', model: 'whisper-1' });
   });
 
   afterEach(() => {
@@ -117,7 +133,19 @@ describe('Composer voice dictation', () => {
     expect(stopTrack).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the server error when no transcription key is configured', async () => {
+  it('sends you to voice input settings instead of recording when no speech-to-text key is set up', async () => {
+    stubVoiceSettings(null);
+    const user = userEvent.setup();
+    stubPreparingSession({ materialized: true });
+    renderThread();
+
+    await user.click(await screen.findByRole('button', { name: 'Set up voice input in settings' }));
+
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.getByTestId('location')).toHaveTextContent(`/factories/${FACTORY_ID}/settings/models#voice-input`);
+  });
+
+  it('shows the server error when transcription is refused', async () => {
     acceptTranscribe(() =>
       HttpResponse.json({ error: 'Voice input needs an API key for a speech-to-text provider.' }, { status: 400 }),
     );

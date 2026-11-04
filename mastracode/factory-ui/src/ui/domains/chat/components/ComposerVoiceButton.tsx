@@ -1,6 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Loader2, Mic, Square } from 'lucide-react';
+import { Loader2, Mic, MicOff, Square } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
 
+import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
+import { VOICE_INPUT_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
+import { useVoiceDictation } from './useVoiceDictation';
 import type { VoiceDictationState } from './useVoiceDictation';
 
 const LABELS: Record<VoiceDictationState, string> = {
@@ -18,25 +22,47 @@ function VoiceIcon({ state }: { state: VoiceDictationState }) {
 }
 
 export function ComposerVoiceButton({
-  state,
+  factoryId,
   disabled,
-  onStart,
-  onStop,
+  onTranscript,
+  onError,
 }: {
-  state: VoiceDictationState;
+  factoryId: string;
   disabled: boolean;
-  onStart: () => void;
-  onStop: () => void;
+  onTranscript: (text: string) => void;
+  onError: (message: string) => void;
 }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const settingsQuery = useVoiceSettings(factoryId);
+  const { state, start, stop } = useVoiceDictation({ factoryId, onTranscript, onError });
+  const needsSetup = settingsQuery.data !== undefined && settingsQuery.data.effective === undefined;
+
+  if (needsSetup && state === 'idle') {
+    return (
+      <Button
+        type="button"
+        size="icon-sm"
+        tooltip="Set up voice input in settings"
+        onClick={() =>
+          navigate(settingsSectionPath(factoryId, 'models', VOICE_INPUT_ANCHOR), { state: { from: location } })
+        }
+      >
+        <MicOff size={14} />
+      </Button>
+    );
+  }
+
   const recording = state === 'recording';
   // Stopping must always work, so a recording clip can be ended even after the composer locks.
-  const blocked = state === 'requesting' || state === 'transcribing' || (disabled && !recording);
+  const blocked =
+    state === 'requesting' || state === 'transcribing' || (!recording && (disabled || settingsQuery.isPending));
   return (
     <Button
       type="button"
       size="icon-sm"
       disabled={blocked}
-      onClick={recording ? onStop : onStart}
+      onClick={recording ? stop : () => void start()}
       aria-label={LABELS[state]}
       aria-pressed={recording}
       tooltip={LABELS[state]}

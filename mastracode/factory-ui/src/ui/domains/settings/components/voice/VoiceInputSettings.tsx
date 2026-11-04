@@ -2,6 +2,9 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useVoiceSettings } from '../../../../../hooks/use-voice-settings';
+import { useScrollToAnchor } from '../../hooks/useScrollToAnchor';
+import { VOICE_INPUT_ANCHOR } from '../../settingsSections';
+import { ProviderRowsSkeleton } from '../models/providers/ProviderRows';
 import { voiceKeyScope } from './key-scope';
 import { SpeechToTextKeys } from './SpeechToTextKeys';
 import { VoiceInputLayout } from './VoiceInputLayout';
@@ -20,6 +23,7 @@ function SectionSkeleton() {
 export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
   const settingsQuery = useVoiceSettings(factoryId);
   const settings = settingsQuery.data;
+  useScrollToAnchor(VOICE_INPUT_ANCHOR, !settingsQuery.isPending);
 
   if (settingsQuery.error) {
     return (
@@ -36,7 +40,7 @@ export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
   }
 
   if (!settings) {
-    return <VoiceInputLayout keysScope="personal" models={<SectionSkeleton />} keys={<SectionSkeleton />} />;
+    return <VoiceInputLayout keysScope="personal" models={<SectionSkeleton />} keys={<ProviderRowsSkeleton />} />;
   }
 
   const keyScope = voiceKeyScope(settings.modelScope);

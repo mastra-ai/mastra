@@ -42,7 +42,11 @@ export function VoiceModelPicker({
     onPick(model && { provider: model.provider, model: model.model });
   };
   return (
-    <Select value={selected ? voiceOptionValue(selected) : UNSET} disabled={disabled} onValueChange={pick}>
+    <Select
+      value={selected ? voiceOptionValue(selected) : UNSET}
+      disabled={disabled || options.length === 0}
+      onValueChange={pick}
+    >
       <SelectTrigger size="sm" aria-label={label} className="w-64">
         {voiceModelLabel(models, selected) ?? unsetLabel}
       </SelectTrigger>
