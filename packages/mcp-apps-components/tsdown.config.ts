@@ -14,6 +14,10 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
+  // Only the iframe apps import these, and `scripts/build-apps.ts` bundles them into the HTML.
+  deps: {
+    alwaysBundle: ['@mastra/playground-ui', '@mastra/react'],
+  },
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },
