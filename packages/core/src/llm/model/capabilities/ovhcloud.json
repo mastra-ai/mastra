@@ -40,10 +40,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.8-27b": [
+    "qwen3.6-27b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "qwen3.5-9b": [
@@ -58,16 +64,10 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "qwen3.6-27b": [
+    "qwen3.8-27b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ]
   }
