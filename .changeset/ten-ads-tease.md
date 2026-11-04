@@ -3,38 +3,11 @@
 '@mastra/playground-ui': patch
 ---
 
-Changed dashboard widget pinning to use standard MCP Apps messages, and added a `useMcpAppHost` hook for React hosts.
+Added widget pinning to the dashboard app over standard MCP Apps messages, and a `useMcpAppHost` hook for React hosts.
 
-**What changed**
+The host sets `mastra.ai/dashboard-pinned-widgets` in its host context to the ids of the widgets it has pinned and advertises `updateModelContext.structuredContent`; each widget then shows a pin button. When the user clicks one, the app sends `ui/update-model-context` with the full list of widgets the user wants pinned under the same key in `structuredContent`. Each entry is `{ widget, scope, defaults }`; parse it with `dashboardPinnedWidgetsSchema`. Pins and drilldowns share one model context, so neither erases the other.
 
-When the user clicks a pin button, the dashboard app now sends `ui/update-model-context` with the full list of widgets the user wants pinned, under `mastra.ai/dashboard-pinned-widgets` in `structuredContent`. Each entry is `{ widget, scope, defaults }`. It no longer sends the custom `mastra.ai/dashboard-widget-pin` notification, so any MCP Apps host can support pinning without handling a Mastra-only message. Pin buttons now show only when the host holds an array under that key in its host context and advertises `updateModelContext.structuredContent`. Pins and drilldowns share one model context, so neither erases the other.
-
-`DASHBOARD_WIDGET_PIN_NOTIFICATION` and `dashboardWidgetPinNotificationParamsSchema` are removed. Use `dashboardPinnedWidgetsSchema` instead.
-
-Before:
-
-```typescript
-bridge.fallbackNotificationHandler = async ({ method, params }) => {
-  if (method !== DASHBOARD_WIDGET_PIN_NOTIFICATION) return;
-  const parsed = dashboardWidgetPinNotificationParamsSchema.safeParse(params);
-  // ...apply one pin or unpin
-};
-```
-
-After:
-
-```typescript
-bridge.onupdatemodelcontext = async ({ structuredContent }) => {
-  if (!structuredContent || !(DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY in structuredContent)) return {};
-  const parsed = dashboardPinnedWidgetsSchema.safeParse(structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]);
-  // ...store the full list of pinned widgets
-  return {};
-};
-```
-
-**New `@mastra/mcp-apps-components/host` subpath**
-
-React hosts built on `@mastra/playground-ui` can use `useMcpAppHost` to wire pinning without handling the messages themselves. The subpath doesn't include the app's HTML.
+React hosts built on `@mastra/playground-ui` can use `useMcpAppHost` from the new `@mastra/mcp-apps-components/host` subpath to wire pinning without handling the messages themselves. The subpath doesn't include the app's HTML.
 
 ```tsx
 import { McpAppHostProvider } from '@mastra/playground-ui/domains/mcps';

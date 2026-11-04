@@ -76,7 +76,7 @@ Each tool runs its read-only observability route in-process as the caller, with 
 
 ### Pinning widgets
 
-Each widget shows a pin button when the host says it can pin. The host owns the pinned widgets; the app only reports which ones the user wants. Everything goes through standard MCP Apps messages, so no custom notification is involved.
+Each widget shows a pin button when the host says it can pin. The host owns the pinned widgets; the app only reports which ones the user wants. Everything goes through standard MCP Apps messages.
 
 1. The host sets `mastra.ai/dashboard-pinned-widgets` in its host context to the ids of the widgets it has pinned (`[]` for none) and advertises `updateModelContext.structuredContent`. Without both, no pin buttons show.
 2. When the user clicks a widget's button, the app sends `ui/update-model-context` with the **full list** of widgets the user wants pinned under the same key in `structuredContent`. Each entry is `{ widget, scope, defaults }`: the widget definition, the dashboard's scope, and the date range and filters the user had on, which together render the pinned widget on its own as the user saw it. The update also has a short text block describing the pins, so the model sees them too.
@@ -151,6 +151,7 @@ Keep in mind:
 - To turn pinning off, set the key to a non-array value such as `null`. Deleting the key does nothing, because `AppBridge` only sends the fields that changed, so the app keeps the last ids it got.
 - Widget ids are only unique within one dashboard definition. Keep pinned ids per bridge (one tool call), not across dashboards.
 - Until the host answers, the app builds each click on the previous one, so quick clicks don't drop pins. Once the host sends its list back, that list wins, including when it declines a pin.
+- The app only knows the `defaults` of widgets pinned since it loaded. Widgets pinned earlier come back with the dashboard's current range and filters, so keep the entries you already store for those ids and only add the new ones.
 - A widget that no longer parses shows no pin button, so the host owns unpinning it.
 
 ## Documentation

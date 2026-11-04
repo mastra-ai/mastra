@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
+import type * as PlaygroundMcps from '@mastra/playground-ui/domains/mcps';
 import { fireEvent, renderHook, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useCallback, useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
   agentRunsAggregate,
   emptyTimeSeries,
@@ -10,7 +11,7 @@ import {
 } from '../apps/dashboard-renderer/__tests__/fixtures/dashboard';
 import { app as dashboardApp } from '../apps/dashboard-renderer/app';
 import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, useMcpAppHost } from '../host';
-import type { DashboardPinnedWidgetEntry, McpAppHostOptions, McpAppRef } from '../host';
+import type { DashboardPinnedWidgetEntry, McpAppHostOptions, McpAppHostValue, McpAppRef } from '../host';
 import { MASTRA_SERVER, renderWithHost } from '../test/host';
 import { server } from '../test/msw-server';
 
@@ -19,6 +20,12 @@ const otherApp: McpAppRef = { toolName: 'showWeather', toolCallId: 'call-2', res
 
 const supportRuns = supportRunsChart.rows[0]!.widgets[0]!;
 const pinnedSupportRuns = { widget: supportRuns, scope: 'project', defaults: { datePreset: '24h', filters: [] } };
+
+// The host types are copied by shape so hosts don't need this package to depend on playground-ui.
+it('returns a value McpAppHostProvider accepts', () => {
+  expectTypeOf<McpAppHostValue>().toExtend<PlaygroundMcps.McpAppHostValue>();
+  expectTypeOf<PlaygroundMcps.McpAppRef>().toExtend<McpAppRef>();
+});
 
 /** A chat host keeping the pinned widget ids of one dashboard in state. */
 function usePinningHost(initial: string[] | null) {

@@ -1,13 +1,11 @@
+import type { drilldownContext } from './drilldown';
 import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY } from './pin';
 import type { DashboardPinnedWidget } from './pin';
 
 type ModelContextText = { type: 'text'; text: string };
 
-/** What a drilldown adds to the dashboard's model context; see `drilldownContext`. */
-export type DrilldownModelContext = {
-  content: ModelContextText[];
-  structuredContent: { drilldown: unknown };
-};
+/** What a drilldown adds to the dashboard's model context. */
+export type DrilldownModelContext = ReturnType<typeof drilldownContext>;
 
 function describePinned(pinned: readonly DashboardPinnedWidget[]): string {
   if (!pinned.length) return 'The user has no widgets of this dashboard pinned.';
