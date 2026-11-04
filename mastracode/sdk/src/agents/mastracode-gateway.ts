@@ -285,6 +285,10 @@ function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | 
   return Array.isArray(envVars) ? envVars[0] : envVars;
 }
 
+export function providerApiKeyEnvVar(providerId: string): string | undefined {
+  return getApiKeyEnvVar((PROVIDER_REGISTRY as Record<string, ProviderConfig>)[providerId]);
+}
+
 /**
  * Whether the process environment has a key for a models.dev provider. Checks every
  * env var the registry lists, as the models.dev gateway does when `resolveModel`

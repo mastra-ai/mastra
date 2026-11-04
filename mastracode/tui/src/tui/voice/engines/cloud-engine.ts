@@ -15,7 +15,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { detectRecorder, MicRecording } from '../mic-capture.js';
 import type { RecorderInfo } from '../mic-capture.js';
-import { createTranscriber, hasProviderCredential } from '../transcribe.js';
+import { createTranscriber, hasProviderCredential, VoiceCredentialError } from '../transcribe.js';
 import type { ReusableTranscriber } from '../transcribe.js';
 import type { STTEngine, STTSession, STTSessionCallbacks } from './types.js';
 
@@ -178,9 +178,7 @@ export class CloudSTTEngine implements STTEngine {
   checkReady(): string | null {
     if (!detectRecorder()) return missingRecorderMessage();
     if (!hasProviderCredential(this.options.provider, this.options.authStorage)) {
-      const env =
-        this.options.provider === 'openai' ? 'OPENAI_API_KEY' : `${this.options.provider.toUpperCase()}_API_KEY`;
-      return `Voice input needs a ${this.options.provider} API key. Set ${env} or add one with /api-keys.`;
+      return new VoiceCredentialError(this.options.provider).message;
     }
     return null;
   }
