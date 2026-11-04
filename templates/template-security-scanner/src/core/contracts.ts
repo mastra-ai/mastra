@@ -17,6 +17,12 @@ export class ControlPlaneError extends Error {
 export const idSchema = z.string().uuid();
 /** Validated revision contract; bounds and cross-field rules are enforced before use. */
 export const revisionSchema = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+/** Strict quoted If-Match revision shared by protected mutation routes. */
+export const ifMatchRevision = z
+  .string()
+  .regex(/^"[1-9][0-9]{0,15}"$/)
+  .transform(value => Number(value.slice(1, -1)))
+  .pipe(revisionSchema);
 const label = z
   .string()
   .trim()

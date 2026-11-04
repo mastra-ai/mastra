@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { idSchema, pageSchema, parse, revisionSchema } from '../core/contracts.js';
+import { idSchema, pageSchema, parse, ifMatchRevision } from '../core/contracts.js';
 import type { BolaAssessmentService } from '../investigation/bola-service.js';
 import { OPERATOR_ID, readJson } from './security.js';
 
@@ -20,14 +20,7 @@ export function registerBolaRoutes(app: Hono, service: BolaAssessmentService) {
   );
   app.post('/api/assessments/:id/cancel', async context => {
     parse(z.object({}).strict(), await readJson(context.req));
-    const revision = parse(
-      z
-        .string()
-        .regex(/^"[1-9][0-9]{0,15}"$/)
-        .transform(value => Number(value.slice(1, -1)))
-        .pipe(revisionSchema),
-      context.req.header('if-match'),
-    );
+    const revision = parse(ifMatchRevision, context.req.header('if-match'));
     const result = await service.cancel(OPERATOR_ID, context.req.param('id'), revision);
     context.header('ETag', `"${result.revision}"`);
     return context.json(result);

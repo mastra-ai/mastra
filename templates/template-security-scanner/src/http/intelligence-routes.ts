@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { pageSchema as listPage, parse } from '../core/contracts.js';
+import { pageSchema as listPage, parse, ifMatchRevision as revision } from '../core/contracts.js';
 import { advisoryId, triageSchema } from '../advisory/contracts.js';
 import { AdvisorySync } from '../advisory/sync.js';
 import { AdvisoryTriage, caseInput, ignoreInput, unignoreInput } from '../advisory/triage.js';
@@ -8,11 +8,6 @@ import { ReferenceCatalog } from '../knowledge/catalog.js';
 import { PlaybookRegistry } from '../knowledge/playbooks.js';
 import { OPERATOR_ID, readJson } from './security.js';
 
-const revision = z
-  .string()
-  .regex(/^"[1-9][0-9]{0,15}"$/)
-  .transform(value => Number(value.slice(1, -1)))
-  .pipe(z.number().int().safe().positive());
 export function registerIntelligenceRoutes(
   app: Hono,
   catalog: ReferenceCatalog,

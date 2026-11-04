@@ -1,6 +1,12 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { ControlPlaneError, idSchema, pageSchema, parse, revisionSchema } from '../core/contracts.js';
+import {
+  ControlPlaneError,
+  idSchema,
+  pageSchema,
+  parse,
+  ifMatchRevision as revisionHeader,
+} from '../core/contracts.js';
 import type { InvestigationService } from '../investigation/service.js';
 import { OPERATOR_ID, readJson } from './security.js';
 
@@ -10,12 +16,6 @@ const approvalRequest = z
     expiresAt: z.iso.datetime(),
   })
   .strict();
-const revisionHeader = z
-  .string()
-  .regex(/^"[1-9][0-9]{0,15}"$/)
-  .transform(value => Number(value.slice(1, -1)))
-  .pipe(revisionSchema);
-
 export function registerInvestigationRoutes(app: Hono, service: InvestigationService, modelEnabled = false) {
   const page = (value: unknown) => parse(pageSchema, value);
   const id = (value: unknown) => parse(idSchema, value);
