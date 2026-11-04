@@ -300,6 +300,29 @@ describe('login() server lifecycle', () => {
     }
   });
 
+  it('shows the hint for other input when there is no skip key', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login();
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      // e.g. a URL copied without its scheme
+      process.stdin.emit('data', Buffer.from(`localhost:${extractPort()}/callback\r`));
+      expect(console.info).toHaveBeenCalledWith(expect.stringContaining("doesn't look like the sign-in address"));
+
+      await sendCallback(extractPort(), { ...validParams, state: extractState() });
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
+    }
+  });
+
   it('fails with the Platform error when the pasted callback carries one', async () => {
     const terminal = mockTerminal();
     try {

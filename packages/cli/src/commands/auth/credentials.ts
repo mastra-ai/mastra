@@ -280,15 +280,11 @@ function listenForInput({ onSkip, onPaste }: { onSkip?: () => void; onPaste: (te
       return;
     }
 
-    // A paste starts with the scheme. With a skip key, anything else (even a lone `h`) is a keypress;
-    // without one, also keep a partial `http`, since some terminals split a paste into tiny chunks.
+    // With a skip key, input that doesn't start with the scheme (even a lone `h`) is a keypress, not a paste.
     buffer += data;
-    if (!buffer.startsWith('http') && (onSkip || !'http'.startsWith(buffer))) {
-      buffer = '';
-      if (onSkip) {
-        cleanup();
-        onSkip();
-      }
+    if (onSkip && !buffer.startsWith('http')) {
+      cleanup();
+      onSkip();
       return;
     }
 
@@ -297,7 +293,7 @@ function listenForInput({ onSkip, onPaste }: { onSkip?: () => void; onPaste: (te
     if (end === -1) return;
     const line = buffer.slice(0, end).trim();
     buffer = '';
-    onPaste(line);
+    if (line) onPaste(line);
   };
 
   stdin.setRawMode(true);
