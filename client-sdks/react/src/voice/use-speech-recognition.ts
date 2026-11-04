@@ -19,7 +19,7 @@ export interface UseSpeechRecognitionArgs {
 }
 
 type SpeechRecognitionResult = SpeechRecognitionState & {
-  start: () => void;
+  start: (onTranscript?: (transcript: string) => void) => void;
   stop: () => void;
 };
 
@@ -81,9 +81,29 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
     error: null,
   });
 
-  const start = () => {
-    if (!speechRecognitionRef.current) return;
-    speechRecognitionRef.current.start();
+  const start = (onTranscript?: (transcript: string) => void) => {
+    const recognition = speechRecognitionRef.current;
+    if (!recognition) return;
+    recognition.start();
+
+    let sessionTranscript = '';
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        }
+      }
+
+      if (!finalTranscript) return;
+      // Continuous mode emits one event per finalized phrase with an advancing
+      // resultIndex, so append to the session transcript instead of replacing it.
+      sessionTranscript += finalTranscript;
+      setState(prev => ({ ...prev, transcript: sessionTranscript }));
+      onTranscript?.(sessionTranscript);
+    };
   };
 
   const stop = () => {
@@ -106,22 +126,6 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
 
     recognition.onstart = () => {
       setState(prev => ({ ...prev, isListening: true, error: null, transcript: '' }));
-    };
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
-        }
-      }
-
-      if (!finalTranscript) return;
-      // Continuous mode emits one event per finalized phrase with an advancing
-      // resultIndex, so append to the session transcript instead of replacing it.
-      setState(prev => ({ ...prev, transcript: prev.transcript + finalTranscript }));
     };
 
     recognition.onerror = (event: any) => {
@@ -176,7 +180,7 @@ const useMastraSpeechToText = ({
     };
   }, [agent]);
 
-  const handleFinish = (session: number) => (file: File) => {
+  const handleFinish = (session: number, onTranscript?: (transcript: string) => void) => (file: File) => {
     if (!agent || session !== sessionRef.current) return;
 
     recorderRef.current = null;
@@ -187,6 +191,7 @@ const useMastraSpeechToText = ({
       .then(res => {
         if (session !== sessionRef.current) return;
         setState(prev => ({ ...prev, transcript: res.text, error: null }));
+        onTranscript?.(res.text);
       })
       .catch(error => {
         if (session !== sessionRef.current) return;
@@ -195,7 +200,7 @@ const useMastraSpeechToText = ({
       });
   };
 
-  const start = () => {
+  const start = (onTranscript?: (transcript: string) => void) => {
     if (!agent || startInFlightRef.current || recorderRef.current) return;
 
     startInFlightRef.current = true;
@@ -206,7 +211,7 @@ const useMastraSpeechToText = ({
     sessionRef.current += 1;
     const session = sessionRef.current;
 
-    void recordMicrophoneToFile(handleFinish(session))
+    void recordMicrophoneToFile(handleFinish(session, onTranscript))
       .then(recorder => {
         startInFlightRef.current = false;
         if (session !== sessionRef.current) {
