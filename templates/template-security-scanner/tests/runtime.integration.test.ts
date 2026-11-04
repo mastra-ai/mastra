@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { cp, lstat, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -64,11 +64,16 @@ async function isolatedRoot() {
   return root;
 }
 
-async function parentFingerprints() {
+async function parentFingerprints(parent = resolve(templateRoot, '../..')) {
   return Promise.all(
     ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'].map(async name => {
-      const content = await readFile(resolve(templateRoot, '../..', name));
-      return createHash('sha256').update(content).digest('hex');
+      try {
+        const content = await readFile(resolve(parent, name));
+        return createHash('sha256').update(content).digest('hex');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw error;
+      }
     }),
   );
 }
@@ -90,6 +95,20 @@ afterEach(async () => {
 });
 
 describe('real local runtime', () => {
+  it('checks parent isolation in standalone folders and preserves filesystem errors', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'scanner-standalone-parent-'));
+    roots.push(parent);
+    expect(await parentFingerprints(parent)).toEqual([null, null, null]);
+    await writeFile(join(parent, 'package.json'), '{"private":true}');
+    expect(await parentFingerprints(parent)).toEqual([
+      createHash('sha256').update('{"private":true}').digest('hex'),
+      null,
+      null,
+    ]);
+    await mkdir(join(parent, 'pnpm-lock.yaml'));
+    await expect(parentFingerprints(parent)).rejects.toMatchObject({ code: 'EISDIR' });
+  });
+
   it('setup_builds_local_runtime_and_cleans_owned_sandbox', async () => {
     const root = await isolatedRoot();
     const settings = loadSettings({ DOCKER_RETAIN_SHARED_BASE_IMAGE: 'true' }, root);
