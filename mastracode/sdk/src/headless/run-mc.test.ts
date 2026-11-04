@@ -1,12 +1,16 @@
 import { Agent } from '@mastra/core/agent';
 import { AgentController, SessionStartupCancelledError } from '@mastra/core/agent-controller';
+import type { MastraModelGatewayInterface } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { Workspace } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import z from 'zod';
+
+import { MastraCodeGateway } from '../agents/mastracode-gateway.js';
+import type { CredentialStore } from '../auth/types.js';
 
 import { runMC } from './run-mc.js';
 import type { ResolutionPolicy } from './types.js';
@@ -60,6 +64,7 @@ interface HarnessOptions {
   doStream: () => Promise<{ stream: ReadableStream }>;
   withReadFileTool?: boolean;
   readFileNeedsApproval?: boolean;
+  gateways?: MastraModelGatewayInterface[];
 }
 
 async function makeHarness(opts: HarnessOptions) {
@@ -109,6 +114,7 @@ async function makeHarness(opts: HarnessOptions) {
       },
     ],
     initialState: { yolo: false },
+    gateways: opts.gateways,
   });
   (controller as any).getAgentForMode = () => registeredAgent;
 
@@ -678,5 +684,112 @@ describe('runMC', () => {
     } finally {
       exitSpy.mockRestore();
     }
+  });
+});
+
+// A transient model catalog failure must not end a run with a configured model before any model call.
+describe('runMC model check without a model catalog', () => {
+  const sonnet = 'anthropic/claude-sonnet-5-5';
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  async function runWithModel(model: string, catalog?: () => Promise<any[]>, gateways?: MastraModelGatewayInterface[]) {
+    const doStream = vi.fn(async () => ({ stream: textStream('Ran without the catalog.') }));
+    const { controller, session } = await makeHarness({ doStream, gateways });
+    if (catalog) vi.spyOn(controller, 'listAvailableModels').mockImplementation(catalog);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await runMC({ controller, session, prompt: 'x', model }).result;
+    return { result, doStream, warn, session };
+  }
+
+  it('runs a keyed registry model when the models.dev fetch fails', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-test');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('fetch failed'))),
+    );
+
+    const { result, doStream, warn, session } = await runWithModel(sonnet);
+
+    expect(result.error?.message).toBeUndefined();
+    expect(result.status).toBe('completed');
+    expect(doStream).toHaveBeenCalledTimes(1);
+    expect(session.model.get()).toBe(sonnet);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`using "${sonnet}" without catalog validation`));
+  });
+
+  it('runs a model with an OAuth login when the models.dev fetch fails', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('fetch failed'))),
+    );
+    const credentialStore = {
+      reload: () => {},
+      get: (provider: string) =>
+        provider === 'anthropic'
+          ? { type: 'oauth', access: 'oauth-access', refresh: 'oauth-refresh', expires: Date.now() + 3_600_000 }
+          : undefined,
+      getStoredApiKey: () => undefined,
+    } as unknown as CredentialStore;
+    const gateway = new MastraCodeGateway({
+      mastraGatewayBaseUrl: 'http://127.0.0.1:9',
+      routeThroughMastraGateway: false,
+      customProviders: [],
+      credentialStore,
+    });
+
+    const { result, doStream } = await runWithModel(sonnet, undefined, [gateway]);
+
+    expect(result.error?.message).toBeUndefined();
+    expect(result.status).toBe('completed');
+    expect(doStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs a keyed registry model when listing the catalog throws', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-test');
+
+    const { result, doStream, warn } = await runWithModel(sonnet, async () => {
+      throw new Error('catalog unavailable');
+    });
+
+    expect(result.status).toBe('completed');
+    expect(doStream).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('catalog unavailable'));
+  });
+
+  it('still rejects a model with no credentials', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+
+    const { result, doStream } = await runWithModel(sonnet, async () => []);
+
+    expect(result.status).toBe('error');
+    expect(result.error?.message).toBe(
+      `Model "${sonnet}" has no API key configured. Set ANTHROPIC_API_KEY to use this model.`,
+    );
+    expect(doStream).not.toHaveBeenCalled();
+  });
+
+  it.each(['does-not-exist/model', 'claude-sonnet-5-5', 'anthropic/'])('still rejects %s', async model => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-test');
+
+    const { result, doStream } = await runWithModel(model, async () => []);
+
+    expect(result.error?.message).toBe(`Unknown model: "${model}"`);
+    expect(doStream).not.toHaveBeenCalled();
+  });
+
+  it('still rejects a model the catalog does not list for a listed provider', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-test');
+    const listed = { id: 'anthropic/claude-haiku-5-5', provider: 'anthropic', modelName: 'claude-haiku-5-5' };
+
+    const { result, doStream } = await runWithModel(sonnet, async () => [{ ...listed, hasApiKey: true, useCount: 0 }]);
+
+    expect(result.error?.message).toBe(`Unknown model: "${sonnet}"`);
+    expect(doStream).not.toHaveBeenCalled();
   });
 });
