@@ -888,4 +888,49 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     },
     TEST_TIMEOUT_MS,
   );
+
+  // MessageHistory placed before the tripping processor saves the deadline turn, including the
+  // streamed text that exists only in that turn. The undo must remove it too. Engines that do not
+  // run the deadline pass yet save nothing of the turn, so this holds on every engine.
+  it(
+    'total-timeout removes the streamed text MessageHistory saved before an output processor trips',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-tripwire-history-first-${engine}`;
+      const tripper: Processor = {
+        id: 'deadline-tripper',
+        processOutputResult: ({ abort }) => abort('blocked'),
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Echo first, then answer.',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        agentOutputProcessors: [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! }), tripper],
+        stopWhen: stepCountIs(5),
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        tools: { echoTool },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_echo', name: 'echoTool', arguments: { input: 'first' } }] },
+          );
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 1 },
+            { content: 'PARTIAL '.repeat(200) },
+            { chunkSize: 8, latency: 50 },
+          );
+        },
+      });
+      // Absence can't be polled for; give a late write time to land.
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.map(message => message.role)).toEqual(['user']);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

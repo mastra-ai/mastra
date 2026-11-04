@@ -351,13 +351,14 @@ export function createMapResultsStep<OUTPUT = undefined>({
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
           }
         },
-        // Like the finish path, a tripwire at the deadline removes the steps savePerStep already wrote.
-        onDeadlineTripwire: () =>
+        // Like the finish path, a tripwire at the deadline removes what was already saved. Undo from the
+        // deadline turn: it holds the streamed text a processor before the tripwire may have saved.
+        onDeadlineTripwire: (turn: MessageList) =>
           undoSavedResponseMessages({
             memory,
             threadId: memoryData.thread?.id ?? threadIdFromArgs,
             memoryConfig,
-            messageList,
+            messageList: turn,
             saveQueueManager,
             earlierTurnSnapshot,
             logger: capabilities.logger,

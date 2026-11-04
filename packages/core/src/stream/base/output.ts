@@ -2175,7 +2175,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                       },
                     );
                   } catch (processorError) {
-                    if (processorError instanceof TripWire) await self.#options.onDeadlineTripwire?.();
+                    if (processorError instanceof TripWire) await self.#options.onDeadlineTripwire?.(turn);
                     throw processorError;
                   }
                 })().catch(processorError => {
