@@ -48,6 +48,12 @@ export interface GenUIChatServices {
   threadId?: string;
 }
 
+export interface GenUIChatSyncState {
+  threadId?: string;
+  /** Whether the chat is running. Surfaces left `streaming` only look busy while it is. */
+  running?: boolean;
+}
+
 export interface GenUIChatActionContext extends GenUIActionContext {
   chat: GenUIChatServices;
   state: GenUIStateStore;
@@ -85,11 +91,17 @@ export interface GenUIController {
   readonly actions: GenUIActionDispatcher;
   /** Frontend tools derived from the registry. Merge into the chat's client tools. */
   readonly clientTools: ClientToolsInput;
-  /** Rebuild surface and tool state from the chat's messages. Incremental while streaming. */
-  sync(messages: ReadonlyArray<MastraDBMessage>): void;
+  /**
+   * Bring surface and tool state in line with the chat: its messages (incremental while streaming), whether
+   * it is running, and its thread. Switching threads drops the previous thread's surfaces, local state,
+   * published context and pending responses.
+   */
+  sync(messages: ReadonlyArray<MastraDBMessage>, chat?: GenUIChatSyncState): void;
   /** Apply an envelope that did not arrive in a message (e.g. a workflow stream). */
   ingest(envelope: unknown): void;
   getState(): GenUIState;
+  /** Ids of every surface with the given placement, in creation order. Same array while they do not change. */
+  getSurfaceIds(placement?: GenUIPlacement): readonly string[];
   /** Fires on surface state changes, run start/end, and cancellations. */
   subscribe(listener: () => void): () => void;
   /**
@@ -99,8 +111,6 @@ export interface GenUIController {
   getSurfaceStatus(surfaceId: string): GenUISurface['status'] | undefined;
   /** Whether a `data-gen-ui` part anchors its surface. A replayed event in a later message does not. */
   isAnchor(eventId: string, envelope: object): boolean;
-  /** Tell the controller whether the chat is running. */
-  setLive(live: boolean): void;
   /** Mark message surfaces that are still streaming as interrupted (the user stopped the run). */
   markAborted(): void;
   getToolApproval(toolCallId: string): GenUIToolApproval | undefined;
@@ -113,8 +123,6 @@ export interface GenUIController {
   validateNodeProps(node: GenUINode): GenUIValidationResult<unknown> | undefined;
   setServices(services: GenUIChatServices): void;
   threadScope(): GenUIStateScope;
-  /** Drop surfaces, local state, published context and pending responses (thread switch). */
-  reset(): void;
   /** Keep the controller alive. Disposal happens after the last release, so StrictMode remounts are safe. */
   retain(): () => void;
   dispose(): void;
@@ -238,6 +246,9 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach(listener => listener());
   let live = false;
+  let syncedThread: { id: string | undefined } | undefined;
+  /** Placement filter -> last surface id list handed out, so unchanged lists keep their identity. */
+  const surfaceIds = new Map<GenUIPlacement | undefined, readonly string[]>();
   /** Surface id -> revision at which the user stopped the run. A later update clears it. */
   const aborted = new Map<string, number>();
   /** Event ids of envelopes that arrived out of band; their surfaces settle on their own. */
@@ -258,8 +269,9 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     const next = new Map<string, object>();
     for (const message of messages) {
       for (const part of message.content.parts) {
-        if ((part.type as string) !== GENUI_DATA_PART_TYPE) continue;
-        const data = (part as { data?: unknown }).data;
+        const type: string = part.type;
+        if (type !== GENUI_DATA_PART_TYPE || !('data' in part)) continue;
+        const { data } = part;
         if (isRecord(data) && typeof data.eventId === 'string' && !next.has(data.eventId)) {
           next.set(data.eventId, data);
         }
@@ -376,7 +388,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       clientTools[tool.name] = {
         id: tool.name,
         description: tool.description,
-        inputSchema: tool.inputSchema as never,
+        inputSchema: tool.inputSchema,
         renderOnly: true,
       };
       continue;
@@ -403,10 +415,12 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
 
   const toSurfaceToolEnvelope = (toolCallId: string, args: unknown): GenUIEnvelope | undefined => {
     if (!isRecord(args) || typeof args.surfaceId !== 'string' || !Array.isArray(args.operations)) return undefined;
-    const operations = dropOptionalNulls(args.operations) as GenUIOperation[];
+    const parsed = parseGenUIOperations(dropOptionalNulls(args.operations), resolvedLimits);
+    if (!parsed.ok) return undefined;
+    const operations: GenUIOperation[] = parsed.value;
     // A surface tool call is a complete batch: mark the surface ready unless the model set a status itself.
-    const setsStatus = operations.some(op => isRecord(op) && op.op === 'setStatus');
-    const deletes = operations.some(op => isRecord(op) && op.op === 'deleteSurface');
+    const setsStatus = operations.some(op => op.op === 'setStatus');
+    const deletes = operations.some(op => op.op === 'deleteSurface');
     return {
       version: GENUI_PROTOCOL_VERSION,
       eventId: surfaceToolEventId(toolCallId),
@@ -446,7 +460,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     clientTools[registry.surfaceTool.name] = {
       id: registry.surfaceTool.name,
       description,
-      inputSchema: surfaceToolInputSchema(manifest, placements) as never,
+      inputSchema: surfaceToolInputSchema(manifest, placements),
       execute: async (input: unknown, executeContext: unknown) => {
         const toolCallId = toolCallIdFrom(executeContext) ?? `call_${Date.now().toString(36)}`;
         const operations =
@@ -463,7 +477,10 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
             error: `placement "${misplaced.placement}" is not available in this app; use one of: ${placements.join(', ')}`,
           };
         }
-        const envelope = toSurfaceToolEnvelope(toolCallId, { ...(input as object), operations: parsed.value });
+        const envelope = toSurfaceToolEnvelope(toolCallId, {
+          ...(isRecord(input) ? input : {}),
+          operations: parsed.value,
+        });
         if (!envelope) return { ok: false, error: 'surfaceId and operations are required' };
         const current = session.getState();
         // `sync` may already have applied this call from the streamed arguments; otherwise dry-run it.
@@ -485,14 +502,14 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     if (!surfaceToolName) return message;
     const cached = projected.get(message);
     if (cached) return cached;
-    let parts: unknown[] | undefined;
+    let parts: MastraDBMessage['content']['parts'] | undefined;
     message.content.parts.forEach((part, index) => {
-      const type = part.type as string;
+      const type: string = part.type;
       if (type !== 'tool-invocation' && type !== 'dynamic-tool' && !type.startsWith('tool-')) {
         parts?.push(part);
         return;
       }
-      const call = normalizeToolPart(part as never);
+      const call = normalizeToolPart(part);
       // A call the tool rejected must not linger in state, or the model's retry would hit `surface-exists`.
       const rejected =
         call?.phase === 'output-error' ||
@@ -508,9 +525,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
         parts?.push(part);
       }
     });
-    const result = parts
-      ? ({ ...message, content: { ...message.content, parts } } as unknown as MastraDBMessage)
-      : message;
+    const result: MastraDBMessage = parts ? { ...message, content: { ...message.content, parts } } : message;
     projected.set(message, result);
     return result;
   };
@@ -528,6 +543,19 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     return result;
   };
 
+  function reset() {
+    session.reset();
+    aborted.clear();
+    externalEvents.clear();
+    anchors = new Map();
+    state.clear();
+    rejectPending('The conversation changed before the user responded');
+    approvalStatus.clear();
+    approvalCache.clear();
+    toolMeta = new Map();
+    notifyTools();
+  }
+
   const controller: GenUIController = {
     registry,
     session,
@@ -535,11 +563,18 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     context,
     actions,
     clientTools,
-    sync(messages) {
+    sync(messages, chat = {}) {
       if (disposed) return;
+      if (syncedThread && syncedThread.id !== chat.threadId) reset();
+      syncedThread = { id: chat.threadId };
       session.sync(surfaceToolName ? messages.map(project) : messages);
       updateAnchors(messages);
       updateToolMeta(messages);
+      const running = chat.running ?? false;
+      if (live !== running) {
+        live = running;
+        notify();
+      }
     },
     ingest(envelope) {
       if (disposed) return;
@@ -547,6 +582,14 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       session.ingest(envelope);
     },
     getState: () => session.getState(),
+    getSurfaceIds(placement) {
+      const state = session.getState();
+      const ids = state.surfaceOrder.filter(id => !placement || state.surfaces[id]?.placement === placement);
+      const previous = surfaceIds.get(placement);
+      if (previous && previous.length === ids.length && previous.every((id, i) => id === ids[i])) return previous;
+      surfaceIds.set(placement, ids);
+      return ids;
+    },
     subscribe(listener) {
       listeners.add(listener);
       const unsubscribe = session.subscribe(listener);
@@ -563,11 +606,6 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       const first = anchors.get(eventId);
       // Not synced yet: the part is new in this render, so it is the first to carry its event.
       return first === undefined || first === envelope;
-    },
-    setLive(next) {
-      if (live === next) return;
-      live = next;
-      notify();
     },
     markAborted() {
       const { surfaces } = session.getState();
@@ -607,19 +645,6 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       services = next;
     },
     threadScope: () => ({ kind: 'thread', id: services?.threadId ?? 'default' }),
-    reset() {
-      session.reset();
-      aborted.clear();
-      externalEvents.clear();
-      anchors = new Map();
-      state.clear();
-      for (const key of Object.keys(context.snapshot())) context.unpublish(key);
-      rejectPending('The conversation changed before the user responded');
-      approvalStatus.clear();
-      approvalCache.clear();
-      toolMeta = new Map();
-      notifyTools();
-    },
     retain() {
       retainers += 1;
       let released = false;

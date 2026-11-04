@@ -1,4 +1,4 @@
-import { isStandardSchema } from '@mastra/client-js/gen-ui';
+import { isStandardSchema, toSafeJSONObject } from '@mastra/client-js/gen-ui';
 import type {
   GenUILimits,
   GenUIPlacement,
@@ -221,20 +221,21 @@ const defaultToolName = (componentName: string) => `ui_${componentName.replace(/
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
+const MAX_JSON_SCHEMA_DEPTH = 64;
+
 /**
  * Resolve the schema sent to the model. Prefers an explicit `jsonSchema`, then Standard JSON Schema
  * (zod 4, arktype, valibot adapters). Zod 3 schemas are handed to client-js as-is, which converts them.
  */
 function resolveModelSchema(name: string, definition: AnyGenUIComponentDefinition): JSONObject | StandardSchemaV1 {
   if (definition.jsonSchema) return definition.jsonSchema;
-  const schema = definition.schema as StandardSchemaV1 & {
-    '~standard': { jsonSchema?: { input?: (options: { target: string }) => unknown } };
-  };
-  const standardJSON = schema['~standard'].jsonSchema?.input;
-  if (typeof standardJSON === 'function') {
-    const result = standardJSON({ target: 'draft-07' });
-    // zod's output carries a non-enumerable `~standard`; copy it so it isn't mistaken for a schema object.
-    if (isRecord(result)) return { ...result } as JSONObject;
+  const schema = definition.schema;
+  const standard = schema['~standard'];
+  const jsonSchema = 'jsonSchema' in standard && isRecord(standard.jsonSchema) ? standard.jsonSchema : undefined;
+  if (typeof jsonSchema?.input === 'function') {
+    const result: unknown = jsonSchema.input({ target: 'draft-07' });
+    // Copying drops the non-enumerable `~standard` zod puts on its output, so it isn't mistaken for a schema object.
+    if (isRecord(result)) return toSafeJSONObject(result, MAX_JSON_SCHEMA_DEPTH);
   }
   if (schema['~standard'].vendor === 'zod') return schema;
   throw new Error(

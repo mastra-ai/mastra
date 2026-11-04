@@ -1,6 +1,6 @@
 import { resolveGenUILimits } from '@mastra/client-js/gen-ui';
 import type { GenUISurface } from '@mastra/client-js/gen-ui';
-import { Component, memo, useCallback, useSyncExternalStore } from 'react';
+import { Component, memo, useSyncExternalStore } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { GenUINodeScope, useGenUIController, useGenUINode, useGenUISurface } from './context';
 import { isCatalogCompatible } from './registry';
@@ -54,16 +54,21 @@ interface BoundaryProps {
 }
 
 /** Contains render errors thrown by a registered component so the rest of the message keeps rendering. */
-export class GenUIErrorBoundary extends Component<BoundaryProps, { error: Error | null; resetKey: unknown }> {
-  state = { error: null as Error | null, resetKey: this.props.resetKey };
+interface BoundaryState {
+  error?: Error;
+  resetKey: unknown;
+}
+
+export class GenUIErrorBoundary extends Component<BoundaryProps, BoundaryState> {
+  state: BoundaryState = { resetKey: this.props.resetKey };
 
   static getDerivedStateFromError(error: unknown) {
     return { error: error instanceof Error ? error : new Error(String(error)) };
   }
 
-  static getDerivedStateFromProps(props: BoundaryProps, state: { error: Error | null; resetKey: unknown }) {
-    // New props from the agent get another chance to render.
-    if (props.resetKey !== state.resetKey) return { error: null, resetKey: props.resetKey };
+  static getDerivedStateFromProps(props: BoundaryProps, state: BoundaryState): Partial<BoundaryState> | null {
+    // New props from the agent get another chance to render. React's API uses `null` for "no change".
+    if (props.resetKey !== state.resetKey) return { error: undefined, resetKey: props.resetKey };
     return null;
   }
 
@@ -78,7 +83,7 @@ export class GenUIErrorBoundary extends Component<BoundaryProps, { error: Error 
 
 function useSurfaceStatus(surfaceId: string): GenUISurface['status'] | undefined {
   const controller = useGenUIController();
-  const get = useCallback(() => controller.getSurfaceStatus(surfaceId), [controller, surfaceId]);
+  const get = () => controller.getSurfaceStatus(surfaceId);
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
@@ -172,7 +177,6 @@ export function GenUISurfaceView({ surfaceId, className }: GenUISurfaceViewProps
       />
     );
   }
-  const showStatus = status === 'streaming' || status === 'failed' || status === 'aborted';
   return (
     <div
       className={className}
@@ -187,7 +191,9 @@ export function GenUISurfaceView({ surfaceId, className }: GenUISurfaceViewProps
       ) : status === 'streaming' ? (
         <Loading />
       ) : null}
-      {showStatus ? <SurfaceStatus status={status as GenUISurfaceStatusProps['status']} error={surface.error} /> : null}
+      {status === 'streaming' || status === 'failed' || status === 'aborted' ? (
+        <SurfaceStatus status={status} error={surface.error} />
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { formatGenUIContext } from '@mastra/client-js/gen-ui';
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { useEffect, useState } from 'react';
 import { useChat } from '../agent/hooks';
 import type { MastraChatProps, SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
@@ -10,16 +11,18 @@ import type { GenUIRegistry } from './registry';
 import { createGenUIRenderers } from './renderers';
 
 export interface UseGenUIChatProps extends MastraChatProps {
-  /** The registry created with `createGenUI`. Keep it stable (module scope); a new registry resets GenUI state. */
+  /** The registry created with `createGenUI`. Read once per mount; remount with a `key` to switch registries. */
   genUI: GenUIRegistry;
-  /** Action handlers that components dispatch with `useGenUIAction(name)`. Read once per registry. */
+  /** Action handlers that components dispatch with `useGenUIAction(name)`. Read once per mount. */
   actions?: Record<string, GenUIChatActionHandler<any>>;
+  /** Your own `MessageFactory` renderers, for parts GenUI does not render. Read once per mount. */
+  renderers?: MessageRenderers;
 }
 
 export interface GenUIChatHandle {
   controller: GenUIController;
-  /** Pass to `MessageFactory` (spread) or wrap with `useGenUIRenderers` to keep your own renderers. */
-  renderers: ReturnType<typeof createGenUIRenderers>;
+  /** Spread into `MessageFactory`. Includes the `renderers` you passed for parts GenUI does not render. */
+  renderers: MessageRenderers;
 }
 
 function mergeTools(own: ClientToolsInput | undefined, genUI: ClientToolsInput): ClientToolsInput {
@@ -39,107 +42,65 @@ function withContext(system: string | undefined, contextBlock: string | undefine
   return system ? `${system}\n\n${contextBlock}` : contextBlock;
 }
 
+function createGenUIChatHandle(
+  { genUI, actions, renderers }: Pick<UseGenUIChatProps, 'genUI' | 'actions' | 'renderers'>,
+  history: { messages?: MastraDBMessage[]; threadId?: string },
+): GenUIChatHandle {
+  const controller = createGenUIController({ registry: genUI, actions });
+  // Surfaces from history are ready on the first render.
+  if (history.messages) controller.sync(history.messages, { threadId: history.threadId });
+  return { controller, renderers: { ...renderers, ...createGenUIRenderers(controller, renderers) } };
+}
+
 /**
  * `useChat` with Generative UI. Registers the registry's frontend tools, derives surfaces from the
  * chat's messages, and attaches published app context to outgoing messages. Plain `useChat` is untouched.
  */
-export function useGenUIChat({ genUI: registry, actions, ...chatProps }: UseGenUIChatProps) {
-  const initialMessages = useRef(chatProps.initialMessages);
-  const controller = useMemo(() => {
-    const created = createGenUIController({ registry, actions });
-    // Seed from history before the first render so surfaces show without waiting for an effect.
-    if (initialMessages.current) created.sync(initialMessages.current);
-    return created;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- actions are read once per registry.
-  }, [registry]);
+export function useGenUIChat({ genUI, actions, renderers, ...chatProps }: UseGenUIChatProps) {
+  const [handle] = useState(() =>
+    createGenUIChatHandle(
+      { genUI, actions, renderers },
+      { messages: chatProps.initialMessages, threadId: chatProps.threadId },
+    ),
+  );
+  const { controller } = handle;
+  const { threadId } = chatProps;
+  const chat = useChat({ ...chatProps, clientTools: mergeTools(chatProps.clientTools, controller.clientTools) });
+
   useEffect(() => controller.retain(), [controller]);
 
-  const clientTools = useMemo(
-    () => mergeTools(chatProps.clientTools, controller.clientTools),
-    [chatProps.clientTools, controller],
-  );
-  const chat = useChat({ ...chatProps, clientTools });
+  // The controller is an external store fed by the chat's messages.
+  useEffect(() => {
+    controller.sync(chat.messages, { threadId, running: chat.isRunning });
+  }, [controller, chat.messages, chat.isRunning, threadId]);
 
-  useLayoutEffect(() => {
-    controller.sync(chat.messages);
-  }, [controller, chat.messages]);
-  useLayoutEffect(() => {
-    controller.setLive(chat.isRunning);
-  }, [controller, chat.isRunning]);
-
-  const threadId = chatProps.threadId;
-  const previousThread = useRef(threadId);
-  useLayoutEffect(() => {
-    if (previousThread.current === threadId) return;
-    previousThread.current = threadId;
-    controller.reset();
-  }, [controller, threadId]);
-
-  const sendMessage = async (input: SendMessageArgs) => {
+  async function sendMessage(input: SendMessageArgs) {
     const contextBlock = formatGenUIContext(controller.context.snapshot());
-    if (input.mode === 'network') {
-      const system = withContext(input.modelSettings?.system, contextBlock);
-      return chat.sendMessage({ ...input, ...(system ? { modelSettings: { ...input.modelSettings, system } } : {}) });
-    }
     const system = withContext(input.modelSettings?.system, contextBlock);
+    const modelSettings = system ? { modelSettings: { ...input.modelSettings, system } } : {};
+    if (input.mode === 'network') return chat.sendMessage({ ...input, ...modelSettings });
     return chat.sendMessage({
       ...input,
       // useChat prefers per-call tools over hook-level ones, so GenUI tools must ride along.
       ...(input.clientTools ? { clientTools: mergeTools(input.clientTools, controller.clientTools) } : {}),
-      ...(system ? { modelSettings: { ...input.modelSettings, system } } : {}),
+      ...modelSettings,
     });
-  };
+  }
 
-  const latest = useRef({ sendMessage, chat, threadId });
-  latest.current = { sendMessage, chat, threadId };
-  useLayoutEffect(() => {
+  // Actions run after commit, so they always see the chat of the latest render.
+  useEffect(() => {
     controller.setServices({
-      sendMessage: args =>
-        latest.current.sendMessage(
-          typeof args === 'string' ? { message: args, threadId: latest.current.threadId } : args,
-        ),
-      approveToolCall: (toolCallId, resumeData) => latest.current.chat.approveToolCall(toolCallId, resumeData),
-      declineToolCall: toolCallId => latest.current.chat.declineToolCall(toolCallId),
-      get threadId() {
-        return latest.current.threadId;
-      },
+      sendMessage: args => sendMessage(typeof args === 'string' ? { message: args, threadId } : args),
+      approveToolCall: (toolCallId, resumeData) => chat.approveToolCall(toolCallId, resumeData),
+      declineToolCall: toolCallId => chat.declineToolCall(toolCallId),
+      threadId,
     });
-  }, [controller]);
+  });
 
-  const handle = useMemo<GenUIChatHandle>(
-    () => ({ controller, renderers: createGenUIRenderers(controller) }),
-    [controller],
-  );
-
-  const cancelRun: typeof chat.cancelRun = (...args) => {
+  function cancelRun(...args: Parameters<typeof chat.cancelRun>) {
     controller.markAborted();
     return chat.cancelRun(...args);
-  };
+  }
 
   return { ...chat, sendMessage, cancelRun, genUI: handle };
-}
-
-/**
- * Combine GenUI renderers with your own. Parts GenUI does not render are passed to `base`.
- * Memoized on the identity of each base renderer.
- */
-export function useGenUIRenderers(genUI: GenUIChatHandle, base: MessageRenderers = {}): MessageRenderers {
-  const { Data, ToolInvocation, DynamicTool } = base;
-  return useMemo(
-    () => ({ ...base, ...createGenUIRenderers(genUI.controller, { Data, ToolInvocation, DynamicTool }) }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on each renderer, not the object.
-    [
-      genUI.controller,
-      Data,
-      ToolInvocation,
-      DynamicTool,
-      base.Text,
-      base.Reasoning,
-      base.File,
-      base.StepStart,
-      base.SourceUrl,
-      base.SourceDocument,
-      base.Error,
-    ],
-  );
 }

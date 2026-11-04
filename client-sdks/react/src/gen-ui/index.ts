@@ -58,7 +58,7 @@ export {
 } from './surface';
 export type { GenUISurfaceViewProps } from './surface';
 export { createGenUIRenderers } from './renderers';
-export { useGenUIChat, useGenUIRenderers } from './chat';
+export { useGenUIChat } from './chat';
 export type { GenUIChatHandle, UseGenUIChatProps } from './chat';
 export { GenUISurfaceOutlet } from './outlet';
 export type { GenUISurfaceOutletProps } from './outlet';

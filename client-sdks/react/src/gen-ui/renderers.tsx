@@ -4,8 +4,8 @@ import {
   validateModelInputSync,
   validateSchemaSync,
 } from '@mastra/client-js/gen-ui';
-import type { JSONObject, StandardSchemaV1 } from '@mastra/client-js/gen-ui';
-import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import type { JSONObject, JSONValue, StandardSchemaV1 } from '@mastra/client-js/gen-ui';
+import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { DataPart, DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
 import { GenUIProvider, GenUIToolCallScope, useGenUIController, useGenUIToolApproval } from './context';
@@ -18,37 +18,42 @@ import type { NormalizedToolCall } from './tool-parts';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+function isJSONValue(value: unknown): value is JSONValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJSONValue);
+  return isJSONObject(value);
+}
+
+function isJSONObject(value: unknown): value is JSONObject {
+  return isRecord(value) && Object.values(value).every(isJSONValue);
+}
+
 function partialArgsOf(call: NormalizedToolCall): JSONObject | undefined {
-  if (call.phase === 'input-streaming' && call.argsText !== undefined) {
-    const { value } = parsePartialJSON(call.argsText);
-    return isRecord(value) ? (value as JSONObject) : undefined;
-  }
-  return isRecord(call.args) ? (call.args as JSONObject) : undefined;
+  const value =
+    call.phase === 'input-streaming' && call.argsText !== undefined ? parsePartialJSON(call.argsText).value : call.args;
+  return isJSONObject(value) ? value : undefined;
 }
 
 /** Inline anchor for a `data-gen-ui` part: draws the surface this event created, nothing otherwise. */
 function SurfaceAnchor({ eventId, envelope }: { eventId: string; envelope?: object }) {
   const controller = useGenUIController();
-  const getSurfaceId = useCallback(() => {
-    // A reconnect may replay an event in a later message; only its first part draws the surface.
-    if (envelope && !controller.isAnchor(eventId, envelope)) return undefined;
+  // A reconnect may replay an event in a later message; only its first part draws the surface.
+  const isAnchor = () => !envelope || controller.isAnchor(eventId, envelope);
+  const getSurfaceId = () => {
+    if (!isAnchor()) return undefined;
     const state = controller.getState();
     return state.surfaceOrder.find(id => state.surfaces[id]?.anchorEventId === eventId);
-  }, [controller, eventId, envelope]);
-  const getRejection = useCallback(
-    () =>
-      envelope && !controller.isAnchor(eventId, envelope)
-        ? undefined
-        : controller.getState().diagnostics.find(d => d.eventId === eventId)?.message,
-    [controller, eventId, envelope],
-  );
+  };
+  const getRejection = () =>
+    isAnchor() ? controller.getState().diagnostics.find(d => d.eventId === eventId)?.message : undefined;
+  const getPlacement = () => {
+    const id = getSurfaceId();
+    return id ? controller.getState().surfaces[id]?.placement : undefined;
+  };
   const surfaceId = useSyncExternalStore(controller.subscribe, getSurfaceId, getSurfaceId);
   const rejection = useSyncExternalStore(controller.subscribe, getRejection, getRejection);
-  const placement = useSyncExternalStore(
-    controller.subscribe,
-    () => (surfaceId ? controller.getState().surfaces[surfaceId]?.placement : undefined),
-    () => (surfaceId ? controller.getState().surfaces[surfaceId]?.placement : undefined),
-  );
+  const placement = useSyncExternalStore(controller.subscribe, getPlacement, getPlacement);
   const { Fallback } = resolveFallbacks(controller.registry.fallbacks);
   if (surfaceId) return placement === 'inline' ? <GenUISurfaceView surfaceId={surfaceId} /> : null;
   if (rejection)
@@ -79,17 +84,11 @@ function BackendToolView({ call }: { call: NormalizedToolCall }) {
   const definition = controller.registry.tools[call.toolName]!;
   const approval = useGenUIToolApproval(call.toolCallId);
   const phase = resolvePhase(call, approval?.kind);
-  const partialArgs = useMemo(() => partialArgsOf(call), [call.phase, call.argsText, call.args]);
-  const args = useMemo(
-    () =>
-      phase === 'input-streaming' ? { value: undefined } : validateOptional(definition.argsSchema, call.args, true),
-    [phase, definition.argsSchema, call.args],
-  );
-  const output = useMemo(
-    () =>
-      phase === 'output-available' ? validateOptional(definition.outputSchema, call.output) : { value: undefined },
-    [phase, definition.outputSchema, call.output],
-  );
+  const partialArgs = partialArgsOf(call);
+  const args =
+    phase === 'input-streaming' ? { value: undefined } : validateOptional(definition.argsSchema, call.args, true);
+  const output =
+    phase === 'output-available' ? validateOptional(definition.outputSchema, call.output) : { value: undefined };
   const validationError = args.error
     ? `invalid arguments: ${args.error}`
     : output.error
@@ -117,11 +116,9 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
   const controller = useGenUIController();
   const entry = controller.registry.components[componentName]!;
   const { Fallback, Loading } = resolveFallbacks(controller.registry.fallbacks);
-  const partialArgs = useMemo(() => partialArgsOf(call), [call.phase, call.argsText, call.args]);
-  const validation = useMemo(
-    () => (call.phase === 'input-streaming' ? undefined : validateModelInputSync(entry.definition.schema, call.args)),
-    [call.phase, call.args, entry.definition.schema],
-  );
+  const partialArgs = partialArgsOf(call);
+  const validation =
+    call.phase === 'input-streaming' ? undefined : validateModelInputSync(entry.definition.schema, call.args);
 
   if (!validation) {
     const Streaming = entry.definition.streaming;

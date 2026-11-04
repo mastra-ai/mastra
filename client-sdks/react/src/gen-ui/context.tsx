@@ -14,23 +14,19 @@ import type {
   JSONValue,
 } from '@mastra/client-js/gen-ui';
 import { editGenUIData, mergeGenUIData, rebaseGenUIEdit } from '@mastra/client-js/gen-ui';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { GenUIController } from './controller';
 import type { GenUIToolApproval } from './registry';
 
-const ControllerContext = createContext<GenUIController | null>(null);
-const NodeContext = createContext<{ surfaceId: string; nodeId: string } | null>(null);
-const ToolCallContext = createContext<string | null>(null);
+export interface GenUINodeScopeValue {
+  surfaceId: string;
+  nodeId: string;
+}
+
+const ControllerContext = createContext<GenUIController | undefined>(undefined);
+const NodeContext = createContext<GenUINodeScopeValue | undefined>(undefined);
+const ToolCallContext = createContext<string | undefined>(undefined);
 
 export function GenUIProvider({ controller, children }: { controller: GenUIController; children?: ReactNode }) {
   return <ControllerContext.Provider value={controller}>{children}</ControllerContext.Provider>;
@@ -45,8 +41,7 @@ export function GenUINodeScope({
   nodeId: string;
   children?: ReactNode;
 }) {
-  const value = useMemo(() => ({ surfaceId, nodeId }), [surfaceId, nodeId]);
-  return <NodeContext.Provider value={value}>{children}</NodeContext.Provider>;
+  return <NodeContext.Provider value={{ surfaceId, nodeId }}>{children}</NodeContext.Provider>;
 }
 
 export function GenUIToolCallScope({ toolCallId, children }: { toolCallId: string; children?: ReactNode }) {
@@ -59,43 +54,29 @@ export function useGenUIController(): GenUIController {
   return controller;
 }
 
-/** The surface and node the calling component was rendered for, or `null` outside a declarative surface. */
-export function useGenUINodeScope() {
+/** The surface and node the calling component was rendered for, or `undefined` outside a declarative surface. */
+export function useGenUINodeScope(): GenUINodeScopeValue | undefined {
   return useContext(NodeContext);
 }
 
 /** Subscribe to one surface. Only re-renders when that surface object changes. */
 export function useGenUISurface(surfaceId: string): GenUISurface | undefined {
   const controller = useGenUIController();
-  const get = useCallback(() => controller.getState().surfaces[surfaceId], [controller, surfaceId]);
+  const get = () => controller.getState().surfaces[surfaceId];
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
 /** Subscribe to one node. Unchanged nodes keep their identity, so this skips token-level re-renders. */
 export function useGenUINode(surfaceId: string, nodeId: string): GenUINode | undefined {
   const controller = useGenUIController();
-  const get = useCallback(
-    () => controller.getState().surfaces[surfaceId]?.nodes[nodeId],
-    [controller, surfaceId, nodeId],
-  );
+  const get = () => controller.getState().surfaces[surfaceId]?.nodes[nodeId];
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
 /** Ids of every surface with the given placement, in creation order. */
-export function useGenUISurfaceIds(placement?: GenUISurface['placement']): string[] {
+export function useGenUISurfaceIds(placement?: GenUISurface['placement']): readonly string[] {
   const controller = useGenUIController();
-  const cache = useRef<{ order: readonly string[]; surfaces: unknown; ids: string[] }>(null);
-  const get = useCallback(() => {
-    const state = controller.getState();
-    if (cache.current && cache.current.order === state.surfaceOrder && cache.current.surfaces === state.surfaces) {
-      return cache.current.ids;
-    }
-    const ids = state.surfaceOrder.filter(id => !placement || state.surfaces[id]?.placement === placement);
-    const previous = cache.current?.ids;
-    const same = previous && previous.length === ids.length && previous.every((id, i) => id === ids[i]);
-    cache.current = { order: state.surfaceOrder, surfaces: state.surfaces, ids: same ? previous : ids };
-    return cache.current.ids;
-  }, [controller, placement]);
+  const get = () => controller.getSurfaceIds(placement);
   return useSyncExternalStore(controller.subscribe, get, get);
 }
 
@@ -111,7 +92,7 @@ export function useGenUISurfaceData(): JSONObject {
   return useGenUISurface(surfaceId)?.data ?? EMPTY;
 }
 
-const EMPTY: JSONObject = Object.freeze({}) as JSONObject;
+const EMPTY: JSONObject = {};
 
 export interface GenUILocalState {
   value: JSONObject;
@@ -137,23 +118,19 @@ export function useGenUILocalState(scope: 'surface' | 'thread' | GenUIStateScope
   }
   const { kind, id } = resolved;
   const store = controller.state;
-  const entry = useStateEntry(store, kind, id);
-  return useMemo(
-    () => ({
-      value: entry.value,
-      revision: entry.revision,
-      set: (update, options) => store.set({ kind, id }, update, options),
-      patch: (values, options) => store.patch({ kind, id }, values, options),
-      reset: () => store.reset({ kind, id }),
-    }),
-    [entry, store, kind, id],
-  );
+  const entry = useStateEntry(store, { kind, id });
+  return {
+    value: entry.value,
+    revision: entry.revision,
+    set: (update, options) => store.set({ kind, id }, update, options),
+    patch: (values, options) => store.patch({ kind, id }, values, options),
+    reset: () => store.reset({ kind, id }),
+  };
 }
 
-function useStateEntry(store: GenUIController['state'], kind: GenUIStateScope['kind'], id: string) {
-  const subscribe = useCallback((listener: () => void) => store.subscribe({ kind, id }, listener), [store, kind, id]);
-  const get = useCallback((): GenUIStateEntry => store.get({ kind, id }), [store, kind, id]);
-  return useSyncExternalStore(subscribe, get, get);
+function useStateEntry(store: GenUIController['state'], scope: GenUIStateScope): GenUIStateEntry {
+  const get = () => store.get(scope);
+  return useSyncExternalStore(listener => store.subscribe(scope, listener), get, get);
 }
 
 export interface GenUISharedData {
@@ -181,30 +158,37 @@ export function useGenUISharedData(): GenUISharedData {
   const data = useGenUISurface(surfaceId)?.data ?? EMPTY;
   const store = controller.state;
   // Surface ids cannot contain "/", so this scope never collides with a surface's own local state.
-  const editsId = `${surfaceId}/edits`;
-  const edits = useStateEntry(store, 'surface', editsId).value as GenUIEdits;
-  const merged = useMemo(() => mergeGenUIData(data, edits), [data, edits]);
-  return useMemo(() => {
-    const scope = { kind: 'surface', id: editsId } as const;
-    const update = (next: (edits: GenUIEdits, data: JSONObject) => GenUIEdits) =>
-      store.set(scope, previous =>
-        next(previous as GenUIEdits, controller.getState().surfaces[surfaceId]?.data ?? EMPTY),
-      );
-    return {
-      value: merged.value,
-      edited: Object.keys(edits),
-      conflicts: merged.conflicts,
-      set: (key, value) => update((current, agentData) => editGenUIData(current, agentData, key, value)),
-      keepLocal: key => update((current, agentData) => rebaseGenUIEdit(current, agentData, key)),
-      discard: key => {
-        if (key === undefined) return store.reset(scope);
-        update(current => {
-          const { [key]: _dropped, ...rest } = current;
-          return rest;
-        });
-      },
-    };
-  }, [controller, store, surfaceId, editsId, edits, merged]);
+  const scope: GenUIStateScope = { kind: 'surface', id: `${surfaceId}/edits` };
+  const edits = readEdits(useStateEntry(store, scope).value);
+  const merged = mergeGenUIData(data, edits);
+  const update = (next: (edits: GenUIEdits, data: JSONObject) => GenUIEdits) =>
+    store.set(scope, previous => next(readEdits(previous), controller.getState().surfaces[surfaceId]?.data ?? EMPTY));
+  return {
+    value: merged.value,
+    edited: Object.keys(edits),
+    conflicts: merged.conflicts,
+    set: (key, value) => update((current, agentData) => editGenUIData(current, agentData, key, value)),
+    keepLocal: key => update((current, agentData) => rebaseGenUIEdit(current, agentData, key)),
+    discard: key => {
+      if (key === undefined) return store.reset(scope);
+      update(current => {
+        const { [key]: _dropped, ...rest } = current;
+        return rest;
+      });
+    },
+  };
+}
+
+/** Edits are stored as plain JSON in the state store; keep only well-formed entries. */
+function readEdits(stored: JSONObject): GenUIEdits {
+  const edits: GenUIEdits = {};
+  for (const [key, edit] of Object.entries(stored)) {
+    if (typeof edit !== 'object' || edit === null || Array.isArray(edit) || !('value' in edit)) continue;
+    const { value, base } = edit;
+    if (value === undefined) continue;
+    edits[key] = base === undefined ? { value } : { value, base };
+  }
+  return edits;
 }
 
 /**
@@ -221,7 +205,8 @@ export function useGenUIPublishedContext(
   const serialized = value === undefined ? undefined : JSON.stringify(value);
   useEffect(() => {
     if (!enabled || serialized === undefined) return;
-    const entry: GenUIContextEntry = { value: JSON.parse(serialized) as JSONValue };
+    const parsed: JSONValue = JSON.parse(serialized);
+    const entry: GenUIContextEntry = { value: parsed };
     if (description) entry.description = description;
     context.publish(key, entry);
     return () => context.unpublish(key);
@@ -247,23 +232,13 @@ export function useGenUIAction(name: string): UseGenUIActionResult {
   const node = useGenUINode(surfaceId, nodeId);
   const sourceRevision = node?.revision ?? 0;
   const [state, setState] = useState<{ status: GenUIActionStatus; result?: GenUIActionResult }>({ status: 'idle' });
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
-  const dispatch = useCallback(
-    async (payload?: unknown) => {
-      setState({ status: 'pending' });
-      const result = await controller.actions.dispatch({ surfaceId, nodeId, name, payload, sourceRevision });
-      if (mounted.current) setState({ status: result.status, result });
-      return result;
-    },
-    [controller, surfaceId, nodeId, name, sourceRevision],
-  );
+  async function dispatch(payload?: unknown) {
+    setState({ status: 'pending' });
+    const result = await controller.actions.dispatch({ surfaceId, nodeId, name, payload, sourceRevision });
+    setState({ status: result.status, result });
+    return result;
+  }
 
   return { dispatch, status: state.status, result: state.result, isPending: state.status === 'pending' };
 }
@@ -276,7 +251,7 @@ function useToolSubscription<T>(get: () => T): T {
 /** Approval or suspension state for a tool call, with approve/decline actions and their loading status. */
 export function useGenUIToolApproval(toolCallId: string): GenUIToolApproval | undefined {
   const controller = useGenUIController();
-  return useToolSubscription(useCallback(() => controller.getToolApproval(toolCallId), [controller, toolCallId]));
+  return useToolSubscription(() => controller.getToolApproval(toolCallId));
 }
 
 export interface GenUIToolResponse {
@@ -291,7 +266,6 @@ export function useGenUIToolResponse(toolCallId?: string): GenUIToolResponse {
   const scoped = useContext(ToolCallContext);
   const id = toolCallId ?? scoped;
   if (!id) throw new Error('useGenUIToolResponse needs a tool call id outside a GenUI tool renderer');
-  const canRespond = useToolSubscription(useCallback(() => controller.hasPendingResponse(id), [controller, id]));
-  const respond = useCallback((value: unknown) => controller.respond(id, value), [controller, id]);
-  return { canRespond, respond };
+  const canRespond = useToolSubscription(() => controller.hasPendingResponse(id));
+  return { canRespond, respond: value => controller.respond(id, value) };
 }

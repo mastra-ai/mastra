@@ -75,7 +75,7 @@ export function Chat() {
 
 With `tool: true`, `WeatherCard` is sent to the agent as a frontend tool named `ui_WeatherCard`. Its input schema is the component's props schema. When the model calls it, the card renders in the message with the validated props.
 
-`useGenUIChat` accepts every `useChat` option and returns the same values, plus a `genUI` handle with the controller and renderers. To keep your own `MessageFactory` renderers, combine them with `useGenUIRenderers(chat.genUI, baseRenderers)`.
+`useGenUIChat` accepts every `useChat` option and returns the same values, plus a `genUI` handle with the controller and renderers. To keep your own `MessageFactory` renderers, pass them as `renderers`; GenUI renders its own parts and hands the rest to yours.
 
 ## Let the model call components
 
