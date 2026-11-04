@@ -17,6 +17,7 @@
       "runtimeVersion": "NODE_22",
       "networkMode": "PUBLIC",
       "protocol": "HTTP",
+      "additionalPolicies": ["agentcore/mongodb-secret-policy.json"],
       "instrumentation": {
         "enableOtel": true
       },
@@ -26,8 +27,8 @@
           "value": "us-east-1"
         },
         {
-          "name": "MONGODB_URI",
-          "value": "SET_BEFORE_DEPLOY"
+          "name": "MONGODB_SECRET_ARN",
+          "value": "arn:aws:secretsmanager:us-east-1:123456789012:secret:mastra-docs-mongodb-ABCDEF"
         },
         {
           "name": "MONGODB_DATABASE",

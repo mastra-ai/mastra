@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { AgentCoreProjectSpecSchema, getSessionProjectRoot, setSessionProjectRoot } from '@aws/agentcore-cdk';
@@ -20,6 +20,11 @@ afterAll(() => {
 test('deploys the documentation agent with MongoDB settings, HTTP access, and Bedrock permissions', () => {
   // Synthesis stages source files but never builds an image or contacts AWS.
   writeFileSync(join(sourceDir, 'Dockerfile'), 'FROM scratch\n');
+  mkdirSync(join(sourceDir, 'agentcore'));
+  copyFileSync(
+    resolve(__dirname, '../../mongodb-secret-policy.json'),
+    join(sourceDir, 'agentcore/mongodb-secret-policy.json'),
+  );
   const config = JSON.parse(readFileSync(resolve(__dirname, '../../agentcore.json'), 'utf8'));
   const spec = AgentCoreProjectSpecSchema.parse({
     ...config,
@@ -40,13 +45,25 @@ test('deploys the documentation agent with MongoDB settings, HTTP access, and Be
     NetworkConfiguration: { NetworkMode: 'PUBLIC' },
     EnvironmentVariables: Match.objectLike({
       MONGODB_DATABASE: 'mastra_docs',
-      MONGODB_URI: 'SET_BEFORE_DEPLOY',
+      MONGODB_SECRET_ARN: 'arn:aws:secretsmanager:us-east-1:123456789012:secret:mastra-docs-mongodb-ABCDEF',
       AWS_REGION: 'us-east-1',
       EMBED_DIMENSION: '1024',
     }),
   });
   const [runtime] = Object.values(template.findResources('AWS::BedrockAgentCore::Runtime'));
   expect(runtime.Properties.ProtocolConfiguration ?? 'HTTP').toBe('HTTP');
+  expect(runtime.Properties.EnvironmentVariables).not.toHaveProperty('MONGODB_URI');
+  template.hasResourceProperties('AWS::IAM::Policy', {
+    PolicyDocument: {
+      Statement: Match.arrayWith([
+        {
+          Effect: 'Allow',
+          Action: 'secretsmanager:GetSecretValue',
+          Resource: 'arn:aws:secretsmanager:us-east-1:123456789012:secret:mastra-docs-mongodb-ABCDEF',
+        },
+      ]),
+    },
+  });
   template.hasResourceProperties('AWS::IAM::Policy', {
     PolicyDocument: {
       Statement: Match.arrayWith([

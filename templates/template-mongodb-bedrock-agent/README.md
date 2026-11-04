@@ -53,7 +53,10 @@ For related memory concepts, see the [Mastra semantic recall documentation](http
 
 `agent.ts` implements the AgentCore HTTP contract (`POST /invocations`, `GET /ping`) and maps each AgentCore session id to a Mastra memory thread. `agentcore/agentcore.json` declares the runtime; the `Dockerfile` builds the required ARM64 image.
 
-Copy `agentcore/aws-targets.example.json` to `agentcore/aws-targets.json` and set your AWS account id, then put your connection string in `agentcore/.env.local` as `MONGODB_URI=...`. Both files are gitignored.
+1. Copy `agentcore/aws-targets.example.json` to `agentcore/aws-targets.json` and set your AWS account id and region.
+2. In [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/create_secret.html), create an **Other type of secret** in that region. Use the **Plaintext** editor and store only your MongoDB connection URI, without JSON or surrounding quotes. Use the default `aws/secretsmanager` encryption key.
+3. Copy the secret's complete ARN into both `MONGODB_SECRET_ARN` in `agentcore/agentcore.json` and `Resource` in `agentcore/mongodb-secret-policy.json`, replacing the example ARN. Set `AWS_REGION` in the runtime configuration to the secret's region as well. The policy grants the runtime role access to that one secret.
+4. Deploy and invoke the runtime:
 
 ```bash
 npx @aws/agentcore deploy
@@ -64,7 +67,9 @@ npx @aws/agentcore invoke '{"prompt":"How do I define a tool in Mastra?"}'
 
 To put it in front of users, call the deployed `/invocations` endpoint from your app and pass a stable session id per user, so each person keeps their own thread in MongoDB.
 
-The runtime gets Bedrock access from its IAM execution role, so no AWS keys go into the image. Non-secret settings live under the agent's `envVars` in `agentcore.json`. If `MONGODB_URI` is not present in the container on your first deploy, your `@aws/agentcore` version does not inject `.env.local`; provide the variable to the runtime without committing its value.
+The runtime uses its IAM execution role for Bedrock and calls Secrets Manager's `GetSecretValue` at startup to load the MongoDB URI. The URI stays out of the image and the deployment configuration. If you use a customer-managed KMS key instead of the default encryption key, grant the runtime role `kms:Decrypt` on that key and allow the role in the key policy.
+
+Local development still reads `MONGODB_URI` from `.env`; it takes precedence when set. `agentcore/.env.local` does not inject arbitrary variables into a deployed runtime. To pick up a rotated secret, restart the runtime so it reads the new value.
 
 ## About Mastra templates
 
