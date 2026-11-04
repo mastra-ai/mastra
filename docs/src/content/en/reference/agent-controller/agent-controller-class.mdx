@@ -760,7 +760,9 @@ Returns: `Promise<ModelAuthStatus>`
 
 #### `listAvailableModels()`
 
-List models from the configured and built-in gateways. Results are cached briefly and sorted with usage data when `modelUseCountProvider` is configured.
+List models from the configured and built-in gateways. Each model's `useCount` comes from `modelUseCountProvider` when you configure one.
+
+The built-in gateways download public catalogs (models.dev and Netlify). They refresh in the background every 5 minutes, and calls return the last downloaded catalog in the meantime, including when a download fails. Configured gateways and API key availability are checked again after 10 seconds.
 
 ```typescript
 const models = await controller.listAvailableModels()
@@ -770,7 +772,7 @@ Returns: `Promise<AvailableModel[]>`
 
 #### `invalidateAvailableModelsCache()`
 
-Clear the available-model cache.
+Make the next `listAvailableModels()` call check configured gateways and API key availability again. Call it after your app stores or removes a credential or changes a custom provider. The models.dev and Netlify catalogs keep their own refresh schedule.
 
 ```typescript
 controller.invalidateAvailableModelsCache()
