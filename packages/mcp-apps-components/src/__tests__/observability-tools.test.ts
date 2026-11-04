@@ -24,7 +24,7 @@ const SUM = { name: [METRIC], aggregation: 'sum' };
 
 type TestUser = { id: string; role: string };
 
-async function startMastra() {
+async function seededStorage() {
   const storage = new InMemoryStore();
   const observability = storage.stores.observability;
   assert(observability);
@@ -37,7 +37,11 @@ async function startMastra() {
       labels: {},
     })),
   });
+  return storage;
+}
 
+async function startMastra() {
+  const storage = await seededStorage();
   const mastra = new Mastra({
     logger: false,
     storage,
@@ -160,6 +164,25 @@ describe('observabilityAppTools', () => {
       expect(appTools.find(tool => tool.name === 'observabilityMetricAggregate')?.inputSchema.properties).toEqual(
         expect.objectContaining({ aggregation: expect.anything() }),
       );
+    });
+  });
+
+  describe('when the tools and the app resolve different copies of @mastra/core', () => {
+    it('still runs the route', async () => {
+      const real = new Mastra({ logger: false, storage: await seededStorage() });
+      // A Mastra from another @mastra/core copy: same API, different class, so `instanceof` fails.
+      const foreign = new Proxy(real, {
+        getPrototypeOf: () => Object.prototype,
+        get: (target, key) => {
+          const value = Reflect.get(target, key, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      expect(foreign instanceof Mastra).toBe(false);
+
+      const result = await observabilityAppTools.observabilityMetricAggregate.execute?.(SUM, { mastra: foreign });
+
+      expect(result).toEqual({ status: 200, body: expect.objectContaining({ value: 12 }) });
     });
   });
 

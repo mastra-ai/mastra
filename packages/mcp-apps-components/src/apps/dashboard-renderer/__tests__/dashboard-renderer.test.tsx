@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
@@ -131,6 +131,24 @@ describe('dashboard renderer app', () => {
         .poll(() => host.messages)
         .toEqual(['Show me the traces for entityName "support", over the last 24h.']);
       expect(host.modelContexts).toEqual([]);
+    });
+
+    it('reports a host that fails mid-drilldown instead of leaving the rejection unhandled', async () => {
+      server.use(http.post(TIME_SERIES_API, () => HttpResponse.json(emptyTimeSeries)));
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = await renderWithHost(app);
+      host.bridge.onupdatemodelcontext = async () => {
+        throw new Error('Host went away');
+      };
+      await host.sendToolResult({ content: [], structuredContent: { definition: supportRunsChart } });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View in traces' }));
+
+      await expect
+        .poll(() => errors.mock.calls.map(([message]) => message))
+        .toContain('[Mastra dashboard] Drilldown failed');
+      expect(host.messages).toEqual([]);
+      errors.mockRestore();
     });
 
     it('offers no drilldown on hosts without a chat to continue', async () => {

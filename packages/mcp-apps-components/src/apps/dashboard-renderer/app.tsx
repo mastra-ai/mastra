@@ -30,7 +30,8 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
           }
           await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] });
         };
-        void send();
+        // A host that disconnects mid-drilldown must not surface as an unhandled rejection.
+        send().catch(error => console.error('[Mastra dashboard] Drilldown failed', error));
       }
     : undefined;
 

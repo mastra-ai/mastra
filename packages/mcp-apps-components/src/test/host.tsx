@@ -92,6 +92,7 @@ export async function renderWithHost<Input>(
   await act(() => started);
 
   return {
+    bridge,
     toolCalls,
     messages,
     modelContexts,

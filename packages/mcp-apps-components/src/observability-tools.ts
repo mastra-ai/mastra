@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core/mastra';
+import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import {
@@ -37,6 +37,11 @@ export const OBSERVABILITY_APP_TOOL_ROUTES: Record<ObservabilityAppToolName, Ser
   observabilityScorePercentiles: GET_SCORE_PERCENTILES,
 };
 
+// Structural, not `instanceof`: a second installed copy of @mastra/core has its own Mastra class.
+function isMastra(value: unknown): value is Mastra {
+  return typeof (value as Partial<Mastra> | undefined)?.getServer === 'function';
+}
+
 function routeTool(id: ObservabilityAppToolName) {
   const route = OBSERVABILITY_APP_TOOL_ROUTES[id];
   const readsQuery = OBSERVABILITY_APP_TOOLS[id].method === 'GET';
@@ -49,7 +54,7 @@ function routeTool(id: ObservabilityAppToolName) {
     // Apps call it; hosts keep it away from the model.
     mcp: { _meta: { ui: { visibility: ['app'] } } },
     execute: async (input, { mastra, requestContext, abortSignal }): Promise<RouteResponse> => {
-      if (!(mastra instanceof Mastra)) return { status: 503, body: { error: `${id} needs a Mastra instance.` } };
+      if (!isMastra(mastra)) return { status: 503, body: { error: `${id} needs a Mastra instance.` } };
       return invokeRoute(route, {
         mastra,
         // Without the caller's context, a server with auth refuses the call.
