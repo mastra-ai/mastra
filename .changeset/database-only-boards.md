@@ -8,7 +8,7 @@ Each project's boards now live only in its database. Factory writes a copy of th
 
 **Boards that no longer fit the code** (edited copies a release no longer fits, older boards stored under a code board's key, copies of boards the app stopped defining) are now served instead of hidden, with the code behaviour that still fits and a `problems` entry for anything dropped.
 
-**Writing boards from code:** added `factory.upsertBoard()`, which creates or updates a project's board with the same checks, cache refresh and audit as the boards API. An unchanged board writes nothing; a refused write throws `BoardWriteError` with the API's error code.
+**Writing a board into a project:** added `factory.upsertBoard()`, which writes a board definition into an existing project, for example to push a changed app board into a copy that no longer follows its code. It creates or replaces the board with the same checks, cache refresh and audit as the boards API, one project per call; a board under a new key gets no code behaviour. An unchanged board writes nothing; a refused write throws `BoardWriteError` with the API's error code.
 
 ```ts
 await factory.upsertBoard(
@@ -25,4 +25,4 @@ await factory.upsertBoard(
 );
 ```
 
-**Deprecated:** `defineBoard()` and the `boards` option of `MastraFactory`. They keep working; store boards with `factory.upsertBoard()` instead.
+**Deprecated:** `defineBoard()` and the `boards` option of `MastraFactory`. They keep working; manage boards through the boards API instead. Removal is tracked in mastra-ai/mastra#28920.

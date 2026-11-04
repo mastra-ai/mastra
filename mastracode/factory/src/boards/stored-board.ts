@@ -125,9 +125,12 @@ export interface MergedStoredBoard {
  *   shape they depend on: the same kind and, on phases with code handlers, the same runner context
  *   and skill, the declared exit tool and no other. Outcomes whose target the row lacks or doesn't
  *   allow are dropped.
- * - The board's `tools`, `events` and `transitionPolicy` attach only when the row has every code
- *   phase, since their handlers may move cards to any of them; `sourceClosed` when both of its
- *   phases are stored and terminal.
+ * - The board's `tools` always attach: they hold the exit-tool approval that keeps anyone but a
+ *   person from moving a card past an unapproved exit tool. If the row lacks a code phase, the
+ *   moves they make to it are refused, and that is reported.
+ * - The board's `events` and `transitionPolicy` attach only when the row has every code phase,
+ *   since their handlers may move cards to any of them; `sourceClosed` when both of its phases are
+ *   stored and terminal.
  * - A move code makes that the row's `nextPhases` don't allow is reported; code making it is refused.
  * - If the board still fails to compile with that behaviour, it runs without any.
  *
@@ -188,8 +191,12 @@ export function mergeCodeBehaviour(row: StoredBoardInput, code: InstalledBoard):
   const unfit = missing.length > 0 ? missingPhases(missing) : undefined;
   const tools = Object.keys(declaration.tools ?? {});
   if (tools.length > 0) {
-    if (unfit) problems.push(`Board "${row.key}" runs without its code tool rules (${tools.join(', ')}): ${unfit}`);
-    else board.tools = declaration.tools;
+    board.tools = declaration.tools;
+    if (unfit) {
+      problems.push(
+        `Board "${row.key}" keeps its code tool rules (${tools.join(', ')}), but can't move cards where they lead: ${unfit}`,
+      );
+    }
   }
   const events = Object.keys(declaration.events ?? {});
   if (events.length > 0) {

@@ -320,8 +320,9 @@ export interface MastraFactoryConfig {
   /**
    * Boards copied into every project, next to the boards each project stored.
    *
-   * @deprecated Store the board with factory.upsertBoard(); see the README "Stored boards" section.
-   * Boards passed here still work: each project gets a copy once, and is served from that copy.
+   * @deprecated Manage boards through the boards API (`/web/factory/projects/:id/boards`, README
+   * "Stored boards"); removal is tracked in mastra-ai/mastra#28920. Boards passed here still work:
+   * each project gets a copy once, and is served from that copy, with the code behaviour they declare.
    */
   boards?: readonly InstalledBoard[];
   /**
@@ -453,7 +454,7 @@ function warnDefinedBoards(boards: BoardRegistry): void {
   if (warnedDefinedBoards || ![...boards.values()].some(isDefinedBoard)) return;
   warnedDefinedBoards = true;
   console.warn(
-    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions once. Store boards with factory.upsertBoard() or the boards API; see the README "Stored boards" section.',
+    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions once. Manage boards through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.',
   );
 }
 
@@ -552,8 +553,10 @@ export class MastraFactory {
   }
 
   /**
-   * Stores a board in a project, for apps that keep board config in code. Creates the board when
-   * the project has none under its key, otherwise replaces it; an unchanged board writes nothing.
+   * Writes a board definition into an existing project, for example to push a changed app board
+   * into a copy that no longer follows its code. Creates the board when the project has none under
+   * its key, otherwise replaces it; an unchanged board writes nothing. It writes one project per
+   * call, and a board under a new key gets no code behaviour (handlers, outcomes, rules).
    * It goes through the same checks, cache invalidation and audit as the boards API: the built-in
    * Work board and app boards can be changed within their code behaviour, the legacy Review board
    * can't be changed, and a refused write throws a `BoardWriteError` with the API's error code.

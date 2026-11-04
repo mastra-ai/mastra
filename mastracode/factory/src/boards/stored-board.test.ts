@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleItemContext, FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
-import { createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { BoardDefinitionError, codeBoardOf, declarationOf, defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { workLaneForRole, workStageCarries } from './legacy-plan-role.js';
@@ -615,7 +616,7 @@ describe('serving a stored row that fell out of step with code', () => {
     expect(triage?.type === 'invokeSkill' && triage.arguments).toContain('Shipyard: check the changelog.');
   });
 
-  it("serves a row missing a phase newer code declares, without the board's rules that could target it", async () => {
+  it("serves a row missing a phase newer code declares, keeping the tool rules that hold Planning's approval", async () => {
     const declaration = declarationOf(workBoard)!;
     const newer = defineBoard({
       ...declaration,
@@ -637,14 +638,56 @@ describe('serving a stored row that fell out of step with code', () => {
 
     expect(problems).toEqual([
       'Phase "testing" isn\'t on stored board "work", so its code behaviour doesn\'t run.',
-      `Board "work" runs without its code tool rules (${Object.keys(workBoard.tools).join(', ')}): phase "testing" isn't stored.`,
+      `Board "work" keeps its code tool rules (${Object.keys(workBoard.tools).join(', ')}), but can't move cards where they lead: phase "testing" isn't stored.`,
     ]);
-    expect(board.tools).toEqual({});
+    // The exit-tool approval guard keys off these rules: without them, a rule or agent could move
+    // a card from Planning into Building without an approved plan.
+    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
     expect(board.phases).not.toHaveProperty('testing');
     expect(board.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
     const plan = await board.rules.planning?.issue?.onEnter?.(entering(board, 'planning', 'issue'));
     expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
     expect(codeBoardOf(board)).toBe(newer);
+  });
+
+  it('keeps a plan on a row missing a newer code phase waiting for approval', async () => {
+    const declaration = declarationOf(workBoard)!;
+    const newer = defineBoard({
+      ...declaration,
+      phases: {
+        ...declaration.phases,
+        testing: { name: 'Testing', kind: 'working', runner: { context: 'work' }, onEnter: { issue: () => undefined } },
+      },
+    } as Parameters<typeof defineBoard>[0]);
+    const { board } = mergeCodeBehaviour(boardDefinitionOf(workBoard), newer);
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const factoryProjectId = '11111111-2222-4333-8444-555555555555';
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId,
+      input: { title: 'Fix the bug', stages: ['planning'], sessions: {}, metadata: {} },
+    });
+    const service = new FactoryTransitionService({
+      configVersion: 'stale-row',
+      storage,
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const moved = await service.transition({
+      orgId: 'org-1',
+      factoryProjectId,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: item.revision,
+      actor: { type: 'agent', bindingId: 'agent', role: 'work' },
+      ingress: { type: 'agent', identity: 'agent-execute' },
+      cause: 'test',
+    });
+
+    expect(moved).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
   });
 
   it('serves a phase whose runner context changed without its code handlers, and keeps the other phases', async () => {

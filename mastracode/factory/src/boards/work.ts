@@ -304,6 +304,10 @@ export function workPullRequestCardRejection(isPullRequest: boolean, toStage: st
 /**
  * The numbered version of Work's default definition. Unedited project copies of an older version
  * are upgraded to this one when a project's boards load; bump it whenever the default changes.
+ *
+ * The upgrade rewrites the copy without checking where cards sit, so a new default must keep every
+ * phase key and kind of the previous one; removing or re-kinding a phase needs a card migration
+ * first. `work.test.ts` pins the phase keys and kinds to catch this.
  */
 export const WORK_BOARD_DEFAULT_VERSION = 1;
 
