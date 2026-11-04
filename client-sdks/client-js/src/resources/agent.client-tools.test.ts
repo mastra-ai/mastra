@@ -158,6 +158,17 @@ describe('Agent client-side tools', () => {
     );
 
     const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const recursiveToolResult = secondCallBody.messages
+      .flatMap((message: any) => (Array.isArray(message.content) ? message.content : []))
+      .find((part: any) => part.type === 'tool-result' && part.toolCallId === toolCallId);
+    expect(recursiveToolResult).toMatchObject({
+      type: 'tool-result',
+      toolCallId,
+      toolName: 'weatherTool',
+      input: { location: 'NYC' },
+      output: { type: 'json', value: { ok: true } },
+    });
+    expect(recursiveToolResult).not.toHaveProperty('result');
     const recursiveMessagesJson = JSON.stringify(secondCallBody.messages);
     expect(recursiveMessagesJson).toContain('__mastraObservability');
     expect(recursiveMessagesJson).toContain(traceparent);
@@ -590,7 +601,10 @@ describe('Agent client-side tools', () => {
 
     expect(toolResultPart).toBeDefined();
     expect(toolResultPart.input).toEqual({ url: 'https://example.com' });
-    expect(toolResultPart.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+    expect(toolResultPart.output).toEqual({
+      type: 'json',
+      value: { ok: true, _b64: 'base64imagedata' },
+    });
     // Transformed output travels via providerOptions on the tool-result.
     expect(toolResultPart.providerOptions).toEqual({
       mastra: {
@@ -1122,14 +1136,14 @@ describe('Agent client-side tools', () => {
           toolCallId: 'call_weather',
           toolName: 'weatherTool',
           input: { location: 'NYC' },
-          result: { temperature: 72 },
+          output: { type: 'json', value: { temperature: 72 } },
         }),
         expect.objectContaining({
           type: 'tool-result',
           toolCallId: 'call_news',
           toolName: 'newsTool',
           input: { topic: 'tech' },
-          result: { headline: 'AI advances' },
+          output: { type: 'json', value: { headline: 'AI advances' } },
         }),
       ]),
     );
@@ -2187,7 +2201,7 @@ describe('Agent client-side tools', () => {
           )) ||
         (msg.role === 'tool' &&
           Array.isArray(msg.content) &&
-          msg.content.some((p: any) => p.type === 'tool-result' && p.result !== undefined)),
+          msg.content.some((p: any) => p.type === 'tool-result' && p.output !== undefined)),
     );
     expect(hasToolResult).toBe(true);
 
