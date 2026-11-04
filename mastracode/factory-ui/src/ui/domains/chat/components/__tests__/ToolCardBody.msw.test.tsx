@@ -214,7 +214,7 @@ describe('Factory tool body', () => {
     });
   });
 
-  describe('when a result exceeds the preview limit', () => {
+  describe('when a result is long', () => {
     it('copies the whole result', async () => {
       const user = userEvent.setup();
       renderWithProviders(<ToolCard tool={longResultTool} />);

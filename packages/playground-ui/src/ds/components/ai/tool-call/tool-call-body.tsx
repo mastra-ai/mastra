@@ -20,7 +20,7 @@ function lastParagraph(text: string): string {
 
 function exitText({ exitCode, error }: ToolCallExit, result: string | undefined): string {
   if (error !== undefined) return `Error: ${stripAnsi(error)}\nExit code: ${exitCode}`;
-  // An exit saved before core sent `error` left why the command could not run only in its result.
+  // An older core sends no `error`, so only its result says why the command could not run.
   if (exitCode === -1 && result) return lastParagraph(result);
   return `Exit code: ${exitCode}`;
 }
