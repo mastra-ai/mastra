@@ -1,14 +1,14 @@
 // @ts-check
-// API or worker process for redis-loading-window.test.ts (COR-1502). Both talk
+// API or worker process for evented-redis-loading.test.ts (COR-1502). Both talk
 // to Redis through the test's LOADING proxy and to Postgres directly.
 import { Agent } from '@mastra/core/agent';
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
 import { z } from 'zod';
-import { Memory } from '@mastra/memory';
 import { RedisStreamsPubSub } from '../src/index.ts';
 
 const role = process.env.LOADING_ROLE;
