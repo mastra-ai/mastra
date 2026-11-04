@@ -5,7 +5,8 @@ import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextproto
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { OBSERVABILITY_APP_TOOLS } from '../observability-protocol';
+import { REQUEST_TOOL_NAME, requestToolInputSchema } from '../request-tool';
+import type { RequestToolInput } from '../request-tool';
 import type { McpAppDefinition } from '../runtime/define-mcp-app';
 
 /** Where the test host's server answers the observability tools; MSW handlers mock its routes. */
@@ -24,18 +25,18 @@ afterEach(async () => {
 const once = (bridge: AppBridge, event: 'initialized' | 'sizechange') =>
   new Promise<void>(resolve => bridge.addEventListener(event, () => resolve()));
 
-/** Answers an observability tool the way the server does: by calling its route and returning the response. */
+/** Answers the request tool the way a server does: by calling the route and returning its response. */
 async function relayToServer(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
-  const route = OBSERVABILITY_APP_TOOLS[name as keyof typeof OBSERVABILITY_APP_TOOLS];
-  if (!route) return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
-  const response =
-    route.method === 'GET'
-      ? await fetch(`${MASTRA_SERVER}${route.path}?${new URLSearchParams(args as Record<string, string>)}`)
-      : await fetch(`${MASTRA_SERVER}${route.path}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(args),
-        });
+  if (name !== REQUEST_TOOL_NAME) return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
+  const { method, path, query, body } = requestToolInputSchema.parse(args);
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query ?? {})) {
+    for (const item of [value].flat()) search.append(key, item);
+  }
+  const response = await fetch(`${MASTRA_SERVER}${path}${search.size > 0 ? `?${search}` : ''}`, {
+    method,
+    ...(body !== undefined && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+  });
   const structuredContent = { status: response.status, body: await response.json() };
   return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent };
 }
@@ -60,13 +61,15 @@ export async function renderWithHost<Input>(
 ) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
-  const toolCalls: string[] = [];
+  // The tool calls the app made, with the request each one carried.
+  const toolCalls: Array<{ name: string; request?: RequestToolInput }> = [];
   const messages: string[] = [];
   const modelContexts: unknown[] = [];
   // What the app asked of the host's chat, in order: a model context update or a message.
   const chat: Array<'context' | 'message'> = [];
   bridge.oncalltool = async ({ name, arguments: args }) => {
-    toolCalls.push(name);
+    const request = requestToolInputSchema.safeParse(args);
+    toolCalls.push({ name, ...(request.success && { request: request.data }) });
     return relayToServer(name, args);
   };
   bridge.onupdatemodelcontext = async params => {

@@ -15,14 +15,14 @@
         "default": "./dist/dashboard-renderer.cjs"
       }
     },
-    "./observability-protocol": {
+    "./request-tool": {
       "import": {
-        "types": "./dist/observability-protocol.d.ts",
-        "default": "./dist/observability-protocol.js"
+        "types": "./dist/request-tool.d.ts",
+        "default": "./dist/request-tool.js"
       },
       "require": {
-        "types": "./dist/observability-protocol.d.ts",
-        "default": "./dist/observability-protocol.cjs"
+        "types": "./dist/request-tool.d.ts",
+        "default": "./dist/request-tool.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -59,7 +59,6 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/playground-ui": "workspace:*",
     "@mastra/react": "workspace:*",
-    "@mastra/server": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/core": "2.4.0",
     "@modelcontextprotocol/ext-apps": "^2.0.3",
