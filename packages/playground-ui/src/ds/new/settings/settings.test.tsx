@@ -3,8 +3,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  SettingsAddRow,
   SettingsContainer,
   SettingsDescription,
+  SettingsEmptyRow,
   SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
@@ -189,6 +191,94 @@ describe('Settings', () => {
       expect(screen.getByText('View only:')).toBeTruthy();
       expect(screen.getByText('Viewer')).toBeTruthy();
       expect(screen.queryByRole('textbox')).toBeNull();
+    });
+  });
+
+  describe('where a row places its control', () => {
+    function controlOf(label: string) {
+      return screen
+        .getByText(label)
+        .closest('[data-slot="settings-row"]')
+        ?.querySelector('[data-slot="settings-row-control"]');
+    }
+
+    it('puts it in the shared right-hand column by default', () => {
+      render(
+        <SettingsRow label="Name">
+          <Input aria-label="Name" />
+        </SettingsRow>,
+      );
+
+      expect(controlOf('Name')?.className).toContain('sm:min-w-64');
+      expect(controlOf('Name')?.className).toContain('[--field-width:100%]');
+    });
+
+    it('puts it under the label at full width when placed below', () => {
+      render(
+        <>
+          <SettingsRow label="Name" controlPlacement="below">
+            <Input aria-label="Name" />
+          </SettingsRow>
+          <SettingsFieldsetRow label="Invite" controlPlacement="below">
+            <Input aria-label="Email" />
+          </SettingsFieldsetRow>
+        </>,
+      );
+
+      for (const label of ['Name', 'Invite']) {
+        expect(controlOf(label)?.className).not.toContain('sm:min-w-64');
+      }
+      expect(screen.getByRole('group', { name: 'Invite' }).className).not.toContain('sm:flex-row');
+    });
+  });
+
+  describe('when a title has info', () => {
+    it('describes the title with it', () => {
+      render(
+        <SettingsGroup>
+          <SettingsHeader>
+            <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
+          </SettingsHeader>
+        </SettingsGroup>,
+      );
+
+      screen.getByRole('heading', { name: 'General' });
+      expect(screen.getByText('General').closest('[aria-describedby]')).toBeTruthy();
+      expect(screen.getByText('Stored in this browser.')).toBeTruthy();
+    });
+  });
+
+  describe('when a list sits in a container', () => {
+    it('keeps its empty state and add action inside the container', () => {
+      let added = 0;
+      render(
+        <SettingsContainer>
+          <SettingsEmptyRow>No request headers</SettingsEmptyRow>
+          <SettingsAddRow onClick={() => (added += 1)}>Add header</SettingsAddRow>
+        </SettingsContainer>,
+      );
+
+      const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.contains(screen.getByText('No request headers'))).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+      expect(added).toBe(1);
+    });
+  });
+
+  describe('when a fieldset row is not the last row', () => {
+    it('keeps the divider under it', () => {
+      render(
+        <SettingsContainer>
+          <SettingsFieldsetRow label="Invite">
+            <Input aria-label="Email" />
+          </SettingsFieldsetRow>
+          <SettingsEmptyRow>No pending invitations</SettingsEmptyRow>
+        </SettingsContainer>,
+      );
+
+      expect(screen.getByRole('group', { name: 'Invite' }).className).toContain(
+        '[.divide-y>&:not(:last-child)]:border-b',
+      );
     });
   });
 });

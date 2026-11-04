@@ -119,16 +119,34 @@ export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
   label: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
+  /** Same as `SettingsRow`'s: `below` puts the controls under the label at full width. */
+  controlPlacement?: 'side' | 'below';
 };
 
-export function SettingsFieldsetRow({ label, description, children, className, ...props }: SettingsFieldsetRowProps) {
+export function SettingsFieldsetRow({
+  label,
+  description,
+  children,
+  className,
+  controlPlacement = 'side',
+  ...props
+}: SettingsFieldsetRowProps) {
   const descriptionId = useId();
+  const controlBelow = controlPlacement === 'below';
 
   return (
     <Fieldset
       data-slot="settings-row"
       aria-describedby={description == null ? undefined : descriptionId}
-      className={cn('flex flex-col sm:flex-row sm:items-center', factoryRowClassName, className)}
+      className={cn(
+        'flex flex-col',
+        !controlBelow && 'sm:flex-row sm:items-center',
+        factoryRowClassName,
+        // Fieldset's `border-0` would otherwise drop the divider a divided container draws under each row.
+        '[.divide-y>&:not(:last-child)]:border-b',
+        controlBelow && 'gap-3',
+        className,
+      )}
       {...props}
     >
       <div className={factoryRowHeadingClassName}>
@@ -140,7 +158,10 @@ export function SettingsFieldsetRow({ label, description, children, className, .
         )}
       </div>
       {children != null && (
-        <div data-slot="settings-row-control" className={factoryRowSideControlClassName}>
+        <div
+          data-slot="settings-row-control"
+          className={cn('min-w-0', !controlBelow && factoryRowSideControlClassName)}
+        >
           {children}
         </div>
       )}
