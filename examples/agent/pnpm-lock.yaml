@@ -22,8 +22,10 @@ overrides:
   '@mastra/memory': link:../../packages/memory
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
+  '@mastra/mcp-apps-components': link:../../packages/mcp-apps-components
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
+  '@mastra/playground-ui': link:../../packages/playground-ui
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
   '@mastra/auth-studio': link:../../auth/studio
@@ -135,12 +137,18 @@ importers:
       '@mastra/mcp':
         specifier: link:../../packages/mcp
         version: link:../../packages/mcp
+      '@mastra/mcp-apps-components':
+        specifier: link:../../packages/mcp-apps-components
+        version: link:../../packages/mcp-apps-components
       '@mastra/memory':
         specifier: link:../../packages/memory
         version: link:../../packages/memory
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/playground-ui':
+        specifier: link:../../packages/playground-ui
+        version: link:../../packages/playground-ui
       '@mastra/slack':
         specifier: link:../../channels/slack
         version: link:../../channels/slack

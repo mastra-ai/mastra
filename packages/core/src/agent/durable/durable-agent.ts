@@ -2968,11 +2968,12 @@ export class DurableAgent<
   protected async deleteRunSnapshots(runId: string): Promise<void> {
     try {
       const workflow = this.getWorkflow();
-      await workflow.deleteWorkflowRunById(runId);
+      await workflow.deleteWorkflowRunById(runId, { storageVersion: 1 });
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.deleteWorkflowRunById({
         runId,
         workflowName: DurableStepIds.AGENTIC_EXECUTION,
+        storageVersion: 1,
       });
     } catch (error) {
       this.#mastra

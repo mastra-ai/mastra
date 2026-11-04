@@ -151,7 +151,7 @@ Each value in the `providers` record form is `true`, `false`, or a `ToolsProvide
 
 ### ConnectClientOptions
 
-Every field falls back to an environment variable, so a fully env-configured app can pass nothing.
+Every field except `fetch` and `resourceId` falls back to an environment variable. `fetch` defaults to `globalThis.fetch`, and `resourceId` has no fallback, so a fully env-configured app that doesn't scope calls to a resource can pass nothing.
 
 <PropertiesTable
   content={[
@@ -165,6 +165,20 @@ Every field falls back to an environment variable, so a fully env-configured app
     name: 'orgId',
     type: 'string',
     description: 'Organization ID. Falls back to MASTRA_ORG_ID; sent as the x-organization-id header when present.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description:
+      'Project ID, sent as the x-mastra-project-id header so the platform can attribute proxy activity to the project. Falls back to MASTRA_PROJECT_ID; the header is omitted when absent.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      "End-user resource key the client acts for, sent as the x-mastra-resource-id header. Connection listings are scoped to global connections plus that resource's connections. Has no environment variable fallback.",
     isOptional: true,
   },
   {

@@ -974,15 +974,6 @@ function safeJsonParse(value: string): unknown {
   }
 }
 
-function deferredDecisionType(decision: FactoryDeferredDecisionRecord): string | undefined {
-  return typeof decision.decision.type === 'string' ? decision.decision.type : undefined;
-}
-
-function ingressWasAccepted(row: GovernanceDbRow | null): boolean {
-  if (!row || typeof row.result !== 'object' || row.result === null || Array.isArray(row.result)) return false;
-  return 'status' in row.result && row.result.status === 'accepted';
-}
-
 const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
   {
     name: 'factory_rule_ingress',
@@ -1313,8 +1304,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
   readonly #claimableWorkListeners = new Set<(scope: FactoryClaimableWorkScope) => void>();
-  // Storage does not know boards. Until the host says which phases are terminal,
-  // no card counts as finished, so the boot sweep never supersedes on a guess.
+  // Storage does not know boards: no card counts as finished until the host wires the predicate.
   #isTerminal: (item: Card) => boolean = () => false;
 
   #legacyMode = false;
@@ -1384,11 +1374,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return due.length ? new Date(Math.min(...due)) : null;
   }
 
-  /**
-   * Wired once at boot, before `init()`. Tells the legacy attention sweep and
-   * the stale-binding sweep which cards sit in a phase their installed board
-   * declares terminal.
-   */
+  /** Tells the stale-binding sweep which cards sit in a phase their installed board declares terminal. */
   useTerminalPhasePredicate(isTerminal: (item: Card) => boolean): void {
     this.#isTerminal = isTerminal;
   }
@@ -1422,7 +1408,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       ops: super.ops,
       log: (message, details) => console.info(`[factory] ${message}`, details),
     });
-    await this.repairLegacyAttentionState();
   }
 
   /** Refresh source evidence without changing work identity or board concurrency tokens. */
@@ -2825,11 +2810,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               },
               { status: 'superseded', updated_at: input.supersededAt, completed_at: input.supersededAt },
             )
-          : await this.#resolveFailedDecision({
+          : await this.#supersedeFailedDecision({
               orgId: input.orgId,
               factoryProjectId: input.factoryProjectId,
               decisionId: decision.id,
-              status: 'superseded',
               now: input.supersededAt,
             });
       if (record) superseded.push(record);
@@ -2860,17 +2844,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return settled;
   }
 
-  async #resolveFailedDecision({
+  async #supersedeFailedDecision({
     orgId,
     factoryProjectId,
     decisionId,
-    status,
     now,
   }: {
     orgId: string;
     factoryProjectId: string;
     decisionId: string;
-    status: 'succeeded' | 'superseded';
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
     const resolved = await this.#withTransaction(async ops => {
@@ -2881,7 +2863,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         current => {
           if (current.status !== 'failed') return null;
           resolved = true;
-          return { status, updated_at: now };
+          return { status: 'superseded', updated_at: now };
         },
       );
       if (!resolved || !row) return null;
@@ -2965,66 +2947,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       }
     }
     return moved;
-  }
-
-  async repairLegacyAttentionState(): Promise<void> {
-    let cursor: { values: Array<Date | string> } | undefined;
-    const inspectedWorkItems = new Set<string>();
-    while (true) {
-      const rows = await this.#db.findMany<GovernanceDbRow>(
-        'factory_deferred_decisions',
-        { status: { in: ['failed', 'proposed'] } },
-        {
-          orderBy: [
-            ['created_at', 'asc'],
-            ['id', 'asc'],
-          ],
-          limit: ATTENTION_RECEIPT_QUERY_BATCH_SIZE + 1,
-          ...(cursor ? { cursor } : {}),
-        },
-      );
-      const page = rows.slice(0, ATTENTION_RECEIPT_QUERY_BATCH_SIZE);
-      for (const row of page) {
-        const decision = toDeferredDecision(row);
-        if (
-          decision.status === 'failed' &&
-          decision.failureOccurrence === 0 &&
-          deferredDecisionType(decision) === 'transition'
-        ) {
-          const ingress = await this.#db.findOne<GovernanceDbRow>('factory_rule_ingress', {
-            org_id: decision.orgId,
-            factory_project_id: decision.factoryProjectId,
-            identity: `decision:${decision.idempotencyKey}`,
-          });
-          if (ingressWasAccepted(ingress)) {
-            await this.#resolveFailedDecision({
-              orgId: decision.orgId,
-              factoryProjectId: decision.factoryProjectId,
-              decisionId: decision.id,
-              status: 'succeeded',
-              now: new Date(),
-            });
-            continue;
-          }
-        }
-        if (!decision.workItemId) continue;
-        const itemKey = `${decision.orgId}\0${decision.factoryProjectId}\0${decision.workItemId}`;
-        if (inspectedWorkItems.has(itemKey)) continue;
-        inspectedWorkItems.add(itemKey);
-        const item = await this.get({ orgId: decision.orgId, id: decision.workItemId });
-        if (!item || !this.#isTerminal(item)) continue;
-        await this.supersedeDecisionsForWorkItem({
-          orgId: decision.orgId,
-          factoryProjectId: decision.factoryProjectId,
-          workItemId: decision.workItemId,
-          supersededAt: new Date(),
-        });
-      }
-      const last = page.at(-1);
-      if (rows.length <= ATTENTION_RECEIPT_QUERY_BATCH_SIZE || !last) return;
-      if (!(last.created_at instanceof Date)) throw new Error('Deferred decision created_at is not a timestamp.');
-      cursor = { values: [last.created_at, last.id] };
-    }
   }
 
   /** Requeue the same idempotent terminal effect; non-failed or non-retryable decisions are never rerun. */
