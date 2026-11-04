@@ -287,20 +287,19 @@ export class PlatformMemory extends MastraMemory {
   async recall(args: StorageListMessagesInput) {
     const threadIds = Array.isArray(args.threadId) ? args.threadId : [args.threadId];
     if (!threadIds.length || threadIds.some(id => !id)) throw new Error('PlatformMemory.recall requires a threadId');
-    if (args.filter?.metadata || args.include?.length) {
+    if (Object.keys(args.filter?.metadata ?? {}).length || args.include?.length) {
       throw new Error('PlatformMemory.recall does not support metadata filters or include windows');
     }
     const page = args.page ?? 0;
     const perPage = args.perPage === false ? 200 : (args.perPage ?? 40);
     const messages: MastraDBMessage[] = [];
     for (const threadId of threadIds) {
-      if (args.resourceId) {
-        const thread = await this.client.getThread(threadId);
-        if (!thread || thread.resourceId !== args.resourceId) continue;
-      }
+      const thread = await this.client.getThread(threadId);
+      if (!thread || (args.resourceId && thread.resourceId !== args.resourceId)) continue;
+      const resourceId = thread.resourceId;
       for (let next = 0; ; next++) {
         const res = await this.client.listMessages(threadId, { page: next, perPage: 200 });
-        messages.push(...res.messages.map(message => messageFromApi(message, threadId, args.resourceId)));
+        messages.push(...res.messages.map(message => messageFromApi(message, threadId, resourceId)));
         if (!res.hasMore) break;
       }
     }

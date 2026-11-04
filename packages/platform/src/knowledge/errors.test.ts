@@ -1,5 +1,10 @@
 import { createServer } from 'node:http';
-import { KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
+import {
+  KnowledgeConflictError,
+  KnowledgeNotFoundError,
+  KnowledgePageHasChildrenError,
+  KnowledgePageKeyConflictError,
+} from '@mastra/core/storage';
 import { afterEach, expect, it } from 'vitest';
 
 import { PlatformKnowledge } from './index';
@@ -12,6 +17,8 @@ afterEach(async () => {
 it.each([
   { status: 404, name: 'KnowledgeNotFoundError', type: KnowledgeNotFoundError },
   { status: 409, name: 'KnowledgeConflictError', type: KnowledgeConflictError },
+  { status: 409, name: 'KnowledgePageKeyConflictError', type: KnowledgePageKeyConflictError },
+  { status: 409, name: 'KnowledgePageHasChildrenError', type: KnowledgePageHasChildrenError },
 ])('preserves $name from problem+json responses', async ({ status, name, type }) => {
   const server = createServer((_req, res) => {
     res.writeHead(status, { 'content-type': 'application/problem+json' });

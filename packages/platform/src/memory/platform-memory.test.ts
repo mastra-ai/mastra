@@ -163,6 +163,8 @@ describe('PlatformMemory', () => {
 
   it('paginates across multiple threads and reports full message counts', async () => {
     const { memory } = agentWith([]);
+    await memory.client.createThread({ id: 'thread_1', resourceId: 'user' });
+    await memory.client.createThread({ id: 'thread_2', resourceId: 'user' });
     const messages = Array.from({ length: 205 }, (_, i) => ({
       id: `msg_${i}`,
       role: 'user',
@@ -251,6 +253,13 @@ describe('PlatformMemory', () => {
     expect((await memory.getThreadById({ threadId: 'thread_3' }))?.resourceId).toBe('user_9');
     const recalled = await memory.recall({ threadId: 'thread_3' });
     expect(recalled.messages.map(m => m.role)).toEqual(['user', 'assistant']);
+    expect(recalled.messages.map(m => m.resourceId)).toEqual(['user_9', 'user_9']);
+    const unfiltered = await memory.recall({ threadId: 'thread_3', filter: { metadata: {} } });
+    expect(unfiltered.messages).toHaveLength(2);
+    await expect(memory.recall({ threadId: 'thread_3', filter: { metadata: { k: 'v' } } })).rejects.toThrow(
+      'does not support metadata filters',
+    );
+    expect((await memory.recall({ threadId: 'missing' })).messages).toEqual([]);
   });
 
   it('lets the agent update working memory in tool mode', async () => {

@@ -5,6 +5,8 @@ import {
   KnowledgeStorage,
   KnowledgeConflictError,
   KnowledgeNotFoundError,
+  KnowledgePageHasChildrenError,
+  KnowledgePageKeyConflictError,
 } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 
@@ -129,6 +131,16 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       }
       if (name === 'KnowledgeConflictError') {
         const error = new KnowledgeConflictError(operation);
+        error.message = message;
+        throw error;
+      }
+      if (name === 'KnowledgePageKeyConflictError') {
+        const error = new KnowledgePageKeyConflictError('', '');
+        error.message = message;
+        throw error;
+      }
+      if (name === 'KnowledgePageHasChildrenError') {
+        const error = new KnowledgePageHasChildrenError('');
         error.message = message;
         throw error;
       }

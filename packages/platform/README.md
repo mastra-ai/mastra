@@ -30,7 +30,7 @@ const knowledge = new PlatformKnowledge();
 ### Knowledge transport contract
 
 - `POST {apiUrl}/v1/knowledge/{instanceId}/operations/{operation}` with `Authorization: Bearer {accessToken}` and JSON body `{ input }`; returns `{ result }`.
-- `instanceId` and `apiUrl` come from options or `MASTRA_KNOWLEDGE_INSTANCE_ID` and `MASTRA_KNOWLEDGE_API_URL`; `apiUrl` defaults to `https://knowledge-api.mastra.ai`. `projectId` is an optional hint; the service derives the authorized project from the instance and credential.
+- `instanceId` and `apiUrl` come from options or `MASTRA_KNOWLEDGE_INSTANCE_ID` and `MASTRA_KNOWLEDGE_API_URL`; `apiUrl` defaults to `https://knowledge-api.mastra.ai`. The service derives the authorized project from the instance and credential; `projectId` is accepted for compatibility but is not sent.
 - `renameScopeDeclaration` is not forwarded and rejects with `KnowledgeUnsupportedCapabilityError`: its `check` callback cannot be sent to the hosted store.
 - Credential priority: option `accessToken`, `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PLATFORM_SECRET_KEY`.
 - The server checks that the instance belongs to the credential's organization and, for project-bound tokens, its project; it allowlists page-store operations and never accepts a connection string from the caller.
