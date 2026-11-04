@@ -1,3 +1,4 @@
+import { copyRuleExclusions, copyRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
 
@@ -6,8 +7,8 @@ export default defineConfig({
   jsPlugins: ['@mastra/playground-ui/oxlint'],
   // This package did not previously run lint; adopt assertion checks without an unrelated lint migration.
   rules: {
-    // Only icon-button-size and placeholder-text from playground-ui's preset for now: the typography rules have
-    // existing hits here.
+    // From playground-ui's preset, only icon-button-size, placeholder-text, and the copy rules below for now: the
+    // typography rules have existing hits here.
     'playground-ui/icon-button-size': 'error',
     'playground-ui/placeholder-text': 'error',
     'mastra/import-order': 'off',
@@ -18,6 +19,11 @@ export default defineConfig({
     'mastra/sentence-case-labels': 'error',
   },
   overrides: [
+    {
+      files: ['src/**/*.{ts,tsx}'],
+      rules: copyRules,
+    },
+    copyRuleExclusions,
     {
       files: ['**/*.{ts,tsx}'],
       rules: { 'typescript/no-floating-promises': 'off', 'typescript/no-misused-promises': 'off' },

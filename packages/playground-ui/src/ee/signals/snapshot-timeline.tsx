@@ -1,4 +1,5 @@
 import { Pause, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
@@ -90,7 +91,7 @@ export function SnapshotTimeline({
   snapshots: ThemeSnapshot[];
   selectedIndex: number;
   totalSnapshots?: number;
-  summary: string;
+  summary: ReactNode;
   isPlaying: boolean;
   onPlayingChange: (isPlaying: boolean) => void;
   onSnapshotChange: (index: number) => void;
@@ -106,7 +107,7 @@ export function SnapshotTimeline({
   const statusParts = [
     `Snapshot ${snapshot.ordinal}/${totalCount}`,
     ...(snapshot.cutoffAt
-      ? [`as of ${selectedDate}`, `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
+      ? [`As of ${selectedDate}`, `Window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
       : [selectedDate]),
     traceLabel(snapshot.traceCount),
   ];
@@ -141,7 +142,7 @@ export function SnapshotTimeline({
       </div>
       {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
-        {statusParts.join(' · ')}
+        {statusParts.join('. ')}
       </p>
     </section>
   );

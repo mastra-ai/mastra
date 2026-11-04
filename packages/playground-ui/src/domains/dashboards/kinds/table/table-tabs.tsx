@@ -50,7 +50,9 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
         openerResults.map(r => r?.data),
       )
     : 'uncountable';
-  const { view, index, heading } = useViewMenu(props.widget, props.views, openingView(props.views, rows));
+  const menu = useViewMenu(props.widget, props.views, openingView(props.views, rows));
+  const { view, index } = menu;
+  const heading = { ...menu.heading, dragHandle: props.dragHandle };
 
   const unsupported = blocked(view.queries);
   if (unsupported) {

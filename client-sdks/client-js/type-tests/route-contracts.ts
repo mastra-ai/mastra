@@ -396,3 +396,11 @@ const invalidCreateResponse: CreateResponseParams = { input: 1 };
 
 void invalidScoreRequest;
 void invalidCreateResponse;
+
+// HTTP signal writes require a trace; storage records remain nullable.
+type _FeedbackWriteTraceId = Expect<
+  Equal<Pick<Parameters<MastraClient['createFeedback']>[0]['feedback'], 'traceId'>, { traceId: string }>
+>;
+type _ScoreWriteTraceId = Expect<
+  Equal<Pick<Parameters<MastraClient['createScore']>[0]['score'], 'traceId'>, { traceId: string }>
+>;

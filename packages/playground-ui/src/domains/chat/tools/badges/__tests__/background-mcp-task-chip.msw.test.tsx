@@ -84,7 +84,8 @@ describe('MCP task chip on a deferred tool call', () => {
       serveBackgroundTask(backgroundTask('completed', '2026-10-27T12:00:42.000Z'));
       renderDeferredCall();
 
-      await waitFor(() => expect(chipText()).toContain('task · completed · 0:42'));
+      await waitFor(() => expect(chipText()).toContain('task completed'));
+      expect(chipText()).toContain('0:42');
     });
   });
 
@@ -93,7 +94,8 @@ describe('MCP task chip on a deferred tool call', () => {
       serveBackgroundTask(backgroundTask('cancelled', '2026-10-27T12:00:10.000Z'));
       renderDeferredCall();
 
-      await waitFor(() => expect(chipText()).toContain('task · cancelled · 0:10'));
+      await waitFor(() => expect(chipText()).toContain('task cancelled'));
+      expect(chipText()).toContain('0:10');
     });
   });
 
@@ -102,7 +104,8 @@ describe('MCP task chip on a deferred tool call', () => {
       serveBackgroundTask(backgroundTask('timed_out', '2026-10-27T12:01:00.000Z'));
       renderDeferredCall();
 
-      await waitFor(() => expect(chipText()).toContain('task · failed · 1:00'));
+      await waitFor(() => expect(chipText()).toContain('task failed'));
+      expect(chipText()).toContain('1:00');
     });
   });
 
@@ -112,7 +115,7 @@ describe('MCP task chip on a deferred tool call', () => {
       renderDeferredCall();
 
       await waitFor(() => expect(requests).toEqual([BACKGROUND_TASK_ID]));
-      expect(chipText()).toContain('task · working');
+      expect(chipText()).toContain('task working');
     });
   });
 
@@ -121,7 +124,7 @@ describe('MCP task chip on a deferred tool call', () => {
       const requests = serveBackgroundTask(backgroundTask('running'));
       renderDeferredCall([working, { ...working, status: 'failed' }]);
 
-      expect(chipText()).toContain('task · failed');
+      expect(chipText()).toContain('task failed');
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(requests).toEqual([]);
     });
