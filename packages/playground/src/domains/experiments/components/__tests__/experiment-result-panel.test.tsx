@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 import type { DatasetExperimentResult, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
-import { agentFailedResult, agentMarkdownResult, workflowResult } from './fixtures/experiment-results';
+import {
+  agentFailedResult,
+  agentMarkdownResult,
+  agentNoFinalTextResult,
+  agentToolCallsResult,
+  workflowResult,
+} from './fixtures/experiment-results';
 import {
   metricsCapableCapabilities,
   metricsUnavailableCapabilities,
@@ -108,6 +114,27 @@ describe('ExperimentResultPanel output', () => {
       expect(document.body.textContent).toContain('"answer": 42');
     });
   });
+
+  describe('when the agent called tools', () => {
+    it('lists each tool call with its result', () => {
+      renderPanel(agentToolCallsResult);
+
+      const toolCalls = screen.getByRole('region', { name: /^Tool calls/ });
+      fireEvent.click(within(toolCalls).getByRole('button', { name: /SearchDocs/ }));
+
+      expect(toolCalls.textContent).toContain('"hits": 3');
+    });
+  });
+
+  describe('when the agent called tools but produced no final text', () => {
+    it('explains the missing text instead of dumping the raw output', () => {
+      renderPanel(agentNoFinalTextResult);
+
+      const output = screen.getByRole('region', { name: 'Output' });
+      expect(within(output).getByText('No final text response after 2 tool calls')).toBeTruthy();
+      expect(output.textContent).not.toContain('toolCalls');
+    });
+  });
 });
 
 describe('ExperimentResultPanel metadata', () => {
@@ -151,7 +178,7 @@ describe('ExperimentResultPanel metadata', () => {
       const { onTagsChange } = renderPanel(result);
 
       fireEvent.click(screen.getByRole('combobox'));
-      const search = await screen.findByPlaceholderText('Search or create tag...');
+      const search = await screen.findByPlaceholderText('Search or create tag');
       fireEvent.input(search, { target: { value: 'fresh' }, inputType: 'insertText' });
       selectOption(await screen.findByRole('option', { name: 'Create "fresh"' }));
 
@@ -221,6 +248,36 @@ describe('ExperimentResultPanel review controls', () => {
     renderPanel(makeResult({ status: null }), { onComplete: vi.fn() });
 
     expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull();
+  });
+
+  it('drops the "Experiment result" title from the header', () => {
+    renderPanel(makeResult());
+
+    expect(screen.queryByRole('heading', { name: 'Experiment result' })).toBeNull();
+  });
+
+  it('renders the complete action with a visible label, before the other header actions', () => {
+    renderPanel(makeResult({ status: 'needs-review' }), {
+      onComplete: vi.fn(),
+      experimentLink: '/experiments/exp-1',
+    });
+
+    const button = screen.getByRole('button', { name: 'Mark as reviewed' });
+    expect(button.textContent).toBe('Mark as reviewed');
+    const experimentLink = screen.getByRole('link', { name: /See experiment/ });
+    expect(button.compareDocumentPosition(experimentLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Sits on the left of the header, outside the right-aligned actions group.
+    expect(experimentLink.parentElement?.contains(button)).toBe(false);
+  });
+
+  it('renders the request review action with a visible label', () => {
+    const onFlagForReview = vi.fn();
+    renderPanel(makeResult({ status: null }), { onFlagForReview });
+
+    const button = screen.getByRole('button', { name: 'Request review' });
+    expect(button.textContent).toBe('Request review');
+    fireEvent.click(button);
+    expect(onFlagForReview).toHaveBeenCalled();
   });
 });
 

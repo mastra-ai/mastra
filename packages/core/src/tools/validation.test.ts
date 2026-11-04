@@ -881,8 +881,9 @@ describe('Tool Output Validation Tests', () => {
     const result = await tool.execute({ sku: 'sku_1' }, { mastra } as any);
 
     expect(result).toEqual({ orderId: 'ord_1', total: '12.50' });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Tool output validation failed for created-order'), {
+    expect(warn).toHaveBeenCalledWith('Tool output validation failed', {
       toolId: 'created-order',
+      issuePaths: ['total'],
     });
   });
 
@@ -917,7 +918,10 @@ describe('Tool Output Validation Tests', () => {
 
     expect(result).toMatchObject({ error: true });
     expect(result.message).toContain('Tool output validation failed for strict-order');
-    expect(warn).toHaveBeenCalledWith(result.message, { toolId: 'strict-order' });
+    expect(warn).toHaveBeenCalledWith('Tool output validation failed', {
+      toolId: 'strict-order',
+      issuePaths: ['orderId'],
+    });
   });
 
   it('should redact sensitive keys from the output echoed in the validation error', async () => {
@@ -2444,51 +2448,6 @@ describe('Standard Schema path segment format (PathSegment objects) — real Val
 describe('Standard Schema path segment format (PathSegment objects) — mock schema', () => {
   // Mock schema simulating the { key: PropertyKey } path segment format to test
   // the full validateToolInput error message path end-to-end.
-  function makeMockSchemaWithObjectPaths(issues: { message: string; path: { key: string }[] }[]) {
-    const jsonSchemaFn = () => ({ type: 'object' as const, properties: { name: { type: 'string' } } });
-    return {
-      '~standard': {
-        vendor: 'mock',
-        version: 1 as const,
-        validate: (_data: unknown) => ({ issues }),
-        types: undefined,
-        jsonSchema: { input: jsonSchemaFn, output: jsonSchemaFn },
-      },
-    } as any;
-  }
-
-  it('validateToolInput: nested error path renders field names, not [object Object]', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Invalid type', path: [{ key: 'user' }, { key: 'email' }] },
-    ]);
-
-    const result = validateToolInput(schema, { user: { email: 123 } });
-
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('user.email');
-    expect(result.error!.message).not.toContain('[object Object]');
-  });
-
-  it('validateToolInput: multiple nested paths all render correctly', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Required', path: [{ key: 'address' }, { key: 'city' }] },
-      { message: 'Too short', path: [{ key: 'address' }, { key: 'zip' }] },
-    ]);
-
-    const result = validateToolInput(schema, { address: {} });
-
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('address.city');
-    expect(result.error!.message).toContain('address.zip');
-    expect(result.error!.message).not.toContain('[object Object]');
-  });
-});
-
-describe('Standard Schema path segment format (PathSegment objects)', () => {
-  // The Standard Schema spec allows path segments to be either a plain PropertyKey
-  // (e.g. 'fieldName') OR a PathSegment object (e.g. { key: 'fieldName' }).
-  // Valibot and ArkType use the { key: PropertyKey } object format.
-  // This mock schema simulates that format without requiring those libraries.
   function makeMockSchemaWithObjectPaths(issues: { message: string; path: { key: string }[] }[]) {
     const jsonSchemaFn = () => ({ type: 'object' as const, properties: { name: { type: 'string' } } });
     return {

@@ -127,7 +127,9 @@ describe.each(ENGINES)('classifier workflow ($name engine)', ({ evented }) => {
       const result = await (await workflow.createRun()).start({ inputData: { message: 'Account locked' } });
 
       expect(result.status).toBe('success');
-      expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: { message: 'Account locked' } }));
+      expect(doEvaluate).toHaveBeenCalledWith(
+        expect.objectContaining({ state: [{ type: 'json', value: { message: 'Account locked' } }] }),
+      );
     } finally {
       if (evented) await mastra.stopWorkers?.();
     }
@@ -282,7 +284,7 @@ describe('classifier workflow construction', () => {
     });
     const result = await (await workflow.createRun()).start({ inputData: { message: 'Need help' } });
     expect(result.status).toBe('success');
-    expect(states).toEqual([{ message: 'Need help' }]);
+    expect(states).toEqual([[{ type: 'json', value: { message: 'Need help' } }]]);
   });
 
   it('fails clearly when a registered classifier is missing', async () => {

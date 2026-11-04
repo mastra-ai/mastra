@@ -108,7 +108,7 @@ function AgentSession() {
         <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
           <BrowserSessionProvider
             key={`session-${agentId}-${actualThreadId}`}
-            agentId={agentId!}
+            agentId={agentId}
             threadId={actualThreadId}
             enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
           >

@@ -240,7 +240,7 @@ describe('RoleImpersonationProvider', () => {
     });
 
     expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0]![0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
+    expect(onRequest.mock.calls[0][0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
   });
 
   it('honors an explicitly empty apiPrefix', async () => {
@@ -259,7 +259,7 @@ describe('RoleImpersonationProvider', () => {
     });
 
     expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0]![0]).toBe(`${BASE_URL}/auth/roles/admin/permissions`);
+    expect(onRequest.mock.calls[0][0]).toBe(`${BASE_URL}/auth/roles/admin/permissions`);
   });
 
   it('strips a trailing slash from apiPrefix', async () => {
@@ -278,7 +278,7 @@ describe('RoleImpersonationProvider', () => {
     });
 
     expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0]![0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
+    expect(onRequest.mock.calls[0][0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
   });
 
   it('adds a leading slash when apiPrefix has none', async () => {
@@ -297,7 +297,7 @@ describe('RoleImpersonationProvider', () => {
     });
 
     expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0]![0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
+    expect(onRequest.mock.calls[0][0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
   });
 
   it('URL-encodes the roleId', async () => {
@@ -316,7 +316,7 @@ describe('RoleImpersonationProvider', () => {
     });
 
     expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0]![0]).toContain('role%20with%20spaces');
+    expect(onRequest.mock.calls[0][0]).toContain('role%20with%20spaces');
   });
 
   it('forwards client.options.headers on the request', async () => {
@@ -335,7 +335,7 @@ describe('RoleImpersonationProvider', () => {
     });
 
     expect(onRequest).toHaveBeenCalledTimes(1);
-    const headers = onRequest.mock.calls[0]![0] as Record<string, string>;
+    const headers = onRequest.mock.calls[0][0] as Record<string, string>;
     expect(headers['x-tenant-id']).toBe('tenant-1');
   });
 
@@ -355,7 +355,7 @@ describe('RoleImpersonationProvider', () => {
     });
 
     expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0]![0]).toBe('application/json');
+    expect(onRequest.mock.calls[0][0]).toBe('application/json');
   });
 
   it('returns a no-op fallback when used outside the provider', async () => {

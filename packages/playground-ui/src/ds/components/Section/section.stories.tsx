@@ -85,7 +85,7 @@ export const WithAction: Story = {
         <Section.Heading>Agents</Section.Heading>
         <Button size="md">
           <Plus className="size-4" />
-          Add Agent
+          Add agent
         </Button>
       </Section.Header>
       <div className="rounded-md border border-border bg-background p-4">

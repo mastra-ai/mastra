@@ -495,4 +495,32 @@ describe('RBAC Permission Enforcement', () => {
       expect(response.status).toBe(403);
     });
   });
+  describe('Reserved permissions key', () => {
+    it('reads permissions from the reserved request-context key, not the legacy key', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+      // A user object without `id` is authenticated but gets no permissions loaded.
+      const originalGetServer = context.mastra.getServer.bind(context.mastra);
+      context.mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async () => ({ email: 'no-id@test.com' }),
+            authorize: async () => true,
+          },
+          rbac: createMockRBACProvider(),
+        }) as any;
+      const testRoute = createProtectedRoute('agents:read');
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const legacyKeyOnly = encodeURIComponent(JSON.stringify({ userPermissions: ['*'] }));
+      const response = await app.fetch(
+        new Request(`http://localhost/api/test/agents-read?requestContext=${legacyKeyOnly}`, {
+          method: 'GET',
+          headers: { Authorization: 'Bearer anything' },
+        }),
+      );
+
+      expect(response.status).toBe(403);
+    });
+  });
 });

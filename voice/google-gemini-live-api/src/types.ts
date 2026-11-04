@@ -74,6 +74,17 @@ export interface GeminiSessionConfig {
 }
 
 /**
+ * Live API `AudioTranscriptionConfig`.
+ */
+export interface GeminiAudioTranscriptionConfig {
+  /**
+   * BCP-47 language codes hinting which languages are in the audio (for example `['es-ES']`).
+   * When omitted or empty, the server auto-detects the language.
+   */
+  languageCodes?: string[];
+}
+
+/**
  * Configuration options for GeminiLiveVoice
  */
 export interface GeminiLiveVoiceConfig {
@@ -119,6 +130,18 @@ export interface GeminiLiveVoiceConfig {
     /** Token budget for the model's thinking. */
     thinkingBudget?: number;
   };
+  /**
+   * Transcription settings for the user's spoken input. Sent in the Live API setup frame as
+   * `input_audio_transcription`. Input transcription is always enabled; this only adds hints.
+   * Applied at `connect()` time.
+   */
+  inputAudioTranscription?: GeminiAudioTranscriptionConfig;
+  /**
+   * Transcription settings for the model's spoken output. Sent in the Live API setup frame as
+   * `output_audio_transcription`. Output transcription is always enabled; this only adds hints.
+   * Applied at `connect()` time.
+   */
+  outputAudioTranscription?: GeminiAudioTranscriptionConfig;
   /** Audio configuration for input/output */
   audioConfig?: Partial<AudioConfig>;
   /** Enable debug logging */

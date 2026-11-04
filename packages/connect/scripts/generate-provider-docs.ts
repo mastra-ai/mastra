@@ -25,7 +25,7 @@ const providersDir = join(packageDir, 'src/providers');
 const outFile = join(repoRoot, 'docs/src/content/en/reference/connect/providers.mdx');
 
 // Providers present in the package but not part of the documented release.
-const EXCLUDE = new Set(['anthropic', 'google-analytics', 'microsoft-teams', 'stripe', 'twitter-v2']);
+const EXCLUDE = new Set(['anthropic', 'google-analytics', 'stripe', 'twitter-v2']);
 
 const DISPLAY: Record<string, string> = {
   clerk: 'Clerk',
@@ -41,10 +41,17 @@ const DISPLAY: Record<string, string> = {
   'incident-io': 'incident.io',
   jira: 'Jira',
   linear: 'Linear',
+  'microsoft-excel': 'Microsoft Excel',
+  'microsoft-powerpoint': 'Microsoft PowerPoint',
+  'microsoft-teams': 'Microsoft Teams',
+  'microsoft-word': 'Microsoft Word',
+  outlook: 'Microsoft Outlook',
   notion: 'Notion',
+  'one-drive': 'OneDrive',
   openai: 'OpenAI',
   posthog: 'PostHog',
   resend: 'Resend',
+  'sharepoint-online': 'SharePoint Online',
   slack: 'Slack',
   snowflake: 'Snowflake',
   supabase: 'Supabase',
@@ -67,14 +74,26 @@ const LOGOS: Record<string, Logo> = {
   'incident-io': { src: 'https://app.nango.dev/images/template-logos/incident-io.svg' },
   jira: { slug: 'jira' },
   linear: { slug: 'linear' },
+  'microsoft-excel': { src: 'https://app.nango.dev/images/template-logos/microsoft-excel.svg' },
+  'microsoft-powerpoint': { src: 'https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg' },
+  'microsoft-teams': { slug: 'microsoftteams' },
+  'microsoft-word': { src: 'https://app.nango.dev/images/template-logos/microsoft-word.svg' },
+  outlook: { slug: 'microsoftoutlook' },
   notion: { slug: 'notion', mono: true },
   openai: { src: 'https://svgl.app/library/openai.svg', mono: true },
   posthog: { slug: 'posthog' },
   resend: { slug: 'resend', mono: true },
+  'sharepoint-online': { src: 'https://app.nango.dev/images/template-logos/sharepoint-online.svg' },
   slack: { src: 'https://svgl.app/library/slack.svg' },
   snowflake: { slug: 'snowflake' },
   supabase: { slug: 'supabase' },
   workos: { src: 'https://svgl.app/library/workos.svg' },
+};
+
+// Account or capability limits shown above a provider's tool table.
+const NOTES: Record<string, string> = {
+  'microsoft-excel':
+    'Workbook operations, such as worksheets, ranges, tables, charts, and named items, require a work or school account. Personal Microsoft accounts can find, create, list, get, and delete workbook files, but Microsoft Graph rejects workbook operations on personal OneDrive.',
 };
 
 function logoJsx(provider: string): string {
@@ -135,6 +154,7 @@ for (const provider of providers) {
   tocRows.push(`| ${logoJsx(provider)}[${name}](#${slug}) | \`${provider}\` | ${tools.length} |`);
   out += `\n## ${name}\n\n`;
   out += `Provider ID: \`${provider}\` · ${tools.length} tools\n\n`;
+  if (NOTES[provider]) out += `:::note\n\n${NOTES[provider]}\n\n:::\n\n`;
   out += `| Tool | Description |\n| - | - |\n`;
   for (const t of tools) {
     out += `| \`${t.id}\` | ${t.desc || '—'} |\n`;

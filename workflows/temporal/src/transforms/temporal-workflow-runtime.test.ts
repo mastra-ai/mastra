@@ -4,7 +4,6 @@ const executeChild = vi.fn();
 const proxyActivities = vi.fn();
 const sleep = vi.fn(async () => {});
 const logInfo = vi.fn();
-const nonRetryable = vi.fn((message: string) => Object.assign(new Error(message), { nonRetryable: true }));
 const defineQuery = vi.fn((name: string) => name);
 const defineSignal = vi.fn((name: string) => name);
 const signalHandlers = new Map<string, (...args: unknown[]) => void>();
@@ -16,7 +15,6 @@ const condition = vi.fn(async (predicate: () => boolean) => {
 });
 
 vi.mock('@temporalio/workflow', () => ({
-  ApplicationFailure: { nonRetryable },
   condition,
   defineQuery,
   defineSignal,
@@ -48,7 +46,6 @@ describe('temporal workflow runtime helper module', () => {
     defineSignal.mockClear();
     setHandler.mockClear();
     condition.mockClear();
-    nonRetryable.mockClear();
     signalHandlers.clear();
   });
 
@@ -75,6 +72,7 @@ describe('temporal workflow runtime helper module', () => {
       requestContext: { tenantId: 'tenant-1' },
       runId: 'run-1',
       resourceId: 'resource-1',
+      validateInputs: true,
       workflowId: 'weather-workflow',
     });
     expect(result).toEqual({
@@ -133,6 +131,7 @@ describe('temporal workflow runtime helper module', () => {
       initData: { orderId: 'order-1' },
       resumeData: { approved: true },
       runId: 'run-1',
+      validateInputs: true,
       workflowId: 'approval-workflow',
     });
   });
@@ -217,109 +216,6 @@ describe('temporal workflow runtime helper module', () => {
     expect(review).toHaveBeenNthCalledWith(2, expect.objectContaining({ resumeData: { reviewed: true } }));
   });
 
-  it('routes keyless and labeled resume signals to active suspended steps', async () => {
-    const approval = vi
-      .fn()
-      .mockResolvedValueOnce({
-        __temporalSuspension: true,
-        suspendPayload: { reason: 'approval' },
-        resumeLabels: { approveOrder: { stepId: 'approval' } },
-      })
-      .mockResolvedValueOnce({ first: true })
-      .mockResolvedValueOnce({
-        __temporalSuspension: true,
-        suspendPayload: { reason: 'second approval' },
-        resumeLabels: { approveOrder: { stepId: 'approval' } },
-      })
-      .mockResolvedValueOnce({ second: true });
-    proxyActivities.mockReturnValue({ approval });
-
-    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
-    const workflow = createWorkflow('approval-workflow').then('approval').commit();
-
-    const firstRun = workflow({ inputData: { orderId: 'order-1' } });
-    await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(1));
-    signalHandlers.get('mastra.resume')?.({ resumeData: { first: true } });
-    await expect(firstRun).resolves.toMatchObject({ result: { first: true } });
-
-    const secondRun = workflow({ inputData: { orderId: 'order-2' } });
-    await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(2));
-    signalHandlers.get('mastra.resume')?.({ label: 'approveOrder', resumeData: { second: true } });
-    await expect(secondRun).resolves.toMatchObject({ result: { second: true } });
-  });
-
-  it('reports all currently suspended parallel steps in status queries', async () => {
-    const approval = vi
-      .fn()
-      .mockResolvedValueOnce({ __temporalSuspension: true, suspendPayload: { reason: 'approval' } })
-      .mockResolvedValueOnce({ approved: true });
-    const review = vi
-      .fn()
-      .mockResolvedValueOnce({ __temporalSuspension: true, suspendPayload: { reason: 'review' } })
-      .mockResolvedValueOnce({ reviewed: true });
-    proxyActivities.mockReturnValue({ approval, review });
-
-    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
-    const workflow = createWorkflow('approval-workflow')
-      .parallel([
-        { type: 'step', step: { id: 'approval' } },
-        { type: 'step', step: { id: 'review' } },
-      ])
-      .commit();
-    const run = workflow({ inputData: { orderId: 'order-1' } });
-
-    await vi.waitFor(() => expect(condition).toHaveBeenCalledTimes(2));
-    expect(signalHandlers.get('mastra.status')?.()).toMatchObject({
-      status: 'suspended',
-      suspended: expect.arrayContaining([['approval'], ['review']]),
-      suspendPayload: {
-        approval: { reason: 'approval' },
-        review: { reason: 'review' },
-      },
-    });
-
-    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
-    await vi.waitFor(() => expect(approval).toHaveBeenCalledTimes(2));
-    expect(signalHandlers.get('mastra.status')?.()).toMatchObject({
-      status: 'suspended',
-      suspended: [['review']],
-      suspendPayload: { review: { reason: 'review' } },
-    });
-
-    signalHandlers.get('mastra.resume')?.({ step: 'review', resumeData: { reviewed: true } });
-    await expect(run).resolves.toMatchObject({ status: 'success' });
-  });
-
-  it('fails non-retryably when a foreach item suspends', async () => {
-    const approveItem = vi.fn().mockResolvedValue({ __temporalSuspension: true, suspendPayload: { reason: 'item' } });
-    proxyActivities.mockReturnValue({ approveItem });
-
-    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
-    const workflow = createWorkflow('approval-workflow').foreach('approveItem').commit();
-
-    await expect(workflow({ inputData: [{ id: 1 }] })).rejects.toMatchObject({
-      message: 'Temporal workflows do not support suspending inside foreach steps yet.',
-      nonRetryable: true,
-    });
-    expect(nonRetryable).toHaveBeenCalledWith('Temporal workflows do not support suspending inside foreach steps yet.');
-  });
-
-  it('fails non-retryably when a child workflow suspends', async () => {
-    proxyActivities.mockReturnValue({});
-    executeChild.mockResolvedValue({ status: 'suspended', suspended: [['approval']] });
-
-    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
-    const workflow = createWorkflow('parent-workflow').thenWorkflow('child-workflow').commit();
-
-    await expect(workflow({ inputData: { orderId: 'order-1' } })).rejects.toMatchObject({
-      message: 'Temporal workflows do not support suspending inside child workflows yet.',
-      nonRetryable: true,
-    });
-    expect(nonRetryable).toHaveBeenCalledWith(
-      'Temporal workflows do not support suspending inside child workflows yet.',
-    );
-  });
-
   it('executes mapping entries through proxy activities', async () => {
     const mappingId = 'mapping_mapped-workflow_0';
     const mapping = vi.fn(async ({ inputData, initData }) => ({
@@ -343,6 +239,7 @@ describe('temporal workflow runtime helper module', () => {
       requestContext: { tenantId: 'tenant-1' },
       runId: 'run-1',
       resourceId: 'resource-1',
+      validateInputs: true,
       workflowId: 'mapped-workflow',
     });
     expect(result).toEqual({
@@ -406,7 +303,7 @@ describe('temporal workflow runtime helper module', () => {
     executeChild.mockResolvedValue({ result: { city: 'SF', child: true } });
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
-    const workflow = createWorkflow('weather-workflow').thenWorkflow('childWorkflow').commit();
+    const workflow = createWorkflow('weather-workflow').thenWorkflow('childWorkflow', 'child-workflow').commit();
     const result = await workflow({
       inputData: { city: 'SF' },
       requestContext: { tenantId: 'tenant-1' },
@@ -421,6 +318,7 @@ describe('temporal workflow runtime helper module', () => {
           requestContext: { tenantId: 'tenant-1' },
           runId: 'run-1',
           resourceId: 'resource-1',
+          validateInputs: true,
           workflowId: 'weather-workflow',
         },
       ],
@@ -431,7 +329,7 @@ describe('temporal workflow runtime helper module', () => {
       result: { city: 'SF', child: true },
       state: undefined,
       steps: {
-        childWorkflow: succeeded({ city: 'SF', child: true }),
+        'child-workflow': succeeded({ city: 'SF', child: true }),
       },
     });
   });
@@ -466,11 +364,13 @@ describe('temporal workflow runtime helper module', () => {
     expect(first).toHaveBeenCalledWith({
       inputData: { value: 1 },
       initData: { value: 1 },
+      validateInputs: true,
       workflowId: 'parallel-workflow',
     });
     expect(second).toHaveBeenCalledWith({
       inputData: { value: 1 },
       initData: { value: 1 },
+      validateInputs: true,
       workflowId: 'parallel-workflow',
     });
     expect(result).toEqual({
@@ -499,7 +399,7 @@ describe('temporal workflow runtime helper module', () => {
     const result = await workflow({ inputData: { value: 'parent-input' } });
 
     expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
-      args: [{ inputData: { value: 'parent-input' }, workflowId: 'parallel-child-workflow' }],
+      args: [{ inputData: { value: 'parent-input' }, validateInputs: true, workflowId: 'parallel-child-workflow' }],
     });
     expect(result).toEqual({
       status: 'success',
@@ -531,10 +431,11 @@ describe('temporal workflow runtime helper module', () => {
     expect(activity).toHaveBeenCalledWith({
       inputData: { value: 'parent-input' },
       initData: { value: 'parent-input' },
+      validateInputs: true,
       workflowId: 'mixed-parallel-workflow',
     });
     expect(executeChild).toHaveBeenCalledWith('childWorkflow', {
-      args: [{ inputData: { value: 'parent-input' }, workflowId: 'mixed-parallel-workflow' }],
+      args: [{ inputData: { value: 'parent-input' }, validateInputs: true, workflowId: 'mixed-parallel-workflow' }],
     });
     expect(result).toMatchObject({
       result: {
@@ -561,16 +462,19 @@ describe('temporal workflow runtime helper module', () => {
     expect(map).toHaveBeenNthCalledWith(1, {
       inputData: { value: 1 },
       initData,
+      validateInputs: true,
       workflowId: 'foreach-workflow',
     });
     expect(map).toHaveBeenNthCalledWith(2, {
       inputData: { value: 2 },
       initData,
+      validateInputs: true,
       workflowId: 'foreach-workflow',
     });
     expect(map).toHaveBeenNthCalledWith(3, {
       inputData: { value: 3 },
       initData,
+      validateInputs: true,
       workflowId: 'foreach-workflow',
     });
     expect(result).toMatchObject({
@@ -642,11 +546,20 @@ describe('temporal workflow runtime helper module', () => {
       .commit();
     const result = await workflow({ inputData: { value: 3 } });
 
-    expect(isSmall).toHaveBeenCalledWith({ inputData: { value: 3 }, workflowId: 'branch-workflow' });
-    expect(isLarge).toHaveBeenCalledWith({ inputData: { value: 3 }, workflowId: 'branch-workflow' });
+    expect(isSmall).toHaveBeenCalledWith({
+      inputData: { value: 3 },
+      validateInputs: true,
+      workflowId: 'branch-workflow',
+    });
+    expect(isLarge).toHaveBeenCalledWith({
+      inputData: { value: 3 },
+      validateInputs: true,
+      workflowId: 'branch-workflow',
+    });
     expect(smallStep).toHaveBeenCalledWith({
       inputData: { value: 3 },
       initData: { value: 3 },
+      validateInputs: true,
       workflowId: 'branch-workflow',
     });
     expect(largeStep).not.toHaveBeenCalled();
@@ -686,19 +599,23 @@ describe('temporal workflow runtime helper module', () => {
     expect(incrementWhile).toHaveBeenNthCalledWith(1, {
       inputData: { value: 0 },
       initData: { value: 0 },
+      validateInputs: true,
       workflowId: 'dowhile-workflow',
     });
     expect(continueWhile).toHaveBeenNthCalledWith(1, {
       inputData: { value: 1 },
+      validateInputs: true,
       workflowId: 'dowhile-workflow',
     });
     expect(incrementUntil).toHaveBeenNthCalledWith(1, {
       inputData: { value: 0 },
       initData: { value: 0 },
+      validateInputs: true,
       workflowId: 'dountil-workflow',
     });
     expect(stopUntil).toHaveBeenNthCalledWith(1, {
       inputData: { value: 1 },
+      validateInputs: true,
       workflowId: 'dountil-workflow',
     });
     expect(incrementWhile).toHaveBeenCalledTimes(2);

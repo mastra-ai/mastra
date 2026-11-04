@@ -390,6 +390,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
+      workspaceUrlKey: connection?.workspaceUrlKey ?? null,
       checkedAt: Date.now(),
     };
   }

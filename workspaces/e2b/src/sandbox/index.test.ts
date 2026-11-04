@@ -1360,6 +1360,23 @@ describe('E2BSandbox', () => {
       expect(mockSandbox.commands.sendStdin).not.toHaveBeenCalled();
     });
 
+    it('lists an exited process until its output has been read', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+      mockSandbox.commands.list.mockResolvedValue([{ pid: 1, cmd: 'node', args: ['server.js'] }]);
+
+      const handle = await sandbox.processes.spawn('echo done');
+      await handle.wait();
+
+      expect(await sandbox.processes.list()).toEqual([
+        { pid: '1', command: 'node server.js', running: true },
+        { pid: handle.pid, command: 'echo done', running: false, exitCode: 0 },
+      ]);
+
+      await sandbox.processes.get(handle.pid);
+      expect(await sandbox.processes.list()).toEqual([{ pid: '1', command: 'node server.js', running: true }]);
+    });
+
     it('defaults cwd to the configured workingDirectory', async () => {
       const sandbox = new E2BSandbox({ workingDirectory: '/srv/app' });
       await sandbox._start();

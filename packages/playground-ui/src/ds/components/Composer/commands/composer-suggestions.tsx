@@ -55,7 +55,7 @@ export function ComposerSuggestions({
             </div>
           )}
           <ScrollArea maxHeight="min(22rem, 50dvh)">
-            <ScrollAreaViewport className="overscroll-contain">
+            <ScrollAreaViewport className="overscroll-y-contain">
               <div id={id} role="listbox" aria-label={label} className="flex flex-col gap-px p-1.5">
                 {items.map((item, index) => (
                   <button

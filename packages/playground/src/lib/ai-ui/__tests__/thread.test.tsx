@@ -12,8 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
-import { emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { emptyChannelPlatforms, emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { attachmentMessages } from './fixtures/attachment-messages';
+import { abortedSignalRun, acceptedSignalMessage, signalRunStart } from './fixtures/signal-run';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -58,6 +59,7 @@ const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
 
 const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(emptyChannelPlatforms)),
   http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
@@ -132,9 +134,10 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
         <ChatProvider
           key={threadId}
           agentId="agent-1"
+          modelVersion={v2Agent.modelVersion}
           threadId={threadId}
           initialMessages={initialMessages}
-          supportsMemory={true}
+          supportsMemory
           settings={{ modelSettings: { chatWithLegacyStream: false, ...modelSettings } }}
         >
           <Thread
@@ -581,7 +584,7 @@ describe('Thread', () => {
       }
     });
 
-    it('shows a scroll-to-bottom control when the viewport is not at the bottom', async () => {
+    it('shows a scroll-to-bottom control when the reader scrolls back up', async () => {
       const scrollTo = vi.fn();
       const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
       Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
@@ -603,13 +606,23 @@ describe('Thread', () => {
         const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
         if (!viewport) throw new Error('missing message scroller viewport');
 
-        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 40 });
+        // The opening scroll lands two frames after mount. Let it settle before the
+        // reader moves, or it races the scroll below and decides the outcome instead.
+        await act(
+          () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+        );
+
+        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 220 });
         Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 100 });
         Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 320 });
+        await act(async () => {
+          fireEvent.scroll(viewport);
+        });
 
         const scrollToEnd = screen.getByRole('button', { name: 'Scroll to end' });
         expect(scrollToEnd.getAttribute('data-active')).toBe('false');
 
+        viewport.scrollTop = 40;
         await act(async () => {
           fireEvent.scroll(viewport);
         });
@@ -680,7 +693,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'hello from composer' } });
     });
@@ -704,7 +717,7 @@ describe('Thread', () => {
       rendered = render(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(firstThreadTextarea, { target: { value: 'first thread draft' } });
     });
@@ -714,7 +727,7 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     expect(secondThreadTextarea.value).toBe('');
 
     await act(async () => {
@@ -726,13 +739,13 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('first thread draft');
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('first thread draft');
 
     await act(async () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('second thread draft');
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('second thread draft');
   });
 
   it('does not send when the composer is empty', async () => {
@@ -749,7 +762,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.keyDown(textarea, { key: 'Enter' });
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -773,7 +786,7 @@ describe('Thread', () => {
         renderThread([]);
       });
 
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       await act(async () => {
         fireEvent.change(textarea, { target: { value: 'composing text' } });
         fireEvent.keyDown(textarea, { key: 'Enter', isComposing: true });
@@ -828,7 +841,7 @@ describe('Thread', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Remove discard.txt' }));
       expect(screen.queryByRole('button', { name: 'Preview discard.txt' })).toBeNull();
       await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
-      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Read both files' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), { target: { value: 'Read both files' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() =>
         expect(sentTexts).toEqual([
@@ -902,7 +915,7 @@ describe('Thread', () => {
         await act(async () => {
           renderThread([]);
         });
-        const textarea = screen.getByPlaceholderText('Enter your message...');
+        const textarea = screen.getByPlaceholderText('Enter your message');
         fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
         if (inspection === 'file classification') {
@@ -959,7 +972,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([]);
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
       fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
@@ -993,7 +1006,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([]);
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() => expect(requests).toBe(1));
@@ -1016,7 +1029,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([], { modelSettings: { chatWithGenerate: true } });
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
 
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -1043,7 +1056,7 @@ describe('Thread', () => {
         await act(async () => {
           renderThread([], { modelSettings });
         });
-        const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+        const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
         fireEvent.change(textarea, { target: { value: 'Summarize my notes' } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -1075,7 +1088,7 @@ describe('Thread', () => {
       fireEvent.submit(form);
 
       const attachments = await screen.findByTestId('composer-attachments');
-      const draft = screen.getByPlaceholderText('Enter your message...');
+      const draft = screen.getByPlaceholderText('Enter your message');
       const composerBox = draft.closest('[data-slot="composer-box"]');
       expect(composerBox).not.toBeNull();
       expect(composerBox?.contains(attachments)).toBe(true);
@@ -1149,6 +1162,89 @@ describe('Thread', () => {
     expect(captured).toHaveLength(0);
   });
 
+  describe('when thread signals allow sending during a run', () => {
+    let subscription: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let sentMessages: string[];
+    let abortRequests: number;
+
+    beforeEach(async () => {
+      window.MASTRA_AGENT_SIGNALS = 'true';
+      subscription = undefined;
+      sentMessages = [];
+      abortRequests = 0;
+      server.use(...baseHandlers());
+      server.use(
+        http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
+        http.post(
+          `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  subscription = controller;
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+        http.post(`${BASE_URL}/api/agents/:agentId/send-message`, async ({ request }) => {
+          sentMessages.push(JSON.stringify(await request.json()));
+          return HttpResponse.json(acceptedSignalMessage);
+        }),
+        http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => {
+          abortRequests += 1;
+          return HttpResponse.json(abortedSignalRun);
+        }),
+      );
+
+      await act(async () => {
+        renderThread([]);
+      });
+      await waitFor(() => expect(subscription).toBeDefined());
+      await act(async () => subscription?.enqueue(new TextEncoder().encode(sseChunk(signalRunStart))));
+      await screen.findByRole('button', { name: 'Cancel' });
+    });
+
+    afterEach(async () => {
+      await act(async () => subscription?.close());
+    });
+
+    it('replaces cancel with send while drafting and restores cancel after clearing the draft', () => {
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+
+      const textarea = screen.getByPlaceholderText('Enter your message');
+      fireEvent.change(textarea, { target: { value: '   ' } });
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+
+      fireEvent.change(textarea, { target: { value: 'Continue with the new instructions' } });
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+
+      fireEvent.change(textarea, { target: { value: '' } });
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    });
+
+    it('does not cancel the run when Send is double-clicked', async () => {
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), {
+        target: { value: 'Continue with the new instructions' },
+      });
+      const primaryAction = screen.getByRole('button', { name: 'Send' });
+      fireEvent.click(primaryAction, { detail: 1 });
+      await waitFor(() => expect(sentMessages.join()).toContain('Continue with the new instructions'));
+      fireEvent.click(primaryAction, { detail: 2 });
+      await act(async () => new Promise(resolve => setTimeout(resolve, 100)));
+
+      expect(abortRequests).toBe(0);
+    });
+
+    it('cancels the run when Cancel is clicked', async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }), { detail: 1 });
+
+      await waitFor(() => expect(abortRequests).toBe(1));
+    });
+  });
+
   it('shows a cancel control while a run is in flight', async () => {
     let resolveStream: (() => void) | null = null;
     const blockedStream = () =>
@@ -1171,7 +1267,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'long running' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -1181,6 +1277,10 @@ describe('Thread', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy();
     });
+
+    fireEvent.change(textarea, { target: { value: 'Wait until this run finishes' } });
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
     await act(async () => {
       resolveStream?.();
@@ -1259,7 +1359,7 @@ describe('TaskPanel', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'track these tasks' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -1393,6 +1493,7 @@ describe('Thread signal-path user-message reconciliation', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'true';
     server.resetHandlers();
+    server.use(...baseHandlers());
   });
 
   it('keeps the same user-row DOM node when the data-user-message echo swaps the message id', async () => {
@@ -1446,7 +1547,7 @@ describe('Thread signal-path user-message reconciliation', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'echo reconciliation' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });

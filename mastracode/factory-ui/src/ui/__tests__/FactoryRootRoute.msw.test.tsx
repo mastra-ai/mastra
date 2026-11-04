@@ -27,6 +27,7 @@ const draft = {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/hello',
   },
+  modelScope: 'factory',
   model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
 };
 
@@ -53,10 +54,7 @@ describe('Factory root route', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Empty Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Empty Factory', repositories: [] }] }),
       ),
     );
 
@@ -85,10 +83,7 @@ describe('Factory root route', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     );
@@ -106,10 +101,7 @@ describe('Factory root route', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Pending Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Pending Factory', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
@@ -126,7 +118,7 @@ describe('Factory root route', () => {
     }
   });
 
-  it('continues from project management to Factory model setup', async () => {
+  it('continues from project management to account setup', async () => {
     seedOnboarding('project-management', null);
 
     server.use(
@@ -146,7 +138,7 @@ describe('Factory root route', () => {
 
     try {
       await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-      await screen.findByRole('heading', { name: 'Choose your model.' });
+      await screen.findByRole('heading', { name: 'Choose your setup.' });
     } finally {
       clearOnboarding();
     }
@@ -184,10 +176,7 @@ describe('Factory root route', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     );
@@ -212,10 +201,7 @@ describe('Factory root route', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Existing Factory', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
     );

@@ -1,4 +1,4 @@
-import { RequestContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -68,168 +68,6 @@ describe('TemporalRun', () => {
     expect(getHandle).toHaveBeenCalledWith('test-run');
     expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
     expect(handleResult).toHaveBeenCalledOnce();
-  });
-
-  it('defaults keyless resume to the only suspended step before signaling', async () => {
-    const suspended = {
-      status: 'suspended',
-      input: { value: 1 },
-      state: {},
-      steps: {},
-      suspended: [['approval']],
-    };
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const handleResult = vi
-      .fn()
-      .mockResolvedValue({ status: 'success', input: { value: 1 }, result: {}, state: {}, steps: {} });
-    const query = vi.fn().mockResolvedValue(suspended);
-    const getHandle = vi.fn().mockReturnValue({ signal, result: handleResult, query });
-    const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
-      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
-    );
-    const run = await workflow.createRun({ runId: 'test-run' });
-
-    await run.resume({ resumeData: { approved: true } });
-
-    expect(query).toHaveBeenCalledWith('mastra.status');
-    expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
-  });
-
-  it('ignores the pre-signal suspension and returns a fresh suspension from resume', async () => {
-    const suspended = (reason: string, suspendedAt: number) => ({
-      status: 'suspended',
-      input: { value: 1 },
-      state: {},
-      steps: {
-        approval: {
-          __temporalStepResult: true,
-          status: 'suspended',
-          payload: { value: 1 },
-          suspendPayload: { reason },
-          suspendedAt,
-        },
-      },
-      suspended: [['approval']],
-      suspendPayload: { approval: { reason } },
-    });
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const result = vi.fn(() => new Promise(() => {}));
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce(suspended('first review', 1))
-      .mockResolvedValueOnce(suspended('first review', 1))
-      .mockResolvedValue(suspended('second review', 2));
-    const getHandle = vi.fn().mockReturnValue({ signal, result, query });
-    const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
-      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
-    );
-    const run = await workflow.createRun({ runId: 'test-run' });
-
-    await expect(run.resume({ step: 'approval', resumeData: { approved: true } })).resolves.toMatchObject({
-      status: 'suspended',
-      suspended: [['approval']],
-      suspendPayload: { approval: { reason: 'second review' } },
-    });
-    expect(query).toHaveBeenCalledTimes(3);
-  });
-
-  it('validates label-only resume data against the labeled step schema', async () => {
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn().mockResolvedValue({
-      status: 'suspended',
-      steps: {
-        approval: {
-          status: 'suspended',
-          suspendedAt: 1,
-        },
-      },
-      suspended: [['approval']],
-      resumeLabels: { approveOrder: { stepId: 'approval' } },
-    });
-    const getHandle = vi.fn().mockReturnValue({ signal, query, result: vi.fn(() => new Promise(() => {})) });
-    const approval = createStep({
-      id: 'approval',
-      inputSchema: z.unknown(),
-      outputSchema: z.unknown(),
-      resumeSchema: z.object({ approved: z.boolean() }),
-      execute: async ({ inputData }) => inputData,
-    });
-    const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
-      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
-    )
-      .then(approval)
-      .commit();
-    const run = await workflow.createRun({ runId: 'test-run' });
-
-    await expect(run.resume({ label: 'approveOrder', resumeData: { approved: 'yes' } })).rejects.toThrow();
-    expect(signal).not.toHaveBeenCalled();
-  });
-
-  it('rejects inactive explicit resume targets before signaling', async () => {
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const query = vi.fn().mockResolvedValue({
-      status: 'suspended',
-      steps: { review: { status: 'suspended', suspendedAt: 1 } },
-      suspended: [['review']],
-    });
-    const getHandle = vi.fn().mockReturnValue({ signal, query });
-    const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
-      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
-    );
-    const run = await workflow.createRun({ runId: 'test-run' });
-
-    await expect(run.resumeAsync({ step: 'approval', resumeData: { approved: true } })).rejects.toThrow(
-      'Temporal workflow is not suspended at step "approval".',
-    );
-    expect(signal).not.toHaveBeenCalled();
-  });
-
-  it('throws when a started workflow status cannot be observed', async () => {
-    const queryError = new Error('Temporal service unavailable');
-    const result = vi.fn(() => new Promise(() => {}));
-    const query = vi.fn().mockRejectedValue(queryError);
-    const start = vi.fn().mockResolvedValue({ result, query });
-    const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown() },
-      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
-    );
-    const run = await workflow.createRun({ runId: 'test-run' });
-
-    await expect(run.start({ inputData: { value: 1 } })).rejects.toMatchObject({
-      name: 'TemporalWorkflowStatusUnknownError',
-      message: 'Unable to determine Temporal workflow status for run "test-run".',
-      cause: queryError,
-    });
-  });
-
-  it('throws after signaling when a resumed workflow status cannot be observed', async () => {
-    const suspended = {
-      status: 'suspended',
-      steps: { approval: { status: 'suspended', suspendedAt: 1 } },
-      suspended: [['approval']],
-    };
-    const queryError = new Error('Temporal service unavailable');
-    const signal = vi.fn().mockResolvedValue(undefined);
-    const result = vi.fn(() => new Promise(() => {}));
-    const query = vi.fn().mockResolvedValueOnce(suspended).mockRejectedValue(queryError);
-    const getHandle = vi.fn().mockReturnValue({ signal, result, query });
-    const workflow = createWorkflow(
-      { id: 'test-workflow', inputSchema: z.unknown(), outputSchema: z.unknown() },
-      { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
-    );
-    const run = await workflow.createRun({ runId: 'test-run' });
-
-    await expect(run.resume({ step: 'approval', resumeData: { approved: true } })).rejects.toMatchObject({
-      name: 'TemporalWorkflowStatusUnknownError',
-      message:
-        'Unable to determine Temporal workflow status for run "test-run" after sending a resume signal. The signal may have been delivered; do not retry resume() blindly.',
-      cause: queryError,
-    });
-    expect(signal).toHaveBeenCalledOnce();
   });
 
   it('returns suspended from start when the Temporal workflow stays open waiting for resume', async () => {
@@ -326,5 +164,258 @@ describe('TemporalRun', () => {
     expect(getHandle).toHaveBeenCalledWith('test-run');
     expect(run.workflowRunStatus).toBe('pending');
     expect(run.abortController.signal.aborted).toBe(false);
+  });
+
+  describe('lifecycle hooks', () => {
+    const steps = {
+      increment: { status: 'success', payload: { value: 1 }, output: { ok: true }, startedAt: 1, endedAt: 2 },
+    };
+    const workerSteps = {
+      increment: {
+        __temporalStepResult: true,
+        status: 'success',
+        payload: { value: 1 },
+        output: { ok: true },
+        startedAt: 1,
+        endedAt: 2,
+      },
+    };
+    const executionResult = (result: unknown) => ({
+      status: 'success',
+      input: { value: 1 },
+      result,
+      state: {},
+      steps: workerSteps,
+    });
+
+    function createHookedWorkflow(
+      options: Record<string, unknown>,
+      result: () => Promise<unknown>,
+      start = vi.fn().mockImplementation(async () => ({ result })),
+    ) {
+      const workflow = createWorkflow(
+        { id: 'hooked-workflow', inputSchema: z.object({ value: z.number() }), outputSchema: z.unknown(), options },
+        { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+      );
+      return { workflow, start };
+    }
+
+    it('runs onStart before dispatch and onFinish after a successful run', async () => {
+      const order: string[] = [];
+      const onStart = vi.fn(async () => {
+        order.push('onStart');
+      });
+      const onFinish = vi.fn(async () => {
+        order.push('onFinish');
+      });
+      const onError = vi.fn();
+      const start = vi.fn().mockImplementation(async () => {
+        order.push('dispatch');
+        return { result: async () => executionResult({ ok: true }) };
+      });
+      const { workflow } = createHookedWorkflow({ onStart, onFinish, onError }, async () => ({}), start);
+      const run = await workflow.createRun({ runId: 'run-1', resourceId: 'resource-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result).toEqual({ status: 'success', input: { value: 1 }, result: { ok: true }, state: {}, steps });
+      expect(order).toEqual(['onStart', 'dispatch', 'onFinish']);
+      expect(onStart).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'run-1', workflowId: 'hooked-workflow', resourceId: 'resource-1' }),
+      );
+      expect((onStart.mock.calls[0] as any)[0].getInitData()).toEqual({ value: 1 });
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'success', result: { ok: true }, steps, runId: 'run-1' }),
+      );
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('runs onFinish and onError when the Temporal workflow fails', async () => {
+      const failure = new Error('activity failed');
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const { workflow } = createHookedWorkflow({ onFinish, onError }, () => Promise.reject(failure));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('runs onError when dispatching to Temporal fails', async () => {
+      const failure = new Error('Temporal service unavailable');
+      const onError = vi.fn();
+      const start = vi.fn().mockRejectedValue(failure);
+      const { workflow } = createHookedWorkflow({ onError }, async () => ({}), start);
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.status).toBe('failed');
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('runs terminal hooks when a resumed Temporal workflow fails', async () => {
+      const failure = new Error('activity failed after resume');
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const signal = vi.fn().mockResolvedValue(undefined);
+      const getHandle = vi.fn().mockReturnValue({ signal, result: vi.fn().mockRejectedValue(failure) });
+      const workflow = createWorkflow(
+        {
+          id: 'hooked-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.unknown(),
+          options: { onFinish, onError },
+        },
+        { client: { workflow: { getHandle } } as unknown as Client, taskQueue: 'test-queue' },
+      );
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
+
+      expect(result.status).toBe('failed');
+      expect(signal).toHaveBeenCalledWith('mastra.resume', { step: 'approval', resumeData: { approved: true } });
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('sends request context values set by onStart to Temporal', async () => {
+      const onStart = vi.fn(({ requestContext }: { requestContext: RequestContext }) => {
+        requestContext.set('tenant', 'acme');
+      });
+      const { workflow, start } = createHookedWorkflow({ onStart }, async () => executionResult({}));
+
+      await (await workflow.createRun({ runId: 'run-1' })).start({ inputData: { value: 1 } });
+      await (await workflow.createRun({ runId: 'run-2' })).startAsync({ inputData: { value: 1 } });
+
+      expect(start).toHaveBeenCalledTimes(2);
+      for (const [, options] of start.mock.calls) {
+        expect(options.args[0].requestContext).toEqual({ tenant: 'acme' });
+      }
+    });
+
+    it('runs terminal hooks and rejects when startAsync dispatch fails', async () => {
+      const failure = new Error('Temporal service unavailable');
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const start = vi.fn().mockRejectedValue(failure);
+      const { workflow } = createHookedWorkflow({ onFinish, onError }, async () => ({}), start);
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toThrow(failure);
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
+    });
+
+    it('rejects start without dispatching when onStart throws', async () => {
+      const gate = new Error('quota exceeded');
+      const onFinish = vi.fn();
+      const { workflow, start } = createHookedWorkflow(
+        {
+          onStart: () => {
+            throw gate;
+          },
+          onFinish,
+        },
+        async () => ({}),
+      );
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.start({ inputData: { value: 1 } })).rejects.toThrow(gate);
+      await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toThrow(gate);
+      expect(start).not.toHaveBeenCalled();
+      expect(onFinish).not.toHaveBeenCalled();
+    });
+
+    it('does not fail the run when onFinish or onError throw', async () => {
+      const onFinish = vi.fn().mockRejectedValue(new Error('onFinish broke'));
+      const onError = vi.fn().mockRejectedValue(new Error('onError broke'));
+      const { workflow } = createHookedWorkflow({ onFinish, onError }, () => Promise.reject(new Error('boom')));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledOnce();
+    });
+
+    it('preserves serialized step results even when payload and output are omitted', async () => {
+      const serializedSteps = {
+        voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
+      };
+      const normalizedSteps = {
+        voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
+      };
+      const onFinish = vi.fn();
+      const { workflow } = createHookedWorkflow({ onFinish }, async () => ({
+        status: 'success',
+        input: { value: 1 },
+        result: undefined,
+        state: {},
+        steps: serializedSteps,
+      }));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      const result = await run.start({ inputData: { value: 1 } });
+
+      expect(result.steps).toEqual(normalizedSteps);
+      expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ steps: normalizedSteps }));
+    });
+
+    it('preserves serialized step results from startAsync background hooks when payload and output are omitted', async () => {
+      let resolveResult!: (value: unknown) => void;
+      const serializedSteps = {
+        voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
+      };
+      const normalizedSteps = {
+        voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
+      };
+      const onFinish = vi.fn();
+      const { workflow } = createHookedWorkflow({ onFinish }, () => new Promise(resolve => (resolveResult = resolve)));
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.startAsync({ inputData: { value: 1 } })).resolves.toEqual({ runId: 'run-1' });
+      resolveResult({ status: 'success', input: { value: 1 }, result: undefined, state: {}, steps: serializedSteps });
+
+      await vi.waitFor(() =>
+        expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ steps: normalizedSteps })),
+      );
+    });
+
+    it('runs onFinish in the background after startAsync returns', async () => {
+      let resolveResult!: (value: unknown) => void;
+      const onStart = vi.fn();
+      const onFinish = vi.fn();
+      const { workflow, start } = createHookedWorkflow(
+        { onStart, onFinish },
+        () => new Promise(resolve => (resolveResult = resolve)),
+      );
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await expect(run.startAsync({ inputData: { value: 1 } })).resolves.toEqual({ runId: 'run-1' });
+      expect(onStart).toHaveBeenCalledOnce();
+      expect(start).toHaveBeenCalledOnce();
+      expect(onFinish).not.toHaveBeenCalled();
+
+      resolveResult(executionResult({ done: true }));
+      await vi.waitFor(() =>
+        expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'success', result: { done: true } })),
+      );
+    });
+
+    it('does not wait for the result in startAsync when no terminal hooks are registered', async () => {
+      const result = vi.fn(() => new Promise(() => {}));
+      const { workflow } = createHookedWorkflow({}, result);
+      const run = await workflow.createRun({ runId: 'run-1' });
+
+      await run.startAsync({ inputData: { value: 1 } });
+
+      expect(result).not.toHaveBeenCalled();
+    });
   });
 });

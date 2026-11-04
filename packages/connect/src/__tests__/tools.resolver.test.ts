@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraConnectError } from '../errors.js';
-import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
+import { PROVIDERS } from '../registry.js';
+import type { ProviderRegistration, ProxyProviderRegistration } from '../registry.js';
 import { tools as connect } from '../tools.js';
 import type { ToolsOptions as ConnectOptions } from '../tools.js';
 import { applyToolFilter } from '../toolset.js';

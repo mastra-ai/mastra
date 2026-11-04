@@ -106,7 +106,7 @@ describe('AgentController thread titles', () => {
 
     const title = await controller.generateThreadTitle({
       threadId,
-      resourceId: session.identity.getResourceId(),
+      sessionId: session.identity.getId(),
     });
 
     expect(title).toBe('Log parser rewrite');
@@ -118,7 +118,7 @@ describe('AgentController thread titles', () => {
     const { controller, session, memory } = await startNamedThread();
     const threadId = session.thread.getId()!;
     await session.thread.rename({ title: 'Wrong name' });
-    await controller.deleteSession({ resourceId: session.identity.getResourceId() });
+    await controller.deleteSession({ sessionId: session.identity.getId() });
 
     expect(await controller.generateThreadTitle({ threadId })).toBe('Log parser rewrite');
     expect((await memory.getThreadById({ threadId }))?.title).toBe('Log parser rewrite');
@@ -127,7 +127,7 @@ describe('AgentController thread titles', () => {
   it('names a thread under the identity the caller supplies', async () => {
     const { controller, session, agent } = await startNamedThread();
     const threadId = session.thread.getId()!;
-    await controller.deleteSession({ resourceId: session.identity.getResourceId() });
+    await controller.deleteSession({ sessionId: session.identity.getId() });
     const namer = vi.spyOn(agent, 'generateTitleFromUserMessage');
 
     const requestContext = new RequestContext();

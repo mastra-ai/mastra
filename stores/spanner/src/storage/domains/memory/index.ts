@@ -17,6 +17,9 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   RunFence,
@@ -28,6 +31,10 @@ import type {
   StorageListThreadsOutput,
   StorageMetadataFilter,
   CreateIndexOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -88,6 +95,15 @@ export class MemorySpanner extends MemoryStorage {
 
   static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
 
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays NULL until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   constructor(config: SpannerDomainConfig) {
     super();
     const { database, indexes, skipDefaultIndexes, initMode } = resolveSpannerConfig(config);
@@ -139,6 +155,22 @@ export class MemorySpanner extends MemoryStorage {
   }
 
   /** Removes every row from threads/messages/resources and run fence tables. Intended for tests. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemorySpanner.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (target, cutoff, limit) =>
+        this.db.pruneRunRows({ tableName: target.table, column: target.column, cutoff: cutoff as number, limit }),
+    });
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await this.db.clearTable({ tableName: TABLE_MESSAGES });
     await this.db.clearTable({ tableName: TABLE_THREADS });

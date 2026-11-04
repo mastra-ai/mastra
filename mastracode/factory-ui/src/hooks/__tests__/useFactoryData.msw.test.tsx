@@ -61,7 +61,7 @@ describe('useProjectIssuesQuery', () => {
   });
 
   it('given more pages, when fetchNextPage is called, then pages accumulate in order', async () => {
-    const pageTwoIssue: GithubIssue = { ...issues[0]!, number: 13, title: 'Page two issue' };
+    const pageTwoIssue: GithubIssue = { ...issues[0], number: 13, title: 'Page two issue' };
     const requestedPages: string[] = [];
     server.use(
       http.get(ISSUES_URL, ({ request }) => {
@@ -106,7 +106,7 @@ describe('useProjectIssuesQuery', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       let hits = 0;
-      const freshIssue: GithubIssue = { ...issues[0]!, number: 99, title: 'Fresh intake' };
+      const freshIssue: GithubIssue = { ...issues[0], number: 99, title: 'Fresh intake' };
       server.use(
         http.get(ISSUES_URL, () => {
           hits += 1;
@@ -197,7 +197,7 @@ describe('useProjectPullRequestsQuery', () => {
 describe('intake feeds across linked repositories', () => {
   const SECOND_ID = 'github-project-2';
   const SECOND_ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${SECOND_ID}/issues`;
-  const secondIssue: GithubIssue = { ...issues[0]!, number: 7, title: 'Second repository issue', repositoryId: 2 };
+  const secondIssue: GithubIssue = { ...issues[0], number: 7, title: 'Second repository issue', repositoryId: 2 };
 
   it('given two linked repositories, when the feed resolves, then it carries issues from both', async () => {
     server.use(
@@ -219,7 +219,7 @@ describe('intake feeds across linked repositories', () => {
         requests.push(`first:${page}`);
         return page === '1'
           ? HttpResponse.json({ issues, nextPage: 2 })
-          : HttpResponse.json({ issues: [{ ...issues[0]!, number: 13 }], nextPage: null });
+          : HttpResponse.json({ issues: [{ ...issues[0], number: 13 }], nextPage: null });
       }),
       http.get(SECOND_ISSUES_URL, ({ request }) => {
         requests.push(`second:${new URL(request.url).searchParams.get('page')}`);

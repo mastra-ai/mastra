@@ -21,7 +21,7 @@ export function SidebarHeader({ className, children, collapsedLogo, actions, ...
     <header
       data-slot="sidebar-header"
       className={cn(
-        'flex h-header-default shrink-0 items-center gap-2',
+        'flex h-header-default shrink-0 items-center gap-0.5',
         collapsed ? 'px-1' : 'pr-2 pl-3.5',
         collapsed && actions && 'h-auto flex-col gap-3 py-3',
         !collapsed && !isMobile && 'w-[calc(var(--sidebar-width)-1rem)]',
@@ -34,7 +34,7 @@ export function SidebarHeader({ className, children, collapsedLogo, actions, ...
           <span
             className={cn(
               hold,
-              'grid place-items-center transition-opacity duration-normal [--sidebar-hold-opacity:1] group-focus-within/collapsed-logo:opacity-0 group-hover/sidebar:opacity-0 motion-reduce:transition-none',
+              'grid place-items-center [--sidebar-hold-opacity:1] group-focus-within/collapsed-logo:opacity-0 group-hover/sidebar:opacity-0',
             )}
           >
             {collapsedLogo}
@@ -43,7 +43,7 @@ export function SidebarHeader({ className, children, collapsedLogo, actions, ...
             <div
               className={cn(
                 hold,
-                'absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-normal [--sidebar-hold-opacity:0] group-hover/sidebar:opacity-100 focus-within:opacity-100 motion-reduce:transition-none',
+                'absolute inset-0 grid place-items-center opacity-0 [--sidebar-hold-opacity:0] group-hover/sidebar:opacity-100 focus-within:opacity-100',
               )}
             >
               <SidebarTrigger />

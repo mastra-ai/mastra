@@ -120,6 +120,26 @@ function assertPositiveLimit(limit: number): void {
   }
 }
 
+/**
+ * Parses JSON object/array text in the table's `jsonb` columns only. A `text` column, such as a
+ * span preview of `{}`, must read back as the stored string.
+ */
+function parseJsonColumns(tableName: TABLE_NAMES, row: Record<string, unknown>): Record<string, unknown> {
+  const schema = TABLE_SCHEMAS[tableName];
+  return Object.fromEntries(
+    Object.entries(row).map(([k, v]) => {
+      if (schema[k]?.type !== 'jsonb' || typeof v !== 'string' || !(v.startsWith('{') || v.startsWith('['))) {
+        return [k, v];
+      }
+      try {
+        return [k, JSON.parse(v)];
+      } catch {
+        return [k, v];
+      }
+    }),
+  );
+}
+
 export class LibSQLDB extends MastraBase {
   private client: Client;
   maxRetries: number;
@@ -423,6 +443,55 @@ export class LibSQLDB extends MastraBase {
   }
 
   /**
+   * Updates multiple records in one write batch, with the same retry behavior as
+   * {@link batchUpdate}. Returns, in input order, whether each update changed a row,
+   * so callers can put extra conditions in `keys` (for example `{ endedAt: null }`).
+   */
+  public async batchUpdateReportingChanges({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<boolean[]> {
+    return this.executeWriteOperationWithRetry(async () => {
+      const changed = updates.map(() => false);
+      const statements: ReturnType<typeof prepareUpdateStatement>[] = [];
+      const statementIndexes: number[] = [];
+      for (const [index, { keys, data }] of updates.entries()) {
+        // Filter out columns that don't exist in the actual database table
+        const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+        if (Object.keys(filteredData).length === 0) continue;
+        statements.push(prepareUpdateStatement({ tableName, updates: filteredData, keys }));
+        statementIndexes.push(index);
+      }
+      if (statements.length === 0) return changed;
+
+      const results = await withClientWriteLock(this.client, () => this.client.batch(statements, 'write'));
+      results.forEach((result, i) => {
+        const index = statementIndexes[i];
+        if (index !== undefined) changed[index] = result.rowsAffected > 0;
+      });
+      return changed;
+    }, `batch update in table ${tableName}`).catch(error => {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE_REPORTING_CHANGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    });
+  }
+
+  /**
    * Internal batch delete implementation without retry logic.
    * Each record can be deleted based on single or composite keys.
    */
@@ -515,7 +584,7 @@ export class LibSQLDB extends MastraBase {
   /**
    * Selects a single record from the specified table by key(s).
    * Returns the most recently created record if multiple matches exist.
-   * Automatically parses JSON string values back to objects/arrays.
+   * Parses `jsonb` column values back to objects/arrays.
    *
    * @typeParam R - The expected return type of the record
    * @param args - The select arguments
@@ -541,21 +610,7 @@ export class LibSQLDB extends MastraBase {
       return null;
     }
 
-    const row = result.rows[0];
-    // Checks whether the string looks like a JSON object ({}) or array ([])
-    // If the string starts with { or [, it assumes it's JSON and parses it
-    // Otherwise, it just returns, preventing unintended number conversions
-    const parsed = Object.fromEntries(
-      Object.entries(row || {}).map(([k, v]) => {
-        try {
-          return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
-        } catch {
-          return [k, v];
-        }
-      }),
-    );
-
-    return parsed as R;
+    return parseJsonColumns(tableName, result.rows[0] ?? {}) as R;
   }
 
   /**
@@ -612,18 +667,7 @@ export class LibSQLDB extends MastraBase {
       args: [...(whereClause?.args ?? []), ...(args ?? [])],
     });
 
-    // Parse JSON columns (same as select())
-    return (result.rows ?? []).map(row => {
-      return Object.fromEntries(
-        Object.entries(row || {}).map(([k, v]) => {
-          try {
-            return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
-          } catch {
-            return [k, v];
-          }
-        }),
-      );
-    }) as R[];
+    return (result.rows ?? []).map(row => parseJsonColumns(tableName, row ?? {})) as R[];
   }
 
   /**
@@ -643,7 +687,7 @@ export class LibSQLDB extends MastraBase {
   }): Promise<number> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
-    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? `${whereClause.sql}` : ''}`;
+    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? whereClause.sql : ''}`;
 
     const result = await this.client.execute({
       sql: statement,

@@ -229,9 +229,8 @@ export class MultiStepProgressComponent extends Container {
       return chalk.hex(mastra.green)(bar); // Mastra green
     } else if (percent >= 75) {
       return chalk.hex(mastra.yellow)(bar); // Mastra yellow
-    } else {
-      return chalk.hex(mastra.blue)(bar); // Mastra blue
     }
+    return chalk.hex(mastra.blue)(bar); // Mastra blue
   }
   private getSpinner(): string {
     const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];

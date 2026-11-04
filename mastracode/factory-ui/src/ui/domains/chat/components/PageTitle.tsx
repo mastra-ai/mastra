@@ -26,7 +26,7 @@ export function PageTitle() {
     sessionId?: string;
     threadId?: string;
   }>();
-  const { resourceId, projectPath, baseUrl, resourceReady } = useChatSessionContext();
+  const { sessionId: chatSessionId, threadTags, baseUrl, resourceReady } = useChatSessionContext();
   const queryClient = useQueryClient();
   const routeSessionId = sessionId ?? threadId;
 
@@ -34,8 +34,8 @@ export function PageTitle() {
 
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId: chatSessionId,
+    threadTags,
     baseUrl,
     enabled: resourceReady,
   });

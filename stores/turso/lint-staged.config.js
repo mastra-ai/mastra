@@ -1,5 +1,5 @@
 export default {
-  '*.{ts,tsx}': ['eslint --fix --max-warnings=0', 'prettier --write'],
-  '*.{js,jsx}': ['eslint --fix', 'prettier --write'],
+  '*.{ts,tsx}': ['oxlint --type-aware --fix --deny-warnings', 'prettier --write'],
+  '*.{js,jsx}': ['oxlint --type-aware --fix', 'prettier --write'],
   '*.{json,md,yml,yaml}': ['prettier --write'],
 };

@@ -1,7 +1,10 @@
-import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 
-import { AuditStorage, clampAuditLimit } from './base.js';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgFactoryStorage } from '@mastra/pg';
+import { describe, expect, it, onTestFinished } from 'vitest';
+
+import { AuditStorage, auditCursorAt, clampAuditLimit, encodeAuditCursor } from './base.js';
 
 describe('clampAuditLimit', () => {
   it('defaults non-finite values and truncates fractions', () => {
@@ -105,5 +108,92 @@ describe('AuditStorage', () => {
     const byActor = await storage.list({ orgId: 'org1', actorId: 'agent:thread-1' });
     expect(byActor.events).toHaveLength(1);
     expect(byActor.events[0]!.actorType).toBe('agent');
+  });
+});
+
+// Set FACTORY_TEST_POSTGRES_URL to a disposable database to also page forward on PostgreSQL,
+// where `id` is a real UUID column and cursor ids must be valid UUIDs.
+const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('AuditStorage paging forward on %s', backend => {
+  async function makeBackendStorage() {
+    const storage =
+      backend === 'postgres'
+        ? new PgFactoryStorage({ id: 'audit-test', connectionString: postgresUrl! })
+        : new LibSQLFactoryStorage({ id: 'audit-test', url: ':memory:' });
+    const audit = storage.registerDomain(new AuditStorage());
+    await storage.init();
+    onTestFinished(() => storage.close());
+    // The Postgres database is shared across runs, so every test gets its own org.
+    return { audit, orgId: `org-${randomUUID()}` };
+  }
+
+  it('pages forward oldest-first without gaps or repeats, even when events share a timestamp', async () => {
+    const { audit: storage, orgId } = await makeBackendStorage();
+    const base = new Date('2026-10-21T12:00:00.000Z').getTime();
+    // Three events land in the same millisecond, so only the id orders them.
+    const times = [0, 1000, 1000, 1000, 2000, 3000];
+    const recorded = [];
+    for (const [i, offset] of times.entries()) {
+      recorded.push(
+        await storage.record({
+          orgId,
+          actorId: 'user:alice',
+          action: `action.${i}`,
+          targets: [],
+          occurredAt: new Date(base + offset),
+        }),
+      );
+    }
+    const inOrder = [...recorded].sort(
+      (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || (a.id < b.id ? -1 : 1),
+    );
+
+    const seen: string[] = [];
+    let after = encodeAuditCursor(inOrder[0]!);
+    for (;;) {
+      const page = await storage.list({ orgId, limit: 2, after });
+      seen.push(...page.events.map(e => e.id));
+      if (!page.nextCursor) break;
+      after = page.nextCursor;
+    }
+
+    expect(seen).toEqual(inOrder.slice(1).map(e => e.id));
+  });
+
+  it('pages forward from a point in time, skipping everything recorded at or before it', async () => {
+    const { audit: storage, orgId } = await makeBackendStorage();
+    const at = new Date('2026-10-21T12:00:00.000Z');
+
+    expect((await storage.list({ orgId, after: auditCursorAt(at) })).events).toEqual([]);
+
+    await storage.record({
+      orgId,
+      actorId: 'user:alice',
+      action: 'a.before',
+      targets: [],
+      occurredAt: new Date(at.getTime() - 1),
+    });
+    await storage.record({ orgId, actorId: 'user:alice', action: 'a.at', targets: [], occurredAt: at });
+    await storage.record({
+      orgId,
+      actorId: 'user:alice',
+      action: 'a.after',
+      targets: [],
+      occurredAt: new Date(at.getTime() + 1),
+    });
+    expect((await storage.list({ orgId, after: auditCursorAt(at) })).events.map(e => e.action)).toEqual(['a.after']);
+  });
+
+  it('refuses to page both ways at once, or forward from an unreadable cursor', async () => {
+    const { audit: storage, orgId } = await makeBackendStorage();
+    const row = await storage.record({ orgId, actorId: 'user:alice', action: 'a.one', targets: [] });
+    const cursor = encodeAuditCursor(row);
+
+    await expect(storage.list({ orgId, before: cursor, after: cursor })).rejects.toThrow(/not both/);
+    await expect(storage.list({ orgId, after: 'not-a-cursor' })).rejects.toThrow(/Invalid audit cursor/);
+    // A well-formed cursor whose id isn't an audit row id would make Postgres reject the query.
+    await expect(storage.list({ orgId, after: `${row.occurredAt.toISOString()}_row-7` })).rejects.toThrow(
+      /Invalid audit cursor/,
+    );
   });
 });

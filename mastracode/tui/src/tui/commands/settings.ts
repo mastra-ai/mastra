@@ -195,6 +195,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
     experimentalCrossAgentSignals: globalSettings.signals.experimentalCrossAgentSignals,
     experimentalScheduleTools: globalSettings.signals.experimentalScheduleTools,
+    experimentalKnowledge: globalSettings.signals.experimentalKnowledge,
     experimentalAgent: resolveExperimentalAgentSetting(globalSettings.experimentalAgent),
     backgroundToolsEnabled: globalSettings.backgroundTools?.enabled ?? false,
     // Display an explicit provider choice as Auto while its API key is missing,
@@ -275,6 +276,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         current.signals.experimentalScheduleTools = enabled;
         saveSettings(current);
         ctx.showInfo(`Experimental schedule tools: ${enabled ? 'on' : 'off'} (restart required)`);
+      },
+      onExperimentalKnowledgeChange: enabled => {
+        const current = loadSettings();
+        current.signals.experimentalKnowledge = enabled;
+        saveSettings(current);
+        ctx.showInfo(`Experimental Knowledge: ${enabled ? 'on' : 'off'} (restart required)`);
       },
       onExperimentalAgentChange: (agent: ExperimentalAgent | null) => {
         const current = loadSettings();

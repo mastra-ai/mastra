@@ -1,5 +1,4 @@
 import {
-  ApplicationFailure,
   condition,
   defineQuery,
   defineSignal,
@@ -18,7 +17,6 @@ export class TemporalExecutionEngine {
   activityHandle;
   resumePayloads = new Map();
   suspendedSteps = new Set();
-  resumeLabels = new Map();
   currentResult;
   initData;
   initialState;
@@ -30,7 +28,7 @@ export class TemporalExecutionEngine {
       ...(params?.options?.retry !== undefined && { retry: params.options.retry }),
     });
     setHandler(resumeSignal, payload => {
-      const id = this.resumeTarget(payload);
+      const id = [...this.suspendedSteps].find(stepId => payload?.step === stepId || payload?.label === stepId);
       if (id !== undefined && !this.resumePayloads.has(id)) {
         this.resumePayloads.set(id, payload);
       }
@@ -45,6 +43,7 @@ export class TemporalExecutionEngine {
       ...(params.requestContext !== undefined && { requestContext: params.requestContext }),
       ...(params.runId !== undefined && { runId: params.runId }),
       ...(params.resourceId !== undefined && { resourceId: params.resourceId }),
+      ...(params.validateInputs !== undefined && { validateInputs: params.validateInputs }),
       workflowId: params.workflowId,
     };
     let result = params.input;
@@ -70,39 +69,6 @@ export class TemporalExecutionEngine {
     return this.currentResult;
   }
 
-  resumeTarget(payload) {
-    if (payload?.step !== undefined) {
-      return this.suspendedSteps.has(payload.step) ? payload.step : undefined;
-    }
-    if (payload?.label !== undefined) {
-      const labeledStep = this.resumeLabels.get(payload.label);
-      return labeledStep !== undefined && this.suspendedSteps.has(labeledStep) ? labeledStep : undefined;
-    }
-    return this.suspendedSteps.size === 1 ? [...this.suspendedSteps][0] : undefined;
-  }
-
-  updateSuspendedResult(stepResults) {
-    const suspended = [...this.suspendedSteps].map(id => [id]);
-    this.currentResult = {
-      status: 'suspended',
-      input: this.initData,
-      state: this.initialState,
-      steps: stepResults,
-      suspended,
-      suspendPayload: Object.fromEntries(suspended.map(([id]) => [id, stepResults[id]?.suspendPayload])),
-      resumeLabels: Object.fromEntries([...this.resumeLabels].map(([label, stepId]) => [label, { stepId }])),
-    };
-  }
-
-  updateRunningResult(stepResults) {
-    this.currentResult = {
-      status: 'running',
-      input: this.initData,
-      state: this.initialState,
-      steps: stepResults,
-    };
-  }
-
   // Record steps in the core StepResult shape ({ status, payload, output, startedAt, endedAt }).
   async recordStep(stepResults, id, payload, run) {
     const startedAt = Date.now();
@@ -119,30 +85,29 @@ export class TemporalExecutionEngine {
         suspendPayload,
         suspendedAt: Date.now(),
       };
-      for (const [label, target] of Object.entries(output.resumeLabels ?? {})) {
-        if (target?.stepId === id) {
-          this.resumeLabels.set(label, id);
-        }
-      }
+      this.currentResult = {
+        status: 'suspended',
+        input: this.initData,
+        state: this.initialState,
+        steps: stepResults,
+        suspended: [[id]],
+        suspendPayload: { [id]: suspendPayload },
+      };
+
       this.suspendedSteps.add(id);
-      this.updateSuspendedResult(stepResults);
       try {
         await condition(() => this.resumePayloads.has(id));
         resumeData = this.resumePayloads.get(id)?.resumeData;
         this.resumePayloads.delete(id);
       } finally {
         this.suspendedSteps.delete(id);
-        for (const [label, stepId] of this.resumeLabels.entries()) {
-          if (stepId === id) {
-            this.resumeLabels.delete(label);
-          }
-        }
       }
-      if (this.suspendedSteps.size > 0) {
-        this.updateSuspendedResult(stepResults);
-      } else {
-        this.updateRunningResult(stepResults);
-      }
+      this.currentResult = {
+        status: 'running',
+        input: this.initData,
+        state: this.initialState,
+        steps: stepResults,
+      };
       output = await run(resumeData);
     }
 
@@ -156,11 +121,12 @@ export class TemporalExecutionEngine {
       startedAt,
       endedAt: Date.now(),
     };
-    if (this.suspendedSteps.size > 0) {
-      this.updateSuspendedResult(stepResults);
-    } else {
-      this.updateRunningResult(stepResults);
-    }
+    this.currentResult = {
+      status: 'running',
+      input: this.initData,
+      state: this.initialState,
+      steps: stepResults,
+    };
     return output;
   }
 
@@ -184,15 +150,10 @@ export class TemporalExecutionEngine {
 
       case 'childWorkflow': {
         log.info('childWorkflow', { workflowType: entry.workflowType });
-        return this.recordStep(stepResults, entry.workflowType, inputData, async () => {
+        return this.recordStep(stepResults, entry.id ?? entry.workflowType, inputData, async () => {
           const childResult = await executeChild(entry.workflowType, {
             args: [{ inputData, ...this.executionContext }],
           });
-          if (childResult?.status === 'suspended' || childResult?.__temporalSuspension === true) {
-            throw ApplicationFailure.nonRetryable(
-              'Temporal workflows do not support suspending inside child workflows yet.',
-            );
-          }
           return childResult?.result ?? childResult;
         });
       }
@@ -311,15 +272,9 @@ export class TemporalExecutionEngine {
             if (i >= items.length) {
               break;
             }
-            const itemResult = await this.activityHandle[entry.step.id](
+            results[i] = await this.activityHandle[entry.step.id](
               this.activityParams(items[i], { initData: this.initData }),
             );
-            if (itemResult?.__temporalSuspension === true) {
-              throw ApplicationFailure.nonRetryable(
-                'Temporal workflows do not support suspending inside foreach steps yet.',
-              );
-            }
-            results[i] = itemResult;
           }
         });
 
@@ -354,6 +309,8 @@ export function createWorkflow(workflowId, options) {
       runId: startArgs?.runId,
       resourceId: startArgs?.resourceId,
       requestContext: startArgs?.requestContext,
+      // A child Workflow gets its parent's setting in startArgs, as nested workflows do in Mastra.
+      validateInputs: startArgs?.validateInputs ?? options?.validateInputs ?? true,
       graph: {
         id: workflowId,
         steps: stepFlow,
@@ -373,10 +330,11 @@ export function createWorkflow(workflowId, options) {
       });
       return workflow;
     },
-    thenWorkflow(workflowType) {
+    thenWorkflow(workflowType, id) {
       stepFlow.push({
         type: 'childWorkflow',
         workflowType,
+        id,
       });
       return workflow;
     },

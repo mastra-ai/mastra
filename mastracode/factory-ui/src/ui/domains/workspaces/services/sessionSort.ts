@@ -1,74 +1,43 @@
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
-import type { FactoryUserSession } from './user-sessions';
+import type { SessionActivityStatus, SessionListRow } from './sessionRows';
 
-export const WORKSPACE_SESSION_SORTS = ['activity', 'updated', 'created'] as const;
-export type WorkspaceSessionSort = (typeof WORKSPACE_SESSION_SORTS)[number];
-export const USER_SESSION_SORTS = ['updated', 'created'] as const;
-export type UserSessionSort = (typeof USER_SESSION_SORTS)[number];
+export const SESSION_SORTS = ['activity', 'updated', 'created'] as const;
+export type SessionSort = (typeof SESSION_SORTS)[number];
 
-export const DEFAULT_WORKSPACE_SESSION_SORT: WorkspaceSessionSort = 'activity';
-export const DEFAULT_USER_SESSION_SORT: UserSessionSort = 'updated';
+export const DEFAULT_SESSION_SORT: SessionSort = 'activity';
 
-const SESSION_SORT_LABELS: Record<WorkspaceSessionSort | UserSessionSort, string> = {
+const SESSION_SORT_LABELS: Record<SessionSort, string> = {
   activity: 'Activity',
   updated: 'Last updated',
   created: 'Last created',
 };
 
-export const WORKSPACE_SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<WorkspaceSessionSort>[] =
-  WORKSPACE_SESSION_SORTS.map(value => ({ value, label: SESSION_SORT_LABELS[value] }));
+export const SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<SessionSort>[] = SESSION_SORTS.map(value => ({
+  value,
+  label: SESSION_SORT_LABELS[value],
+}));
 
-export const USER_SESSION_SORT_OPTIONS: readonly DropdownMenuRadioOption<UserSessionSort>[] = USER_SESSION_SORTS.map(
-  value => ({ value, label: SESSION_SORT_LABELS[value] }),
-);
-
-export function isWorkspaceSessionSort(value: unknown): value is WorkspaceSessionSort {
-  return WORKSPACE_SESSION_SORTS.some(sort => sort === value);
+export function isSessionSort(value: unknown): value is SessionSort {
+  return SESSION_SORTS.some(sort => sort === value);
 }
 
-export function isUserSessionSort(value: unknown): value is UserSessionSort {
-  return USER_SESSION_SORTS.some(sort => sort === value);
-}
+const ACTIVITY_RANK: Record<SessionActivityStatus, number> = {
+  initializing: 0,
+  working: 0,
+  waiting: 0,
+  idle: 1,
+  done: 2,
+};
 
-export interface SortableWorkspaceRow {
-  pinned: boolean;
-  initializing: boolean;
-  running: boolean;
-  attention: boolean;
-  settled: boolean;
-  createdAt: string;
-  updatedAt: string;
-  workspace: { sessionId: string };
-}
-
-function watchRank(row: SortableWorkspaceRow): number {
-  if (row.initializing || row.running || row.attention) return 0;
-  return row.settled ? 2 : 1;
-}
-
-const WORKSPACE_ROW_ORDER: Record<WorkspaceSessionSort, (a: SortableWorkspaceRow, b: SortableWorkspaceRow) => number> =
-  {
-    activity: (a, b) => watchRank(a) - watchRank(b) || b.createdAt.localeCompare(a.createdAt),
-    updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
-    created: (a, b) => b.createdAt.localeCompare(a.createdAt),
-  };
-
-export function compareWorkspaceRows(sort: WorkspaceSessionSort) {
-  const bySort = WORKSPACE_ROW_ORDER[sort];
-  return (a: SortableWorkspaceRow, b: SortableWorkspaceRow) =>
-    Number(b.pinned) - Number(a.pinned) || bySort(a, b) || b.workspace.sessionId.localeCompare(a.workspace.sessionId);
-}
-
-const USER_SESSION_ORDER: Record<UserSessionSort, (a: FactoryUserSession, b: FactoryUserSession) => number> = {
+const SESSION_ROW_ORDER: Record<SessionSort, (a: SessionListRow, b: SessionListRow) => number> = {
+  activity: (a, b) => ACTIVITY_RANK[a.status] - ACTIVITY_RANK[b.status] || b.createdAt.localeCompare(a.createdAt),
   updated: (a, b) => b.updatedAt.localeCompare(a.updatedAt),
   created: (a, b) => b.createdAt.localeCompare(a.createdAt),
 };
 
-export function compareUserSessions(sort: UserSessionSort, pinnedSessions: ReadonlySet<string>) {
-  const bySort = USER_SESSION_ORDER[sort];
-  return (a: FactoryUserSession, b: FactoryUserSession) =>
-    Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
-    bySort(a, b) ||
-    b.sessionId.localeCompare(a.sessionId);
+export function compareSessionRows(sort: SessionSort) {
+  const bySort = SESSION_ROW_ORDER[sort];
+  return (a: SessionListRow, b: SessionListRow) =>
+    Number(b.pinned) - Number(a.pinned) || bySort(a, b) || b.session.sessionId.localeCompare(a.session.sessionId);
 }

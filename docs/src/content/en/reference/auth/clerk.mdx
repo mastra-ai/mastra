@@ -96,9 +96,9 @@ export const mastra = new Mastra({
   },
   {
     name: 'authorizeUser',
-    type: '(user: User, request: MastraAuthRequest) => Promise<boolean> | boolean',
+    type: '(user: JwtPayload, request: MastraAuthRequest) => Promise<boolean> | boolean',
     description:
-      'Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users, unless `organizationId` or `organizationSlug` is set, in which case only members of that organization are allowed.',
+      'Custom authorization function to determine if a user should be granted access. For token requests, `user` holds the verified Clerk JWT claims, identified by `sub` (`JwtPayload` is exported from `@mastra/auth`). When SSO is configured, requests authenticated by the SSO session cookie pass the session user instead, identified by `id`. Called after token verification. By default, allows all authenticated users, unless `organizationId` or `organizationSlug` is set, in which case only members of that organization are allowed.',
     isOptional: true,
   },
 ]}

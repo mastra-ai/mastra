@@ -89,7 +89,7 @@ export class StdioCodeModeTransport implements CodeModeTransport {
             // can reject if the process already exited/was killed. Swallow that
             // so it never surfaces as an unhandled rejection.
             void serveRpc(frame.id, frame.tool, frame.args).catch(() => {});
-            return;
+            break;
         }
       }
 

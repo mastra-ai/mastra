@@ -30,28 +30,28 @@ export function GlobalSearchRail({
       />
       <CommandPaletteScope
         icon={<SquareKanban />}
-        label="Work Sessions"
+        label="Work sessions"
         count={counts.work}
         active={activeScope === 'work'}
         onSelect={() => onScopeChange('work')}
       />
       <CommandPaletteScope
         icon={<GitPullRequest />}
-        label="Review Sessions"
+        label="Review sessions"
         count={counts.review}
         active={activeScope === 'review'}
         onSelect={() => onScopeChange('review')}
       />
       <CommandPaletteScope
         icon={<Ticket />}
-        label="Work Items"
+        label="Work items"
         count={counts.items}
         active={activeScope === 'items'}
         onSelect={() => onScopeChange('items')}
       />
       <CommandPaletteScope
         icon={<GitBranch />}
-        label="User Sessions"
+        label="User sessions"
         count={counts.user}
         active={activeScope === 'user'}
         onSelect={() => onScopeChange('user')}

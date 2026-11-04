@@ -70,9 +70,8 @@ export class SqlBuilder {
   whereAnd(condition: string, ...params: SqlParam[]): SqlBuilder {
     if (this.whereAdded) {
       return this.andWhere(condition, ...params);
-    } else {
-      return this.where(condition, ...params);
     }
+    return this.where(condition, ...params);
   }
 
   andWhere(condition: string, ...params: SqlParam[]): SqlBuilder {

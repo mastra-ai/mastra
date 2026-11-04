@@ -1221,6 +1221,36 @@ describe('BackgroundTaskManager', () => {
       expect(executeFn).toHaveBeenCalledTimes(2);
     });
 
+    it('refuses a resume fenced on a suspension the task has moved past', async () => {
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend({ awaiting: 'approval' });
+          return undefined;
+        }
+        return { approved: true };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cfence1', args: {}, agentId: 'a1', runId: 'r-fence' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      const suspended = await manager.getTask(task.id);
+      expect(suspended?.status).toBe('suspended');
+
+      const stale = new Date(suspended!.suspendedAt!.getTime() - 1000);
+      await expect(manager.resume(task.id, { approved: true }, { suspendedAt: stale })).rejects.toThrow(
+        /suspension has changed/,
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+      expect(executeFn).toHaveBeenCalledTimes(1);
+
+      await manager.resume(task.id, { approved: true }, { suspendedAt: suspended!.suspendedAt! });
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+    });
+
     it('drops a model-authored suspendedToolRunId so the framework-persisted id wins on resume', async () => {
       // A queued model payload cannot establish delegated identity. The arbitrary
       // ID must be dropped from the fresh call and replaced by the framework ID
@@ -1911,6 +1941,106 @@ describe('BackgroundTaskManager', () => {
       } finally {
         release();
         await local.cleanup();
+      }
+    });
+
+    it.each([
+      ['rejects when aborted', true],
+      ['ignores the abort and returns', false],
+    ])('aborts a run cancelled from another manager on shared storage (executor %s)', async (_label, rejectOnAbort) => {
+      const config = {
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      };
+      const onTaskComplete = vi.fn();
+      const onTaskFailed = vi.fn();
+      // Separate Mastra + pubsub per manager: B's `task.cancel` event cannot
+      // reach A, as with two processes on the default in-process pubsub.
+      const workerA = await makeLocalManager({ ...config, onTaskComplete, onTaskFailed });
+      const workerB = await makeLocalManager(config);
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let executorSignal: AbortSignal | undefined;
+      let executorReturned = false;
+      const onChunk = vi.fn();
+      const onResult = vi.fn();
+      const onComplete = vi.fn();
+      const onFailed = vi.fn();
+      const published: string[] = [];
+      const onPublished = (event: { type: string }) => {
+        published.push(event.type);
+      };
+      await workerA.isolatedPubsub.subscribe('background-tasks-result', onPublished);
+
+      try {
+        const { task } = await workerA.mgr.enqueue(
+          { toolName: 't', toolCallId: 'remote-cancel', args: {}, agentId: 'a1', runId: 'r-remote-cancel' },
+          {
+            executor: {
+              execute: async (_args: unknown, opts: { abortSignal?: AbortSignal }) => {
+                executorSignal = opts.abortSignal;
+                if (rejectOnAbort) {
+                  await new Promise((_resolve, reject) => {
+                    opts.abortSignal!.addEventListener('abort', () => reject(opts.abortSignal!.reason));
+                  });
+                }
+                await gate;
+                executorReturned = true;
+                return 'late result';
+              },
+            },
+            onChunk,
+            onResult,
+            onComplete,
+            onFailed,
+          },
+        );
+        await vi.waitFor(async () => expect((await workerA.mgr.getTask(task.id))?.status).toBe('running'));
+        await vi.waitFor(() => expect(executorSignal).toBeDefined());
+        expect(executorSignal!.aborted).toBe(false);
+
+        await workerB.mgr.cancel(task.id);
+        const cancelled = await workerB.mgr.getTask(task.id);
+        expect(cancelled!.status).toBe('cancelled');
+        expect(cancelled!.ownerId).toBeUndefined();
+        expect(cancelled!.completedAt).toBeInstanceOf(Date);
+
+        // A's next heartbeat (1s with a 3s lease) is rejected and finds the
+        // row cancelled, so the local run is aborted as a cancellation.
+        await vi.waitFor(() => expect(executorSignal!.aborted).toBe(true), { timeout: 5_000, interval: 50 });
+        expect((executorSignal!.reason as Error).message).toBe('Task cancelled');
+
+        release();
+        if (!rejectOnAbort) await vi.waitFor(() => expect(executorReturned).toBe(true));
+        // Let A's workflow settle the attempt.
+        await tick(300);
+
+        const after = await workerA.mgr.getTask(task.id);
+        expect(after!.status).toBe('cancelled');
+        expect(after!.result).toBeUndefined();
+        expect(after!.error).toBeUndefined();
+        expect(after!.completedAt!.getTime()).toBe(cancelled!.completedAt!.getTime());
+
+        // The observer is live (it saw the claim), so these negatives are real.
+        expect(published).toContain('task.running');
+        expect(published).not.toContain('task.completed');
+        expect(published).not.toContain('task.failed');
+        expect(onChunk).not.toHaveBeenCalled();
+        expect(onResult).not.toHaveBeenCalled();
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(onFailed).not.toHaveBeenCalled();
+        expect(onTaskComplete).not.toHaveBeenCalled();
+        expect(onTaskFailed).not.toHaveBeenCalled();
+      } finally {
+        release();
+        await workerA.isolatedPubsub.unsubscribe('background-tasks-result', onPublished);
+        await workerA.cleanup();
+        await workerB.cleanup();
       }
     });
   });

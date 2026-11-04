@@ -36,6 +36,15 @@ export const partialCompletedLoop: GetWorkflowRunByIdResponse = {
 
 export const pausedLoop: GetWorkflowRunByIdResponse = { ...suspendedLoop, status: 'paused' };
 
+export const resumedElsewhereLoop: GetWorkflowRunByIdResponse = {
+  ...completedLoop,
+  status: 'running',
+  steps: {
+    persisted: { status: 'success', startedAt: 100, endedAt: 110 },
+    'analyze-document[0].count-words': { status: 'running', startedAt: 110 },
+  },
+};
+
 export const completedIterationArray: GetWorkflowRunByIdResponse = {
   ...completedLoop,
   steps: {

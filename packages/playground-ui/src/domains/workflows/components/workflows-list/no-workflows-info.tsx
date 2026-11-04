@@ -18,7 +18,7 @@ export const NoWorkflowsInfo = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        Workflows Documentation
+        Workflows documentation
       </Button>
     }
     variant="fill"

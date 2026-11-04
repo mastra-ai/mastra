@@ -90,6 +90,10 @@ function applyBreakdown(
  * cursor file in `~/.mastra/usage-telemetry.json`. Each event also carries lifetime
  * totals so consumers can read either incremental or cumulative usage. Runs once at
  * server startup; respects `MASTRA_TELEMETRY_DISABLED`. Never throws.
+ *
+ * Superseded by `startModelUsageTelemetry` (`mastra_model_token_usage_v2`). This cursor
+ * can repeat usage when it is lost while storage persists, so its events are not summable.
+ * Kept until the analysis that reads this event no longer needs it.
  */
 export async function syncUsageTelemetry(mastra: Mastra, options: SyncUsageTelemetryOptions = {}): Promise<void> {
   try {

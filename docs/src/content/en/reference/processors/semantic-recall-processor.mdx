@@ -54,8 +54,9 @@ const processor = new SemanticRecall({
           {
             name: 'embedder',
             type: 'MastraEmbeddingModel<string>',
-            description: 'Embedder for generating query embeddings',
-            isOptional: false,
+            description:
+              'Embedder for generating query embeddings. Required unless the vector store embeds text itself (self-embedding)',
+            isOptional: true,
           },
           {
             name: 'topK',

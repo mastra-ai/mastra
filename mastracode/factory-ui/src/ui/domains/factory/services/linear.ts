@@ -14,7 +14,8 @@ export type LinearStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
-  | 'ready';
+  | 'ready'
+  | 'unavailable';
 
 export interface LinearStatus {
   enabled: boolean;
@@ -89,10 +90,11 @@ export async function fetchLinearStatus(baseUrl: string): Promise<LinearStatus> 
     if (res.status === 401) {
       return { enabled: false, connected: false, workspace: null, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, connected: false, workspace: null };
+    if (res.status === 404) return { enabled: false, connected: false, workspace: null };
+    if (!res.ok) return { enabled: false, connected: false, workspace: null, reason: 'unavailable' };
     return (await res.json()) as LinearStatus;
   } catch {
-    return { enabled: false, connected: false, workspace: null };
+    return { enabled: false, connected: false, workspace: null, reason: 'unavailable' };
   }
 }
 
@@ -190,6 +192,22 @@ export const LINEAR_TEAM_SOURCE_PREFIX = 'linear-team:';
 
 export function linearTeamSourceId(team: Pick<LinearTeam, 'id' | 'sourceId'>): string {
   return team.sourceId ?? `${LINEAR_TEAM_SOURCE_PREFIX}${team.id}`;
+}
+
+/**
+ * Workspace a platform-managed Linear source belongs to. Those source IDs are
+ * `linear-project:` / `linear-team:` followed by base64url JSON carrying
+ * `workspaceId`; any other shape yields `null`.
+ */
+export function linearSourceWorkspaceId(sourceId: string): string | null {
+  const encoded = /^linear-(?:project|team):(.+)$/.exec(sourceId)?.[1];
+  if (!encoded) return null;
+  try {
+    const parsed = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))) as { workspaceId?: unknown };
+    return typeof parsed.workspaceId === 'string' && parsed.workspaceId ? parsed.workspaceId : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isLinearTeamSourceId(sourceId: string): boolean {

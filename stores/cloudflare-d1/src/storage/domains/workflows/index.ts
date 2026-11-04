@@ -11,6 +11,10 @@ import type {
   StorageListWorkflowRunsInput,
   TABLE_NAMES,
   UpdateWorkflowStateOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -22,11 +26,14 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   WorkflowsStorage,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
-import { DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
+import { assertRunFence, DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
 import type { RunFenceCheck } from '../../db/run-fencing';
 import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
@@ -52,11 +59,24 @@ function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunO
 }
 
 export class WorkflowsStorageD1 extends WorkflowsStorage {
+  /**
+   * Tables `prune()` can clean up. Run ownership records anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's record is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   #db: D1DB;
 
   constructor(config: D1DomainConfig) {
     super();
     this.#db = new D1DB(resolveD1Config(config));
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -71,6 +91,27 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     await this.#db.createTable({
       tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
       schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_WORKFLOW_RUN_OWNERS],
+    });
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowsStorageD1.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        this.#db.pruneRunRows({
+          tableName: TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAMES,
+          column: 'updatedAt',
+          cutoff: Number(cutoff),
+          limit,
+        }),
     });
   }
 
@@ -237,6 +278,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -245,7 +287,8 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     const now = new Date().toISOString();
     const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
@@ -296,7 +339,27 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     );
 
     try {
-      await executeFenced(this.#db, check, query.build());
+      if (expectedStatus === undefined) {
+        await executeFenced(this.#db, check, query.build());
+        return true;
+      }
+      // The guard sits on the conflict update, so the stored status is checked in the same
+      // statement that overwrites it. An explicit empty list matches no status.
+      const expectedStatuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+      const { sql, params } = query.build();
+      const statusGuard =
+        expectedStatuses.length === 0
+          ? ' WHERE 0'
+          : ` WHERE (CASE WHEN json_valid(${fullTableName}.snapshot) THEN json_extract(${fullTableName}.snapshot, '$.status') END) IN (${expectedStatuses.map(() => '?').join(', ')})`;
+      const rows = await this.#db.executeQuery({
+        sql: `${sql}${statusGuard} RETURNING 1 AS written`,
+        params: [...params, ...expectedStatuses],
+      });
+      const written = Array.isArray(rows) && rows.length > 0;
+      if (!written && check) {
+        await assertRunFence(this.#db, check);
+      }
+      return written;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -305,6 +368,34 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to persist workflow snapshot: ${error instanceof Error ? error.message : String(error)}`,
+          details: { workflowName, runId },
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const row = await this.#db.executeQuery({
+        sql: `SELECT CASE WHEN json_valid(snapshot) THEN json_extract(snapshot, '$.status') END AS status FROM ${this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT)} WHERE workflow_name = ? AND run_id = ?`,
+        params: [workflowName, runId],
+        first: true,
+      });
+      const status: unknown = row && !Array.isArray(row) ? row.status : undefined;
+      return (status ?? null) as WorkflowRunStatus | null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
         },
         error,

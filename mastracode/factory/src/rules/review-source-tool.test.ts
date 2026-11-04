@@ -19,7 +19,7 @@ function requestContext(overrides: Partial<{ threadId: string; resourceId: strin
   context.set('controller', {
     resourceId: overrides.resourceId ?? 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    scope: '/worktree',
+    sessionId: overrides.resourceId ?? 'resource-1',
     session: { id: 'session-1', ownerId: 'code', modeId: 'build' },
     getState: () => ({ factoryProjectId: PROJECT_ID }),
   });

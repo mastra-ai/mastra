@@ -1,15 +1,18 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
+/** The read-only view of a request context that credential and account lookups need. */
+export type RequestContextReader = { get(key: string): unknown };
+
 const ACCOUNT_ROUTING_SELECTIONS_KEY = 'mastracodeAccountRoutingSelections';
 
 type AccountRoutingSelections = Record<string, string>;
 
-function getSelections(requestContext?: RequestContext): AccountRoutingSelections | undefined {
+function getSelections(requestContext?: RequestContextReader): AccountRoutingSelections | undefined {
   const value = requestContext?.get(ACCOUNT_ROUTING_SELECTIONS_KEY);
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as AccountRoutingSelections) : undefined;
 }
 
-export function getRequestAccountSelection(requestContext: RequestContext | undefined, providerId: string) {
+export function getRequestAccountSelection(requestContext: RequestContextReader | undefined, providerId: string) {
   return getSelections(requestContext)?.[providerId];
 }
 
@@ -27,7 +30,7 @@ export function setRequestAccountSelection(
 
 const ACCOUNT_ROUTING_EXHAUSTED_KEY = 'mastracodeAccountRoutingExhaustedProviders';
 
-function getExhaustedProviders(requestContext?: RequestContext): string[] {
+function getExhaustedProviders(requestContext?: RequestContextReader): string[] {
   const value = requestContext?.get(ACCOUNT_ROUTING_EXHAUSTED_KEY);
   return Array.isArray(value) ? (value as string[]) : [];
 }
@@ -50,7 +53,7 @@ export function markRequestAccountRoutingExhausted(
 
 /** Whether routing already rejected every account for this provider on this request. */
 export function isRequestAccountRoutingExhausted(
-  requestContext: RequestContext | undefined,
+  requestContext: RequestContextReader | undefined,
   providerId: string,
 ): boolean {
   return getExhaustedProviders(requestContext).includes(providerId);

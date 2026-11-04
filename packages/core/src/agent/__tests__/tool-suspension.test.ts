@@ -35,19 +35,15 @@ describe('Tool suspension memory persistence', () => {
             { type: 'text-start', id: 'text-1' },
             { type: 'text-delta', id: 'text-1', delta: 'Let me find job listings for you.' },
             { type: 'text-end', id: 'text-1' },
-            {
-              type: 'tool-call-delta',
-              toolCallType: 'function',
-              toolCallId: 'call-1',
-              toolName: 'find-job-tool',
-              argsTextDelta: '{"title":"software engineer"}',
-            },
+            { type: 'tool-input-start', id: 'call-1', toolName: 'find-job-tool' },
+            { type: 'tool-input-delta', id: 'call-1', delta: '{"title":"software engineer"}' },
+            { type: 'tool-input-end', id: 'call-1' },
             {
               type: 'tool-call',
               toolCallType: 'function',
               toolCallId: 'call-1',
               toolName: 'find-job-tool',
-              args: '{"title":"software engineer"}',
+              input: '{"title":"software engineer"}',
             },
             {
               type: 'finish',
@@ -143,6 +139,6 @@ describe('Tool suspension memory persistence', () => {
     expect(assistantWithToolCall).toBeDefined();
   });
 
-  // Test moved to tool-suspension.e2e.test.ts: 'should save thread and messages to memory before suspension when tool calls suspend()'
+  // Test moved to loop/test-utils/aimock/scenarios/tool-suspension-persistence.scenario.test.ts: 'should save thread and messages to memory before suspension when tool calls suspend()'
   // That test uses real OpenAI model: 'openai/gpt-4o-mini'
 });

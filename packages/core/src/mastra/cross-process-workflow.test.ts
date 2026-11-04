@@ -464,7 +464,11 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
 
     expect(
       pubsub.calls
-        .filter(c => c.event.runId === 'run-1' || c.event.runId === 'nested-run')
+        .filter(
+          c =>
+            (c.topic === 'workflows' || c.topic === 'workflows-finish') &&
+            (c.event.runId === 'run-1' || c.event.runId === 'nested-run'),
+        )
         .map(c => [c.topic, c.localOnly]),
     ).toEqual([
       ['workflows', true],

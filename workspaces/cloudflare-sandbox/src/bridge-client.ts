@@ -282,10 +282,10 @@ export class CloudflareSandboxBridgeClient {
           message: typeof parsed?.error === 'string' ? parsed.error : data,
           code: typeof parsed?.code === 'string' ? parsed.code : undefined,
         });
-        return;
+        break;
       }
       default:
-        return;
+        break;
     }
   }
 

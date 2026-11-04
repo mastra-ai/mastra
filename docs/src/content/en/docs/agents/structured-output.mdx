@@ -134,6 +134,17 @@ Visit [`.generate()`](/reference/agents/generate) for a full list of configurati
 ]
 ```
 
+## Read the result
+
+The schema is input, the object is output. You pass the shape you want in `structuredOutput.schema`, and read the validated result from `response.object`. That field holds the parsed, schema-validated value, so you don't parse or validate it yourself. The exception is `errorStrategy: 'fallback'`: when validation fails, `response.object` is your configured `fallbackValue`, which never went through the schema. Check `response.usedFallbackValue` to tell the two cases apart.
+
+```typescript
+const response = await testAgent.generate('Help me plan my day.', { structuredOutput: { schema } })
+const plan = response.object // typed from the schema you passed in
+```
+
+With `agent.stream()` and structured output, read `stream.object` once the stream finishes.
+
 ## Stream structured output
 
 Streaming also supports structured output. The final structured object is available on `stream.fullStream` and after the stream completes on `stream.object`. Text stream chunks are still emitted, but they contain natural language text rather than structured data.
@@ -283,7 +294,7 @@ The response is still validated against `schema`. Only the injected text changes
 When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
 
 <Inject>
-  **For AI agents:** The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`, `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or `__GATEWAY_GOOGLE_MODEL__`. Use `/` and not `:` as a separator. Example: `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise. By defining the model using `provider/model` format Mastra automatically looks for environment variables for the provider. The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`.
+  **For AI agents:** The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`, `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or `__GATEWAY_GOOGLE_MODEL_FLASH__`. Use `/` and not `:` as a separator. Example: `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise. By defining the model using `provider/model` format Mastra automatically looks for environment variables for the provider. The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`.
 </Inject>
 
 ```typescript

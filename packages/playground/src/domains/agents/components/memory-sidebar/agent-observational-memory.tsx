@@ -1,16 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import {
+  InfoTooltip,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useElapsedTime } from '@mastra/playground-ui/hooks/use-elapsed-time';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatElapsed } from '@mastra/playground-ui/utils/duration';
 import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks/memory';
-import { Brain, ExternalLink, Info } from 'lucide-react';
+import { Brain, ExternalLink } from 'lucide-react';
 import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
@@ -82,6 +87,8 @@ const ProgressBar = ({
   const textColorFilled = isProcessing ? 'text-info-subtle-foreground' : 'text-background';
   const tokenBg = isProcessing ? 'bg-info-subtle' : 'bg-fill';
   const tokenTextColor = isProcessing ? 'text-info-subtle-foreground' : 'text-muted-foreground';
+  // The observer handles messages and the reflector handles observations.
+  const settingsOwner = label === 'Messages' ? 'Observer' : 'Reflector';
 
   return (
     <div className="min-w-0 flex-1">
@@ -89,52 +96,45 @@ const ProgressBar = ({
         <Txt as="span" variant="meta" tone="muted" className="uppercase">
           {label}
         </Txt>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button type="button" className="inline-flex items-center justify-center">
-              <Info className={cn('h-2.5 w-2.5 cursor-help', quietTextHover, controlStateColorTransition)} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs">
-            <div className="space-y-1.5">
-              <Txt as="p" variant="column" tone="ink">
-                {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
+        <InfoTooltip aria-label={`${settingsOwner} settings`} contentClassName="max-w-xs">
+          <div className="space-y-1.5">
+            <Txt as="p" variant="column" tone="ink">
+              {settingsOwner} Settings
+            </Txt>
+            <div className="space-y-0.5">
+              <Txt as="p" variant="caption">
+                <span className="text-muted-foreground">Model:</span>{' '}
+                <span className="text-foreground">{model || 'not configured'}</span>
               </Txt>
-              <div className="space-y-0.5">
-                <Txt as="p" variant="caption">
-                  <span className="text-muted-foreground">Model:</span>{' '}
-                  <span className="text-foreground">{model || 'not configured'}</span>
-                </Txt>
-                {modelRouting?.length ? (
-                  <div>
-                    <Txt as="span" variant="caption" tone="muted">
-                      Routing:
-                    </Txt>
-                    <div className="mt-0.5 space-y-0.5 pl-2">
-                      {modelRouting.map(route => (
-                        <Txt as="p" variant="caption" tone="ink" key={`${route.upTo}-${route.model}`}>
-                          ≤{formatTokens(route.upTo)} → {route.model}
-                        </Txt>
-                      ))}
-                    </div>
+              {modelRouting?.length ? (
+                <div>
+                  <Txt as="span" variant="caption" tone="muted">
+                    Routing:
+                  </Txt>
+                  <div className="mt-0.5 space-y-0.5 pl-2">
+                    {modelRouting.map(route => (
+                      <Txt as="p" variant="caption" tone="ink" key={`${route.upTo}-${route.model}`}>
+                        ≤{formatTokens(route.upTo)} → {route.model}
+                      </Txt>
+                    ))}
                   </div>
-                ) : (
-                  <Txt as="p" variant="caption">
-                    <span className="text-muted-foreground">Threshold:</span>{' '}
-                    <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
-                  </Txt>
-                )}
-                {isAdaptive && totalBudget && (
-                  <Txt as="p" variant="caption">
-                    <span className="text-muted-foreground">Mode:</span>{' '}
-                    <span className="text-badge-amber-indicator">Adaptive</span>{' '}
-                    <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
-                  </Txt>
-                )}
-              </div>
+                </div>
+              ) : (
+                <Txt as="p" variant="caption">
+                  <span className="text-muted-foreground">Threshold:</span>{' '}
+                  <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
+                </Txt>
+              )}
+              {isAdaptive && totalBudget && (
+                <Txt as="p" variant="caption">
+                  <span className="text-muted-foreground">Mode:</span>{' '}
+                  <span className="text-badge-amber-indicator">Adaptive</span>{' '}
+                  <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
+                </Txt>
+              )}
             </div>
-          </TooltipContent>
-        </Tooltip>
+          </div>
+        </InfoTooltip>
       </div>
 
       <div className="flex items-stretch">
@@ -496,7 +496,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         onClick={() => (isDetailViewOpen ? closeDetailView() : openDetailView())}
         icon={<Brain />}
       >
-        Analyze Observations
+        Analyze observations
       </Button>
     </div>
   );

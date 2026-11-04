@@ -55,7 +55,7 @@ const dedupeLabels = (pins: ToolProviderConnectionFormValue[]): ToolProviderConn
 const pinsEqual = (a: ToolProviderConnectionFormValue[], b: ToolProviderConnectionFormValue[]): boolean => {
   if (a.length !== b.length) return false;
   return a.every((pin, index) => {
-    const other = b[index]!;
+    const other = b[index];
     return (
       pin.connectionId === other.connectionId &&
       pin.toolkit === other.toolkit &&

@@ -220,6 +220,21 @@ describe('ChatProvider', () => {
   });
 
   describe.each(['nested', 'ordinary'] as const)('when same-named %s calls need approval', kind => {
+    // Live tool rows go through the transcript's reveal, which lays down one word per
+    // animation frame. Under a loaded CI runner those frames stretch past any timeout,
+    // so these routing tests read the transcript the way a reduced-motion reader does.
+    beforeEach(() => {
+      const matchMedia = window.matchMedia;
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        ...matchMedia(query),
+        matches: query === '(prefers-reduced-motion: reduce)',
+      }));
+    });
+
+    afterEach(() => {
+      vi.mocked(window.matchMedia).mockRestore();
+    });
+
     describe.each(['signals-live', 'legacy-live', 'signals-history', 'legacy-history', 'generate-history'])(
       'when the transcript uses %s',
       scenario => {
@@ -313,13 +328,7 @@ describe('ChatProvider', () => {
                   stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
               });
             }
-            // Live tool rows share the transcript's paced reveal.
-            await waitFor(
-              () => expect(screen.getAllByRole('button', { name: `Approve ${toolName}` })).toHaveLength(2),
-              {
-                timeout: 3000,
-              },
-            );
+            await waitFor(() => expect(screen.getAllByRole('button', { name: `Approve ${toolName}` })).toHaveLength(2));
             const cards = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge');
             expect(cards).toHaveLength(2);
             for (const [index, id] of ['first', 'second'].entries()) {

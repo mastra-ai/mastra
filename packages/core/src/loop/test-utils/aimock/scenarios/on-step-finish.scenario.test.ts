@@ -47,14 +47,14 @@ describeForAllEngines(
         },
       });
 
-      // Should have 2 steps (tool call + finish)
-      expect(steps.length).toBeGreaterThanOrEqual(2);
-
-      // First step should have tool calls
-      expect(steps[0].toolCalls).toBeDefined();
-
-      // Last step should have text
-      expect(steps[steps.length - 1].text).toBeDefined();
+      // One callback per model turn: the tool-call step, then the final text step.
+      expect(steps).toHaveLength(2);
+      expect(steps[0].toolCalls).toHaveLength(1);
+      expect(steps[0].toolCalls[0].payload.toolName).toBe('tick');
+      expect(steps[0].finishReason).toBe('tool-calls');
+      expect(steps[1].toolCalls).toHaveLength(0);
+      expect(steps[1].text).toBe('Done.');
+      expect(steps[1].finishReason).toBe('stop');
     });
 
     it('onStepFinish receives step context', async () => {
@@ -73,11 +73,9 @@ describeForAllEngines(
         },
       });
 
-      // Should have at least one step
-      expect(stepsSeen.length).toBeGreaterThan(0);
-
-      // Steps should have some context
-      expect(stepsSeen[0]).toBeDefined();
+      expect(stepsSeen).toHaveLength(1);
+      expect(stepsSeen[0].text).toBe('Done.');
+      expect(stepsSeen[0].finishReason).toBe('stop');
     });
   },
   {},

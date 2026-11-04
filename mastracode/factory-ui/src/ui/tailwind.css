@@ -1,26 +1,40 @@
-/* Tailwind v4 entry for the MastraCode web UI.
- *
- * The compiled Playground UI stylesheet is imported from main.tsx. This file
- * only adds Tailwind utilities and imports raw design tokens for @theme-based
- * utility generation. */
 @import 'tailwindcss';
-@import 'tw-animate-css';
+@import '@mastra/playground-ui/components.css';
+@import '@mastra/playground-ui/sources.css';
 
-/* Raw design tokens (:root + @theme) shipped by playground-ui. Importing the
- * uncompiled theme lets Tailwind read @theme and generate DS utilities without
- * treating theme.css as the component stylesheet. */
-@import '@mastra/playground-ui/theme.css';
+/* Mona Sans and Commit Mono, same as Studio. Mona Sans comes from
+ * @fontsource-variable/mona-sans, imported in main.tsx. Commit Mono is bundled
+ * like Studio's (packages/playground/src/fonts.css): SIL OFL, see
+ * assets/fonts/OFL-CommitMono.txt. */
+@font-face {
+  font-family: CommitMono;
+  src:
+    local('Commit Mono'),
+    url('./assets/fonts/CommitMono-400-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
-@custom-variant dark (&:is(.dark *));
+@font-face {
+  font-family: CommitMono;
+  src:
+    local('Commit Mono'),
+    url('./assets/fonts/CommitMono-700-Regular.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
-/* Mona Sans everywhere, same as Studio. Faces come from
- * @fontsource-variable/mona-sans, imported in main.tsx. */
 @layer base {
   :root {
     --font-display:
       'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
       'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body: var(--font-display);
+    --font-mono:
+      'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+    --font-mono-size-adjust: ex-height 0.508;
   }
 }
 
