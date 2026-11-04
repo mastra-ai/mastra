@@ -3,6 +3,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -43,10 +44,16 @@ function versionOptions(allVersions: DatasetItemVersion[], disabled?: Set<number
       value: String(v.datasetVersion),
       label: (
         <span className="flex w-full items-center gap-2">
-          <b>v. {v.datasetVersion}</b>
-          <Txt as="span" variant="caption" tone="muted">
-            {formatDate(date, 'date-time')}
-          </Txt>
+          <Metadata>
+            <Metadata.Item>
+              <b>v. {v.datasetVersion}</b>
+            </Metadata.Item>
+            <Metadata.Item>
+              <Txt as="span" variant="caption" tone="muted">
+                {formatDate(date, 'date-time')}
+              </Txt>
+            </Metadata.Item>
+          </Metadata>
           {v.isLatest ? (
             <Badge variant="blue" size="xs" className="ml-auto">
               Latest

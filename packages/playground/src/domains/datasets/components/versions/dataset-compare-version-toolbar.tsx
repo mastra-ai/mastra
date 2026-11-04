@@ -25,7 +25,7 @@ export function DatasetCompareVersionToolbar({
 
   const options = (versions ?? []).map(version => {
     const versionLabel = `v${version.version}`;
-    const dateLabel = version.createdAt ? formatDate(new Date(version.createdAt), 'date-time') : undefined;
+    const dateLabel = formatDate(version.createdAt, 'date-time');
     const currentLabel = version.isCurrent ? '(current)' : undefined;
     return {
       value: String(version.version),
@@ -45,13 +45,12 @@ export function DatasetCompareVersionToolbar({
       ),
     };
   });
-  const items = options.map(({ value, label }) => ({ value, label }));
 
   return (
     <Column.Toolbar className="grid w-full grid-cols-[1fr_1fr_1fr_10rem] gap-4">
       <div />
       <Select
-        items={items}
+        items={options}
         value={versionA ?? ''}
         onValueChange={(val: string) => onVersionChange?.(val, versionB ?? '')}
       >
@@ -67,7 +66,7 @@ export function DatasetCompareVersionToolbar({
         </SelectContent>
       </Select>
       <Select
-        items={items}
+        items={options}
         value={versionB ?? ''}
         onValueChange={(val: string) => onVersionChange?.(versionA ?? '', val)}
       >

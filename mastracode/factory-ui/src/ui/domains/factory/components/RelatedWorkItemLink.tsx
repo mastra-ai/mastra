@@ -90,9 +90,7 @@ export function RelatedWorkItemLink({
       <TooltipContent side="top" className="max-w-90">
         <Metadata>
           {tooltipParts.map((part, index) => (
-            <Metadata.Item key={index} className="wrap-anywhere">
-              {part}
-            </Metadata.Item>
+            <Metadata.Item key={index}>{part}</Metadata.Item>
           ))}
         </Metadata>
       </TooltipContent>

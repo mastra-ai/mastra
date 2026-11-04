@@ -63,7 +63,7 @@ export function ThemeFilterBanner({
     >
       {selections.map((selection, index) => {
         const color = colors[index];
-        const signalName = signalLabel(signalCatalog, selection.signalName);
+        const signalTitle = signalLabel(signalCatalog, selection.signalName);
         const selectionName = selection.kind === 'theme' ? selection.label : 'Noise';
         return (
           <button
@@ -71,7 +71,7 @@ export function ThemeFilterBanner({
             aria-label={
               selections.length === 1
                 ? `Clear ${selection.kind} filter`
-                : `Clear filter ${signalName}: ${selectionName}`
+                : `Clear filter ${signalTitle}: ${selectionName}`
             }
             onClick={() => onRemove(selection.signalName)}
             type="button"
@@ -80,7 +80,7 @@ export function ThemeFilterBanner({
             <span aria-hidden="true" style={{ backgroundColor: color }} className="rounded-0.5 size-2" />
             <Txt as="span" variant="column" className="block">
               <Metadata>
-                <Metadata.Item>{signalName}</Metadata.Item>
+                <Metadata.Item>{signalTitle}</Metadata.Item>
                 <Metadata.Item>{selectionName}</Metadata.Item>
               </Metadata>
             </Txt>

@@ -1,8 +1,8 @@
 import type { EntityLearningProgressResponse, SignalCatalogEntry } from '@mastra/client-js';
 import { CpuIcon, ExternalLink } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Button } from '../../../ds/components/Button';
 
+import { Button } from '../../../ds/components/Button';
 import { Card } from '../../../ds/components/Card';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import { getSignalColor } from '../signal-colors';

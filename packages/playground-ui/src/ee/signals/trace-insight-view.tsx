@@ -4,6 +4,7 @@ import { signalLabel } from './signal-formatting';
 import type { TraceInsightResponse } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -78,9 +79,11 @@ function ObservationItem({ observation }: { observation: string }) {
   return (
     <li className={`rounded-md p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
-        <Txt variant="meta" tone="muted" className="flex flex-wrap items-center gap-2 uppercase">
-          {severity === 'problem' && <span className="text-destructive-foreground">problem</span>}
-          <span>{kind}</span>
+        <Txt variant="meta" tone="muted" className="uppercase">
+          <Metadata>
+            {severity === 'problem' && <Metadata.Item className="text-destructive-foreground">problem</Metadata.Item>}
+            <Metadata.Item>{kind}</Metadata.Item>
+          </Metadata>
         </Txt>
       )}
       <Txt as="p" variant="body" tone="ink" className={kind === undefined ? '' : 'mt-1'}>

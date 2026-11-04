@@ -202,12 +202,10 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
       message = (
         <Metadata singleLine>
           <Metadata.Item className="shrink-0">
-            <span>
-              <Txt as="b" variant="label" tone="ink">
-                {validation.total}
-              </Txt>{' '}
-              item{validation.total !== 1 ? 's' : ''} ready
-            </span>
+            <Txt as="b" variant="label" tone="ink">
+              {validation.total}
+            </Txt>{' '}
+            item{validation.total !== 1 ? 's' : ''} ready
           </Metadata.Item>
           {validation.missingGroundTruthCount > 0 && (
             <Metadata.Item>{validation.missingGroundTruthCount} without groundTruth</Metadata.Item>

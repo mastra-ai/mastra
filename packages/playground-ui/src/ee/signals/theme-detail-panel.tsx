@@ -225,16 +225,21 @@ export function ThemeDetailPanel({
                             {/* A nextCursor means older points exist beyond the fetched window,
                                 so the oldest loaded point is a lower bound, not the true origin. */}
                             <Metadata>
-                              <Metadata.Item>
-                                {historyQuery.data?.nextCursor
-                                  ? `Active since at least ${formatSnapshotDate(oldestHistoryPoint.startedAt)}`
-                                  : `First seen ${formatSnapshotDate(oldestHistoryPoint.startedAt)}`}
-                              </Metadata.Item>
-                              <Metadata.Item>
-                                {historyQuery.data?.nextCursor
-                                  ? `in ${historyPoints.length}+ snapshots`
-                                  : `in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}
-                              </Metadata.Item>
+                              {historyQuery.data?.nextCursor ? (
+                                <>
+                                  <Metadata.Item>
+                                    {`Active since at least ${formatSnapshotDate(oldestHistoryPoint.startedAt)}`}
+                                  </Metadata.Item>
+                                  <Metadata.Item>{`in ${historyPoints.length}+ snapshots`}</Metadata.Item>
+                                </>
+                              ) : (
+                                <>
+                                  <Metadata.Item>{`First seen ${formatSnapshotDate(oldestHistoryPoint.startedAt)}`}</Metadata.Item>
+                                  <Metadata.Item>
+                                    {`in ${historyPoints.length} ${historyPoints.length === 1 ? 'snapshot' : 'snapshots'}`}
+                                  </Metadata.Item>
+                                </>
+                              )}
                               <Metadata.Item>{themeTrendDirection(historyPoints)}</Metadata.Item>
                             </Metadata>
                           </Txt>

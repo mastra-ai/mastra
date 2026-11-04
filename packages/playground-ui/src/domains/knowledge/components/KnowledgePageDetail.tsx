@@ -2,8 +2,8 @@ import { ChevronRight, Pin } from 'lucide-react';
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
-import { knowledgePageRefIndex } from '../lib/pageRefs';
 
+import { knowledgePageRefIndex } from '../lib/pageRefs';
 import type { KnowledgePageRefIndex } from '../lib/pageRefs';
 import { parseRecordSegments } from '../lib/recordText';
 import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '../lib/remarkKnowledgeLinks';
@@ -14,8 +14,8 @@ import type {
   KnowledgePagePayload,
   KnowledgePinPayload,
 } from '../pageTypes';
-import { Badge } from '@/ds/components/Badge';
 
+import { Badge } from '@/ds/components/Badge';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';

@@ -54,7 +54,7 @@ export function ExperimentCrumbItemCount() {
   const count = `${totalItems} ${totalItems === 1 ? 'item' : 'items'}`;
 
   return (
-    <Txt as="span" variant="caption" tone="muted" className="whitespace-nowrap tabular-nums">
+    <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
       <Metadata>
         <Metadata.Item>{count}</Metadata.Item>
         {failedCount > 0 && <Metadata.Item>{failedCount} errored</Metadata.Item>}
