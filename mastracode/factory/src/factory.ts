@@ -147,6 +147,7 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
+import { McpServersStorage } from './storage/domains/mcp-servers/base.js';
 import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -685,6 +686,7 @@ export class MastraFactory {
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
+    const mcpServersStorage = storage.registerDomain(new McpServersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -705,6 +707,7 @@ export class MastraFactory {
       modelDefaults: modelDefaultsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
+      mcpServers: mcpServersStorage,
       filesystem: filesystemStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,

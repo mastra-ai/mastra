@@ -17,6 +17,7 @@ import { ModelCredentialsStorage } from './domains/credentials/base.js';
 import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
 import { IntegrationStorage } from './domains/integrations/base.js';
+import { McpServersStorage } from './domains/mcp-servers/base.js';
 import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
@@ -96,6 +97,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   modelDefaults: ModelDefaultsStorage;
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
+  mcpServers: McpServersStorage;
   queueHealth: QueueHealthStorage;
   channelIdentity: ChannelIdentityStorage;
   comments: WorkItemCommentsStorage;
@@ -131,6 +133,7 @@ export async function createFactoryStorageForTests(
   const modelDefaults = storage.registerDomain(new ModelDefaultsStorage());
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
+  const mcpServers = storage.registerDomain(new McpServersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
@@ -150,6 +153,7 @@ export async function createFactoryStorageForTests(
     modelDefaults,
     memorySettings,
     customProviders,
+    mcpServers,
     queueHealth,
     channelIdentity,
     comments,

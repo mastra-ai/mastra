@@ -41,6 +41,7 @@ import type { CustomProvidersStorage } from '../storage/domains/custom-providers
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
+import type { McpServersStorage } from '../storage/domains/mcp-servers/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
@@ -122,6 +123,7 @@ export interface FactoryApiRoutesDeps {
     modelCredentials: ModelCredentialsStorage;
     memorySettings: MemorySettingsStorage;
     customProviders: CustomProvidersStorage;
+    mcpServers: McpServersStorage;
     filesystem: FilesystemStorage;
     modelDefaults: ModelDefaultsStorage;
     projects: FactoryProjectsStorage;
