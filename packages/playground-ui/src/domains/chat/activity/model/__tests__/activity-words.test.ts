@@ -116,7 +116,7 @@ describe('settledWords', () => {
 describe('outcomeText', () => {
   it('counts failed and unfinished calls among several', () => {
     const calls = [view('a.ts'), view('b.ts', 'error'), view('c.ts', 'running')];
-    expect(outcomeText(callsOutcome(calls), calls.length)).toBe('1 failed · 1 incomplete');
+    expect(outcomeText(callsOutcome(calls), calls.length)).toBe('1 failed and 1 incomplete');
   });
 
   it('only says a lone call never finished', () => {

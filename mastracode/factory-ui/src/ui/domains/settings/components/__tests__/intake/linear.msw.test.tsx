@@ -283,7 +283,8 @@ describe('IntakeSection linear', () => {
       const project = await screen.findByRole('button', { name: 'Remove Q3 Roadmap' });
       expect(project).toBeEnabled();
       const linearSection = screen.getByRole('region', { name: 'Linear' });
-      expect(within(linearSection).getByText('Engineering · project takes precedence')).toBeInTheDocument();
+      const precedence = within(linearSection).getByText('project takes precedence');
+      expect(within(precedence.parentElement!).getByText('Engineering')).toBeInTheDocument();
 
       await userEvent.click(project);
       await waitFor(() => expect(saved).toHaveLength(1));

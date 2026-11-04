@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
-import { snapshotSummaryLabel } from './sankey-signals-data';
 import { SignalDeltaColumn } from './signal-delta-column';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
+import { SnapshotSummary } from './snapshot-summary';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
@@ -106,7 +106,7 @@ export function ThemeCompare({
 
           className="rounded-md border border-border px-2 py-1 tabular-nums"
         >
-          {snapshotSummaryLabel(fromSnapshot, flows[fromIndex])}
+          <SnapshotSummary snapshot={fromSnapshot} flow={flows[fromIndex]} label="Earlier snapshot" />
         </Txt>
         <Txt as="span" variant="caption" tone="muted" aria-hidden="true">
           →
@@ -117,12 +117,12 @@ export function ThemeCompare({
 
           className="rounded-md border border-border px-2 py-1 tabular-nums"
         >
-          {snapshotSummaryLabel(toSnapshot, flows[toIndex])}
+          <SnapshotSummary snapshot={toSnapshot} flow={flows[toIndex]} label="Later snapshot" />
         </Txt>
         <Txt variant="caption" tone="muted">
           {grabbedPoint === undefined
-            ? 'Click a landmark to move the nearest point · click a point to grab it.'
-            : 'Point grabbed — click a landmark to place it.'}
+            ? 'Click a landmark to move the nearest point. Click a point to grab it.'
+            : 'Point grabbed. Click a landmark to place it.'}
         </Txt>
       </div>
       {fromIndex === toIndex ? (

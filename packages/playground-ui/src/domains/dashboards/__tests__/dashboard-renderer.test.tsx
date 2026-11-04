@@ -32,7 +32,7 @@ import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const agentRunsWidget = metricsWidget('agent-runs');
 const distinctIdsWidget = metricsWidget('distinct-ids');
@@ -230,10 +230,11 @@ describe('DashboardRenderer', () => {
         if (failing) return HttpResponse.json({ error: 'boom' }, { status: 500 });
         return request.interval ? distinctIdsSeriesFixture(request.timeRange) : distinctIdsTotalsFixture;
       });
-      const { container } = renderDashboard(definition(distinctIdsWidget));
+      const { container, queryClient } = renderDashboard(definition(distinctIdsWidget));
       const widget = cell(container, 'distinct-ids');
       // The client retries an aggregate itself before the widget sees the error.
       expect(await within(widget).findByText(LOAD_ERROR, undefined, { timeout: 5000 })).toBeDefined();
+      await waitForMutationsIdle(queryClient);
       failing = false;
       fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
       expect(await within(widget).findAllByText('Resources', undefined, { timeout: 5000 })).not.toHaveLength(0);
