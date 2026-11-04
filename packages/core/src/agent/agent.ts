@@ -779,6 +779,16 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
   return hasConfiguredProcessor(processors, processor => processor.providesSkillDiscovery === 'on-demand');
 }
 
+function runIdAlreadyClaimedError({ agentName, runId }: { agentName: string; runId: string }): MastraError {
+  return new MastraError({
+    id: 'AGENT_RUN_ID_ALREADY_CLAIMED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: `Agent "${agentName}" cannot start a run with id "${runId}" because another run already owns it.`,
+    details: { agentName, runId },
+  });
+}
+
 function alreadyClaimedResumeError({
   agentName,
   method,
@@ -1801,6 +1811,36 @@ export class Agent<
    */
   hasResumableStreams(): boolean {
     return !!this.#durable || !!this.__getStreamBus();
+  }
+
+  /**
+   * A published run's id identifies exactly one run: its stream topic and its
+   * ownership record are both keyed by it. A caller-supplied `runId` is only a
+   * claim, so this refuses one that another run already holds — otherwise a
+   * second caller would take over that run's topic and record, and be treated
+   * as its owner by `observe()` and the server's run routes.
+   *
+   * Runs without a resourceId own nothing to protect, and a scoped record keeps
+   * the id until it expires, so the same owner can still reuse it (a resume, or
+   * a retry after the run finished).
+   *
+   * Reading the record and writing our own is not atomic, so two processes
+   * starting the same id within one cache round-trip of each other can still
+   * overlap. The cache has no compare-and-set to close that.
+   */
+  async #assertRunIdAvailable(runId: string, resourceId: string | undefined): Promise<void> {
+    const bus = this.#ownStreamBus();
+    if (!bus) return;
+
+    if (this.#publishedRuns.has(runId)) {
+      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+    }
+
+    const record = await readAgentRunRecord(bus.runRecordCache, this.id, runId);
+    if (!record?.resourceId) return;
+    if (record.resourceId !== resourceId) {
+      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+    }
   }
 
   #createStreamPublisher(
@@ -9320,6 +9360,8 @@ export class Agent<
       normalizeToolPayloadTransformPolicy(
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
+
+    await this.#assertRunIdAvailable(runId, resourceId);
 
     const streamPublisher = this.#createStreamPublisher(runId, {
       resourceId,
