@@ -203,13 +203,13 @@ function NoteList({ notes }: { notes: NoteSummary[] }) {
           </Txt>
           {note.page || note.author ? (
             <Meta>
-              <Metadata>
+              <Metadata singleLine>
                 {note.page && (
                   <Metadata.Item>
                     <PageLink page={note.page} />
                   </Metadata.Item>
                 )}
-                {note.author && <Metadata.Item>{note.author}</Metadata.Item>}
+                {note.author && <Metadata.Item className="shrink-0">{note.author}</Metadata.Item>}
               </Metadata>
             </Meta>
           ) : null}

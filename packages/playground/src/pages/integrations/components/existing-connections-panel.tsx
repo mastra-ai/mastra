@@ -19,7 +19,7 @@ function ConnectionRow({
   return (
     <li className="flex items-center justify-between gap-4 border-b py-2">
       <div className="flex min-w-0 flex-col gap-2">
-        <Txt as="p" variant="caption" font="mono">
+        <Txt as="p" variant="caption" font="mono" className="wrap-anywhere">
           {connection.connectionId}
         </Txt>
         <Metadata>
