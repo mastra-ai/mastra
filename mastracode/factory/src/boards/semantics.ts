@@ -1,4 +1,3 @@
-import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import type { FactoryRuleBoardClosure, FactoryRulePhaseContext } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
@@ -98,26 +97,9 @@ export function newestOpenPullRequestNumber(item: SourcedItem, except?: number):
 
 interface SessionedItem {
   readonly sessions: Readonly<Record<string, { readonly branch?: string | null } | undefined>>;
-  readonly stageHistory?: readonly { readonly stage: string }[];
 }
 
 type BranchedItem = Pick<Card, 'id' | 'externalSource'> & { readonly workItem: Pick<Card['workItem'], 'metadata'> };
-
-const WORKING_STAGES: ReadonlySet<string> = new Set([...Object.values(FACTORY_ROLE_STAGES), PULL_REQUEST_REVIEW_PHASE]);
-
-/**
- * Whether work has started on the card: a session in a working role (triage, plan, work,
- * review) is bound, or the card has been in a working phase. From then on, a pull request
- * someone else opens for the card's issue gets a card of its own instead of joining this one,
- * so a card being worked on only carries the pull requests its own sessions opened. Stage
- * history keeps that true after the session is deleted.
- */
-export function workStarted(item: SessionedItem): boolean {
-  return (
-    Object.keys(FACTORY_ROLE_STAGES).some(role => item.sessions[role] !== undefined) ||
-    (item.stageHistory ?? []).some(entry => WORKING_STAGES.has(entry.stage))
-  );
-}
 
 /**
  * Whether a pull request from `headBranch` was opened by the card's own sessions: the head is

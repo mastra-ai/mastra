@@ -107,10 +107,12 @@ function materializeMergeRequest(context: FactoryGitLabRuleContext) {
     title: context.mergeRequest.title,
     url: context.mergeRequest.url,
     stage: 'intake',
-    // A merge request for a card already on the board is filed on that card. One that closes a
-    // resting issue's card brings it to PR review.
+    // A merge request for a card already on the board is filed on that card. For one that closes
+    // an issue on the board, the project's intake routes decide whether it joins that card.
     ...(context.pullRequestHome
-      ? { attachTo: { workItemId: context.pullRequestHome.workItemId, review: context.pullRequestHome.reason === 'closes' } }
+      ? context.pullRequestHome.reason === 'closes'
+        ? { closesIssue: { workItemId: context.pullRequestHome.workItemId } }
+        : { attachTo: { workItemId: context.pullRequestHome.workItemId } }
       : {}),
     metadata: {
       gitlabHost: context.repository.host,

@@ -100,6 +100,11 @@ const intakeRouteTargetSchema = z
     boardKey: intakeRouteIdentifierSchema,
     /** Unset lands the card in the board's first phase. */
     phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
+    /**
+     * File a pull request on the card of the issue it closes (on `boardKey`) instead of a new card;
+     * that card moves to `phaseKey` when its board allows it. Matches no other arrival.
+     */
+    joinClosedIssue: z.boolean().optional(),
   })
   .strict();
 const intakeRouteWhenSchema = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
@@ -162,7 +167,7 @@ const intakeRouteSchema = z.object({
   /** 0 is evaluated first. */
   position: z.number().int(),
   when: intakeRouteWhenSchema.nullable(),
-  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }),
+  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
   on: z.array(z.enum(STATUS_EVENTS)),
   allowWorkingPhase: z.boolean(),
   /** Send it back as `expectedRevision` when editing or deleting. */

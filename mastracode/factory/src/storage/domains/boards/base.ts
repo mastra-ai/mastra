@@ -93,8 +93,16 @@ export interface StoredBoardSnapshot {
 
 export interface IntakeRouteTarget {
   boardKey: string;
-  /** Unset lands the card in the board's first phase. */
+  /**
+   * Unset lands the card in the board's first phase. On a route that joins a closed issue's
+   * card, the phase that card moves to when its board allows it; unset leaves it where it is.
+   */
   phaseKey?: string | null;
+  /**
+   * Files a pull request on the card of the issue it closes, which must be on `boardKey`, as one
+   * more source instead of a card of its own. The route doesn't match any other arrival.
+   */
+  joinClosedIssue?: boolean;
 }
 
 /** An intake route as it is written. */
@@ -118,7 +126,7 @@ export interface StoredIntakeRouteRecord {
   enabled: boolean;
   position: number;
   when: RuleGroup | null;
-  target: { boardKey: string; phaseKey: string | null };
+  target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
   on: StatusEvent[];
   allowWorkingPhase: boolean;
   revision: number;
@@ -191,11 +199,34 @@ export const REOPENED_ROUTE: StoredIntakeRouteInput = {
 };
 
 /**
+ * A pull request from someone with write access that closes an issue nobody has started work on
+ * joins that issue's card, which goes to PR review. "Started" is the project's call: drop `triage`
+ * from the phases to give a triaged issue's pull request its own card. Its condition stands on its
+ * own, so it is tried first.
+ */
+export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
+  name: 'Pull requests that close a waiting issue join its card',
+  when: {
+    operator: 'AND',
+    conditions: [
+      { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+      { field: 'author.trusted', operator: 'equals', value: true },
+      { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+      { field: 'closedIssue.phase', operator: 'in', value: ['intake', 'triage', 'canceled'] },
+      { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
+    ],
+  },
+  target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
+};
+
+/**
  * The routes Factory adds to a project, in order, each under a key that never changes. A project
  * gets each one once: a new project gets them all, a project set up earlier gets a route added
- * since at the end of its list, and a route an admin deleted stays deleted.
+ * since at the end of its list (or at the start, for a `first` one), and a route an admin deleted
+ * stays deleted.
  */
-export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput }[] = [
+export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput; first?: true }[] = [
+  { key: 'closes-issue', route: CLOSES_ISSUE_INTAKE_ROUTE, first: true },
   { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
   { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },
   { key: 'closed-completed', route: CLOSED_COMPLETED_ROUTE },
@@ -270,6 +301,7 @@ interface IntakeRouteRow extends Record<string, unknown> {
   /** Null on rows written before routes named events: they place new cards. */
   on_events: StatusEvent[] | null;
   allow_working_phase: boolean | null;
+  join_closed_issue: boolean | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -575,6 +607,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         ...(patch.target !== undefined && {
           board_key: patch.target.boardKey,
           phase_key: patch.target.phaseKey ?? null,
+          join_closed_issue: patch.target.joinClosedIssue ?? false,
         }),
         updated_by: options.actor,
       });
@@ -642,15 +675,27 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       if (missing.length === 0) return;
       const rows = await readIntakeRoutes(ops, scope);
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
-      for (const { route } of missing) {
+      const first: string[] = [];
+      for (const { route, first: leads } of missing) {
         // A project at the limit keeps its own routes; the default counts as added all the same.
         if (position >= MAX_INTAKE_ROUTES) break;
+        const id = randomUUID();
         await insertIntakeRoute(ops, scope, {
-          id: randomUUID(),
+          id,
           input: route,
           position: position++,
           actor: DEFAULT_INTAKE_ROUTE_ACTOR,
         });
+        if (leads) first.push(id);
+      }
+      // A project that had routes before gets a leading default ahead of them.
+      if (first.length > 0 && rows.length > 0) {
+        const placed = await readIntakeRoutes(ops, scope);
+        const leading = new Set(first);
+        await placeIntakeRoutes(ops, [
+          ...first.map(id => placed.find(row => row.id === id)!),
+          ...placed.filter(row => !leading.has(row.id)),
+        ]);
       }
       await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), {
         seeded_defaults: [...seededDefaults(current), ...missing.map(({ key }) => key)],
@@ -839,7 +884,7 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     enabled: row.enabled,
     position: row.position,
     when: row.when_condition,
-    target: { boardKey: row.board_key, phaseKey: row.phase_key },
+    target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
     on: routeEvents(row),
     allowWorkingPhase: row.allow_working_phase ?? false,
     revision: row.revision,
@@ -907,6 +952,7 @@ async function insertIntakeRoute(
     phase_key: route.input.target.phaseKey ?? null,
     on_events: route.input.on ?? null,
     allow_working_phase: route.input.allowWorkingPhase ?? false,
+    join_closed_issue: route.input.target.joinClosedIssue ?? false,
     revision: 1,
     created_by: route.actor,
     created_at: now,

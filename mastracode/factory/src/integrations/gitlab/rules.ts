@@ -6,7 +6,6 @@ import {
   eventBoardId,
   isTerminalWorkItem,
   cardOwnsBranch,
-  workStarted,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   rulePhaseField,
@@ -420,20 +419,25 @@ export class GitLabRules {
       trusted: actorTrusted,
       factoryAuthored: false,
     };
-    // A merge request seen for the first time is filed on the card it belongs to, when one is on
-    // the board: the card whose branch it comes from, or the card of the issue a trusted author's
-    // description says it closes. An untrusted author's merge request never lands on another card.
+    // A merge request seen for the first time is filed on the card whose branch it comes from,
+    // when one is on Work. Otherwise a trusted author's merge request names the card of the issue
+    // its description says it closes, and the project's intake routes decide, when it is filed,
+    // whether it joins that card. An untrusted author's merge request never lands on another card.
     const eligibleHome = (card: Card) =>
-      card.externalSource?.type !== 'pull-request' &&
-      boardForWorkItem(card) === 'work' &&
-      !isTerminalWorkItem(this.options.boards, card);
+      card.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(this.options.boards, card);
     let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
     if (event === 'mergeRequestOpened' && mergeRequestKey && !reviewItem && !attachedItem) {
       // A branch name alone is not proof: a fork can reuse it. The Factory's own merge requests come
       // from this project under a trusted account.
       const sourceProjectId = number(mergeRequest?.source_project_id);
       const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
-      if (authoringItem && fromThisProject && (actorTrusted || mergeRequestAuthorTrusted) && eligibleHome(authoringItem)) {
+      if (
+        authoringItem &&
+        fromThisProject &&
+        (actorTrusted || mergeRequestAuthorTrusted) &&
+        eligibleHome(authoringItem) &&
+        boardForWorkItem(authoringItem) === 'work'
+      ) {
         home = { card: authoringItem, reason: 'authored' };
       } else if (mergeRequestAuthorTrusted) {
         for (const iid of closingIssueNumbers(string(mergeRequest?.description), {
@@ -445,8 +449,7 @@ export class GitLabRules {
             item =>
               item.externalSource?.integrationId === 'gitlab' &&
               item.externalSource.externalId === key &&
-              eligibleHome(item) &&
-              !workStarted(item),
+              eligibleHome(item),
           );
           if (card) {
             home = { card, reason: 'closes' };
@@ -522,7 +525,7 @@ export class GitLabRules {
       if (unchangedListedHead) return { status: 'ignored' };
     }
     const ownItem = reviewItem ?? attachedItem;
-    const openedItem = home?.card ?? authoringItem;
+    const openedItem = (home?.reason === 'authored' ? home.card : undefined) ?? authoringItem;
     const candidates: Array<Card | undefined> =
       event === 'mergeRequestMerged'
         ? [...new Map([ownItem, authoringItem].filter(Boolean).map(item => [item!.id, item!])).values()]
@@ -582,14 +585,7 @@ export class GitLabRules {
         )
       : [];
     // A merge request filed on its issue's card is tracked there the same way.
-    const trackedItem =
-      home?.reason === 'closes'
-        ? home.card
-        : attachedItem
-          ? attachedItem
-          : branchOwners.length === 1
-            ? authoringItem
-            : undefined;
+    const trackedItem = attachedItem ?? (branchOwners.length === 1 ? authoringItem : undefined);
     if (trackedItem && mergeRequestIid) {
       await this.#trackOpenMergeRequest({
         orgId: trackedItem.orgId,
@@ -602,9 +598,7 @@ export class GitLabRules {
         // Only a merge request the card wrote is the one it has out. One filed there because it
         // closes the issue is someone else's work: recording it would stop the builder's own
         // self-review and merge request.
-        ownedByCard:
-          home?.reason !== 'closes' &&
-          (trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch)),
+        ownedByCard: trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch),
       });
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };

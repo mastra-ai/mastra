@@ -692,12 +692,17 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
    */
   skipRules?: boolean;
   /**
-   * File the pull or merge request on this existing card as one more source instead of on a
-   * card of its own. Applies only when no card holds the record yet and the card is still open
-   * on Work; otherwise the record is filed as usual. `review` moves a card resting in Intake or
-   * Canceled to PR review once the record is on it.
+   * File the pull or merge request on this existing card, the one that authored it, as one more
+   * source instead of on a card of its own. Applies only when no card holds the record yet and
+   * the card is still open on Work; otherwise the record is filed as usual.
    */
-  attachTo?: { workItemId: string; review: boolean };
+  attachTo?: { workItemId: string };
+  /**
+   * The card of the issue this pull or merge request closes. When no card holds the record yet,
+   * the project's intake routes can test that card and join the record to it (see
+   * `IntakeRouteTarget.joinClosedIssue`); otherwise it is filed as usual.
+   */
+  closesIssue?: { workItemId: string };
   metadata?: Record<string, FactoryRuleJsonValue>;
 }
 

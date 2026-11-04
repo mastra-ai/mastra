@@ -8,7 +8,6 @@ import {
   eventBoardId,
   isTerminalWorkItem,
   cardOwnsBranch,
-  workStarted,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   rulePhaseField,
@@ -851,7 +850,9 @@ export class GithubRules {
             body: string(pullRequest?.body),
           })
         : undefined;
-    const relatedItem = home?.card ?? matchedItem;
+    // The card of an issue the pull request closes isn't the pull request's card yet: the
+    // project's intake routes decide, when it is filed, whether it joins that card.
+    const relatedItem = (home?.reason === 'authored' ? home.card : undefined) ?? matchedItem;
     const pullRequestHome: FactoryPullRequestHome | undefined = home
       ? { workItemId: home.card.id, reason: home.reason }
       : undefined;
@@ -1323,12 +1324,13 @@ export class GithubRules {
   }
 
   /**
-   * The existing card a pull request opened for the first time is filed on, or undefined when it
-   * gets a card of its own. The card must be open on Work, in this repository, and not a pull
-   * request's own card. In order: the card that authored it, by provenance or session branch,
-   * when the pull request is Factory-authored or its author is trusted; then, for a trusted
-   * author only, the card of the first issue its description says it closes. An untrusted
-   * author's pull request never lands on another card, whatever it says.
+   * The existing card a pull request opened for the first time belongs with, or undefined when it
+   * gets a card of its own. The card must be open, in this repository, and not a pull request's
+   * own card. In order: the card that authored it (on Work), by provenance or session branch,
+   * when the pull request is Factory-authored or its author is trusted; it is filed there. Then,
+   * for a trusted author only, the card of the first issue its description says it closes; an
+   * intake route decides whether it joins that one. An untrusted author's pull request never
+   * lands on another card, whatever it says.
    */
   async #pullRequestHome(input: {
     orgId: string;
@@ -1355,18 +1357,18 @@ export class GithubRules {
     if (filed) return undefined;
     const eligible = (card: Card) =>
       card.externalSource?.type !== 'pull-request' &&
-      boardForWorkItem(card) === 'work' &&
       !isTerminalWorkItem(this.options.boards, card) &&
       cardBelongsToRepository(card, input.repositoryId, input.repositoryName);
-    if (input.matchedItem && eligible(input.matchedItem)) return { card: input.matchedItem, reason: 'authored' };
+    if (input.matchedItem && eligible(input.matchedItem) && boardForWorkItem(input.matchedItem) === 'work') {
+      return { card: input.matchedItem, reason: 'authored' };
+    }
     if (!input.authorTrusted) return undefined;
     for (const issueNumber of closingIssueNumbers(input.body, { provider: 'github', repository: input.repositoryName })) {
       const card = items.find(
         item =>
           (item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) ||
             item.externalSource?.externalId === legacySourceKey(input.repositoryId, 'issue', issueNumber)) &&
-          eligible(item) &&
-          !workStarted(item),
+          eligible(item),
       );
       if (card) return { card, reason: 'closes' };
     }
