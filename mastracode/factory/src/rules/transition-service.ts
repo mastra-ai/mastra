@@ -189,6 +189,9 @@ function consentEffect(
   working: boolean,
   humanMove: boolean,
 ): TransitionConsentOptions {
+  // A provider event (a reopen, a close) is not a person's say-so: whatever a person armed before
+  // no longer stands once a route moves the card.
+  if (request.eventRoute) return { autonomy: 'disarm' };
   const autonomy = transitionConsent(working, humanMove);
   return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }

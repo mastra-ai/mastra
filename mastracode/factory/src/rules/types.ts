@@ -650,7 +650,8 @@ export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase
   /**
    * What an idle session does with it. Defaults to `wake`; `persist` keeps it
    * for the session's next run, for sources whose own comments Factory cannot
-   * tell apart from other people's.
+   * tell apart from other people's. Activity from an untrusted author always
+   * persists: it never starts a run.
    */
   idleBehavior?: 'wake' | 'persist';
 }

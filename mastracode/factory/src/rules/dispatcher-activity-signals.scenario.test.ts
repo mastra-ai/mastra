@@ -188,22 +188,49 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
 }
 
 describe('scenario: source activity reaches the card session as pointers', () => {
-  it('wakes an idle session with who commented and where, marked untrusted, and nothing they wrote', async () => {
+  it('wakes an idle session with who commented and where, and nothing they wrote', async () => {
     const factory = await mountFactory();
 
-    await factory.signal();
+    await factory.signal({ author: 'maintainer', authorTrusted: true });
     await waitFor(() => factory.agentEnds() === 1, 'the woken run to end');
 
     const [record] = await factory.notifications();
     expect(record).toMatchObject({
       kind: 'source-activity',
-      summary: `New comment by @contributor (untrusted author) on acme/repo#42: ${COMMENT_URL}`,
+      summary: `New comment by @maintainer on acme/repo#42: ${COMMENT_URL}`,
     });
     // The agent was prompted with the pointer.
     expect(factory.prompts.at(-1)).toContain(COMMENT_URL);
-    expect(factory.prompts.at(-1)).toContain('@contributor (untrusted author)');
+    expect(factory.prompts.at(-1)).toContain('@maintainer');
     expect((await factory.decisions()).map(entry => entry.status)).toEqual(['succeeded']);
   });
+
+  it.each([
+    { provider: 'GitHub', decision: {} },
+    {
+      provider: 'GitLab',
+      decision: {
+        reference: 'group/project#42',
+        url: 'https://gitlab.example.com/group/project/-/issues/42#note_98',
+        idleBehavior: 'persist' as const,
+      },
+    },
+  ])(
+    'starts no run for an untrusted $provider comment on an idle session, and keeps the pointer in its notifications',
+    async ({ decision }) => {
+      const factory = await mountFactory();
+
+      await factory.signal(decision);
+      // Give a wrongly started run time to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Nothing calls the model; the pointer stays in the session's notifications.
+      expect(factory.prompts).toEqual([]);
+      expect((await factory.decisions()).map(entry => entry.status)).toEqual(['succeeded']);
+      const [record] = await factory.notifications();
+      expect(record?.summary).toContain('@contributor (untrusted author)');
+    },
+  );
 
   it('keeps comments that arrive while the session is busy as one pending notification that counts them', async () => {
     const factory = await mountFactory();

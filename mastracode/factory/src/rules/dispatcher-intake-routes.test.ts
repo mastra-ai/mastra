@@ -141,10 +141,11 @@ async function setup(
     return { committed, card: await workItems.get({ orgId: 'org-1', id: cardId }) };
   };
   /** Puts a card in a phase directly, the way a person's move would leave it. */
-  const putAt = async (cardId: string, stage: string) => {
+  const putAt = async (cardId: string, stage: string, autonomy?: 'arm') => {
     const card = await workItems.get({ orgId: 'org-1', id: cardId });
     await workItems.commitTransition({
       ...scope,
+      ...(autonomy ? { autonomy } : {}),
       workItemId: cardId,
       expectedRevision: card!.revision,
       destinationStage: stage,
@@ -644,14 +645,17 @@ describe('intake routes moving existing cards on status events', () => {
   });
 
   it('moves a card into a working phase such as Triage only when the route allows it', async () => {
-    const { route, deliver, deliverEvent, putAt, routeDecisions, stageAudits, boards, scope } = await setup();
+    const { route, deliver, deliverEvent, putAt, routeDecisions, stageAudits, boards, scope, workItems } =
+      await setup();
     const reopened = await route({
       name: 'Reopened back to Triage',
       on: ['work_item.reopened'],
       target: { boardKey: 'work', phaseKey: 'triage' },
     });
     const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
-    await putAt(card.id, 'done');
+    // Armed by a person before the issue closed.
+    await putAt(card.id, 'done', 'arm');
+    expect((await workItems.get({ orgId: 'org-1', id: card.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
 
     expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['done'] });
     // Refused for good, not retried: the route has to change first.
@@ -668,7 +672,10 @@ describe('intake routes moving existing cards on status events', () => {
       { allowWorkingPhase: true },
       { expectedRevision: reopened.revision, actor: 'admin' },
     );
-    expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['triage'] });
+    const moved = (await deliverEvent(card.id, { type: 'work_item.reopened' })).card;
+    expect(moved).toMatchObject({ stages: ['triage'] });
+    // The reopen is not a person's say-so: the card waits for consent again before it runs.
+    expect(moved?.autonomyArmedAt).toBeNull();
   });
 
   it("ignores a route that names another board, or is disabled, and takes the next match on the card's board", async () => {

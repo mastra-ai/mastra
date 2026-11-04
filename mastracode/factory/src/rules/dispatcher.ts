@@ -2060,7 +2060,8 @@ export class FactoryDecisionDispatcher {
         },
         {
           ifActive: { behavior: 'persist' },
-          ifIdle: { behavior: decision.idleBehavior ?? 'wake' },
+          // An untrusted author never starts a run: the pointer waits for the session's next one.
+          ifIdle: { behavior: decision.authorTrusted ? (decision.idleBehavior ?? 'wake') : 'persist' },
           requestContext: factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId }),
         },
       ),
