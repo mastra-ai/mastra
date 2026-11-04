@@ -53,6 +53,8 @@ export type ChartCardProps<V extends string = string> = {
   isLoading?: boolean;
   /** Top-bar buttons, e.g. "View in traces": revealed on hover, except on `hero` cards. */
   actions?: ReactNode;
+  /** Top-bar buttons always shown, after `actions`: ones that show a state, e.g. a pinned widget's unpin button. */
+  persistentActions?: ReactNode;
   /**
    * Legend and controls above the body; they stay in every state. Pass `false` or `null` while
    * there's nothing to show yet, and the row keeps its height.
@@ -85,6 +87,7 @@ export function ChartCard<V extends string = string>({
   change,
   isLoading = false,
   actions,
+  persistentActions,
   toolbar,
   isUpdating = false,
   bodyHeight = 'fixed',
@@ -125,13 +128,15 @@ export function ChartCard<V extends string = string>({
             )}
           </div>
           {/* Pulled up and right by the same 8px, so the expand icon sits as far from the card's
-              top as from its right edge. Actions show on hover, the expand link always. */}
+              top as from its right edge. Actions show on hover, persistent actions and the expand
+              link always. */}
           <div className="-my-1 -mr-2 flex items-center gap-1 justify-self-end">
             {actions && (
               <MetricsCard.Actions reveal="hover" className="my-0">
                 {actions}
               </MetricsCard.Actions>
             )}
+            {persistentActions}
             {href ? (
               <Button
                 variant="ghost"
@@ -198,10 +203,25 @@ export function ChartCard<V extends string = string>({
             dragHandle={dragHandle}
           />
         )}
-        {actions && (
-          <MetricsCard.Actions reveal={hero ? 'always' : 'hover'} className={cn(hero && 'my-0 self-center')}>
-            {actions}
+        {persistentActions ? (
+          // One group, so the buttons keep their spacing; only `actions` wait for hover.
+          <MetricsCard.Actions className={cn(hero && 'my-0 self-center')}>
+            {actions &&
+              (hero ? (
+                actions
+              ) : (
+                <MetricsCard.Actions reveal="hover" className="my-0">
+                  {actions}
+                </MetricsCard.Actions>
+              ))}
+            {persistentActions}
           </MetricsCard.Actions>
+        ) : (
+          actions && (
+            <MetricsCard.Actions reveal={hero ? 'always' : 'hover'} className={cn(hero && 'my-0 self-center')}>
+              {actions}
+            </MetricsCard.Actions>
+          )
         )}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>

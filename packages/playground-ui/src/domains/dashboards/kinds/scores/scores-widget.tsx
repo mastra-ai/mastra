@@ -6,11 +6,13 @@ import { BUCKET_AXIS } from '../../../metrics/lib/chart-axis';
 import { CHART_COLORS } from '../../../metrics/lib/chart-colors';
 import { bucketPlan, intervalHours } from '../../../metrics/lib/metrics-buckets';
 import { ViewGate } from '../../components/view-gate';
+import { PendingChartCard } from '../../components/widget-chrome';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { useScorers } from '../../hooks/use-scorers';
 import { viewTitle } from '../../lib/chrome';
 import type { ViewHeading } from '../../lib/chrome';
 import { FORMATTERS } from '../../lib/format';
+import { pinActions } from '../../lib/pin-actions';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeScores, withScorer } from '../../lib/scores';
@@ -28,12 +30,17 @@ const SCORER_COLORS = [
   CHART_COLORS.indigo,
 ];
 
-export function ScoresWidget({ widget, views, expand, dragHandle }: WidgetKindProps<ScoresOptions>) {
+export function ScoresWidget({ widget, views, expand, dragHandle, pin }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
   // Scores show their first view only, so the title is plain or, with somewhere to expand to, a link.
-  const heading = { ...viewTitle(widget, [view], 0, () => {}, expand), dragHandle };
+  const heading = {
+    ...viewTitle(widget, [view], 0, () => {}, expand),
+    dragHandle,
+    ...pinActions(pin),
+  };
   return (
-    <ViewGate queries={view.queries} pending={() => null}>
+    // The card, and its pin, stay while the view waits, so a pinned widget can still be unpinned.
+    <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
       {page => <ScoresView heading={heading} view={view} page={page} />}
     </ViewGate>
   );
