@@ -2,7 +2,10 @@ import { CopyButton } from '../CopyButton';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
 import type { InputGroupInputProps } from '../InputGroup';
 
-export type CopyInputProps = Omit<InputGroupInputProps, 'value' | 'readOnly' | 'defaultValue'> & {
+export type CopyInputProps = Omit<
+  InputGroupInputProps,
+  'value' | 'readOnly' | 'defaultValue' | 'aria-label' | 'aria-labelledby'
+> & {
   value: string;
   /** What's being copied, e.g. "organization ID": names the input and the copy button. */
   label: string;
