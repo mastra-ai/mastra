@@ -206,7 +206,9 @@ function readBoundRepository(item: Card): ReviewSourceOutput['boundRepository'] 
 }
 
 function readPullRequestAuthor(item: Card): string | null {
-  const author = attachedReviewedPullRequest(item)?.author ?? item.workItem.author;
+  // An attached pull request's author is its own; the card's issue author never stands in for it.
+  const attached = attachedReviewedPullRequest(item);
+  const author = attached ? attached.author : item.workItem.author;
   if (typeof author === 'string' && author.trim()) return author.trim();
   return null;
 }
