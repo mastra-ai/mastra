@@ -28,6 +28,35 @@ export function isReconnectableMCPError(error: unknown): boolean {
   );
 }
 
+const CONNECTION_NOT_ESTABLISHED_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
+const REJECTED_BEFORE_DISPATCH_STATUSES = new Set([400, 401, 403, 404]);
+
+/**
+ * Whether a reconnectable failure proves the request never reached the server's
+ * handler, so sending it again cannot repeat its effects.
+ *
+ * A reset socket (`fetch failed` with `UND_ERR_SOCKET`), a cut-off response
+ * (`terminated`) or a closed transport (`Connection closed`) can all follow a
+ * request the server already received and ran, so they return false.
+ */
+export function isUnsentRequestError(error: unknown): boolean {
+  if (!isReconnectableMCPError(error)) return false;
+
+  const message = (error as Error).message.toLowerCase();
+  if (
+    message.includes('not connected') ||
+    message.includes('econnrefused') ||
+    message.includes('connection refused') ||
+    /\bhttp 40[0134]\b/.test(message)
+  ) {
+    return true;
+  }
+
+  const { httpStatus, code } = getMCPDiscoveryErrorDetails(error);
+  if (httpStatus !== undefined) return REJECTED_BEFORE_DISPATCH_STATUSES.has(httpStatus);
+  return typeof code === 'string' && CONNECTION_NOT_ESTABLISHED_CODES.has(code);
+}
+
 const GATEWAY_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
 
 /**

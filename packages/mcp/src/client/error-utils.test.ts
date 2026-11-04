@@ -1,7 +1,12 @@
 import { SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 import { describe, expect, it } from 'vitest';
 
-import { getMCPDiscoveryErrorDetails, isReconnectableMCPError, isRecoverableTaskPollError } from './error-utils';
+import {
+  getMCPDiscoveryErrorDetails,
+  isReconnectableMCPError,
+  isRecoverableTaskPollError,
+  isUnsentRequestError,
+} from './error-utils';
 
 describe('getMCPDiscoveryErrorDetails', () => {
   it('preserves MCP SDK 2 HTTP status and transport code through wrapped causes', () => {
@@ -135,6 +140,24 @@ describe('isReconnectableMCPError', () => {
     }
     expect(isReconnectableMCPError('fetch failed')).toBe(false);
     expect(isReconnectableMCPError(undefined)).toBe(false);
+  });
+});
+
+describe('isUnsentRequestError', () => {
+  const fetchFailed = (code: string, message: string) =>
+    new TypeError('fetch failed', { cause: Object.assign(new Error(message), { code }) });
+
+  it.each([
+    ['not connected', new Error('Not connected'), true],
+    ['refused connection', fetchFailed('ECONNREFUSED', 'connect ECONNREFUSED 127.0.0.1:1'), true],
+    ['unknown host', fetchFailed('ENOTFOUND', 'getaddrinfo ENOTFOUND mcp.invalid'), true],
+    ['HTTP 404 from the endpoint', new Error('Error POSTing to endpoint (HTTP 404): Session not found'), true],
+    ['socket reset after sending', fetchFailed('UND_ERR_SOCKET', 'other side closed'), false],
+    ['response cut off', new Error('TypeError: terminated'), false],
+    ['transport closed', new Error('Connection closed'), false],
+    ['not reconnectable', new Error('Validation failed'), false],
+  ])('%s -> %s', (_label, error, unsent) => {
+    expect(isUnsentRequestError(error)).toBe(unsent);
   });
 });
 

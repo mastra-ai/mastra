@@ -3385,20 +3385,32 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
   let mcpServer: McpServer;
   let baseUrl: URL;
   let failing = false;
-  let discoverCount = 0;
-  let dropConcurrentToolCalls = false;
-  let pendingToolCallSockets: Array<{ destroy(): void }> = [];
+  let dropPingDuringWrite = false;
+  let toolCallsReceived: Record<string, number> = {};
+  let ticketsCreated = 0;
+  let writeStarted: Promise<void>;
+  let markWriteStarted: () => void;
+  let writeMayFinish: Promise<void>;
+  let finishWrite: () => void;
   let client: InternalMastraMCPClient;
 
   beforeEach(async () => {
     failing = false;
-    discoverCount = 0;
-    dropConcurrentToolCalls = false;
-    pendingToolCallSockets = [];
+    dropPingDuringWrite = false;
+    toolCallsReceived = {};
+    ticketsCreated = 0;
+    writeStarted = new Promise(resolve => (markWriteStarted = resolve));
+    writeMayFinish = new Promise(resolve => (finishWrite = resolve));
     mcpServer = new McpServer({ name: 'wedge-repro-server', version: '0.0.1' }, { capabilities: { tools: {} } });
     mcpServer.registerTool('ping', { description: 'ping', inputSchema: z.object({}) }, async () => ({
       content: [{ type: 'text', text: 'pong' }],
     }));
+    mcpServer.registerTool('createTicket', { description: 'create a ticket', inputSchema: z.object({}) }, async () => {
+      ticketsCreated++;
+      markWriteStarted();
+      await writeMayFinish;
+      return { content: [{ type: 'text', text: `ticket-${ticketsCreated}` }] };
+    });
     const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
 
     httpServer = createServer(async (req, res) => {
@@ -3415,14 +3427,15 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
         res.writeHead(400).end();
         return;
       }
-      if (body?.method === 'server/discover') discoverCount++;
-      if (body?.method === 'tools/call' && dropConcurrentToolCalls) {
-        pendingToolCallSockets.push(req.socket);
-        if (pendingToolCallSockets.length === 2) {
-          dropConcurrentToolCalls = false;
-          pendingToolCallSockets.forEach(socket => socket.destroy());
+      if (body?.method === 'tools/call') {
+        const name = body.params?.name;
+        toolCallsReceived[name] = (toolCallsReceived[name] ?? 0) + 1;
+        if (name === 'ping' && dropPingDuringWrite) {
+          dropPingDuringWrite = false;
+          await writeStarted;
+          req.socket.destroy();
+          return;
         }
-        return;
       }
       handler(req, res, body);
     });
@@ -3573,26 +3586,26 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
     });
   }, 20000);
 
-  it('shares one real HTTP reconnect when concurrent tool calls lose the same transport', async () => {
+  // A dropped socket can follow a request the server already ran, and reconnecting closed the
+  // shared transport, aborting the in-flight write so it was sent again. (#28415)
+  it('creates one ticket when a parallel call loses its connection while the write runs (#28415)', async () => {
     client = new InternalMastraMCPClient({
-      name: 'concurrent-http-reconnect',
+      name: 'replay-safety',
       server: { url: baseUrl },
     });
     await client.connect();
     const tools = await client.tools();
 
-    dropConcurrentToolCalls = true;
-    const results = await Promise.all([
-      tools['ping'].execute!({ context: {} }),
-      tools['ping'].execute!({ context: {} }),
-    ]);
+    dropPingDuringWrite = true;
+    const write = tools['createTicket'].execute!({});
+    const [ping] = await Promise.allSettled([tools['ping'].execute!({})]);
+    finishWrite();
+    const [ticket] = await Promise.allSettled([write]);
 
-    expect(results).toMatchObject([
-      { content: [{ type: 'text', text: 'pong' }] },
-      { content: [{ type: 'text', text: 'pong' }] },
-    ]);
-    // The reconnect reuses the negotiated revision instead of probing again.
-    expect(discoverCount).toBe(1);
+    expect(ticketsCreated).toBe(1);
+    expect(toolCallsReceived).toEqual({ createTicket: 1, ping: 1 });
+    expect(ticket).toMatchObject({ status: 'fulfilled', value: { content: [{ type: 'text', text: 'ticket-1' }] } });
+    expect(ping).toMatchObject({ status: 'rejected', reason: { id: 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN' } });
   }, 20000);
 });
 
@@ -3612,6 +3625,9 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     });
     return { client, sdkClient };
   }
+
+  // Only failures that prove the call never reached the server are retried.
+  const refused = () => new Error('connect ECONNREFUSED 127.0.0.1:1234');
 
   it('shares one reconnect when concurrent calls fail on the same transport', async () => {
     const { client, sdkClient } = createToolClient();
@@ -3640,8 +3656,8 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     const secondCall = tool.execute?.({});
     await vi.waitFor(() => expect(callTool).toHaveBeenCalledTimes(2));
 
-    rejectFirst(new Error('Connection closed'));
-    rejectSecond(new Error('Connection closed'));
+    rejectFirst(refused());
+    rejectSecond(refused());
 
     await expect(Promise.all([firstCall, secondCall])).resolves.toEqual([
       { content: [{ type: 'text', text: 'pong' }] },
@@ -3672,7 +3688,7 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     await vi.waitFor(() => expect(callTool).toHaveBeenCalledOnce());
 
     (client as any).transport = replacementTransport;
-    rejectToolCall(new Error('Connection closed'));
+    rejectToolCall(refused());
 
     await expect(result).resolves.toEqual({ content: [{ type: 'text', text: 'pong' }] });
     expect(staleTransport.close).not.toHaveBeenCalled();
@@ -3706,8 +3722,8 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
       });
     const callTool = vi
       .spyOn(sdkClient, 'callTool')
-      .mockRejectedValueOnce(new Error('Connection closed'))
-      .mockRejectedValueOnce(new Error('Connection closed'))
+      .mockRejectedValueOnce(refused())
+      .mockRejectedValueOnce(refused())
       .mockResolvedValue({ content: [{ type: 'text', text: 'pong' }] });
 
     const tool = (await client.tools())['ping'];
@@ -3771,7 +3787,7 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     await vi.waitFor(() => expect(callTool).toHaveBeenCalledOnce());
 
     await client.disconnect();
-    rejectToolCall(new Error('Connection closed'));
+    rejectToolCall(refused());
 
     await expect(result).rejects.toThrow('MCP client was disconnected while recovering the failed transport');
     expect(connect).not.toHaveBeenCalled();
