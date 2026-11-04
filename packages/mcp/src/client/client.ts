@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { AnySpan, TracingContext } from '@mastra/core/observability';
-import { createTool, validateToolOutput } from '@mastra/core/tools';
+import { createTool, getValidationIssuePaths, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
@@ -377,6 +377,19 @@ function runOutsideDatadogTraceScope<T>(callback: () => T): T {
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
  */
+/**
+ * Names a tool-call failure for logs without its message: server error text can echo the submitted
+ * arguments back (Issue #29318). The full error still reaches the caller.
+ */
+function errorKind(error: unknown): string {
+  if (error instanceof MastraError) return error.id;
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    return code === undefined ? error.name : `${error.name} (${String(code)})`;
+  }
+  return typeof error;
+}
+
 function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 'warn' | 'error' {
   switch (level) {
     case 'debug':
@@ -1817,7 +1830,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 return res && finishToolCall(res);
               }
 
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+              this.log('debug', `Executing tool: ${tool.name}`, { runId: context?.runId });
               // progressToken spreads last so the Mastra-managed token takes precedence.
               const progressMeta = this.enableProgressTracking
                 ? { progressToken: context?.runId || crypto.randomUUID() }
@@ -1860,7 +1873,7 @@ export class InternalMastraMCPClient extends MastraBase {
               // consumer opted into `'return'`.
               if (res.isError && this.onToolError === 'throw') {
                 const errorText = extractToolErrorText(res.content);
-                this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
+                this.log('debug', `Tool reported an error: ${tool.name}`);
                 throw new MastraError({
                   id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
                   domain: ErrorDomain.MCP,
@@ -1890,7 +1903,7 @@ export class InternalMastraMCPClient extends MastraBase {
                   const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
                   if (validation.error) {
                     this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
-                      message: validation.error.message,
+                      issuePaths: getValidationIssuePaths(validation.error, validationSchema, 'output'),
                     });
                     return validation.error;
                   }
@@ -1927,17 +1940,15 @@ export class InternalMastraMCPClient extends MastraBase {
                   return await executeToolCall();
                 } catch (reconnectError) {
                   this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
-                    originalError: e instanceof Error ? e.message : String(e),
-                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
-                    toolArgs: input,
+                    originalError: errorKind(e),
+                    reconnectError: errorKind(reconnectError),
                   });
                   throw reconnectError;
                 }
               }
 
               this.log('error', `Error calling tool: ${tool.name}`, {
-                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                toolArgs: input,
+                error: errorKind(e),
               });
               throw e;
             }

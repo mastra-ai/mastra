@@ -1035,7 +1035,7 @@ describe('CoreToolBuilder validation failure logs', () => {
   }
 
   function expectNoLoggedValue(logger: ReturnType<typeof spyLogger>, value: string) {
-    for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+    for (const level of ['debug', 'info', 'warn', 'error', 'trackException'] as const) {
       for (const call of logger[level].mock.calls) {
         expect(JSON.stringify(call)).not.toContain(value);
       }
@@ -1066,6 +1066,30 @@ describe('CoreToolBuilder validation failure logs', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Tool input validation failed',
       expect.objectContaining({ tool: 'register_user', issuePaths: ['email', 'address.zip'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('masks submitted record keys in the logged input paths', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'tag_contacts',
+      description: 'Tags contacts',
+      inputSchema: z.object({
+        contacts: z.record(z.string(), z.object({ tags: z.array(z.string()) })),
+      }),
+      execute: async () => ({ ok: true }),
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'tag_contacts', logger: logger as any },
+    }).build();
+
+    await builtTool.execute!({ contacts: { [email]: { tags: ['vip', 7] } } }, { toolCallId: 'call-1', messages: [] });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool input validation failed',
+      expect.objectContaining({ tool: 'tag_contacts', issuePaths: ['contacts.*.tags.1'] }),
     );
     expectNoLoggedValue(logger, email);
   });

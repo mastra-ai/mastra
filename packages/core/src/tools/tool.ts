@@ -638,7 +638,7 @@ export class Tool<
           const logger = organizedContext.mastra?.getLogger?.() ?? this.mastra?.getLogger?.();
           logger?.warn('Tool output validation failed', {
             toolId: this.id,
-            issuePaths: getValidationIssuePaths(outputValidation.error),
+            issuePaths: getValidationIssuePaths(outputValidation.error, this.outputSchema, 'output'),
           });
           if (this.outputValidation === 'warn') {
             // The tool already ran, so keep its real result and only report the mismatch.

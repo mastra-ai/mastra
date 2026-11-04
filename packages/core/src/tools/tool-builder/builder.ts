@@ -866,7 +866,7 @@ export class CoreToolBuilder extends MastraBase {
             if (resumeValidation.error) {
               logger?.warn('Tool resume data validation failed', {
                 ...logData,
-                issuePaths: getValidationIssuePaths(resumeValidation.error),
+                issuePaths: getValidationIssuePaths(resumeValidation.error, resumeSchema),
               });
               toolSpan?.end({
                 output: resumeValidation.error,
@@ -901,7 +901,7 @@ export class CoreToolBuilder extends MastraBase {
           if (suspendValidation.error) {
             logger?.warn('Tool suspend data validation failed', {
               ...logData,
-              issuePaths: getValidationIssuePaths(suspendValidation.error),
+              issuePaths: getValidationIssuePaths(suspendValidation.error, suspendSchema),
             });
             toolSpan?.end({
               output: suspendValidation.error,
@@ -934,7 +934,7 @@ export class CoreToolBuilder extends MastraBase {
           if (outputValidation.error) {
             logger?.warn('Tool output validation failed', {
               ...logData,
-              issuePaths: getValidationIssuePaths(outputValidation.error),
+              issuePaths: getValidationIssuePaths(outputValidation.error, outputSchema, 'output'),
             });
             toolSpan?.end({
               output: outputValidation.error,
@@ -1038,7 +1038,10 @@ export class CoreToolBuilder extends MastraBase {
           const suspendedToolRunIdErrToIgnore =
             error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
           if (error && !suspendedToolRunIdErrToIgnore) {
-            logger.warn('Tool input validation failed', { ...logData, issuePaths: getValidationIssuePaths(error) });
+            logger.warn('Tool input validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(error, parameters),
+            });
             toolSpan?.end({ output: error, ...executionFailureTermination(error), attributes: { success: false } });
             return error;
           }
