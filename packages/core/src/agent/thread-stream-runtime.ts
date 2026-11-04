@@ -5517,7 +5517,8 @@ export class AgentThreadStreamRuntime {
       }
       const ownerRunId = owns.owner ? threadLeaseRunId(owns.owner) : undefined;
       // Only user messages have an admission the owner announces (their pending presentation), so only
-      // they can be held until admitted without risking a second delivery.
+      // they can be held until admitted without risking a second delivery. Known limit: if the owner admits it
+      // but that presentation is lost before its run ends, the held copy is queued again and the message runs twice.
       if (owns.owner && ownerRunId && this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {
         const forwarded = state.forwardedIdleSignalsByThread.get(key) ?? new Map();
         // The owner presents it under the run ID it resolves the address to, which drops a legacy retake marker.
