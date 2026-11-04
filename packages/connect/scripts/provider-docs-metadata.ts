@@ -63,7 +63,7 @@ export const EXCLUDED_PROVIDERS: ReadonlySet<string> = new Set([
 ]);
 
 /** Shared Connect setup that every generated page links to as its prerequisite. */
-export const CONNECT_GUIDE_PATH = '/docs/mastra-platform/connect/overview';
+export const CONNECT_GUIDE_PATH = '/docs/mastra-platform/connect';
 
 /** Providers with a generated toolset in src/providers. Keys are provider IDs. */
 export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
@@ -256,6 +256,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     canonicalPage: 'providers/resend.mdx',
     ownership: 'generated-page',
     summary: 'send email and broadcasts, and manage contacts, segments, domains, templates, and webhooks',
+    note: "Connect Resend with an API key that has **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.",
     emit: true,
   },
   'sharepoint-online': {

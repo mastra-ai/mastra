@@ -1021,6 +1021,12 @@ Provider ID: `posthog` · 67 tools
 
 Provider ID: `resend` · 80 tools
 
+:::note
+
+Connect Resend with an API key that has **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.
+
+:::
+
 | Tool | Description |
 | - | - |
 | `resend_add_contact_to_segment` | Add a contact to a segment in Resend. |

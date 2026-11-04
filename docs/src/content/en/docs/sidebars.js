@@ -812,7 +812,7 @@ const sidebars = {
       collapsed: true,
       link: {
         type: 'doc',
-        id: 'mastra-platform/connect/overview',
+        id: 'mastra-platform/connect',
       },
       customProps: {
         contextualSidebar: true,

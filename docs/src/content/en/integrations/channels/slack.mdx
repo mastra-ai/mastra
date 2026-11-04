@@ -17,11 +17,11 @@ Use Slack with Mastra in two ways:
 - **Agent tools** let an agent act in Slack, for example to read conversations or send messages.
 - **Agent chat** lets people message your agent in Slack channel threads or direct messages. Mastra runs the agent for each message and streams the response back to Slack. The Slack adapter handles Slack AI indicators and interactive cards for you.
 
-[Mastra Connect](/docs/mastra-platform/connect/overview) sets up both and keeps Slack credentials on the Mastra platform. For agent chat, you can also create and manage your own Slack app instead.
+[Mastra Connect](/docs/mastra-platform/connect) sets up both and keeps Slack credentials on the Mastra platform. For agent chat, you can also create and manage your own Slack app instead.
 
 ## Connect
 
-Before you start, complete the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to install `@mastra/connect` and configure your platform project.
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
 
 Slack tools and Slack chat use separate connections with different credentials, so one connection can't serve both:
 

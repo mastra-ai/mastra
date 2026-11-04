@@ -10,11 +10,11 @@ packages:
 
 Telegram channels let people talk to your agent in Telegram direct messages, groups, and bot mentions.
 
-[Mastra Connect](/docs/mastra-platform/connect/overview) stores your Telegram bot token on the Mastra platform and registers the webhook for you. You can also manage the bot token and webhook yourself.
+[Mastra Connect](/docs/mastra-platform/connect) stores your Telegram bot token on the Mastra platform and registers the webhook for you. You can also manage the bot token and webhook yourself.
 
 ## Connect
 
-Before you start, complete the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to install `@mastra/connect` and configure your platform project.
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
 
 Connect uses a bot token from BotFather. Before you connect an agent, set `MASTRA_ENCRYPTION_KEY` on a persistent production server. Mastra uses it to encrypt the stored webhook secret. Without a key, the secret is stored unencrypted.
 
