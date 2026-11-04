@@ -5,16 +5,16 @@ import { cn } from '@/lib/utils';
 export type DashboardSpan = (typeof DASHBOARD_WIDGET_SPANS)[number];
 
 /**
- * Twelve columns on wide containers. Below `@3xl` every widget takes the row, as in `MetricsGrid`;
- * between `@3xl` and `@7xl`, widgets narrower than half take half, like the Metrics page's 3-up grids.
+ * Below `@3xl` every widget takes the row, as in `MetricsGrid`. From `@3xl` up each widget takes its
+ * saved span, so a row keeps the widths it was arranged with and never wraps onto a second line.
  */
 const SPAN_CLASSES: Record<DashboardSpan, string> = {
   12: 'col-span-full',
   6: '@3xl:col-span-6',
-  4: '@3xl:col-span-6 @7xl:col-span-4',
-  3: '@3xl:col-span-6 @7xl:col-span-3',
-  2: '@3xl:col-span-4 @7xl:col-span-2',
-  1: '@3xl:col-span-2 @7xl:col-span-1',
+  4: '@3xl:col-span-4',
+  3: '@3xl:col-span-3',
+  2: '@3xl:col-span-2',
+  1: '@3xl:col-span-1',
 };
 
 /** One dashboard row: its own grid, so a short row never pulls widgets up from the next. */
