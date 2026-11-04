@@ -112,8 +112,8 @@ There is no dual-write rollback: an older Factory version sees the legacy snapsh
 
 Each project's boards live in its database, and the stored row is the board.
 
-- **Factory's boards**: the built-in Work board, the boards you pass to `new MastraFactory({ boards })` (app boards) and the definitions you pass as `seedBoards`. Factory stores each in a project once: when the project is created, and in projects that existed before on the first time a process loads them, which includes the preload at startup. The project keeps a key's board from then on. A Factory release or an app change never rewrites it, and a board the project deleted is not stored again. A key you add later is stored once in every project that hasn't had it. The legacy Review board is never stored and stays read-only.
-- **The project's own boards**: boards an admin created through the boards API, or that an app wrote with [`factory.insertBoard()`](#writing-a-board-into-projects).
+- **Factory's boards**: the built-in Work board and the boards you pass to `new MastraFactory({ boards })` (app boards). Factory stores each in a project once: when the project is created, and in projects that existed before on the first time a process loads them, which includes the preload at startup. The project keeps a key's board from then on. A Factory release or an app change never rewrites it, and a board the project deleted is not stored again. A key you add later is stored once in every project that hasn't had it. The legacy Review board is never stored and stays read-only.
+- **The project's own boards**: boards an admin created through the boards API, or that an app wrote with [`factory.upsertBoard()`](#writing-a-board-into-projects).
 
 A project's boards are the Work and app boards in code order, followed by the others. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. Existing apps need no change.
 
@@ -132,17 +132,17 @@ What code behaviour depends on stays fixed, and an edit that changes it is refus
 
 Everything else can change: names and descriptions, added `nextPhases`, `autoStart` and `autoStartWhen`, exit-tool approval, runner instructions, the runner of working phases without code handlers, the order of phases after the first, and new phases (which behave like stored-board phases).
 
-**When Factory's definition changes.** A project keeps the board it stored, so a newer Work default or a changed app board doesn't reach it on its own. `POST …/boards/:boardKey/reset` with `expectedRevision` rewrites the board to Factory's current definition for its key (Work, an app board or a `seedBoards` entry) at the next revision; revisions never go back, so a client holding an older revision is refused.
+**When Factory's definition changes.** A project keeps the board it stored, so a newer Work default or a changed app board doesn't reach it on its own. `POST …/boards/:boardKey/reset` with `expectedRevision` rewrites the board to Factory's current definition for its key (Work or an app board) at the next revision; revisions never go back, so a client holding an older revision is refused.
 
 **Boards that no longer fit the code.** A Work or app board is served even when it has fallen out of step with a newer release's code, with the code behaviour that still fits it. A phase the code declares keeps its handlers only while it is on the board with the same `kind`, `runner.context`, `runner.skill` and exit tool; an outcome is dropped when its target phase is gone or the board no longer allows the move; the board's tool rules always stay (they hold exit-tool approvals, such as Planning's `submit_plan`), and its event rules and transition policy need every phase the code declares, and `sourceClosed` needs both its phases, still terminal. A move Factory's code makes that the board's `nextPhases` don't allow is reported too; when code makes it, the move is refused (and retried until its attempts run out), and the card stays where it is. Each dropped behaviour is reported in the board's `problems`, for example `Phase "testing" isn't on stored board "release", so its code behaviour doesn't run.` or `Phase "triage" runs without its code behaviour: <conflict>`. A board stored under an app board's key that the app stopped defining is served as one of the project's own boards.
 
-Creating a board under a built-in or app board's key is refused with `409 code_board`, and so is deleting the Work board, whose code handlers run by its key; reset it instead. App and `seedBoards` boards can be deleted like the project's own; Factory doesn't store them again, and `factory.insertBoard()` brings one back. A stored `review` board stays hidden by the Review board.
+Creating a board under a built-in or app board's key is refused with `409 code_board`, and so is deleting the Work board, whose code handlers run by its key; reset it instead. App boards can be deleted like the project's own; Factory doesn't store them again, and `factory.upsertBoard()` brings one back. A stored `review` board stays hidden by the Review board.
 
 **When a board isn't stored.** If storing Factory's boards in a project fails, the boards it couldn't store aren't served, the catalog reports `Board "<key>" isn't stored in this project yet; Factory stores it on the next load.`, and `GET …/boards/:boardKey` answers `404 board_not_found`; the project's next load tries again. Factory serves code boards itself only for the legacy Review board, for every project when the boards storage could not start, and on a replica that has not loaded a project yet, until its first load.
 
 #### Writing a board into projects
 
-`seedBoards` stores board definitions in every project once, including existing projects (on their first load, which includes the preload in `prepare()`) and projects created later; a project that deletes one keeps it deleted. `factory.insertBoard()` is a one-off write after `prepare()`: it stores a board in each named project (or all of them) that has no board under its key, and never over one it has, edited or not. A project that deleted the board gets it again, so use it to bring a deleted app or seed board back, or to push a board into chosen projects, and don't run it on every boot. The board is checked once, as the boards API checks it, and each insert is audited as `factory.board.created` by `system:factory`. It returns the projects it stored the board in and the ones it skipped. A refused board throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `unknown_skill`, `code_behaviour`, or `code_board` for the legacy Review board's key). A board under a new key has no code behaviour; an app board's key keeps the app board's.
+`factory.upsertBoard()` writes a board definition into projects after `prepare()`: each named project (or all of them) that has no board under its key gets it, and each one that has it, edited or not, has it replaced at the next revision. Factory doesn't run it for you, so projects created later don't get the board until you run it again; run it from an admin script, or after `prepare()` when you want every project to have the definition you ship. The board is checked once, as the boards API checks it, each replacement passes the checks an edit does (cards in a removed phase refuse it with `phase_in_use` there), and each write is audited as `factory.board.created` or `factory.board.updated` by `system:factory`. It returns the projects it stored the board in, the ones it replaced it in, and the ones that already had it unchanged. A refused board throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use`, `project_not_found`, or `code_board` for the legacy Review board's key). A board under a new key has no code behaviour; an app board's key keeps the app board's, so it also brings back an app board a project deleted.
 
 ```ts
 const bugs = {
@@ -155,12 +155,9 @@ const bugs = {
   ],
 } satisfies StoredBoardInput;
 
-// Every project stores Bugs once, now and when it's created.
-const factory = new MastraFactory({ storage, seedBoards: [bugs] });
+const factory = new MastraFactory({ storage });
 await factory.prepare();
-
-// Once, for example from an admin script: give Bugs back to one project that deleted it.
-const { inserted, skipped } = await factory.insertBoard(bugs, { projects: [{ orgId, factoryProjectId }] });
+const { inserted, updated, unchanged } = await factory.upsertBoard(bugs, { projects: 'all' });
 ```
 
 **Editing rules for stored boards.**
@@ -221,15 +218,15 @@ Admins can make the same edits in the Factory UI under **Settings → Work board
 
 ### Migrating from `defineBoard()`
 
-`defineBoard()` and the `boards` option of `MastraFactory` are deprecated: pass board definitions as `seedBoards`, write them into existing projects with [`factory.insertBoard()`](#writing-a-board-into-projects), or manage them through the boards API. Nothing breaks: each project stores the boards you pass once, Factory serves them from its rows with the code behaviour the board declares, and a later code change reaches a project only through reset. Factory logs once per process:
+`defineBoard()` and the `boards` option of `MastraFactory` are deprecated: write board definitions into projects with [`factory.upsertBoard()`](#writing-a-board-into-projects), or manage them through the boards API. Nothing breaks: each project stores the boards you pass once, Factory serves them from its rows with the code behaviour the board declares, and a later code change reaches a project only through reset. Factory logs once per process:
 
 ```text
-[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Pass board definitions as seedBoards, write them into existing projects with factory.insertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.
+[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Write board definitions into projects with factory.upsertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.
 ```
 
 `includeDefaultBoards` decides whether projects get the built-in Work board (and the legacy Review board).
 
-Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no handlers, policies or rules, can move off code: pass its definition under a new key as `seedBoards` (and `factory.insertBoard()` it into existing projects), move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
+Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no handlers, policies or rules, can move off code: write its definition under a new key into projects with `factory.upsertBoard()`, move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
 
 Removing `defineBoard()` still needs code behaviour that stored boards can reference by name, and integrations that read each project's boards. That work is tracked in [mastra-ai/mastra#28920](https://github.com/mastra-ai/mastra/issues/28920).
 

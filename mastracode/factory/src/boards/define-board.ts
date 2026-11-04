@@ -540,8 +540,8 @@ const DEFINED_BOARD = Symbol('DefinedBoard');
 /**
  * Declares a board in code.
  *
- * @deprecated Pass the board's definition as `MastraFactory({ seedBoards })`, write it into existing
- * projects with `factory.insertBoard()`, or manage it through the boards API
+ * @deprecated Write the board's definition into projects with `factory.upsertBoard()`, or manage
+ * it through the boards API
  * (`/web/factory/projects/:id/boards`, README "Stored boards"); removal is tracked in
  * mastra-ai/mastra#28920. A board defined here still works: each project stores it once and is
  * served from its row, with the code behaviour it declares.

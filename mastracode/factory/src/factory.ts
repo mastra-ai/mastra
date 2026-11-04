@@ -48,14 +48,13 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
-import { BoardWriteError, BoardWrites, issueMessage } from './boards/board-writes.js';
+import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
-import { compileStoredBoard, storedBoardInputSchema } from './boards/stored-board.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
@@ -322,20 +321,12 @@ export interface MastraFactoryConfig {
   /**
    * Boards stored in every project once, next to the boards each project stored.
    *
-   * @deprecated Pass board definitions as `seedBoards`, write them into existing projects with
-   * `factory.insertBoard()`, or manage them through the boards API (`/web/factory/projects/:id/boards`,
+   * @deprecated Write board definitions into projects with `factory.upsertBoard()`, or manage them
+   * through the boards API (`/web/factory/projects/:id/boards`,
    * README "Stored boards"); removal is tracked in mastra-ai/mastra#28920. Boards passed here still
    * work: each project stores them once and is served from its rows, with the code behaviour they declare.
    */
   boards?: readonly InstalledBoard[];
-  /**
-   * Board definitions stored in every project once: when a project is created, and in projects
-   * that exist already on their first load. Each key is stored once per project, so a project
-   * that edits or deletes the board keeps its change, and a later change here doesn't reach
-   * projects that stored the board before; write it into them with `factory.insertBoard()` or the
-   * boards API. Keys must be unique and can't be a built-in or app board's key.
-   */
-  seedBoards?: readonly StoredBoardInput[];
   /**
    * App skills written in code with `createSkill()` from `@mastra/core/skills`.
    * Every Factory session can load them, and a board phase runs one through
@@ -458,34 +449,6 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
-/**
- * Checks `seedBoards` the way the boards API checks a new board, so a bad one fails at startup. An
- * unknown skill only warns, as it does for code boards (the boards API refuses it).
- */
-function assertSeedBoards(seedBoards: readonly StoredBoardInput[], codeBoards: BoardRegistry): StoredBoardInput[] {
-  const keys = new Set<string>();
-  return seedBoards.map(input => {
-    const parsed = storedBoardInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error(`MastraFactory: seed board is invalid: ${issueMessage(parsed.error.issues)}`);
-    }
-    const board = parsed.data;
-    if (codeBoards.has(board.key)) {
-      throw new Error(`MastraFactory: seed board "${board.key}" uses the key of a built-in or app board.`);
-    }
-    if (keys.has(board.key)) throw new Error(`MastraFactory: seed board "${board.key}" is listed twice.`);
-    keys.add(board.key);
-    try {
-      compileStoredBoard(board);
-    } catch (error) {
-      throw new Error(
-        `MastraFactory: seed board "${board.key}" is invalid: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    return board;
-  });
-}
-
 let warnedDefinedBoards = false;
 
 /** Warns once per process when the app declares boards in code; Factory's own boards never warn. */
@@ -493,7 +456,7 @@ function warnDefinedBoards(boards: BoardRegistry): void {
   if (warnedDefinedBoards || ![...boards.values()].some(isDefinedBoard)) return;
   warnedDefinedBoards = true;
   console.warn(
-    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Pass board definitions as seedBoards, write them into existing projects with factory.insertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.',
+    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Write board definitions into projects with factory.upsertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.',
   );
 }
 
@@ -535,10 +498,9 @@ export class MastraFactory {
   readonly #boards: BoardRegistry;
   /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
-  /** Writes to stored boards for `insertBoard()`; undefined until `prepare()` or when the boards domain is down. */
+  /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
   #boardStore: { writes: BoardWrites; projects: FactoryProjectsStorage; audit: AuditDomain } | undefined;
   readonly #skills: readonly InlineSkill[];
-  readonly #seedBoards: readonly StoredBoardInput[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
@@ -575,16 +537,6 @@ export class MastraFactory {
       );
     }
     this.#skills = assertFactorySkills(config.skills);
-    this.#seedBoards = assertSeedBoards(config.seedBoards ?? [], this.#boards);
-    for (const problem of findBoardSkillProblems(
-      createBoardRegistry({
-        boards: this.#seedBoards.map(board => compileStoredBoard(board)),
-        includeDefaultBoards: false,
-      }),
-      this.#skills,
-    )) {
-      console.warn(`[factory] ${problem}`);
-    }
     for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
       console.warn(`[factory] ${problem}`);
     }
@@ -604,18 +556,20 @@ export class MastraFactory {
   }
 
   /**
-   * Stores a board in projects that have none under its key, and never overwrites one: a project
-   * that has the board, edited or not, is skipped. It's a one-off write: a project that deleted
-   * the board gets it back, so don't run it on every boot (`seedBoards` stores a board in each
-   * project once, including projects created later, and keeps a deleted one deleted). Use it to
-   * bring back an app board a project deleted, or to push a board into chosen projects. The
-   * board is validated once, as the boards API does, and each insert is audited as
-   * `factory.board.created` by `system:factory`. The legacy Review board's key is refused with a
-   * `BoardWriteError` (`code_board`). Available after `prepare()`.
+   * Writes a board definition into projects: each project that has no board under its key gets
+   * it, and each one that has it, edited or not, has it replaced at the next revision. Use it to
+   * push a board from code into projects; it isn't run for you, and projects created later don't
+   * get it until you run it again. A Work or app board's key keeps that board's code behaviour,
+   * so the definition is checked as an edit is; a new key gets none (no handlers, outcomes, tool or
+   * event rules). The board is validated once, as the boards API does, and each write is audited
+   * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
+   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `code_board` for the
+   * legacy Review board, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
+   * Available after `prepare()`.
    *
    * @example
    * ```ts
-   * const { inserted, skipped } = await factory.insertBoard(
+   * const { inserted, updated, unchanged } = await factory.upsertBoard(
    *   {
    *     key: 'bugs',
    *     name: 'Bugs',
@@ -625,26 +579,25 @@ export class MastraFactory {
    *       { key: 'fixed', name: 'Fixed', kind: 'terminal' },
    *     ],
    *   },
-   *   { projects: [{ orgId, factoryProjectId }] },
+   *   { projects: 'all' },
    * );
    * ```
    */
-  async insertBoard(
+  async upsertBoard(
     board: StoredBoardInput,
     options: { projects: 'all' | readonly StoredBoardScope[] },
-  ): Promise<{ inserted: StoredBoardScope[]; skipped: StoredBoardScope[] }> {
+  ): Promise<{ inserted: StoredBoardScope[]; updated: StoredBoardScope[]; unchanged: StoredBoardScope[] }> {
     const store = this.#boardStore;
     if (!store) {
       throw new Error(
         this.#preparing
-          ? "MastraFactory.insertBoard(): the boards storage isn't available, so boards can't be stored."
-          : 'MastraFactory.insertBoard() needs prepare() first.',
+          ? "MastraFactory.upsertBoard(): the boards storage isn't available, so boards can't be stored."
+          : 'MastraFactory.upsertBoard() needs prepare() first.',
       );
     }
     const { writes, projects, audit } = store;
     const input = writes.validate(board);
-    // Work, app and seed boards are stored per project like any other, so their keys can be
-    // inserted (bringing back one a project deleted); the legacy Review board can't.
+    // Work and app boards are stored per project like any other; the legacy Review board isn't.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
@@ -661,7 +614,11 @@ export class MastraFactory {
         }
       }
     }
-    const result: { inserted: StoredBoardScope[]; skipped: StoredBoardScope[] } = { inserted: [], skipped: [] };
+    const result: { inserted: StoredBoardScope[]; updated: StoredBoardScope[]; unchanged: StoredBoardScope[] } = {
+      inserted: [],
+      updated: [],
+      unchanged: [],
+    };
     for (const scope of scopes) {
       const writer: BoardWriter = {
         id: 'factory',
@@ -669,7 +626,7 @@ export class MastraFactory {
           await audit.record({ orgId: scope.orgId, actorId: 'factory', actorType: 'system', ...entry });
         },
       };
-      ((await writes.insert(scope, input, writer)) ? result.inserted : result.skipped).push(scope);
+      result[await writes.upsert(scope, input, writer)].push(scope);
     }
     return result;
   }
@@ -905,7 +862,6 @@ export class MastraFactory {
         storage: storedBoardsStorage,
         projects: factoryProjectsStorage,
         codeSkills: this.#skills,
-        seedBoards: this.#seedBoards,
       });
       this.#projectBoards = projectBoards;
       this.#boardStore = {

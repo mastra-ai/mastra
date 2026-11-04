@@ -140,8 +140,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     }
 
     /**
-     * A database no other test file shares: boot stores seed boards in every project, and
-     * `insertBoard({ projects: 'all' })` writes to all of them.
+     * A database no other test file shares: `upsertBoard({ projects: 'all' })` writes to every
+     * project in it.
      */
     async function isolatedDatabase() {
       if (backend === 'libsql') return database();
@@ -158,11 +158,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     }
 
     /** Boots one replica: a real `MastraFactory` with its API mounted on Hono. */
-    async function boot(
-      newStorage: () => FactoryStorage,
-      orgId: string,
-      options: { seedBoards?: StoredBoardInput[]; boards?: InstalledBoard[] } = {},
-    ) {
+    async function boot(newStorage: () => FactoryStorage, orgId: string, options: { boards?: InstalledBoard[] } = {}) {
       const storage = newStorage();
       const github = new GithubIntegration({
         appId: '123',
@@ -835,56 +831,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(runsOf(requests, 'factory-triage', after.title)[0]).not.toContain(TRIAGE_NOTE);
       }, 120_000);
 
-      describe('seedBoards and insertBoard()', () => {
-        it('stores seedBoards in existing projects on their first load and in projects created later, once each', async () => {
-          stubModel();
-          const orgId = `org-${randomUUID()}`;
-          const db = await isolatedDatabase();
-          const before = await boot(db, orgId);
-          const existing = await createProject(before, 'Existing');
-          const keys = async (replica: Awaited<ReturnType<typeof boot>>, projectId: string) =>
-            (await replica.boards.list({ orgId, factoryProjectId: projectId })).map(row => [row.key, row.revision]);
-          expect(await keys(before, existing)).toEqual([['work', 1]]);
-
-          // Boot stores the seed board in the project that exists already.
-          const seeded = await boot(db, orgId, { seedBoards: [bugsBoard] });
-          expect(await keys(seeded, existing)).toEqual([
-            ['work', 1],
-            ['bugs', 1],
-          ]);
-          const later = await createProject(seeded, 'Later');
-          expect(await keys(seeded, later)).toEqual([
-            ['work', 1],
-            ['bugs', 1],
-          ]);
-          expect((await catalog(seeded, later)).map(board => [board.id, board.source])).toContainEqual([
-            'bugs',
-            'stored',
-          ]);
-          const card = await seeded.send('POST', `/web/factory/projects/${later}/work-items`, {
-            board: 'bugs',
-            title: 'Crash on save',
-          });
-          expect(card.status).toBe(200);
-          expect((await transition(seeded, later, card.json.workItem, 'fixing')).json.result).toMatchObject({
-            status: 'accepted',
-            stage: 'fixing',
-          });
-
-          // A project that deleted it keeps it deleted, through a restart with the same seeds.
-          const deleted = await seeded.send(
-            'DELETE',
-            `/web/factory/projects/${existing}/boards/bugs?expectedRevision=1`,
-          );
-          expect(deleted.status).toBe(204);
-          const restarted = await boot(db, orgId, { seedBoards: [{ ...bugsBoard, name: 'Bugs v2' }] });
-          expect(await keys(restarted, existing)).toEqual([['work', 1]]);
-          expect((await catalog(restarted, existing)).map(board => board.id)).not.toContain('bugs');
-          // And a changed seed doesn't rewrite the project that has it.
-          expect((await restarted.boards.get({ orgId, factoryProjectId: later }, 'bugs'))!.name).toBe('Bugs');
-        }, 60_000);
-
-        it('inserts a board into every project that lacks it, never over one it has, and audits each insert', async () => {
+      describe('upsertBoard()', () => {
+        it('writes a board into every project, over the ones that have it, and audits each write', async () => {
           stubModel();
           const orgId = `org-${randomUUID()}`;
           const replica = await boot(await isolatedDatabase(), orgId);
@@ -899,45 +847,91 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           });
           expect(ours.status).toBe(201);
 
-          const result = await replica.factory.insertBoard(bugsBoard, { projects: 'all' });
+          const result = await replica.factory.upsertBoard(bugsBoard, { projects: 'all' });
           expect(result.inserted.map(scope => scope.factoryProjectId).sort()).toEqual([first, third].sort());
-          expect(result.skipped).toEqual([{ orgId, factoryProjectId: edited }]);
+          expect(result.updated).toEqual([{ orgId, factoryProjectId: edited }]);
+          expect(result.unchanged).toEqual([]);
           expect((await replica.boards.get({ orgId, factoryProjectId: edited }, 'bugs'))!).toMatchObject({
-            name: 'Our bugs',
-            revision: 1,
+            name: 'Bugs',
+            revision: 2,
           });
           // Served at once on this replica, not after the recheck window.
           expect((await catalog(replica, first)).map(board => board.id)).toContain('bugs');
-
-          // Run again, it skips every project; a project that deleted the board gets it back.
-          const deleted = await replica.send('DELETE', `/web/factory/projects/${first}/boards/bugs?expectedRevision=1`);
-          expect(deleted.status).toBe(204);
-          const again = await replica.factory.insertBoard(bugsBoard, { projects: 'all' });
-          expect(again.inserted).toEqual([{ orgId, factoryProjectId: first }]);
-          expect(again.skipped).toHaveLength(2);
-
-          const audit = await replica.storage.getDomain<AuditStorage>('audit').list({
-            orgId,
-            factoryProjectId: third,
-            actions: ['factory.board.created'],
+          const card = await replica.send('POST', `/web/factory/projects/${first}/work-items`, {
+            board: 'bugs',
+            title: 'Crash on save',
           });
-          expect(audit.events.map(event => [event.action, event.actorType, event.actorId])).toEqual([
-            ['factory.board.created', 'system', 'factory'],
+          expect(card.status).toBe(200);
+          expect((await transition(replica, first, card.json.workItem, 'fixing')).json.result).toMatchObject({
+            status: 'accepted',
+            stage: 'fixing',
+          });
+
+          // Run again, it writes nothing; a project that deleted the board gets it back.
+          const deleted = await replica.send('DELETE', `/web/factory/projects/${third}/boards/bugs?expectedRevision=1`);
+          expect(deleted.status).toBe(204);
+          const again = await replica.factory.upsertBoard(bugsBoard, { projects: 'all' });
+          expect(again.inserted).toEqual([{ orgId, factoryProjectId: third }]);
+          expect(again.updated).toEqual([]);
+          expect(again.unchanged).toHaveLength(2);
+
+          // It isn't stored for you: a project created later has no board under the key.
+          const later = await createProject(replica, 'Later');
+          expect((await catalog(replica, later)).map(board => board.id)).not.toContain('bugs');
+
+          const audit = (projectId: string) =>
+            replica.storage
+              .getDomain<AuditStorage>('audit')
+              .list({ orgId, factoryProjectId: projectId, actions: ['factory.board.created', 'factory.board.updated'] })
+              .then(page => page.events.map(event => [event.action, event.actorType, event.actorId]));
+          expect(await audit(first)).toEqual([['factory.board.created', 'system', 'factory']]);
+          expect(await audit(edited)).toEqual([
+            ['factory.board.updated', 'system', 'factory'],
+            ['factory.board.created', 'human', 'admin-user'],
           ]);
 
+          // A card sits in Fixing, so a definition without that phase is refused there.
           await expect(
-            replica.factory.insertBoard({ ...bugsBoard, key: 'review' }, { projects: 'all' }),
+            replica.factory.upsertBoard(
+              {
+                ...bugsBoard,
+                phases: [
+                  { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixed'] },
+                  { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+                ],
+              },
+              { projects: [{ orgId, factoryProjectId: first }] },
+            ),
+          ).rejects.toMatchObject({ code: 'phase_in_use' });
+          await expect(
+            replica.factory.upsertBoard({ ...bugsBoard, key: 'review' }, { projects: 'all' }),
           ).rejects.toMatchObject({ code: 'code_board' });
           // Work's key is checked against Work's code behaviour, as an edit is.
           await expect(
-            replica.factory.insertBoard({ ...bugsBoard, key: 'work' }, { projects: 'all' }),
+            replica.factory.upsertBoard({ ...bugsBoard, key: 'work' }, { projects: 'all' }),
           ).rejects.toMatchObject({ code: 'code_behaviour' });
           await expect(
-            replica.factory.insertBoard({ ...bugsBoard, phases: [] }, { projects: 'all' }),
+            replica.factory.upsertBoard({ ...bugsBoard, phases: [] }, { projects: 'all' }),
           ).rejects.toMatchObject({ code: 'invalid_board' });
           await expect(
-            replica.factory.insertBoard(bugsBoard, { projects: [{ orgId, factoryProjectId: randomUUID() }] }),
+            replica.factory.upsertBoard(bugsBoard, { projects: [{ orgId, factoryProjectId: randomUUID() }] }),
           ).rejects.toMatchObject({ code: 'project_not_found' });
+        }, 60_000);
+
+        it('lets two replicas write the same board into a project at once, each write landing', async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const db = await isolatedDatabase();
+          const [a, b] = [await boot(db, orgId), await boot(db, orgId)];
+          const project = await createProject(a, 'Raced');
+          const scope = [{ orgId, factoryProjectId: project }];
+          const results = await Promise.all([
+            a.factory.upsertBoard({ ...bugsBoard, name: 'Bugs A' }, { projects: scope }),
+            b.factory.upsertBoard({ ...bugsBoard, name: 'Bugs B' }, { projects: scope }),
+          ]);
+          // One stored it and the other replaced it, after rereading when the insert lost.
+          expect(results.flatMap(result => [...result.inserted, ...result.updated])).toHaveLength(2);
+          expect((await a.boards.get({ orgId, factoryProjectId: project }, 'bugs'))!.revision).toBe(2);
         }, 60_000);
       });
 
@@ -977,7 +971,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         }
         const definition = (await replica.send('GET', `/web/factory/projects/${kept}/boards/release`)).json.board;
 
-        const result = await replica.factory.insertBoard(
+        const result = await replica.factory.upsertBoard(
           { key: 'release', name: definition.name, phases: definition.phases },
           {
             projects: [
@@ -988,7 +982,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         );
         expect(result).toEqual({
           inserted: [{ orgId, factoryProjectId: gone }],
-          skipped: [{ orgId, factoryProjectId: kept }],
+          updated: [],
+          unchanged: [{ orgId, factoryProjectId: kept }],
         });
         const back = await catalog(replica, gone);
         expect(back.find(board => board.id === 'release')).toMatchObject({ source: 'app' });

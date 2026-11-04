@@ -684,7 +684,7 @@ export function registerApiCommand(program: CommanderCommand): void {
   });
   addAction(factoryBoard, 'reset', FACTORY_API_ROUTE_CATALOG.boardReset, {
     description:
-      "Rewrite a project's Work, app or seed board to Factory's current definition at the next revision, using its expected revision",
+      "Rewrite a project's Work or app board to Factory's current definition at the next revision, using its expected revision",
     input: 'required',
     routePlacement: 'origin',
     examples: [

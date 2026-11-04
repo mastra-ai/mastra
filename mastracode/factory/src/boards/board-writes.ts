@@ -1,5 +1,5 @@
 /**
- * Writes to a project's stored boards, shared by the boards API and `MastraFactory#insertBoard()`.
+ * Writes to a project's stored boards, shared by the boards API and `MastraFactory#upsertBoard()`.
  *
  * Every write is checked against the rules `defineBoard()` enforces, the skills its runners name,
  * the code behaviour of a code board's copy, and the cards sitting on the board. It then
@@ -67,6 +67,7 @@ export function issueMessage(issues: readonly z.core.$ZodIssue[]): string {
 }
 
 const UNKNOWN_SKILL = 'but no such skill exists';
+const UPSERT_ATTEMPTS = 3;
 
 /** Storage refusals (a stale revision, a missing or existing board) as board write errors. */
 async function stored<T>(write: () => Promise<T>): Promise<T> {
@@ -151,16 +152,41 @@ export class BoardWrites {
   }
 
   /**
-   * Stores a validated board unless the project has one under its key, after the project's first
-   * load stored Factory's boards. Never overwrites; returns whether it stored the board.
+   * Stores a validated board in a project, after its first load stored Factory's boards: creates
+   * it when the project has none under its key, and otherwise replaces the project's board, edited
+   * or not, at its current revision, with the same checks as an edit. A write that loses a race
+   * with another one rereads and tries again.
    */
-  async insert(scope: StoredBoardScope, board: StoredBoardInput, writer: BoardWriter): Promise<boolean> {
+  async upsert(
+    scope: StoredBoardScope,
+    board: StoredBoardInput,
+    writer: BoardWriter,
+  ): Promise<'inserted' | 'updated' | 'unchanged'> {
     const { storage, boards } = this.deps;
     await boards.describe(scope);
-    if (!(await storage.insertIfMissing(scope, board, writer.id))) return false;
-    boards.invalidate(scope);
-    await this.#audit(scope, writer, 'created', board);
-    return true;
+    for (let attempt = 1; ; attempt++) {
+      const row = await storage.get(scope, board.key);
+      try {
+        if (!row) {
+          if (!(await storage.insertIfMissing(scope, board, writer.id))) {
+            throw new BoardWriteError(409, {
+              error: 'revision_mismatch',
+              message: `Board "${board.key}" was stored by another write; try again.`,
+            });
+          }
+          boards.invalidate(scope);
+          await this.#audit(scope, writer, 'created', board);
+          return 'inserted';
+        }
+        const { key, ...definition } = board;
+        const { written } = await this.replace(scope, key, definition, { expectedRevision: row.revision, writer });
+        return written ? 'updated' : 'unchanged';
+      } catch (error) {
+        const lost =
+          error instanceof BoardWriteError && (error.code === 'revision_mismatch' || error.code === 'board_not_found');
+        if (!lost || attempt >= UPSERT_ATTEMPTS) throw error;
+      }
+    }
   }
 
   /**
