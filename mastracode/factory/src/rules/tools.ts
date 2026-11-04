@@ -259,7 +259,12 @@ function createReviewVerdictTool(
             id: parent.id,
             userId: `agent:${binding.id}`,
             patch: {
-              metadata: { reviewVerdict: verdict, reviewedHeadSha: reviewedHeadSha.toLowerCase(), reviewedAt },
+              metadata: {
+                reviewVerdict: verdict,
+                reviewedHeadSha: reviewedHeadSha.toLowerCase(),
+                reviewedAt,
+                ...(reviewedNumber !== undefined ? { reviewedPullRequestNumber: reviewedNumber } : {}),
+              },
             },
           });
         }
