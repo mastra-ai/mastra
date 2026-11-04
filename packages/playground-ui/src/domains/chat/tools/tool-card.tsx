@@ -307,6 +307,7 @@ export const ToolCardInner = ({
           return (
             <KnowledgeToolBadge
               card={card}
+              args={input}
               toolName={toolName}
               metadata={metadata}
               toolCallId={toolCallId}
