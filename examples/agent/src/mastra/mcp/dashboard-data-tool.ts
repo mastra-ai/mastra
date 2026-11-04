@@ -2,35 +2,24 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import {
+  DASHBOARD_DATA_REQUESTS,
   DASHBOARD_DATA_TOOL_NAME,
   dashboardDataInputSchema,
   dashboardDataOutputSchema,
 } from '@mastra/mcp-apps-components/dashboard-renderer';
-import type { DashboardDataOperation, DashboardDataOutput } from '@mastra/mcp-apps-components/dashboard-renderer';
+import type { DashboardDataOutput } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { SERVER_ROUTES, invokeRoute } from '@mastra/server/server-adapter';
 
-// The read-only observability route that answers each read the dashboard makes. `visibility: ['app']`
-// only keeps the tool away from the model; it doesn't stop a direct call, so these are all it runs.
-const ROUTES = {
-  aggregateTraces: 'POST /observability/traces/aggregate',
-  aggregateSpans: 'POST /observability/spans/aggregate',
-  getMetricAggregate: 'POST /observability/metrics/aggregate',
-  getMetricBreakdown: 'POST /observability/metrics/breakdown',
-  getMetricTimeSeries: 'POST /observability/metrics/timeseries',
-  getMetricPercentiles: 'POST /observability/metrics/percentiles',
-  listScores: 'GET /observability/scores',
-  getScoreAggregate: 'POST /observability/scores/aggregate',
-  getScoreBreakdown: 'POST /observability/scores/breakdown',
-  getScoreTimeSeries: 'POST /observability/scores/timeseries',
-  getScorePercentiles: 'POST /observability/scores/percentiles',
-} satisfies Record<DashboardDataOperation, string>;
-
+// The tool context types `mastra` as a structural copy of `Mastra`, which `invokeRoute()` doesn't
+// accept. This narrows it, and is false when the MCP server isn't registered on a Mastra instance.
 function isMastra(value: unknown): value is Mastra {
   return typeof (value as Partial<Mastra> | undefined)?.getServer === 'function';
 }
 
 // Answers each dashboard read by running its Mastra route in-process as the caller, with the route's
 // own validation and permission checks, so the app sees exactly what the signed-in user can read.
+// `visibility: ['app']` only keeps the tool away from the model; it doesn't stop a direct call, so
+// the input schema's operations, and the routes behind them, are all it runs.
 export const dashboardDataTool = createTool({
   id: DASHBOARD_DATA_TOOL_NAME,
   description: 'Reads observability data for the dashboard app.',
@@ -39,7 +28,7 @@ export const dashboardDataTool = createTool({
   // Apps call it; hosts keep it away from the model.
   mcp: { _meta: { ui: { visibility: ['app'] } } },
   execute: async (call, { mastra, requestContext, abortSignal }): Promise<DashboardDataOutput> => {
-    const key = ROUTES[call.operation];
+    const key = DASHBOARD_DATA_REQUESTS[call.operation];
     const route = SERVER_ROUTES.find(candidate => `${candidate.method} ${candidate.path}` === key);
     if (!route) return { status: 404, body: { error: `This Mastra server has no ${key} route.` } };
     if (!isMastra(mastra))

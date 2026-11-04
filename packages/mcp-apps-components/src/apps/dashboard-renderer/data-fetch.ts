@@ -1,22 +1,12 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { firstText, structuredOutput } from '../../runtime/tool-result';
-import { DASHBOARD_DATA_OPERATIONS, DASHBOARD_DATA_TOOL_NAME, dashboardDataOutputSchema } from './data';
+import {
+  DASHBOARD_DATA_OPERATIONS,
+  DASHBOARD_DATA_REQUESTS,
+  DASHBOARD_DATA_TOOL_NAME,
+  dashboardDataOutputSchema,
+} from './data';
 import type { DashboardDataInput, DashboardDataOperation } from './data';
-
-/** The request `MastraClient` makes for each read, without the server's API prefix. */
-export const DASHBOARD_DATA_REQUESTS = {
-  aggregateTraces: 'POST /observability/traces/aggregate',
-  aggregateSpans: 'POST /observability/spans/aggregate',
-  getMetricAggregate: 'POST /observability/metrics/aggregate',
-  getMetricBreakdown: 'POST /observability/metrics/breakdown',
-  getMetricTimeSeries: 'POST /observability/metrics/timeseries',
-  getMetricPercentiles: 'POST /observability/metrics/percentiles',
-  listScores: 'GET /observability/scores',
-  getScoreAggregate: 'POST /observability/scores/aggregate',
-  getScoreBreakdown: 'POST /observability/scores/breakdown',
-  getScoreTimeSeries: 'POST /observability/scores/timeseries',
-  getScorePercentiles: 'POST /observability/scores/percentiles',
-} satisfies Record<DashboardDataOperation, string>;
 
 const OPERATION_BY_REQUEST = new Map<string, DashboardDataOperation>(
   DASHBOARD_DATA_OPERATIONS.map(operation => [DASHBOARD_DATA_REQUESTS[operation], operation]),

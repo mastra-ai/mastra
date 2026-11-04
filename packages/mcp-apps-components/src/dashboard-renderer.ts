@@ -14,6 +14,7 @@ export type { DashboardWidgetPinNotificationParams } from './apps/dashboard-rend
 export {
   DASHBOARD_DATA_TOOL_NAME,
   DASHBOARD_DATA_OPERATIONS,
+  DASHBOARD_DATA_REQUESTS,
   dashboardDataInputSchema,
   dashboardDataOutputSchema,
 } from './apps/dashboard-renderer/data';
