@@ -1,5 +1,5 @@
 /**
- * Writes to a project's stored boards, shared by the boards API and `MastraFactory#upsertBoard()`.
+ * Writes to a project's stored boards, shared by the boards API and `MastraFactory#insertBoard()`.
  *
  * Every write is checked against the rules `defineBoard()` enforces, the skills its runners name,
  * the code behaviour of a code board's copy, and the cards sitting on the board. It then
@@ -148,6 +148,19 @@ export class BoardWrites {
     this.deps.boards.invalidate(scope);
     await this.#audit(scope, writer, 'created', board);
     return row;
+  }
+
+  /**
+   * Stores a validated board unless the project has one under its key, after the project's first
+   * load stored Factory's boards. Never overwrites; returns whether it stored the board.
+   */
+  async insert(scope: StoredBoardScope, board: StoredBoardInput, writer: BoardWriter): Promise<boolean> {
+    const { storage, boards } = this.deps;
+    await boards.describe(scope);
+    if (!(await storage.insertIfMissing(scope, board, writer.id))) return false;
+    boards.invalidate(scope);
+    await this.#audit(scope, writer, 'created', board);
+    return true;
   }
 
   /**
