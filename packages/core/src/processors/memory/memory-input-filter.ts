@@ -81,6 +81,33 @@ import { parseMemoryRequestContext } from '../../memory';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
+/**
+ * A client returning tool outcomes usually doesn't know the id of the stored message that holds
+ * the calls (`@mastra/client-js` sends a fresh assistant or tool message), so the outcomes would
+ * be saved as a second copy of the call. When every outcome completes a call the latest stored
+ * message still has pending, that is the message being answered: take its id so `MessageList.add`
+ * folds the outcomes into it. A pending client call can only be completed by the client, so this
+ * can't mistake a duplicated server result for a new one.
+ */
+function answeringStoredCalls(outcomes: MastraDBMessage, latestStored: MastraDBMessage): MastraDBMessage {
+  if (outcomes.role !== 'assistant' || latestStored.role !== 'assistant' || outcomes.id === latestStored.id) {
+    return outcomes;
+  }
+
+  const pending = new Map<string, MastraToolInvocationPart['toolInvocation']['state']>();
+  for (const part of latestStored.content.parts) {
+    if (part.type === 'tool-invocation') pending.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+  }
+  const answersStoredCalls =
+    outcomes.content.parts.length > 0 &&
+    outcomes.content.parts.every(part => {
+      if (part.type !== 'tool-invocation') return false;
+      const storedState = pending.get(part.toolInvocation.toolCallId);
+      return storedState !== undefined && advancesToolInvocationState(storedState, part.toolInvocation.state);
+    });
+  return answersStoredCalls ? { ...outcomes, id: latestStored.id } : outcomes;
+}
+
 export interface MemoryInputFilterOptions {
   storage: MemoryStorage;
   /**
@@ -219,6 +246,8 @@ export class MemoryInputFilter implements Processor {
     if (boundaryAssistant) {
       const advanced = await this.advanceStoredToolCalls(boundaryAssistant, threadId);
       if (advanced) retainedInput = [advanced, ...retainedInput];
+    } else if (retainedInput[0]) {
+      retainedInput = [answeringStoredCalls(retainedInput[0], stored.messages[0]!)];
     }
 
     messageList.clear.input.db();
