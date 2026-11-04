@@ -137,6 +137,7 @@ describe('api command descriptors', () => {
       factoryBoardCreate: ['boardCreate', ['id'], true, true, false],
       factoryBoardUpdate: ['boardReplace', ['id', 'boardKey'], true, true, false],
       factoryBoardDelete: ['boardDelete', ['id', 'boardKey'], true, true, false],
+      factoryBoardReset: ['boardReset', ['id', 'boardKey'], true, true, false],
       factorySkills: ['skillList', [], true, false, false],
       factorySkillUpdate: ['skillOverrideSave', ['id', 'name'], true, true, false],
       factorySkillRevert: ['skillOverrideRevert', ['id', 'name'], false, false, false],

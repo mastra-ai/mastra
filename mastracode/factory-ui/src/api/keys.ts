@@ -30,6 +30,9 @@ export const queryKeys = {
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
+  /** Under `boardCatalog`, so invalidating the catalog also refreshes the board. */
+  board: (factoryProjectId: string | undefined, boardKey: string) =>
+    ['factory', 'boards', factoryProjectId ?? null, 'board', boardKey] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
