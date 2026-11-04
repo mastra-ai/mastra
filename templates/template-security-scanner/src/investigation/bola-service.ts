@@ -416,8 +416,7 @@ export class BolaAssessmentService {
         assessment.profiles[0]!.profileId,
         assessment.profiles[1]!.profileId,
       ]);
-      if (candidates.length < 2 || new Set(candidates.map(item => item.prerequisite)).size < 2)
-        throw new ControlPlaneError('BOLA_CANDIDATES_INCOMPLETE', 409);
+      if (!candidates.length) throw new ControlPlaneError('BOLA_CANDIDATES_INCOMPLETE', 409);
       assessment = await this.store.update(id, owner, value => ({
         ...this.requireActive(value),
         state: 'PLANNING',

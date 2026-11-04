@@ -90,6 +90,7 @@ async function journey(
   mode: 'vulnerable' | 'protected',
   scenario:
     | 'normal'
+    | 'collectionDetailOnly'
     | 'storeFailure'
     | 'reusedScanFailure'
     | 'shutdownScanAdmission'
@@ -348,7 +349,7 @@ async function journey(
     const rules = (revision: number) => [
       rule('/api/orders', 'user', revision),
       rule('/api/orders/{id}', 'user', revision),
-      rule('/api/orders/{id}/receipt', 'user', revision),
+      ...(scenario === 'collectionDetailOnly' ? [] : [rule('/api/orders/{id}/receipt', 'user', revision)]),
       rule('/api/products', 'public', revision),
     ];
     const target = await call<Target>('/api/targets', 'POST', {
@@ -1055,7 +1056,7 @@ async function journey(
     }
     expect(result!.proof?.principalComparison).toBe('DISTINCT');
     expect(new Set(result!.candidates.map(item => item.prerequisite))).toEqual(
-      new Set(['collection_detail', 'detail_receipt']),
+      new Set(scenario === 'collectionDetailOnly' ? ['collection_detail'] : ['collection_detail', 'detail_receipt']),
     );
     expect(result!.selected?.routeTemplate).toBe('/api/orders/{id}');
     expect(result!.proof?.requestCount).toBe(2);
@@ -1434,6 +1435,11 @@ describe('one-button REST BOLA assessment against the owned Hono API', () => {
   it(
     'drains in-flight assessment persistence before closing assessments',
     () => journey('protected', 'shutdownAssessmentAdmission'),
+    300_000,
+  );
+  it(
+    'assesses a collection and detail without requiring receipt routes',
+    () => journey('protected', 'collectionDetailOnly'),
     300_000,
   );
   it('records a reviewed positive only for the owner detail in vulnerable mode', () => journey('vulnerable'), 300_000);
