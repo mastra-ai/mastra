@@ -14,12 +14,11 @@
  * `openai-codex`) do not authorize the transcription endpoints.
  */
 
-import { Readable } from 'node:stream';
-
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 import { resolveSTTModel, STT_MODELS, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
 import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
+import { createSTTTranscriber, resolveSTTApiKey } from '@mastra/code-sdk/voice/transcribe';
 
 import type { CredentialRecord } from '../storage/domains/credentials/base.js';
 import type { FactoryModelScope } from '../storage/domains/projects/base.js';
@@ -28,23 +27,6 @@ import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/bas
 
 /** Raw audio cap. Roughly half an hour of browser-recorded Opus. */
 export const MAX_TRANSCRIBE_AUDIO_BYTES = 8 * 1024 * 1024;
-
-const PROVIDER_ENV_VAR: Record<string, string> = {
-  openai: 'OPENAI_API_KEY',
-  groq: 'GROQ_API_KEY',
-  alibaba: 'DASHSCOPE_API_KEY',
-  'alibaba-cn': 'DASHSCOPE_API_KEY',
-  scaleway: 'SCALEWAY_API_KEY',
-  nvidia: 'NVIDIA_API_KEY',
-  nearai: 'NEAR_AI_API_KEY',
-  evroc: 'EVROC_API_KEY',
-  deepgram: 'DEEPGRAM_API_KEY',
-  mistral: 'MISTRAL_API_KEY',
-};
-
-interface VoiceListener {
-  listen(audioStream: NodeJS.ReadableStream, options?: Record<string, unknown>): Promise<unknown>;
-}
 
 /** Map a browser recording MIME type to the file extension providers expect. */
 export function audioFiletype(mimeType: string): string {
@@ -94,11 +76,7 @@ export function tenantVoiceCaller(records: CredentialRecord[], orgId: string, us
 
 /** Local (no-auth) mode is single-user: env vars first, then the file-backed key store, at every scope. */
 export function localVoiceCaller(authStorage: AuthStorage | undefined): VoiceCaller {
-  const keyFor = (provider: string) => {
-    const envVar = PROVIDER_ENV_VAR[provider];
-    const fromEnv = envVar ? process.env[envVar]?.trim() : undefined;
-    return fromEnv || authStorage?.getStoredApiKey(provider);
-  };
+  const keyFor = (provider: string) => resolveSTTApiKey(provider, authStorage);
   return { userKey: keyFor, orgKey: keyFor, settingsKey: { orgId: 'local', userId: 'local' } };
 }
 
@@ -186,45 +164,11 @@ export async function chooseSTTModel(
   return { entry: resolveSTTModel(provider, requested.model ?? saved?.model), apiKey };
 }
 
-/**
- * The Mistral and OpenAI constructors also build a speech (TTS) client and
- * throw without a key for it, so both get the caller's key instead of falling
- * back to the deployment's env vars.
- */
-async function buildVoice(entry: STTModel, apiKey: string): Promise<VoiceListener> {
-  if (entry.resolver === 'deepgram') {
-    const { DeepgramVoice } = await import('@mastra/voice-deepgram');
-    return new DeepgramVoice({ listeningModel: { name: entry.model as never, apiKey } });
-  }
-  if (entry.resolver === 'mistral') {
-    const { MistralVoice } = await import('@mastra/voice-mistral');
-    return new MistralVoice({ speechModel: { apiKey }, listeningModel: { name: entry.model, apiKey } });
-  }
-  const { OpenAIVoice } = await import('@mastra/voice-openai');
-  return new OpenAIVoice({
-    speechModel: { apiKey },
-    listeningModel: {
-      name: entry.model as never,
-      apiKey,
-      ...(entry.resolver === 'openai-compatible' && entry.baseURL ? { options: { baseURL: entry.baseURL } } : {}),
-    },
-  });
-}
-
-function normalizeTranscript(result: unknown): string {
-  if (typeof result === 'string') return result.trim();
-  if (result && typeof result === 'object' && 'transcript' in result) {
-    const transcript = (result as { transcript?: unknown }).transcript;
-    if (typeof transcript === 'string') return transcript.trim();
-  }
-  return '';
-}
-
 export async function transcribeAudio(
   choice: { entry: STTModel; apiKey: string },
   audio: Buffer,
   mimeType: string,
 ): Promise<string> {
-  const voice = await buildVoice(choice.entry, choice.apiKey);
-  return normalizeTranscript(await voice.listen(Readable.from(audio), { filetype: audioFiletype(mimeType) }));
+  const transcriber = await createSTTTranscriber(choice.entry, choice.apiKey);
+  return transcriber.transcribe(audio, audioFiletype(mimeType));
 }
