@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
 import { ToolCallArguments } from './tool-call-arguments';
 import { ToolCallCommand, ToolCallMono } from './tool-call-mono';
 import { ToolCallOutput } from './tool-call-output';
 import { toolCallResultText } from './tool-call-view';
 import type { ToolCallView } from './tool-call-view';
+
+const FOLLOW_TAIL = 'flex flex-col-reverse';
 
 export interface ToolCallBodyProps extends ToolCallView {
   showFullArguments?: boolean;
@@ -18,18 +19,11 @@ function commandOutput(view: ToolCallView, result: string | undefined): string |
 }
 
 function CommandBody({ command, output }: { command: string; output?: string }) {
-  const outputRef = useRef<HTMLPreElement>(null);
-
-  useEffect(() => {
-    const block = outputRef.current;
-    if (block) block.scrollTop = block.scrollHeight;
-  }, [output]);
-
   return (
     <>
       <ToolCallCommand command={command} />
       {output && (
-        <ToolCallMono ref={outputRef} copyText={output} className="text-muted-foreground">
+        <ToolCallMono copyText={output} className={`${FOLLOW_TAIL} text-muted-foreground`}>
           {output}
         </ToolCallMono>
       )}
