@@ -794,7 +794,10 @@ export class InvestigationService {
         }
         const scan = await this.scans.store.latestUsable(owner, event.targetId);
         const precedent = await this.store.latestInvestigationForTarget(owner, event.targetId);
-        if (!scan || !precedent) continue;
+        if (!scan || !precedent) {
+          await this.store.finishScheduleEvent(event.id, owner, 'CANCELLED');
+          continue;
+        }
         const admitted = await this.admit(
           owner,
           { scanId: scan.id, idempotencyKey: event.id, ...precedent.limits },

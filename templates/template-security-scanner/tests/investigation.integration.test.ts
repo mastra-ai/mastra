@@ -3803,6 +3803,47 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
     }
   }, 180000);
 
+  it.each([false, true])(
+    'cancels schedule events missing prerequisites (usable scan: %s)',
+    async withScan => {
+      const wire = await modelWire({ category: 'idor', path: '/catalog', interpretation: 'NOT_REPRODUCED' });
+      const lab = await startDiscoveryLab({ investigationModels: wire.models });
+      const selected = await discoveryCase(lab, { path: '/catalog' });
+      expect(
+        (
+          await lab.request(`/api/targets/${selected.target.id}/recurrence`, 'PUT', {
+            targetId: selected.target.id,
+            cron: '* * * * *',
+            timezone: 'UTC',
+            enabled: true,
+          })
+        ).status,
+      ).toBe(200);
+      const store = new InvestigationStore(lab.settings.databaseUrl);
+      await store.initialize();
+      try {
+        if (withScan) {
+          const admitted = await selected.admit();
+          expect(admitted.status).toBe(202);
+          expect((await lab.wait(String(admitted.data.id))).state).toBe('COMPLETED');
+        }
+        await tickRecurrenceAtNextWindow(store, selected.target.id, true);
+        const [event] = await store.pendingScheduleEvents('local-operator', 100);
+        expect(event).toBeDefined();
+        await lab.restart();
+        expect((await lab.query(`SELECT state FROM scanner_recurrence_events WHERE id='${event!.id}'`))[0]?.state).toBe(
+          'CANCELLED',
+        );
+        expect(await store.pendingScheduleEvents('local-operator', 100)).toEqual([]);
+        expect((await lab.request('/api/investigations?limit=100')).data.items).toEqual([]);
+        expect(wire.received).toEqual([]);
+      } finally {
+        await store.close();
+      }
+    },
+    180000,
+  );
+
   it('schedule_event_cannot_admit_after_target_is_deleted_between_lineage_and_transaction', async () => {
     const wire = await modelWire({ category: 'idor', path: '/catalog', interpretation: 'NOT_REPRODUCED' });
     const lab = await startDiscoveryLab({ investigationModels: wire.models });
