@@ -2,7 +2,7 @@
 
 Prebuilt [MCP Apps](https://mastra.ai/docs/connections/mcp) that render Mastra UI components inside any MCP App host, such as Mastra Studio. Each app ships as a self-contained HTML resource you register on an `MCPServer`, plus a server-side helper to link it to your tools.
 
-The apps never reach the network from their iframe. They read data by calling app-only observability tools on the same server, which agents don't see.
+The apps never reach the network from their iframe. They read data by calling app-only observability tools that you register on the same server. The package ships the contract for those tools, not the tools themselves.
 
 ## Installation
 
@@ -12,15 +12,15 @@ npm install @mastra/mcp-apps-components
 
 ## Usage
 
-Register the dashboard renderer and `observabilityAppTools` on an `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI.
+Register the dashboard renderer on an `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI.
 
 ```typescript
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
 import { dashboardRendererApp, dashboardRendererInputSchema } from '@mastra/mcp-apps-components/dashboard-renderer';
-import { observabilityAppTools } from '@mastra/mcp-apps-components/observability-tools';
 import { z } from 'zod';
+import { observabilityAppTools } from './observability-tools';
 
 const DASHBOARD_APP_URI = 'ui://mastra/dashboard';
 
@@ -72,7 +72,15 @@ export const dashboardServer = new MCPServer({
 });
 ```
 
-Each tool runs its read-only observability route in-process as the caller, with the route's own validation, authentication, permission and FGA checks, so the app sees the same data the signed-in user can.
+### Observability tools
+
+The dashboard app reads its data by calling one tool per entry of `OBSERVABILITY_APP_TOOLS`, exported from `@mastra/mcp-apps-components/observability-protocol`. Each entry names the tool and the Mastra observability route it reads. Define those tools on the server that serves the app:
+
+- Name each tool after its entry and mark it app-only with `mcp: { _meta: { ui: { visibility: ['app'] } } }`, so hosts keep it away from the model.
+- A `POST` entry takes the route's request body. A `GET` entry takes the query string, parsed by `routeQuerySchema`.
+- Answer with the route's own status and body, matching `routeResponseSchema`.
+
+For example, run each route in-process as the caller with `invokeRoute()` from `@mastra/server/server-adapter`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. The [MCP Apps docs](https://mastra.ai/docs/connections/mcp) show a full implementation.
 
 ### Pinning widgets
 
