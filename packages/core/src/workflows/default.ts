@@ -36,6 +36,7 @@ import type { ExecuteSleepParams, ExecuteSleepUntilParams } from './handlers/sle
 import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepUntilHandler } from './handlers/sleep';
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
+import { rebaseNestedState } from './nested-state';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type {
@@ -768,7 +769,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Apply mutable context changes back to the execution context.
    */
   applyMutableContext(executionContext: ExecutionContext, mutableContext: MutableContext): void {
-    Object.assign(executionContext.state, mutableContext.state);
+    // A nested run's changes are rebased here, not when it finishes: steps running alongside it
+    // may change the state in between.
+    Object.assign(
+      executionContext.state,
+      mutableContext.stateBase
+        ? rebaseNestedState(executionContext.state, mutableContext.stateBase, mutableContext.state)
+        : mutableContext.state,
+    );
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }

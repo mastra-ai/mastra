@@ -1,0 +1,319 @@
+---
+title: 'Reference: Scope declarations | Knowledge'
+description: 'The Knowledge scopes option: patterns and params, access rules, belongsTo, child scopes, template pages, labels, renaming, and the errors each raises.'
+packages:
+  - '@mastra/core'
+---
+
+# Scope declarations
+
+The `scopes` option on [`Knowledge`](/reference/knowledge/knowledge-class) declares every scope type a run can hold and who gets which role on scopes of that type. Each key is a pattern or a concrete address, and each value is a declaration. Knowledge checks the whole object when you construct it. A typo fails at startup instead of silently granting nothing. See [Scopes and access](/docs/knowledge/scopes-and-access) for a walkthrough.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+## Usage example
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  tools: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'team:$orgId:$teamId': {
+      description: 'A team',
+      displayLabel: '$teamId team',
+      belongsTo: 'org:$orgId',
+      access: [
+        { principal: 'self', role: 'editor' },
+        { principal: 'org:$orgId', role: 'viewer' },
+      ],
+      pages: [{ key: 'handbook', name: 'Team Handbook' }],
+    },
+  },
+})
+```
+
+`scopes` is required. Pass `{}` if the instance needs no scope types. [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) returns the declarations for Memory's `resource:` and `thread:` scopes and a tenant scope.
+
+## Declaration fields
+
+<PropertiesTable
+  content={[
+  {
+    name: 'access',
+    type: 'Array<{ principal: string; role: KnowledgeRole }>',
+    description:
+      'Rules. Each gives runs holding `principal` the role `viewer`, `contributor`, `editor` or `owner` on scopes of this type. `principal` is `self` or a declared pattern.',
+    isOptional: true,
+  },
+  { name: 'description', type: 'string', description: 'What the scope holds. The model reads it.', isOptional: true },
+  {
+    name: 'displayLabel',
+    type: 'string',
+    description: 'Short name for UIs such as Studio. `$params` fill in from the address. The model never sees it.',
+    isOptional: true,
+  },
+  {
+    name: 'belongsTo',
+    type: 'string',
+    description:
+      'Pattern of the scope this one is placed under. Grants nothing by itself; rules can bind params through it. Patterns only.',
+    isOptional: true,
+  },
+  {
+    name: 'children',
+    type: 'Array<{ name: string; description?: string; displayLabel?: string; access?: Rule[] }>',
+    description: 'Scopes created with each scope of this type, at `<address>/<name>`. Patterns only.',
+    isOptional: true,
+  },
+  {
+    name: 'pages',
+    type: 'KnowledgePageTemplate[]',
+    description:
+      'Template pages every scope of this type has: `{ key, name, description?, pages? }`, nested through `pages`. Patterns only.',
+    isOptional: true,
+  },
+  {
+    name: 'pinnedContext',
+    type: 'Array<string | { list: string; depth?: number }>',
+    description:
+      "What every run holding a scope of this type gets pinned. A string is a page path, such as `policy:$orgId#refund-policy`. `{ list, depth }` pins a listing of the pages under a scope or page path, `depth` 1 to 3 (default 1), such as `{ list: 'site:$siteId', depth: 1 }`. Each path is a [page path](/reference/knowledge/knowledge-tools#page-references) whose `$params` bind from the holding scope. A malformed path, an undeclared scope type, or a `$param` the holding scope lacks fails at startup. Pins are delivered only when the `Knowledge` instance sets `pinnedContext` and the agent has Memory. See [Pinned context](/docs/knowledge/pinned-context).",
+    isOptional: true,
+  },
+  {
+    name: 'pinnedContextPriority',
+    type: 'number',
+    description: 'Order of stored pins aimed at this scope type, highest first.',
+    isOptional: true,
+    defaultValue: '0',
+  },
+]}
+/>
+
+## Patterns and params
+
+A key such as `team:$orgId:$teamId` is a pattern. The text before the first `:` is the type, and each `$name` segment is a param. The address `team:acme:support` matches it with `$orgId = acme` and `$teamId = support`.
+
+The last param takes the rest of the value, so `resource:$resourceId` matches `resource:user:123` with `$resourceId = user:123`. Memory ids that contain `:` keep working.
+
+A type can have several patterns only when no address can match two of them. Each pair must have different literal text at the same position:
+
+```typescript oxfmt:false
+scopes: {
+  'role:$orgId:admin': { description: 'Org administrators' },
+  'role:$orgId:support': { description: 'Support agents' },
+}
+```
+
+Overlapping patterns fail at startup. There's no precedence between them:
+
+```text
+Knowledge scope patterns "role:$orgId:$role" and "role:$orgId:admin" overlap; patterns of a type must be pairwise disjoint.
+```
+
+A pattern ending in a param overlaps a longer one with the same start, so `kb:$orgId` and `kb:$orgId:public` overlap too. Use two types, such as `kb-public:$orgId` and `kb-internal:$orgId`.
+
+## Rules
+
+`access` lists rules. Each rule names a principal, the run scope a run must hold for the rule to apply, and the role that run gets. The principal is a declared scope pattern or `self`, the scope being accessed:
+
+```typescript oxfmt:false
+scopes: {
+  ...knowledgeMemoryScopes(),
+  'team:$orgId:$teamId': {
+    description: 'A team',
+    access: [
+      { principal: 'self', role: 'editor' },
+      { principal: 'org:$orgId', role: 'viewer' },
+    ],
+  },
+}
+```
+
+- `self` is the scope the rule is declared on. A run holding `team:acme:support` is an editor there.
+- `org:$orgId` binds `$orgId` from the team's address. A run holding `org:acme` can read `team:acme:support`, and a run holding `org:globex` can't see it at all.
+
+The roles are `viewer`, `contributor`, `editor` and `owner`, each including the ones before it. What each role can do:
+
+| Role | Can |
+| - | - |
+| `viewer` | Search and read pages and notes |
+| `contributor` | Create pages and add notes |
+| `editor` | Edit a page's name, description and body, move pages within a scope, restamp and remove notes, and pin pages |
+| `owner` | Move pages to another scope, merge pages away and delete pages |
+
+See [what each operation needs](/reference/knowledge/knowledge-tools#what-each-operation-needs) for the role each tool operation checks.
+
+A principal's params must be bound in one of two ways:
+
+- **From the address prefix.** The principal's params are the first params of the target pattern, as with `org:$orgId` on `team:$orgId:$teamId`.
+- **Through `belongsTo`.** The target's `belongsTo` pattern carries the params, as shown in the next section.
+
+Any other binding fails at startup:
+
+```text
+Knowledge rule principal "y:$b" on "x:$a:$b" would reach scopes that aren't an address prefix; reorder "x:$a:$b"'s params so the bound ones come first, or bind them through belongsTo.
+```
+
+Every principal must also be a declared type:
+
+```text
+Knowledge rule principal "org:$orgId" on "policy:$orgId" is not a declared scope type; declare it or fix the typo.
+```
+
+Roles don't carry over. A run holding `org:acme` reads `team:acme:support` through its `org:$orgId` viewer rule, but it doesn't get the roles `team:acme:support` gives to other scopes. There's no inheritance either. A role on `org:acme` gives nothing on scopes placed under it unless a rule says so.
+
+## Place scopes with `belongsTo`
+
+`belongsTo` puts a scope under another one in the tree. It grants nothing by itself, but a rule can bind params through it:
+
+```typescript oxfmt:false
+'project:$projectId': {
+  belongsTo: 'org:$orgId',
+  access: [
+    { principal: 'self', role: 'editor' },
+    { principal: 'org:$orgId', role: 'viewer' },
+  ],
+},
+```
+
+The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from the project's place in the tree. The first run that writes Knowledge while holding `project:p1` and exactly one `org:` scope places it under that scope, and the placement sticks. After that, a run holding `org:acme` can read `project:p1`, and a run holding `org:globex` can't.
+
+Runs that only read create and place nothing. Until a writing run places `project:p1`, the `org:$orgId` rule gives nothing on it. A run that holds several `org:` scopes logs a warning and leaves the placement unchanged. A run that holds a different `org:` scope from the stored placement also logs a warning, and the placement stays.
+
+## Child scopes and keyed pages
+
+`children` declares scopes created with each scope of the type, at `<address>/<name>`. `pages` declares template pages, keyed pages every scope of the type has. A template can list its own `pages` to nest them:
+
+```typescript oxfmt:false
+'team:$orgId:$teamId': {
+  access: [
+    { principal: 'self', role: 'editor' },
+    { principal: 'org:$orgId', role: 'viewer' },
+  ],
+  children: [
+    {
+      name: 'private',
+      description: 'Only the team can read this',
+      access: [{ principal: 'team:$orgId:$teamId', role: 'editor' }],
+    },
+  ],
+  pages: [
+    {
+      key: 'handbook',
+      name: 'Team Handbook',
+      pages: [{ key: 'on-call', name: 'On-call rota' }],
+    },
+  ],
+},
+```
+
+Every team now has `team:acme:support/private`, a page the tools can name as `team:acme:support#handbook`, and a page under it at `team:acme:support#handbook/on-call`.
+
+Keys are unique among siblings and can't contain `/`, `#` or `%`. A duplicate or invalid key fails at startup.
+
+Template pages belong to the config:
+
+- A run that writes creates any template page its scopes are missing, including ones you add to the config later. Runs that only read create nothing. A page already sitting at that path is adopted instead, and becomes a template page.
+- Tools can edit a template page's name, description and body under the usual roles, add notes to it, and merge other pages into it.
+- Tools can't move a template page or merge it away. They get `"team:acme:support#handbook" is declared in config; change the scope's pages to move it.`
+- A page you take out of `pages` becomes an ordinary page and keeps its key. Putting the template back adopts the page at that path, with its body and notes. If the page has moved, the next writing run creates a new one there.
+- If host code deletes a template page through the store, the next writing run creates a new, empty one at that path.
+
+A child gets no rules from its parent. List every rule it needs, with params bound from the parent's address. In a child's rules `self` is the child, which no run holds, so name the parent's pattern as the principal, as above. A run holding `org:acme` reads the team's pages but not the private child's.
+
+## Label scopes for UIs
+
+`displayLabel` gives a scope type a short name for screens such as Studio. The model never sees it. `description` is what the model reads. `$params` fill in from the address, and a concrete address's own label wins:
+
+```typescript oxfmt:false
+scopes: {
+  'org:$orgId': {
+    displayLabel: '$orgId organization',
+    access: [{ principal: 'self', role: 'editor' }],
+    children: [{ name: 'private', displayLabel: 'Private', access: [{ principal: 'org:$orgId', role: 'owner' }] }],
+  },
+  'org:acme': { displayLabel: 'Acme HQ' },
+}
+```
+
+`knowledge.scopeLabel('org:globex')` returns `globex organization`, and `knowledge.scopeLabel('org:acme')` returns `Acme HQ`. See [`scopeLabel()`](/reference/knowledge/knowledge-class#scopelabel).
+
+## Share one scope
+
+A key with no params is a concrete address. It adds rules to the one pattern it matches, for a single scope:
+
+```typescript oxfmt:false
+'feature:$orgId:$featureId': { description: 'Product features' },
+'feature:acme:a': {
+  access: [
+    { principal: 'team:acme:eng', role: 'editor' },
+    { principal: 'team:acme:support', role: 'contributor' },
+  ],
+},
+```
+
+Engineering edits feature A, and support can add notes and pages there without editing engineering's pages. Other features get only the pattern's rules.
+
+Declare the pattern first. A concrete address with no matching pattern fails at startup:
+
+```text
+Knowledge scope "feature:acme:a" doesn't match a declared pattern; declare its pattern first.
+```
+
+A concrete address can add `description`, `displayLabel`, `access`, `pinnedContext` and `pinnedContextPriority`. Declare `belongsTo`, `children` and `pages` on the pattern.
+
+## Run scopes
+
+A run's scopes come from host code: the `MASTRA_SCOPES_KEY` request context key, the `scopes` option on a call, and the agent's `scopes` option. A list on the agent adds to the others. A function on the agent receives them and returns the final set. With Memory, a run also holds `resource:<resourceId>` and `thread:<threadId>`. See [set a run's scopes](/docs/knowledge/scopes-and-access#set-a-runs-scopes).
+
+With Knowledge attached, every scope a run holds must match a declared type. A type that only names who a run is still needs a declaration, even an empty one such as `'role:$orgId:support': {}`.
+
+A run has exactly one Memory resource and one thread. `knowledgeMemoryScopes()` places a user's `resource:` scope under the org held by its first writing run, and that placement doesn't change. Give a user who works in several orgs a resource ID per org, such as `acme-dana` and `globex-dana`.
+
+`MASTRA_SCOPES_KEY` is reserved: the server ignores it in request bodies. It needs a `@mastra/server` release that reserves it.
+
+### Errors
+
+| Error | Cause |
+| - | - |
+| `Knowledge run scope "project:x" does not match a declared scope type. …` | Knowledge has no declaration for a scope the run holds. |
+| ``Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.`` | The run has no scopes and no Memory. |
+| `Agent request context "mastra__scopes" must be an array of "<type>:<value>" strings.` | A scope entry isn't a string. |
+| `Invalid agent scope "Org:acme" in request context "mastra__scopes". …` | A scope isn't `<type>:<value>` with a lowercase type. |
+| `The agent's scopes function dropped "resource:dana". …` | The agent's `scopes` function left out a `resource:` or `thread:` scope. |
+| `Agent scopes contain more than one resource: …` | The run holds two `resource:` (or `thread:`) scopes. |
+| `Agent scope "resource:cust-7" conflicts with option "memory.resource" "spec-1". …` | A `resource:` scope disagrees with `memory.resource`. |
+| `AGENT_SCOPES_SERVER_OUTDATED` | Scopes came from the request context or the call behind an older `@mastra/server`. |
+
+## Rename or retire a scope type
+
+Each stored scope remembers the declaration key it was created from, and prefix and `belongsTo` rules match on that key. Renaming a key in `scopes`, say `'team:$org:$team'` to `'team:$orgId:$teamId'`, would cut every existing team scope off from those rules. To prevent that, Knowledge checks the stored keys against `scopes` on first use and refuses to run while any is missing:
+
+```text
+Knowledge storage has scopes created from declarations this config doesn't declare: "team:$org:$team" (12 scopes). Restore each key in scopes, rename it with knowledge.renameScopeDeclaration(from, to), or keep the key with no access rules to retire it.
+```
+
+After renaming the key in `scopes`, move the stored scopes to the new key. Child scope keys such as `team:$org:$team/internal` move with it:
+
+```typescript
+await knowledge.renameScopeDeclaration('team:$org:$team', 'team:$orgId:$teamId')
+```
+
+The rename happens in one step and changes nothing when it's refused: when the old key is still in `scopes`, the new key isn't, or a stored address doesn't match the new pattern.
+
+During a rolling deploy, instances with the new config refuse to run until the rename happens. After the rename, instances still on the old config lose the prefix and `belongsTo` rules on those scopes. Deploy the new config, then run the rename straight away.
+
+To retire a type without moving its scopes, keep its key in `scopes` with no `access` rules. Its scopes stay stored, and no rule reaches them.
+
+## Related
+
+- [Scopes and access](/docs/knowledge/scopes-and-access)
+- [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes)
+- [Knowledge class](/reference/knowledge/knowledge-class)

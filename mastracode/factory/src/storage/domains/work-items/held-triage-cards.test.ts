@@ -1,21 +1,27 @@
 import { randomUUID } from 'node:crypto';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { FactoryTriageType } from '../../../rules/types.js';
+import { createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
 import { HELD_CARD_SWEEP_ACTOR, WorkItemsStorage } from './base.js';
-import type { WorkItemRow } from './base.js';
+import type { Card } from './base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 const PROJECT = 'project-held';
 
-describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held triage cards on %s', backend => {
+describe.each(
+  ['libsql', ...(postgresUrl ? ['postgres'] : [])].flatMap(backend =>
+    ['split', 'dry-run'].map(mode => ({ backend, mode })),
+  ),
+)('returning held triage cards on $backend ($mode)', ({ backend, mode }) => {
   async function setup() {
+    vi.stubEnv('MASTRA_FACTORY_WORK_ITEM_SPLIT', mode === 'dry-run' ? 'dry-run' : 'on');
+    onTestFinished(() => vi.unstubAllEnvs());
     const storage =
       backend === 'postgres'
-        ? new PgFactoryStorage({ id: `held-${randomUUID()}`, connectionString: postgresUrl! })
+        ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: `held-${randomUUID()}`, url: ':memory:' });
     const workItems = storage.registerDomain(new WorkItemsStorage());
     await storage.init();
@@ -24,7 +30,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held 
     const orgId = `org-${randomUUID()}`;
     let next = 0;
 
-    async function file(board: string | undefined, bound: boolean): Promise<WorkItemRow> {
+    async function file(board: string | undefined, bound: boolean): Promise<Card> {
       next += 1;
       const input = {
         ...(board ? { board } : {}),
@@ -51,10 +57,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held 
 
     /** How the old triage rule left a card: classified in Triage, accepted only when a person said so. */
     async function triaged(
-      item: WorkItemRow,
+      item: Card,
       triageType: FactoryTriageType,
       { accept = false, arm = false }: { accept?: boolean; arm?: boolean } = {},
-    ): Promise<WorkItemRow> {
+    ): Promise<Card> {
       const committed = await workItems.commitTransition({
         orgId,
         factoryProjectId: PROJECT,
@@ -75,7 +81,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held 
     }
 
     /** A person starts a new run on the card after triage classified it. */
-    async function startRun(item: WorkItemRow): Promise<WorkItemRow> {
+    async function startRun(item: Card): Promise<Card> {
       return (
         await workItems.prepareRunStart({
           orgId,
@@ -91,8 +97,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held 
       ).item;
     }
 
-    const mine = (moved: WorkItemRow[]) => moved.filter(item => item.orgId === orgId).map(item => item.id);
-    const stageOf = async (item: WorkItemRow) => (await workItems.get({ orgId, id: item.id }))?.stages;
+    const mine = (moved: Card[]) => moved.filter(item => item.orgId === orgId).map(item => item.id);
+    const stageOf = async (item: Card) => (await workItems.get({ orgId, id: item.id }))?.stages;
     return { workItems, file, triaged, startRun, mine, stageOf, orgId };
   }
 

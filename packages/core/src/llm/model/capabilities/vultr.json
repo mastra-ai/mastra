@@ -39,25 +39,7 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -76,29 +58,24 @@
         "type": "toggle"
       }
     ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "muse-glimmer-30b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "mimo-v2.6-flash-rl": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3.5-content-safety": [
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
@@ -109,12 +86,16 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "mimo-v2.6-pro-rl": [
+    "qwen3.8-27b": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
-    "minimax-m3": [
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }
@@ -125,10 +106,29 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
       }
     ]
   }

@@ -79,12 +79,20 @@ import type { Tool } from '../tools/tool';
 import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
+import { HAND_BACK_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
+import {
+  cancelNestedRun,
+  createNestedRunParentStatusLookup,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from './nested-run-recovery';
+import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
 import { claimWorkflowRunOwnership } from './run-ownership';
@@ -3207,6 +3215,7 @@ export class Workflow<
     timeTravel,
     parentWorkflow,
     [PUBSUB_SYMBOL]: pubsub,
+    [HAND_BACK_STATE_SYMBOL]: handBackState,
     mastra,
     requestContext,
     abort,
@@ -3246,6 +3255,7 @@ export class Workflow<
       forEachIndex?: number;
     };
     [PUBSUB_SYMBOL]: PubSub;
+    [HAND_BACK_STATE_SYMBOL]?: (state: TState, base: Record<string, unknown>) => Promise<void>;
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
@@ -3312,8 +3322,17 @@ export class Workflow<
     // and relaying with the same runId would cause an infinite event loop.
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
+    // A started nested run works on its own copy of the parent's state and hands back its changes
+    // on top of the parent's state then, so changes the parent's other steps make meanwhile are kept.
+    let startState = state;
+    let startedFrom: Record<string, unknown> | undefined;
+    if (!restart && !isResume) {
+      startedFrom = toJsonState(state);
+      // State that isn't JSON is shared and handed back whole, as before.
+      if (startedFrom) startState = copyState(state);
+    }
     // Nothing may await between this and createRun(), which takes it synchronously.
-    this.#nestedRunStart = !restart && !isResume ? { input: inputData, state } : undefined;
+    this.#nestedRunStart = !restart && !isResume ? { input: inputData, state: startState } : undefined;
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
@@ -3351,6 +3370,9 @@ export class Workflow<
     // The parent and nested snapshots are written separately, so a crash can leave them out of
     // sync. Trust the nested run's status: an active nested run must be restarted, and a nested
     // run that never claimed its resume must be resumed. See https://github.com/mastra-ai/mastra/issues/25187
+    // What the nested run's hand-back is relative to. A nested run a restarting parent restarts or
+    // resumes may have changes its parent never received, so it hands back its whole state.
+    let handBackBase: Record<string, unknown> | undefined;
     try {
       let restartNested = !!restart;
       let resumeNested = isResume;
@@ -3395,7 +3417,7 @@ export class Workflow<
         res = await run.timeTravel({
           inputData: timeTravel?.inputData,
           resumeData: timeTravel?.resumeData,
-          initialState: state,
+          initialState: startState,
           step: timeTravel?.steps,
           context: (timeTravel?.nestedStepResults?.[this.id] ?? {}) as any,
           nestedStepsContext: timeTravel?.nestedStepResults as any,
@@ -3406,6 +3428,7 @@ export class Workflow<
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         });
+        handBackBase = startedFrom;
       } else if (restartNested) {
         res = await run.restart({
           requestContext,
@@ -3426,6 +3449,7 @@ export class Workflow<
           label: resume?.label,
           perStep,
         });
+        if (isResume) handBackBase = run.resumedFromState;
       } else {
         res = await run.start({
           inputData,
@@ -3433,12 +3457,14 @@ export class Workflow<
           actor,
           ...observabilityContext,
           outputWriter,
-          initialState: state,
+          initialState: startState,
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         } as any);
+        handBackBase = startedFrom;
       }
     } finally {
+      run.resumedFromState = undefined;
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
       abortSignal.removeEventListener('abort', parentAbortCb);
       unwatch();
@@ -3450,7 +3476,7 @@ export class Workflow<
     });
 
     if (res.state) {
-      await setState(res.state);
+      await (handBackBase && handBackState ? handBackState(res.state, handBackBase) : setState(res.state));
     }
 
     if (suspendedSteps?.length) {
@@ -3548,11 +3574,58 @@ export class Workflow<
       return;
     }
     const activeRuns = await this.listActiveWorkflowRuns();
-    if (activeRuns.runs.length > 0) {
-      this.logger.debug('Restarting active workflow runs', { count: activeRuns.runs.length });
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
+    const runs: typeof activeRuns.runs = [];
+    for (const runSnapshot of activeRuns.runs) {
+      const parent = nestedRunParentOf(runSnapshot.snapshot);
+      if (!parent) {
+        runs.push(runSnapshot);
+        continue;
+      }
+      // Restarting a nested run standalone while its parent drives it runs the item twice, and
+      // after the parent finished nothing collects the result, so the item runs a second time.
+      try {
+        const parentStatus = await parentStatusOf(parent);
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(runSnapshot);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: this.id,
+            runId: runSnapshot.runId,
+            expectedStatus: nestedRunStatusOf(runSnapshot.snapshot),
+            logger: this.logger,
+          });
+        } else if (recovery === 'skip') {
+          // The parent can still drive this run, so there is nothing to do here. Logged because a
+          // nested run left waiting on a parent that never restarts is otherwise only visible in
+          // the nested workflow's own active runs.
+          this.logger.debug('Left a nested workflow run for its parent to drive', {
+            workflowId: this.id,
+            runId: runSnapshot.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.logger.error('Failed to recover nested workflow run', {
+          workflowId: this.id,
+          runId: runSnapshot.runId,
+          error,
+        });
+      }
+    }
+    if (runs.length > 0) {
+      this.logger.debug('Restarting active workflow runs', { count: runs.length });
     }
     const concurrency = this.#mastra?.recoveryConfig?.workflowConcurrency ?? DEFAULT_RESTART_CONCURRENCY;
-    await runWithConcurrency(activeRuns.runs, concurrency, async runSnapshot => {
+    await runWithConcurrency(runs, concurrency, async runSnapshot => {
       try {
         const run = await this.createRun({ runId: runSnapshot.runId });
         await run.restart();
@@ -3912,6 +3985,13 @@ export class Run<
   workflowRunStatus: WorkflowRunStatus;
 
   parentWorkflow?: NestedWorkflowParent;
+
+  /**
+   * For a nested run its parent resumes: the state it resumed from, as JSON. Its parent already
+   * holds that state, so it takes only the changes after it. Set by `_resume`, taken by the parent's step.
+   * @internal
+   */
+  resumedFromState?: Record<string, unknown>;
 
   readonly workflowEngineType: WorkflowEngineType;
 
@@ -5522,6 +5602,7 @@ export class Run<
     };
 
     params.onExecutionStarted?.();
+    if (params.skipParentWorkflowClaim) this.resumedFromState = toJsonState(snapshot?.value);
     const executionResultPromise = this.#executeOwned(() =>
       this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,

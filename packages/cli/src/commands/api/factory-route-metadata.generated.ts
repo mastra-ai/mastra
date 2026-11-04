@@ -2995,8 +2995,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "array",
           "items": {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
+            "properties": {
+              "workItem": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "author": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "provider",
+                  "key",
+                  "url",
+                  "title",
+                  "state",
+                  "labels",
+                  "author"
+                ],
+                "additionalProperties": {}
+              }
             },
             "additionalProperties": {}
           }
@@ -4933,8 +4983,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "workItem": {
           "type": "object",
-          "propertyNames": {
-            "type": "string"
+          "properties": {
+            "workItem": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "key",
+                "url",
+                "title",
+                "state",
+                "labels",
+                "author"
+              ],
+              "additionalProperties": {}
+            }
           },
           "additionalProperties": {}
         }
@@ -7272,8 +7372,58 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "workItem": {
           "type": "object",
-          "propertyNames": {
-            "type": "string"
+          "properties": {
+            "workItem": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "author": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "provider",
+                "key",
+                "url",
+                "title",
+                "state",
+                "labels",
+                "author"
+              ],
+              "additionalProperties": {}
+            }
           },
           "additionalProperties": {}
         }

@@ -24,6 +24,12 @@
     "zai-org/GLM-4.6"
   ],
   "reasoning": {
+    "zai-org/GLM-4.6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "openai/gpt-oss-120b": [
       {
         "type": "effort",
@@ -34,12 +40,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "zai-org/GLM-4.6": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
       }
     ]
   }
