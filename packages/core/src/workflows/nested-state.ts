@@ -133,12 +133,25 @@ function stripStartStateOnce(value: unknown): unknown {
   const result = value as Record<string, unknown>;
   const suspendPayload = result.suspendPayload as Record<string, unknown> | undefined;
   const meta = suspendPayload?.__workflow_meta as Record<string, unknown> | undefined;
-  if (!meta || typeof meta !== 'object' || !Object.hasOwn(meta, 'startState')) return value;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return value;
 
   // A `.foreach()` over a nested run keeps one base per parked item, next to the item's own metadata.
+  // An item that parks is stripped here even when the step's own metadata carries no base: a sibling
+  // item that fails leaves the step metadata without one while the parked item keeps its own.
   const { startState: _startState, foreachOutput, ...restMeta } = meta;
-  const nextMeta =
-    Array.isArray(foreachOutput) ? { ...restMeta, foreachOutput: foreachOutput.map(stripStartStateOnce) } : restMeta;
+  const nextForeachOutput = Array.isArray(foreachOutput) ? foreachOutput.map(stripStartStateOnce) : foreachOutput;
+  const foreachChanged =
+    Array.isArray(nextForeachOutput) &&
+    Array.isArray(foreachOutput) &&
+    nextForeachOutput.some((item, index) => item !== foreachOutput[index]);
 
-  return { ...result, suspendPayload: { ...suspendPayload, __workflow_meta: nextMeta } };
+  if (!Object.hasOwn(meta, 'startState') && !foreachChanged) return value;
+
+  return {
+    ...result,
+    suspendPayload: {
+      ...suspendPayload,
+      __workflow_meta: foreachChanged ? { ...restMeta, foreachOutput: nextForeachOutput } : restMeta,
+    },
+  };
 }

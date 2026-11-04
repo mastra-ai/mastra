@@ -804,4 +804,52 @@ describe('what a parked nested run exposes to callers', () => {
       expect(item.suspendPayload.__workflow_meta.runId).toBeTypeOf('string');
     }
   });
+
+  it('keeps a parked item base out of the result when a sibling item failed', async () => {
+    // The failing sibling leaves the step metadata without a base of its own, so an item's base is
+    // only reachable through `foreachOutput`.
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+      .then(
+        createStep({
+          id: 'inner-wait',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          resumeSchema: z.boolean(),
+          execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+            if (inputData.n === 1) {
+              // Slow enough that the other item is parked before this one fails.
+              await new Promise(resolve => setTimeout(resolve, 30));
+              throw new Error('item failed');
+            }
+            if (resumeData === undefined) {
+              await setState({ items: [...state.items, `inner-wait:${inputData.n}`] });
+              return suspend({});
+            }
+            return { n: inputData.n + 1 };
+          },
+        }),
+      )
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: z.array(num),
+      outputSchema: z.array(num),
+      stateSchema: items,
+    })
+      .foreach(inner, { concurrency: 2 })
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const result: any = await run.start({ inputData: [{ n: 0 }, { n: 1 }], initialState: { items: ['hidden'] } });
+    expect(result.status).toBe('failed');
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    const parkedItems = parkedMeta(result).foreachOutput as any[];
+    expect(parkedItems[0].suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+
+    const stored: any = await outer.getWorkflowRunById('run-1');
+    const storedItems = parkedMeta(stored).foreachOutput as any[];
+    expect(storedItems[0].suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+  });
 });
