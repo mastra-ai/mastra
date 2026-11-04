@@ -20,7 +20,7 @@ export type OwnedResource = {
   sharedBase?: boolean;
 };
 export class DiscoveryStore {
-  private readonly client;
+  readonly client;
   private writes: Promise<unknown> = Promise.resolve();
   private retentionFailure = false;
   constructor(url: string) {

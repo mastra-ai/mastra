@@ -1,3 +1,5 @@
+import { principalJsonPointerSchema, privatePrincipal, scanPrincipalComparison } from '../src/discovery/principals.js';
+import type { Scan } from '../src/discovery/contracts.js';
 import { corsReadObservation } from '../src/discovery/cors-observation.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -459,5 +461,54 @@ describe('Bounded native CORS response correlation', () => {
     expect(valid.result({ completed: true, readable: true, errorText: 'PRIVATE_FIELD_SENTINEL' })).toEqual({
       state: 'INCOMPLETE',
     });
+  });
+});
+
+describe('private REST principal observations', () => {
+  it('reads escaped JSON pointers without coercion or inherited account values', () => {
+    expect(privatePrincipal({ 'account/id': { '~subject': 'account-a' } }, '/account~1id/~0subject')).toBe('account-a');
+    for (const value of [null, 1, true, [], {}, '', ' account-a', 'account-a\n', 'x'.repeat(257)])
+      expect(privatePrincipal({ principal: value }, '/principal')).toBeNull();
+    expect(privatePrincipal(Object.create({ principal: 'account-a' }), '/principal')).toBeNull();
+    expect(privatePrincipal({ principal: 'account-a' }, undefined)).toBeNull();
+    for (const pointer of ['', 'principal', '/bad~2escape', '/' + 'x'.repeat(256), '/a/b/c/d/e/f/g/h/i', '/account\n'])
+      expect(principalJsonPointerSchema.safeParse(pointer).success).toBe(false);
+  });
+  it('requires one finite comparison between two ready REST profiles', () => {
+    const scan = {
+      roles: [
+        { profileId: 'a', source: 'rest-json', identity: 'READY' },
+        {
+          profileId: 'b',
+          source: 'rest-json',
+          identity: 'READY',
+          principalComparisons: [{ profileId: 'a', result: 'DISTINCT' }],
+        },
+      ],
+    } as Scan;
+    expect(scanPrincipalComparison(scan, ['a', 'b'])).toBe('DISTINCT');
+    expect(scanPrincipalComparison(scan, ['a', 'a'])).toBe('UNKNOWN');
+    expect(scanPrincipalComparison({ ...scan, roles: [scan.roles[0]!] }, ['a', 'b'])).toBe('UNKNOWN');
+    expect(
+      scanPrincipalComparison({ ...scan, roles: [scan.roles[0]!, { ...scan.roles[1]!, identity: 'AUTH_REQUIRED' }] }, [
+        'a',
+        'b',
+      ]),
+    ).toBe('UNKNOWN');
+    expect(
+      scanPrincipalComparison({ ...scan, roles: [scan.roles[0]!, { ...scan.roles[1]!, principalComparisons: [] }] }, [
+        'a',
+        'b',
+      ]),
+    ).toBe('UNKNOWN');
+    expect(
+      scanPrincipalComparison(
+        {
+          ...scan,
+          roles: [scan.roles[0]!, { ...scan.roles[1]!, principalComparisons: [{ profileId: 'a', result: 'SAME' }] }],
+        },
+        ['a', 'b'],
+      ),
+    ).toBe('SAME');
   });
 });

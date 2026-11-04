@@ -23,6 +23,7 @@ import { PlaybookRegistry } from '../knowledge/playbooks.js';
 import { AdvisoryStore } from '../advisory/store.js';
 import { AdvisorySource } from '../advisory/source.js';
 import { AdvisorySync } from '../advisory/sync.js';
+import { AdvisoryTriage, MastraAdvisoryModels, type AdvisoryModels } from '../advisory/triage.js';
 import { registerIntelligenceRoutes } from './intelligence-routes.js';
 import { InvestigationService } from '../investigation/service.js';
 import { registerInvestigationRoutes } from './investigation-routes.js';
@@ -32,6 +33,10 @@ import { OwnedGatewayVerifier } from '../investigation/driver.js';
 import { AdvisoryScheduler } from '../advisory/schedule.js';
 import { prepareDataDirectory } from '../runtime/files.js';
 import { operationStatus, recoverInterruptedRestore } from '../runtime/operations.js';
+import { BolaAssessmentService } from '../investigation/bola-service.js';
+import { BolaGatewayDriver, type BolaImageBuildHook, type BolaVerificationHook } from '../investigation/bola-driver.js';
+import { MastraBolaModels, type BolaModels } from '../investigation/bola-models.js';
+import { registerBolaRoutes } from './bola-routes.js';
 
 export async function initializeStorage(
   settings: Settings,
@@ -69,10 +74,15 @@ export async function startControlPlane(
   ownedLab?: OwnedLabBoundary,
   advisorySource?: AdvisorySource,
   investigationModels?: InvestigationModels,
+  bolaModels?: BolaModels,
+  bolaVerificationHook?: BolaVerificationHook,
+  bolaImageBuildHook?: BolaImageBuildHook,
+  advisoryModels?: AdvisoryModels,
 ) {
-  if (settings.SCANNER_INVESTIGATION_ENABLED && !investigationModels && !hasMorphApiKey())
+  if (settings.SCANNER_INVESTIGATION_ENABLED && !investigationModels && !bolaModels && !hasMorphApiKey())
     throw new RuntimeDiagnostic('MORPH_API_KEY_REQUIRED', 'Set MORPH_API_KEY before enabling investigation models.');
   let investigations: InvestigationService | undefined;
+  let assessments: BolaAssessmentService | undefined;
   let advisoryScheduler: AdvisoryScheduler | undefined;
   await prepareDataDirectory(settings);
   const releaseInstance = await acquireInstance(settings);
@@ -99,7 +109,14 @@ export async function startControlPlane(
   const playbooks = new PlaybookRegistry(catalog);
   const advisoryStore = new AdvisoryStore(settings.databaseUrl);
   const advisory = new AdvisorySync(advisoryStore, advisorySource ?? new AdvisorySource());
+  const advisoryTriage = new AdvisoryTriage(
+    settings.databaseUrl,
+    advisoryStore,
+    domainStore,
+    advisoryModels ?? (agents ? new MastraAdvisoryModels(agents.sherlock, settings.EXPLORER_MODEL) : undefined),
+  );
   advisoryScheduler = new AdvisoryScheduler(settings, advisory, async () => {
+    await advisoryTriage.planNew(OPERATOR_ID);
     if (settings.SCANNER_INVESTIGATION_ENABLED) await investigations?.processSchedules(OPERATOR_ID);
   });
   const app = new Hono();
@@ -118,7 +135,13 @@ export async function startControlPlane(
     async (scope, validate, commit) =>
       scans
         ? scans.coordinateMutation(scope, validate, () =>
-            investigations ? investigations.coordinateMutation(scope, async () => undefined, commit) : commit(),
+            investigations
+              ? investigations.coordinateMutation(
+                  scope,
+                  async () => undefined,
+                  () => (assessments ? assessments.coordinateMutation(scope, async () => undefined, commit) : commit()),
+                )
+              : commit(),
           )
         : (await validate(), commit()),
   );
@@ -138,9 +161,19 @@ export async function startControlPlane(
     verifier,
     settings.SCANNER_INVESTIGATION_ENABLED,
   );
+  assessments = new BolaAssessmentService(
+    scans.store,
+    service,
+    scans,
+    new BolaGatewayDriver(settings, service, scans.store, ownedLab, bolaVerificationHook, bolaImageBuildHook),
+    bolaModels ?? (agents ? new MastraBolaModels(agents, settings.EXPLORER_MODEL, settings.JUDGE_MODEL) : undefined),
+  );
   registerDomainRoutes(app, service, scans);
-  registerIntelligenceRoutes(app, catalog, playbooks, advisory, () => investigations!.processSchedules(OPERATOR_ID));
+  registerIntelligenceRoutes(app, catalog, playbooks, advisory, advisoryTriage, () =>
+    investigations!.processSchedules(OPERATOR_ID),
+  );
   registerInvestigationRoutes(app, investigations, settings.SCANNER_INVESTIGATION_ENABLED);
+  registerBolaRoutes(app, assessments);
   app.get('/api/advisory-schedule', async context => context.json(await advisoryStore.scheduleStatus()));
   app.post('/api/advisory-schedule/pause', async context => {
     const { paused, revision } = parse(
@@ -149,7 +182,7 @@ export async function startControlPlane(
     );
     return context.json(await advisoryStore.pauseSchedule(paused, revision));
   });
-  await registerConsoleRoutes(app, settings, investigations, service);
+  await registerConsoleRoutes(app, settings, investigations, service, assessments);
   app.get('/api/runtime', async context => {
     let scanningEnabled = false;
     if (settings.SCANNER_DISCOVERY_ENABLED)
@@ -179,8 +212,12 @@ export async function startControlPlane(
       const stoppedListener = await Promise.allSettled([
         listener?.listening ? closeListener(listener) : Promise.resolve(),
       ]);
-      const stoppedInvestigations = await Promise.allSettled([investigations.close()]);
-      const stoppedAdvisory = await Promise.allSettled([advisoryScheduler!.close(), advisory.close()]);
+      const stoppedInvestigations = await Promise.allSettled([assessments.close(), investigations.close()]);
+      const stoppedAdvisory = await Promise.allSettled([
+        advisoryScheduler!.close(),
+        advisory.close(),
+        advisoryTriage.close(),
+      ]);
       const critical = [
         ...stoppedListener,
         ...stoppedInvestigations,
@@ -209,9 +246,11 @@ export async function startControlPlane(
     await catalog.initialize();
     await playbooks.initialize();
     await advisoryStore.initialize();
+    await advisoryTriage.initialize();
     await advisoryScheduler.initialize();
     await scans.initialize();
     await investigations.initialize();
+    await assessments.initialize(OPERATOR_ID);
     const adapter = new MastraServer({
       app,
       mastra,

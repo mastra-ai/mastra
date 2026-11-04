@@ -2,13 +2,13 @@ import { StringDecoder } from 'node:string_decoder';
 import type Docker from 'dockerode';
 import type { Duplex } from 'node:stream';
 import type { PrivateSandbox } from './native.js';
-import type { KatanaCommand } from './command.js';
+import type { KatanaCommand, RestCommand } from './command.js';
 
 // This is a provider-specific pipe control, not a second sandbox. DockerSandbox
 // still owns start, inspected isolation, safe control commands, and destroy.
 export async function privateProcess(
   sandbox: PrivateSandbox,
-  command: KatanaCommand,
+  command: KatanaCommand | RestCommand,
   options: {
     abortSignal?: AbortSignal;
     timeout: number;

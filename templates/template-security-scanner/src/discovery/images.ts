@@ -126,6 +126,7 @@ export async function buildDiscoveryImages(
   signal?: AbortSignal,
   acquired?: (imageId: string, inputHash: string) => Promise<void>,
   acquiring?: (tag: string, inputHash: string) => Promise<void>,
+  built?: (kind: 'gateway' | 'firewall', tag: string, imageId: string) => Promise<void>,
 ): Promise<DiscoveryImages> {
   signal?.throwIfAborted();
   const inputs = await prepareDiscoveryInputs(settings, signal);
@@ -224,6 +225,7 @@ export async function buildDiscoveryImages(
       )
         throw new ControlPlaneError('DISCOVERY_IMAGE_MISMATCH', 503);
       images[kind] = image.Id;
+      await built?.(kind, tag, image.Id);
       await acquired?.(image.Id, hash);
     }
     return { gateway: images.gateway!, firewall: images.firewall!, inputHash, certutil: inputs.certutil };

@@ -56,6 +56,58 @@ function requireBinding(expected: IdentityBinding, current: IdentityBinding) {
     throw new ControlPlaneError('REVISION_CONFLICT', 409);
   }
 }
+function requireLegacyExecution(target: Target) {
+  if (
+    target.application !== undefined ||
+    target.authenticationDrivers !== undefined ||
+    target.routeAccessRules !== undefined
+  )
+    throw new ControlPlaneError('APPLICATION_DRIVER_UNSUPPORTED', 403);
+}
+function apiKeyDriver(target: Target, profile: Profile) {
+  const driver = target.authenticationDrivers?.find(item => item.profileId === profile.id);
+  if (profile.kind !== 'api_key_header' || driver?.kind !== 'api_key_header')
+    throw new ControlPlaneError('AUTHENTICATION_DRIVER_UNSUPPORTED', 403);
+  if (
+    driver.secretRef !== profile.credentialRef ||
+    driver.credentialOrigins.length !== 1 ||
+    driver.credentialOrigins[0] !== new URL(target.entryUrl).origin
+  )
+    throw new ControlPlaneError('AUTHENTICATION_SCOPE_DENIED', 403);
+  if (driver.expiresAt && Date.parse(driver.expiresAt) <= Date.now()) throw new ControlPlaneError('AUTH_REQUIRED', 403);
+  if (
+    !target.routeAccessRules?.some(
+      rule =>
+        rule.source === 'operator' &&
+        rule.method === 'GET' &&
+        rule.pathTemplate === driver.accessCheckPath &&
+        rule.audience === 'user' &&
+        rule.objectPolicy === 'owner',
+    )
+  )
+    throw new ControlPlaneError('ACCESS_CHECK_RULE_REQUIRED', 403);
+  return driver;
+}
+function requireExecutableApplication(target: Target) {
+  if (!target.application) return requireLegacyExecution(target);
+  if (
+    target.application.kind !== 'rest_api' ||
+    !target.permittedMethods.every(method => ['GET', 'HEAD'].includes(method))
+  )
+    throw new ControlPlaneError('APPLICATION_DRIVER_UNSUPPORTED', 403);
+  if (
+    target.application.openApiUrl &&
+    new URL(target.application.openApiUrl).origin !== new URL(target.entryUrl).origin
+  )
+    throw new ControlPlaneError('OPENAPI_ORIGIN_UNSUPPORTED', 403);
+  if (!target.routeAccessRules?.some(rule => rule.source === 'operator' && rule.method === 'GET'))
+    throw new ControlPlaneError('ROUTE_RULES_REQUIRED', 403);
+  requireRouteRuleRevision(target, target.revision);
+}
+function requireRouteRuleRevision(target: Pick<Target, 'routeAccessRules'>, revision: number) {
+  if (target.routeAccessRules?.some(rule => rule.source === 'operator' && rule.operatorRevision !== revision))
+    throw new ControlPlaneError('INVALID_INPUT', 400);
+}
 /** Operator-owned record whose mutation must quiesce affected work. */
 export type MutationScope = {
   /** Operator that owns this record; derived from the authenticated session. */
@@ -120,6 +172,11 @@ export class ControlPlane {
   }
   private authorizeProfile(target: Target, profile: Pick<Profile, 'kind'> & { identityEndpoint?: string }) {
     if (profile.kind === 'public') return;
+    if (profile.kind === 'api_key_header') {
+      if (target.application?.kind !== 'rest_api' || !target.permittedMethods.includes('GET'))
+        throw new ControlPlaneError('AUTHENTICATION_SCOPE_DENIED', 403);
+      return;
+    }
     const endpoint = new URL(profile.identityEndpoint!);
     if (
       !target.approvedOrigins.includes(endpoint.origin) ||
@@ -131,6 +188,7 @@ export class ControlPlane {
   }
   async createTarget(owner: string, input: unknown) {
     const data = parse(targetSchema, input);
+    requireRouteRuleRevision(data, 1);
     if (data.authProfileIds.length) throw new ControlPlaneError('PROFILE_SCOPE_DENIED', 403);
     const target: Target = { ...data, id: randomUUID(), owner, revision: 1 };
     await this.store.write(async transaction => {
@@ -183,7 +241,8 @@ export class ControlPlane {
     for (const otherId of target.authProfileIds) {
       if (
         otherId !== id &&
-        (await this.store.get<Profile>('profile', otherId, owner, transaction)).role === data.role
+        (await this.store.get<Profile>('profile', otherId, owner, transaction)).role === data.role &&
+        data.kind !== 'api_key_header'
       ) {
         throw new ControlPlaneError('ROLE_CONFLICT', 409);
       }
@@ -285,6 +344,7 @@ export class ControlPlane {
   private async applyCheckIdentity(owner: string, targetId: string, id: string, input: unknown) {
     const binding = parse(bindingSchema, input);
     const { target, profile, policy } = await this.context(owner, targetId, id);
+    requireLegacyExecution(target);
     requireBinding(binding, currentBinding(target, profile));
     requireRevision(policy.revision, target.policyRevision);
     this.authorizeProfile(target, profile);
@@ -383,6 +443,7 @@ export class ControlPlane {
   ) {
     const target = await this.store.get<Target>('target', targetId, owner, transaction);
     requireRevision(target.revision, request.targetRevision);
+    requireExecutableApplication(target);
     const policy = await this.authorizeTarget(target, transaction);
     requireRevision(policy.revision, request.policyRevision);
     if (target.environment !== 'lab' && !policy.retention) throw new ControlPlaneError('RETENTION_REQUIRED', 403);
@@ -394,6 +455,8 @@ export class ControlPlane {
       if (current.profile.expiresAt && Date.parse(current.profile.expiresAt) <= Date.now())
         throw new ControlPlaneError('AUTH_REQUIRED', 403);
       const profile = current.profile;
+      if (target.application?.kind === 'rest_api' && profile.kind !== 'public' && profile.kind !== 'api_key_header')
+        throw new ControlPlaneError('AUTHENTICATION_DRIVER_UNSUPPORTED', 403);
       if (
         profile.kind !== 'public' &&
         profile.identityResult?.status === 'AUTH_REQUIRED' &&
@@ -408,7 +471,9 @@ export class ControlPlane {
         headers.push(
           profile.kind === 'bearer'
             ? { authorization: `Bearer ${credential.value}` }
-            : { [credential.name!]: credential.value },
+            : profile.kind === 'api_key_header'
+              ? { [apiKeyDriver(target, profile).headerName.toLowerCase()]: credential.value }
+              : { [credential.name!]: credential.value },
         );
       }
     }
@@ -422,7 +487,9 @@ export class ControlPlane {
         headers:
           profile.kind === 'bearer'
             ? { authorization: `Bearer ${credential.value}` }
-            : { [credential.name!]: credential.value },
+            : profile.kind === 'api_key_header'
+              ? { [apiKeyDriver(target, profile).headerName.toLowerCase()]: credential.value }
+              : { [credential.name!]: credential.value },
       });
     }
     return { target, policy, profiles, headers, guardHeaders };
@@ -463,7 +530,8 @@ export class ControlPlane {
     for (const otherId of target.authProfileIds)
       if (
         otherId !== id &&
-        (await this.store.get<Profile>('profile', otherId, target.owner, transaction)).role === data.role
+        (await this.store.get<Profile>('profile', otherId, target.owner, transaction)).role === data.role &&
+        data.kind !== 'api_key_header'
       )
         throw new ControlPlaneError('ROLE_CONFLICT', 409);
     if (data.kind !== 'public')
@@ -480,6 +548,7 @@ export class ControlPlane {
   }
   async updateTarget(owner: string, id: string, revision: number, input: unknown) {
     const data = parse(targetSchema, input);
+    requireRouteRuleRevision(data, revision + 1);
     const scope = { owner, kind: 'target' as const, id, revision };
     return this.coordinate(
       scope,
@@ -539,7 +608,9 @@ export class ControlPlane {
         status,
         reason:
           status === 'READY'
-            ? 'IDENTITY_MATCHED'
+            ? current.profile.kind === 'api_key_header'
+              ? 'ACCESS_CHECK_SUCCEEDED'
+              : 'IDENTITY_MATCHED'
             : status === 'AUTH_REQUIRED'
               ? 'SESSION_REJECTED'
               : 'IDENTITY_TRANSPORT_FAILED',

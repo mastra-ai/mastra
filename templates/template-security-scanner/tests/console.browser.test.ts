@@ -536,7 +536,11 @@ describe('real security console browser journeys', () => {
     ).toBe(true);
 
     await navigate(page, 'Scans');
-    await page.getByRole('button', { name: 'Refresh' }).click();
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Scans', exact: true, level: 2 }) })
+      .getByRole('button', { name: 'Refresh' })
+      .click();
     const scanRow = page.getByRole('row').filter({ hasText: scan.id.slice(0, 8) });
     await visible(scanRow);
     await scanRow.getByRole('button', { name: 'Investigate' }).click();
@@ -716,7 +720,11 @@ describe('real security console browser journeys', () => {
       (await lab.stats())['stream-contacts']! > (beforeStream['stream-contacts'] ?? 0) ? true : undefined,
     );
     await navigate(page, 'Scans');
-    await page.getByRole('button', { name: 'Refresh' }).click();
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Scans', exact: true, level: 2 }) })
+      .getByRole('button', { name: 'Refresh' })
+      .click();
     const streamId = z.object({ id: z.string().uuid() }).parse(streaming.data).id;
     const streamRow = page.getByRole('row').filter({ hasText: streamId.slice(0, 8) });
     await visible(streamRow);

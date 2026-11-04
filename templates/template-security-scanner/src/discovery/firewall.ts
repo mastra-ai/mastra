@@ -10,9 +10,12 @@ const canonical = (value: unknown): string =>
     }
     return item;
   });
-export function verifyFirewall(value: unknown, gatewayIp: string, port: number) {
+export function verifyFirewall(value: unknown, gatewayIp: string, port: number | readonly [number, number]) {
   z.ipv4().parse(gatewayIp);
-  z.number().int().min(8080).max(8111).parse(port);
+  const allowedPorts = Array.isArray(port) ? port : [port];
+  for (const item of allowedPorts) z.number().int().min(8080).max(8111).parse(item);
+  if (allowedPorts.length === 2 && (allowedPorts[0] !== 8080 || allowedPorts[1] !== 8081))
+    throw new Error('FIREWALL_PORT_RANGE_INVALID');
   const entries = z
     .object({ nftables: z.array(z.record(z.string(), z.unknown())).max(128) })
     .strict()
@@ -50,7 +53,11 @@ export function verifyFirewall(value: unknown, gatewayIp: string, port: number) 
   const expected = {
     output: [
       established,
-      [match(payload('ip', 'daddr'), gatewayIp), match(payload('tcp', 'dport'), port), { accept: null }],
+      [
+        match(payload('ip', 'daddr'), gatewayIp),
+        match(payload('tcp', 'dport'), allowedPorts.length === 1 ? allowedPorts[0] : { range: allowedPorts }),
+        { accept: null },
+      ],
       [...loop('output', 9222, true), { accept: null }],
       [...loop('output', { range: [40000, 40031] }, true), { counter: true }, { accept: null }],
       [{ counter: true }, { drop: null }],

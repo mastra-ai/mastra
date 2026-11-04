@@ -8,6 +8,7 @@ import { idSchema, pageSchema, parse } from '../core/contracts.js';
 import type { ControlPlane } from '../core/control-plane.js';
 import type { InvestigationService } from '../investigation/service.js';
 import type { Finding, StoredProof } from '../investigation/store.js';
+import type { BolaAssessmentService } from '../investigation/bola-service.js';
 import { OPERATOR_ID } from './security.js';
 
 const assetName = z.string().regex(/^(?:console-[a-f0-9]{64}\.js|style-[a-f0-9]{64}\.css)$/);
@@ -77,6 +78,7 @@ export async function registerConsoleRoutes(
   settings: Settings,
   investigations: InvestigationService,
   control: ControlPlane,
+  assessments: BolaAssessmentService,
 ) {
   const assets = await consoleAssets(settings.root);
   app.get('/', context => {
@@ -104,6 +106,7 @@ export async function registerConsoleRoutes(
         modelConfigured: investigations.modelConfigured(),
         approvalCallback: investigations.approvalCallback(),
       },
+      bolaAssessment: { available: assessments.enabled },
       sandbox: {
         driver: settings.SANDBOX_DRIVER,
         platform: settings.DOCKER_PLATFORM,

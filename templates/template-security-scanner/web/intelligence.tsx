@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import {
   send,
+  get,
+  type BolaFinding,
   type Advisory,
   type AgentData,
   type Approval,
@@ -11,6 +13,7 @@ import {
   type Investigation,
   type Page,
   type Scan,
+  type Target,
 } from './api';
 import { Dialog, Empty, Loading, Notice, Pager, Section, Status, Time, errorCode, useData } from './ui';
 
@@ -86,9 +89,11 @@ export function OverviewView({ navigate }: { navigate: (view: string) => void })
                 ? 'Unavailable'
                 : advisory.data.stale
                   ? 'Stale'
-                  : advisory.data.lastSuccessAt
-                    ? 'Current'
-                    : 'No sync'}
+                  : advisory.data.incomplete
+                    ? 'Incomplete coverage'
+                    : advisory.data.lastSuccessAt
+                      ? 'Current'
+                      : 'No sync'}
           </strong>
           <small>
             {advisory.loading ? (
@@ -96,7 +101,10 @@ export function OverviewView({ navigate }: { navigate: (view: string) => void })
             ) : !advisory.data ? (
               'Status unavailable'
             ) : advisory.data.lastSuccessAt ? (
-              <Time value={advisory.data.lastSuccessAt} />
+              <>
+                Last imported page: <Time value={advisory.data.lastSuccessAt} />
+                {advisory.data.incomplete ? ' · Incomplete coverage' : ''}
+              </>
             ) : (
               'No successful sync recorded'
             )}
@@ -433,9 +441,34 @@ export function FindingsView() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string>();
   const data = useData<Page<Finding>>(`/api/findings?limit=${limit}&offset=${offset}`);
+  const bolaFindings = useData<Page<BolaFinding>>('/api/bola-findings?limit=100&offset=0');
   const finding = data.data?.items.find(item => item.id === selected);
   return (
     <>
+      <Section title="REST BOLA findings" action={<button onClick={bolaFindings.reload}>Refresh</button>}>
+        <Notice code={bolaFindings.error} stale={bolaFindings.stale} onRetry={bolaFindings.reload} />
+        {(bolaFindings.data?.items ?? []).map(item => (
+          <div className="record" key={item.id}>
+            <strong>Broken object level authorization</strong>
+            <span className="mono">{item.id}</span>
+            <span>
+              {item.routeTemplate} · owner {item.ownerStatus}, alternate {item.alternateStatus} · same private response
+              yes
+            </span>
+            <span>
+              Checker {item.checkerId} · {item.gatewayRequests} gateway requests · assessment{' '}
+              {item.assessmentId.slice(0, 8)}
+            </span>
+            <span>
+              Sherlock: {item.selection?.hypothesis ?? 'Legacy selection'} ·{' '}
+              {item.selection?.rationaleCode ?? 'Unrecorded'} · confidence {item.selection?.confidence ?? 'unknown'} ·
+              limitations {item.selection?.limitations.join(', ') ?? 'unrecorded'}
+            </span>
+            <Time value={item.createdAt} />
+          </div>
+        ))}
+        {bolaFindings.data && !bolaFindings.data.items.length && <Empty>No confirmed REST BOLA findings.</Empty>}
+      </Section>
       <Section title="Findings" action={<button onClick={data.reload}>Refresh</button>}>
         <Notice code={data.error} stale={data.stale} onRetry={data.reload} />
         {data.loading ? (
@@ -616,7 +649,49 @@ export function VulnerabilitiesView() {
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [reason, setReason] = useState('');
+  const [scope, setScope] = useState('all_targets');
+  const [targetId, setTargetId] = useState('');
+  const [notes, setNotes] = useState('');
+  const [evidenceRefs, setEvidenceRefs] = useState('');
+  const [checkers, setCheckers] = useState<
+    { id: string; version: number; kind: string; execution: string; summary: string }[] | null
+  >(null);
   const data = useData<Page<Advisory>>(`/api/advisories?limit=${limit}&offset=${offset}`);
+  const targets = useData<Page<Target>>('/api/targets?limit=100&offset=0');
+  const triageState = useData<{
+    importance: string;
+    targetRelevance: string;
+    suggested: boolean;
+    checkerAvailability: string;
+    hypothesis: {
+      state: string;
+      recommendation: string | null;
+      rationaleCode: string | null;
+      confidence: string | null;
+      modelId: string | null;
+    } | null;
+    hypothesisHistory: {
+      sourceRevision: number;
+      state: string;
+      recommendation: string | null;
+      rationaleCode: string | null;
+      createdAt: string;
+    }[];
+    ignores: {
+      scope: string;
+      targetId: string | null;
+      operator: string;
+      reason: string;
+      ignoredAt: string;
+      clearedAt: string | null;
+    }[];
+    cases: { id: string; notes: string; evidenceRefs: string[]; createdAt: string; sourceRevision: number }[];
+  }>(
+    selected
+      ? `/api/advisories/${encodeURIComponent(selected)}/triage-state${scope === 'target' && targetId ? `?targetId=${encodeURIComponent(targetId)}` : ''}`
+      : '',
+  );
   const status = useData<{
     lastSuccessAt?: string | null;
     stale?: boolean;
@@ -659,6 +734,31 @@ export function VulnerabilitiesView() {
       setBusy(false);
     }
   }
+  async function action(work: () => Promise<unknown>) {
+    setBusy(true);
+    setError('');
+    try {
+      await work();
+      triageState.reload();
+      data.reload();
+    } catch (reason) {
+      setError(errorCode(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function searchCheckers(id: string) {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await get<{ items: typeof checkers }>(`/api/advisories/${encodeURIComponent(id)}/checkers`);
+      setCheckers(result.items);
+    } catch (reason) {
+      setError(errorCode(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <Section
@@ -687,14 +787,21 @@ export function VulnerabilitiesView() {
             <Status value="Unavailable" />
           ) : status.data.stale ? (
             <Status value="Stale" />
+          ) : status.data.incomplete ? (
+            <Status value="Incomplete coverage" />
           ) : status.data?.lastSuccessAt ? (
             <Status value="Current" />
           ) : (
             <Status value="No sync" />
           )}{' '}
-          · Last success{' '}
+          · Last imported page{' '}
           {status.loading ? 'Loading…' : status.error ? 'Unavailable' : <Time value={status.data?.lastSuccessAt} />}
+          {status.data?.incomplete ? ' · Incomplete coverage' : ''}
         </div>
+        <p className="hint">
+          Synchronization may make up to eight bounded Sherlock model calls when a model is configured. Advisory cards
+          do not assert target impact or execute a checker.
+        </p>
         {syncMessage && (
           <p className="success" role="status">
             {syncMessage}
@@ -727,7 +834,13 @@ export function VulnerabilitiesView() {
                 {data.data.items.map(record => (
                   <tr key={record.id}>
                     <td>
-                      <button className="link mono" onClick={() => setSelected(record.id)}>
+                      <button
+                        className="link mono"
+                        onClick={() => {
+                          setSelected(record.id);
+                          setCheckers(null);
+                        }}
+                      >
                         {record.id}
                       </button>
                     </td>
@@ -787,6 +900,151 @@ export function VulnerabilitiesView() {
               <span className="eyebrow">Applicability</span>
               <p>Unknown until bound to an investigation and target.</p>
             </div>
+          </div>
+          <div className="record">
+            <strong>Advisory hypothesis</strong>
+            <span>
+              Target relevance: {triageState.data?.targetRelevance ?? 'unknown'} · Checker:{' '}
+              {triageState.data?.checkerAvailability ?? 'loading'}
+            </span>
+            <span>
+              Advisory importance: {triageState.data?.importance ?? 'unknown'} · source status {item.upstreamStatus}.
+              Importance does not establish target impact.
+            </span>
+            <span>
+              {triageState.data?.hypothesis?.state === 'ready'
+                ? `${triageState.data.hypothesis.recommendation} · ${triageState.data.hypothesis.rationaleCode} · confidence ${triageState.data.hypothesis.confidence}`
+                : triageState.data?.hypothesis?.state === 'pending'
+                  ? 'Triage pending: model unavailable or output invalid.'
+                  : 'No Sherlock recommendation for this revision.'}
+            </span>
+            <span>No application finding or automatic test is created by advisory triage.</span>
+            {triageState.data?.suggested === false && (
+              <span>Recommendation suppressed for this scope; the audit record remains visible.</span>
+            )}
+          </div>
+          {triageState.data?.hypothesisHistory.length ? (
+            <div className="record">
+              <strong>Hypothesis revision history</strong>
+              {triageState.data.hypothesisHistory.map(entry => (
+                <span key={entry.sourceRevision}>
+                  r{entry.sourceRevision} · {entry.state} · {entry.recommendation ?? 'no model recommendation'} ·{' '}
+                  <Time value={entry.createdAt} />
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <h3>Manual actions</h3>
+          <div className="record">
+            <label>
+              Ignore reason{' '}
+              <input value={reason} maxLength={160} onChange={event => setReason(event.currentTarget.value)} />
+            </label>
+            <label>
+              Ignore scope{' '}
+              <select value={scope} onChange={event => setScope(event.currentTarget.value)}>
+                <option value="all_targets">All my targets</option>
+                <option value="target">This target</option>
+              </select>
+            </label>
+            {scope === 'target' && (
+              <label>
+                Target{' '}
+                <select value={targetId} onChange={event => setTargetId(event.currentTarget.value)}>
+                  <option value="">Select target</option>
+                  {targets.data?.items.map(target => (
+                    <option key={target.id} value={target.id}>
+                      {target.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button
+              disabled={busy || !reason.trim() || (scope === 'target' && !targetId)}
+              onClick={() =>
+                action(() =>
+                  send(`/api/advisories/${encodeURIComponent(item.id)}/ignore`, 'POST', {
+                    scope,
+                    targetId: scope === 'target' ? targetId : null,
+                    reason,
+                  }),
+                )
+              }
+            >
+              Ignore
+            </button>
+            {triageState.data?.ignores
+              .filter(ignore => !ignore.clearedAt)
+              .map(ignore => (
+                <div key={`${ignore.scope}:${ignore.targetId}`}>
+                  <span>
+                    Ignored {ignore.scope}
+                    {ignore.targetId ? ` (${ignore.targetId})` : ''} by {ignore.operator}: {ignore.reason} ·{' '}
+                    <Time value={ignore.ignoredAt} />
+                  </span>{' '}
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      action(() =>
+                        send(`/api/advisories/${encodeURIComponent(item.id)}/unignore`, 'POST', {
+                          scope: ignore.scope,
+                          targetId: ignore.targetId,
+                        }),
+                      )
+                    }
+                  >
+                    Undo ignore
+                  </button>
+                </div>
+              ))}
+          </div>
+          <div className="record">
+            <label>
+              Investigation notes{' '}
+              <textarea value={notes} maxLength={2000} onChange={event => setNotes(event.currentTarget.value)} />
+            </label>
+            <label>
+              Evidence references (comma separated){' '}
+              <input value={evidenceRefs} onChange={event => setEvidenceRefs(event.currentTarget.value)} />
+            </label>
+            <button
+              disabled={busy || !notes.trim()}
+              onClick={() =>
+                action(() =>
+                  send(`/api/advisories/${encodeURIComponent(item.id)}/cases`, 'POST', {
+                    notes,
+                    evidenceRefs: evidenceRefs
+                      .split(',')
+                      .map(value => value.trim())
+                      .filter(Boolean),
+                  }),
+                )
+              }
+            >
+              Investigate
+            </button>
+            {triageState.data?.cases.map(manualCase => (
+              <span key={manualCase.id}>
+                Manual case {manualCase.id.slice(0, 8)} · r{manualCase.sourceRevision} · {manualCase.notes} ·{' '}
+                {manualCase.evidenceRefs.length} refs · <Time value={manualCase.createdAt} />
+              </span>
+            ))}
+          </div>
+          <div className="record">
+            <button disabled={busy} onClick={() => searchCheckers(item.id)}>
+              Search scanner/checker
+            </button>
+            {checkers &&
+              (checkers.length ? (
+                checkers.map(checker => (
+                  <span key={checker.id}>
+                    {checker.id} v{checker.version} · {checker.kind} · {checker.execution} · {checker.summary}
+                  </span>
+                ))
+              ) : (
+                <span>None available. No external code was downloaded or executed.</span>
+              ))}
           </div>
           <p className="source-text">{item.detail.summary?.text ?? 'No summary recorded.'}</p>
           <h3>Event history</h3>

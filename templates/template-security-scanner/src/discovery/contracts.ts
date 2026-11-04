@@ -49,7 +49,7 @@ export const observationSchema = z
     /** Identity profile used for this observation or operation. */
     profileId: idSchema,
     /** Discovery engine that produced this observation. */
-    source: z.enum(['katana-http', 'katana-headless']),
+    source: z.enum(['katana-http', 'katana-headless', 'rest-json']),
     /** Distinguishes a gateway-observed response from an advertised surface. */
     provenance: z.enum(['upstream-response', 'advertised']),
     /** Canonical HTTP(S) origin inside the authorized target scope. */
@@ -60,6 +60,10 @@ export const observationSchema = z
     method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']),
     /** Parameter names only; parameter values are withheld. */
     parameterNames: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_.\-]{0,63}$/)).max(32),
+    /** Confirmed or advertised route template used to interpret this REST observation. */
+    routeTemplate: z.string().max(512).optional(),
+    /** Previously observed scoped path that supplied this REST detail reference. */
+    linkedFrom: pathSchema.optional(),
     /** Trusted upstream HTTP status; absent for advertised surfaces. */
     status: z.number().int().min(100).max(599).optional(),
   })
@@ -69,7 +73,7 @@ export const observationSchema = z
       context.addIssue({ code: 'custom', message: 'Advertised surfaces cannot claim an upstream status.' });
     if (
       value.provenance === 'upstream-response' &&
-      (value.source !== 'katana-http' || value.kind !== 'endpoint' || value.status === undefined)
+      (!['katana-http', 'rest-json'].includes(value.source) || value.kind !== 'endpoint' || value.status === undefined)
     )
       context.addIssue({ code: 'custom', message: 'Upstream responses require an HTTP endpoint and observed status.' });
   });
@@ -169,9 +173,21 @@ export const roleResultSchema = z
       .max(120)
       .regex(/^[a-zA-Z0-9:_-]+$/),
     /** Discovery engine that produced this observation. */
-    source: z.enum(['katana-http', 'katana-headless']),
+    source: z.enum(['katana-http', 'katana-headless', 'rest-json']),
     /** Current identity readiness information; never a vulnerability verdict. */
     identity: z.enum(['READY', 'AUTH_REQUIRED', 'UNAVAILABLE']),
+    /** Finite comparisons from this scan; account identifiers never leave trusted memory. */
+    principalComparisons: z
+      .array(
+        z
+          .object({
+            profileId: idSchema,
+            result: z.enum(['SAME', 'DISTINCT', 'UNKNOWN']),
+          })
+          .strict(),
+      )
+      .max(31)
+      .optional(),
     /** Bounded output-minimization and rejection counters. */
     counters: discoveryCountersSchema,
     /** Whether this result is incomplete or contains withheld observations. */

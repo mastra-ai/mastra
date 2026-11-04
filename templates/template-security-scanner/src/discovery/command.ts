@@ -20,6 +20,52 @@ export type KatanaCommand = {
   /** Brand assigned by the trusted builder, never accepted from API input. */
   [katanaBrand]: true;
 };
+/** Fixed read-only request; credentials are injected by the gateway after policy checks. */
+export type RestCommand = {
+  executable: 'katana';
+  args: string[];
+  [katanaBrand]: true;
+};
+export function restCommand(url: string, proxy: string): RestCommand {
+  const parsed = urlSchema.parse(url);
+  return {
+    executable: 'katana',
+    args: [
+      '-jsonl',
+      '-silent',
+      '-no-color',
+      '-disable-update-check',
+      '-disable-unique-filter',
+      '-omit-raw',
+      '-exclude-output-fields',
+      'raw,reader,resp,customfields,knowledgebase,extra',
+      '-depth',
+      '0',
+      '-disable-redirects',
+      '-concurrency',
+      '1',
+      '-parallelism',
+      '1',
+      '-rate-limit',
+      '10',
+      '-retry',
+      '0',
+      '-timeout',
+      '4',
+      '-crawl-duration',
+      '2s',
+      '-max-response-size',
+      '32768',
+      '-max-domain-pages',
+      '1',
+      '-proxy',
+      proxy,
+      '-u',
+      parsed,
+    ],
+    [katanaBrand]: true,
+  };
+}
 export function katanaCommand(input: z.infer<typeof commandInput>): KatanaCommand {
   const { entryUrl, mode, proxy } = commandInput.parse(input);
   const args = [

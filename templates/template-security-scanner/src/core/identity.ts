@@ -52,11 +52,16 @@ export function ownedLoopbackIdentityTransport(listener: Server): IdentityTransp
   return {
     supports: (target, profile) =>
       target.environment === 'lab' &&
-      profile.kind !== 'public' &&
+      (profile.kind === 'bearer' || profile.kind === 'header') &&
       profile.identityEndpoint === endpoint &&
       listener.listening,
     async check(profile, headers) {
-      if (profile.kind === 'public' || profile.identityEndpoint !== endpoint || !listener.listening) {
+      if (
+        profile.kind === 'public' ||
+        profile.kind === 'api_key_header' ||
+        profile.identityEndpoint !== endpoint ||
+        !listener.listening
+      ) {
         return { status: 'UNAVAILABLE', reason: 'REMOTE_IDENTITY_DISABLED' };
       }
       return new Promise(resolve => {

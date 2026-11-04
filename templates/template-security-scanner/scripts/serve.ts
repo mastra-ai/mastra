@@ -1,8 +1,13 @@
 import { diagnostic, loadSettings } from '../src/config/settings.js';
-import { startLocalServer } from '../src/http/server.js';
+import { startControlPlane } from '../src/http/server.js';
+import { readExampleBoundary } from '../example-target-api/transport.js';
+import { preflight } from '../src/runtime/docker.js';
 
 try {
-  const runtime = await startLocalServer(loadSettings());
+  const settings = loadSettings();
+  await preflight(settings);
+  const boundary = await readExampleBoundary(settings);
+  const runtime = await startControlPlane(settings, settings.PORT, undefined, boundary);
   console.log(`Local API: ${runtime.url}/api/runtime`);
   let stopping = false;
   const stop = async () => {

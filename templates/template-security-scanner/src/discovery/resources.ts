@@ -52,9 +52,11 @@ export class ScanResources {
   }
   async verify(resource: OwnedResource) {
     if (resource.kind === 'image') {
-      const image = await this.client.getImage(resource.imageId ?? resource.id).inspect();
+      const reference = resource.imageId ?? resource.id;
+      const image = await this.client.getImage(reference).inspect();
+      const acquiring = resource.id === `${resource.scanId}:acquiring:${reference}`;
       if (
-        image.Id !== (resource.imageId ?? resource.id) ||
+        (acquiring ? !image.RepoTags?.includes(reference) : image.Id !== reference) ||
         image.Config.Labels?.[OWNER_LABEL] !== ownerIdentity(this.settings) ||
         image.Config.Labels?.[INPUT_LABEL] !== resource.token
       )
@@ -86,23 +88,34 @@ export class ScanResources {
     let complete = true;
     for (const resource of (await this.store.resources(this.scanId)).reverse()) {
       try {
-        await this.verify(resource);
+        const observed = await this.verify(resource);
         if (resource.kind === 'image' && retainImageRecords) continue;
         if (resource.kind === 'container') await this.client.getContainer(resource.id).remove({ force: true, v: true });
         else if (resource.kind === 'network') await this.client.getNetwork(resource.id).remove();
         else {
+          const image = observed as Docker.ImageInspectInfo;
+          const imageId = image.Id;
+          // Another job's persisted receipt owns a shared image until that job
+          // releases it. The last exact-owner receipt removes the image.
+          const shared = (await this.store.resources()).some(
+            other =>
+              other.kind === 'image' &&
+              other.scanId !== resource.scanId &&
+              other.token === resource.token &&
+              (other.imageId === imageId || (other.imageId !== undefined && image.RepoTags?.includes(other.imageId))),
+          );
+          if (shared) {
+            await this.store.forget(resource.id);
+            continue;
+          }
           // A shared consumer owns its own lifecycle. Preserve both the image
           // and this deletion receipt so a later owned cleanup can finish it.
-          if (
-            (await this.client.listContainers({ all: true, filters: { ancestor: [resource.imageId ?? resource.id] } }))
-              .length
-          )
-            continue;
+          if ((await this.client.listContainers({ all: true, filters: { ancestor: [imageId] } })).length) continue;
           if (resource.sharedBase && this.settings.DOCKER_RETAIN_SHARED_BASE_IMAGE) {
             await this.store.forget(resource.id);
             continue;
           }
-          await this.client.getImage(resource.imageId ?? resource.id).remove({ force: false, noprune: true });
+          await this.client.getImage(imageId).remove({ force: false, noprune: true });
         }
         await this.store.forget(resource.id);
       } catch (error) {

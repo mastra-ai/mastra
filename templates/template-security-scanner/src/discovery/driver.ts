@@ -21,7 +21,9 @@ import { budgetSchema, roleResultSchema, type Scan, type Observation, type ScanR
 
 import type { OwnedLabBoundary } from './lab.js';
 export { ownedLabBoundary, type OwnedLabBoundary } from './lab.js';
-import { openGateway, gatewayStatsSchema } from './gateway.js';
+import { openGateway, gatewayRole, gatewayStatsSchema } from './gateway.js';
+import { RestJsonReader } from './rest.js';
+import { privatePrincipal } from './principals.js';
 /** Sanitized discovery-driver outcome and shared-budget snapshot. */
 export type DriverResult = {
   /** Sanitized machine-readable reason for the recorded state. */
@@ -70,6 +72,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
       aborter.signal,
       AbortSignal.timeout(context.target.scanLimits.maxDurationSeconds * 1000 + 30000),
     ]);
+    const principals = new Map<string, { source: string; value: string | null }>();
     let images: DiscoveryImages | undefined,
       image: ImageReceipt | undefined,
       gateway: Docker.Container | undefined,
@@ -240,7 +243,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
             {
               headers: {
                 bytes: Buffer.from(
-                  Object.entries(header)
+                  Object.entries(context.target.application?.kind === 'rest_api' ? {} : header)
                     .map(([name, value]) => `${name}: ${value}\n`)
                     .join(''),
                 ),
@@ -287,100 +290,183 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
               });
               if (!result.success) throw new Error('SANDBOX_CA_IMPORT');
             }
-          const identity = async () => {
-            if (profile.kind === 'public') return 'READY' as const;
-            await validate();
-            const before = await snapshot();
-            await privateProcess(
-              sandbox!,
-              katanaCommand({ entryUrl: profile.identityEndpoint, mode: 'http', proxy: `http://${gatewayIp}:${port}` }),
-              { timeout: 15000, abortSignal: roleSignal, onStdout: () => {}, onStderr: () => {} },
-            );
-            const after = await snapshot();
-            for (const status of ['AUTH_REQUIRED', 'READY', 'UNAVAILABLE'] as const)
-              if (
-                (after.counts[`identity-${profile.role}-${status}`] ?? 0) >
-                (before.counts[`identity-${profile.role}-${status}`] ?? 0)
-              )
-                return status;
-            return 'UNAVAILABLE' as const;
-          };
-          stage = 'IDENTITY';
-          identityStatus = await identity();
-          if (identityStatus === 'READY' && scan.request.operation === 'discovery') {
-            await validate();
-            stage = 'DISCOVERY';
-            let finished = false;
-            const pending = privateProcess(
+          if (context.target.application?.kind === 'rest_api') {
+            if (scan.request.mode !== 'http') throw new Error('REST_HEADLESS_UNSUPPORTED');
+            const configured = context.target.authenticationDrivers?.find(item => item.profileId === profile.id);
+            if (
+              profile.kind !== 'public' &&
+              (profile.kind !== 'api_key_header' || configured?.kind !== 'api_key_header')
+            )
+              throw new Error('REST_AUTHENTICATION_UNSUPPORTED');
+            let principal: string | null = null;
+            const principalSource =
+              configured?.kind === 'api_key_header' && configured.principalJsonPointer
+                ? JSON.stringify([
+                    new URL(context.target.entryUrl).origin,
+                    configured.accessCheckPath,
+                    configured.principalJsonPointer,
+                  ])
+                : '';
+            const reader = new RestJsonReader(
               sandbox,
-              katanaCommand({
-                entryUrl: context.target.entryUrl,
-                mode: scan.request.mode,
-                proxy: `http://${gatewayIp}:${port}`,
-              }),
-              {
-                timeout: 45000,
-                abortSignal: roleSignal,
-                onStdout: chunk => parser.feed('stdout', chunk),
-                onStderr: chunk => parser.feed('stderr', chunk),
+              context.target,
+              profile,
+              `http://${gatewayIp}:${port}`,
+              guard,
+              roleSignal,
+              validate,
+              body => {
+                principal = privatePrincipal(
+                  body,
+                  configured?.kind === 'api_key_header' ? configured.principalJsonPointer : undefined,
+                );
               },
-            ).finally(() => {
-              finished = true;
-            });
-            let verifiedBrowser = false;
-            let browserFailure = false;
-            try {
-              if (scan.request.mode === 'headless')
-                for (let attempt = 0; attempt < 100 && !finished; attempt++) {
-                  stage = 'BROWSER_ARGS';
-                  const observed = await inspectBrowser(sandbox, guard, roleSignal);
-                  if (observed.browserProcesses && !verifiedBrowser) {
-                    stage = 'BROWSER_SANDBOX';
-                    await browserSandboxStatus(sandbox, roleSignal, value => {
-                      stage = value;
-                    });
-                    verifiedBrowser = true;
-                  }
-                  if (!finished) await pause(100, undefined, { signal: roleSignal });
-                }
-            } catch (error) {
-              if (error instanceof BrowserInspectionError) stage = error.stage;
-              browserFailure = !roleSignal.aborted;
-              roleController.abort();
+            );
+            stage = 'IDENTITY';
+            const result = await reader.discover(
+              configured?.kind === 'api_key_header' ? configured.accessCheckPath : undefined,
+              scan.request.operation === 'identity',
+            );
+            const state = await snapshot();
+            identityStatus =
+              profile.kind === 'public'
+                ? 'READY'
+                : (state.counts[`identity-${gatewayRole(profile)}-READY`] ?? 0) > 0 && result.accessReady
+                  ? 'READY'
+                  : (state.counts[`identity-${gatewayRole(profile)}-AUTH_REQUIRED`] ?? 0) > 0
+                    ? 'AUTH_REQUIRED'
+                    : 'UNAVAILABLE';
+            if (identityStatus !== 'READY') {
+              reason = identityStatus === 'AUTH_REQUIRED' ? 'AUTH_REQUIRED' : 'IDENTITY_UNAVAILABLE';
+              partial = true;
             }
-            const execution = await pending;
-            if (browserFailure) throw new Error('BROWSER_POLICY_FAILED');
-            if (scan.request.mode === 'headless' && !verifiedBrowser) throw new Error('BROWSER_SANDBOX_UNPROVEN');
-            partial ||= !execution.success || Boolean(execution.pipe.stopReason);
-            if (!roleSignal.aborted) identityStatus = await identity();
+            if (identityStatus !== 'READY') principal = null;
+            const principalComparisons = [...principals].map(([profileId, previous]) => ({
+              profileId,
+              result:
+                !principalSource || previous.source !== principalSource || principal === null || previous.value === null
+                  ? ('UNKNOWN' as const)
+                  : previous.value === principal
+                    ? ('SAME' as const)
+                    : ('DISTINCT' as const),
+            }));
+            principals.set(profile.id, { source: principalSource, value: principal });
+            principal = null;
+            const observations = identityStatus === 'READY' ? result.observations : [];
+            const role = roleResultSchema.parse({
+              profileId: profile.id,
+              role: profile.role,
+              source: 'rest-json',
+              identity: identityStatus,
+              principalComparisons,
+              counters: { ...parser.counters, parsed: observations.length, withheld: result.partial ? 1 : 0 },
+              partial: result.partial || identityStatus !== 'READY',
+            });
+            if (guard.unsafe(JSON.stringify({ observations, role }))) throw new Error('SANITIZED_EXPORT_REJECTED');
+            stage = 'PUBLISH';
+            await publish(observations, role);
+            partial ||= role.partial;
+          } else {
+            const identity = async () => {
+              if (profile.kind === 'public') return 'READY' as const;
+              if (profile.kind === 'api_key_header') return 'UNAVAILABLE' as const;
+              await validate();
+              const before = await snapshot();
+              await privateProcess(
+                sandbox!,
+                katanaCommand({
+                  entryUrl: profile.identityEndpoint,
+                  mode: 'http',
+                  proxy: `http://${gatewayIp}:${port}`,
+                }),
+                { timeout: 15000, abortSignal: roleSignal, onStdout: () => {}, onStderr: () => {} },
+              );
+              const after = await snapshot();
+              for (const status of ['AUTH_REQUIRED', 'READY', 'UNAVAILABLE'] as const)
+                if (
+                  (after.counts[`identity-${profile.role}-${status}`] ?? 0) >
+                  (before.counts[`identity-${profile.role}-${status}`] ?? 0)
+                )
+                  return status;
+              return 'UNAVAILABLE' as const;
+            };
+            stage = 'IDENTITY';
+            identityStatus = await identity();
+            if (identityStatus === 'READY' && scan.request.operation === 'discovery') {
+              await validate();
+              stage = 'DISCOVERY';
+              let finished = false;
+              const pending = privateProcess(
+                sandbox,
+                katanaCommand({
+                  entryUrl: context.target.entryUrl,
+                  mode: scan.request.mode,
+                  proxy: `http://${gatewayIp}:${port}`,
+                }),
+                {
+                  timeout: 45000,
+                  abortSignal: roleSignal,
+                  onStdout: chunk => parser.feed('stdout', chunk),
+                  onStderr: chunk => parser.feed('stderr', chunk),
+                },
+              ).finally(() => {
+                finished = true;
+              });
+              let verifiedBrowser = false;
+              let browserFailure = false;
+              try {
+                if (scan.request.mode === 'headless')
+                  for (let attempt = 0; attempt < 100 && !finished; attempt++) {
+                    stage = 'BROWSER_ARGS';
+                    const observed = await inspectBrowser(sandbox, guard, roleSignal);
+                    if (observed.browserProcesses && !verifiedBrowser) {
+                      stage = 'BROWSER_SANDBOX';
+                      await browserSandboxStatus(sandbox, roleSignal, value => {
+                        stage = value;
+                      });
+                      verifiedBrowser = true;
+                    }
+                    if (!finished) await pause(100, undefined, { signal: roleSignal });
+                  }
+              } catch (error) {
+                if (error instanceof BrowserInspectionError) stage = error.stage;
+                browserFailure = !roleSignal.aborted;
+                roleController.abort();
+              }
+              const execution = await pending;
+              if (browserFailure) throw new Error('BROWSER_POLICY_FAILED');
+              if (scan.request.mode === 'headless' && !verifiedBrowser) throw new Error('BROWSER_SANDBOX_UNPROVEN');
+              partial ||= !execution.success || Boolean(execution.pipe.stopReason);
+              if (!roleSignal.aborted) identityStatus = await identity();
+            }
+            const result = parser.finish(partial || identityStatus !== 'READY');
+            if (identityStatus !== 'READY') {
+              result.counters.withheld += result.observations.length;
+              result.observations = [];
+              result.partial = true;
+              reason = identityStatus === 'AUTH_REQUIRED' ? 'AUTH_REQUIRED' : 'IDENTITY_UNAVAILABLE';
+            }
+            const role = roleResultSchema.parse({
+              profileId: profile.id,
+              role: profile.role,
+              source: scan.request.mode === 'http' ? 'katana-http' : 'katana-headless',
+              identity: identityStatus,
+              counters: result.counters,
+              partial: result.partial,
+            });
+            if (guard.unsafe(JSON.stringify({ observations: result.observations, role })))
+              throw new Error('SANITIZED_EXPORT_REJECTED');
+            stage = 'PUBLISH';
+            await publish(result.observations, role);
+            partial ||= result.partial;
+            if (result.counters.policyDenied > 0) reason = 'POLICY_BLOCKED';
+            else if (result.counters.upstreamUnverified > 0) reason = 'UPSTREAM_UNVERIFIED';
+            if (parser.stopped) {
+              reason = 'OUTPUT_BOUND';
+              break;
+            }
+            if (identityStatus !== 'READY') break;
           }
-          const result = parser.finish(partial || identityStatus !== 'READY');
-          if (identityStatus !== 'READY') {
-            result.counters.withheld += result.observations.length;
-            result.observations = [];
-            result.partial = true;
-            reason = identityStatus === 'AUTH_REQUIRED' ? 'AUTH_REQUIRED' : 'IDENTITY_UNAVAILABLE';
-          }
-          const role = roleResultSchema.parse({
-            profileId: profile.id,
-            role: profile.role,
-            source: scan.request.mode === 'http' ? 'katana-http' : 'katana-headless',
-            identity: identityStatus,
-            counters: result.counters,
-            partial: result.partial,
-          });
-          if (guard.unsafe(JSON.stringify({ observations: result.observations, role })))
-            throw new Error('SANITIZED_EXPORT_REJECTED');
-          stage = 'PUBLISH';
-          await publish(result.observations, role);
-          partial ||= result.partial;
-          if (result.counters.policyDenied > 0) reason = 'POLICY_BLOCKED';
-          else if (result.counters.upstreamUnverified > 0) reason = 'UPSTREAM_UNVERIFIED';
-          if (parser.stopped) {
-            reason = 'OUTPUT_BOUND';
-            break;
-          }
-          if (identityStatus !== 'READY') break;
         } catch (error) {
           const prefix = parser.finish(true);
           if (profile.kind !== 'public') {
@@ -447,6 +533,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
         reason = 'CLEANUP_FAILED';
         diagnostic = 'CLEANUP';
       }
+      principals.clear();
       guard.clear();
     }
     if (partial && reason === 'DISCOVERY_COMPLETE') reason = 'DISCOVERY_PARTIAL';

@@ -18,7 +18,7 @@
     "format": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
     "build": "tsc --outDir dist",
-    "test:unit": "vitest run tests/settings.test.ts tests/control-plane.test.ts tests/discovery.test.ts",
+    "test:unit": "vitest run tests/settings.test.ts tests/control-plane.test.ts tests/discovery.test.ts tests/assessment-contracts.test.ts tests/bola-bindings.test.ts tests/source-digest.test.ts",
     "test:console:unit": "vitest run tests/console.component.test.ts --reporter=verbose",
     "test:console:integration": "vitest run tests/console.integration.test.ts --reporter=verbose",
     "test:console": "npm run test:console:integration && npm run test:console:browser",
@@ -33,7 +33,12 @@
     "check:gateway": "node --import tsx scripts/check-gateway.ts",
     "operate": "node --env-file-if-exists=.env --import tsx scripts/operate.ts",
     "lab": "node --env-file-if-exists=.env --import tsx scripts/lab.ts",
-    "test:operations": "node --import tsx scripts/test-operations.ts"
+    "example-target": "node --env-file-if-exists=.env --import tsx scripts/example-target.ts",
+    "sync:advisories": "node --env-file-if-exists=.env --import tsx scripts/sync-advisories.ts",
+    "test:example-target": "vitest run tests/example-target.integration.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism",
+    "test:operations": "node --import tsx scripts/test-operations.ts",
+    "test:assessment": "npm run build:console && vitest run tests/example-target.integration.test.ts tests/bola.integration.test.ts tests/bola.browser.integration.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism",
+    "test:advisories": "npm run build:console && vitest run tests/advisory-owner.integration.test.ts tests/advisory.browser.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",

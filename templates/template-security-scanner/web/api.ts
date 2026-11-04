@@ -79,6 +79,76 @@ export type Target = {
   scanLimits: Limits;
   /** Target-owned profile identifiers, maintained by profile registration/removal. */
   authProfileIds: string[];
+  application?: { kind: 'rest_api'; version: 1; discoveryModes: ('openapi' | 'observed_json')[]; openApiUrl?: string };
+  authenticationDrivers?: {
+    kind: 'api_key_header';
+    version: 1;
+    profileId: string;
+    secretRef: string;
+    credentialOrigins: string[];
+    headerName: string;
+    accessCheckPath: string;
+    principalJsonPointer?: string;
+    refresh: 'reregister';
+  }[];
+  routeAccessRules?: RouteAccessRule[];
+};
+export type RouteAccessRule = {
+  version: 1;
+  method: 'GET';
+  pathTemplate: string;
+  source: 'operator';
+  operatorRevision: number;
+  audience: 'public' | 'user' | 'admin';
+  objectPolicy?: 'owner' | 'shared';
+  expectedUnauthorizedStatus: number[];
+};
+export type BolaAssessment = {
+  id: string;
+  revision: number;
+  targetId: string;
+  scanId: string;
+  state: string;
+  outcome: string | null;
+  reason: string | null;
+  verificationCleanup?: 'NOT_STARTED' | 'PENDING' | 'DEBT' | 'COMPLETE';
+  evidenceAvailability?: 'available' | 'expired' | 'unknown';
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  usedRequests: number;
+  usedTokens: number;
+  candidates: { id: string; routeTemplate: string; prerequisite: string; evidenceIds: string[] }[];
+  selected: { id: string; routeTemplate: string; prerequisite: string; evidenceIds: string[] } | null;
+  selection: { rationaleCode: string; hypothesis: string; confidence: string; limitations: string[] } | null;
+  proof: {
+    ownerStatus: number | null;
+    alternateStatus: number | null;
+    bodyMatches: boolean | null;
+    requestCount: number;
+    completed: boolean;
+    verifierCredentialFree: boolean;
+    firewallVerified: boolean;
+    directFixtureDenied: boolean | null;
+    gatewayCredentialInjections: number;
+    verifiedGatewayPeers: number;
+  } | null;
+  findingId: string | null;
+  modelEvents: { role: string; modelId: string; usageTokens: number | null }[];
+};
+export type BolaFinding = {
+  id: string;
+  assessmentId: string;
+  targetId: string;
+  categoryId: 'bola';
+  checkerId: 'bola_rest_read';
+  routeTemplate: string;
+  ownerStatus: number;
+  alternateStatus: number;
+  samePrivateResponse: true;
+  gatewayRequests: number;
+  selection: { rationaleCode: string; hypothesis: string; confidence: string; limitations: string[] } | null;
+  createdAt: string;
 };
 /** Public identity metadata; private credential values are excluded. */
 export type Profile = {

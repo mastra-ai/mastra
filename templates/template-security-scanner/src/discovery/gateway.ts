@@ -27,6 +27,8 @@ const originTuple = (origin: string) => {
   const url = new URL(origin);
   return [url.protocol.slice(0, -1), url.hostname, Number(url.port || (url.protocol === 'https:' ? 443 : 80))];
 };
+export const gatewayRole = (profile: ScanContext['profiles'][number]) =>
+  profile.kind === 'api_key_header' ? profile.id : profile.role;
 
 export async function gatewayState(gateway: Docker.Container, guard: SecretGuard) {
   const state = gatewayStatsSchema.parse(
@@ -67,11 +69,26 @@ export async function openGateway(
     const verified = await ownedLabBoundary(client, lab.fixtureId, lab.networkId, lab.token, lab.upstreamCa);
     if (verified.address !== lab.address || context.target.environment !== 'lab')
       throw new Error('LAB_BOUNDARY_CHANGED');
+    if (
+      context.target.application?.kind === 'rest_api' &&
+      context.profiles.some(profile => profile.kind === 'api_key_header') &&
+      new URL(context.target.entryUrl).protocol === 'http:' &&
+      new URL(context.target.entryUrl).origin !== `http://${verified.address}:18080`
+    )
+      throw new Error('REST_HTTP_LAB_ORIGIN_REQUIRED');
   }
+  if (
+    !lab &&
+    context.target.application?.kind === 'rest_api' &&
+    context.profiles.some(profile => profile.kind === 'api_key_header') &&
+    new URL(context.target.entryUrl).protocol !== 'https:'
+  )
+    throw new Error('INSECURE_AUTH_TRANSPORT');
   const gatewayIp = ingress.address(10);
   const profiles: Record<string, { role: string; header_file: string }> = {},
     headers: Record<string, string | null> = {},
     identities: Record<string, { endpoint: string; expected: string }> = {},
+    accessChecks: Record<string, string> = {},
     credentialOrigins: Record<string, unknown> = {};
   const files: Record<string, { bytes: Buffer }> = {};
   const guardFiles = context.guardHeaders.map(item => `/workspace/guard-${item.profileId}.headers`);
@@ -86,20 +103,32 @@ export async function openGateway(
   for (let index = 0; index < context.profiles.length; index++) {
     const profile = context.profiles[index]!,
       header = context.headers[index]!,
-      name = Object.keys(header)[0] ?? null;
-    profiles[String(8080 + index)] = { role: profile.role, header_file: `/workspace/${profile.id}.headers` };
-    headers[profile.role] = name;
+      name = Object.keys(header)[0] ?? null,
+      role = gatewayRole(profile);
+    profiles[String(8080 + index)] = { role, header_file: `/workspace/${profile.id}.headers` };
+    headers[role] = name;
     files[`${profile.id}.headers`] = { bytes: Buffer.from(name ? `${name}: ${header[name]}\n` : '') };
-    credentialOrigins[profile.role] =
-      profile.kind === 'public' ? null : originTuple(new URL(profile.identityEndpoint).origin);
-    if (profile.kind !== 'public')
-      identities[profile.role] = { endpoint: profile.identityEndpoint, expected: profile.expectedIdentity };
+    const apiKey = context.target.authenticationDrivers?.find(driver => driver.profileId === profile.id);
+    credentialOrigins[role] =
+      profile.kind === 'public'
+        ? null
+        : profile.kind === 'api_key_header' && apiKey?.kind === 'api_key_header'
+          ? originTuple(apiKey.credentialOrigins[0]!)
+          : profile.kind === 'bearer' || profile.kind === 'header'
+            ? originTuple(new URL(profile.identityEndpoint).origin)
+            : null;
+    if (profile.kind === 'api_key_header' && apiKey?.kind === 'api_key_header')
+      accessChecks[role] = `${apiKey.credentialOrigins[0]}${apiKey.accessCheckPath}`;
+    else if (profile.kind === 'bearer' || profile.kind === 'header')
+      identities[role] = { endpoint: profile.identityEndpoint, expected: profile.expectedIdentity };
   }
   const config = {
     profiles,
     guard_files: guardFiles,
     headers,
     identities,
+    access_checks: accessChecks,
+    inject_credentials: context.target.application?.kind === 'rest_api',
     credential_origins: credentialOrigins,
     origins: context.target.approvedOrigins.map(originTuple),
     allowed_paths: context.target.allowedPaths,

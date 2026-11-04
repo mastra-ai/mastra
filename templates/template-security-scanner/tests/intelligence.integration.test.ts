@@ -1,4 +1,6 @@
 import { createClient } from '@libsql/client';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createServer } from 'node:http';
 import { copyFile, mkdtemp, readFile, readdir, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,7 +8,8 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadSettings } from '../src/config/settings.js';
 import { AdvisorySource } from '../src/advisory/source.js';
-import { versionApplicability } from '../src/advisory/contracts.js';
+import type { AdvisoryModels } from '../src/advisory/triage.js';
+import { detailSchema, materialHash, versionApplicability } from '../src/advisory/contracts.js';
 import { startControlPlane } from '../src/http/server.js';
 import { ReferenceCatalog } from '../src/knowledge/catalog.js';
 import { PlaybookRegistry, categories, type Category } from '../src/knowledge/playbooks.js';
@@ -21,13 +24,17 @@ afterEach(async () => {
 type Detail = {
   id: string;
   aliases: string[];
-  status: 'published' | 'withdrawn';
+  status: 'published' | 'withdrawn' | 'rejected' | 'provisional';
   title: string;
   originalDescription: string;
-  affected: { vendor: string; product: string; ranges: unknown[] }[];
+  affected: { vendor: string; product: string; ranges: unknown[]; versions?: string[] }[];
   sources: { name: string; url: string; license: string }[];
   modifiedAt: string;
   summary?: { text: string; model: string; promptVersion: string };
+  severity?: string;
+  exposure?: 'Actively exploited' | 'Default setups' | 'Specific setups only' | 'Unclear' | null;
+  publishedAt?: string | null;
+  context?: Record<string, unknown> | null;
 };
 function detail(id: string, description = 'Owned fixture vulnerability', aliases: string[] = []): Detail {
   return {
@@ -113,12 +120,26 @@ async function waitForAdvisoryRetry(app: Awaited<ReturnType<typeof startHarness>
   if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
 }
 
-async function startHarness(fixture: Awaited<ReturnType<typeof startAdvisoryFixture>>) {
+async function startHarness(
+  fixture: Awaited<ReturnType<typeof startAdvisoryFixture>>,
+  advisoryModels?: AdvisoryModels,
+) {
   const root = await mkdtemp(join(tmpdir(), 'scanner-intelligence-'));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   const settings = loadSettings({ CONTROL_BOOTSTRAP_SECRET: bootstrap, SCANNER_ENCRYPTION_KEY: key }, root);
   const source = new AdvisorySource(fixture.url, true);
-  let running = await startControlPlane(settings, 0, undefined, undefined, source);
+  let running = await startControlPlane(
+    settings,
+    0,
+    undefined,
+    undefined,
+    source,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    advisoryModels,
+  );
   let active = true;
   cleanup.push(async () => {
     if (active) await running.close();
@@ -154,11 +175,33 @@ async function startHarness(fixture: Awaited<ReturnType<typeof startAdvisoryFixt
     root,
     settings,
     request,
+    async withoutCsrf(path: string) {
+      return fetch(`${running.url}${path}`, {
+        method: 'POST',
+        headers: { origin: running.url, cookie, 'content-type': 'application/json' },
+        body: '{}',
+      });
+    },
     url: () => running.url,
+    async close() {
+      await running.close();
+      active = false;
+    },
     async restart() {
       await running.close();
       active = false;
-      running = await startControlPlane(settings, 0, undefined, undefined, source);
+      running = await startControlPlane(
+        settings,
+        0,
+        undefined,
+        undefined,
+        source,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        advisoryModels,
+      );
       active = true;
       await login();
     },
@@ -312,6 +355,409 @@ const scope = {
 };
 
 describe('F4 offline intelligence through protected HTTP and file libSQL', () => {
+  it('accepts only pinned single-hop GHSA and CVE detail redirects with matching identity', async () => {
+    const cdn = 'f9gkulwameaj0boi.public.blob.vercel-storage.com';
+    const ghsa = 'GHSA-2345-CFGH-JMPQ';
+    const cve = 'CVE-2026-12345';
+    const location = (id: string) => `https://${cdn}/public/entries/${id}.json`;
+    const redirect = (target: string) => new Response(null, { status: 302, headers: { location: target } });
+    const body = (value: Detail) =>
+      new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    const run = async (requested: string, responses: Response[], code?: string) => {
+      let requests = 0;
+      const source = new AdvisorySource(undefined, false, async (_url, options) => {
+        expect(options?.redirect).toBe('manual');
+        requests++;
+        const response = responses.shift();
+        if (!response) throw new Error('UNEXPECTED_EXTRA_REQUEST');
+        return response;
+      });
+      if (code) await expect(source.detail(requested)).rejects.toMatchObject({ code });
+      else expect((await source.detail(requested)).id).toMatch(/^(?:GHSA|CVE)-/);
+      return requests;
+    };
+
+    expect(await run(ghsa, [redirect(location(ghsa)), body(detail(ghsa))])).toBe(2);
+    expect(await run(ghsa, [redirect(location(ghsa)), body(detail(cve, undefined, [ghsa]))])).toBe(2);
+    expect(await run(cve, [redirect(location(cve)), body(detail(cve))])).toBe(2);
+    for (const denied of [
+      `https://other.example/public/entries/${ghsa}.json`,
+      `${location(ghsa)}?query=1`,
+      `https://${cdn}:8443/public/entries/${ghsa}.json`,
+      `http://${cdn}/public/entries/${ghsa}.json`,
+      `https://user@${cdn}/public/entries/${ghsa}.json`,
+      `${location(ghsa)}#fragment`,
+      `https://${cdn}/public/entries/../entries/${ghsa}.json`,
+      `https://${cdn}/public/entries/%2e%2e/entries/${ghsa}.json`,
+      `https://${cdn}/public/entries/GHSA-AAA-BBBB-CCCC.json`,
+      `https://${cdn}/public/entries/GHSA-AAAA-CFGH-JMPQ.json`,
+    ])
+      expect(await run(ghsa, [redirect(denied)], 'ADVISORY_REDIRECT_DENIED')).toBe(1);
+    expect(await run(ghsa, [redirect(location(ghsa)), redirect(location(ghsa))], 'ADVISORY_REDIRECT_DENIED')).toBe(2);
+    expect(await run(ghsa, [redirect(location(ghsa)), body(detail(cve))], 'ADVISORY_ALIAS_MISMATCH')).toBe(2);
+  });
+
+  it('classifies bounded primary and CDN detail HTTP failures without retaining response text', async () => {
+    const id = 'CVE-2026-15555';
+    const cdn = 'f9gkulwameaj0boi.public.blob.vercel-storage.com';
+    for (const [status, category] of [
+      [404, '404'],
+      [429, '429'],
+      [403, 'OTHER_4XX'],
+      [503, '5XX'],
+      [201, 'OTHER'],
+    ] as const) {
+      for (const stage of ['PRIMARY', 'CDN'] as const) {
+        const seen: string[] = [];
+        const source = new AdvisorySource(undefined, false, async url => {
+          seen.push(new URL(url.toString()).origin);
+          if (stage === 'CDN' && seen.length === 1)
+            return new Response(null, {
+              status: 302,
+              headers: { location: `https://${cdn}/public/entries/${id}.json` },
+            });
+          return new Response('PRIVATE_RESPONSE_MARKER', { status });
+        });
+        let code: string | undefined;
+        try {
+          await source.detail(id);
+        } catch (error) {
+          code = (error as { code?: string }).code;
+        }
+        expect(code).toBe(`ADVISORY_DETAIL_${stage}_${category}`);
+        expect(JSON.stringify({ code })).not.toContain('PRIVATE_RESPONSE_MARKER');
+        expect(seen).toHaveLength(stage === 'CDN' ? 2 : 1);
+      }
+    }
+  });
+
+  it('retains the last good inbox after partial HEAD import and rotation HTTP failures', async () => {
+    const fixture = await startAdvisoryFixture();
+    const old = detail('CVE-2026-23001');
+    const newest = detail('CVE-2026-23002');
+    const rotation = detail('CVE-2026-23003');
+    for (const item of [old, newest, rotation]) fixture.setDetail(item);
+    fixture.page(null, [old.id], null);
+    const app = await startHarness(fixture);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    const lastGood = await app.request<{ lastSuccessAt: string; stale: boolean; incomplete: boolean }>(
+      '/api/advisories/status',
+    );
+    expect(lastGood.body).toMatchObject({ stale: false, incomplete: true });
+    expect(lastGood.body.lastSuccessAt).toBeTruthy();
+    fixture.page(null, [newest.id], 'rotation-page');
+    fixture.page('rotation-page', [rotation.id], null);
+    fixture.details.set(rotation.id, { status: 429, body: { privateMarker: 'PRIVATE_RESPONSE_MARKER' } });
+    const primary = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
+    expect(primary.body.code).toBe('ADVISORY_DETAIL_PRIMARY_429_ROTATION');
+    const partial = await app.request<{
+      lastSuccessAt: string;
+      failureCode: string;
+      stale: boolean;
+      incomplete: boolean;
+    }>('/api/advisories/status');
+    expect(partial.body).toMatchObject({
+      stale: true,
+      incomplete: true,
+      failureCode: 'ADVISORY_DETAIL_PRIMARY_429',
+    });
+    expect(partial.body.lastSuccessAt).toBeTruthy();
+    expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(2);
+    expect((await app.request(`/api/advisories/${old.id}`)).status).toBe(200);
+    fixture.details.set(rotation.id, { status: 302, location: `/public/entries/${rotation.id}.json` });
+    fixture.details.set(`/public/entries/${rotation.id}.json`, {
+      status: 503,
+      body: { privateMarker: 'PRIVATE_RESPONSE_MARKER' },
+    });
+    await waitForAdvisoryRetry(app);
+    const cdnFailure = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
+    expect(cdnFailure.body.code).toBe('ADVISORY_DETAIL_CDN_5XX_ROTATION');
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({
+      stale: true,
+      incomplete: true,
+      failureCode: 'ADVISORY_DETAIL_CDN_5XX',
+    });
+    expect(JSON.stringify([primary.body, cdnFailure.body, partial.body])).not.toContain('PRIVATE_RESPONSE_MARKER');
+    expect(JSON.stringify([primary.body, cdnFailure.body, partial.body])).not.toContain(rotation.id);
+    fixture.details.set(`/public/entries/${rotation.id}.json`, { body: rotation });
+    await waitForAdvisoryRetry(app);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({
+      stale: false,
+      incomplete: true,
+      failureCode: null,
+    });
+    expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(3);
+  }, 120000);
+
+  it('accepts documented exposure values and rejects unknown advisory fields', () => {
+    const local = detail('CVE-2026-10001');
+    for (const exposure of [null, 'Actively exploited', 'Default setups', 'Specific setups only', 'Unclear'] as const) {
+      expect(detailSchema.safeParse({ ...local, exposure }).success).toBe(true);
+    }
+    expect(detailSchema.safeParse({ ...local, exposure: 'Unverified' }).success).toBe(false);
+    expect(detailSchema.safeParse({ ...local, unexpected: 'unreviewed field' }).success).toBe(false);
+  });
+
+  it('imports bounded current feed metadata without retaining it or weakening strict detail validation', async () => {
+    const fixture = await startAdvisoryFixture();
+    const original = detail('CVE-2026-12004');
+    const enriched = {
+      ...original,
+      summary: {
+        text: 'Owned fixture summary',
+        model: 'owned-summary-model',
+        promptVersion: 'v1',
+        generatedAt: '2026-11-04T00:00:00Z',
+        basis: { note: 'PRIVATE_BASIS_MARKER' },
+      },
+      recordNotes: [{ note: 'PRIVATE_NOTE_MARKER' }],
+      fixedIn: ['PRIVATE_FIX_MARKER'],
+    };
+    fixture.page(null, [original.id], null);
+    fixture.details.set(original.id, { body: enriched });
+    const modelInputs: unknown[] = [];
+    const models: AdvisoryModels = {
+      async plan(candidate) {
+        modelInputs.push(candidate);
+        return {
+          value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+          modelId: 'owned-local-model',
+        };
+      },
+    };
+    const app = await startHarness(fixture, models);
+
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    const saved = await app.request<{ detail: Detail }>(`/api/advisories/${original.id}`);
+    expect(saved.status).toBe(200);
+    expect(saved.body.detail.summary).toMatchObject({ text: 'Owned fixture summary' });
+    expect(saved.body.detail.summary).not.toHaveProperty('generatedAt');
+    expect(saved.body.detail.summary).not.toHaveProperty('basis');
+    expect(saved.body.detail).not.toHaveProperty('recordNotes');
+    expect(saved.body.detail).not.toHaveProperty('fixedIn');
+    const stored = await app.query('SELECT detail FROM scanner_advisories');
+    const exported = JSON.stringify([saved.body, stored, modelInputs]);
+    for (const marker of ['PRIVATE_BASIS_MARKER', 'PRIVATE_NOTE_MARKER', 'PRIVATE_FIX_MARKER']) {
+      expect(exported).not.toContain(marker);
+    }
+    expect(materialHash(detailSchema.parse(enriched))).toBe(
+      materialHash(detailSchema.parse({ ...original, summary: enriched.summary })),
+    );
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({
+      stale: false,
+      failureCount: 0,
+      failureCode: null,
+    });
+
+    for (const malformed of [
+      { ...enriched, summary: { ...enriched.summary, basis: 'not-an-object' } },
+      { ...enriched, summary: { ...enriched.summary, generatedAt: 'x'.repeat(501) } },
+      { ...enriched, recordNotes: 'not-an-array' },
+      { ...enriched, fixedIn: { version: '1.0' } },
+      { ...enriched, recordNotes: [{ note: 'x'.repeat(32769) }] },
+      { ...enriched, unexpected: true },
+      { ...enriched, summary: { ...enriched.summary, unexpected: true } },
+    ]) {
+      expect(detailSchema.safeParse(malformed).success).toBe(false);
+    }
+  }, 120000);
+
+  it('accepts bounded vendor product versions without weakening affected variants', () => {
+    const local = detail('CVE-2026-12001');
+    const affected = { vendor: 'Owned', product: 'Portal', ranges: [], versions: ['1.0'] };
+    const parsed = detailSchema.parse({ ...local, affected: [local.affected[0], affected] });
+    expect(parsed.affected[1]).toEqual(affected);
+    expect(versionApplicability(parsed, '1.0')).toBe('APPLICABILITY_UNKNOWN');
+    for (const versions of ['1.0', [1], ['x'.repeat(501)], Array(1001).fill('1.0')]) {
+      expect(detailSchema.safeParse({ ...local, affected: [{ ...affected, versions }] }).success).toBe(false);
+    }
+    expect(detailSchema.safeParse({ ...local, affected: [{ ...affected, unexpected: true }] }).success).toBe(false);
+    expect(
+      detailSchema.safeParse({ ...local, affected: [{ ecosystem: 'npm', package: 'owned', ranges: [] }] }).success,
+    ).toBe(false);
+  });
+
+  it('discards bounded package metadata on vendor products while retaining strict affected variants', () => {
+    const local = detail('CVE-2026-12003');
+    const base = { vendor: 'Owned', product: 'Portal', ranges: [], versions: ['1.0'] };
+    const without = detailSchema.parse({ ...local, affected: [base] });
+    for (const metadata of [null, 'owned', 7, true, ['owned'], { name: 'owned' }]) {
+      const parsed = detailSchema.parse({ ...local, affected: [{ ...base, package: metadata }] });
+      expect(parsed.affected).toEqual([base]);
+      expect(materialHash(parsed)).toBe(materialHash(without));
+      expect(versionApplicability(parsed, '1.0')).toBe('APPLICABILITY_UNKNOWN');
+    }
+    for (const metadata of [
+      'x'.repeat(501),
+      Array(17).fill('x'),
+      Object.fromEntries(Array.from({ length: 17 }, (_, index) => [`field${index}`, 'x'])),
+      { nested: { deeper: { tooDeep: { value: 'x' } } } },
+      { text: 'x'.repeat(4097) },
+      Number.POSITIVE_INFINITY,
+      () => 'x',
+    ]) {
+      expect(detailSchema.safeParse({ ...local, affected: [{ ...base, package: metadata }] }).success).toBe(false);
+    }
+    expect(detailSchema.safeParse({ ...local, affected: [{ ...base, package: 'owned', unknown: true }] }).success).toBe(
+      false,
+    );
+    expect(
+      detailSchema.safeParse({ ...local, affected: [{ ecosystem: 'npm', package: {}, ranges: [], versions: [] }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('bounds vendor ecosystem metadata while preserving the package-only contract', () => {
+    const local = detail('CVE-2026-12005');
+    const product = { vendor: 'Owned', product: 'Portal', ranges: [] };
+    const base = detailSchema.parse({ ...local, affected: [product] });
+    for (const ecosystem of ['Maven', 'npm', 'x'.repeat(500)]) {
+      const parsed = detailSchema.parse({ ...local, affected: [{ ...product, ecosystem, package: 'owned' }] });
+      expect(parsed.affected).toEqual([product]);
+      expect(materialHash(parsed)).toBe(materialHash(base));
+    }
+    for (const ecosystem of [null, 1, {}, [], 'x'.repeat(501)]) {
+      expect(detailSchema.safeParse({ ...local, affected: [{ ...product, ecosystem }] }).success).toBe(false);
+    }
+    expect(
+      detailSchema.safeParse({ ...local, affected: [{ ...product, ecosystem: 'npm', unknown: true }] }).success,
+    ).toBe(false);
+    const packageOnly = { ecosystem: 'npm', package: 'owned', ranges: [], versions: ['1.0'] };
+    expect(detailSchema.parse({ ...local, affected: [packageOnly] }).affected).toEqual([packageOnly]);
+    expect(detailSchema.safeParse({ ...local, affected: [{ ...packageOnly, versions: undefined }] }).success).toBe(
+      false,
+    );
+  });
+
+  it('imports vendor versions and ecosystem metadata through HTTP without inferring applicability', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entry = detail('CVE-2026-12002');
+    entry.exposure = null;
+    entry.affected.push({ vendor: 'Owned', product: 'Portal', ranges: [], versions: ['1.0'] });
+    fixture.page(null, [entry.id], null);
+    fixture.details.set(entry.id, { status: 302, location: `/public/entries/${entry.id}.json` });
+    const packageMetadata = { name: 'PRIVATE_PACKAGE_METADATA_MARKER' };
+    let ecosystem = 'PRIVATE_ECOSYSTEM_METADATA_MARKER';
+    const withPackage = () => ({
+      ...entry,
+      affected: [entry.affected[0], { ...entry.affected[1], package: packageMetadata, ecosystem }],
+    });
+    fixture.details.set(`/public/entries/${entry.id}.json`, { body: withPackage() });
+    const seen: unknown[] = [];
+    const models: AdvisoryModels = {
+      async plan(candidate) {
+        seen.push(candidate);
+        return {
+          value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+          modelId: 'owned-local-model',
+        };
+      },
+    };
+    const app = await startHarness(fixture, models);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    expect(fixture.requests).toContain(`/public/entries/${entry.id}.json`);
+    const saved = await app.request<{ revision: number; detail: Detail }>(`/api/advisories/${entry.id}`);
+    expect(saved.body.detail.affected[1]?.versions).toEqual(['1.0']);
+    expect(saved.body.detail.affected[1]).not.toHaveProperty('package');
+    expect(saved.body.detail.affected[1]).not.toHaveProperty('ecosystem');
+    const stored = await app.query('SELECT detail FROM scanner_advisories');
+    expect((JSON.parse(String(stored[0]?.detail)) as Detail).affected[1]?.versions).toEqual(['1.0']);
+    expect(String(stored[0]?.detail)).not.toContain('PRIVATE_PACKAGE_METADATA_MARKER');
+    expect(seen).toMatchObject([{ id: entry.id, applicability: 'APPLICABILITY_UNKNOWN' }]);
+    expect(JSON.stringify(seen)).not.toContain('PRIVATE_PACKAGE_METADATA_MARKER');
+    expect(JSON.stringify([saved.body, stored, seen])).not.toContain(ecosystem);
+    await app.restart();
+    expect(versionApplicability(detailSchema.parse(saved.body.detail), '1.0')).toBe('APPLICABILITY_UNKNOWN');
+    packageMetadata.name = 'CHANGED_PRIVATE_PACKAGE_METADATA_MARKER';
+    ecosystem = 'CHANGED_PRIVATE_ECOSYSTEM_METADATA_MARKER';
+    fixture.details.set(`/public/entries/${entry.id}.json`, { body: withPackage() });
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    const unchanged = await app.request<{ revision: number; detail: Detail }>(`/api/advisories/${entry.id}`);
+    expect(unchanged.body.revision).toBe(saved.body.revision);
+    entry.affected[1]!.versions = ['2.0'];
+    fixture.details.set(`/public/entries/${entry.id}.json`, { body: withPackage() });
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    const revised = await app.request<{ revision: number; detail: Detail }>(`/api/advisories/${entry.id}`);
+    expect(revised.body).toMatchObject({
+      revision: saved.body.revision + 1,
+      detail: { affected: [entry.affected[0], entry.affected[1]] },
+    });
+  }, 120000);
+
+  it('accepts bounded nonpublished variants and discards source context', () => {
+    const local = detail('CVE-2026-10001');
+    for (const status of ['rejected', 'provisional'] as const) {
+      const parsed = detailSchema.parse({ ...local, status, publishedAt: null, context: { note: 'PRIVATE_CONTEXT' } });
+      expect(parsed).toMatchObject({ status, publishedAt: null });
+      expect(parsed).not.toHaveProperty('context');
+    }
+    expect(detailSchema.safeParse({ ...local, context: null }).success).toBe(true);
+    expect(detailSchema.safeParse({ ...local, context: 'PRIVATE_CONTEXT' }).success).toBe(false);
+    expect(detailSchema.safeParse({ ...local, context: { note: 'x'.repeat(4097) } }).success).toBe(false);
+    expect(detailSchema.safeParse({ ...local, context: { ['x'.repeat(101)]: 1 } }).success).toBe(false);
+    expect(detailSchema.safeParse({ ...local, status: 'unreviewed' }).success).toBe(false);
+  });
+
+  it('keeps nonpublished advisories out of automatic hypotheses and source context out of storage and model input', async () => {
+    const fixture = await startAdvisoryFixture();
+    const rejected = { ...detail('CVE-2026-11001'), status: 'rejected' as const, publishedAt: null };
+    const provisional = { ...detail('CVE-2026-11002'), status: 'provisional' as const, publishedAt: null };
+    const published = {
+      ...detail('CVE-2026-11003'),
+      publishedAt: null,
+      context: { note: 'PRIVATE_CONTEXT_MARKER' },
+    };
+    fixture.page(null, [rejected.id, provisional.id, published.id], null);
+    for (const item of [rejected, provisional, published]) fixture.setDetail(item);
+    const seen: unknown[] = [];
+    const models: AdvisoryModels = {
+      async plan(candidate) {
+        seen.push(candidate);
+        return {
+          value: { recommendation: 'monitor_advisory', rationaleCode: 'PRODUCT_METADATA_ONLY', confidence: 'low' },
+          modelId: 'owned-local-model',
+        };
+      },
+    };
+    const app = await startHarness(fixture, models);
+    const imported = await app.request<{ hypotheses: { ready: number; pending: number } }>(
+      '/api/advisories/sync',
+      'POST',
+      {},
+    );
+    expect(imported).toMatchObject({ status: 200, body: { hypotheses: { ready: 1, pending: 0 } } });
+    expect(seen).toMatchObject([{ id: published.id }]);
+    expect(JSON.stringify(seen)).not.toContain('PRIVATE_CONTEXT_MARKER');
+    for (const item of [rejected, provisional]) {
+      const response = await app.request<{ upstreamStatus: string; detail: Detail }>(`/api/advisories/${item.id}`);
+      expect(response.body).toMatchObject({ upstreamStatus: item.status, detail: { publishedAt: null } });
+      expect(
+        (await app.request<{ hypothesis: unknown }>(`/api/advisories/${item.id}/triage-state`)).body.hypothesis,
+      ).toBeNull();
+    }
+    const response = await app.request<{ revision: number; detail: Detail }>(`/api/advisories/${published.id}`);
+    expect(response.body.detail.publishedAt).toBeNull();
+    expect(response.body.detail).not.toHaveProperty('context');
+    expect(JSON.stringify((await app.request<{ items: unknown[] }>('/api/advisories')).body)).not.toContain(
+      'PRIVATE_CONTEXT_MARKER',
+    );
+    expect(JSON.stringify(await app.query('SELECT detail FROM scanner_advisories'))).not.toContain(
+      'PRIVATE_CONTEXT_MARKER',
+    );
+    fixture.setDetail({ ...published, context: { note: 'REPLACED_CONTEXT_MARKER' } });
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    expect((await app.request<{ revision: number }>(`/api/advisories/${published.id}`)).body.revision).toBe(
+      response.body.revision,
+    );
+    expect(JSON.stringify(await app.query('SELECT detail FROM scanner_advisories'))).not.toContain(
+      'REPLACED_CONTEXT_MARKER',
+    );
+  }, 120000);
+
   it('catalog_integrity_and_all_p0_applicability_cases', async () => {
     const fixture = await startAdvisoryFixture();
     const app = await startHarness(fixture);
@@ -399,8 +845,11 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
 
   it('advisory_pagination_detail_and_revision_import_is_idempotent', async () => {
     const fixture = await startAdvisoryFixture();
-    const first = detail('CVE-2026-10001', 'Initial owned fixture text', ['GHSA-AAAA-BBBB-CCCC']);
-    const second = detail('CVE-2026-10002');
+    const first = {
+      ...detail('CVE-2026-10001', 'Initial owned fixture text', ['GHSA-AAAA-BBBB-CCCC']),
+      exposure: null,
+    };
+    const second = { ...detail('CVE-2026-10002'), exposure: 'Default setups' as const };
     fixture.setDetail(first);
     fixture.setDetail(second);
     fixture.page(null, [first.id], 'page-two');
@@ -424,6 +873,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect(alias.body).toMatchObject({ revision: 1, recordRevision: 1, triageStatus: 'new' });
     expect(alias.etag).toBe('"1"');
     expect(alias.body.detail.affected[0]?.ranges).toEqual([{ unsupported: 'range semantics' }]);
+    expect(alias.body.detail.exposure).toBeNull();
     expect(versionApplicability(alias.body.detail as any, '9.9.9')).toBe('APPLICABILITY_UNKNOWN');
     expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(2);
     expect((await app.request('/api/advisories/status')).body).toMatchObject({ stale: false, incomplete: true });
@@ -472,7 +922,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     ).toMatchObject({ etag: '"2"', body: { id: first.id, recordRevision: 2, triageStatus: 'triaged' } });
     const changed = {
       ...first,
-      originalDescription: 'Materially revised owned fixture text',
+      exposure: 'Specific setups only' as const,
       modifiedAt: '2026-10-29T13:00:00.000Z',
     };
     fixture.details.set(`/public/entries/${first.id}.json`, { body: changed });
@@ -487,7 +937,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       etag: '"3"',
       body: { revision: 2, recordRevision: 3, triageStatus: 'triaged' },
     });
-    expect(revised.body.detail.originalDescription).toBe(changed.originalDescription);
+    expect(revised.body.detail.exposure).toBe(changed.exposure);
     expect(
       (await app.request<{ items: { revision: number }[] }>(`/api/advisories/${first.id}/events`)).body.items.map(
         event => event.revision,
@@ -809,5 +1259,318 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     ).toBe(true);
     expect(JSON.stringify({ bounded, history })).not.toContain(marker);
     expect((await app.request('/api/advisories/status')).body).toMatchObject({ stale: false, failureCode: null });
+  }, 120000);
+
+  it('reports imported entries and material revisions from the real sync CLI', async () => {
+    const fixture = await startAdvisoryFixture();
+    const head = detail('CVE-2026-654323');
+    const rotation = detail('CVE-2026-654324');
+    fixture.page(null, [head.id], 'older');
+    fixture.page('older', [rotation.id], null);
+    fixture.setDetail(head);
+    fixture.setDetail(rotation);
+    const app = await startHarness(fixture);
+    const sync = async () => {
+      const result = await promisify(execFile)(process.execPath, ['--import', 'tsx', 'scripts/sync-advisories.ts'], {
+        cwd: resolve(import.meta.dirname, '..'),
+        env: {
+          PORT: new URL(app.url()).port,
+          CONTROL_BOOTSTRAP_SECRET: bootstrap,
+          SCANNER_ENCRYPTION_KEY: key,
+          MORPH_API_KEY: '',
+          SCANNER_ADVISORY_SYNC_ENABLED: 'false',
+        },
+        timeout: 20000,
+      });
+      expect(result.stdout + result.stderr).not.toContain(bootstrap);
+      expect(result.stdout + result.stderr).not.toContain(key);
+      return JSON.parse(result.stdout.trim());
+    };
+    await sync();
+    head.originalDescription = 'Changed head advisory';
+    rotation.originalDescription = 'Changed rotation advisory';
+    head.modifiedAt = rotation.modifiedAt = '2026-10-30T12:00:00.000Z';
+    const revised = await sync();
+    expect(revised).toMatchObject({ importedHeadRevisions: 1, importedRotationRevisions: 1 });
+    expect(revised).toMatchObject({ importedHeadEntries: 1, importedRotationEntries: 1, refreshed: 2 });
+    expect((await app.request(`/api/advisories/${head.id}`)).body).toMatchObject({ revision: 2 });
+    expect((await app.request(`/api/advisories/${rotation.id}`)).body).toMatchObject({ revision: 2 });
+    expect(await sync()).toMatchObject({
+      importedHeadRevisions: 0,
+      importedRotationRevisions: 0,
+      importedHeadEntries: 1,
+      importedRotationEntries: 1,
+    });
+  }, 60000);
+
+  it('rejects overlapping manual hypothesis planning without a duplicate model call', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entry = detail('CVE-2026-654325');
+    fixture.page(null, [entry.id], null);
+    fixture.setDetail(entry);
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => (entered = resolve));
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    let calls = 0;
+    const app = await startHarness(fixture, {
+      async plan() {
+        calls++;
+        if (calls === 1) {
+          entered();
+          await held;
+        }
+        return {
+          value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+          modelId: 'owned-local-sherlock',
+        };
+      },
+    });
+    const first = app.request('/api/advisories/sync', 'POST', {});
+    try {
+      await started;
+      const overlap = await app.request('/api/advisories/sync', 'POST', {});
+      expect(overlap.status).toBe(409);
+      expect(overlap.body.code).toBe('ADVISORY_TRIAGE_BUSY');
+      expect(calls).toBe(1);
+    } finally {
+      release();
+      expect((await first).status).toBe(200);
+    }
+    expect((await app.request(`/api/advisories/${entry.id}/triage-state`)).body.hypothesis.state).toBe('ready');
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    expect(calls).toBe(1);
+  }, 60000);
+
+  it('aborts and drains manual hypothesis planning before closing model storage', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entries = [detail('CVE-2026-654326'), detail('CVE-2026-654327')];
+    fixture.page(
+      null,
+      entries.map(item => item.id),
+      null,
+    );
+    entries.forEach(item => fixture.setDetail(item));
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => (entered = resolve));
+    let release!: () => void;
+    let calls = 0;
+    let aborted = false;
+    let settled = false;
+    const app = await startHarness(fixture, {
+      async plan(_candidate, signal) {
+        calls++;
+        entered();
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const abort = () => {
+              aborted = true;
+              reject(new Error('OWNED_MODEL_ABORTED'));
+            };
+            release = () => {
+              signal.removeEventListener('abort', abort);
+              resolve();
+            };
+            if (signal.aborted) abort();
+            else signal.addEventListener('abort', abort, { once: true });
+          });
+          return {
+            value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+            modelId: 'owned-local-sherlock',
+          };
+        } finally {
+          settled = true;
+        }
+      },
+    });
+    const request = app.request('/api/advisories/sync', 'POST', {}).catch(() => undefined);
+    try {
+      await started;
+      await app.close();
+      expect(aborted).toBe(true);
+      expect(settled).toBe(true);
+      expect(calls).toBe(1);
+    } finally {
+      release?.();
+      await request;
+    }
+    await app.restart();
+    const listed = await app.request<{ items: { id: string }[] }>('/api/advisories');
+    expect(listed.body.items).toHaveLength(2);
+    const states = await Promise.all(entries.map(item => app.request(`/api/advisories/${item.id}/triage-state`)));
+    expect(states.every(item => item.body.hypothesis?.state !== 'ready')).toBe(true);
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({ stale: false, failureCount: 0 });
+    expect(calls).toBe(1);
+  }, 60000);
+
+  it('keeps unsupported CVE triage durable and separate from findings across sync revisions', async () => {
+    const fixture = await startAdvisoryFixture();
+    const php = detail('CVE-2026-654321', 'Private source prose MUST_NOT_REACH_SHERLOCK');
+    php.affected = [{ vendor: 'PHP', product: 'Runtime', ranges: [] }];
+    php.severity = 'high';
+    const npm = detail('CVE-2026-654322', 'Another private source prose MUST_NOT_REACH_SHERLOCK');
+    npm.affected = [{ vendor: 'Node', product: 'npm', ranges: [] }];
+    fixture.page(null, [php.id, npm.id], null);
+    fixture.setDetail(php);
+    fixture.setDetail(npm);
+    const seen: unknown[] = [];
+    const models: AdvisoryModels = {
+      async plan(candidate) {
+        seen.push(candidate);
+        if (candidate.id === npm.id) throw new Error('MODEL_UNAVAILABLE');
+        return {
+          value: { recommendation: 'review_vendor_guidance', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+          modelId: 'owned-fake-sherlock',
+        };
+      },
+    };
+    const app = await startHarness(fixture, models);
+    expect((await fetch(`${app.url()}/api/advisories/${php.id}/triage-state`)).status).toBe(403);
+    expect((await fetch(`${app.url()}/api/advisories/sync`, { method: 'POST' })).status).toBe(403);
+    expect((await app.withoutCsrf('/api/advisories/sync')).status).toBe(403);
+    const synced = await app.request<{ hypotheses: { ready: number; pending: number } }>(
+      '/api/advisories/sync',
+      'POST',
+      {},
+    );
+    expect(synced.status).toBe(200);
+    expect(synced.body.hypotheses).toMatchObject({ ready: 1, pending: 1 });
+    const cli = await promisify(execFile)(process.execPath, ['--import', 'tsx', 'scripts/sync-advisories.ts'], {
+      cwd: resolve(import.meta.dirname, '..'),
+      env: {
+        ...process.env,
+        PORT: new URL(app.url()).port,
+        CONTROL_BOOTSTRAP_SECRET: bootstrap,
+        SCANNER_ENCRYPTION_KEY: key,
+      },
+      timeout: 20000,
+    });
+    expect(JSON.parse(cli.stdout.trim().split('\n').at(-1)!)).toMatchObject({ hypotheses: { ready: 0, pending: 1 } });
+    expect(cli.stderr).toContain('up to 8 bounded Sherlock calls');
+    expect(cli.stdout + cli.stderr).not.toContain(bootstrap);
+    expect(JSON.stringify(seen)).not.toContain('MUST_NOT_REACH_SHERLOCK');
+    expect(seen).toHaveLength(3);
+    const state = await app.request<{
+      hypothesis: { state: string; recommendation: string | null };
+      targetRelevance: string;
+      checkerAvailability: string;
+      importance: string;
+    }>(`/api/advisories/${php.id}/triage-state`);
+    expect(state.body).toMatchObject({
+      importance: 'high',
+      targetRelevance: 'unknown',
+      checkerAvailability: 'none_available',
+      hypothesis: { state: 'ready', recommendation: 'review_vendor_guidance' },
+    });
+    expect((await app.request<{ items: unknown[] }>(`/api/advisories/${php.id}/checkers`)).body.items).toHaveLength(0);
+    expect(
+      (await app.request<{ items: { id: string; kind: string }[] }>(`/api/advisories/${npm.id}/checkers`)).body.items,
+    ).toMatchObject([{ id: 'node_package_review', kind: 'runbook' }]);
+    expect(
+      (
+        await app.request<{ hypothesis: { state: string; recommendation: null } }>(
+          `/api/advisories/${npm.id}/triage-state`,
+        )
+      ).body.hypothesis,
+    ).toMatchObject({ state: 'pending', recommendation: null });
+    expect(
+      (
+        await app.request(`/api/advisories/${php.id}/ignore`, 'POST', {
+          scope: 'all_targets',
+          targetId: null,
+          reason: 'Forged operator',
+          operator: 'operator-b',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await app.request(`/api/advisories/${php.id}/ignore`, 'POST', {
+          scope: 'target',
+          targetId: '00000000-0000-4000-8000-000000000001',
+          reason: 'No such owned target',
+        })
+      ).status,
+    ).toBe(404);
+    const ignored = await app.request<{ ignores: { operator: string; clearedAt: string | null }[] }>(
+      `/api/advisories/${php.id}/ignore`,
+      'POST',
+      { scope: 'all_targets', targetId: null, reason: 'Operator reviewed vendor guidance' },
+    );
+    expect(ignored.status).toBe(200);
+    expect(ignored.body.ignores[0]).toMatchObject({ operator: 'local-operator', clearedAt: null });
+    const manual = await app.request<{ cases: { notes: string; sourceRevision: number }[] }>(
+      `/api/advisories/${php.id}/cases`,
+      'POST',
+      { notes: 'Check installed PHP version manually', evidenceRefs: ['inventory:php'] },
+    );
+    expect(manual.status).toBe(201);
+    expect(manual.body.cases[0]).toMatchObject({ notes: 'Check installed PHP version manually', sourceRevision: 1 });
+    php.originalDescription = 'Revised private source prose';
+    php.modifiedAt = '2026-10-30T12:00:00.000Z';
+    fixture.setDetail(php);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    await app.restart();
+    const revised = await app.request<{
+      sourceRevision: number;
+      ignores: { clearedAt: string | null }[];
+      cases: { sourceRevision: number }[];
+    }>(`/api/advisories/${php.id}/triage-state`);
+    expect(revised.body.sourceRevision).toBe(2);
+    expect(revised.body.ignores[0]?.clearedAt).toBeNull();
+    expect(revised.body.cases[0]?.sourceRevision).toBe(1);
+    const callsBeforeIgnoredSync = seen.filter(value => (value as { id: string }).id === php.id).length;
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    expect(seen.filter(value => (value as { id: string }).id === php.id)).toHaveLength(callsBeforeIgnoredSync);
+    const undone = await app.request<{ ignores: { clearedAt: string | null }[] }>(
+      `/api/advisories/${php.id}/unignore`,
+      'POST',
+      { scope: 'all_targets', targetId: null },
+    );
+    expect(undone.status).toBe(200);
+    expect(undone.body.ignores[0]?.clearedAt).toBeTruthy();
+    const limits = { maxRequests: 10, maxDurationSeconds: 30, maxResponseBytes: 8192, maxConcurrency: 1 };
+    const policy = await app.request<{ id: string; revision: number }>('/api/policies', 'POST', {
+      name: 'Owned advisory scope',
+      permittedMethods: ['GET'],
+      scanLimits: limits,
+    });
+    expect(policy.status).toBe(201);
+    const target = await app.request<{ id: string }>('/api/targets', 'POST', {
+      name: 'Owned advisory target',
+      entryUrl: `${fixture.url}/`,
+      approvedOrigins: [fixture.url],
+      allowedPaths: ['/'],
+      excludedPaths: ['/excluded'],
+      permittedMethods: ['GET'],
+      environment: 'lab',
+      authorizationEvidenceRef: 'approval:owned-advisory-test',
+      authorizationConfirmed: true,
+      policyId: policy.body.id,
+      policyRevision: policy.body.revision,
+      schedule: { enabled: false, timezone: 'UTC' },
+      scanLimits: limits,
+      authProfileIds: [],
+    });
+    expect(target.status).toBe(201);
+    const targetIgnore = await app.request(`/api/advisories/${php.id}/ignore`, 'POST', {
+      scope: 'target',
+      targetId: target.body.id,
+      reason: 'Only this owned target',
+    });
+    expect(targetIgnore.status).toBe(200);
+    expect(
+      (await app.request<{ suggested: boolean }>(`/api/advisories/${php.id}/triage-state?targetId=${target.body.id}`))
+        .body.suggested,
+    ).toBe(false);
+    expect((await app.request<{ suggested: boolean }>(`/api/advisories/${php.id}/triage-state`)).body.suggested).toBe(
+      true,
+    );
+    expect(
+      (
+        await app.request<{ hypothesisHistory: { sourceRevision: number }[] }>(`/api/advisories/${php.id}/triage-state`)
+      ).body.hypothesisHistory.map(item => item.sourceRevision),
+    ).toEqual([1]);
+    expect((await app.request<{ items: unknown[] }>('/api/findings')).body.items).toHaveLength(0);
   }, 120000);
 });

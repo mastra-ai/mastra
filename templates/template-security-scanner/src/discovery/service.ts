@@ -8,6 +8,8 @@ import { KatanaDiscoveryDriver, type OwnedLabBoundary } from './driver.js';
 import { requireDiscoveryCapability } from './capability.js';
 import { forbiddenCredentialValues, SecretGuard } from './parser.js';
 import { reconcileScans, ScanResources } from './resources.js';
+import { ownedLabBoundary } from './lab.js';
+import { dockerClient } from '../runtime/docker.js';
 
 type Running = {
   owner: string;
@@ -16,6 +18,8 @@ type Running = {
   targetId: string;
   policyId: string;
   profileIds: string[];
+  startPending: boolean;
+  start: () => void;
   stopReason?: ScanReason;
 };
 export class ScanService {
@@ -42,6 +46,9 @@ export class ScanService {
     this.retentionTimer.unref();
   }
   async admit(owner: string, targetId: string, input: unknown) {
+    return (await this.admitWithReceipt(owner, targetId, input)).scan;
+  }
+  async admitWithReceipt(owner: string, targetId: string, input: unknown, options: { deferStart?: boolean } = {}) {
     const request = parse(scanAdmissionSchema, input);
     const operation = this.admissions.then(async () => {
       if (this.closed) throw new ControlPlaneError('DISCOVERY_UNAVAILABLE', 503);
@@ -73,6 +80,31 @@ export class ScanService {
         async transaction => {
           if (this.active.size) throw new ControlPlaneError('DISCOVERY_BUSY', 409);
           context = await this.control.scanContext(owner, targetId, request, transaction);
+          if (
+            context.target.application?.kind === 'rest_api' &&
+            context.profiles.some(profile => profile.kind === 'api_key_header') &&
+            new URL(context.target.entryUrl).protocol === 'http:'
+          ) {
+            if (!this.lab || context.target.environment !== 'lab')
+              throw new ControlPlaneError('INSECURE_AUTH_TRANSPORT', 403);
+            let verified;
+            try {
+              verified = await ownedLabBoundary(
+                dockerClient(this.settings),
+                this.lab.fixtureId,
+                this.lab.networkId,
+                this.lab.token,
+                this.lab.upstreamCa,
+              );
+            } catch {
+              throw new ControlPlaneError('OWNED_LAB_REQUIRED', 403);
+            }
+            if (
+              verified.address !== this.lab.address ||
+              new URL(context.target.entryUrl).origin !== `http://${verified.address}:18080`
+            )
+              throw new ControlPlaneError('OWNED_LAB_REQUIRED', 403);
+          }
           const guard = new SecretGuard(forbiddenCredentialValues(context.guardHeaders.map(item => item.headers)));
           try {
             if (
@@ -102,8 +134,13 @@ export class ScanService {
           };
         },
       );
+      let start = () => {};
       if (result.created) {
         const ready = context!;
+        let releaseStart: () => void = () => {};
+        const gate = new Promise<void>(resolve => {
+          releaseStart = resolve;
+        });
         const entry: Running = {
           owner,
           controller: new AbortController(),
@@ -111,14 +148,41 @@ export class ScanService {
           targetId,
           policyId: ready.policy.id,
           profileIds: ready.target.authProfileIds,
+          startPending: true,
+          start: () => {},
         };
+        entry.start = () => {
+          if (!entry.startPending) return;
+          entry.startPending = false;
+          releaseStart();
+        };
+        start = entry.start;
         this.active.set(scan.id, entry);
-        entry.promise = Promise.resolve().then(() => this.run(scan, ready, entry));
+        entry.promise = gate.then(() => this.run(scan, ready, entry));
+        if (!options.deferStart) start();
       }
-      return result.scan;
+      return { ...result, start };
     });
     this.admissions = operation.catch(() => undefined);
     return operation;
+  }
+  async waitForCompletion(owner: string, scanId: string, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const running = this.active.get(scanId);
+    if (running) {
+      let abort: () => void = () => {};
+      const cancelled = new Promise<never>((_, reject) => {
+        abort = () => reject(signal.reason ?? new Error('SCAN_WAIT_ABORTED'));
+        signal.addEventListener('abort', abort, { once: true });
+      });
+      try {
+        await Promise.race([running.promise, cancelled]);
+      } finally {
+        signal.removeEventListener('abort', abort);
+      }
+    }
+    signal.throwIfAborted();
+    return this.store.get(scanId, owner);
   }
   private async validate(scan: Scan) {
     const current = await this.store.get(scan.id, scan.owner);
@@ -141,7 +205,13 @@ export class ScanService {
         return;
       }
       await this.store.update(scan.id, scan.owner, current => ({ ...current, state: 'RUNNING' }));
-      const driver = new KatanaDiscoveryDriver(this.settings, this.store, this.lab);
+      const driver = new KatanaDiscoveryDriver(
+        this.settings,
+        this.store,
+        context.target.application?.kind === 'rest_api' && new URL(context.target.entryUrl).protocol === 'https:'
+          ? undefined
+          : this.lab,
+      );
       const outcome = await driver.discover(
         scan,
         context,
@@ -220,10 +290,17 @@ export class ScanService {
   async cancel(owner: string, id: string, reason: ScanReason = 'CANCELLED_BY_OPERATOR') {
     const existing = await this.store.get(id, owner);
     if (terminal(existing.state)) return existing;
+    const running = this.active.get(id);
+    if (running?.startPending) {
+      running.stopReason = reason;
+      running.controller.abort();
+      running.start();
+      await running.promise;
+      return this.store.get(id, owner);
+    }
     await this.store.update(id, owner, current =>
       terminal(current.state) ? current : { ...current, state: 'CANCEL_REQUESTED', reason, partial: true },
     );
-    const running = this.active.get(id);
     if (running) {
       running.stopReason = reason;
       running.controller.abort();
@@ -327,7 +404,10 @@ export class ScanService {
       complete = false;
     } finally {
       // Even a failed requested-state write must not leave network work alive.
-      for (const [, entry] of running) entry.controller.abort();
+      for (const [, entry] of running) {
+        entry.controller.abort();
+        entry.start();
+      }
       const exited = await Promise.allSettled(running.map(([, entry]) => entry.promise));
       complete &&= exited.every(result => result.status === 'fulfilled');
       const closed = await Promise.allSettled([this.store.close()]);

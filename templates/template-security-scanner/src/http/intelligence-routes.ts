@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { pageSchema as listPage, parse } from '../core/contracts.js';
 import { advisoryId, triageSchema } from '../advisory/contracts.js';
 import { AdvisorySync } from '../advisory/sync.js';
+import { AdvisoryTriage, caseInput, ignoreInput, unignoreInput } from '../advisory/triage.js';
 import { ReferenceCatalog } from '../knowledge/catalog.js';
 import { PlaybookRegistry } from '../knowledge/playbooks.js';
-import { readJson } from './security.js';
+import { OPERATOR_ID, readJson } from './security.js';
 
 const revision = z
   .string()
@@ -17,6 +18,7 @@ export function registerIntelligenceRoutes(
   catalog: ReferenceCatalog,
   registry: PlaybookRegistry,
   advisory: AdvisorySync,
+  triage: AdvisoryTriage,
   onAdvisorySync?: () => Promise<void>,
 ) {
   app.get('/api/references', async context => {
@@ -38,9 +40,47 @@ export function registerIntelligenceRoutes(
   app.post('/api/advisories/sync', async context => {
     parse(z.object({}).strict(), await readJson(context.req));
     const result = await advisory.syncOnce();
+    const hypotheses = await triage.planNew(OPERATOR_ID);
     await onAdvisorySync?.();
-    return context.json(result, 200);
+    return context.json({ ...result, hypotheses }, 200);
   });
+  app.get('/api/advisories/:id/triage-state', async context =>
+    context.json(
+      await triage.state(
+        parse(advisoryId, context.req.param('id')),
+        parse(z.string().uuid().optional(), context.req.query('targetId')),
+        OPERATOR_ID,
+      ),
+    ),
+  );
+  app.get('/api/advisories/:id/checkers', async context =>
+    context.json(await triage.search(parse(advisoryId, context.req.param('id')))),
+  );
+  app.post('/api/advisories/:id/ignore', async context =>
+    context.json(
+      await triage.ignore(
+        parse(advisoryId, context.req.param('id')),
+        parse(ignoreInput, await readJson(context.req)),
+        OPERATOR_ID,
+      ),
+    ),
+  );
+  app.post('/api/advisories/:id/unignore', async context => {
+    const input = parse(unignoreInput, await readJson(context.req));
+    return context.json(
+      await triage.unignore(parse(advisoryId, context.req.param('id')), input.scope, input.targetId, OPERATOR_ID),
+    );
+  });
+  app.post('/api/advisories/:id/cases', async context =>
+    context.json(
+      await triage.investigate(
+        parse(advisoryId, context.req.param('id')),
+        parse(caseInput, await readJson(context.req)),
+        OPERATOR_ID,
+      ),
+      201,
+    ),
+  );
   app.get('/api/advisories/:id', async context => {
     const id = parse(advisoryId, context.req.param('id'));
     const canonical = await advisory.store.resolveAlias(id);

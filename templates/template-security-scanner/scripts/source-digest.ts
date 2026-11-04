@@ -14,7 +14,7 @@ export async function sourceDigest(root: string) {
     '.nvmrc',
     '.oxfmtrc.json',
   ];
-  for (const directory of ['src', 'scripts', 'tests', 'docker', 'web', 'references', 'docs']) {
+  for (const directory of ['src', 'scripts', 'tests', 'docker', 'web', 'references', 'docs', 'example-target-api']) {
     for (const entry of await readdir(join(root, directory), { recursive: true })) {
       const path = `${directory}/${entry}`,
         stat = await lstat(join(root, path));

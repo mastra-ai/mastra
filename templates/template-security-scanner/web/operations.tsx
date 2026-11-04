@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import {
   send,
+  get,
   type Binding,
+  type BolaAssessment,
   type Evidence,
   type Investigation,
   type Page,
@@ -9,6 +11,7 @@ import {
   type Profile,
   type Scan,
   type Target,
+  type RouteAccessRule,
 } from './api';
 import { Dialog, Empty, Loading, Notice, Pager, Section, Status, Time, errorCode, useData } from './ui';
 import { ScanInvestigations } from './investigation';
@@ -274,6 +277,27 @@ function TargetForm({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<Policy>();
+  const [applicationKind, setApplicationKind] = useState<'legacy' | 'rest_api'>(target?.application?.kind ?? 'legacy');
+  const [rules, setRules] = useState<
+    Array<Pick<RouteAccessRule, 'pathTemplate' | 'audience' | 'objectPolicy' | 'expectedUnauthorizedStatus'>>
+  >(
+    target?.routeAccessRules ?? [
+      { pathTemplate: '/api/orders', audience: 'user', objectPolicy: 'owner', expectedUnauthorizedStatus: [401, 403] },
+      {
+        pathTemplate: '/api/orders/{id}',
+        audience: 'user',
+        objectPolicy: 'owner',
+        expectedUnauthorizedStatus: [401, 403, 404],
+      },
+      {
+        pathTemplate: '/api/orders/{id}/receipt',
+        audience: 'user',
+        objectPolicy: 'owner',
+        expectedUnauthorizedStatus: [401, 403, 404],
+      },
+      { pathTemplate: '/api/products', audience: 'public', expectedUnauthorizedStatus: [] },
+    ],
+  );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -310,6 +334,29 @@ function TargetForm({
       schedule: { enabled: false, timezone: 'UTC' },
       scanLimits: target?.scanLimits ?? policy!.scanLimits,
       authProfileIds: target?.authProfileIds ?? [],
+      ...(applicationKind === 'rest_api'
+        ? {
+            application: {
+              kind: 'rest_api',
+              version: 1,
+              discoveryModes: value(data, 'openApiUrl') ? ['openapi', 'observed_json'] : ['observed_json'],
+              ...(value(data, 'openApiUrl') ? { openApiUrl: value(data, 'openApiUrl') } : {}),
+            },
+            ...(target?.authenticationDrivers ? { authenticationDrivers: target.authenticationDrivers } : {}),
+            routeAccessRules: rules
+              .filter(rule => rule.pathTemplate.trim())
+              .map(rule => ({
+                version: 1,
+                method: 'GET',
+                pathTemplate: rule.pathTemplate.trim(),
+                source: 'operator',
+                operatorRevision: (target?.revision ?? 0) + 1,
+                audience: rule.audience,
+                ...(rule.audience === 'user' ? { objectPolicy: rule.objectPolicy ?? 'owner' } : {}),
+                expectedUnauthorizedStatus: rule.audience === 'public' ? [] : rule.expectedUnauthorizedStatus,
+              })),
+          }
+        : {}),
     };
     setBusy(true);
     try {
@@ -344,6 +391,135 @@ function TargetForm({
             required
           />
         </label>
+        <label>
+          Application
+          <select
+            value={applicationKind}
+            onChange={event => setApplicationKind(event.currentTarget.value as 'legacy' | 'rest_api')}
+          >
+            <option value="legacy">Website or existing laboratory target</option>
+            <option value="rest_api">REST API</option>
+          </select>
+        </label>
+        {applicationKind === 'rest_api' && (
+          <>
+            <label>
+              OpenAPI URL (optional)
+              <input
+                name="openApiUrl"
+                type="url"
+                defaultValue={target?.application?.openApiUrl}
+                placeholder="http://example/openapi.json"
+              />
+            </label>
+            <p className="hint">
+              Confirm the intended access for observed GET routes. An owner rule means each user may read only their own
+              objects.
+            </p>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>GET route</th>
+                    <th>Audience</th>
+                    <th>Object policy</th>
+                    <th>Unauthorized status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rules.map((rule, index) => (
+                    <tr key={index}>
+                      <td>
+                        <input
+                          aria-label={`Route ${index + 1}`}
+                          value={rule.pathTemplate}
+                          onChange={event =>
+                            setRules(current =>
+                              current.map((item, i) =>
+                                i === index ? { ...item, pathTemplate: event.target.value } : item,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        <select
+                          aria-label={`Audience ${index + 1}`}
+                          value={rule.audience}
+                          onChange={event =>
+                            setRules(current =>
+                              current.map((item, i) =>
+                                i === index
+                                  ? { ...item, audience: event.target.value as RouteAccessRule['audience'] }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          <option value="public">Public</option>
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          aria-label={`Object policy ${index + 1}`}
+                          disabled={rule.audience !== 'user'}
+                          value={rule.objectPolicy ?? 'owner'}
+                          onChange={event =>
+                            setRules(current =>
+                              current.map((item, i) =>
+                                i === index
+                                  ? { ...item, objectPolicy: event.target.value as 'owner' | 'shared' }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          <option value="owner">Owner only</option>
+                          <option value="shared">Shared</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          aria-label={`Unauthorized status ${index + 1}`}
+                          disabled={rule.audience === 'public'}
+                          value={rule.expectedUnauthorizedStatus.join(',')}
+                          onChange={event =>
+                            setRules(current =>
+                              current.map((item, i) =>
+                                i === index
+                                  ? {
+                                      ...item,
+                                      expectedUnauthorizedStatus: event.target.value
+                                        .split(',')
+                                        .map(value => Number(value.trim()))
+                                        .filter(value => value >= 400 && value <= 499),
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setRules(current => [
+                  ...current,
+                  { pathTemplate: '', audience: 'user', objectPolicy: 'owner', expectedUnauthorizedStatus: [401, 403] },
+                ])
+              }
+            >
+              Add route rule
+            </button>
+          </>
+        )}
         <div className="form-grid">
           <label>
             Environment
@@ -467,26 +643,70 @@ export function ProfileForm({
     const input =
       kind === 'public'
         ? { ...base, kind: 'public' }
-        : {
-            ...base,
-            kind,
-            identityEndpoint: value(data, 'endpoint'),
-            expectedIdentity: value(data, 'expected'),
-            credential:
-              kind === 'bearer'
-                ? { value: String(data.get('credential') ?? '') }
-                : { name: value(data, 'header'), value: String(data.get('credential') ?? '') },
-          };
+        : kind === 'api_key_header'
+          ? { ...base, kind: 'api_key_header', credential: { value: String(data.get('credential') ?? '') } }
+          : {
+              ...base,
+              kind,
+              identityEndpoint: value(data, 'endpoint'),
+              expectedIdentity: value(data, 'expected'),
+              credential:
+                kind === 'bearer'
+                  ? { value: String(data.get('credential') ?? '') }
+                  : { name: value(data, 'header'), value: String(data.get('credential') ?? '') },
+            };
     const credentialField = form.querySelector<HTMLInputElement>('input[name="credential"]');
     if (credentialField) credentialField.value = '';
     setBusy(true);
     try {
-      await send(
+      const saved = await send<Profile>(
         profile ? `/api/targets/${target.id}/profiles/${profile.id}` : `/api/targets/${target.id}/profiles`,
         profile ? 'PUT' : 'POST',
         input,
         profile?.revision ?? target.revision,
       );
+      if (kind === 'api_key_header' && !profile) {
+        const current = await get<Target>(`/api/targets/${target.id}`);
+        const origin = new URL(current.entryUrl).origin;
+        const driver = {
+          kind: 'api_key_header' as const,
+          version: 1 as const,
+          profileId: saved.id,
+          secretRef: saved.id,
+          credentialOrigins: [origin],
+          headerName: value(data, 'headerName'),
+          accessCheckPath: value(data, 'accessCheckPath'),
+          ...(value(data, 'principalJsonPointer') ? { principalJsonPointer: value(data, 'principalJsonPointer') } : {}),
+          refresh: 'reregister' as const,
+        };
+        await send(
+          `/api/targets/${target.id}`,
+          'PUT',
+          {
+            name: current.name,
+            entryUrl: current.entryUrl,
+            approvedOrigins: current.approvedOrigins,
+            allowedPaths: current.allowedPaths,
+            excludedPaths: current.excludedPaths,
+            permittedMethods: current.permittedMethods,
+            environment: current.environment,
+            authorizationEvidenceRef: current.authorizationEvidenceRef,
+            authorizationConfirmed: true,
+            policyId: current.policyId,
+            policyRevision: current.policyRevision,
+            schedule: { enabled: false, timezone: 'UTC' },
+            scanLimits: current.scanLimits,
+            authProfileIds: current.authProfileIds,
+            application: current.application,
+            authenticationDrivers: [...(current.authenticationDrivers ?? []), driver],
+            routeAccessRules: current.routeAccessRules?.map(rule => ({
+              ...rule,
+              operatorRevision: current.revision + 1,
+            })),
+          },
+          current.revision,
+        );
+      }
       onSaved();
       onClose();
     } catch (reason) {
@@ -516,9 +736,40 @@ export function ProfileForm({
             <option value="public">Public</option>
             <option value="bearer">Bearer token</option>
             <option value="header">Header</option>
+            {target.application?.kind === 'rest_api' && <option value="api_key_header">API key header</option>}
           </select>
         </label>
-        {kind !== 'public' && (
+        {kind === 'api_key_header' && (
+          <>
+            {!profile && (
+              <>
+                <label>
+                  Header name
+                  <input name="headerName" defaultValue="x-api-key" required maxLength={64} />
+                </label>
+                <label>
+                  Existing own-resource access check path
+                  <input name="accessCheckPath" defaultValue="/api/orders" required maxLength={512} />
+                </label>
+                <label>
+                  Account identifier JSON pointer (optional)
+                  <input name="principalJsonPointer" placeholder="/principal" maxLength={256} />
+                </label>
+                <p className="hint">
+                  BOLA needs the same pointer and check path for both accounts. Select a stable account identifier
+                  returned by that existing GET, such as /principal in the Orders API. Without distinct observed
+                  accounts, the assessment is inconclusive.
+                </p>
+              </>
+            )}
+            <label>
+              API key
+              <input name="credential" type="password" required autoComplete="new-password" />
+            </label>
+            <p className="hint">The key is sealed on the server and is never displayed again.</p>
+          </>
+        )}
+        {kind !== 'public' && kind !== 'api_key_header' && (
           <>
             <label>
               Identity endpoint
@@ -592,6 +843,7 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
   const recurrence = useData<{
     schedule: { cron: string; timezone: string; enabled: boolean; revision: number; nextAt: string } | null;
   }>(`/api/targets/${target.id}/recurrence`);
+  const assessments = useData<Page<BolaAssessment>>('/api/assessments?limit=100&offset=0');
   const current = profiles.data?.items ?? [];
   const binding = (profile: Profile): Binding => ({
     targetRevision: target.revision,
@@ -631,6 +883,29 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
         idempotencyKey: crypto.randomUUID().replaceAll('-', ''),
       });
       setMessage(`Scan admitted: ${result.id}`);
+    } catch (reason) {
+      setError(errorCode(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function assess() {
+    const ready = current.filter(profile => profile.kind === 'api_key_header' && profile.identity.status === 'READY');
+    if (ready.length !== 2) {
+      setError('TWO_READY_API_KEYS_REQUIRED');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const result = await send<BolaAssessment>(`/api/targets/${target.id}/assessments`, 'POST', {
+        targetRevision: target.revision,
+        policyRevision: target.policyRevision,
+        profiles: ready.map(binding),
+        idempotencyKey: crypto.randomUUID().replaceAll('-', ''),
+      });
+      setMessage(`Assessment started: ${result.id.slice(0, 8)}. View its progress in Scans.`);
+      assessments.reload();
     } catch (reason) {
       setError(errorCode(reason));
     } finally {
@@ -722,6 +997,35 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
           <Empty>Add a profile, then check its identity before starting a scan.</Empty>
         ) : null}
       </Section>
+      {target.application?.kind === 'rest_api' && (
+        <Section title="REST access rules">
+          <p className="hint">
+            These operator-confirmed rules define expected access; they do not select an object ID or a test route.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Route</th>
+                  <th>Audience</th>
+                  <th>Object</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(target.routeAccessRules ?? []).map(rule => (
+                  <tr key={`${rule.method}:${rule.pathTemplate}`}>
+                    <td>{rule.method}</td>
+                    <td className="mono">{rule.pathTemplate}</td>
+                    <td>{rule.audience}</td>
+                    <td>{rule.objectPolicy ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
       <Section title="Recurrence">
         <Notice code={recurrence.error} stale={recurrence.stale} onRetry={recurrence.reload} />
         {recurrence.loading ? (
@@ -748,6 +1052,19 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
         </p>
       )}
       <div className="form-actions">
+        {target.application?.kind === 'rest_api' && (
+          <button
+            className="primary"
+            disabled={
+              busy ||
+              current.filter(profile => profile.kind === 'api_key_header' && profile.identity.status === 'READY')
+                .length !== 2
+            }
+            onClick={assess}
+          >
+            Start REST assessment
+          </button>
+        )}
         <button
           className="primary"
           disabled={busy || !current.some(profile => profile.identity.status === 'READY')}
@@ -756,6 +1073,20 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
           New scan
         </button>
       </div>
+      {target.application?.kind === 'rest_api' && (
+        <Section title="Recent REST assessments" action={<button onClick={assessments.reload}>Refresh</button>}>
+          <Notice code={assessments.error} stale={assessments.stale} onRetry={assessments.reload} />
+          {(assessments.data?.items ?? [])
+            .filter(item => item.targetId === target.id)
+            .map(item => (
+              <div className="record" key={item.id}>
+                <span className="mono">{item.id.slice(0, 8)}</span>
+                <Status value={item.outcome ?? item.state} />
+                <span>{item.selected?.routeTemplate ?? item.reason ?? 'Discovering account-specific resources'}</span>
+              </div>
+            ))}
+        </Section>
+      )}
       {editing && (
         <ProfileForm
           target={target}
@@ -878,16 +1209,33 @@ export function ScansView() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const records = useData<Page<Scan>>(`/api/scans?limit=${limit}&offset=${offset}`);
+  const assessments = useData<Page<BolaAssessment>>('/api/assessments?limit=25&offset=0');
+  const [selectedAssessment, setSelectedAssessment] = useState<string>();
   const evidence = useData<Page<Evidence>>(
     selected ? `/api/scans/${selected}/evidence?limit=${limit}&offset=${evidenceOffset}` : '',
   );
   const scan = records.data?.items.find(item => item.id === selected);
+  const assessment = assessments.data?.items.find(item => item.id === selectedAssessment);
   async function cancel(scan: Scan) {
     setBusy(true);
     setError('');
     try {
       const result = await send<Scan>(`/api/scans/${scan.id}/cancel`, 'POST', {});
       setMessage(`Scan ${result.state.toLowerCase().replaceAll('_', ' ')}.`);
+      records.reload();
+    } catch (reason) {
+      setError(errorCode(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function cancelAssessment(item: BolaAssessment) {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await send<BolaAssessment>(`/api/assessments/${item.id}/cancel`, 'POST', {}, item.revision);
+      setMessage(`Assessment ${result.state.toLowerCase().replaceAll('_', ' ')}.`);
+      assessments.reload();
       records.reload();
     } catch (reason) {
       setError(errorCode(reason));
@@ -918,6 +1266,93 @@ export function ScansView() {
   }
   return (
     <>
+      <Section title="REST assessments" action={<button onClick={assessments.reload}>Refresh</button>}>
+        <Notice code={assessments.error} stale={assessments.stale} onRetry={assessments.reload} />
+        {assessments.loading ? (
+          <Loading />
+        ) : assessments.data?.items.length ? (
+          <div className="stack">
+            {assessments.data.items.map(item => (
+              <div className="record" key={item.id}>
+                <button className="link mono" onClick={() => setSelectedAssessment(item.id)}>
+                  {item.id.slice(0, 8)}
+                </button>
+                <Status value={item.outcome ?? item.state} />
+                <span>{item.selected?.routeTemplate ?? item.reason ?? 'Discovering'}</span>
+                {['DISCOVERING', 'PLANNING', 'VERIFYING', 'CANCEL_REQUESTED'].includes(item.state) && (
+                  <button disabled={busy || item.state === 'CANCEL_REQUESTED'} onClick={() => cancelAssessment(item)}>
+                    Cancel assessment
+                  </button>
+                )}
+                <Time value={item.updatedAt} />
+              </div>
+            ))}
+          </div>
+        ) : assessments.data && !assessments.error ? (
+          <Empty>No REST assessments yet.</Empty>
+        ) : null}
+      </Section>
+      {assessment && (
+        <Section
+          title={`Assessment ${assessment.id.slice(0, 8)}`}
+          action={<button onClick={() => setSelectedAssessment(undefined)}>Close</button>}
+        >
+          <p>
+            <Status value={assessment.outcome ?? assessment.state} /> · {assessment.reason ?? 'In progress'}
+          </p>
+          <p>
+            Evidence: {assessment.evidenceAvailability ?? 'unknown'}
+            {assessment.evidenceAvailability === 'available' && assessment.expiresAt
+              ? ` until ${assessment.expiresAt}`
+              : ''}
+          </p>
+          <p>Verifier cleanup: {assessment.verificationCleanup ?? 'unknown'}</p>
+          <p>
+            Checker: {assessment.selected ? 'bola_rest_read' : 'Pending'} · Selected route:{' '}
+            {assessment.selected?.routeTemplate ?? 'Pending'}
+          </p>
+          <p>
+            Sherlock hypothesis: {assessment.selection?.hypothesis ?? 'Pending'} · Rationale:{' '}
+            {assessment.selection?.rationaleCode ?? 'Pending'} · Confidence:{' '}
+            {assessment.selection?.confidence ?? 'Pending'}
+          </p>
+          <p>Limitations: {assessment.selection?.limitations.join(', ') ?? 'Pending'}</p>
+          <p>
+            Observed candidates:{' '}
+            {assessment.candidates
+              .map(candidate => `${candidate.routeTemplate} (${candidate.prerequisite})`)
+              .join(', ') || 'Pending'}
+          </p>
+          <p>
+            Expected: an alternate account cannot read an owner-only resource. Observed owner status:{' '}
+            {assessment.proof?.ownerStatus ?? 'unknown'}; alternate status:{' '}
+            {assessment.proof?.alternateStatus ?? 'unknown'}.
+          </p>
+          <p>
+            Same private response:{' '}
+            {assessment.proof?.bodyMatches === null || assessment.proof?.bodyMatches === undefined
+              ? 'unknown'
+              : assessment.proof.bodyMatches
+                ? 'yes'
+                : 'no'}{' '}
+            · Gateway requests: {assessment.proof?.requestCount ?? 0} · Proof complete:{' '}
+            {assessment.proof?.completed ? 'yes' : 'no'}
+          </p>
+          <p>
+            Model roles:{' '}
+            {assessment.modelEvents.map(event => `${event.role} (${event.modelId})`).join(', ') || 'Pending'} · Reserved
+            model tokens: {assessment.usedTokens}
+          </p>
+          {assessment.findingId && (
+            <p>
+              Finding: <span className="mono">{assessment.findingId}</span>
+            </p>
+          )}
+          <p className="hint">
+            An incomplete comparison is inconclusive. A protected response does not create a finding.
+          </p>
+        </Section>
+      )}
       <Section title="Scans" action={<button onClick={records.reload}>Refresh</button>}>
         <Notice code={records.error || error} stale={records.stale} onRetry={records.reload} />
         {message && (

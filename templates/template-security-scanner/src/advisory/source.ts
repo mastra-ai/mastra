@@ -5,6 +5,9 @@ import { advisoryId, detailSchema, pageSchema, type AdvisoryDetail } from './con
 const OFFICIAL = 'https://cve.now';
 const CDN = 'f9gkulwameaj0boi.public.blob.vercel-storage.com';
 const MAX_BODY = 512 * 1024;
+const cveCdnPath = /^\/public\/entries\/CVE-\d{4}-\d{4,}\.json$/;
+const ghsaCdnPath =
+  /^\/public\/entries\/GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}\.json$/i;
 const isRedirect = (status: number) => status >= 300 && status < 400;
 const redirectDenied = () => new ControlPlaneError('ADVISORY_REDIRECT_DENIED', 503);
 
@@ -99,9 +102,11 @@ export class AdvisorySource {
     const requested = advisoryId.parse(id);
     const response = await this.request(`/api/v1/entries/${encodeURIComponent(requested)}`, signal);
     let detailResponse = response;
+    let stage: 'PRIMARY' | 'CDN' = 'PRIMARY';
     if ([301, 302, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
       if (!location) throw redirectDenied();
+      if (/%|\\|(?:^|\/)\.{1,2}(?:\/|$)/.test(location)) throw redirectDenied();
       let url: URL;
       try {
         url = new URL(location, this.base);
@@ -113,9 +118,10 @@ export class AdvisorySource {
         : url.protocol === 'https:' &&
           url.hostname === CDN &&
           url.port === '' &&
-          /^\/public\/entries\/CVE-\d{4}-\d{4,}\.json$/.test(url.pathname);
+          (cveCdnPath.test(url.pathname) || ghsaCdnPath.test(url.pathname));
       if (!allowed || url.username || url.password || url.search || url.hash) throw redirectDenied();
       try {
+        stage = 'CDN';
         detailResponse = await this.transport(url, {
           redirect: 'manual',
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
@@ -126,7 +132,21 @@ export class AdvisorySource {
       }
     } else if (isRedirect(response.status)) throw redirectDenied();
     if (isRedirect(detailResponse.status)) throw redirectDenied();
-    if (detailResponse.status !== 200) throw new ControlPlaneError('ADVISORY_DETAIL_UNAVAILABLE', 503);
+    if (detailResponse.status !== 200) {
+      void detailResponse.body?.cancel().catch(() => undefined);
+      const status = detailResponse.status;
+      const category =
+        status === 404
+          ? '404'
+          : status === 429
+            ? '429'
+            : status >= 400 && status < 500
+              ? 'OTHER_4XX'
+              : status >= 500 && status < 600
+                ? '5XX'
+                : 'OTHER';
+      throw new ControlPlaneError(`ADVISORY_DETAIL_${stage}_${category}`, 503);
+    }
     const detail = validated(detailSchema, await boundedJson(detailResponse));
     const canonical = detail.id.toUpperCase();
     if (

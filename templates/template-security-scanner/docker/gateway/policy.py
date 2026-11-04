@@ -37,6 +37,9 @@ class PolicyError(Exception):
     pass
 
 
+type Endpoint = tuple[str, int]
+
+
 class Budget:
     def __init__(
         self, requests: int, response_bytes: int, concurrent: int, seconds: int
@@ -166,6 +169,13 @@ class Policy:
     def request(self, request: http.Request, role: str) -> None:
         self.origin(request.scheme, request.host, request.port)
         if (
+            self.config.get("inject_credentials")
+            and self.secrets[role]
+            and request.scheme != "https"
+            and not self.allowed_ips
+        ):
+            raise PolicyError("credential-transport")
+        if (
             self.secrets[role]
             and (request.scheme, request.host, request.port)
             != self.credential_origins[role]
@@ -190,35 +200,6 @@ class Policy:
         )
         if len(host_headers) != 1 or host_headers[0].lower() != expected:
             raise PolicyError("authority")
-        expected_name = self.headers[role]
-        comparison = self.config.get("invalid_session_comparison")
-        invalid_comparison = bool(
-            comparison
-            and self.allowed_ips
-            and not expected_name
-            and not self.secrets[role]
-            and comparison["role"] == role
-            and tuple(comparison["origin"])
-            == (request.scheme, request.host, request.port)
-            and comparison["path"] == request.path
-            and request.headers.get("authorization") == "Bearer invalid-scanner-session"
-        )
-        if expected_name and not hmac.compare_digest(
-            request.headers.get(expected_name, ""), self.secrets[role]
-        ):
-            raise PolicyError("identity")
-        credential_names = {
-            "authorization",
-            "proxy-authorization",
-            "cookie",
-            "x-api-key",
-            "x-test-identity",
-        } | {name for name in self.headers.values() if name}
-        for name in credential_names:
-            if invalid_comparison and name == "authorization":
-                continue
-            if name != expected_name and name in request.headers:
-                raise PolicyError("identity")
         if request.path.startswith("//"):
             raise PolicyError("path")
         parsed_path = urlsplit(request.path)
@@ -260,6 +241,47 @@ class Policy:
             matches(prefix) for prefix in self.config["excluded_paths"]
         ):
             raise PolicyError("path")
+        expected_name = self.headers[role]
+        comparison = self.config.get("invalid_session_comparison")
+        invalid_comparison = bool(
+            comparison
+            and self.allowed_ips
+            and not expected_name
+            and not self.secrets[role]
+            and comparison["role"] == role
+            and tuple(comparison["origin"])
+            == (request.scheme, request.host, request.port)
+            and comparison["path"] == request.path
+            and request.headers.get("authorization") == "Bearer invalid-scanner-session"
+        )
+        credential_names = {
+            "authorization",
+            "proxy-authorization",
+            "cookie",
+            "x-api-key",
+            "x-test-identity",
+        } | {name for name in self.headers.values() if name}
+        for name in credential_names:
+            if invalid_comparison and name == "authorization":
+                continue
+            if name != expected_name and name in request.headers:
+                raise PolicyError("identity")
+        if expected_name:
+            if self.config.get("inject_credentials"):
+                if expected_name in request.headers:
+                    raise PolicyError("identity")
+            elif not hmac.compare_digest(
+                request.headers.get(expected_name, ""), self.secrets[role]
+            ):
+                raise PolicyError("identity")
+
+    def inject(self, request: http.Request, role: str) -> None:
+        name = self.headers[role]
+        if not self.config.get("inject_credentials") or not name:
+            return
+        if name in request.headers:
+            raise PolicyError("identity")
+        request.headers[name] = self.secrets[role]
 
     def addresses(self, results: Sequence[tuple[int, int, int, str, Any]]) -> str:
         addresses = {str(item[4][0]) for item in results}
@@ -317,8 +339,11 @@ class Gateway:
         self.policy = Policy(config, secrets, guards)
         self.budget = Budget(**config["budget"])
         self.counts: Counter[str] = Counter()
-        self.pending: dict[tuple[str, str, int], tuple[str, str]] = {}
-        self.expected_peers: dict[str, str] = {}
+        self.pending: dict[tuple[str, str, int], tuple[Endpoint, str, str]] = {}
+        self.expected_peers: dict[str, Endpoint] = {}
+        self.verified_peers: set[str] = set()
+        self.verified_flow_peers: dict[str, Endpoint] = {}
+        self.connection_flows: dict[str, tuple[str, str, str, int, Endpoint, str]] = {}
         self.reservations: dict[str, http.HTTPFlow] = {}
         self.expired_roles: set[str] = set()
         self.deadline_handle: asyncio.TimerHandle | None = None
@@ -367,6 +392,7 @@ class Gateway:
         return self.profiles[flow.client_conn.sockname[1]]
 
     def release(self, flow: http.HTTPFlow) -> None:
+        self.strip_credential(flow)
         self.pending.pop(
             (flow.client_conn.id, flow.request.host, flow.request.port), None
         )
@@ -376,6 +402,13 @@ class Gateway:
             self.counts["released-reservations"] += 1
         self.snapshot()
 
+    def strip_credential(self, flow: http.HTTPFlow) -> None:
+        if self.policy.config.get("inject_credentials"):
+            for name in self.policy.headers.values():
+                if name:
+                    flow.request.headers.pop(name, None)
+        flow.metadata.pop("credential-injected", None)
+
     def client_disconnected(self, client: connection.Client) -> None:
         # The disconnect hook precedes transport cancellation. An opening/live
         # upstream retains its slot until server_disconnected/connect_error.
@@ -383,22 +416,37 @@ class Gateway:
         for flow in tuple(self.reservations.values()):
             if flow.client_conn.id == client.id:
                 self.counts["disconnected-reservations"] += 1
+                self.strip_credential(flow)
                 self.pending.pop(
                     (client.id, flow.request.host, flow.request.port), None
                 )
-                if flow.server_conn.id not in self.expected_peers:
+                if flow.id not in {
+                    binding[0] for binding in self.connection_flows.values()
+                }:
                     self.release(flow)
 
     def server_disconnected(self, data: ServerConnectionHookData) -> None:
         self.expected_peers.pop(data.server.id, None)
+        self.verified_peers.discard(data.server.id)
         self.release_server(data)
 
     def release_server(self, data: ServerConnectionHookData) -> None:
+        self.release_connection(data.server.id)
+
+    def release_connection(self, server_id: str) -> None:
+        self.expected_peers.pop(server_id, None)
+        self.verified_peers.discard(server_id)
+        binding = self.connection_flows.pop(server_id, None)
+        if binding:
+            self.verified_flow_peers.pop(binding[5], None)
         for flow in tuple(self.reservations.values()):
-            if flow.server_conn.id == data.server.id:
+            if flow.server_conn.id == server_id or (
+                binding and (flow.id == binding[0] or flow.server_conn.id == binding[5])
+            ):
                 self.release(flow)
 
     def deny(self, flow: http.HTTPFlow, reason: str) -> None:
+        self.strip_credential(flow)
         self.pending.pop(
             (flow.client_conn.id, flow.request.host, flow.request.port), None
         )
@@ -450,6 +498,7 @@ class Gateway:
             ]
             self.counts["fresh-dns-lookups"] += 1
             address = self.policy.addresses(results)
+            endpoint = (address, flow.request.port)
             if (
                 not flow.metadata.get("reserved")
                 or flow.client_conn.timestamp_end is not None
@@ -461,11 +510,13 @@ class Gateway:
                 self.budget.exhaustion_reason = "time"
                 raise PolicyError("budget-time")
             if flow.server_conn.connected and (
-                not flow.server_conn.peername or flow.server_conn.peername[0] != address
+                self.verified_flow_peers.get(flow.server_conn.id) != endpoint
+                or flow.server_conn.peername != endpoint
             ):
                 raise PolicyError("dns-peer-change")
             key = (flow.client_conn.id, flow.request.host, flow.request.port)
-            self.pending[key] = (address, role)
+            self.pending[key] = (endpoint, role, flow.id)
+            flow.metadata["dns-endpoint"] = endpoint
             self.counts["authorized"] += 1
             self.snapshot()
             authorized = True
@@ -477,33 +528,159 @@ class Gateway:
             if not authorized and flow.response is None:
                 self.deny(flow, "resolver-failure")
 
+    def request(self, flow: http.HTTPFlow) -> None:
+        if (
+            not self.policy.config.get("inject_credentials")
+            or flow.response is not None
+        ):
+            return
+        self.counts["credential-request-hook"] += 1
+        try:
+            role = self.role(flow)
+            key = (flow.client_conn.id, flow.request.host, flow.request.port)
+            pending = self.pending.get(key)
+            endpoint = flow.metadata.get("dns-endpoint")
+            if (
+                not flow.metadata.get("reserved")
+                or flow.client_conn.timestamp_end is not None
+                or not endpoint
+                or (
+                    pending != (endpoint, role, flow.id)
+                    and self.verified_flow_peers.get(flow.server_conn.id) != endpoint
+                )
+            ):
+                raise PolicyError("pre-egress")
+            flow.metadata["request-ready"] = True
+            if (
+                flow.server_conn.connected
+                and self.verified_flow_peers.get(flow.server_conn.id) == endpoint
+            ):
+                self.inject_verified(flow, role)
+            else:
+                self.counts["credential-deferred"] += 1
+        except PolicyError as error:
+            self.deny(flow, str(error))
+
+    def inject_verified(
+        self, flow: http.HTTPFlow, role: str, server: connection.Server | None = None
+    ) -> None:
+        endpoint = flow.metadata.get("dns-endpoint")
+        peer = flow.server_conn.peername if server is None else server.peername
+        binding = self.connection_flows.get(server.id) if server is not None else None
+        verified = (
+            (
+                self.verified_flow_peers.get(flow.server_conn.id) == endpoint
+                and flow.server_conn.connected
+                if server is None
+                else server.id in self.verified_peers
+                and self.expected_peers.get(server.id) == endpoint
+                and server.connected
+                and server.address == endpoint
+                and binding is not None
+                and binding[0] == flow.id
+                and binding[5] == flow.server_conn.id
+            )
+            and peer is not None
+            and peer == endpoint
+        )
+        if (
+            not flow.metadata.get("reserved")
+            or not flow.metadata.get("request-ready")
+            or flow.client_conn.timestamp_end is not None
+            or not verified
+        ):
+            raise PolicyError("pre-egress")
+        if flow.metadata.get("credential-injected"):
+            return
+        self.policy.inject(flow.request, role)
+        flow.metadata["credential-injected"] = True
+        self.counts["credential-injected"] += 1
+        self.snapshot()
+
     def server_connect(self, data: ServerConnectionHookData) -> None:
         if not data.server.address:
             data.server.error = "policy-no-address"
             return
         host, port = data.server.address
         authorization = self.pending.pop((data.client.id, host, port), None)
-        if authorization is None:
+        flow = self.reservations.get(authorization[2]) if authorization else None
+        if (
+            authorization is None
+            or flow is None
+            or not flow.metadata.get("reserved")
+            or (
+                self.policy.config.get("inject_credentials")
+                and not flow.metadata.get("request-ready")
+            )
+            or flow.client_conn.timestamp_end is not None
+            or flow.client_conn.id != data.client.id
+            or flow.request.host != host
+            or flow.request.port != port
+            or flow.metadata.get("dns-endpoint") != authorization[0]
+            or authorization[0][1] != port
+        ):
             data.server.error = "policy-no-request-authorization"
             self.counts["denied-preconnect"] += 1
         else:
-            address, _ = authorization
+            endpoint, _, _ = authorization
             data.server.sni = host
-            data.server.address = (address, port)
-            self.expected_peers[data.server.id] = address
+            data.server.address = endpoint
+            self.expected_peers[data.server.id] = endpoint
+            self.verified_peers.discard(data.server.id)
+            self.connection_flows[data.server.id] = (
+                flow.id,
+                data.client.id,
+                host,
+                port,
+                endpoint,
+                flow.server_conn.id,
+            )
             self.counts["numeric-pins"] += 1
         self.snapshot()
 
     def server_connected(self, data: ServerConnectionHookData) -> None:
         expected = self.expected_peers.get(data.server.id)
-        if not data.server.peername or expected != data.server.peername[0]:
+        binding = self.connection_flows.get(data.server.id)
+        flow = self.reservations.get(binding[0]) if binding else None
+        if (
+            not binding
+            or not flow
+            or not flow.metadata.get("reserved")
+            or (
+                self.policy.config.get("inject_credentials")
+                and not flow.metadata.get("request-ready")
+            )
+            or flow.client_conn.timestamp_end is not None
+            or data.client.id != binding[1]
+            or flow.client_conn.id != binding[1]
+            or flow.server_conn.id != binding[5]
+            or flow.request.host != binding[2]
+            or flow.request.port != binding[3]
+            or flow.metadata.get("dns-endpoint") != binding[4]
+            or binding[4][1] != binding[3]
+            or data.server.address != binding[4]
+            or data.server.peername is None
+            or expected != data.server.peername
+        ):
             data.server.error = "policy-peer-mismatch"
             self.counts["peer-mismatch"] += 1
             self.budget.exhausted = True
             self.budget.stream_stopped = True
             self.budget.exhaustion_reason = "peer-mismatch"
+            self.verified_peers.discard(data.server.id)
+            self.release_server(data)
         else:
+            self.verified_peers.add(data.server.id)
             self.counts["peer-verified"] += 1
+            self.verified_flow_peers[binding[5]] = expected
+            if self.policy.config.get("inject_credentials"):
+                try:
+                    self.inject_verified(flow, self.role(flow), data.server)
+                except PolicyError as error:
+                    data.server.error = "policy-request-rejected"
+                    self.deny(flow, str(error))
+                    self.verified_peers.discard(data.server.id)
+                    self.release_server(data)
         self.snapshot()
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
@@ -521,16 +698,21 @@ class Gateway:
         checking_identity = bool(
             identity and flow.request.pretty_url == identity["endpoint"]
         )
+        access_check = self.policy.config.get("access_checks", {}).get(self.role(flow))
+        checking_access = bool(access_check and flow.request.pretty_url == access_check)
         identity_body = bytearray()
 
         def stream(chunk: bytes) -> bytes:
-            if checking_identity:
+            if checking_identity or checking_access:
                 if len(identity_body) + len(chunk) <= 4096:
                     identity_body.extend(chunk)
                 else:
                     flow.metadata["identity-overflow"] = True
-            if not chunk and checking_identity:
-                self.check_identity(flow, identity, bytes(identity_body))
+            if not chunk and (checking_identity or checking_access):
+                if checking_identity:
+                    self.check_identity(flow, identity, bytes(identity_body))
+                else:
+                    self.check_access(flow, bytes(identity_body))
                 identity_body.clear()
 
             if not chunk:
@@ -547,6 +729,35 @@ class Gateway:
             return chunk
 
         flow.response.stream = stream
+
+    def check_access(self, flow: http.HTTPFlow, body: bytes) -> None:
+        role = self.role(flow)
+        status = "UNAVAILABLE"
+        if flow.response is not None:
+            if (
+                flow.response.status_code in {401, 403}
+                or 300 <= flow.response.status_code < 400
+            ):
+                status = "AUTH_REQUIRED"
+            elif (
+                flow.response.status_code == 200
+                and not flow.metadata.get("identity-overflow")
+                and flow.response.headers.get("content-type", "")
+                .lower()
+                .split(";", 1)[0]
+                .strip()
+                == "application/json"
+            ):
+                try:
+                    observed = json.loads(body)
+                    if isinstance(observed, (dict, list)):
+                        status = "READY"
+                except (ValueError, UnicodeError):
+                    pass
+        self.counts[f"identity-{role}-{status}"] += 1
+        if status == "AUTH_REQUIRED":
+            self.expired_roles.add(role)
+        self.snapshot()
 
     def check_identity(
         self, flow: http.HTTPFlow, identity: dict[str, str], body: bytes
@@ -595,11 +806,17 @@ class Gateway:
 
     def tls_failed_server(self, data: Any) -> None:
         self.counts["tls-server-failed"] += 1
+        server = getattr(data, "conn", None)
+        if server is not None:
+            self.expected_peers.pop(server.id, None)
+            self.verified_peers.discard(server.id)
+            self.release_connection(server.id)
         self.snapshot()
 
     def server_connect_error(self, data: ServerConnectionHookData) -> None:
         self.counts["server-connect-errors"] += 1
         self.expected_peers.pop(data.server.id, None)
+        self.verified_peers.discard(data.server.id)
         self.release_server(data)
         self.snapshot()
 

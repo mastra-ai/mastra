@@ -363,6 +363,71 @@ describe('protected local control plane over real HTTP and libSQL', () => {
     expect((await app.call(`/api/policies/${policy.id}`, 'DELETE', undefined, policy.revision)).status).toBe(204);
   }, 60000);
 
+  it('keeps confirmed route rules inside the authorized method, path and target revision across restart', async () => {
+    const app = await startHarness();
+    const policy = await app.createPolicy();
+    const input = {
+      ...targetInput(policy, app.fixture.url),
+      entryUrl: `${app.fixture.url}/api/orders`,
+      allowedPaths: ['/api/orders'],
+      excludedPaths: ['/api/orders/internal/private'],
+    };
+    const rule = {
+      version: 1,
+      method: 'GET',
+      pathTemplate: '/api/orders/{id}',
+      audience: 'user',
+      objectPolicy: 'owner',
+      source: 'operator',
+      operatorRevision: 1,
+      expectedUnauthorizedStatus: [403, 404],
+    };
+    for (const invalid of [
+      { ...rule, method: 'DELETE' },
+      { ...rule, pathTemplate: '/admin/users/{id}' },
+      { ...rule, pathTemplate: '/api/orders/internal/private' },
+      { ...rule, pathTemplate: '/api/orders/{id}/private' },
+      { ...rule, operatorRevision: 99 },
+    ]) {
+      const response = await app.call('/api/targets', 'POST', { ...input, routeAccessRules: [invalid] });
+      expect(response.status).toBe(400);
+    }
+    const overlappingExclusion = await app.call('/api/targets', 'POST', {
+      ...input,
+      excludedPaths: ['/api/orders/internal'],
+      routeAccessRules: [rule],
+    });
+    expect(overlappingExclusion.status).toBe(400);
+    const created = await app.call<Target>('/api/targets', 'POST', { ...input, routeAccessRules: [rule] });
+    expect(created.status).toBe(201);
+    expect(created.body.routeAccessRules?.[0]).toMatchObject({ operatorRevision: created.body.revision });
+    const stale = await app.call(
+      `/api/targets/${created.body.id}`,
+      'PUT',
+      {
+        ...targetBody(created.body),
+        name: 'Updated order API',
+      },
+      created.body.revision,
+    );
+    expect(stale.status).toBe(400);
+    expect((await app.getTarget(created.body.id)).revision).toBe(1);
+    const updated = await app.call<Target>(
+      `/api/targets/${created.body.id}`,
+      'PUT',
+      {
+        ...targetBody(created.body),
+        name: 'Updated order API',
+        routeAccessRules: [{ ...rule, operatorRevision: 2 }],
+      },
+      created.body.revision,
+    );
+    expect(updated.status).toBe(200);
+    await app.restart();
+    expect(await app.getTarget(created.body.id)).toEqual(updated.body);
+    const records = await app.records();
+    expect(records.records.find(row => row.id === created.body.id)?.revision).toBe(2);
+  });
   it('target_mutations_reject_csrf_scope_and_revision_conflicts', async () => {
     const app = await startHarness();
     const policy = await app.createPolicy();

@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { applicationDriverSchema } from './application-drivers.js';
+import { authenticationDriverSchema } from './authentication-drivers.js';
+import { routeAccessRulesSchema, routeTemplateWithinScope } from './route-access.js';
 
 export class ControlPlaneError extends Error {
   constructor(
@@ -184,6 +187,16 @@ export const targetSchema = z
       .max(32)
       .refine(value => new Set(value).size === value.length)
       .default([]),
+    /** Explicit application contract; absent on historical Katana targets. */
+    application: applicationDriverSchema.optional(),
+    /** Future authentication metadata only; credentials still require sealed registration. */
+    authenticationDrivers: z
+      .array(authenticationDriverSchema)
+      .max(32)
+      .refine(value => new Set(value.map(driver => driver.profileId)).size === value.length)
+      .optional(),
+    /** Operator-confirmed or suggested route intent, bound by the target revision. */
+    routeAccessRules: routeAccessRulesSchema.optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -191,6 +204,31 @@ export const targetSchema = z
     const entry = new URL(value.entryUrl);
     if (!value.approvedOrigins.includes(entry.origin) || !pathAllowed(entry.pathname, value)) {
       context.addIssue({ code: 'custom', message: 'The entry URL must be inside approved scope.' });
+    }
+    if (value.application?.kind === 'rest_api' && value.application.openApiUrl) {
+      const openApi = value.application.openApiUrl;
+      if (
+        !urlSchema.safeParse(openApi).success ||
+        !value.approvedOrigins.includes(new URL(openApi).origin) ||
+        !pathAllowed(new URL(openApi).pathname, value)
+      ) {
+        context.addIssue({ code: 'custom', message: 'The OpenAPI URL must be inside approved scope.' });
+      }
+    }
+    for (const driver of value.authenticationDrivers ?? []) {
+      if (
+        driver.credentialOrigins.some(origin => !value.approvedOrigins.includes(origin)) ||
+        (driver.kind === 'api_key_header' && !pathAllowed(driver.accessCheckPath, value))
+      ) {
+        context.addIssue({ code: 'custom', message: 'Authentication access must remain inside approved scope.' });
+      }
+    }
+    for (const rule of value.routeAccessRules ?? []) {
+      if (!value.permittedMethods.includes(rule.method) || !routeTemplateWithinScope(rule.pathTemplate, value))
+        context.addIssue({
+          code: 'custom',
+          message: 'Route access rules must remain inside approved methods and paths.',
+        });
     }
   });
 export function pathAllowed(path: string, scope: { allowedPaths: string[]; excludedPaths: string[] }) {
@@ -255,6 +293,14 @@ export const profileSchema = z.discriminatedUnion('kind', [
           value: privateValue,
         })
         .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...profileBase,
+      kind: z.literal('api_key_header'),
+      /** Credential transport is selected by the target's versioned authentication driver. */
+      credential: z.object({ value: privateValue }).strict(),
     })
     .strict(),
 ]);
