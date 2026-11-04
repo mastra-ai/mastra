@@ -110,3 +110,35 @@ function rebaseValue(
   }
   return final;
 }
+
+/**
+ * Removes the state a nested run started from out of a step result that is leaving the process.
+ *
+ * A parent that parks on a nested run records that state in `suspendPayload.__workflow_meta.startState`
+ * so a crashed parent can rebase the run's changes when it re-drives the step. Callers never need it:
+ * results keep the rest of the metadata (run id, path, `.foreach()` iteration ids) but not workflow
+ * state, which they only see through `includeState`.
+ */
+export function withoutNestedRunStartState<T>(stepResult: T): T {
+  if (Array.isArray(stepResult)) {
+    const items = stepResult.map(item => stripStartStateOnce(item));
+    return items as T;
+  }
+  return stripStartStateOnce(stepResult) as T;
+}
+
+function stripStartStateOnce(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const result = value as Record<string, unknown>;
+  const suspendPayload = result.suspendPayload as Record<string, unknown> | undefined;
+  const meta = suspendPayload?.__workflow_meta as Record<string, unknown> | undefined;
+  if (!meta || typeof meta !== 'object' || !Object.hasOwn(meta, 'startState')) return value;
+
+  // A `.foreach()` over a nested run keeps one base per parked item, next to the item's own metadata.
+  const { startState: _startState, foreachOutput, ...restMeta } = meta;
+  const nextMeta =
+    Array.isArray(foreachOutput) ? { ...restMeta, foreachOutput: foreachOutput.map(stripStartStateOnce) } : restMeta;
+
+  return { ...result, suspendPayload: { ...suspendPayload, __workflow_meta: nextMeta } };
+}

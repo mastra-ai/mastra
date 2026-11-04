@@ -749,3 +749,59 @@ describe('a nested run hands back only its changes', () => {
     expect(unordered ? [...appended].sort() : appended).toEqual(expected);
   });
 });
+
+describe('what a parked nested run exposes to callers', () => {
+  /** `inner` suspends on its first step, so the parent parks on it holding the state it started from. */
+  const build = (nested: 'then' | 'foreach') => {
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+      .then(appendItem('inner-wait', { suspends: true }))
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: nested === 'then' ? num : z.array(num),
+      outputSchema: nested === 'then' ? num : z.array(num),
+      stateSchema: items,
+    });
+    return (nested === 'then' ? outer.then(inner) : outer.foreach(inner)).commit();
+  };
+
+  const parkedMeta = (result: any) => result.steps.inner.suspendPayload.__workflow_meta;
+
+  it('keeps the state a re-driven nested run starts from out of the result and the stored run', async () => {
+    const outer = build('then');
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const result: any = await run.start({ inputData: { n: 0 }, initialState: { items: ['hidden'] } });
+    expect(result.status).toBe('suspended');
+    // Callers only see workflow state through `includeState`, so a base kept for the recovery sweep
+    // has no business riding out inside the step metadata they do get.
+    expect(result).not.toHaveProperty('state');
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    expect(parkedMeta(result).runId).toBe('run-1');
+    expect(parkedMeta(result)).not.toHaveProperty('startState');
+
+    // The stored run goes through a different projection, and had to strip it as well.
+    const stored: any = await outer.getWorkflowRunById('run-1');
+    expect(parkedMeta(stored).runId).toBe('run-1');
+    expect(parkedMeta(stored)).not.toHaveProperty('startState');
+  });
+
+  it('keeps a .foreach() item base out of the result too', async () => {
+    const outer = build('foreach');
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const result: any = await run.start({ inputData: [{ n: 0 }, { n: 1 }], initialState: { items: ['hidden'] } });
+    expect(result.status).toBe('suspended');
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    expect(parkedMeta(result)).not.toHaveProperty('startState');
+    // Each parked iteration carries its own base for the re-drive.
+    const parkedItems = parkedMeta(result).foreachOutput as any[];
+    expect(parkedItems.length).toBeGreaterThan(0);
+    for (const item of parkedItems) {
+      expect(item.suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+      expect(item.suspendPayload.__workflow_meta.runId).toBeTypeOf('string');
+    }
+  });
+});
