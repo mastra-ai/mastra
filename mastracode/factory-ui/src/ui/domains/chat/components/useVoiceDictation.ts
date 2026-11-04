@@ -39,11 +39,17 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * Records a clip from the microphone and transcribes it server-side with the
- * caller's own speech-to-text key. Each finished transcript is handed to
- * `onTranscript`; failures (mic denied, no key, provider error) go to `onError`.
- */
+const MIC_BLOCKED = 'Microphone access was blocked. Allow it in your browser to use voice input.';
+const MIC_ERRORS: Record<string, string> = {
+  NotFoundError: 'No microphone found. Connect one to use voice input.',
+  NotReadableError: 'Your microphone is busy in another app. Close it and try again.',
+};
+
+function micErrorMessage(error: unknown): string {
+  return (error instanceof DOMException && MIC_ERRORS[error.name]) || MIC_BLOCKED;
+}
+
+/** Records a mic clip and transcribes it server-side, so provider keys never reach the browser. */
 export function useVoiceDictation({
   factoryId,
   onTranscript,
@@ -88,21 +94,7 @@ export function useVoiceDictation({
     };
   }, []);
 
-  const start = async () => {
-    setRequesting(true);
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      onError('Microphone access was blocked. Allow it in your browser to use voice input.');
-      return;
-    } finally {
-      setRequesting(false);
-    }
-    if (!mountedRef.current) {
-      stopTracks(stream);
-      return;
-    }
+  const startRecorder = (stream: MediaStream) => {
     const recorder = new MediaRecorder(stream);
     const chunks: Blob[] = [];
     recorder.ondataavailable = event => {
@@ -115,9 +107,32 @@ export function useVoiceDictation({
       const clip = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type || 'audio/webm' });
       if (clip.size > 0) transcribe.mutate(clip);
     };
-    recorderRef.current = recorder;
     recorder.start();
-    setRecording(true);
+    return recorder;
+  };
+
+  const start = async () => {
+    setRequesting(true);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+      onError(micErrorMessage(error));
+      return;
+    } finally {
+      setRequesting(false);
+    }
+    if (!mountedRef.current) {
+      stopTracks(stream);
+      return;
+    }
+    try {
+      recorderRef.current = startRecorder(stream);
+      setRecording(true);
+    } catch {
+      stopTracks(stream);
+      onError('This browser could not start recording. Try again or use another browser.');
+    }
   };
 
   const stop = () => {

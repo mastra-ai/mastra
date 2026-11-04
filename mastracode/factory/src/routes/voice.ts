@@ -1,11 +1,4 @@
-/**
- * Voice input routes for the web composer.
- *
- * The browser records a clip with `MediaRecorder` and posts it here; the server
- * transcribes it with the caller's provider API key (see `voice/transcription.ts`
- * for which key and model apply under each Factory model scope), so keys never
- * reach the browser.
- */
+/** Voice input routes: the browser posts a recorded clip and the server transcribes it, so keys never reach the browser. */
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { STT_MODELS, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
@@ -21,7 +14,6 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import {
   chooseSTTModel,
-  factoryVoiceSettingsKey,
   localVoiceCaller,
   MAX_TRANSCRIBE_AUDIO_BYTES,
   savedSTTModel,
@@ -29,7 +21,7 @@ import {
   transcribeAudio,
   voicePolicy,
 } from '../voice/transcription.js';
-import type { VoiceCaller, VoiceFactory } from '../voice/transcription.js';
+import type { VoiceCaller, VoiceFactory, VoicePolicy } from '../voice/transcription.js';
 import { resolveCredentialContext } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteDependencies } from './route.js';
@@ -45,28 +37,22 @@ const transcribeBodySchema = z.object({
 });
 
 const settingsBodySchema = z.object({
-  /** `personal` saves the caller's own choice; `factory` saves the Factory's (org admins only). */
-  target: z.enum(['personal', 'factory']).default('personal'),
   factoryId: z.string().min(1).optional(),
   provider: z.string().min(1).nullable(),
   model: z.string().min(1).optional(),
 });
 
 export interface VoiceRoutesDeps extends RouteDependencies {
-  /** File-backed credentials for local (no-auth) mode. */
   authStorage?: AuthStorage;
-  /** Tenant credential domain; absent in local mode. */
   modelCredentials?: ModelCredentialsStorage;
-  /** Saved transcription model choices. Without it voice input stays on auto. */
   voiceSettings?: VoiceSettingsStorage;
-  /** Factory projects, for the model scope and Factory voice model a request names. */
   factoryProjects?: FactoryProjectsStorage;
 }
 
 interface VoiceRequest {
   caller: VoiceCaller;
   factory?: VoiceFactory;
-  /** The tenant org, for admin checks; absent in local mode. */
+  /** Absent in local mode, where there is no org admin to check. */
   orgId?: string;
 }
 
@@ -94,33 +80,25 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
     return { caller, orgId, factory: { id: project.id, orgId: project.orgId, modelScope: project.modelScope } };
   }
 
-  async #canEditFactory(c: Context, request: VoiceRequest): Promise<boolean> {
-    if (!request.factory) return false;
-    return request.orgId ? this.deps.auth.isOrganizationAdmin(c, request.orgId) : true;
+  async #canEdit(c: Context, request: VoiceRequest, policy: VoicePolicy): Promise<boolean> {
+    if (policy.scope === 'user' || !request.orgId) return true;
+    return this.deps.auth.isOrganizationAdmin(c, request.orgId);
   }
 
   async #settings(c: Context, request: VoiceRequest) {
     const storage = this.deps.voiceSettings;
-    const { caller, factory } = request;
-    const policy = voicePolicy(caller, factory);
+    const policy = voicePolicy(request.caller, request.factory);
     const effective = await chooseSTTModel(policy, storage);
     return {
-      modelScope: factory?.modelScope ?? null,
-      personal: choice(await savedSTTModel(storage, caller.settingsKey)),
-      factory: factory ? choice(await savedSTTModel(storage, factoryVoiceSettingsKey(factory))) : null,
-      canEditFactory: await this.#canEditFactory(c, request),
+      scope: policy.scope,
+      selected: choice(await savedSTTModel(storage, policy.settingsKey)),
+      canEdit: await this.#canEdit(c, request, policy),
       effective: 'error' in effective ? null : choice(effective.entry),
-      models: STT_MODELS.map(m => ({
-        provider: m.provider,
-        model: m.model,
-        label: m.label,
-        available: policy.keyFor(m.provider) !== undefined,
-      })),
+      models: STT_MODELS.map(m => ({ provider: m.provider, model: m.model, label: m.label })),
       keys: sttProviders().map(provider => ({
         provider,
         envVar: sttApiKeyEnvVar(provider),
-        user: caller.userKey(provider) !== undefined,
-        org: caller.orgKey(provider) !== undefined,
+        saved: policy.keyFor(provider) !== undefined,
       })),
     };
   }
@@ -149,21 +127,17 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           const c = loose(context);
           const parsed = settingsBodySchema.safeParse(await c.req.json().catch(() => undefined));
           if (!parsed.success) return c.json({ error: 'Expected { provider, model }.' }, 400);
-          const { target, factoryId, provider, model } = parsed.data;
-          if (target === 'factory' && !factoryId) return c.json({ error: 'Expected a factoryId.' }, 400);
+          const { factoryId, provider, model } = parsed.data;
 
           const request = await this.#request(c, factoryId);
           if ('response' in request) return request.response;
           const storage = this.deps.voiceSettings;
           if (!storage) return c.json({ error: 'Voice settings storage is unavailable.' }, 503);
-          if (target === 'factory' && !(await this.#canEditFactory(c, request))) {
+          const policy = voicePolicy(request.caller, request.factory);
+          if (!(await this.#canEdit(c, request, policy))) {
             return c.json({ error: 'organization_admin_required' }, 403);
           }
-          const key =
-            target === 'factory' && request.factory
-              ? factoryVoiceSettingsKey(request.factory)
-              : request.caller.settingsKey;
-
+          const key = policy.settingsKey;
           await storage.ensureReady();
           if (provider === null) {
             await storage.clear(key);

@@ -1,20 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { transcribeAudio, VoiceCredentialError } from '../transcribe.js';
+import { createTranscriber, VoiceCredentialError } from '../transcribe.js';
 
-const AUDIO = Buffer.from('fake-wav');
-
-describe('transcribeAudio', () => {
+describe('createTranscriber', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it('asks for the provider key by its env var name before calling any provider', async () => {
+  it('asks for the provider key by its env var name before calling any provider', () => {
     vi.stubEnv('MISTRAL_API_KEY', '');
 
-    const attempt = transcribeAudio(AUDIO, { provider: 'mistral' });
+    const attempt = () => createTranscriber({ provider: 'mistral' });
 
-    await expect(attempt).rejects.toBeInstanceOf(VoiceCredentialError);
-    await expect(attempt).rejects.toThrow(/Set MISTRAL_API_KEY or add one with \/api-keys/);
+    expect(attempt).toThrow(VoiceCredentialError);
+    expect(attempt).toThrow(/Set MISTRAL_API_KEY or add one with \/api-keys/);
   });
 });

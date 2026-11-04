@@ -78,8 +78,7 @@ function storedKeys(keys: Record<string, string>): AuthStorage {
 }
 
 describe('createSTTTranscriber', () => {
-  // Keys added with /api-keys never reach process.env, and the SDK constructors
-  // used to read their TTS key from there and throw.
+  // OpenAIVoice and MistralVoice read their TTS key from OPENAI_API_KEY/MISTRAL_API_KEY and throw without it.
   it.each([
     { provider: 'openai', model: 'whisper-1', host: 'api.openai.com', text: 'from openai' },
     { provider: 'groq', model: 'whisper-large-v3-turbo', host: 'api.groq.com', text: 'from groq' },

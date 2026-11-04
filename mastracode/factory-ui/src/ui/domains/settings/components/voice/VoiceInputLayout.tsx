@@ -1,30 +1,42 @@
 import type { ReactNode } from 'react';
 
+import type { VoiceSettings } from '../../../../../hooks/use-voice-settings';
 import { VOICE_INPUT_ANCHOR } from '../../settingsSections';
+import type { SettingsScope } from '../SettingsScope';
 import { SettingsSubsection } from '../SettingsSubsection';
 
-/** Positions the voice model rows above the speech-to-text keys they depend on. */
+type VoiceScope = VoiceSettings['scope'];
+
+const MODEL_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'factory', user: 'personal' };
+const KEYS_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'org', user: 'personal' };
+
+const DESCRIPTION = 'Speech-to-text for the composer mic.';
+const SCOPE_DESCRIPTION: Record<VoiceScope, string> = {
+  factory: `${DESCRIPTION} Like chats in this Factory, it uses the Factory's model and organization keys.`,
+  user: `${DESCRIPTION} Like chats in this Factory, it uses your own model and keys.`,
+};
+
 export function VoiceInputLayout({
+  scope,
   models,
   keys,
-  keysScope,
 }: {
+  scope: VoiceScope | undefined;
   models: ReactNode;
   keys: ReactNode;
-  keysScope: 'personal' | 'org';
 }) {
   return (
     <div className="flex flex-col gap-8">
       <SettingsSubsection
         id={VOICE_INPUT_ANCHOR}
-        scope="factory"
+        scope={scope && MODEL_SCOPE[scope]}
         title="Voice input"
-        description="Speech-to-text model for the composer mic and Slack voice clips in this Factory."
+        description={scope ? SCOPE_DESCRIPTION[scope] : DESCRIPTION}
       >
         {models}
       </SettingsSubsection>
       <SettingsSubsection
-        scope={keysScope}
+        scope={scope && KEYS_SCOPE[scope]}
         title="Speech-to-text keys"
         description="Voice input uses the same provider keys as chat models."
       >

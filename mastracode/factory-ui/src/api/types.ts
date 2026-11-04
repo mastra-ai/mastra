@@ -193,17 +193,14 @@ export interface VoiceChoice {
 
 /** `GET`/`PUT /web/voice/settings`. */
 export interface VoiceSettingsResponse {
-  /** The Factory's model scope; `null` when no Factory was named. */
-  modelScope: 'factory' | 'user' | 'hybrid' | null;
-  /** The caller's own saved choice (`null` follows the Factory, then auto). */
-  personal: VoiceChoice | null;
-  /** The Factory's saved choice (`null` is auto). */
-  factory: VoiceChoice | null;
-  canEditFactory: boolean;
+  /** Like an interactive chat: the Factory's model with organization keys, or the caller's own model and keys. */
+  scope: 'factory' | 'user';
+  /** The saved model on that side; `null` is auto. */
+  selected: VoiceChoice | null;
+  canEdit: boolean;
   /** The model voice input uses right now, or `null` when no usable key exists. */
   effective: VoiceChoice | null;
-  /** Every registry model; `available` when the caller can use a key for it under the Factory's scope. */
-  models: Array<VoiceChoice & { label: string; available: boolean }>;
-  /** Which speech-to-text keys the caller holds personally and the org shares, and the env var each key fills. */
-  keys: Array<{ provider: string; envVar?: string; user: boolean; org: boolean }>;
+  models: Array<VoiceChoice & { label: string }>;
+  /** Whether that side holds a key for each provider, and the env var the key fills. */
+  keys: Array<{ provider: string; envVar?: string; saved: boolean }>;
 }
