@@ -90,6 +90,7 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
     >
       <ChartArea isEmpty={!isLoading && peak === 0} emptyMessage={`No ${EMPTY_NOUN[entity]} in this range.`}>
         <MetricsLineChart
+          lineStyle="thin"
           data={data}
           series={SERIES}
           height="fill"

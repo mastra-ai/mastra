@@ -38,7 +38,7 @@ export function RepositoryPickerDialog({
           <DialogDescription>Choose a linked repository for this task.</DialogDescription>
           <SearchInput
             label="Search repositories"
-            placeholder="Search…"
+            placeholder="Search"
             size="sm"
             value={query}
             onValueChange={setQuery}

@@ -142,7 +142,7 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
               className="min-w-64 flex-1"
             >
               <FilterBar.Chips />
-              <FilterBar.Input placeholder="Filter tasks…" />
+              <FilterBar.Input placeholder="Filter tasks" />
             </FilterBar>
           </ActionRow.Start>
           <ActionRow.End>

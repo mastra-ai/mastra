@@ -150,7 +150,7 @@ export function SettingsNavigation() {
       </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
+          <SearchInput label="Search settings" placeholder="Search settings" value={query} onValueChange={setQuery} />
         </div>
       )}
       {filteredGroups.length > 0 ? (

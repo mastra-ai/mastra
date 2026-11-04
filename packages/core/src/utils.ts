@@ -4,6 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { FGACheckContext, MastraFGAPermissionInput } from './auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from './background-tasks';
 import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
@@ -321,6 +322,26 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * browser capabilities for web automation, screenshots, and data extraction.
    */
   browser?: MastraBrowser;
+  /**
+   * Resolves what this tool's `tools:execute` check authorizes against, when the tool's owner has its
+   * own rule (`MCPServer` checks its tools against its own resource and `fga` mapping). Without it,
+   * the check uses the standalone or agent tool resource.
+   * @internal
+   */
+  resolveExecuteFGA?: (ctx: { user: unknown; requestContext?: RequestContext }) => Promise<ToolExecuteFGACheck>;
+}
+
+/**
+ * The FGA check a tool runs before each execution, as returned by `ToolOptions.resolveExecuteFGA`.
+ * @internal
+ */
+export interface ToolExecuteFGACheck {
+  resource: { type: string; id: string };
+  permission: MastraFGAPermissionInput;
+  /** Merged into the check context the FGA provider receives. */
+  context?: FGACheckContext;
+  /** Merged into the check metadata the FGA provider receives. */
+  metadata?: Record<string, unknown>;
 }
 
 /**

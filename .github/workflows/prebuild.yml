@@ -1,9 +1,10 @@
 name: Prebuild
 
 on:
+  # No base-branch filter: a stacked PR (based on another PR's branch) runs the same
+  # tests it would on main, diffed against main (see "Check for code changes").
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, 0.x]
   # Lets other workflows (e.g. the alpha cron, which publishes without a PR) gate on the
   # full suite without duplicating these jobs. A call always runs the full suite on the
   # caller's commit.
@@ -24,6 +25,7 @@ jobs:
     outputs:
       has_code: ${{ steps.filter.outputs.has_code }}
       head_sha: ${{ steps.filter.outputs.head_sha }}
+      base_sha: ${{ steps.filter.outputs.base_sha }}
       full_suite: ${{ steps.filter.outputs.full_suite }}
     steps:
       - name: Checkout repo
@@ -39,7 +41,8 @@ jobs:
       - name: Check for code changes
         id: filter
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           # A workflow_call (e.g. the alpha cron) and the Changesets release PR run the full
           # suite. Every other PR runs only the tests affected by its diff. A fork can pick any
@@ -48,6 +51,15 @@ jobs:
         run: |
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "full_suite=$FULL_SUITE" >> "$GITHUB_OUTPUT"
+
+          # A stacked PR merges into another PR's branch, but its code ends up on main, so
+          # diff it against main to select the same tests the stack will need there.
+          BASE_SHA=$PR_BASE_SHA
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" != "main" ] && [ "$BASE_REF" != "0.x" ]; then
+            BASE_SHA=$(git merge-base origin/main "$HEAD_SHA")
+            echo "Stacked on $BASE_REF; diffing against main at $BASE_SHA."
+          fi
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
 
           if [ "$FULL_SUITE" = "true" ]; then
             echo "Full suite requested; running Prebuild."
@@ -85,6 +97,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -122,6 +135,7 @@ jobs:
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
       experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
       mastracode_e2e_changed: ${{ steps.compute.outputs.mastracode_e2e_changed }}
+      durable_streams_changed: ${{ steps.compute.outputs.durable_streams_changed }}
       stores_changed: ${{ steps.compute.outputs.stores_changed }}
       workspaces_changed: ${{ steps.compute.outputs.workspaces_changed }}
       memory_changed: ${{ steps.compute.outputs.memory_changed }}
@@ -132,6 +146,7 @@ jobs:
       affected_memory_tests: ${{ steps.compute.outputs.affected_memory_tests }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -152,7 +167,7 @@ jobs:
       - name: Compute affected test files
         id: compute
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ needs.changes.outputs.base_sha }}
           HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
           FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
         run: |
@@ -266,6 +281,22 @@ jobs:
             file === '.github/workflows/mastracode-e2e.yml'
           );
 
+          // The worker-takeover suite drives real child processes against Redis streams and a
+          // Postgres workflow store; it only exercises the paths that matter when lease
+          // ownership, evented delivery, or the workflow store change.
+          const durableStreamsChanged = fullSuite || changed(file =>
+            file.startsWith('packages/core/src/agent/') ||
+            file.startsWith('packages/core/src/mastra/') ||
+            file.startsWith('packages/core/src/workflows/evented/') ||
+            file.startsWith('pubsub/redis-streams/') ||
+            file.startsWith('stores/pg/') ||
+            file.startsWith('packages/memory/') ||
+            file === '.github/workflows/test-durable-streams.yml' ||
+            file === '.github/workflows/test-suite.yml' ||
+            file === '.github/workflows/prebuild.yml' ||
+            file === 'pnpm-lock.yaml'
+          );
+
           output(`affected_store_tests=${affectedStoreTests}\n`);
           const workspaceDockerPackages = workspaceSelection.packages.filter(packageName =>
             ['s3', 'gcs', 'azure'].includes(packageName),
@@ -292,6 +323,7 @@ jobs:
           output(`e2e_changed=${e2eChanged}\n`);
           output(`experiment_worker_e2e_changed=${experimentWorkerChanged}\n`);
           output(`mastracode_e2e_changed=${mastracodeE2eChanged}\n`);
+          output(`durable_streams_changed=${durableStreamsChanged}\n`);
 
           console.error(`Affected: ${count}/${total} tests (${(ratio * 100).toFixed(1)}%)`);
           console.error(`Affected unit/type tests: ${unitTestFiles.length}`);
@@ -330,7 +362,7 @@ jobs:
           AFFECTED_WORKSPACE_TESTS: ${{ steps.compute.outputs.affected_workspace_tests }}
           WORKSPACE_PACKAGES: ${{ steps.compute.outputs.workspace_packages }}
           AFFECTED_MEMORY_TESTS: ${{ steps.compute.outputs.affected_memory_tests }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ needs.changes.outputs.base_sha }}
           HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
         run: |
           mkdir -p /tmp/affected-outputs
@@ -363,12 +395,14 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
       has_unit_tests: ${{ needs.affected-tests.outputs.has_unit_tests }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
+      durable_streams_changed: ${{ needs.affected-tests.outputs.durable_streams_changed }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -380,6 +414,7 @@ jobs:
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       experiment_worker_e2e_changed: ${{ needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' }}
@@ -394,6 +429,7 @@ jobs:
     uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
@@ -407,6 +443,7 @@ jobs:
     uses: ./.github/workflows/test-combined-stores.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
@@ -425,6 +462,7 @@ jobs:
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       workspace_packages: ${{ needs.affected-tests.outputs.workspace_packages }}
@@ -440,6 +478,7 @@ jobs:
     runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
+      id-token: write
     timeout-minutes: 15
     services:
       postgres:

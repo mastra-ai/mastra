@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
@@ -75,13 +76,16 @@ export function ActivityEvent({
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <Txt as="span" variant="meta" tone="ink" className="truncate">
-          {actor.name}
-          {modelId ? (
-            <Txt as="span" variant="meta" tone="muted">
-              {' '}
-              · {modelId}
-            </Txt>
-          ) : null}
+          <Metadata singleLine>
+            <Metadata.Item>{actor.name}</Metadata.Item>
+            {modelId && (
+              <Metadata.Item>
+                <Txt as="span" variant="meta" tone="muted">
+                  {modelId}
+                </Txt>
+              </Metadata.Item>
+            )}
+          </Metadata>
         </Txt>
         <Txt as="span" variant="meta" tone="muted" className="flex items-baseline justify-between gap-3">
           <span className={cn('min-w-0', isCreated ? 'normal-case' : 'truncate first-letter:uppercase')}>

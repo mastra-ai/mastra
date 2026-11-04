@@ -294,9 +294,19 @@ export abstract class Bundler extends MastraBase implements IBundler {
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
   protected defaultExternalsPreset = false;
+  private configEntryFile?: string;
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
+  }
+
+  /**
+   * The CLI bundles a generated wrapper when the project has file-based agents. The
+   * wrapper only re-exports `mastra`, so option extraction can't find the
+   * `new Mastra({...})` call there and must read the user's entry instead.
+   */
+  setConfigEntryFile(entryFile: string | undefined): void {
+    this.configEntryFile = entryFile;
   }
 
   async loadEnvVars(): Promise<Map<string, string>> {
@@ -376,11 +386,12 @@ export abstract class Bundler extends MastraBase implements IBundler {
     } as const;
 
     try {
-      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+      const bundlerOptions = await getBundlerOptions(this.configEntryFile ?? mastraEntryFile, outputDirectory);
 
       return bundlerOptions ?? defaultBundlerOptions;
     } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to load the bundler options, using the defaults instead: ${message}`, { error });
     }
 
     return defaultBundlerOptions;
@@ -689,8 +700,10 @@ export abstract class Bundler extends MastraBase implements IBundler {
       dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
     }
 
+    // Workspace packages in `analyzedBundleInfo.dependencies` are compiled into the bundle, so only
+    // the ones still imported at runtime need a tarball and an install (#28303).
     const initialWorkspaceDependencies = new Set<string>();
-    for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
+    for (const dep of analyzedBundleInfo.externalDependencies.keys()) {
       const pkgName = getPackageName(dep);
       if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
         initialWorkspaceDependencies.add(pkgName);

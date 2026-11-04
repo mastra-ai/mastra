@@ -465,6 +465,8 @@ When using PostgreSQL as your vector store, you can optimize semantic recall per
 
 PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an IVFFlat index, but HNSW indexes typically provide better performance, especially with OpenAI embeddings which use inner product distance.
 
+Semantic recall always filters by thread or resource. PgVector uses the vector index for these searches only with HNSW on pgvector 0.8.0 or newer. With IVFFlat, each search compares the query against every message in the thread or resource.
+
 ```typescript {18-23}
 import { Memory } from '@mastra/memory'
 import { PostgresStore, PgVector } from '@mastra/pg'

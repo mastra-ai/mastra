@@ -606,6 +606,43 @@ console.log(errors, errorDetails, durations)
 
 When called without options, the method omits only `durations`; `toolsets`, `errors`, and `errorDetails` are always returned.
 
+#### Report each server as it settles
+
+The returned promise resolves only after every server finishes, so one slow server delays the whole result. Pass `onServerSettled` to handle each server as soon as its discovery succeeds, fails, or times out. The callback receives the server name and either `value` (that server's tools, keyed by the server's own tool names) or `error`, plus `duration` in milliseconds. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+await mcp.listToolsetsWithErrors({
+  perServerTimeoutMs: 60_000,
+  onServerSettled: (serverName, { value, error, duration }) => {
+    if (error) {
+      console.error(`${serverName} failed after ${duration}ms: ${error.message}`)
+    } else {
+      console.log(`${serverName} ready with ${Object.keys(value).length} tools`)
+    }
+  },
+})
+```
+
+Errors thrown by the callback are logged and don't affect discovery. The same is true for an `async` callback that rejects: the rejection is logged and never becomes an unhandled rejection.
+
+#### Discover only some servers
+
+Pass `serverNames` to discover only the named servers, for example to retry the ones that timed out without starting every other server again. Names that aren't configured are ignored. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+const { errorDetails } = await mcp.listToolsetsWithErrors({ perServerTimeoutMs: 3_000 })
+
+// Only servers that timed out are worth retrying. A server that failed for
+// another reason (bad config, auth refused) will just fail again.
+const timedOut = Object.entries(errorDetails)
+  .filter(([, details]) => details.code === MCP_DISCOVERY_TIMEOUT_CODE)
+  .map(([serverName]) => serverName)
+
+const retry = await mcp.listToolsetsWithErrors({ serverNames: timedOut })
+```
+
+`MCP_DISCOVERY_TIMEOUT_CODE` is exported from `@mastra/mcp`. It marks the errors that `perServerTimeoutMs` produced, so you can tell a slow server apart from a broken one.
+
 ### `listToolDefinitions()`
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
@@ -1467,7 +1504,7 @@ With `tasks` set, the client tells the server it accepts tasks. The server decid
 When a tool call returns a task, the tool keeps its usual shape:
 
 - The client polls the task at the interval the server suggests until it finishes, then returns the tool result.
-- A task that needs input is answered through `inputRequests`, once per request key. The client sends the answers with `tasks/update` and keeps polling the same task. It never sends `tools/call` again. Without a handler the call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
+- A task that needs input is answered through `inputRequests`, once per request key. The client sends the answers with `tasks/update` and keeps polling the same task. It never sends `tools/call` again. Without a handler, a tool call from an agent or workflow suspends so the user can answer (see [Answering task input from the agent chat](#answering-task-input-from-the-agent-chat)). A direct `tool.execute()` call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
 - Aborting the tool call sends `tasks/cancel`. Reaching `maxWaitMs` sends it too, and fails the call with `MCP_CLIENT_TOOL_TASK_TIMEOUT`. Both end the call right away, even while a poll or your input handler is still running. A late answer from either is dropped.
 - A disconnect while the client polls ends the call with `MCP_CLIENT_TOOL_TASK_POLL_FAILED` and doesn't reconnect.
 - If the server can't be reached while the client polls, for example during a restart or deploy, the client reconnects and keeps polling with growing delays of up to 30 seconds. Refused connections and HTTP 502, 503, and 504 from a proxy count as unreachable. After 5 minutes without an answer, or when `maxWaitMs` or the task's TTL ends first, the call fails with `MCP_CLIENT_TOOL_TASK_POLL_FAILED`. The task may still finish on the server. The TTL counts from the task's `createdAt`. If the client can't read that timestamp, it counts from when it started waiting.
@@ -1477,6 +1514,50 @@ When a tool call returns a task, the tool keeps its usual shape:
 - When the call continues as a task, and whenever the task's status changes, the tool writes an `MCPTaskProgress` entry (`{ type: 'mcp-task', taskId, status, createdAt, serverName }`) to its output stream. Studio's tool-call card uses it to show the task's status, elapsed time and MCP task id while it runs. Tool output isn't saved with the thread. After a reload, the card shows only the result.
 
 On an agent with [background tasks](/docs/harness/background-tasks) enabled, tools from a server with `tasks` set run as deferred background tasks with no retries. The agent keeps working while the remote task runs, and cancelling the background task cancels the remote task. Override this per tool with the agent's `backgroundTasks.tools`.
+
+#### Answering task input from the agent chat
+
+When a task needs input, no `inputRequests` handler is configured, and the tool runs in an agent or workflow, the tool call suspends like any tool that calls `suspend()`. The remote task stays open on the server. The suspend payload (`MCPInputRequestSuspendPayload`) carries the requests still waiting for an answer:
+
+```typescript
+const payload: MCPInputRequestSuspendPayload = {
+  type: 'mcp-input-request',
+  serverName: 'reports',
+  toolName: 'approve_and_send',
+  taskId: 'Zx81…', // the MCP task the answers go to
+  createdAt: '2026-10-30T10:00:00.000Z', // when the task was created
+  requestedAt: '2026-10-30T10:00:04.000Z', // when the call suspended; new each time the task asks again
+  requests: {
+    approve: {
+      method: 'elicitation/create',
+      params: {
+        mode: 'form',
+        message: 'Send it?',
+        requestedSchema: {
+          type: 'object',
+          properties: { ok: { type: 'boolean' } },
+          required: ['ok'],
+        },
+      },
+    },
+  },
+}
+```
+
+Resume the tool call with one answer per request key (`MCPInputRequestResumeData`), for example through `agent.resumeStream()` in the foreground, or `backgroundTaskManager.resume()` for a deferred background task:
+
+```typescript
+await agent.resumeStream(
+  { inputResponses: { approve: { action: 'accept', content: { ok: true } } } },
+  { runId, toolCallId },
+)
+```
+
+On resume the client sends the answers to the same task with `tasks/update` and keeps polling it. It never sends `tools/call` again. If the server asks again, the call suspends again with the new requests. If the task ended meanwhile, the call fails with the usual task error, such as `MCP_CLIENT_TOOL_TASK_CANCELLED`, or `MCP_CLIENT_TOOL_TASK_POLL_FAILED` when the server no longer knows the task. Resume data that isn't `{ inputResponses: { [key]: { action: 'accept' | 'decline' | 'cancel', content? } } }`, or that leaves a request unanswered, fails with `MCP_CLIENT_TOOL_TASK_RESUME_INVALID` without contacting the server.
+
+A configured `inputRequests` handler takes precedence: the call then never suspends.
+
+The payload holds the MCP task id, which grants access to the task. It's stored with the suspended tool call, so treat it like the rest of the thread's data.
 
 #### `tasks.get(serverName: string, taskId: string)`
 

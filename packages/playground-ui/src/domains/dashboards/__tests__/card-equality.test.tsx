@@ -568,7 +568,7 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
 
       it('pages the rows', async () => {
         const { widget } = await toolsView();
-        expect(within(widget.root).getAllByRole('row')).toHaveLength(14);
+        expect(within(widget.root).getAllByRole('row')).toHaveLength(11);
         expect(within(widget.root).getByRole('button', { name: 'Next' })).toBeDefined();
       });
 

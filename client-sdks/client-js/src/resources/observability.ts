@@ -385,7 +385,7 @@ export class Observability extends BaseResource {
    * Queries completed spans using a span predicate, returning one row per matching span.
    *
    * @param params - Span query, including its required time range
-   * @returns Matching span rows with input/output previews and model cost
+   * @returns Matching span rows with model/provider fields and input/output/error previews
    */
   querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
     return this.request('/observability/spans/query', { method: 'POST', body: params });
