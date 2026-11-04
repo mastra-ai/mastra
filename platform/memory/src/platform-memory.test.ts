@@ -205,6 +205,9 @@ describe('PlatformMemoryClient', () => {
       const client = new PlatformMemoryClient();
       expect(client.instanceId).toBe('mem_env');
       expect(client.mcpUrl).toBe('https://api.example/v1/memory/mem_env/mcp');
+      expect(new PlatformMemoryClient({ apiUrl: 'http://localhost:8080/' }).mcpUrl).toBe(
+        'http://localhost:8080/v1/memory/mem_env/mcp',
+      );
     } finally {
       delete process.env.MASTRA_PLATFORM_SECRET_KEY;
       delete process.env.MASTRA_MEMORY_INSTANCE_ID;

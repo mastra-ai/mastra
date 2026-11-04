@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { platformMemoryMiddleware } from './ai-sdk';
-import { PlatformMemoryClient } from './client';
+import type { PlatformMemoryClient } from './client';
 
 const usage = {
   inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },

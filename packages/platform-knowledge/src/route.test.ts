@@ -43,49 +43,31 @@ it('allows the project to be derived from the instance and credential', () => {
   ).not.toThrow();
 });
 
-it('defaults to the hosted Knowledge API and honours MASTRA_KNOWLEDGE_API_URL', async () => {
+it('defaults to the hosted Knowledge API and accepts an env or explicit URL override', async () => {
   const urls: string[] = [];
   const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
     urls.push(String(input));
     return new Response(JSON.stringify({ result: { pages: [] } }), { headers: { 'content-type': 'application/json' } });
   });
+  const previousUrl = process.env.MASTRA_KNOWLEDGE_API_URL;
   try {
-    const hosted = new PlatformKnowledge({ instanceId: 'kn_1', accessToken: 'token' });
-    await (await hosted.getStorage()).listPages({ read: 'all' } as never);
-    process.env.MASTRA_KNOWLEDGE_API_URL = 'http://localhost:3062/';
-    const local = new PlatformKnowledge({ instanceId: 'kn_1', accessToken: 'token' });
-    await (await local.getStorage()).listPages({ read: 'all' } as never);
-  } finally {
     delete process.env.MASTRA_KNOWLEDGE_API_URL;
+    const options = { instanceId: 'kn_1', accessToken: 'token' };
+    await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
+    process.env.MASTRA_KNOWLEDGE_API_URL = 'http://localhost:3062/';
+    await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
+    await (
+      await new PlatformKnowledge({ ...options, apiUrl: 'http://localhost:8080/' }).getStorage()
+    ).listPages({ read: 'all' });
+  } finally {
+    if (previousUrl === undefined) delete process.env.MASTRA_KNOWLEDGE_API_URL;
+    else process.env.MASTRA_KNOWLEDGE_API_URL = previousUrl;
     fetchSpy.mockRestore();
   }
   expect(urls).toEqual([
     'https://knowledge-api.mastra.ai/v1/knowledge/kn_1/operations/listPages',
     'http://localhost:3062/v1/knowledge/kn_1/operations/listPages',
-  ]);
-});
-
-it('defaults to the hosted Knowledge API and honours MASTRA_KNOWLEDGE_API_URL', async () => {
-  const urls: string[] = [];
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
-    urls.push(String(input));
-    return new Response(JSON.stringify({ result: { pages: [] } }), { headers: { 'content-type': 'application/json' } });
-  });
-  try {
-    await (
-      await new PlatformKnowledge({ instanceId: 'kn_1', accessToken: 't' }).getStorage()
-    ).listPages({ read: 'all' } as never);
-    process.env.MASTRA_KNOWLEDGE_API_URL = 'http://localhost:3062/';
-    await (
-      await new PlatformKnowledge({ instanceId: 'kn_1', accessToken: 't' }).getStorage()
-    ).listPages({ read: 'all' } as never);
-  } finally {
-    delete process.env.MASTRA_KNOWLEDGE_API_URL;
-    fetchMock.mockRestore();
-  }
-  expect(urls).toEqual([
-    'https://knowledge-api.mastra.ai/v1/knowledge/kn_1/operations/listPages',
-    'http://localhost:3062/v1/knowledge/kn_1/operations/listPages',
+    'http://localhost:8080/v1/knowledge/kn_1/operations/listPages',
   ]);
 });
 
