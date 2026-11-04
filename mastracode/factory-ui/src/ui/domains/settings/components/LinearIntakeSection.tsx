@@ -12,6 +12,7 @@ import {
   linearTeamSourceId,
 } from '../../factory/services/linear';
 import type { LinearStatus } from '../../factory/services/linear';
+import { useLinearReconnectResult } from '../hooks/useLinearReconnectResult';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
@@ -31,6 +32,7 @@ export function LinearIntakeSection({
 }: IntakeSectionProps & { statusQuery: UseQueryResult<LinearStatus> }) {
   const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
+  const reconnect = useLinearReconnectResult(statusQuery);
   const connected = Boolean(status?.enabled && status.connected);
   const projectsQuery = useLinearProjectListingQuery(connected);
   const teamsQuery = useLinearTeamListingQuery(connected);
@@ -56,15 +58,15 @@ export function LinearIntakeSection({
   const pausedIds = new Set(paused.flatMap(group => group.sourceIds));
   const groups = groupLinearSourcesByTeam(projects, teams, config.linear.sourceIds);
   const sourcesLoaded = projectsQuery.isSuccess && teamsQuery.isSuccess && workspaceErrors.size === 0;
-  // Older servers do not provide the workspace inventory. Preserve their
-  // existing disconnected-source display while using explicit state when available.
-  const legacySources =
+  // Direct-OAuth and older Platform servers send no workspace inventory, so a
+  // saved source's workspace counts as disconnected once the listings omit it.
+  const inferredSources =
     status?.workspaces === undefined && sourcesLoaded
       ? partitionLinearSources(config.linear.sourceIds, groups)
       : { selectedIds: config.linear.sourceIds ?? [], disconnected: [] };
   const selectedIds =
     status?.workspaces === undefined
-      ? legacySources.selectedIds
+      ? inferredSources.selectedIds
       : (config.linear.sourceIds ?? []).filter(id => !pausedIds.has(id));
   const listedIds = new Set(groups.flatMap(group => group.items.map(item => item.id)));
   const missingIds = selectedIds.filter(id => !listedIds.has(id));
@@ -134,9 +136,9 @@ export function LinearIntakeSection({
         )
       }
     >
-      {connected && config.linear.enabled && !reauthRequired && legacySources.disconnected.length > 0 && (
+      {connected && config.linear.enabled && !reauthRequired && inferredSources.disconnected.length > 0 && (
         <DisconnectedLinearWorkspaces
-          workspaces={legacySources.disconnected}
+          workspaces={inferredSources.disconnected}
           pending={busy}
           onRemove={sourceIds => {
             const next = (config.linear.sourceIds ?? []).filter(id => !sourceIds.includes(id));
@@ -169,6 +171,8 @@ export function LinearIntakeSection({
           workspace={workspace}
           count={sourceIds.length}
           pending={busy}
+          reconnect={reconnect.resultFor(workspace)}
+          onRetry={() => void reconnect.retry()}
           onRemove={() => {
             const remaining = (config.linear.sourceIds ?? []).filter(id => !sourceIds.includes(id));
             void update({ ...config, linear: { ...config.linear, sourceIds: remaining.length ? remaining : null } });

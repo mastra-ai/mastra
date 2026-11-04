@@ -4,17 +4,22 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Trash2 } from 'lucide-react';
 
 import type { LinearWorkspaceConnection } from '../../factory/services/linear';
+import type { LinearReconnectResult } from '../hooks/useLinearReconnectResult';
 import { LinearWorkspaceControl } from './LinearWorkspaceControl';
 
 export function PausedLinearWorkspace({
   workspace,
   count,
   pending,
+  reconnect,
+  onRetry,
   onRemove,
 }: {
   workspace: LinearWorkspaceConnection;
   count: number;
   pending: boolean;
+  reconnect: LinearReconnectResult;
+  onRetry: () => void;
   onRemove: () => void;
 }) {
   return (
@@ -28,8 +33,14 @@ export function PausedLinearWorkspace({
         </span>
       }
       description={`${count} ${count === 1 ? 'project or team' : 'projects and teams'} paused. Reconnect to resume. Your saved routing is kept.`}
+      errorMsg={reconnect.error}
     >
       <div className="flex flex-wrap items-center gap-2">
+        {reconnect.unverified && (
+          <Button size="sm" variant="ghost" onClick={onRetry}>
+            Retry
+          </Button>
+        )}
         <LinearWorkspaceControl workspace={workspace} targeted />
         <Button
           size="sm"

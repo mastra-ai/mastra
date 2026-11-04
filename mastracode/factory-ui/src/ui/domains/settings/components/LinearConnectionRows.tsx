@@ -1,12 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Link2, Plus, Settings2 } from 'lucide-react';
-import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { connectLinear } from '../../factory/services/linear';
+import { useLinearReconnectResult } from '../hooks/useLinearReconnectResult';
 import { IntegrationLabel } from './IntegrationLabel';
 import { LinearWorkspaceControl } from './LinearWorkspaceControl';
 import { accessDescription, NotConfiguredRow, RetryRow } from './common/ConnectionStateRows';
@@ -15,19 +15,7 @@ export function LinearConnectionRows({ showAvailable }: { showAvailable: boolean
   const { baseUrl } = useApiConfig();
   const query = useLinearStatusQuery();
   const status = query.data;
-  const [params, setParams] = useSearchParams();
-  const retry = async () => {
-    const result = await query.refetch();
-    if (!result.data || result.data.reason === 'unavailable') return;
-    setParams(
-      current => {
-        current.delete('linear_reconnect');
-        current.delete('linear_workspace_id');
-        return current;
-      },
-      { replace: true },
-    );
-  };
+  const { resultFor, retry } = useLinearReconnectResult(query);
   const label = <IntegrationLabel provider="linear" name="Linear" />;
   if (query.isPending) return <SettingsRowsSkeleton label="Loading Linear connections" rows={1} />;
   if (query.isError || status?.reason === 'unavailable') {
@@ -60,14 +48,7 @@ export function LinearConnectionRows({ showAvailable }: { showAvailable: boolean
   return (
     <>
       {workspaces.map(workspace => {
-        const returnedHere = params.get('linear_workspace_id') === workspace.id;
-        const result = returnedHere ? params.get('linear_reconnect') : undefined;
-        const reconnectError =
-          result === 'not_connected'
-            ? `This workspace is still disconnected. Choose ${workspace.name} when authorizing in Linear.`
-            : result === 'unavailable'
-              ? "Couldn't verify this connection. Retry to check its status."
-              : undefined;
+        const { error, unverified } = resultFor(workspace);
         return (
           <SettingsRow
             key={workspace.id}
@@ -79,10 +60,10 @@ export function LinearConnectionRows({ showAvailable }: { showAvailable: boolean
                 <span>{workspace.connected ? 'Connected' : 'Disconnected · Intake paused'}</span>
               </span>
             }
-            errorMsg={reconnectError}
+            errorMsg={error}
           >
             <div className="flex flex-wrap items-center gap-2">
-              {result === 'unavailable' && (
+              {unverified && (
                 <Button size="sm" variant="ghost" onClick={() => void retry()}>
                   Retry
                 </Button>

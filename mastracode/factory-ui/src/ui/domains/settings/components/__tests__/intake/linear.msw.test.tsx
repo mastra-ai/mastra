@@ -9,6 +9,7 @@ import { linearWorkspaceStatus } from '../fixtures/linearConnections';
 import {
   BINDINGS_URL,
   LINEAR_PROJECTS_URL,
+  LINEAR_STATUS_URL,
   LINEAR_TEAMS_URL,
   baseConfig,
   engTeam,
@@ -53,6 +54,39 @@ describe('IntakeSection linear', () => {
       await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject]));
     },
   );
+
+  it.each([
+    ['not_connected', 'This workspace is still disconnected. Choose Mastra when authorizing in Linear.'],
+    ['unavailable', "Couldn't verify this connection. Retry to check its status."],
+  ])('explains a %s reconnect on the paused workspace it targeted', async (outcome, message) => {
+    let restored = false;
+    useIntakeHandlers({
+      config: { ...baseConfig(), linear: { enabled: true, sourceIds: [pausedProject, liveProject] } },
+    });
+    server.use(
+      http.get(LINEAR_STATUS_URL, () =>
+        HttpResponse.json({
+          ...linearWorkspaceStatus,
+          workspaces: linearWorkspaceStatus.workspaces.map(workspace => ({
+            ...workspace,
+            connected: workspace.connected || restored,
+          })),
+        }),
+      ),
+      http.get(LINEAR_PROJECTS_URL, () =>
+        HttpResponse.json({ projects: [{ id: liveProject, name: 'Labs roadmap', state: 'started', teams: [] }] }),
+      ),
+      http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: [] })),
+    );
+    renderIntakeSection(`/factories/fp-1/settings/intake?linear_reconnect=${outcome}&linear_workspace_id=mastra`);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
+    if (outcome !== 'unavailable') return;
+    restored = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Reconnect Mastra' })).not.toBeInTheDocument());
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
 
   it('shows healthy sources and a retry for a workspace outage without calling it disconnected', async () => {
     useIntakeHandlers({
