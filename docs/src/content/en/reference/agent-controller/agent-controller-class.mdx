@@ -762,7 +762,7 @@ Returns: `Promise<ModelAuthStatus>`
 
 List models from the configured and built-in gateways. Each model's `useCount` comes from `modelUseCountProvider` when you configure one.
 
-The built-in gateways download public catalogs (models.dev and Netlify). Calls return the last downloaded catalog, including when a download fails. Once it is 5 minutes old, the next call downloads a new one in the background without waiting for it. Configured gateways and API key availability are checked again after 10 seconds.
+The built-in gateways download public catalogs (models.dev and Netlify). Calls return the last downloaded catalog, including when a download fails. Once it's 5 minutes old, the next call downloads a new one in the background without waiting for it. Configured gateways and API key availability are checked again after 10 seconds.
 
 ```typescript
 const models = await controller.listAvailableModels()
