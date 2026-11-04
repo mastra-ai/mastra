@@ -166,7 +166,14 @@ channels: {
 
 This bypasses only the requester check: actions still need a pending tool approval and a mapped thread. The default isn't a strict identity guarantee when a run has no recorded requester (for example, a scheduled run); in that case, another channel member may be able to respond. If stored messages identify multiple possible requesters after a restart, requester-only mode instead rejects their clicks.
 
-Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
+Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. `autoResumeSuspendedTools` is set on the run whenever the adapter can't render interactive approval buttons: `toolDisplay: 'text'`, `approvalButtons: false`, or `toolDisplay: 'hidden'` on a platform that has no button support. With it, a later message on the same thread resumes data-bearing `suspend()` flows. This requires memory. It doesn't turn a message into consent: tools that require approval stay suspended until an explicit approval or decline. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
+
+### Tools that call `suspend()`
+
+A tool that calls `suspend(payload)` inside `execute` is not the same as a tool with `requireApproval: true`. The run emits a `tool-call-suspended` chunk instead of a `tool-call-approval` chunk, and channels don't render it — only approvals become Approve/Deny cards, and those cards carry no resume payload.
+
+- **Button-capable adapters (Slack, Discord, Teams, Google Chat, Telegram with the default tool display):** nothing is posted and the run stays suspended. The thread is parked, so the next message in that thread is queued behind the suspended run instead of starting a new run, until you resume it with `agent.resumeStream(resumeData, { runId })` or the suspended-run TTL (`MASTRA_SUSPENDED_RUN_TTL_MS`, default 30 minutes) sweeps the in-memory record.
+- **Adapters that can't render approval buttons:** `autoResumeSuspendedTools` is enabled for the run, so the next message on the thread resumes the suspended tool with that message as context.
 
 ### Custom action handling
 
