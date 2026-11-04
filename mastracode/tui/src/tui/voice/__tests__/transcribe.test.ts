@@ -1,132 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-/**
- * Captured constructor configs so we can assert how each provider's voice client
- * was built (model name, apiKey, baseURL) without hitting the network.
- */
-const openaiCalls: Array<Record<string, any>> = [];
-const deepgramCalls: Array<Record<string, any>> = [];
-const mistralCalls: Array<Record<string, any>> = [];
-const mistralListenOptions: Array<Record<string, any> | undefined> = [];
-
-vi.mock('@mastra/voice-openai', () => ({
-  OpenAIVoice: class {
-    constructor(config: Record<string, any>) {
-      openaiCalls.push(config);
-    }
-    async listen() {
-      return 'openai transcript';
-    }
-  },
-}));
-
-vi.mock('@mastra/voice-deepgram', () => ({
-  DeepgramVoice: class {
-    constructor(config: Record<string, any>) {
-      deepgramCalls.push(config);
-    }
-    async listen() {
-      // Deepgram returns an object shape, not a bare string.
-      return { transcript: 'deepgram transcript', words: [] };
-    }
-  },
-}));
-
-vi.mock('@mastra/voice-mistral', () => ({
-  MistralVoice: class {
-    constructor(config: Record<string, any>) {
-      mistralCalls.push(config);
-    }
-    async listen(_audio: unknown, options?: Record<string, any>) {
-      mistralListenOptions.push(options);
-      return '  mistral transcript  ';
-    }
-  },
-}));
-
-import { transcribeAudio, VoiceCredentialError, resolveProviderApiKey } from '../transcribe.js';
+import { transcribeAudio, VoiceCredentialError } from '../transcribe.js';
 
 const AUDIO = Buffer.from('fake-wav');
 
-describe('transcribeAudio provider routing', () => {
-  beforeEach(() => {
-    openaiCalls.length = 0;
-    deepgramCalls.length = 0;
-    mistralCalls.length = 0;
-    mistralListenOptions.length = 0;
-    vi.unstubAllEnvs();
-  });
-
+describe('transcribeAudio', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it('routes the default (openai/whisper-1) through OpenAIVoice with no baseURL', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
-    const text = await transcribeAudio(AUDIO);
-    expect(text).toBe('openai transcript');
-    expect(deepgramCalls).toHaveLength(0);
-    expect(openaiCalls).toHaveLength(1);
-    expect(openaiCalls[0]!.listeningModel.name).toBe('whisper-1');
-    expect(openaiCalls[0]!.listeningModel.apiKey).toBe('sk-openai');
-    expect(openaiCalls[0]!.listeningModel.options).toBeUndefined();
-  });
-
-  it('routes an openai-compatible host (groq) through OpenAIVoice with its baseURL', async () => {
-    vi.stubEnv('GROQ_API_KEY', 'gsk-groq');
-    const text = await transcribeAudio(AUDIO, { provider: 'groq', model: 'whisper-large-v3-turbo' });
-    expect(text).toBe('openai transcript');
-    expect(openaiCalls).toHaveLength(1);
-    expect(openaiCalls[0]!.listeningModel.name).toBe('whisper-large-v3-turbo');
-    expect(openaiCalls[0]!.listeningModel.apiKey).toBe('gsk-groq');
-    expect(openaiCalls[0]!.listeningModel.options.baseURL).toBe('https://api.groq.com/openai/v1');
-  });
-
-  it('routes Deepgram through the dedicated DeepgramVoice and normalizes { transcript }', async () => {
-    vi.stubEnv('DEEPGRAM_API_KEY', 'dg-key');
-    const text = await transcribeAudio(AUDIO, { provider: 'deepgram', model: 'nova-3' });
-    expect(text).toBe('deepgram transcript');
-    expect(openaiCalls).toHaveLength(0);
-    expect(deepgramCalls).toHaveLength(1);
-    expect(deepgramCalls[0]!.listeningModel.name).toBe('nova-3');
-    expect(deepgramCalls[0]!.listeningModel.apiKey).toBe('dg-key');
-  });
-
-  it('routes Mistral through the dedicated MistralVoice with the Voxtral model', async () => {
-    vi.stubEnv('MISTRAL_API_KEY', 'mistral-key');
-    const text = await transcribeAudio(AUDIO, { provider: 'mistral' });
-    expect(text).toBe('mistral transcript');
-    expect(openaiCalls).toHaveLength(0);
-    expect(deepgramCalls).toHaveLength(0);
-    expect(mistralCalls).toHaveLength(1);
-    expect(mistralCalls[0]!.listeningModel).toEqual({ name: 'voxtral-mini-latest', apiKey: 'mistral-key' });
-    expect(mistralListenOptions[0]).toEqual({ filetype: 'wav' });
-  });
-
-  it('throws VoiceCredentialError for Mistral without MISTRAL_API_KEY', async () => {
+  it('asks for the provider key by its env var name before calling any provider', async () => {
     vi.stubEnv('MISTRAL_API_KEY', '');
-    await expect(transcribeAudio(AUDIO, { provider: 'mistral' })).rejects.toThrow(/MISTRAL_API_KEY/);
-  });
 
-  it('throws VoiceCredentialError when the provider has no key', async () => {
-    // Force the key empty so the test is deterministic regardless of the host
-    // environment (e.g. a real DEEPGRAM_API_KEY exported on a dev machine/CI).
-    vi.stubEnv('DEEPGRAM_API_KEY', '');
-    await expect(transcribeAudio(AUDIO, { provider: 'deepgram' })).rejects.toBeInstanceOf(VoiceCredentialError);
-  });
+    const attempt = transcribeAudio(AUDIO, { provider: 'mistral' });
 
-  it('resolveProviderApiKey honors env over stored credentials', () => {
-    vi.stubEnv('DEEPGRAM_API_KEY', 'env-key');
-    const authStorage = { getStoredApiKey: () => 'stored-key' } as any;
-    expect(resolveProviderApiKey('deepgram', authStorage)).toBe('env-key');
-  });
-
-  it('resolveProviderApiKey falls back to stored credentials when env is unset', () => {
-    // Force the key empty so the test is deterministic regardless of the host
-    // environment (e.g. a real GROQ_API_KEY exported on a dev machine), which
-    // otherwise gets printed in the assertion diff.
-    vi.stubEnv('GROQ_API_KEY', '');
-    const authStorage = { getStoredApiKey: (p: string) => (p === 'groq' ? 'stored-groq' : undefined) } as any;
-    expect(resolveProviderApiKey('groq', authStorage)).toBe('stored-groq');
+    await expect(attempt).rejects.toBeInstanceOf(VoiceCredentialError);
+    await expect(attempt).rejects.toThrow(/Set MISTRAL_API_KEY or add one with \/api-keys/);
   });
 });

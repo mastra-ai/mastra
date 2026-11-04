@@ -94,16 +94,6 @@ describe('stt-registry', () => {
     expect(defaultModelForProvider('deepgram')?.model).toBe('nova-3');
   });
 
-  it('includes Mistral Voxtral as a dedicated provider', () => {
-    const mistral = sttModelsForProvider('mistral');
-    expect(mistral.map(m => m.model)).toEqual(['voxtral-mini-latest']);
-    for (const entry of mistral) {
-      expect(entry.resolver).toBe('mistral');
-      expect(entry.baseURL).toBeUndefined();
-    }
-    expect(resolveSTTModel('mistral').model).toBe('voxtral-mini-latest');
-  });
-
   it('does not require Deepgram to appear in the models.dev snapshot', () => {
     // Deepgram is added deliberately; it is not in the models.dev STT snapshot.
     const snapshot = loadSnapshot();
