@@ -1596,8 +1596,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card.workItem.sources[1]).toMatchObject({ state: 'merged' });
     });
 
-    it.each(['triage', 'planning', 'review'])(
-      "gives someone else's merge request its own card once the issue has been in %s",
+    it.each(['planning', 'execute', 'review'])(
+      "gives someone else's merge request its own card once the issue is in %s, by the default route",
       async stage => {
         const h = await harness();
         const issue = await h.issueCard(stage);
@@ -1610,15 +1610,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       },
     );
 
-    it("gives someone else's merge request its own card when the issue has been in Building, even with no session left", async () => {
+    it('files a merge request on an issue still in Triage, which stays there', async () => {
       const h = await harness();
-      const issue = await h.issueCard('execute');
+      const issue = await h.issueCard('triage');
 
       await h.ingest(mergeRequest(17, 'Closes #42'));
 
       const cards = await h.cards();
-      expect(cards).toHaveLength(2);
-      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['triage'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
     });
 
     const builderSession = {

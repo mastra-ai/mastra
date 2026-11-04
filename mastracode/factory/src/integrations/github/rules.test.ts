@@ -6103,8 +6103,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(cards.find(card => card.id === issue.id)).toMatchObject({ stages: ['done'] });
     });
 
-    it.each(['triage', 'planning', 'review'])(
-      "gives someone else's pull request its own card once the issue has been in %s",
+    it.each(['planning', 'execute', 'review'])(
+      "gives someone else's pull request its own card once the issue is in %s, by the default route",
       async stage => {
         const h = await harness('write');
         const issue = await h.issueCard(42, stage);
@@ -6120,15 +6120,74 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       },
     );
 
-    it("gives someone else's pull request its own card when the issue has been in Building, even with no session left", async () => {
-      const h = await harness('write');
-      const issue = await h.issueCard(42, 'execute');
+    it("never files an outsider's pull request on the issue's card, even when a route would let anyone join", async () => {
+      const h = await harness('read');
+      const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+      const route = (await h.boards.listIntakeRoutes(scope)).find(entry => entry.target.joinClosedIssue)!;
+      await h.boards.updateIntakeRoute(
+        scope,
+        route.id,
+        { when: null },
+        { expectedRevision: route.revision, actor: 'admin' },
+      );
+      const issue = await h.issueCard(42, 'intake');
 
       await h.ingest(openedPullRequest(17, 'Fixes #42'));
 
       const cards = await h.cards();
       expect(cards).toHaveLength(2);
       expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+    });
+
+    it("follows the project's closing-issue route: edited, it joins a planned issue; deleted, nothing joins", async () => {
+      const h = await harness('write');
+      const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
+      const route = (await h.boards.listIntakeRoutes(scope)).find(entry => entry.target.joinClosedIssue)!;
+      await h.boards.updateIntakeRoute(
+        scope,
+        route.id,
+        {
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'author.trusted', operator: 'equals', value: true },
+              { field: 'closedIssue.phase', operator: 'equals', value: 'planning' },
+            ],
+          },
+        },
+        { expectedRevision: route.revision, actor: 'admin' },
+      );
+      const planned = await h.issueCard(42, 'planning');
+      const waiting = await h.issueCard(43, 'intake');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      await h.ingest(openedPullRequest(18, 'Fixes #43'));
+
+      let cards = await h.cards();
+      expect(cards).toHaveLength(3);
+      expect(sourceTypes(cards.find(card => card.id === planned.id)!)).toEqual(['issue', 'pull-request']);
+      expect(sourceTypes(cards.find(card => card.id === waiting.id)!)).toEqual(['issue']);
+
+      const edited = (await h.boards.listIntakeRoutes(scope)).find(entry => entry.id === route.id)!;
+      await h.boards.deleteIntakeRoute(scope, edited.id, { expectedRevision: edited.revision });
+      const fresh = await h.issueCard(44, 'intake');
+      await h.ingest(openedPullRequest(19, 'Fixes #44'));
+      cards = await h.cards();
+      expect(cards).toHaveLength(5);
+      expect(sourceTypes(cards.find(card => card.id === fresh.id)!)).toEqual(['issue']);
+    });
+
+    it('files a pull request on an issue still in Triage, which stays there: Work has no Triage → PR review move', async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'triage');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['triage'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(await reviewsStarted(h, issue.id)).toEqual([]);
     });
 
     it('files a pull request that fixes two issues on the first one named only', async () => {

@@ -51,7 +51,7 @@ async function setup(
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Routes' } });
   const scope = { orgId: 'org-1', factoryProjectId: project.id };
   const defaults = await seeded.boards.listIntakeRoutes(scope);
-  const [defaultRoute] = defaults;
+  const defaultRoute = defaults.find(route => route.name === DEFAULT_INTAKE_ROUTE.name);
   if (!options.withDefaultRoute) {
     // Last first, so no delete moves (and re-revisions) a route still to delete.
     for (const seededRoute of defaults.toReversed()) {
@@ -258,7 +258,9 @@ describe('intake routes placing linked cards', () => {
 
   it("files trusted pull requests in Work › PR review by the default route, and outside authors' in Intake", async () => {
     const { boards, scope, deliver, runs } = await setup({ withDefaultRoute: true });
-    const pullRequestRoute = (await boards.listIntakeRoutes(scope))[1]!;
+    const pullRequestRoute = (await boards.listIntakeRoutes(scope)).find(
+      route => route.name === PULL_REQUEST_INTAKE_ROUTE.name,
+    )!;
     expect(pullRequestRoute).toMatchObject({
       name: PULL_REQUEST_INTAKE_ROUTE.name,
       target: { boardKey: 'work', phaseKey: 'pr-review' },

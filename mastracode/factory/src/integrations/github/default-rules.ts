@@ -144,9 +144,14 @@ function materializePullRequestIntake(
     title: context.pullRequest.title,
     url: context.pullRequest.url,
     stage,
-    // A pull request for a card already on the board is filed on that card. One that closes a
-    // resting issue's card brings it to PR review; the authoring card's own evaluation moves it.
-    ...(home ? { attachTo: { workItemId: home.workItemId, review: home.reason === 'closes' } } : {}),
+    // A pull request for a card already on the board is filed on that card; the authoring card's
+    // own evaluation moves it. For one that closes an issue on the board, the project's intake
+    // routes decide whether it joins that card.
+    ...(home
+      ? home.reason === 'closes'
+        ? { closesIssue: { workItemId: home.workItemId } }
+        : { attachTo: { workItemId: home.workItemId } }
+      : {}),
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
