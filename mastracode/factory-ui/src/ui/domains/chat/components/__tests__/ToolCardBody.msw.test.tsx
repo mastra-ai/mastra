@@ -43,6 +43,14 @@ describe('Factory tool body', () => {
       expect(screen.getByText(/file-0\.ts/)).toBeVisible();
     });
 
+    it('shows how it exited when its result ends with blank lines', async () => {
+      const result = `${failedCommand.result}\n\n`;
+      renderWithProviders(<ToolCard tool={{ ...failedCommand, output: lines.join('\n'), result }} />);
+      await userEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/Exit code: 1/)).toBeVisible();
+    });
+
     it('keeps escape codes its output spells out as text', async () => {
       const result = "const clearLine = '\\u001b[2K';\n\nExit code: 1";
       renderWithProviders(<ToolCard tool={{ ...failedCommand, output: '', result }} />);
