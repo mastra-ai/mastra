@@ -1,6 +1,11 @@
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import type { KnowledgeConfig } from '@mastra/core/knowledge';
-import { MastraCompositeStore, KnowledgeStorage } from '@mastra/core/storage';
+import {
+  MastraCompositeStore,
+  KnowledgeStorage,
+  KnowledgeConflictError,
+  KnowledgeNotFoundError,
+} from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 
 export interface PlatformKnowledgeOptions extends Omit<
@@ -12,7 +17,7 @@ export interface PlatformKnowledgeOptions extends Omit<
   projectId?: string;
   instanceId?: string;
   /**
-   * Knowledge API URL. Falls back to `MASTRA_KNOWLEDGE_API_URL`, then `MASTRA_KNOWLEDGE_SERVICE_URL`, then `https://knowledge-api.mastra.ai`.
+   * Knowledge API URL. Falls back to `MASTRA_KNOWLEDGE_API_URL`, then `https://knowledge-api.mastra.ai`.
    */
   apiUrl?: string;
 }
@@ -94,10 +99,32 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       method: 'POST',
       headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' },
       body: encode({ input }),
+      signal: AbortSignal.timeout(30_000),
     });
-    const body = decode<{ result?: unknown; error?: { message?: string } }>(await response.text());
-    if (!response.ok) throw new Error(body.error?.message ?? `Knowledge request failed (${response.status})`);
-    return body.result;
+    const text = await response.text();
+    if (!response.ok) {
+      let body: { name?: string; detail?: string; title?: string; error?: { name?: string; message?: string } } = {};
+      try {
+        body = JSON.parse(text);
+      } catch {
+        // Gateways can return non-JSON error pages.
+      }
+      const message =
+        body.detail ?? body.title ?? body.error?.message ?? `Knowledge request failed (${response.status})`;
+      const name = body.name ?? body.error?.name;
+      if (name === 'KnowledgeNotFoundError') {
+        const error = new KnowledgeNotFoundError('record', operation);
+        error.message = message;
+        throw error;
+      }
+      if (name === 'KnowledgeConflictError') {
+        const error = new KnowledgeConflictError(operation);
+        error.message = message;
+        throw error;
+      }
+      throw new Error(message);
+    }
+    return decode<{ result?: unknown }>(text).result;
   }
 
   override getCapabilities() {
@@ -121,11 +148,7 @@ export class PlatformKnowledge extends Knowledge {
     const token =
       options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
-    const apiUrl =
-      options.apiUrl ??
-      (process.env.MASTRA_KNOWLEDGE_API_URL?.trim() || undefined) ??
-      (process.env.MASTRA_KNOWLEDGE_SERVICE_URL?.trim() || undefined) ??
-      DEFAULT_API_URL;
+    const apiUrl = options.apiUrl ?? (process.env.MASTRA_KNOWLEDGE_API_URL?.trim() || undefined) ?? DEFAULT_API_URL;
     if (!token || !instanceId) {
       throw new Error('PlatformKnowledge requires a Platform access token and Knowledge instance ID');
     }

@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import { afterEach, expect, it, vi } from 'vitest';
 import { PlatformKnowledge } from './index';
 
@@ -72,7 +73,7 @@ it('defaults to the hosted Knowledge API and accepts an env or explicit URL over
   }
   expect(urls).toEqual([
     'https://knowledge-api.mastra.ai/v1/knowledge/kn_1/operations/listPages',
-    'http://injected.local/v1/knowledge/kn_1/operations/listPages',
+    'https://knowledge-api.mastra.ai/v1/knowledge/kn_1/operations/listPages',
     'http://localhost:3062/v1/knowledge/kn_1/operations/listPages',
     'http://localhost:8080/v1/knowledge/kn_1/operations/listPages',
   ]);

@@ -214,8 +214,26 @@ export class PlatformMemory extends MastraMemory {
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const page = args.page ?? 0;
     const perPage = args.perPage === false ? 200 : (args.perPage ?? 100);
-    const res = await this.client.listThreads({ resourceId: args.filter?.resourceId, page, perPage });
-    return { threads: res.threads.map(threadFromApi), hasMore: res.hasMore, page, perPage, total: res.threads.length };
+    const threads: StorageThreadType[] = [];
+    for (let next = 0; ; next++) {
+      const res = await this.client.listThreads({ resourceId: args.filter?.resourceId, page: next, perPage: 200 });
+      threads.push(...res.threads.map(threadFromApi));
+      if (!res.hasMore) break;
+    }
+    const filtered = threads.filter(thread =>
+      Object.entries(args.filter?.metadata ?? {}).every(([key, value]) => thread.metadata?.[key] === value),
+    );
+    const field = args.orderBy?.field ?? 'updatedAt';
+    const direction = args.orderBy?.direction === 'ASC' ? 1 : -1;
+    filtered.sort((a, b) => direction * (a[field].getTime() - b[field].getTime()));
+    const selected = args.perPage === false ? filtered : filtered.slice(page * perPage, (page + 1) * perPage);
+    return {
+      threads: selected,
+      hasMore: args.perPage === false ? false : (page + 1) * perPage < filtered.length,
+      page,
+      perPage: args.perPage === false ? (false as const) : perPage,
+      total: filtered.length,
+    };
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -267,13 +285,43 @@ export class PlatformMemory extends MastraMemory {
   }
 
   async recall(args: StorageListMessagesInput) {
-    const threadId = Array.isArray(args.threadId) ? args.threadId[0] : args.threadId;
-    if (!threadId) throw new Error('PlatformMemory.recall requires a threadId');
+    const threadIds = Array.isArray(args.threadId) ? args.threadId : [args.threadId];
+    if (!threadIds.length || threadIds.some(id => !id)) throw new Error('PlatformMemory.recall requires a threadId');
+    if (args.filter?.metadata || args.include?.length) {
+      throw new Error('PlatformMemory.recall does not support metadata filters or include windows');
+    }
     const page = args.page ?? 0;
     const perPage = args.perPage === false ? 200 : (args.perPage ?? 40);
-    const res = await this.client.listMessages(threadId, { page, perPage });
-    const messages = res.messages.map(message => messageFromApi(message, threadId, args.resourceId));
-    return { messages, total: messages.length, page, perPage, hasMore: res.hasMore };
+    const messages: MastraDBMessage[] = [];
+    for (const threadId of threadIds) {
+      if (args.resourceId) {
+        const thread = await this.client.getThread(threadId);
+        if (!thread || thread.resourceId !== args.resourceId) continue;
+      }
+      for (let next = 0; ; next++) {
+        const res = await this.client.listMessages(threadId, { page: next, perPage: 200 });
+        messages.push(...res.messages.map(message => messageFromApi(message, threadId, args.resourceId)));
+        if (!res.hasMore) break;
+      }
+    }
+    const { start, end, startExclusive, endExclusive } = args.filter?.dateRange ?? {};
+    const filtered = messages.filter(message => {
+      const timestamp = message.createdAt.getTime();
+      return (
+        (!start || (startExclusive ? timestamp > start.getTime() : timestamp >= start.getTime())) &&
+        (!end || (endExclusive ? timestamp < end.getTime() : timestamp <= end.getTime()))
+      );
+    });
+    const direction = args.orderBy?.direction === 'DESC' ? -1 : 1;
+    filtered.sort((a, b) => direction * (a.createdAt.getTime() - b.createdAt.getTime()));
+    const selected = args.perPage === false ? filtered : filtered.slice(page * perPage, (page + 1) * perPage);
+    return {
+      messages: selected,
+      total: filtered.length,
+      page,
+      perPage: args.perPage === false ? (false as const) : perPage,
+      hasMore: args.perPage === false ? false : (page + 1) * perPage < filtered.length,
+    };
   }
 
   async getWorkingMemory({ threadId, resourceId }: { threadId: string; resourceId?: string }): Promise<string | null> {

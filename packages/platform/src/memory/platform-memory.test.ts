@@ -92,14 +92,36 @@ function fakeMemoryApi() {
       return json({ system: observations, messages: messages.get(id) ?? [], observedAt: null });
     }
     if ((m = path.match(/^\/threads\/([^/]+)\/messages$/))) {
-      return json({ messages: messages.get(decodeURIComponent(m[1]!)) ?? [], hasMore: false });
+      const all = messages.get(decodeURIComponent(m[1]!)) ?? [];
+      const page = Number(url.searchParams.get('page') ?? 0);
+      const perPage = Number(url.searchParams.get('perPage') ?? 40);
+      return json({
+        messages: all.slice(page * perPage, (page + 1) * perPage),
+        hasMore: (page + 1) * perPage < all.length,
+      });
     }
     if ((m = path.match(/^\/threads\/([^/]+)$/))) {
       const t = thread(decodeURIComponent(m[1]!));
       return t ? json(t) : json({ title: 'Not found' }, 404);
     }
+    if (path === '/threads' && method === 'GET') {
+      const page = Number(url.searchParams.get('page') ?? 0);
+      const perPage = Number(url.searchParams.get('perPage') ?? 100);
+      const all = [...threads.keys()]
+        .map(id => thread(id)!)
+        .filter(t => !url.searchParams.has('resourceId') || t.resourceId === url.searchParams.get('resourceId'));
+      return json({
+        threads: all.slice(page * perPage, (page + 1) * perPage),
+        hasMore: (page + 1) * perPage < all.length,
+      });
+    }
     if (path === '/threads' && method === 'POST') {
-      threads.set(body.id, { id: body.id, resourceId: body.resourceId, title: body.title ?? '', metadata: {} });
+      threads.set(body.id, {
+        id: body.id,
+        resourceId: body.resourceId,
+        title: body.title ?? '',
+        metadata: body.metadata ?? {},
+      });
       return json(thread(body.id), 201);
     }
     return json({ title: `unhandled ${method} ${path}` }, 500);
@@ -138,6 +160,55 @@ describe('PlatformMemory', () => {
     });
     return { agent, memory };
   }
+
+  it('paginates across multiple threads and reports full message counts', async () => {
+    const { memory } = agentWith([]);
+    const messages = Array.from({ length: 205 }, (_, i) => ({
+      id: `msg_${i}`,
+      role: 'user',
+      content: `message ${i}`,
+      createdAt: new Date(2024, 0, 1, 0, i).toISOString(),
+    }));
+    api.messages.set('thread_1', messages);
+    api.messages.set('thread_2', [
+      { id: 'other', role: 'user', content: 'other thread', createdAt: new Date(2025, 0, 1).toISOString() },
+    ]);
+    const all = await memory.recall({ threadId: ['thread_1', 'thread_2'], perPage: false });
+    expect(all.messages).toHaveLength(206);
+    expect(all.total).toBe(206);
+    expect(all.messages.at(-1)?.id).toBe('other');
+    const recent = await memory.recall({
+      threadId: ['thread_1', 'thread_2'],
+      perPage: 2,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+    });
+    expect(recent.messages.map(m => m.id)).toEqual(['other', 'msg_204']);
+    expect(recent.total).toBe(206);
+    expect(recent.hasMore).toBe(true);
+    const filtered = await memory.recall({
+      threadId: ['thread_1', 'thread_2'],
+      filter: { dateRange: { start: new Date(2025, 0, 1) } },
+    });
+    expect(filtered.messages.map(m => m.id)).toEqual(['other']);
+    expect(filtered.total).toBe(1);
+  });
+
+  it('reports full thread totals and applies metadata filtering', async () => {
+    const { memory } = agentWith([]);
+    for (let i = 0; i < 205; i++) {
+      await memory.client.createThread({
+        id: `thread_${i}`,
+        resourceId: 'user',
+        metadata: { group: i % 2 ? 'odd' : 'even' },
+      });
+    }
+    const all = await memory.listThreads({ perPage: false });
+    expect(all.threads).toHaveLength(205);
+    expect(all.total).toBe(205);
+    const filtered = await memory.listThreads({ perPage: 2, page: 1, filter: { metadata: { group: 'even' } } });
+    expect(filtered.total).toBe(103);
+    expect(filtered.threads).toHaveLength(2);
+  });
 
   it('saves each turn and replays the thread on the next one', async () => {
     const prompts: any[] = [];
