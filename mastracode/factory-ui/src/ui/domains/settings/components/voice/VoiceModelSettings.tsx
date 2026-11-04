@@ -26,8 +26,7 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
   const update = useUpdateVoiceSettings(factoryId);
   const { modelScope, models } = settings;
   const orgKeys = new Set(settings.keys.filter(k => k.org).map(k => k.provider));
-  // In user scope each member transcribes with their own key, so any model is a valid Factory default.
-  const factoryHasKey = (m: VoiceModel) => modelScope === 'user' || orgKeys.has(m.provider);
+  const factoryHasKey = (m: VoiceModel) => (modelScope === 'user' ? m.available : orgKeys.has(m.provider));
   const factoryLabel = voiceModelLabel(models, settings.factory) ?? 'Auto';
 
   const save = (args: UpdateVoiceSettingsArgs) =>

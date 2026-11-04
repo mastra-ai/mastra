@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
@@ -55,13 +56,21 @@ function stubSettings(initial: VoiceSettingsResponse, onPut?: (body: unknown) =>
   return { requested, saved };
 }
 
+function renderVoiceSettings() {
+  return renderWithProviders(
+    <MemoryRouter>
+      <VoiceInputSettings factoryId={FACTORY_ID} />
+    </MemoryRouter>,
+  );
+}
+
 describe('VoiceInputSettings', () => {
   it('lets an admin pick the Factory model from models the organization has a key for', async () => {
     const { requested, saved } = stubSettings(settings(), () =>
       settings({ factory: { provider: 'openai', model: 'whisper-1' } }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<VoiceInputSettings factoryId={FACTORY_ID} />);
+    renderVoiceSettings();
 
     const picker = await screen.findByRole('combobox', { name: 'Factory voice model' });
     expect(requested[0]).toBe(FACTORY_ID);
@@ -89,7 +98,7 @@ describe('VoiceInputSettings', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<VoiceInputSettings factoryId={FACTORY_ID} />);
+    renderVoiceSettings();
 
     const picker = await screen.findByRole('combobox', { name: 'Your voice model' });
     expect(picker).toHaveTextContent("Use Factory's (OpenAI Whisper)");
@@ -111,7 +120,7 @@ describe('VoiceInputSettings', () => {
 
   it('keeps the Factory model read-only for members who are not org admins', async () => {
     stubSettings(settings({ canEditFactory: false }));
-    renderWithProviders(<VoiceInputSettings factoryId={FACTORY_ID} />);
+    renderVoiceSettings();
 
     const picker = await screen.findByRole('combobox', { name: 'Factory voice model' });
     expect(picker).toBeDisabled();
@@ -121,7 +130,7 @@ describe('VoiceInputSettings', () => {
 
   it('hides the personal choice when the Factory bills every run to the organization', async () => {
     stubSettings(settings({ modelScope: 'factory' }));
-    renderWithProviders(<VoiceInputSettings factoryId={FACTORY_ID} />);
+    renderVoiceSettings();
 
     await screen.findByRole('combobox', { name: 'Factory voice model' });
     expect(screen.queryByRole('combobox', { name: 'Your voice model' })).not.toBeInTheDocument();
@@ -131,7 +140,7 @@ describe('VoiceInputSettings', () => {
   it('keeps a saved model whose key was removed visible, flagged as missing a key', async () => {
     stubSettings(settings({ personal: { provider: 'deepgram', model: 'nova-3' }, effective: null }));
     const user = userEvent.setup();
-    renderWithProviders(<VoiceInputSettings factoryId={FACTORY_ID} />);
+    renderVoiceSettings();
 
     const picker = await screen.findByRole('combobox', { name: 'Your voice model' });
     expect(picker).toHaveTextContent('Deepgram Nova 3');
@@ -163,15 +172,36 @@ describe('VoiceInputSettings', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<VoiceInputSettings factoryId={FACTORY_ID} />);
+    renderVoiceSettings();
 
-    await user.click(await screen.findByRole('button', { name: 'Add Deepgram key' }));
+    await user.click(await screen.findByRole('button', { name: 'Add provider' }));
+    await user.click(await screen.findByRole('button', { name: 'Add API key for Deepgram' }));
     await user.type(await screen.findByPlaceholderText('Paste API key'), 'dg-secret');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
       expect(keys).toEqual([{ provider: 'deepgram', body: { key: 'dg-secret', envVar: 'DEEPGRAM_API_KEY' } }]),
     );
-    expect(await screen.findByRole('button', { name: 'Replace Deepgram key' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Deepgram actions' })).toBeInTheDocument();
+  });
+
+  it('offers no model to pick until a speech-to-text key exists', async () => {
+    stubSettings(
+      settings({
+        modelScope: 'user',
+        effective: null,
+        models: MODELS.map(m => ({ ...m, available: false })),
+        keys: [
+          { provider: 'openai', envVar: 'OPENAI_API_KEY', user: false, org: false },
+          { provider: 'mistral', envVar: 'MISTRAL_API_KEY', user: false, org: false },
+          { provider: 'deepgram', envVar: 'DEEPGRAM_API_KEY', user: false, org: false },
+        ],
+      }),
+    );
+    renderVoiceSettings();
+
+    expect(await screen.findByRole('combobox', { name: 'Factory voice model' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Your voice model' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /actions$/ })).not.toBeInTheDocument();
   });
 });

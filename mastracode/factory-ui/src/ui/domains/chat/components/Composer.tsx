@@ -51,7 +51,7 @@ import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
-import { useVoiceDictation, voiceDictationSupported } from './useVoiceDictation';
+import { voiceDictationSupported } from './useVoiceDictation';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
@@ -121,14 +121,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const updateDraft = setComposerDraft;
 
   const [canDictate] = useState(voiceDictationSupported);
-  const dictation = useVoiceDictation({
-    factoryId,
-    onTranscript: text => {
-      updateDraft(draft.trim() ? `${draft.trimEnd()} ${text}` : text);
-      inputRef.current?.focus();
-    },
-    onError: message => pushNotice(message, 'error'),
-  });
+  const appendTranscript = (text: string) => {
+    updateDraft(draft.trim() ? `${draft.trimEnd()} ${text}` : text);
+    inputRef.current?.focus();
+  };
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -330,12 +326,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {canDictate && (
+              {canDictate && factoryId && (
                 <ComposerVoiceButton
-                  state={dictation.state}
+                  factoryId={factoryId}
                   disabled={textareaDisabled || preview !== undefined}
-                  onStart={() => void dictation.start()}
-                  onStop={dictation.stop}
+                  onTranscript={appendTranscript}
+                  onError={message => pushNotice(message, 'error')}
                 />
               )}
               <ComposerPrimaryAction

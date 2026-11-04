@@ -1,7 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { KeyRound } from 'lucide-react';
+import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import type { ProviderInfo } from '../../../../../api/types';
@@ -9,58 +7,112 @@ import { useOrgKeyAdminQuery, useProvidersQuery } from '../../../../../hooks/use
 import type { VoiceKeyStatus } from '../../../../../hooks/use-voice-settings';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { AddApiKeyDialog } from '../AddApiKeyDialog';
-import { hasVoiceKey } from './key-scope';
+import { ConnectedProviderRow } from '../models/providers/ConnectedProviderRow';
+import type { ProviderConnection } from '../models/providers/ConnectedProviderRow';
+import { ProviderRows, ProviderRowsSkeleton } from '../models/providers/ProviderRows';
+import {
+  CREDENTIAL_STATUS,
+  ORG_SCOPE_MEMBER_REASON,
+  sharedSourceStatus,
+  storedCredentialScope,
+} from '../provider-credential';
+import type { CredentialScope } from '../provider-credential';
+import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
 import type { VoiceKeyScope } from './key-scope';
 
-function keyStatusLabel({ user, org }: VoiceKeyStatus): string {
-  if (user && org) return 'Personal and organization keys';
-  if (user) return 'Personal key';
-  if (org) return 'Organization key';
-  return 'No key';
+const ORG_FALLBACK_STATUS: StatusPresentation = {
+  label: 'Organization key',
+  tone: 'neutral',
+  description: 'Used when you have no personal key',
+};
+
+/** Deepgram only transcribes, so the chat provider catalog does not list it. */
+function speechProviderInfo(status: VoiceKeyStatus, catalog: ProviderInfo[] | undefined): ProviderInfo {
+  return (
+    catalog?.find(p => p.provider === status.provider) ?? {
+      provider: status.provider,
+      source: 'none',
+      envVar: status.envVar,
+    }
+  );
 }
 
-/** One row per speech-to-text provider, each opening the shared add-key dialog at the Factory's key scope. */
+function voiceKeyConnection(
+  status: VoiceKeyStatus,
+  provider: ProviderInfo,
+  scope: CredentialScope,
+  keyScope: VoiceKeyScope,
+): ProviderConnection | undefined {
+  if (scope === 'org' ? status.org : status.user) {
+    const shared = sharedSourceStatus(provider.source);
+    return shared
+      ? { provider, status: shared, credential: undefined, signInExpired: false }
+      : { provider, status: CREDENTIAL_STATUS.api_key, credential: 'api_key', signInExpired: false };
+  }
+  return keyScope === undefined && status.org
+    ? { provider, status: ORG_FALLBACK_STATUS, credential: undefined, signInExpired: false }
+    : undefined;
+}
+
 export function SpeechToTextKeys({ keys, keyScope }: { keys: VoiceKeyStatus[]; keyScope: VoiceKeyScope }) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
-  const [dialogProvider, setDialogProvider] = useState<ProviderInfo>();
+  const [addOpen, setAddOpen] = useState(false);
+  const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
+
+  if (providersQuery.isPending) return <ProviderRowsSkeleton />;
 
   const authEnabled = authQuery.data?.authEnabled === true;
-  const cannotAddOrgKey = keyScope === 'org' && orgKeyAdminQuery.data === false;
+  const scope = storedCredentialScope(keyScope ?? 'user', authEnabled);
+  const readOnly = scope === 'org' && orgKeyAdminQuery.data === false;
+  const actionsDisabled = authQuery.isPending || readOnly;
+  const options = keys.map(status => {
+    const provider = speechProviderInfo(status, providersQuery.data);
+    return { provider, connection: voiceKeyConnection(status, provider, scope, keyScope) };
+  });
 
-  const openDialog = ({ provider, envVar }: VoiceKeyStatus) =>
-    setDialogProvider(providersQuery.data?.find(p => p.provider === provider) ?? { provider, source: 'none', envVar });
+  const openKeyDialog = (provider: ProviderInfo) => {
+    setAddOpen(false);
+    setKeyDialogProvider(provider);
+  };
 
   return (
-    <>
-      <SettingsContainer>
-        {keys.map(status => {
-          const name = providerDisplayName(status.provider);
-          const action = hasVoiceKey(status, keyScope) ? 'Replace' : 'Add';
-          return (
-            <SettingsRow key={status.provider} label={name} description={keyStatusLabel(status)}>
-              <Button
-                size="sm"
-                icon={<KeyRound />}
-                disabled={cannotAddOrgKey}
-                aria-label={`${action} ${name} key`}
-                onClick={() => openDialog(status)}
-              >
-                {action} key
-              </Button>
-            </SettingsRow>
-          );
-        })}
-      </SettingsContainer>
-      {dialogProvider && (
+    <div className="flex flex-col gap-2">
+      <ProviderRows addDisabled={actionsDisabled} onAdd={() => setAddOpen(true)}>
+        {options.flatMap(({ connection }) =>
+          connection ? (
+            <ConnectedProviderRow
+              key={connection.provider.provider}
+              connection={connection}
+              requestScope={authEnabled ? scope : undefined}
+              disabled={actionsDisabled}
+              onUpdateKey={() => setKeyDialogProvider(connection.provider)}
+            />
+          ) : (
+            []
+          ),
+        )}
+      </ProviderRows>
+      {readOnly && (
+        <Txt as="p" variant="caption" tone="muted">
+          {ORG_SCOPE_MEMBER_REASON}
+        </Txt>
+      )}
+      <AddSpeechToTextKeyDrawer
+        open={addOpen}
+        options={options.map(({ provider, connection }) => ({ provider, connectedAs: connection?.status.label }))}
+        onAddKey={openKeyDialog}
+        onClose={() => setAddOpen(false)}
+      />
+      {keyDialogProvider && (
         <AddApiKeyDialog
-          provider={dialogProvider}
+          provider={keyDialogProvider}
           authEnabled={authEnabled}
           fixedScope={authEnabled ? keyScope : undefined}
-          onClose={() => setDialogProvider(undefined)}
+          onClose={() => setKeyDialogProvider(undefined)}
         />
       )}
-    </>
+    </div>
   );
 }
