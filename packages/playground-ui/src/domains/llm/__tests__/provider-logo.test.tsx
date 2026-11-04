@@ -290,6 +290,18 @@ describe('ProviderLogo', () => {
     expect(document.querySelector('img')).toBeNull();
   });
 
+  it('requests a models.dev logo whose slug contains a dot', () => {
+    render(<ProviderLogo providerId="wafer.ai" />);
+    expect(screen.getByRole('img', { name: 'wafer.ai logo' }).getAttribute('src')).toBe(
+      'https://models.dev/logos/wafer.ai.svg',
+    );
+  });
+
+  it('still strips an api qualifier from a provider without a dotted logo', () => {
+    render(<ProviderLogo providerId="cerebras.chat" />);
+    expect(screen.getByRole('img').getAttribute('src')).toBe('https://models.dev/logos/cerebras.svg');
+  });
+
   it('shows the monogram when a models.dev logo fails to load', () => {
     render(<ProviderLogo providerId="cerebras" />);
     fireEvent.error(screen.getByRole('img', { name: 'cerebras logo' }));

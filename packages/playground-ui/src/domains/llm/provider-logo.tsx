@@ -97,7 +97,10 @@ export const ProviderLogo = ({ providerId, className = '', size = 'lg', style }:
   const [failedLogoSlug, setFailedLogoSlug] = useState<string>();
 
   const cleanedProviderId = cleanProviderIdUtil(providerId);
-  const cleanProviderId = cleanedProviderId.replace(/^~/, '').replace(/\//g, '-').toLowerCase();
+  const normalizeProviderId = (id: string) => id.replace(/^~/, '').replace(/\//g, '-').toLowerCase();
+  const cleanProviderId = normalizeProviderId(cleanedProviderId);
+  const exactProviderId = normalizeProviderId(providerId);
+  const logoSlug = modelsDevLogoSlugs.has(exactProviderId) ? exactProviderId : cleanProviderId;
 
   const iconSize = iconSizes.find(name => name === size);
   const sizeClassName = iconSize && iconSizeClassNames[iconSize];
@@ -115,7 +118,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 'lg', style }:
     );
   }
 
-  if (!modelsDevLogoSlugs.has(cleanProviderId) || failedLogoSlug === cleanProviderId) {
+  if (!modelsDevLogoSlugs.has(logoSlug) || failedLogoSlug === logoSlug) {
     const fallbackIcon = fallbackProviderIcons.get(cleanedProviderId);
     const fallback = fallbackIcon ? providerMapToIcon[fallbackIcon] : undefined;
     if (fallback) {
@@ -136,10 +139,10 @@ export const ProviderLogo = ({ providerId, className = '', size = 'lg', style }:
 
   return (
     <img
-      src={`https://models.dev/logos/${cleanProviderId}.svg`}
+      src={`https://models.dev/logos/${logoSlug}.svg`}
       alt={`${providerId} logo`}
       className={cn('shrink-0 dark:brightness-0 dark:invert', sizeClassName, className)}
-      onError={() => setFailedLogoSlug(cleanProviderId)}
+      onError={() => setFailedLogoSlug(logoSlug)}
       loading="lazy"
       style={{
         ...sizeStyle,
