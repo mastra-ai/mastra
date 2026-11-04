@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useMastraClient } from '../mastra-client-context';
 import { recordMicrophoneToFile } from './record-mic-to-file';
 
@@ -23,35 +23,39 @@ type SpeechRecognitionResult = SpeechRecognitionState & {
   stop: () => void;
 };
 
+interface VoiceAgentCheck {
+  agentId: string;
+  agent?: Agent;
+}
+
+const UNSUPPORTED_ERROR = 'Speech Recognition not supported in this browser';
+
+const browserSupportsSpeechRecognition = () => 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
+const subscribeToNothing = () => () => {};
+const assumeSupportedOnServer = () => true;
+
 export const useSpeechRecognition = ({
   language = 'en-US',
   agentId,
   requestContext,
 }: UseSpeechRecognitionArgs): SpeechRecognitionResult => {
   const client = useMastraClient();
-  const [agent, setAgent] = useState<Agent | null>(null);
+  const [voiceAgentCheck, setVoiceAgentCheck] = useState<VoiceAgentCheck>();
 
   useEffect(() => {
+    if (!agentId) return;
     let cancelled = false;
-
-    if (!agentId) {
-      setAgent(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const agent = client.getAgent(agentId);
+    const candidate = client.getAgent(agentId);
 
     const check = async () => {
       try {
-        const speakers = await agent.voice.getSpeakers(requestContext);
+        const speakers = await candidate.voice.getSpeakers(requestContext);
         if (!cancelled) {
-          setAgent(speakers.length > 0 ? agent : null);
+          setVoiceAgentCheck({ agentId, agent: speakers.length > 0 ? candidate : undefined });
         }
       } catch {
         if (!cancelled) {
-          setAgent(null);
+          setVoiceAgentCheck({ agentId });
         }
       }
     };
@@ -62,6 +66,8 @@ export const useSpeechRecognition = ({
       cancelled = true;
     };
   }, [agentId, client, requestContext]);
+
+  const agent = voiceAgentCheck && voiceAgentCheck.agentId === agentId ? voiceAgentCheck.agent : undefined;
 
   const browserSpeechRecognition = useBrowserSpeechRecognition({ language });
   const mastraSpeechRecognition = useMastraSpeechToText({ agent, language });
@@ -75,6 +81,7 @@ export const useSpeechRecognition = ({
 
 const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string }): SpeechRecognitionResult => {
   const speechRecognitionRef = useRef<any>(null);
+  const supported = useSyncExternalStore(subscribeToNothing, browserSupportsSpeechRecognition, assumeSupportedOnServer);
   const [state, setState] = useState<SpeechRecognitionState>({
     isListening: false,
     transcript: '',
@@ -112,10 +119,7 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
   };
 
   useEffect(() => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      setState(prev => ({ ...prev, error: 'Speech Recognition not supported in this browser' }));
-      return;
-    }
+    if (!browserSupportsSpeechRecognition()) return;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -150,18 +154,13 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
 
   return {
     ...state,
+    error: supported ? state.error : UNSUPPORTED_ERROR,
     start,
     stop,
   };
 };
 
-const useMastraSpeechToText = ({
-  agent,
-  language,
-}: {
-  agent: Agent | null;
-  language: string;
-}): SpeechRecognitionResult => {
+const useMastraSpeechToText = ({ agent, language }: { agent?: Agent; language: string }): SpeechRecognitionResult => {
   const [state, setState] = useState<SpeechRecognitionState>({
     isListening: false,
     transcript: '',

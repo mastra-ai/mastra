@@ -344,6 +344,27 @@ describe('useSpeechRecognition (mastra path)', () => {
     expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
   });
 
+  describe('when agentId switches to an agent whose voice is still being checked', () => {
+    it('dictates through the browser instead of the previous agent', async () => {
+      installSpeechRecognition();
+      const { result, rerender } = renderHook(({ agentId }) => useSpeechRecognition({ agentId }), {
+        initialProps: { agentId: 'agent-1' },
+        wrapper,
+      });
+      await waitFor(() => {
+        act(() => result.current.start());
+        expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+      });
+      lastRecognition.start.mockClear();
+      getSpeakersMock.mockImplementationOnce(() => new Promise(() => {}));
+
+      rerender({ agentId: 'agent-2' });
+      act(() => result.current.start());
+
+      expect(lastRecognition.start).toHaveBeenCalled();
+    });
+  });
+
   it('surfaces Mastra listen errors and clears listening state', async () => {
     installSpeechRecognition();
     listenMock.mockRejectedValueOnce(new Error('listen failed'));
