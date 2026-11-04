@@ -72,12 +72,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'clerk', mono: true },
     canonicalPage: 'auth/clerk.mdx',
     ownership: 'handwritten-with-partial',
+    summary: 'manage users, organizations, memberships, invitations, roles, and sessions',
+    emit: true,
   },
   discord: {
     name: 'Discord',
     logo: { slug: 'discord' },
     canonicalPage: 'channels/discord.mdx',
     ownership: 'handwritten-with-partial',
+    summary: 'send and manage messages, and manage channels, threads, roles, members, and webhooks',
+    emit: true,
   },
   fireflies: {
     name: 'Fireflies.ai',
@@ -93,6 +97,9 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'github', mono: true },
     canonicalPage: 'channels/github.mdx',
     ownership: 'handwritten-with-partial',
+    summary:
+      'search code and repositories, manage issues, pull requests, branches, files, and releases, and inspect and rerun workflow runs',
+    emit: true,
   },
   'google-calendar': {
     name: 'Google Calendar',
@@ -115,6 +122,8 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'googledrive' },
     canonicalPage: 'file-storage/google-drive.mdx',
     ownership: 'handwritten-with-partial',
+    summary: 'find, upload, copy, move, and export files, and manage folders, comments, permissions, and shared drives',
+    emit: true,
   },
   'google-mail': {
     name: 'Gmail',
@@ -188,6 +197,8 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'microsoftteams' },
     canonicalPage: 'channels/teams.mdx',
     ownership: 'handwritten-with-partial',
+    summary: 'read and send channel and chat messages, and manage teams, channels, chats, and members',
+    emit: true,
   },
   'microsoft-word': {
     name: 'Microsoft Word',
@@ -226,12 +237,18 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { src: 'https://svgl.app/library/openai.svg', mono: true },
     canonicalPage: 'voice/openai.mdx',
     ownership: 'handwritten-with-partial',
+    summary:
+      'create responses, chat completions, embeddings, images, and moderations, and manage files, batches, and vector stores',
+    emit: true,
   },
   posthog: {
     name: 'PostHog',
     logo: { slug: 'posthog' },
     canonicalPage: 'observability/posthog.mdx',
     ownership: 'handwritten-with-partial',
+    summary:
+      'capture events, run queries, and manage feature flags, experiments, insights, dashboards, cohorts, and surveys',
+    emit: true,
   },
   resend: {
     name: 'Resend',
@@ -270,12 +287,16 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     logo: { slug: 'supabase' },
     canonicalPage: 'auth/supabase.mdx',
     ownership: 'handwritten-with-partial',
+    summary: 'query and change table rows, call database functions, and manage storage buckets, files, and auth users',
+    emit: true,
   },
   workos: {
     name: 'WorkOS',
     logo: { src: 'https://svgl.app/library/workos.svg' },
     canonicalPage: 'auth/workos.mdx',
     ownership: 'handwritten-with-partial',
+    summary: 'manage organizations, users, memberships, invitations, SSO connections, and directories',
+    emit: true,
   },
 };
 
@@ -319,6 +340,8 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     logo: { slug: 'neon' },
     canonicalPage: 'databases/neon.mdx',
     ownership: 'handwritten-with-partial',
+    summary: 'manage projects and branches, run SQL, and plan and apply schema migrations',
+    emit: true,
     mcpDocsUrl: 'https://neon.com/docs/ai/neon-mcp-server',
     mcpDocsLabel: 'Neon MCP server',
   },
@@ -327,6 +350,9 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     logo: { slug: 'render', mono: true },
     canonicalPage: 'deploy/render.mdx',
     ownership: 'handwritten-with-partial',
+    summary:
+      'create services and datastores, update environment variables, read logs and metrics, and query Postgres databases',
+    emit: true,
     mcpDocsUrl: 'https://render.com/docs/mcp-server',
     mcpDocsLabel: 'Render MCP server',
   },

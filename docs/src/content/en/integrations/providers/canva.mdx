@@ -42,4 +42,6 @@ export const canvaMcpAgent = new Agent({
 })
 ```
 
-Mastra discovers Canva's tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your `@mastra/connect` version. Tool keys start with `canva-mcp_`. See [Canva MCP](https://www.canva.dev/docs/apps/mcp/) for the tools Canva provides, [MCP providers](/reference/connect/tools#mcp-providers) for how Mastra loads them, and the [`tools()` parameters](/reference/connect/tools#parameters) to restrict tools or require approval before a call runs.
+Mastra discovers Canva's tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your `@mastra/connect` version. Tool keys start with `canva-mcp_`.
+
+To see which tools Canva provides, read the [Canva MCP](https://www.canva.dev/docs/apps/mcp/) documentation. To require approval before a call runs, see [MCP providers](/reference/connect/tools#mcp-providers) in the `tools()` reference.

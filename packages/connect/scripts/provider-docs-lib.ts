@@ -184,7 +184,9 @@ function toolsetSummary(id: string, docs: ToolProviderDocs, tools: Tool[]): stri
 }
 
 function mcpSummary(id: string, docs: McpProviderDocs): string {
-  return `Mastra discovers ${docs.name}'s tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your \`@mastra/connect\` version. Tool keys start with \`${id}_\`. See [${docs.mcpDocsLabel}](${docs.mcpDocsUrl}) for the tools ${docs.name} provides, [MCP providers](${TOOLS_REFERENCE}#mcp-providers) for how Mastra loads them, and the [\`tools()\` parameters](${TOOLS_REFERENCE}#parameters) to restrict tools or require approval before a call runs.`;
+  return `Mastra discovers ${docs.name}'s tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your \`@mastra/connect\` version. Tool keys start with \`${id}_\`.
+
+To see which tools ${docs.name} provides, read the [${docs.mcpDocsLabel}](${docs.mcpDocsUrl}) documentation. To require approval before a call runs, see [MCP providers](${TOOLS_REFERENCE}#mcp-providers) in the \`tools()\` reference.`;
 }
 
 function pageIntro(docs: ProviderDocs, mcp: boolean): string {

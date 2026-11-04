@@ -3,16 +3,32 @@ title: "GitHub | Channels"
 description: "Subscribe Mastra agents to GitHub pull requests with @mastra/github-signals, polling modes, notification signals, and subscription management tools."
 packages:
   - "@mastra/core"
+  - "@mastra/connect"
   - "@mastra/github-signals"
   - "@mastra/libsql"
   - "@mastra/memory"
 ---
 
+import GithubConnectTools from "@site/src/components/connect/generated/github.mdx";
+
 # GitHub
 
-The `@mastra/github-signals` provider lets an agent follow pull requests (PRs). It polls subscribed PRs and sends [notification signals](/docs/signals/notifications) to the agent thread when relevant activity occurs.
+Use GitHub with Mastra in two ways:
 
-## Installation
+- **Agent tools** let an agent work with repositories, issues, pull requests, releases, and workflow runs through [Mastra Connect](/docs/mastra-platform/connect/overview).
+- **[Pull request signals](#pull-request-signals)** let an agent follow pull requests (PRs) and react when they change.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to install `@mastra/connect` and configure your platform project. Connect keeps GitHub credentials on the Mastra platform, so your application never stores them.
+
+<GithubConnectTools />
+
+## Pull request signals
+
+The `@mastra/github-signals` provider polls subscribed PRs and sends [notification signals](/docs/signals/notifications) to the agent thread when relevant activity occurs. It runs on your own infrastructure and uses the GitHub CLI for access, separately from Connect.
+
+### Installation
 
 Install GitHub Signals and the memory packages used in this example:
 
@@ -20,7 +36,7 @@ Install GitHub Signals and the memory packages used in this example:
 npm install @mastra/github-signals @mastra/libsql @mastra/memory
 ```
 
-## Prerequisites
+### Prerequisites
 
 GitHub Signals requires:
 
@@ -35,7 +51,7 @@ Bot authorization checks `ignoredBots` first, using an exact case-insensitive lo
 
 Failed, inaccessible, malformed, and unsupported app-owner lookups deny the bot comment. Successful app-owner lookups are cached for 24 hours; failed lookups aren't cached.
 
-## Agent and subscription
+### Agent and subscription
 
 Create one `GithubSignals` instance and register it on the agent. Register the agent and a storage adapter on the Mastra instance:
 
@@ -85,7 +101,7 @@ The provider syncs the PR immediately, stores the subscription, and starts polli
 
 A thread has one current GitHub Signals subscription. Subscribing it to another PR replaces the existing subscription.
 
-## Subscription modes
+### Subscription modes
 
 GitHub Signals supports two subscription modes:
 
@@ -113,7 +129,7 @@ The review-state cursor includes the unresolved thread count and the latest unre
 
 During subscription, a PR already known to be closed or merged isn't stored and doesn't send an activity notification. Otherwise, review mode silently saves its first available non-terminal snapshot, including when the subscribe-time snapshot fails and a later poll supplies the first observation. If the first available poll snapshot or a later snapshot is closed or merged, the provider sends a terminal notification and removes the subscription. It doesn't follow a later reopen unless you subscribe again.
 
-## Subscription tools
+### Subscription tools
 
 The provider adds `github_subscribe_pr` and `github_unsubscribe_pr` tools to the agent. Pass `mode` when subscribing:
 
@@ -128,7 +144,7 @@ The provider adds `github_subscribe_pr` and `github_unsubscribe_pr` tools to the
 
 Omitting `mode` selects `working`. Don't subscribe for a one-off PR inspection.
 
-## MastraCode commands
+### MastraCode commands
 
 In MastraCode, use the spaced `--mode` flag with a PR number, `owner/repo#number`, or full GitHub PR URL:
 

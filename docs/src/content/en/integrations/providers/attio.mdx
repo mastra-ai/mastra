@@ -42,4 +42,6 @@ export const attioMcpAgent = new Agent({
 })
 ```
 
-Mastra discovers Attio's tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your `@mastra/connect` version. Tool keys start with `attio-mcp_`. See [Attio MCP](https://docs.attio.com/mcp/overview) for the tools Attio provides, [MCP providers](/reference/connect/tools#mcp-providers) for how Mastra loads them, and the [`tools()` parameters](/reference/connect/tools#parameters) to restrict tools or require approval before a call runs.
+Mastra discovers Attio's tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your `@mastra/connect` version. Tool keys start with `attio-mcp_`.
+
+To see which tools Attio provides, read the [Attio MCP](https://docs.attio.com/mcp/overview) documentation. To require approval before a call runs, see [MCP providers](/reference/connect/tools#mcp-providers) in the `tools()` reference.
