@@ -717,10 +717,13 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Memory storage is not initialized' });
       }
 
-      // Determine the resourceId to use
-      const effectiveResourceId = resourceId;
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       if (!effectiveResourceId) {
         throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
+      }
+      if (threadId) {
+        const thread = await memory.getThreadById({ threadId });
+        await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
       }
 
       // For resource-scoped OM, lookup by resourceId only (threadId=null)
@@ -798,10 +801,6 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Observational Memory processor not available' });
       }
 
-      // Block until buffering completes (30s timeout)
-      await (omProcessor as any).waitForBuffering(threadId, resourceId);
-
-      // After buffering, fetch the updated record
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
@@ -817,10 +816,17 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Memory storage is not initialized' });
       }
 
-      const effectiveResourceId = resourceId;
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       if (!effectiveResourceId) {
         throw new HTTPException(400, { message: 'resourceId is required' });
       }
+      if (threadId) {
+        const thread = await memory.getThreadById({ threadId });
+        await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+      }
+
+      // Block until buffering completes (30s timeout)
+      await (omProcessor as any).waitForBuffering(threadId, effectiveResourceId);
 
       const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
       const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);

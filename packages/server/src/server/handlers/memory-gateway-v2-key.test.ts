@@ -37,4 +37,66 @@ describe('observational memory for gateway agents with a v2 key', () => {
     ).rejects.toThrow('Observational Memory is not enabled for this agent');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+  async function setupLocalOM() {
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'msk-gateway-test');
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'gateway-agent',
+      name: 'gateway-agent',
+      instructions: 'test-instructions',
+      model: 'mastra/openai/gpt-5-mini' as any,
+      memory,
+    });
+    const waitForBuffering = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(agent, 'resolveProcessorById').mockResolvedValue({
+      config: { scope: 'thread' },
+      waitForBuffering,
+    } as any);
+    const mastra = new Mastra({ logger: false, agents: { 'gateway-agent': agent } });
+    await memory.saveThread({
+      thread: { id: 'thread-1', resourceId: 'resource-1', title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const store = await memory.storage.getStore('memory');
+    const record = await store!.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+    return { mastra, record, waitForBuffering, fetchMock: vi.spyOn(globalThis, 'fetch') };
+  }
+
+  it.each([
+    ['GET_OBSERVATIONAL_MEMORY_ROUTE', GET_OBSERVATIONAL_MEMORY_ROUTE],
+    ['AWAIT_BUFFER_STATUS_ROUTE', AWAIT_BUFFER_STATUS_ROUTE],
+  ] as const)('%s returns the locally stored record', async (_name, route) => {
+    const { mastra, record, fetchMock } = await setupLocalOM();
+
+    const result = await (route.handler as any)({
+      ...createTestServerContext({ mastra }),
+      agentId: 'gateway-agent',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+
+    expect(result.record?.id).toBe(record.id);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['GET_OBSERVATIONAL_MEMORY_ROUTE', GET_OBSERVATIONAL_MEMORY_ROUTE],
+    ['AWAIT_BUFFER_STATUS_ROUTE', AWAIT_BUFFER_STATUS_ROUTE],
+  ] as const)('%s rejects a thread owned by another resource', async (_name, route) => {
+    const { mastra, waitForBuffering } = await setupLocalOM();
+
+    await expect(
+      (route.handler as any)({
+        ...createTestServerContext({ mastra }),
+        agentId: 'gateway-agent',
+        resourceId: 'resource-2',
+        threadId: 'thread-1',
+      }),
+    ).rejects.toThrow('Access denied');
+    expect(waitForBuffering).not.toHaveBeenCalled();
+  });
 });
