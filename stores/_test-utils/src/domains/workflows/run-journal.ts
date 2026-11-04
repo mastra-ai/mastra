@@ -1,6 +1,12 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import type { WorkflowsStorage, WorkflowRun, WorkflowRunHeader } from '@mastra/core/storage';
-import { getSnapshotMemoryInfo, isRunFenceConflictError, summarizeStepResult } from '@mastra/core/storage';
+import type { RunFenceScope, WorkflowsStorage, WorkflowRun, WorkflowRunHeader } from '@mastra/core/storage';
+import {
+  getSnapshotMemoryInfo,
+  isRunFenceConflictError,
+  setRunFenceContext,
+  summarizeStepResult,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleSuspendedSnapshotWithThread } from './data';
@@ -1127,6 +1133,14 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
           }),
         );
         await rejected(store.deleteWorkflowRunById({ workflowName, runId: id, fence }));
+        // The engine writes state drafts with the fence of the run fence scope it runs in.
+        const scopes = new AsyncLocalStorage<RunFenceScope | undefined>();
+        const context = setRunFenceContext({ current: () => scopes.getStore(), run: (s, f) => scopes.run(s, f) });
+        await rejected(
+          context.run({ fenceFor: () => fence }, () =>
+            store.appendWorkflowRunStateDraft({ workflowName, runId: id, state: { stale: 1 } }),
+          ),
+        );
         expect(await load(id)).toEqual(original);
         expect((await loadRun(id))!.lastSeq).toBe(2);
 

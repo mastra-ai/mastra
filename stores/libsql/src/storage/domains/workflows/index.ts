@@ -846,7 +846,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
   }
 
-  /** One batch behind the write lock: the header's `lastSeq` bump, then the draft numbered at it. */
+  /**
+   * One batch behind the write lock (or the run's fence): the header's `lastSeq` bump, then the
+   * draft numbered at it.
+   */
   async appendWorkflowRunStateDraft(
     args: { workflowName: string; runId: string } & (
       | { on: StateVersion; ops: StatePatchOp[] }
@@ -862,28 +865,26 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     try {
       const [header] = await this.executeWithRetry(
         () =>
-          withClientWriteLock(this.#client, () =>
-            this.#client.batch(
-              [
-                {
-                  sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET lastSeq = lastSeq + 1, stateShared = 1
-                    WHERE workflow_name = ? AND run_id = ? RETURNING lastSeq`,
-                  args: [workflowName, runId],
-                },
-                {
-                  sql: `INSERT INTO ${TABLE_WORKFLOW_RUN_ENTRIES} (workflow_name, run_id, seq, kind, step_id, payload)
-                    SELECT workflow_name, run_id, lastSeq, 'state-draft', NULL, jsonb(?)
-                    FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
-                  args: [safeStringify(payload), workflowName, runId],
-                },
-              ],
-              'write',
-            ),
+          withRunFence(this.#client, this.#runFenceCheck(undefined, runId, 'appendWorkflowRunStateDraft'), writer =>
+            writer.batch([
+              {
+                sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET lastSeq = lastSeq + 1, stateShared = 1
+                  WHERE workflow_name = ? AND run_id = ? RETURNING lastSeq`,
+                args: [workflowName, runId],
+              },
+              {
+                sql: `INSERT INTO ${TABLE_WORKFLOW_RUN_ENTRIES} (workflow_name, run_id, seq, kind, step_id, payload)
+                  SELECT workflow_name, run_id, lastSeq, 'state-draft', NULL, jsonb(?)
+                  FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
+                args: [safeStringify(payload), workflowName, runId],
+              },
+            ]),
           ),
         'appendWorkflowRunStateDraft',
       );
       row = header!.rows[0];
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw this.#runError('APPEND_WORKFLOW_RUN_STATE_DRAFT', workflowName, runId, error);
     }
     if (!row) throw new Error(`Storage v2 run ${workflowName}/${runId} is not stored`);

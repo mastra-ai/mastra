@@ -1158,18 +1158,26 @@ export class WorkflowsPG extends WorkflowsStorage {
         : { on: args.on.draft ? { seq: args.on.seq, draft: true } : { seq: args.on.seq }, ops: args.ops };
     let row: { seq: number } | null;
     try {
-      row = await this.#db.client.oneOrNone<{ seq: number }>(
-        `WITH h AS (
-           UPDATE ${this.#runsTable()} SET "lastSeq" = "lastSeq" + 1, "stateShared" = true
-           WHERE workflow_name = $1 AND run_id = $2
-           RETURNING "lastSeq"
-         )
-         INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
-         SELECT $1, $2, h."lastSeq", 'state-draft', NULL, $3::jsonb FROM h
-         RETURNING seq`,
-        [workflowName, runId, toPgJson(payload)],
+      row = await withRunFence(
+        this.#db.client,
+        this.#runOwnersTable(),
+        resolveRunFence(this, undefined, runId),
+        'appendWorkflowRunStateDraft',
+        q =>
+          q.oneOrNone<{ seq: number }>(
+            `WITH h AS (
+               UPDATE ${this.#runsTable()} SET "lastSeq" = "lastSeq" + 1, "stateShared" = true
+               WHERE workflow_name = $1 AND run_id = $2
+               RETURNING "lastSeq"
+             )
+             INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+             SELECT $1, $2, h."lastSeq", 'state-draft', NULL, $3::jsonb FROM h
+             RETURNING seq`,
+            [workflowName, runId, toPgJson(payload)],
+          ),
       );
     } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
       throw this.#runError('APPEND_WORKFLOW_RUN_STATE_DRAFT', workflowName, runId, error);
     }
     if (!row) throw new Error(`Storage v2 run ${workflowName}/${runId} is not stored`);
