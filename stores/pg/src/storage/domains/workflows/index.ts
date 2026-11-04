@@ -1044,13 +1044,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       return await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'writeWorkflowRunCheckpoint');
-        if (state === undefined && stateBase !== undefined) {
-          // Before this run's own rows, so it locks the base run's header before a delete of the
-          // base run (which locks it, then rewrites this run's entries) could wait on this run.
-          await t.none(
-            `UPDATE ${this.#runsTable()} SET "stateShared" = true
-             WHERE workflow_name = $1 AND run_id = $2 AND NOT "stateShared"`,
-            [stateBase.workflowName, stateBase.runId],
+        const base = state === undefined ? stateBase : undefined;
+        if (base) {
+          // Before this run's own rows, so a delete of the base run (which locks its header, then
+          // rewrites this run's entries) waits on this run rather than the other way round, and a
+          // prune skips it. KEY SHARE, so the base run's own writes and its other children don't wait.
+          await t.oneOrNone(
+            `SELECT 1 FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR KEY SHARE`,
+            [base.workflowName, base.runId],
           );
         }
         const header = await t.oneOrNone<{ lastSeq: number; stateShared: boolean }>(
@@ -1059,6 +1060,28 @@ export class WorkflowsPG extends WorkflowsStorage {
         );
         // `expectedStatus` rejected the write: the header is left as is, and so are the entries.
         if (!header) return null;
+        if (base) {
+          // Shared before the version is checked: a checkpoint of the base run that committed first
+          // dropped it, which the check sees; one that commits later sees the flag and keeps it.
+          await t.none(
+            `UPDATE ${this.#runsTable()} SET "stateShared" = true
+             WHERE workflow_name = $1 AND run_id = $2 AND NOT "stateShared"`,
+            [base.workflowName, base.runId],
+          );
+          const { stored } = await t.one<{ stored: boolean }>(
+            `SELECT EXISTS (
+               SELECT 1 FROM ${this.#entriesTable()} WHERE workflow_name = $1 AND run_id = $2
+                 AND CASE WHEN $4::boolean THEN kind = 'state-draft' AND seq = $3::int
+                     ELSE kind IN ('state', 'state-base') AND seq <= $3::int END
+             ) AS stored`,
+            [base.workflowName, base.runId, base.seq, base.draft === true],
+          );
+          if (!stored) {
+            throw new Error(
+              `Workflow run ${run.workflowName}/${run.runId} builds on state version ${base.seq} of ${base.workflowName}/${base.runId}, which is not stored`,
+            );
+          }
+        }
         const { lastSeq, stateShared } = header;
         // A new statement under READ COMMITTED: with the header locked above, it sees every
         // append that committed before this checkpoint, so none of their entries survive it.

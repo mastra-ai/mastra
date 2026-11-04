@@ -432,24 +432,42 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   /**
-   * Runs a storage v2 write's statements behind the run's fence. With `expectedStatus`, in a
-   * write transaction that first reads the stored status, and writes nothing (resolving to null)
-   * when the run is stored and its status doesn't match.
+   * Runs a storage v2 write's statements behind the run's fence. With `expectedStatus` or
+   * `stateBase`, in a write transaction that first reads the stored run: it writes nothing
+   * (resolving to null) when the run is stored and its status doesn't match `expectedStatus`, and
+   * throws when the state version `stateBase` names isn't stored.
    */
   #writeRun(
     check: RunFenceCheck | undefined,
     run: RunWrite,
-    expectedStatus: WorkflowRunStatus | WorkflowRunStatus[] | undefined,
+    { expectedStatus, stateBase }: { expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[]; stateBase?: StateRef },
     statements: SqliteStatement[],
   ): Promise<SqliteResultSet[] | null> {
-    if (expectedStatus === undefined) return withRunFence(this.#client, check, writer => writer.batch(statements));
+    if (expectedStatus === undefined && stateBase === undefined) {
+      return withRunFence(this.#client, check, writer => writer.batch(statements));
+    }
     return inWriteTransaction(this.#client, async tx => {
       if (check) await assertRunFence(tx, check);
-      const { rows } = await tx.execute({
-        sql: `SELECT status FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
-        args: [run.workflowName, run.runId],
-      });
-      if (rows[0] && !matchesExpectedWorkflowStatus(rows[0].status as WorkflowRunStatus, expectedStatus)) return null;
+      if (expectedStatus !== undefined) {
+        const { rows } = await tx.execute({
+          sql: `SELECT status FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
+          args: [run.workflowName, run.runId],
+        });
+        if (rows[0] && !matchesExpectedWorkflowStatus(rows[0].status as WorkflowRunStatus, expectedStatus)) return null;
+      }
+      if (stateBase !== undefined) {
+        const { rows } = await tx.execute({
+          sql: `SELECT 1 FROM ${TABLE_WORKFLOW_RUN_ENTRIES} WHERE workflow_name = ? AND run_id = ?
+            AND CASE WHEN ? THEN kind = 'state-draft' AND seq = ? ELSE kind IN ('state', 'state-base') AND seq <= ? END
+            LIMIT 1`,
+          args: [stateBase.workflowName, stateBase.runId, stateBase.draft ? 1 : 0, stateBase.seq, stateBase.seq],
+        });
+        if (!rows[0]) {
+          throw new Error(
+            `Workflow run ${run.workflowName}/${run.runId} builds on state version ${stateBase.seq} of ${stateBase.workflowName}/${stateBase.runId}, which is not stored`,
+          );
+        }
+      }
       const results: SqliteResultSet[] = [];
       for (const statement of statements) results.push(await tx.execute(statement));
       return results;
@@ -739,9 +757,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   /**
-   * One batch behind the write lock (see `#writeRun` for `expectedStatus`): marking the run a state
-   * base builds on as shared, the header upsert, then the deletion of the run's entries (only its
-   * steps when another run builds on its state, see `stateShared`), then the new ones.
+   * One batch behind the write lock (see `#writeRun` for `expectedStatus` and `stateBase`): marking
+   * the run a state base builds on as shared, the header upsert, then the deletion of the run's
+   * entries (only its steps when another run builds on its state, see `stateShared`), then the new ones.
    */
   async writeWorkflowRunCheckpoint({
     fence,
@@ -762,11 +780,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     const entries = journalEntries(steps, { state, stateBase, statePatch }, true);
     const check = this.#runFenceCheck(fence, run.runId, 'writeWorkflowRunCheckpoint');
     try {
+      const base = state === undefined ? stateBase : undefined;
       const statements: SqliteStatement[] = [];
-      if (stateBase !== undefined) {
+      if (base) {
         statements.push({
           sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET stateShared = 1 WHERE workflow_name = ? AND run_id = ? AND NOT stateShared`,
-          args: [stateBase.workflowName, stateBase.runId],
+          args: [base.workflowName, base.runId],
         });
       }
       statements.push(
@@ -779,7 +798,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         insertEntries(run, entries),
       );
       const results = await this.executeWithRetry(
-        () => this.#writeRun(check, run, expectedStatus, statements),
+        () => this.#writeRun(check, run, { expectedStatus, stateBase: base }, statements),
         'writeWorkflowRunCheckpoint',
       );
       return results && { lastSeq: Number(results[statements.length - 3]!.rows[0]!.lastSeq) };
@@ -817,7 +836,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     try {
       const results = await this.executeWithRetry(
         () =>
-          this.#writeRun(check, run, expectedStatus, [
+          this.#writeRun(check, run, { expectedStatus }, [
             upsertHeader(run, entries.length, { checkpoint: false, startStateSeq }),
             insertEntries(run, entries),
           ]),

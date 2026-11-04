@@ -760,22 +760,110 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await statesOf(child)).state).toEqual({ own: true });
       });
 
-      it('starts from an empty state when the base run is not stored, or the checkpoint has no state', async () => {
-        const { parent, child, header, childOf } = family();
-        await store.writeWorkflowRunCheckpoint({
-          ...child,
-          header: childOf('missing'),
-          steps: {},
-          stateBase: { workflowName: `${workflowName}-missing`, runId: child.runId, seq: 3 },
-        });
-        await store.appendWorkflowRunEntries({
-          ...child,
-          header: childOf('missing'),
-          steps: {},
-          statePatch: [set(['c'], 1)],
-        });
-        expect((await statesOf(child)).state).toEqual({ c: 1 });
+      it('rejects a checkpoint built on a state version that is not stored', async () => {
+        const { run, parent, child, header, childOf } = family();
+        const notStored = /not stored/;
+        // The base run isn't stored.
+        await expect(
+          store.writeWorkflowRunCheckpoint({
+            ...child,
+            header: childOf('parent'),
+            steps: {},
+            stateBase: { ...parent, seq: 3 },
+          }),
+        ).rejects.toThrow(notStored);
+        expect(await store.loadWorkflowRun({ ...child, successfulSteps: 'full' })).toBeNull();
 
+        // A later checkpoint of the base run dropped the version, or the draft was never stored.
+        const { lastSeq: dropped } = (await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: {},
+          state: { v: 1 },
+        }))!;
+        const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: {},
+          state: { v: 2 },
+        }))!;
+        for (const stateBase of [
+          { ...parent, seq: dropped },
+          { ...parent, seq: lastSeq, draft: true as const },
+        ]) {
+          await expect(
+            store.writeWorkflowRunCheckpoint({ ...child, header: childOf('parent'), steps: {}, stateBase }),
+          ).rejects.toThrow(notStored);
+        }
+        expect(await store.loadWorkflowRun({ ...child, successfulSteps: 'full' })).toBeNull();
+
+        // A write that `expectedStatus` rejects doesn't keep the base run's earlier versions either.
+        const canceled = run('canceled');
+        await store.writeWorkflowRunCheckpoint({
+          ...canceled,
+          header: { ...childOf('parent'), status: 'canceled' },
+          steps: {},
+        });
+        expect(
+          await store.writeWorkflowRunCheckpoint({
+            ...canceled,
+            header: childOf('parent'),
+            steps: {},
+            stateBase: { ...parent, seq: lastSeq },
+            expectedStatus: 'running',
+          }),
+        ).toBeNull();
+        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { v: 3 } });
+        await expect(
+          store.writeWorkflowRunCheckpoint({
+            ...child,
+            header: childOf('parent'),
+            steps: {},
+            stateBase: { ...parent, seq: lastSeq },
+          }),
+        ).rejects.toThrow(notStored);
+      });
+
+      it('builds every run on a base run deleted or checkpointed while they checkpoint, or rejects them', async () => {
+        for (let round = 0; round < 10; round++) {
+          const { run, parent, header, childOf } = family();
+          const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
+            ...parent,
+            header,
+            steps: {},
+            state: { list: ['a'] },
+          }))!;
+          // The first children to build on the base run, alongside its delete or a checkpoint that
+          // starts its state over (and drops the version they build on, unless they share it first).
+          const children = ['c1', 'c2', 'c3'].map(name => run(`${name}-${round}`));
+          const results = await Promise.allSettled([
+            ...children.map(c =>
+              store.writeWorkflowRunCheckpoint({
+                ...c,
+                header: childOf('parent'),
+                steps: {},
+                stateBase: { ...parent, seq: lastSeq },
+              }),
+            ),
+            round % 2
+              ? store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { list: ['b'] } })
+              : store.deleteWorkflowRunById(parent),
+          ]);
+          expect(results.at(-1)!.status).toBe('fulfilled');
+          for (const [i, c] of children.entries()) {
+            const result = results[i]!;
+            if (result.status === 'rejected') {
+              expect(String(result.reason)).toMatch(/not stored/);
+              expect(await store.loadWorkflowRun({ ...c, successfulSteps: 'full' })).toBeNull();
+            } else {
+              expect((await statesOf(c)).state).toEqual({ list: ['a'] });
+            }
+          }
+        }
+      });
+
+      it('starts from an empty state when the checkpoint has no state', async () => {
+        const { parent, header } = family();
         await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, state: { p: 1 } });
         await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {} });
         expect((await statesOf(parent)).state).toEqual({});

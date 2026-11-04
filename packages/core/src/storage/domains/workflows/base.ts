@@ -181,6 +181,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * from `{}`. Earlier state entries are kept, so a nested run built on an earlier version of this
    * run's state still reads it. Writes the header, creating the run if it isn't stored. Returns the
    * run's `lastSeq`, or null when `expectedStatus` rejected the write (see `appendWorkflowRunEntries`).
+   * Throws when `stateBase` names a version that isn't stored (its run was deleted, or a checkpoint
+   * of it dropped that version), rather than starting the run's state from `{}`.
    *
    * `threadId` is the whole run's thread (`getSnapshotMemoryInfo`), passed on every write.
    * Stores that keep it next to the header filter `listWorkflowRuns` by it without reading entries.
