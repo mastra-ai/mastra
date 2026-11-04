@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatAnnotatedMessage, normalizeAnnotationText } from './format-annotated-message';
+import { formatAnnotatedMessage, normalizeAnnotationText } from '../format-annotated-message';
 
 describe('formatAnnotatedMessage', () => {
   describe('when no annotations were added', () => {
