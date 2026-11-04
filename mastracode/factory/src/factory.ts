@@ -457,7 +457,10 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
-/** Checks `seedBoards` the way the boards API checks a new board, so a bad one fails at startup. */
+/**
+ * Checks `seedBoards` the way the boards API checks a new board, so a bad one fails at startup. An
+ * unknown skill only warns, as it does for code boards (the boards API refuses it).
+ */
 function assertSeedBoards(seedBoards: readonly StoredBoardInput[], codeBoards: BoardRegistry): StoredBoardInput[] {
   const keys = new Set<string>();
   return seedBoards.map(input => {
@@ -598,11 +601,13 @@ export class MastraFactory {
 
   /**
    * Stores a board in projects that have none under its key, and never overwrites one: a project
-   * that has the board, edited or not, is skipped. Use it to bring a new board to projects that
-   * exist already; `seedBoards` brings it to projects created later. The board is validated
-   * once, as the boards API does, and each insert is audited as `factory.board.created` by
-   * `system:factory`. Built-in and app board keys are refused with a `BoardWriteError`
-   * (`code_board`). Available after `prepare()`.
+   * that has the board, edited or not, is skipped. It's a one-off write: a project that deleted
+   * the board gets it back, so don't run it on every boot (`seedBoards` stores a board in each
+   * project once, including projects created later, and keeps a deleted one deleted). Use it to
+   * bring back an app board a project deleted, or to push a board into chosen projects. The
+   * board is validated once, as the boards API does, and each insert is audited as
+   * `factory.board.created` by `system:factory`. The legacy Review board's key is refused with a
+   * `BoardWriteError` (`code_board`). Available after `prepare()`.
    *
    * @example
    * ```ts
@@ -633,8 +638,10 @@ export class MastraFactory {
       );
     }
     const { writes, projects, audit } = store;
-    writes.refuseCodeBoard(board.key, 'create');
     const input = writes.validate(board);
+    // Work, app and seed boards are stored per project like any other, so their keys can be
+    // inserted (bringing back one a project deleted); the legacy Review board can't.
+    writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
     if (options.projects === 'all') {

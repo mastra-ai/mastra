@@ -16,4 +16,4 @@ curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work/reset" -H '
 
 **What stays fixed:** phases the code declares, their kind, the first phase, the runner context and skill of phases whose work runs in code, declared exit tools, and the moves Factory's code makes between phases. Edits that change these are refused with `422 code_behaviour`, listing each conflict.
 
-Board responses now include `customized` and `defaultChanged`, so you can see when Factory's default changed after your edit. Unedited boards have no stored copy and keep following the running Factory version, at revision 0; resetting a board rewrites its copy to the code default at the next revision, so revisions never go back. Code boards still can't be deleted or created over (`409 code_board`), and the legacy Review board stays read-only.
+Resetting a board rewrites it to Factory's definition at the next revision, so revisions never go back. Boards can't be created over a code board's key (`409 code_board`), and the legacy Review board stays read-only.

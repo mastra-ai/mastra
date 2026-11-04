@@ -22,7 +22,9 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { compileBoardDefinition } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
+import type { InstalledBoard } from './registry.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -159,7 +161,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     async function boot(
       newStorage: () => FactoryStorage,
       orgId: string,
-      options: { seedBoards?: StoredBoardInput[] } = {},
+      options: { seedBoards?: StoredBoardInput[]; boards?: InstalledBoard[] } = {},
     ) {
       const storage = newStorage();
       const github = new GithubIntegration({
@@ -924,10 +926,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ]);
 
           await expect(
+            replica.factory.insertBoard({ ...bugsBoard, key: 'review' }, { projects: 'all' }),
+          ).rejects.toMatchObject({ code: 'code_board' });
+          // Work's key is checked against Work's code behaviour, as an edit is.
+          await expect(
             replica.factory.insertBoard({ ...bugsBoard, key: 'work' }, { projects: 'all' }),
-          ).rejects.toMatchObject({
-            code: 'code_board',
-          });
+          ).rejects.toMatchObject({ code: 'code_behaviour' });
           await expect(
             replica.factory.insertBoard({ ...bugsBoard, phases: [] }, { projects: 'all' }),
           ).rejects.toMatchObject({ code: 'invalid_board' });
@@ -936,6 +940,60 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           ).rejects.toMatchObject({ code: 'project_not_found' });
         }, 60_000);
       });
+
+      it('brings back an app board a project deleted, in the projects named, and nowhere else', async () => {
+        stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const release = compileBoardDefinition({
+          id: 'release',
+          name: 'Release',
+          initialPhase: 'queued',
+          phases: {
+            queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
+            shipping: { name: 'Shipping', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+            shipped: { name: 'Shipped', kind: 'terminal' },
+          },
+        });
+        const db = await isolatedDatabase();
+        const replica = await boot(db, orgId, { boards: [release] });
+        const [kept, gone, other] = [
+          await createProject(replica, 'Kept'),
+          await createProject(replica, 'Gone'),
+          await createProject(replica, 'Other'),
+        ];
+        for (const project of [gone, other]) {
+          const deleted = await replica.send(
+            'DELETE',
+            `/web/factory/projects/${project}/boards/release?expectedRevision=1`,
+          );
+          expect(deleted.status).toBe(204);
+        }
+        const definition = (await replica.send('GET', `/web/factory/projects/${kept}/boards/release`)).json.board;
+
+        const result = await replica.factory.insertBoard(
+          { key: 'release', name: definition.name, phases: definition.phases },
+          {
+            projects: [
+              { orgId, factoryProjectId: kept },
+              { orgId, factoryProjectId: gone },
+            ],
+          },
+        );
+        expect(result).toEqual({
+          inserted: [{ orgId, factoryProjectId: gone }],
+          skipped: [{ orgId, factoryProjectId: kept }],
+        });
+        const back = await catalog(replica, gone);
+        expect(back.find(board => board.id === 'release')).toMatchObject({ source: 'app' });
+        // Served as the app board again; the project not named stays without it.
+        expect((await replica.boards.get({ orgId, factoryProjectId: gone }, 'release'))!.revision).toBe(1);
+        expect(await replica.boards.get({ orgId, factoryProjectId: other }, 'release')).toBeNull();
+
+        // A restart stores it nowhere again.
+        const restarted = await boot(db, orgId, { boards: [release] });
+        await catalog(restarted, other);
+        expect(await restarted.boards.get({ orgId, factoryProjectId: other }, 'release')).toBeNull();
+      }, 60_000);
 
       it("changes what Work runs through the boards API, and refuses a change Work's code behaviour can't honour", async () => {
         const requests = stubModel();

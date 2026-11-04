@@ -136,13 +136,13 @@ Everything else can change: names and descriptions, added `nextPhases`, `autoSta
 
 **Boards that no longer fit the code.** A Work or app board is served even when it has fallen out of step with a newer release's code, with the code behaviour that still fits it. A phase the code declares keeps its handlers only while it is on the board with the same `kind`, `runner.context`, `runner.skill` and exit tool; an outcome is dropped when its target phase is gone or the board no longer allows the move; the board's tool rules always stay (they hold exit-tool approvals, such as Planning's `submit_plan`), and its event rules and transition policy need every phase the code declares, and `sourceClosed` needs both its phases, still terminal. A move Factory's code makes that the board's `nextPhases` don't allow is reported too; when code makes it, the move is refused (and retried until its attempts run out), and the card stays where it is. Each dropped behaviour is reported in the board's `problems`, for example `Phase "testing" isn't on stored board "release", so its code behaviour doesn't run.` or `Phase "triage" runs without its code behaviour: <conflict>`. A board stored under an app board's key that the app stopped defining is served as one of the project's own boards.
 
-Creating a board under a built-in or app board's key is refused with `409 code_board`, and so is deleting the Work board, whose code handlers run by its key; reset it instead. App and `seedBoards` boards can be deleted like the project's own. A stored `review` board stays hidden by the Review board.
+Creating a board under a built-in or app board's key is refused with `409 code_board`, and so is deleting the Work board, whose code handlers run by its key; reset it instead. App and `seedBoards` boards can be deleted like the project's own; Factory doesn't store them again, and `factory.insertBoard()` brings one back. A stored `review` board stays hidden by the Review board.
 
 **When a board isn't stored.** If storing Factory's boards in a project fails, the boards it couldn't store aren't served, the catalog reports `Board "<key>" isn't stored in this project yet; Factory stores it on the next load.`, and `GET …/boards/:boardKey` answers `404 board_not_found`; the project's next load tries again. Factory serves code boards itself only for the legacy Review board, for every project when the boards storage could not start, and on a replica that has not loaded a project yet, until its first load.
 
 #### Writing a board into projects
 
-`seedBoards` stores board definitions in every project once, including projects created later. `factory.insertBoard()` stores a board in projects that exist already, after `prepare()`: in each project that has no board under its key, and never over one it has, edited or not. A project that deleted the board gets it again. The board is checked once, as the boards API checks it, and each insert is audited as `factory.board.created` by `system:factory`. It returns the projects it stored the board in and the ones it skipped. A refused board throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `unknown_skill`, or `code_board` for a built-in or app board's key). Boards written either way have no code behaviour.
+`seedBoards` stores board definitions in every project once, including existing projects (on their first load, which includes the preload in `prepare()`) and projects created later; a project that deletes one keeps it deleted. `factory.insertBoard()` is a one-off write after `prepare()`: it stores a board in each named project (or all of them) that has no board under its key, and never over one it has, edited or not. A project that deleted the board gets it again, so use it to bring a deleted app or seed board back, or to push a board into chosen projects, and don't run it on every boot. The board is checked once, as the boards API checks it, and each insert is audited as `factory.board.created` by `system:factory`. It returns the projects it stored the board in and the ones it skipped. A refused board throws `BoardWriteError`, whose `code` is the boards API's error code (`invalid_board`, `unknown_skill`, `code_behaviour`, or `code_board` for the legacy Review board's key). A board under a new key has no code behaviour; an app board's key keeps the app board's.
 
 ```ts
 const bugs = {
@@ -155,10 +155,12 @@ const bugs = {
   ],
 } satisfies StoredBoardInput;
 
+// Every project stores Bugs once, now and when it's created.
 const factory = new MastraFactory({ storage, seedBoards: [bugs] });
 await factory.prepare();
-// Projects that stored Bugs before keep theirs; projects that never had it get it now.
-const { inserted, skipped } = await factory.insertBoard(bugs, { projects: 'all' });
+
+// Once, for example from an admin script: give Bugs back to one project that deleted it.
+const { inserted, skipped } = await factory.insertBoard(bugs, { projects: [{ orgId, factoryProjectId }] });
 ```
 
 **Editing rules for stored boards.**
