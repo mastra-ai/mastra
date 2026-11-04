@@ -13,7 +13,8 @@ import type { ObservabilityContext } from '../../observability';
 import { EntityType, resolveObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MastraCompositeStore } from '../../storage';
-import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../workflows/types';
+import { loadStepResults } from '../../workflows/run-journal';
+import type { WorkflowResult, WorkflowRunStartOptions } from '../../workflows/types';
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
 import type { MastraScorer } from '../base';
@@ -1024,7 +1025,7 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>, ta
     scoringData: {
       input: item.input,
       output: workflowResult.status === 'success' ? workflowResult.result : undefined,
-      stepResults: workflowResult.steps as Record<string, StepResult<any, any, any, any>>,
+      stepResults: await loadStepResults(workflowResult.steps),
       stepExecutionPath: workflowResult.stepExecutionPath,
     },
   };
