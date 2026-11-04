@@ -73,6 +73,7 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../agent';
 import type { MastraToolInvocationPart } from '../../agent/message-list';
+import { MessageMerger } from '../../agent/message-list/merge';
 import {
   advancesToolInvocationState,
   isClientToolInvocationUpdate,
@@ -84,27 +85,36 @@ import type { MemoryStorage } from '../../storage';
 /**
  * A client returning tool outcomes usually doesn't know the id of the stored message that holds
  * the calls (`@mastra/client-js` sends a fresh assistant or tool message), so the outcomes would
- * be saved as a second copy of the call. When every outcome completes a call the latest stored
- * message still has pending, that is the message being answered: take its id so `MessageList.add`
- * folds the outcomes into it. A pending client call can only be completed by the client, so this
- * can't mistake a duplicated server result for a new one.
+ * be saved as a second copy of the call. When every outcome is for a call in the latest stored
+ * message and at least one completes a call still pending there, that is the message being
+ * answered: take its id so `MessageList.add` folds the outcomes into it. Calls completed in the
+ * same step (a server tool next to the client tool) come back too; the merge drops them as stale.
+ * A pending client call can only be completed by the client, so this can't mistake a duplicated
+ * server result for a new one. A message sealed by observational memory takes nothing more, so its
+ * outcomes keep their own id and are saved as a new message.
  */
 function answeringStoredCalls(outcomes: MastraDBMessage, latestStored: MastraDBMessage): MastraDBMessage {
-  if (outcomes.role !== 'assistant' || latestStored.role !== 'assistant' || outcomes.id === latestStored.id) {
+  if (
+    outcomes.role !== 'assistant' ||
+    latestStored.role !== 'assistant' ||
+    outcomes.id === latestStored.id ||
+    MessageMerger.isSealed(latestStored)
+  ) {
     return outcomes;
   }
 
-  const pending = new Map<string, MastraToolInvocationPart['toolInvocation']['state']>();
+  const storedStates = new Map<string, MastraToolInvocationPart['toolInvocation']['state']>();
   for (const part of latestStored.content.parts) {
-    if (part.type === 'tool-invocation') pending.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
   }
+  const toolParts = outcomes.content.parts.filter(part => part.type === 'tool-invocation');
   const answersStoredCalls =
-    outcomes.content.parts.length > 0 &&
-    outcomes.content.parts.every(part => {
-      if (part.type !== 'tool-invocation') return false;
-      const storedState = pending.get(part.toolInvocation.toolCallId);
-      return storedState !== undefined && advancesToolInvocationState(storedState, part.toolInvocation.state);
-    });
+    toolParts.length > 0 &&
+    toolParts.length === outcomes.content.parts.length &&
+    toolParts.every(part => storedStates.has(part.toolInvocation.toolCallId)) &&
+    toolParts.some(part =>
+      advancesToolInvocationState(storedStates.get(part.toolInvocation.toolCallId)!, part.toolInvocation.state),
+    );
   return answersStoredCalls ? { ...outcomes, id: latestStored.id } : outcomes;
 }
 
