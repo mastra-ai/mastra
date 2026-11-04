@@ -1451,9 +1451,10 @@ describe('Agent signals: drain and lease handoff', () => {
         const queued = runtime.queueMessage(agent, `queued ${outcome}`, { resourceId, threadId, queueOwnerId }, pubsub);
         finishActiveRun();
 
-        await waitForCondition(() => counts.at(-1) === 0);
-        expect(counts).toEqual([0, 1, 0]);
         if (outcome === 'forward') {
+          await waitForCondition(() =>
+            pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === ownerRunId),
+          );
           expect(stream).not.toHaveBeenCalled();
           expect(pubsub.publishedData).toContainEqual(
             expect.objectContaining({
@@ -1462,7 +1463,11 @@ describe('Agent signals: drain and lease handoff', () => {
               signal: expect.objectContaining({ id: queued.signal.id }),
             }),
           );
+          // The forwarded message still counts until the owner accepts it, which this owner never does.
+          expect(counts).toEqual([0, 1]);
         } else {
+          await waitForCondition(() => counts.at(-1) === 0);
+          expect(counts).toEqual([0, 1, 0]);
           expect(stream).toHaveBeenCalledTimes(1);
         }
       }

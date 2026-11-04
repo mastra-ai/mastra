@@ -224,5 +224,8 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
           completionStartTime: executionOutput.completionStartTime,
           timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
         }),
+    // The latest iteration's response, even when it has none, as in the main loop: a run
+    // whose final step is aborted or rejected mid-stream ends with no response on the span.
+    lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,
   };
 }

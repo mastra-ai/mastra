@@ -486,6 +486,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             requestContext,
             tracingContext,
             logger: mastra?.getLogger?.(),
+            messageId: state.messageId,
             outputResult: {
               text: finalText ?? '',
               usage: state.accumulatedUsage,
@@ -499,6 +500,16 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           }
 
           const tripwire = finishResult.tripwire;
+          if (pubsub && !tripwire) {
+            for (const chunk of finishResult.structuredOutputChunks ?? []) {
+              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+            }
+          }
+          if (pubsub) {
+            for (const chunk of finishResult.outputResultChunks ?? []) {
+              await emitChunkEvent(pubsub, state.runId, chunk, true);
+            }
+          }
           if (tripwire && pubsub) {
             await emitChunkEvent(pubsub, state.runId, {
               type: 'tripwire',
@@ -506,11 +517,6 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               from: ChunkFrom.AGENT,
               payload: tripwire,
             });
-          }
-          if (pubsub && !tripwire) {
-            for (const chunk of finishResult.structuredOutputChunks ?? []) {
-              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
-            }
           }
 
           // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
@@ -592,6 +598,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                 finishReason: state.lastStepResult?.reason || 'stop',
                 ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 ...clocks,
+                responseId: state.lastResponse?.id,
+                responseModel: state.lastResponse?.modelId,
               },
               usage,
             });

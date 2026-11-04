@@ -45,10 +45,15 @@
         "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.7": [
+    "openai/gpt-5.5": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "toggle"
       }
     ],
     "anthropic/claude-opus-4.6": [
@@ -56,6 +61,12 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 127999
+      }
+    ],
+    "anthropic/claude-opus-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8": [
@@ -75,17 +86,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

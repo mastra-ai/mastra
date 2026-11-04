@@ -579,6 +579,78 @@ describe('FactoryPhaseStateProcessor', () => {
       );
     });
 
+    it('lets a custom exit tool’s own success move the card on, but not an agent or a failed call', async () => {
+      const release = defineBoard({
+        id: 'release',
+        name: 'Release',
+        initialPhase: 'intake',
+        phases: {
+          intake: { name: 'Intake', kind: 'resting', nextPhases: ['drafting'] },
+          drafting: {
+            name: 'Drafting',
+            kind: 'working',
+            runner: { context: 'work' },
+            exitTool: 'publish_draft',
+            nextPhases: ['shipping'],
+          },
+          shipping: { name: 'Shipping', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+          shipped: { name: 'Shipped', kind: 'terminal' },
+        },
+        tools: {
+          publish_draft: {
+            // Moves on whatever the call returned, so a failed call reaches the exit-tool gate.
+            onResult: context =>
+              context.item.stages[0] === 'drafting'
+                ? {
+                    type: 'transition',
+                    idempotencyKey: `${context.ingress.id}:published:${context.result.status}`,
+                    board: 'release',
+                    stage: 'shipping',
+                  }
+                : undefined,
+          },
+        },
+      });
+      const setup = async () => {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const prepared = await prepare(storage, 'work', 'issue', { id: 'release', stage: 'drafting' });
+        const boards = createBoardRegistry({ boards: [release] });
+        const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+        const processor = new FactoryPhaseStateProcessor({
+          configVersion: 'rules-v1',
+          boards,
+          storage,
+          transitionService,
+        });
+        return { storage, prepared, transitionService, processor };
+      };
+
+      const failed = await setup();
+      await failed.processor.processInputStep(
+        inputArgs(requestContext(), [toolMessage({ toolName: 'publish_draft', state: 'error', result: 'boom' })]),
+      );
+      expect(await stageOf(failed.storage, failed.prepared.item.id)).toEqual(['drafting']);
+      const byAgent = await failed.transitionService.transition({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: failed.prepared.item.id,
+        board: 'release',
+        stage: 'shipping',
+        expectedRevision: failed.prepared.item.revision,
+        actor: { type: 'agent', bindingId: failed.prepared.binding.id, role: 'work' },
+        ingress: { type: 'agent', identity: 'agent-skips-the-exit-tool' },
+        cause: 'test',
+      });
+      expect(byAgent).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      expect(byAgent.status === 'rejected' && byAgent.reason).toContain('Drafting ends when publish_draft succeeds');
+
+      const succeeded = await setup();
+      await succeeded.processor.processInputStep(
+        inputArgs(requestContext(), [toolMessage({ toolName: 'publish_draft', result: { content: 'Published.' } })]),
+      );
+      expect(await stageOf(succeeded.storage, succeeded.prepared.item.id)).toEqual(['shipping']);
+    });
+
     it('fails closed when the item’s board is not installed', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepare(storage, 'plan');
@@ -645,6 +717,76 @@ describe('FactoryPhaseStateProcessor', () => {
 
     expect(signal).toMatchObject({ attributes: { board: 'release', stage: 'queued' } });
     expect(signal?.contents).toContain('Factory release phase: Release Queue (queued)');
+  });
+
+  it('runs onEnter once when a tool rule re-enters the current stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const onEnter = vi.fn(() => ({
+      type: 'invokeSkill' as const,
+      idempotencyKey: 'restart-build',
+      role: 'builder',
+      prompt: 'Start the build over.',
+    }));
+    const board = defineBoard({
+      id: 'custom',
+      title: 'Custom',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', role: 'builder', next: 'done', onEnter: { issue: onEnter } },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+      tools: {
+        request_restart: {
+          onResult: () => ({
+            type: 'transition' as const,
+            idempotencyKey: 'restart',
+            board: 'custom',
+            stage: 'building',
+            reenter: true,
+          }),
+        },
+      },
+    });
+    const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+    const prepared = await prepare(storage, 'builder', 'issue', { id: 'custom', stage: 'building' });
+    const reader = {
+      listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'request_restart' })], hasMore: false })),
+    };
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      storage,
+      boards,
+      transitionService,
+      messageReader: reader as never,
+    });
+
+    await processor.reconcileBinding(prepared.binding);
+    await processor.reconcileBinding(prepared.binding);
+    // The deferred dispatcher later replays the stored decision with the same ingress identity.
+    const item = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      board: 'custom',
+      stage: 'building',
+      reenter: true,
+      expectedRevision: item!.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: 'decision:restart' },
+      cause: 'tool_result_rule',
+      causalChain: [],
+    });
+
+    expect(onEnter).toHaveBeenCalledOnce();
+    const queued = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+      entry => entry.decision.type === 'invokeSkill',
+    );
+    expect(queued).toEqual([
+      expect.objectContaining({ decision: expect.objectContaining({ idempotencyKey: 'restart-build' }) }),
+    ]);
   });
 
   it('ingests custom-phase persisted results once and retains their cursor and provenance', async () => {
@@ -1003,6 +1145,29 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(reasoningChanged?.contents).toContain('Runtime: model=openai/gpt-5.6-sol, reasoning-setting=xhigh');
   });
 
+  it('gives a pull request card reviewed on the Work board the review runtime, but not an issue card in Review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'review', 'pull-request', { id: 'work', stage: 'review' });
+    const boards = createBoardRegistry();
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
+
+    const signal = await processor.computeStateSignal(stateArgs(requestContext({ modelId: 'openai/gpt-5.5' })));
+
+    expect(signal).toMatchObject({
+      attributes: { status: 'active', board: 'work', stage: 'review', role: 'review', modelId: 'openai/gpt-5.5' },
+    });
+    expect(signal?.contents).toContain('Runtime: model=openai/gpt-5.5');
+
+    const issueStorage = (await createFactoryStorageForTests()).workItems;
+    await prepare(issueStorage, 'review', 'issue', { id: 'work', stage: 'review' });
+    const issueSignal = await new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage: issueStorage,
+    }).computeStateSignal(stateArgs(requestContext({ modelId: 'openai/gpt-5.5' })));
+    expect(issueSignal?.attributes).not.toHaveProperty('modelId');
+  });
+
   it('rejects review phase state without a selected model', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
@@ -1012,6 +1177,24 @@ describe('FactoryPhaseStateProcessor', () => {
     await expect(processor.computeStateSignal(stateArgs(requestContext({ modelId: '' })))).rejects.toThrow(
       'Factory review phase requires a selected session model.',
     );
+  });
+
+  it('tells the planner an approved plan moves the card, and it may move it only when plans are auto-approved', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'planning' });
+    const boards = createBoardRegistry();
+    const signal = await new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+    }).computeStateSignal(stateArgs(requestContext()));
+    expect(signal?.contents).toContain(
+      'This phase ends when submit_plan succeeds and is approved; that moves the card on.',
+    );
+    expect(signal?.contents).toContain(
+      'You can move it on to a working phase yourself with factory_transition_work_item only when submit_plan is auto-approved for this card; otherwise a person approves the handoff.',
+    );
+    expect(signal?.contents).not.toContain('Then move the card with factory_transition_work_item');
   });
 
   it('emits, suppresses, re-emits after compaction, and retracts a revoked phase snapshot', async () => {

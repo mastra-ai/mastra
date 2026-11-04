@@ -881,8 +881,9 @@ describe('Tool Output Validation Tests', () => {
     const result = await tool.execute({ sku: 'sku_1' }, { mastra } as any);
 
     expect(result).toEqual({ orderId: 'ord_1', total: '12.50' });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Tool output validation failed for created-order'), {
+    expect(warn).toHaveBeenCalledWith('Tool output validation failed', {
       toolId: 'created-order',
+      issuePaths: ['total'],
     });
   });
 
@@ -917,7 +918,10 @@ describe('Tool Output Validation Tests', () => {
 
     expect(result).toMatchObject({ error: true });
     expect(result.message).toContain('Tool output validation failed for strict-order');
-    expect(warn).toHaveBeenCalledWith(result.message, { toolId: 'strict-order' });
+    expect(warn).toHaveBeenCalledWith('Tool output validation failed', {
+      toolId: 'strict-order',
+      issuePaths: ['orderId'],
+    });
   });
 
   it('should redact sensitive keys from the output echoed in the validation error', async () => {

@@ -11,9 +11,8 @@ import { selectEventRule } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
-import { linearClaimKey } from './claim.js';
 import type { LinearEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -82,22 +81,17 @@ export class LinearRules {
 
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
-    const itemsByClaimKey = new Map(items.filter(item => item.claimKey).map(item => [item.claimKey, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      // The stable issue id finds the card even after Linear renamed the
-      // identifier; the identifier covers cards filed before claims existed.
+      // One card per Linear issue per project; other projects may file their own.
+      // The identifier finds the card filed under it; after Linear renamed the
+      // identifier, the stable issue id finds it, preferring a live card over
+      // finished ones, as the issue detail route does.
+      const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
       const relatedItem =
-        itemsByClaimKey.get(linearClaimKey(issue.id)) ?? itemsBySourceKey.get(`linear:${issue.identifier}`);
-      // One live card per Linear issue per org. When the winning source for an
-      // issue moves to a source routed elsewhere (a project deselected under a
-      // selected team, or the reverse), the card that already exists keeps the
-      // issue; this Factory must not mint a second one. The store's claim index
-      // is the guarantee; this check spares the dispatcher a refused upsert.
-      if (!relatedItem && (await this.#heldElsewhere(input, issue))) {
-        statuses.push('missing');
-        continue;
-      }
+        itemsBySourceKey.get(`linear:${issue.identifier}`) ??
+        byIssueId.find(item => !isTerminalWorkItem(this.options.boards, item)) ??
+        byIssueId[0];
       statuses.push(await this.#ingestIssue(input, issue, relatedItem));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
@@ -105,26 +99,10 @@ export class LinearRules {
     return { status: 'missing', ingested: statuses.length };
   }
 
-  async #heldElsewhere(input: LinearRulesIngress, issue: LinearIssueIngress): Promise<boolean> {
-    const heldLive = (row: WorkItemRow) =>
-      row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row);
-    const claimant = await this.options.storage.getByClaimKey({
-      orgId: input.orgId,
-      claimKey: linearClaimKey(issue.id),
-    });
-    if (claimant && heldLive(claimant)) return true;
-    // Cards filed before claims existed carry only the identifier.
-    const legacy = await this.options.storage.listBySource({
-      orgId: input.orgId,
-      source: { integrationId: 'linear', type: 'issue', externalId: `linear:${issue.identifier}` },
-    });
-    return legacy.some(heldLive);
-  }
-
   async #ingestIssue(
     input: LinearRulesIngress,
     issue: LinearIssueIngress,
-    relatedItem: WorkItemRow | undefined,
+    relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `linear:${issue.id}:${issue.updatedAt}`;
@@ -156,6 +134,7 @@ export class LinearRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              workItem: relatedItem.workItem,
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
