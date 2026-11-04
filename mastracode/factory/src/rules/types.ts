@@ -615,7 +615,9 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
   /**
    * The status event this move answers. The project's intake routes on the card's board then
    * decide where the card goes instead, and this move applies only when no route on the board
-   * handles the event; a route that does, even a disabled one, owns it.
+   * handles the event; a route that does, even a disabled one, owns it. Factory drops the tag
+   * from a decision returned by an explicit override on the integration's `rules`, so that
+   * override's move always applies; a board handler's tagged move still goes to the routes.
    */
   event?: BoardEventFacts;
 }
