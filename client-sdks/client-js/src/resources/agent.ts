@@ -2676,7 +2676,7 @@ export class Agent extends BaseResource {
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   input: toolCall.args,
-                  result,
+                  output: { type: 'json', value: result as JSONValue },
                   ...(modelOutput != null
                     ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
                     : {}),

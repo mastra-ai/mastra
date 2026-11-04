@@ -46,7 +46,7 @@ export const Parallel: Story = {
     nodes: parallelNodes,
     edges: parallelEdges,
     groups: [
-      { id: 'load-context', label: 'Parallel', description: '2 paths · Run together', nodeIds: ['orders', 'tickets'] },
+      { id: 'load-context', label: 'Parallel', description: '2 paths run together', nodeIds: ['orders', 'tickets'] },
     ],
   },
 };

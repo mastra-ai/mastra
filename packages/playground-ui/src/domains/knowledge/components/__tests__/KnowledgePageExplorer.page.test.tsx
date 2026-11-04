@@ -205,7 +205,11 @@ describe('KnowledgePageExplorer page view', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       const view = within(pageView());
       expect(view.getByTestId('knowledge-page-path').textContent).toBe('org:acme#policies/refund');
-      expect(view.getByTestId('knowledge-page-version').textContent).toMatch(/^Version 3 · updated .* by admin$/);
+      const version = view.getByTestId('knowledge-page-version');
+      expect(Array.from(version.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
+        'Version 3',
+        expect.stringMatching(/^Updated .+ by admin$/),
+      ]);
       const crumbs = within(view.getByRole('navigation', { name: 'Breadcrumb' }));
       expect(crumbs.getAllByRole('button').map(button => button.textContent)).toEqual(['Acme', 'Policies']);
     });
@@ -257,7 +261,11 @@ describe('KnowledgePageExplorer page view', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       const activity = within(within(pageView()).getByRole('region', { name: 'Activity' }));
       expect(activity.getByText('Page edited')).toBeTruthy();
-      expect(activity.getByText('Page edited').parentElement?.textContent).toMatch(/Page editedadmin · /);
+      const [event] = activity.getAllByRole('listitem');
+      expect(Array.from(event.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
+        'admin',
+        expect.stringMatching(/.+/),
+      ]);
     });
   });
 
