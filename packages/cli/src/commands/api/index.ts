@@ -681,6 +681,18 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryBoard, 'reset', FACTORY_API_ROUTE_CATALOG.boardReset, {
+    description:
+      "Reset a project's edited copy of a built-in or app board to its code default, using its expected revision",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Reset the Work board at revision 3',
+        command: `mastra api factory board reset <project-id> work '{"expectedRevision":3}'`,
+      },
+    ],
+  });
 
   addAction(factory, 'skills', FACTORY_API_ROUTE_CATALOG.skillList, {
     description: "List Factory skills; pass a projectId to include that project's edits",

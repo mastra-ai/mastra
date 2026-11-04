@@ -458,6 +458,8 @@ function BoardEditor({
   const error = save.error ?? reset.error;
   const stale = error?.code === 'revision_mismatch';
   const pending = save.isPending || reset.isPending;
+  // Only the read-only Review board has no revision; editable boards start at 0.
+  const revision = board.revision ?? 0;
 
   const setPhase = (phase: StoredPhaseInfo) =>
     setDraft(current => ({ ...current, phases: current.phases.map(p => (p.key === phase.key ? phase : p)) }));
@@ -542,7 +544,7 @@ function BoardEditor({
               disabled={pending}
               onClick={() => {
                 save.reset();
-                reset.mutate(board.revision!);
+                reset.mutate(revision);
               }}
             >
               Reset to default
@@ -553,7 +555,7 @@ function BoardEditor({
             disabled={!changed || blocked || pending || instructionsTooLong(draft)}
             onClick={() => {
               reset.reset();
-              save.mutate({ name: draft.name, phases: draft.phases, expectedRevision: board.revision! });
+              save.mutate({ name: draft.name, phases: draft.phases, expectedRevision: revision });
             }}
           >
             Save

@@ -105,9 +105,9 @@ function scopeKey(scope: StoredBoardScope): string {
 
 /**
  * The per-project board cache. A project's boards are the code boards, followed by the boards the
- * project stored. A code board the project edited (a customized stored copy under its key) is
- * served as the stored fields plus the code behaviour of its board and phase keys; an unedited copy
- * serves the code board itself. The legacy Review board is always served from code. Loads recheck the
+ * project stored. A code board the project edited (a stored copy under its key) is served as the
+ * stored fields plus the code behaviour of its board and phase keys; a code board the project
+ * hasn't edited has no stored copy and serves the code board itself. The legacy Review board is always served from code. Loads recheck the
  * project's board version at most every `recheckMs` and recompile when it changed, so stored
  * edits on other replicas arrive within that delay. The cache never writes.
  */
@@ -153,12 +153,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
     );
   }
 
-  /** The stored copy each editable code board starts from, for the boards API to seed and reset. */
-  seeds(): CodeBoardSeed[] {
-    return [...this.#seeds.values()];
-  }
-
-  /** The seed for one editable code board, or undefined when `key` isn't one. */
+  /** The definition a project's first edit of an editable code board copies, or undefined when `key` isn't one. */
   seedFor(key: string): CodeBoardSeed | undefined {
     return this.#seeds.get(key);
   }
@@ -264,8 +259,8 @@ export class ProjectBoardCache implements ProjectBoardSource {
     const byKey = new Map(rows.map(row => [row.key, row]));
     const details = new Map(this.#codeDetails);
     const problems: string[] = [];
-    // Code boards keep their code order. Unedited copies serve the code board itself, so a newer
-    // Factory release's defaults reach them on every replica without a write.
+    // Code boards keep their code order. One the project hasn't edited has no row and serves the
+    // code board itself, so a newer Factory release's defaults reach it on every replica without a write.
     const boards: InstalledBoard[] = [...this.codeRegistry.values()].map(code => {
       const row = byKey.get(code.id);
       if (!row) return code;
@@ -279,7 +274,6 @@ export class ProjectBoardCache implements ProjectBoardSource {
         );
         return code;
       }
-      if (!row.customized) return code;
       const defaultChanged = row.seedHash !== this.#seeds.get(code.id)!.hash;
       const reason = this.#mergeProblem(row, code);
       if (typeof reason === 'string') {
