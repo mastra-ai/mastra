@@ -16,11 +16,8 @@ describeForAllEngines(
   'AIMock loop scenario: queued approvals survive re-suspension',
   engine => {
     const getMock = useLoopScenarioAimock();
-    // #27925: Inngest delivers the final answer twice in all three orderings.
-    // Reproduced on three real-host runs; root cause not yet established.
-    const approvalTest = engine === 'inngest' ? it.fails : it;
 
-    approvalTest.each(['forward', 'reverse', 'concurrent'] as const)(
+    it.each(['forward', 'reverse', 'concurrent', 'one-by-one'] as const)(
       'finishes both calls approved in %s order',
       async order => {
         const llm = getMock();
@@ -81,7 +78,19 @@ describeForAllEngines(
               { timeout: 10_000 },
             );
           }
-          const ids = order === 'reverse' ? ['call-b', 'call-a'] : ['call-a', 'call-b'];
+          if (order === 'one-by-one') {
+            // Approving call-a must not run call-b. The resumed stream ends once the run parks on call-b (#27925).
+            const resumed = await agent.resumeStream(
+              { confirmed: true },
+              { runId: initial.runId, toolCallId: 'call-a' },
+            );
+            for await (const _ of resumed.fullStream) {
+              // drain
+            }
+            expect(committed).not.toContain('B');
+          }
+          const ids =
+            order === 'reverse' ? ['call-b', 'call-a'] : order === 'one-by-one' ? ['call-b'] : ['call-a', 'call-b'];
           const approve = (toolCallId: string) =>
             agent.sendToolApproval({
               threadId,
@@ -90,10 +99,9 @@ describeForAllEngines(
               approved: true,
               resumeData: { confirmed: true },
             });
-          const decisions =
-            order === 'concurrent'
-              ? await Promise.all(ids.map(approve))
-              : [await approve(ids[0]!), await approve(ids[1]!)];
+          const decisions = [];
+          if (order === 'concurrent') decisions.push(...(await Promise.all(ids.map(approve))));
+          else for (const id of ids) decisions.push(await approve(id));
           expect(decisions.map(d => d.toolCallId)).toEqual(ids);
           await vi.waitFor(
             () => {

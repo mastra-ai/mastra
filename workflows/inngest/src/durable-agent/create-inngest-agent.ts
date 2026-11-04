@@ -174,6 +174,34 @@ const STREAM_CLEANUP = Symbol('mastra.durable.inngest.streamCleanup');
 const RESUME_SNAPSHOT_WAIT_MS = 10_000;
 const RESUME_SNAPSHOT_POLL_MS = 100;
 
+/** runId -> toolCallId -> token of the resume of that tool call in flight in this process. */
+const inFlightToolCallResumes = new Map<string, Map<string, symbol>>();
+
+/** Marks a resume of `toolCallId` as in flight. The returned release only clears its own mark. */
+function markToolCallResume(runId: string, toolCallId: string): () => void {
+  const token = Symbol(toolCallId);
+  const marks = inFlightToolCallResumes.get(runId) ?? new Map<string, symbol>();
+  marks.set(toolCallId, token);
+  inFlightToolCallResumes.set(runId, marks);
+  return () => {
+    if (marks.get(toolCallId) !== token) return;
+    marks.delete(toolCallId);
+    if (marks.size === 0) inFlightToolCallResumes.delete(runId);
+  };
+}
+
+/** A second approval of a tool call this process is already resuming fails right away (#27485). */
+function assertToolCallResumeNotInFlight(agentName: string, runId: string, toolCallId: string | undefined): void {
+  if (!toolCallId || !inFlightToolCallResumes.get(runId)?.has(toolCallId)) return;
+  throw new MastraError({
+    id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text: `InngestAgent "${agentName}" resume(${runId}) cannot resume the run because another resume of it is already running.`,
+    details: { agentName, runId, toolCallId },
+  });
+}
+
 /**
  * Merges the wrapped agent's `defaultOptions` under the call options, matching
  * core `DurableAgent`, so lifecycle callbacks configured as defaults fire unless
@@ -1009,6 +1037,32 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
+   * Claims a suspension read by `resume()` (`suspended` -> `running`) so no other resume, in this
+   * process or another, dispatches it again (#27485, #27925). The worker never persists `running`
+   * for the agent loop, so the claim holds until the resumed segment persists its own state.
+   * Returns the release, or `undefined` when another resume got there first.
+   */
+  async function claimSuspension(runId: string, snapshot: { timestamp?: number } | undefined) {
+    const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore?.supportsConcurrentUpdates?.()) return async () => {};
+    const setStatus = (status: 'running' | 'suspended', expectedStatus: 'running' | 'suspended') =>
+      workflowsStore.updateWorkflowState({
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+        runId,
+        opts: { status, expectedStatus },
+      });
+    const release = async () => {
+      await setStatus('suspended', 'running');
+    };
+    const claimed = await setStatus('running', 'suspended');
+    if (claimed?.timestamp === snapshot?.timestamp) return release;
+    // Every suspension persist rewrites the timestamp, so another resume ran and suspended the run
+    // again after `snapshot` was read. That newer suspension is not ours to claim.
+    if (claimed) await release();
+    return undefined;
+  }
+
+  /**
    * Tool calls and text from before the suspension, seeded into the resumed stream
    * so its `toolCalls` and `text` include them without replaying their chunks.
    * Mirrors core `DurableAgent.#loadSuspendedIteration`. The outer suspension can persist
@@ -1554,6 +1608,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
+      assertToolCallResumeNotInFlight(agent.name, runId, resumeOptions?.toolCallId);
+
       const existingRegistryEntry = getRunRegistryEntry(runId, mastra);
       const priorExecution = existingRegistryEntry?.workflowExecution;
 
@@ -1584,6 +1640,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         const isReady = async (s: any) => {
           nestedSnapshot = undefined;
           if (s?.status !== 'suspended' || (toolCallId && !s.resumeLabels?.[toolCallId])) return false;
+          // The engine persists a suspension more than once before the finalize step writes it last
+          // with `activePaths: []`. A claim taken on an earlier write would be overwritten (#27925).
+          if (s.activePaths?.length) return false;
           const labelIds = Object.keys(s.resumeLabels ?? {});
           if (labelIds.length === 0) return true;
           nestedSnapshot = await workflowsStore.loadWorkflowSnapshot({
@@ -1596,6 +1655,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         let snapshot: any = await loadSnapshot();
         const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
         while (!(await isReady(snapshot)) && Date.now() < deadline) {
+          // The tool call may have been claimed by a resume that started alongside this one.
+          assertToolCallResumeNotInFlight(agent.name, runId, toolCallId);
           await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
           snapshot = await loadSnapshot();
         }
@@ -1640,7 +1701,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       let steps: string[];
       if (toolCallId) {
         const targetStepId = resumeLabels[toolCallId]?.stepId;
-        if (!targetStepId) {
+        // The nested run picks the parked call by this label; without it every parked call resumes (#27925).
+        if (!targetStepId || (nestedSnapshot && !nestedSnapshot.resumeLabels?.[toolCallId])) {
           const available = Object.keys(resumeLabels);
           throw new NonRetriableError(
             `Cannot resume run ${runId}: no suspended tool call with id "${toolCallId}". ` +
@@ -1669,6 +1731,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         suspendedSnapshot,
         nestedSnapshot,
       );
+
+      // Claimed before this resume touches the run's registry entry, which a concurrent winner uses.
+      const releaseClaim = await claimSuspension(runId, suspendedSnapshot);
+      if (!releaseClaim) {
+        // Unless the winner resumes this same tool call, wait for the run to suspend again.
+        assertToolCallResumeNotInFlight(agent.name, runId, toolCallId);
+        return proxyRef!.resume(runId, resumeData, resumeOptions);
+      }
+      const releaseToolCallMarker = toolCallId ? markToolCallResume(runId, toolCallId) : () => {};
 
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
@@ -1785,6 +1856,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       let resumeCleanedUp = false;
       const finalizeResumeRegistry = () => {
         clearTotalTimeout();
+        releaseToolCallMarker();
         if (resumeCleanedUp) return;
         resumeCleanedUp = true;
         stopForwardingAbort?.();
@@ -1829,7 +1901,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         requestContext: callbackOptions.requestContext,
         onChunk: chunk => {
           resumedChunkSeen = true;
-          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
+          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+            stopForwardingAbort?.();
+            // The call parked again, so approving it again is not a duplicate. This runs before the
+            // caller reads the chunk.
+            if (chunk.payload.toolCallId === toolCallId) releaseToolCallMarker();
+          }
           return callbackOptions.onChunk?.(chunk);
         },
         onStepFinish: callbackOptions.onStepFinish,
@@ -1850,6 +1927,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onSuspended: async data => {
           if (!resumedChunkSeen) return;
           clearTotalTimeout();
+          releaseToolCallMarker();
           try {
             await callbackOptions.onSuspended?.(data);
           } finally {
@@ -1909,6 +1987,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               steps,
               resumePayload: resumeData,
               resumePath: steps[0] ? snapshot?.suspendedPaths?.[steps[0]] : undefined,
+              label: toolCallId,
             },
           }),
         });
@@ -1932,6 +2011,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         // subscription, otherwise a later resume of the same runId is blocked.
         streamCleanup();
         finalizeResumeRegistry();
+        // The event was never sent, so hand the suspension back. The dispatch error is the one to report.
+        await releaseClaim().catch(() => {});
         throw error;
       }
 

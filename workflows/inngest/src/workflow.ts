@@ -720,6 +720,8 @@ export class InngestWorkflow<
                   status: result.status,
                   value: result.state ?? initialState ?? {},
                   context: toSnapshotContext(result.steps),
+                  // InngestAgent resumes only claim a suspension written here, which they tell apart
+                  // from the engine's earlier writes by this empty path.
                   activePaths: [],
                   activeStepsPath: {},
                   serializedStepGraph: this.serializedStepGraph,

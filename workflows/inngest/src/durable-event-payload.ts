@@ -103,6 +103,8 @@ export function buildDurableResumeEventData(
       steps: string[];
       resumePayload: any;
       resumePath?: any;
+      /** Resume label (the tool call id for agent runs) that picks one parked step. */
+      label?: string;
     };
     tracingOptions?: TracingOptions;
     workflowId?: string;
