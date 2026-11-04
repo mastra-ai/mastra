@@ -317,6 +317,39 @@ describe('Connect provider docs metadata matches the published catalog', () => {
     }
   });
 
+  it('links every Connect provider page exactly once from the Connect page grid', async () => {
+    const docsDir = join(packageDir, '../../docs/src/content/en');
+    const { default: sidebars } = (await import(join(docsDir, 'integrations/sidebars.js'))) as {
+      default: { integrationsSidebar: Array<{ label?: string; items?: Array<{ id?: string }> }> };
+    };
+    const idsIn = (label: string) => {
+      const category = sidebars.integrationsSidebar.find(entry => entry.label === label);
+      expect(category, `sidebar category "${label}"`).toBeDefined();
+      return category!.items!.flatMap(item => (item.id ? [item.id] : []));
+    };
+    const grid = readFileSync(join(docsDir, 'docs/mastra-platform/connect.mdx'), 'utf8').match(
+      /<IntegrationGrid[\s\S]*?\/>/,
+    )![0];
+    const linked = [...idsIn(grid.match(/section="([^"]+)"/)![1]!)];
+    for (const [, label, list] of grid.matchAll(/getIntegrationItems\('([^']+)'(?:,\s*\[([^\]]*)\])?\)/g)) {
+      const ids = idsIn(label!);
+      if (list === undefined) {
+        linked.push(...ids);
+        continue;
+      }
+      for (const [, id] of list.matchAll(/'([^']+)'/g)) {
+        expect(ids, `"${id}" listed under "${label}"`).toContain(id);
+        linked.push(id!);
+      }
+    }
+    const expected = new Set(
+      [...Object.values(TOOL_PROVIDERS), ...Object.values(MCP_PROVIDERS), ...Object.values(CHANNEL_CONNECTIONS)].map(
+        p => p.canonicalPage.replace(/\.mdx$/, ''),
+      ),
+    );
+    expect(linked.sort()).toEqual([...expected].sort());
+  });
+
   it('puts Slack tools and Slack chat on the same page', () => {
     expect(TOOL_PROVIDERS.slack!.canonicalPage).toBe('channels/slack.mdx');
     expect(CHANNEL_CONNECTIONS['slack-channels']!.canonicalPage).toBe('channels/slack.mdx');
