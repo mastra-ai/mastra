@@ -179,7 +179,7 @@ export interface LinearWorkspaceListingError {
 
 export interface LinearProjectListing {
   projects: LinearProject[];
-  /** Workspaces that failed to list while others succeeded; absent on older servers. */
+  /** Workspaces that failed to list while others succeeded; absent on direct-OAuth and older servers. */
   workspaceErrors?: LinearWorkspaceListingError[];
 }
 
