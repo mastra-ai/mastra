@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { workItemBranch } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
@@ -7,9 +8,11 @@ import {
   boardForWorkItem,
   cardOwnsBranch,
   isTerminalWorkItem,
+  pullRequestSourceNumber,
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
+  reviewedPullRequest,
   workItemPhaseSemantics,
 } from './semantics.js';
 import { createTestBoard } from './test-utils.js';
@@ -201,5 +204,28 @@ describe('branch ownership', () => {
     expect(cardOwnsBranch({ ...card, sessions: { work: { branch: 'legacy/42' } } }, 'legacy/42')).toBe(true);
     expect(cardOwnsBranch({ ...card, sessions: {} }, 'feature-42')).toBe(false);
     expect(cardOwnsBranch({ ...card, sessions: {} }, '')).toBe(false);
+  });
+});
+
+describe('the number of an attached change request', () => {
+  it("reads a GitLab merge request's iid from its facts, not from digits at the end of its key", () => {
+    // GitLab keys are base64url JSON, so trailing digits are an accident of the encoding.
+    const key = `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host: 'gitlab.com', projectId: 7, mergeRequestIid: 17 })).toString('base64url')}`;
+    const issue = createProviderWorkItemForTests({
+      id: 'item-1',
+      title: 'Fix it',
+      source: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:42' },
+      metadata: {},
+    });
+    const mergeRequest = createProviderWorkItemForTests({
+      id: 'item-1',
+      title: 'Fix it',
+      source: { integrationId: 'gitlab', type: 'pull-request', externalId: key },
+      metadata: { gitlabMergeRequestIid: 17, state: 'open' },
+    }).sources[0]!;
+    const attached = reviewedPullRequest({ workItem: { ...issue, sources: [...issue.sources, mergeRequest] } });
+
+    expect(attached && pullRequestSourceNumber(attached)).toBe(17);
+    expect(/(\d+)$/.exec(key)?.[1]).not.toBe('17');
   });
 });

@@ -59,6 +59,7 @@ import {
   createBoardRegistry,
   isTerminalWorkItem,
   PULL_REQUEST_REVIEW_PHASE,
+  pullRequestSourceNumber,
   reviewedPullRequest,
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
@@ -1834,7 +1835,8 @@ export class MastraFactory {
                         // An issue card in PR review reviews the pull request attached to it.
                         if (!item || item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return undefined;
                         const attached = reviewedPullRequest(item);
-                        return attached ? /(\d+)$/.exec(attached.externalId)?.[1] : undefined;
+                        const number = attached ? pullRequestSourceNumber(attached) : undefined;
+                        return number === undefined ? undefined : String(number);
                       },
                     }
                   : {}),
