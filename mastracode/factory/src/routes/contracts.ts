@@ -46,8 +46,7 @@ const nullableTrimmed = (max: number) =>
 const projectPathSchema = z.object({ id: uuidSchema });
 const projectDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
 const boardPathSchema = z.object({ id: uuidSchema, boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH) });
-// 0 is the revision of a built-in or app board the project hasn't edited, which has no stored copy yet.
-const boardRevisionSchema = z.number().int().min(0);
+const boardRevisionSchema = z.number().int().min(1);
 /** Send the `revision` you read so a concurrent edit is not overwritten. */
 export const boardResetBodySchema = z.object({ expectedRevision: boardRevisionSchema });
 /** A board's definition; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -61,9 +60,8 @@ const storedBoardResponseSchema = z.object({
     /** In order; the first phase is where cards start. */
     phases: z.array(storedPhaseInputSchema),
     /**
-     * Send it back as `expectedRevision` when editing or resetting. 0 for a built-in or app board
-     * the project hasn't edited, which serves its code definition and has no stored copy. Null for
-     * the legacy Review board, which is read-only.
+     * Send it back as `expectedRevision` when editing or resetting. Null for the legacy Review
+     * board, which is read-only and not stored.
      */
     revision: z.number().int().nullable(),
     source: z.enum(['builtin', 'app', 'stored']),
@@ -72,10 +70,6 @@ const storedBoardResponseSchema = z.object({
      * behaviour stays attached. False for the legacy Review board, which is read-only.
      */
     editable: z.boolean(),
-    /** A built-in or app board the project edited; it no longer follows its code definition. */
-    customized: z.boolean(),
-    /** An edited built-in or app board whose code definition changed since; reset to adopt it. */
-    defaultChanged: z.boolean(),
     /**
      * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
      * phase stays with its kind, phases with code handlers keep their runner context and skill,
@@ -766,10 +760,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
           source: z.enum(['builtin', 'app', 'stored']).optional(),
           /** False only for the legacy Review board; built-in Work, app and stored boards can be edited. */
           editable: z.boolean().optional(),
-          /** A built-in or app board the project edited. */
-          customized: z.boolean().optional(),
-          /** An edited built-in or app board whose code definition changed since the edit. */
-          defaultChanged: z.boolean().optional(),
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
           initialPhase: z.string(),

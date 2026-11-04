@@ -119,10 +119,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board writes on
     await boards.describe(scope);
     const { key: _key, ...work } = boardDefinitionOf(workBoard);
     await writes.replace(scope, 'work', { ...work, name: 'Our work' }, { expectedRevision: 1, writer });
-    expect(await storage.get(scope, 'work')).toMatchObject({ name: 'Our work', customized: true });
+    expect(await storage.get(scope, 'work')).toMatchObject({ name: 'Our work', revision: 2 });
 
+    // Reset rewrites the row at the next revision, so a save made before it is stale afterwards.
     const reset = await writes.reset(scope, 'work', { expectedRevision: 2, writer });
-    expect(reset).toMatchObject({ name: 'Work', revision: 3, customized: false });
+    expect(reset).toMatchObject({ name: 'Work', revision: 3 });
+    expect(await storage.get(scope, 'work')).toMatchObject({ name: 'Work', revision: 3 });
+    const stale = await refusal(() =>
+      writes.replace(scope, 'work', { ...work, name: 'Stale' }, { expectedRevision: 2, writer }),
+    );
+    expect(stale).toMatchObject({ status: 409, code: 'revision_mismatch' });
     expect(audits.at(-1)).toMatchObject({ action: 'factory.board.reset' });
 
     await writes.create(scope, bugs, writer);
