@@ -138,3 +138,4 @@ export function createKnowledgeLegacyUpgradeTests(fixture: KnowledgeLegacyUpgrad
 }
 
 export { createKnowledgePageStoreTests } from './pages';
+export { createKnowledgeImporterStoreTests } from './importers';

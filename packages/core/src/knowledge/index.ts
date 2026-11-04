@@ -323,7 +323,10 @@ export class Knowledge extends MastraBase {
    *
    * @experimental
    */
-  async runImporter<TOptions>(id: string, options: KnowledgeRunImporterOptions<TOptions> = {}): Promise<KnowledgeImportRun> {
+  async runImporter<TOptions>(
+    id: string,
+    options: KnowledgeRunImporterOptions<TOptions> = {},
+  ): Promise<KnowledgeImportRun> {
     const importer = this.#importers.get(id);
     if (!importer) throw new Error(`No Knowledge importer "${id}" is registered.`);
     if (this.#runningImporters.has(id)) throw new KnowledgeImporterBusyError(id);
@@ -332,7 +335,8 @@ export class Knowledge extends MastraBase {
       return await runKnowledgeImporter(
         {
           ...this.#hostWriter(),
-          log: (level, message, data) => (level === 'warn' ? this.logger.warn(message, data) : this.logger.info(message, data)),
+          log: (level, message, data) =>
+            level === 'warn' ? this.logger.warn(message, data) : this.logger.info(message, data),
         },
         importer,
         options,

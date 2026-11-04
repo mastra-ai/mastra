@@ -179,9 +179,7 @@ export async function runKnowledgeImporter<TOptions>(
   const pages: KnowledgeImporterPages = {
     async upsert(page) {
       checkAbort();
-      const result = dryRun
-        ? await previewUpsert(storage, page)
-        : await upsertKnowledgePage(host, { ...page, author });
+      const result = dryRun ? await previewUpsert(storage, page) : await upsertKnowledgePage(host, { ...page, author });
       counts[result.status]++;
       const owned = await ownedPage(page.scope, page.path);
       touched.set(ownedKey(owned), owned);

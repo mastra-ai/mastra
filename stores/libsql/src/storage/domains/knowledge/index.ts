@@ -10,7 +10,7 @@ import {
   TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
 import { KnowledgeSchemaResetRequiredError, KnowledgeStorage } from '@mastra/core/storage';
-import type { KnowledgePageStore } from '@mastra/core/storage';
+import type { KnowledgeImporterStore, KnowledgePageStore } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type {
@@ -20,6 +20,7 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
+import { KNOWLEDGE_IMPORTER_DDL, KNOWLEDGE_IMPORTER_TABLES, LibSQLKnowledgeImporters } from './importers';
 import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages, upgradeKnowledgePinKinds } from './pages';
 
 interface Executor {
@@ -68,6 +69,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #client: Client;
   readonly #db: LibSQLDB;
   readonly #pages: LibSQLKnowledgePages;
+  readonly #importers: LibSQLKnowledgeImporters;
 
   constructor(config: LibSQLDomainConfig) {
     const client = resolveClient(config);
@@ -83,6 +85,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       read: this.#client,
       transaction: operation => this.#transaction(operation),
     });
+    this.#importers = new LibSQLKnowledgeImporters({
+      read: this.#client,
+      transaction: operation => this.#transaction(operation),
+    });
   }
 
   override getCapabilities() {
@@ -92,11 +98,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsImporters: true,
     } as const;
   }
 
   override async dangerouslyClearAll(): Promise<void> {
     await this.#pages.clearAll();
+    await this.#importers.clearAll();
   }
 
   // Schema-4 page store: delegates to LibSQLKnowledgePages.
@@ -132,6 +140,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const inspection = await this.#inspectPages(tx);
       if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
       for (const statement of KNOWLEDGE_PAGE_DDL) await tx.execute(statement);
+      for (const statement of KNOWLEDGE_IMPORTER_DDL) await tx.execute(statement);
       await upgradeKnowledgePinKinds(tx);
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,
@@ -143,16 +152,44 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
       await this.#client.batch(
-        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
-          table => ({
-            sql: `DROP TABLE IF EXISTS "${table}"`,
-            args: [],
-          }),
-        ),
+        [
+          ...KNOWLEDGE_RESETTABLE_TABLE_NAMES,
+          KNOWLEDGE_PAGE_TABLES.pinAudiences,
+          KNOWLEDGE_PAGE_TABLES.links,
+          ...Object.values(KNOWLEDGE_IMPORTER_TABLES),
+        ].map(table => ({
+          sql: `DROP TABLE IF EXISTS "${table}"`,
+          args: [],
+        })),
         'write',
       );
     });
     await this.init();
+  }
+
+  override getImportState(input: Parameters<KnowledgeImporterStore['getImportState']>[0]) {
+    return this.#importers.getImportState(input);
+  }
+  override setImportState(input: Parameters<KnowledgeImporterStore['setImportState']>[0]) {
+    return this.#importers.setImportState(input);
+  }
+  override createImportRun(input: Parameters<KnowledgeImporterStore['createImportRun']>[0]) {
+    return this.#importers.createImportRun(input);
+  }
+  override updateImportRun(input: Parameters<KnowledgeImporterStore['updateImportRun']>[0]) {
+    return this.#importers.updateImportRun(input);
+  }
+  override getImportRun(input: Parameters<KnowledgeImporterStore['getImportRun']>[0]) {
+    return this.#importers.getImportRun(input);
+  }
+  override listImportRuns(input: Parameters<KnowledgeImporterStore['listImportRuns']>[0]) {
+    return this.#importers.listImportRuns(input);
+  }
+  override listImportOwnedPages(input: Parameters<KnowledgeImporterStore['listImportOwnedPages']>[0]) {
+    return this.#importers.listImportOwnedPages(input);
+  }
+  override updateImportOwnedPages(input: Parameters<KnowledgeImporterStore['updateImportOwnedPages']>[0]) {
+    return this.#importers.updateImportOwnedPages(input);
   }
 
   override materializeScope(

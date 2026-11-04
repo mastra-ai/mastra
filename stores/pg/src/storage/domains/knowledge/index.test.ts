@@ -1,4 +1,8 @@
-import { createKnowledgeLegacyUpgradeTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
+import {
+  createKnowledgeImporterStoreTests,
+  createKnowledgeLegacyUpgradeTests,
+  createKnowledgePageStoreTests,
+} from '@internal/storage-test-utils';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -104,6 +108,7 @@ beforeAll(async () => {
 });
 
 createKnowledgePageStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
+createKnowledgeImporterStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
 
 const LEGACY_SCHEMA = 'knowledge_legacy_test';
 const legacyTable = (name: string) => `"${LEGACY_SCHEMA}"."${name}"`;

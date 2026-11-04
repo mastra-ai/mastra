@@ -8,6 +8,7 @@ import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
   createKnowledgeLegacyUpgradeTests,
   createKnowledgeSchemaResetTests,
+  createKnowledgeImporterStoreTests,
   createKnowledgePageStoreTests,
 } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
@@ -22,6 +23,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
 import { LibSQLStore } from '../../index';
+import { KNOWLEDGE_IMPORTER_TABLES } from './importers';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 const COMPAT_CONSTANTS = [
@@ -48,6 +50,7 @@ describe('Knowledge Core compatibility', () => {
 });
 
 createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+createKnowledgeImporterStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
 async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
   const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');
@@ -128,7 +131,12 @@ createKnowledgeSchemaResetTests(async () => {
       );
       const names = new Set(tables.rows.map(row => String(row.name)));
       expect(names).toEqual(
-        new Set([...KNOWLEDGE_PAGES_TABLE_NAMES, 'mastra_knowledge_pin_audiences', 'mastra_knowledge_page_links']),
+        new Set([
+          ...KNOWLEDGE_PAGES_TABLE_NAMES,
+          'mastra_knowledge_pin_audiences',
+          'mastra_knowledge_page_links',
+          ...Object.values(KNOWLEDGE_IMPORTER_TABLES),
+        ]),
       );
     },
     cleanup: async () => client.close(),

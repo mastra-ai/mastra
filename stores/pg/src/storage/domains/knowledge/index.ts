@@ -1,11 +1,12 @@
 import { createKnowledgePagesCoreLoader, KNOWLEDGE_PAGES_SCHEMA_VERSION } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { KnowledgeStorage } from '@mastra/core/storage';
-import type { KnowledgePageStore } from '@mastra/core/storage';
+import type { KnowledgeImporterStore, KnowledgePageStore } from '@mastra/core/storage';
 import { defaults as pgDefaults } from 'pg';
 
 import type { DbClient, PgDomainConfig } from '../../db';
 import { resolvePgConfig } from '../../db';
+import { PG_KNOWLEDGE_IMPORTER_TABLES, PgKnowledgeImporters, pgKnowledgeImporterDDL } from './importers';
 import { PgKnowledgePages, pgKnowledgePagesDDL } from './pages';
 import { inspectPgKnowledgePagesSchema, initPgKnowledgePagesSchema, resetPgKnowledgePagesSchema } from './pages-schema';
 
@@ -84,18 +85,22 @@ type PageStoreMethod = {
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class KnowledgePG extends KnowledgeStorage {
   static getExportDDL(schemaName?: string): string[] {
-    return pgKnowledgePagesDDL(schemaName).map(statement => `${statement};`);
+    return [...pgKnowledgePagesDDL(schemaName), ...pgKnowledgeImporterDDL(schemaName)].map(
+      statement => `${statement};`,
+    );
   }
 
   readonly #client: DbClient;
   readonly #schemaName?: string;
   readonly #pages: PgKnowledgePages;
+  readonly #importers: PgKnowledgeImporters;
 
   constructor(config: PgDomainConfig) {
     super({ storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config) });
     const { client, schemaName } = resolvePgConfig(config);
     this.#client = client;
     this.#schemaName = schemaName;
+    this.#importers = new PgKnowledgeImporters({ client, schemaName });
     this.#pages = new PgKnowledgePages({
       client,
       schemaName,
@@ -116,11 +121,13 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsImporters: true,
     } as const;
   }
 
   async init(): Promise<void> {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
+    await this.#importers.init();
   }
 
   override async inspectSchema() {
@@ -128,11 +135,63 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
+    const q = (t: string) => (this.#schemaName ? `"${this.#schemaName}"."${t}"` : `"${t}"`);
+    await this.#client.query(`DROP TABLE IF EXISTS ${Object.values(PG_KNOWLEDGE_IMPORTER_TABLES).map(q).join(', ')}`);
     await resetPgKnowledgePagesSchema(this.#client, this.#schemaName);
+    await this.#importers.init();
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#pages.clearAll();
+    await this.#importers.clearAll();
+  }
+
+  override getImportState(
+    input: Parameters<KnowledgeImporterStore['getImportState']>[0],
+  ): ReturnType<KnowledgeImporterStore['getImportState']> {
+    return this.#importers.getImportState(input);
+  }
+
+  override setImportState(
+    input: Parameters<KnowledgeImporterStore['setImportState']>[0],
+  ): ReturnType<KnowledgeImporterStore['setImportState']> {
+    return this.#importers.setImportState(input);
+  }
+
+  override createImportRun(
+    input: Parameters<KnowledgeImporterStore['createImportRun']>[0],
+  ): ReturnType<KnowledgeImporterStore['createImportRun']> {
+    return this.#importers.createImportRun(input);
+  }
+
+  override updateImportRun(
+    input: Parameters<KnowledgeImporterStore['updateImportRun']>[0],
+  ): ReturnType<KnowledgeImporterStore['updateImportRun']> {
+    return this.#importers.updateImportRun(input);
+  }
+
+  override getImportRun(
+    input: Parameters<KnowledgeImporterStore['getImportRun']>[0],
+  ): ReturnType<KnowledgeImporterStore['getImportRun']> {
+    return this.#importers.getImportRun(input);
+  }
+
+  override listImportRuns(
+    input: Parameters<KnowledgeImporterStore['listImportRuns']>[0],
+  ): ReturnType<KnowledgeImporterStore['listImportRuns']> {
+    return this.#importers.listImportRuns(input);
+  }
+
+  override listImportOwnedPages(
+    input: Parameters<KnowledgeImporterStore['listImportOwnedPages']>[0],
+  ): ReturnType<KnowledgeImporterStore['listImportOwnedPages']> {
+    return this.#importers.listImportOwnedPages(input);
+  }
+
+  override updateImportOwnedPages(
+    input: Parameters<KnowledgeImporterStore['updateImportOwnedPages']>[0],
+  ): ReturnType<KnowledgeImporterStore['updateImportOwnedPages']> {
+    return this.#importers.updateImportOwnedPages(input);
   }
 
   override materializeScope(
