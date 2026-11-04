@@ -7,6 +7,7 @@
  * Run:  npm run ingest   (requires MONGODB_URI + AWS credentials in .env)
  */
 import './_env.js'; // MUST be first — loads .env before any env-reading module.
+import { randomUUID } from 'node:crypto';
 import { embedMany } from 'ai';
 import { MDocument } from '@mastra/rag';
 import { MongoDBVector } from '@mastra/mongodb';
@@ -40,12 +41,14 @@ function slug(url: string): string {
 }
 
 async function main() {
+  if (!Number.isInteger(DOCS_LIMIT) || DOCS_LIMIT < 1) throw new Error('DOCS_LIMIT must be a positive integer.');
   if (!MONGODB_URI) throw new Error('MONGODB_URI is not set. Copy .env.example to .env first.');
 
   console.log(`Fetching docs index: ${LLMS_TXT}`);
   const index = await fetch(LLMS_TXT).then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))));
   const allLinks = parseDocLinks(index);
   const links = allLinks.slice(0, DOCS_LIMIT);
+  if (links.length === 0) throw new Error('No documentation pages found; keeping the existing corpus.');
   console.log(
     `Found ${allLinks.length} doc pages; ingesting ${links.length} ` +
       `(DOCS_LIMIT=${DOCS_LIMIT}${allLinks.length > links.length ? `, skipping ${allLinks.length - links.length}` : ''}).`,
@@ -53,13 +56,14 @@ async function main() {
 
   const vectorStore = new MongoDBVector({ id: 'ingest', uri: MONGODB_URI, dbName: MONGODB_DATABASE });
 
-  console.log(`Ensuring vector index "${VECTOR_INDEX}" (dimension ${EMBED_DIMENSION}, cosine)…`);
-  await vectorStore.createIndex({ indexName: VECTOR_INDEX, dimension: EMBED_DIMENSION, metric: 'cosine' });
-  await vectorStore.waitForIndexReady({ indexName: VECTOR_INDEX });
+  const ingestionId = randomUUID();
+  try {
+    console.log(`Ensuring vector index "${VECTOR_INDEX}" (dimension ${EMBED_DIMENSION}, cosine)…`);
+    await vectorStore.createIndex({ indexName: VECTOR_INDEX, dimension: EMBED_DIMENSION, metric: 'cosine' });
+    await vectorStore.waitForIndexReady({ indexName: VECTOR_INDEX });
 
-  let totalChunks = 0;
-  for (const [i, link] of links.entries()) {
-    try {
+    let totalChunks = 0;
+    for (const [i, link] of links.entries()) {
       const md = await fetch(link.url).then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))));
       const doc = MDocument.fromMarkdown(md);
       const chunks = await doc.chunk({ strategy: 'recursive', maxSize: 1024, overlap: 100 });
@@ -77,20 +81,24 @@ async function main() {
       await vectorStore.upsert({
         indexName: VECTOR_INDEX,
         vectors,
-        metadata: chunks.map(c => ({ text: c.text, mdUrl: link.url, pageUrl, title: link.title })),
+        metadata: chunks.map(c => ({ text: c.text, mdUrl: link.url, pageUrl, title: link.title, ingestionId })),
         ids: chunks.map((_, idx) => `${slug(link.url)}-${idx}`),
       });
 
       totalChunks += chunks.length;
       console.log(`  [${i + 1}/${links.length}] ${link.title} — ${chunks.length} chunks`);
-    } catch (err) {
-      console.warn(`  [${i + 1}/${links.length}] SKIPPED ${link.url}: ${(err as Error).message}`);
     }
-  }
 
-  console.log(`\nDone. Upserted ${totalChunks} chunks from ${links.length} pages into "${VECTOR_INDEX}".`);
-  await (vectorStore as unknown as { disconnect?: () => Promise<void> }).disconnect?.();
-  process.exit(0);
+    // Only reconcile after every selected page has been fetched, embedded, and stored.
+    await vectorStore.deleteVectors({
+      indexName: VECTOR_INDEX,
+      filter: { mdUrl: { $regex: '^https://mastra\\.ai/docs/.*\\.md$' }, ingestionId: { $ne: ingestionId } },
+    });
+
+    console.log(`\nDone. Upserted ${totalChunks} chunks from ${links.length} pages into "${VECTOR_INDEX}".`);
+  } finally {
+    await vectorStore.disconnect();
+  }
 }
 
 main().catch(err => {

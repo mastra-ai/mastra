@@ -23,6 +23,15 @@ It shows one thing: a documentation agent whose retrieval and memory both live i
 3. `npm run ingest && npm run dev`, then try the first-run prompt from the README in Mastra Studio. A change that breaks the first Studio interaction breaks the template.
 4. If you changed setup, environment variables, or the first-run experience, update `README.md` and `.env.example`. The template page on mastra.ai is generated from `README.md`.
 
+## Automated tests
+
+Run `npm test` for local HTTP error regressions. To also test first ingestion and corpus
+reconciliation, start a disposable MongoDB Atlas Local container and set
+`TEST_MONGODB_URI` to its connection string before running `npm test`. These integration
+tests create and remove uniquely named test databases; use a disposable instance.
+Documentation and Bedrock responses come from a local HTTP server, so no AWS credentials
+or paid model calls are needed.
+
 ## The one patched dependency
 
 `@ai-sdk/amazon-bedrock` is pinned to an exact version and patched, via `patches/` and

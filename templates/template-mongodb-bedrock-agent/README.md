@@ -19,6 +19,7 @@ One Atlas cluster handles vector search and conversation storage, while Bedrock 
 - **[Bedrock model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)**: choose a region where the chat and embedding models are available. Set `AWS_REGION` to that region (default: `us-east-1`). For a first use of Claude, submit Anthropic's use case details from the Bedrock Model catalog if prompted. The IAM identity you use locally needs `bedrock:InvokeModel` and, for streamed responses, `bedrock:InvokeModelWithResponseStream`. Access to the default Claude inference profile must also cover its destination regions.
 - **[AWS credentials for local development](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)**: use the standard AWS credential chain, such as an SSO profile configured with `aws configure sso` and signed in with `aws sso login --profile <profile>`. [Install the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) if you use this path. Set `AWS_PROFILE` if you use a named profile. Access keys through the standard AWS environment variables are another option; no separate Bedrock API key is used.
 - **[Bedrock model IDs](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4-6.html)**: `BEDROCK_MODEL_ID` defaults to `us.anthropic.claude-sonnet-4-6`, and `BEDROCK_EMBED_MODEL_ID` defaults to [`amazon.titan-embed-text-v2:0`](https://docs.aws.amazon.com/bedrock/latest/userguide/titan-embedding-models.html). Use model IDs available to your account and region. `EMBED_DIMENSION` defaults to `1024` and must match the embedding model's output and the Atlas vector index.
+- Run one ingestion at a time. A successful run removes obsolete chunks and pages excluded by `DOCS_LIMIT` from the Mastra documentation corpus. Failed runs retain older records, though pages written before the failure may already be updated.
 - `DOCS_LIMIT` optionally limits how many pages the ingestion script reads from the documentation index; the default is `60`. The included example uses the [Mastra documentation index](https://mastra.ai/llms.txt).
 
 ## Quickstart 🚀
@@ -29,7 +30,7 @@ One Atlas cluster handles vector search and conversation storage, while Bedrock 
 2. **Add your credentials**
    - Run `cp .env.example .env` and fill in the values described under Prerequisites.
 3. **Load the documentation**
-   - Run `npm run ingest` to embed the example documentation corpus and store it in Atlas. Check that the output reports inserted chunks and review any `SKIPPED` pages.
+   - Run `npm run ingest` to embed the example documentation corpus and store it in Atlas. Check that the command finishes successfully and reports inserted chunks. A failed fetch or embedding stops the run; retry after fixing the reported error.
 4. **Start the dev server**
    - Run `npm run dev`.
    - Open [Mastra Studio](http://localhost:4111), select **Mastra Docs Agent**, and ask “How do I give a Mastra agent memory?” Look for an answer based on the retrieved documentation with a **Sources** list linking the pages used.
@@ -44,7 +45,7 @@ One Atlas cluster handles vector search and conversation storage, while Bedrock 
 ## Customization
 
 - Open the project in your coding agent and describe the change you want. For example: “Adapt this docs assistant to our API reference. Explore the ingestion script, search tool, and agent instructions, then propose a plan before changing code.”
-- To use your own documentation site, update `LLMS_TXT` and the link pattern in `scripts/ingest.ts`, adjust the subject in `src/mastra/agents/docs-agent.ts`, and run `npm run ingest` again.
+- To use your own documentation site, update `LLMS_TXT`, the link pattern, and the reconciliation URL filter in `scripts/ingest.ts`, adjust the subject in `src/mastra/agents/docs-agent.ts`, and run `npm run ingest` again.
 
 For related memory concepts, see the [Mastra semantic recall documentation](https://mastra.ai/docs/memory/semantic-recall).
 

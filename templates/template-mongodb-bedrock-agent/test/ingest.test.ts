@@ -107,3 +107,59 @@ test('stops when the vector index configuration is invalid', async () => {
   expect(result.output).not.toContain('SKIPPED');
   expect(result.output).not.toContain('Done.');
 });
+
+test.skipIf(!process.env.TEST_MONGODB_URI)(
+  'removes obsolete chunks and excluded pages only after a complete ingestion',
+  async () => {
+    const client = new MongoClient(process.env.TEST_MONGODB_URI!);
+    const db = client.db(`ingest_${randomUUID().replaceAll('-', '')}`);
+    let introduction = '# Introduction\n\n' + 'Use Mastra to build agents. '.repeat(150);
+    let pageStatus = 200;
+    const handler: RequestListener = (req, res) => {
+      if (req.url === '/llms.txt') {
+        res.end('[Introduction](https://mastra.ai/docs/introduction.md)\n[Tools](https://mastra.ai/docs/tools.md)');
+      } else if (req.url?.startsWith('/docs/')) {
+        res.writeHead(pageStatus);
+        res.end(req.url === '/docs/introduction.md' ? introduction : '# Tools\n\nAgents can call tools.');
+      } else {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ embedding: Array(1024).fill(0.1), inputTextTokenCount: 10 }));
+      }
+    };
+    const env = { MONGODB_DATABASE: db.databaseName };
+    const collection = db.collection('mastra_docs_embeddings');
+    try {
+      const first = await ingest(handler, env);
+      expect(first.code, first.output).toBe(0);
+      expect(await collection.countDocuments()).toBeGreaterThan(2);
+      // Include records written by the original template before generation tags existed.
+      await collection.updateMany({}, { $unset: { 'metadata.ingestionId': '' } });
+      const unrelated = { metadata: { mdUrl: 'https://another.example/guide.md', text: 'Keep this source' } };
+      await collection.insertOne(unrelated);
+
+      introduction = '# Introduction\n\nBuild an agent with Mastra.';
+      const second = await ingest(handler, { ...env, DOCS_LIMIT: '1' });
+      expect(second.code, second.output).toBe(0);
+      const current = await collection.find().toArray();
+      expect(current).toHaveLength(2);
+      const introductionDoc = current.find(doc => doc.metadata.mdUrl === 'https://mastra.ai/docs/introduction.md');
+      expect(introductionDoc?.metadata.text).toContain('Build an agent with Mastra.');
+      expect(current.find(doc => doc.metadata.mdUrl === unrelated.metadata.mdUrl)?.metadata).toEqual(
+        unrelated.metadata,
+      );
+
+      const empty = await ingest((_req, res) => res.end('No links available'), env);
+      expect(empty.code, empty.output).toBe(1);
+      expect(await collection.find().toArray()).toEqual(current);
+
+      pageStatus = 503;
+      const failed = await ingest(handler, env);
+      expect(failed.code, failed.output).toBe(1);
+      expect(failed.output).not.toContain('Done.');
+      expect(await collection.find().toArray()).toEqual(current);
+    } finally {
+      await db.dropDatabase();
+      await client.close();
+    }
+  },
+);
