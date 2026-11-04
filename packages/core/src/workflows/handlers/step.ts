@@ -113,7 +113,6 @@ export async function executeStep(
   const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
 
-  // Read before the first await, while the run executes: the step can outlive its run.
   const journal = engine.getRunJournal(runId);
 
   const stepCallId = globalThis.crypto.randomUUID();
@@ -272,7 +271,6 @@ export async function executeStep(
       // and can't be a parallel or branch arm, so nothing else of the run is in flight here: the
       // write is a boundary write and stores the state each iteration starts from, as v1 does.
       stepIds: executionContext.foreachIndex !== undefined ? [] : iterationCount !== undefined ? undefined : [step.id],
-      journal,
     });
   }
 

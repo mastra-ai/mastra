@@ -176,10 +176,9 @@ export interface PersistStepUpdateParams {
    */
   stepIds?: string[];
   /**
-   * Storage v2: the journal of the execution this write belongs to, set by a step's start write.
-   * The step can still be running after its run stopped (see `RunJournal.close`), when the engine
-   * no longer has the run's journal, or has the journal of a later execution of the run. Unset,
-   * the write uses the run's current journal.
+   * Storage v2: the journal of the execution this write belongs to, set by the engine's own writes,
+   * which aren't made from one of the execution's entries. Unset, the write uses the journal of the
+   * execution it is made from (see `getRunJournal`).
    */
   journal?: RunJournal;
 }

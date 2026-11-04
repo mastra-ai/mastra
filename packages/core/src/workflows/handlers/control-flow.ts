@@ -180,8 +180,6 @@ export async function executeParallel(
   } = params;
 
   const observabilityContext = resolveObservabilityContext(rest);
-  // Read before the first await, while the run executes: an arm can outlive its run.
-  const journal = engine.getRunJournal(runId);
 
   const steps = entry.steps;
 
@@ -294,7 +292,6 @@ export async function executeParallel(
           workflowStatus: 'running',
           requestContext,
           phase: `parallel-arm-end.${i}`,
-          journal,
         });
       }
       return stepExecResult.result;
@@ -1067,8 +1064,6 @@ export async function executeForeach(
   } = params;
 
   const observabilityContext = resolveObservabilityContext(rest);
-  // Read before the first await, while the run executes: a progress write can outlive its run.
-  const journal = engine.getRunJournal(runId);
 
   const { step, opts } = entry;
   const stepId = getEntryId(step);
@@ -1198,7 +1193,6 @@ export async function executeForeach(
             workflowStatus: 'running',
             requestContext,
             phase: `foreach-progress.${checkpointCount++}`,
-            journal,
           });
         } catch (err) {
           checkpointError = err instanceof Error ? err : new Error(String(err));

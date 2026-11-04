@@ -88,6 +88,8 @@ export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
 };
 
 const retryCountStorage = new AsyncLocalStorage<number>();
+/** The journal of the storage-v2 execution whose entries run in the current async context. */
+const executionJournal = new AsyncLocalStorage<RunJournal | undefined>();
 
 /**
  * Default implementation of the ExecutionEngine
@@ -115,12 +117,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    */
   protected lastPersistedStatusByRun = new Map<string, { status?: WorkflowRunStatus; replayingCanceled: boolean }>();
 
-  /** Journals of the storage-v2 runs executing on this engine. A run is on v2 when it has one. */
-  #journals = new Map<string, RunJournal>();
-
-  /** @internal Returns the journal of a storage-v2 run while it executes. */
+  /**
+   * @internal Returns the journal of the storage-v2 execution of `runId` this is called from; a run
+   * is on v2 when it has one. Each execution has its own: a restart or resume can start another
+   * execution of the run before a hung one ends, and neither may write through the other's.
+   */
   getRunJournal(runId: string): RunJournal | undefined {
-    return this.#journals.get(runId);
+    const journal = executionJournal.getStore();
+    return journal?.runId === runId ? journal : undefined;
   }
 
   /** Returns the last status persisted for a given run in this process, if any. */
@@ -915,7 +919,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         inherited: params.inheritedState,
         resumed: !!resume,
       });
-      this.#journals.set(runId, journal);
     }
 
     try {
@@ -958,6 +961,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           replayingCanceled: this.lastPersistedStatusByRun.get(runId)?.replayingCanceled === true,
         });
         await this.persistStepUpdate({
+          journal,
           workflowId,
           runId,
           resourceId,
@@ -1003,6 +1007,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             };
 
             await this.persistStepUpdate({
+              journal,
               workflowId,
               runId,
               resourceId,
@@ -1039,6 +1044,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           }
 
           await this.persistStepUpdate({
+            journal,
             workflowId,
             runId,
             resourceId,
@@ -1126,27 +1132,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         await journal?.hydrate(stepResults, [...getStepIds(entry), ...(i > 0 ? getStepIds(steps[i - 1]!) : [])]);
 
         try {
-          lastOutput = await this.executeEntry({
-            workflowId,
-            runId,
-            resourceId,
-            entry,
-            executionContext,
-            serializedStepGraph: params.serializedStepGraph,
-            prevStep: steps[i - 1]!,
-            stepResults,
-            resume,
-            timeTravel,
-            restart: entryRestart,
-            ...createObservabilityContext({ currentSpan: workflowSpan }),
-            abortController: params.abortController,
-            pubsub: params.pubsub,
-            requestContext: currentRequestContext,
-            actor: params.actor,
-            outputWriter: params.outputWriter,
-            disableScorers,
-            perStep,
-          });
+          lastOutput = await executionJournal.run(journal, () =>
+            this.executeEntry({
+              workflowId,
+              runId,
+              resourceId,
+              entry,
+              executionContext,
+              serializedStepGraph: params.serializedStepGraph,
+              prevStep: steps[i - 1]!,
+              stepResults,
+              resume,
+              timeTravel,
+              restart: entryRestart,
+              ...createObservabilityContext({ currentSpan: workflowSpan }),
+              abortController: params.abortController,
+              pubsub: params.pubsub,
+              requestContext: currentRequestContext,
+              actor: params.actor,
+              outputWriter: params.outputWriter,
+              disableScorers,
+              perStep,
+            }),
+          );
         } catch (error) {
           // A thrown control-flow error bypasses settled-result finalization. End
           // this execution and any still-open children without rewriting completed
@@ -1212,6 +1220,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepExecutionPath,
           )) as any;
           await this.persistStepUpdate({
+            journal,
             workflowId,
             runId,
             resourceId,
@@ -1286,6 +1295,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           }
 
           await this.persistStepUpdate({
+            journal,
             workflowId,
             runId,
             resourceId,
@@ -1422,6 +1432,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepExecutionPath,
       )) as any;
       await this.persistStepUpdate({
+        journal,
         workflowId,
         runId,
         resourceId,
@@ -1484,7 +1495,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return { ...result, runId };
     } finally {
       journal?.close();
-      this.#journals.delete(runId);
     }
   }
 
