@@ -30,6 +30,12 @@ export interface AgentRunRecord {
   threadId?: string;
   status: AgentRunStatus;
   updatedAt: number;
+  /**
+   * The publisher that last wrote this record. A finished run's cleanup compares
+   * it with the record it finds, so it can tell its own run from a later one that
+   * reused the id. Not used for authorization.
+   */
+  publisherId?: string;
 }
 
 /** Where a publisher keeps the record of its run, and whose run it is. */

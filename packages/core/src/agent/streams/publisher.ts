@@ -8,7 +8,7 @@ import { scheduleStreamCleanup } from './bus';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
 import type { AgentRunRecordTarget } from './run-records';
-import { deleteAgentRunRecord, writeAgentRunRecord } from './run-records';
+import { deleteAgentRunRecord, readAgentRunRecord, writeAgentRunRecord } from './run-records';
 
 /**
  * Publishes a run's chunks on its stream topic as the loop produces them, so
@@ -113,10 +113,12 @@ export function createAgentStreamPublisher({
   };
 
   let runningRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Stamped on every record this publisher writes, so cleanup can tell its own run from a later one. */
+  const publisherId = globalThis.crypto.randomUUID();
   const writeRecord = (status: 'running' | 'suspended' | 'finished') => async () => {
     if (!record) return;
     const { cache, ...owner } = record;
-    await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now() }).catch(error => {
+    await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now(), publisherId }).catch(error => {
       logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
       if (status === 'running' && !ended && !runningRetryTimer) {
         runningRetryTimer = setTimeout(() => {
@@ -145,12 +147,27 @@ export function createAgentStreamPublisher({
 
   const scheduleCleanup = () => {
     const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
-      // The run's control and ack topics end with it too; a transport that keeps
-      // streams (Redis Streams) would otherwise hold them until its idle TTL.
-      for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
-        void pubsub.clearTopic(topic).catch(() => {});
-      }
-      if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
+      void (async () => {
+        // A finished run's id can be claimed again before this fires, and the topic and
+        // record then belong to that run. Only clear state this publisher wrote.
+        if (record) {
+          let current;
+          try {
+            current = await readAgentRunRecord(record.cache, record.agentId, runId);
+          } catch {
+            // The cache is unreadable, so there is no way to tell whose run this is. Leave
+            // the state to its TTL rather than risk deleting a live run's record.
+            return;
+          }
+          if (current && current.publisherId !== publisherId) return;
+        }
+        // The run's control and ack topics end with it too; a transport that keeps
+        // streams (Redis Streams) would otherwise hold them until its idle TTL.
+        for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
+          void pubsub.clearTopic(topic).catch(() => {});
+        }
+        if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
+      })();
     });
     timer?.unref?.();
   };

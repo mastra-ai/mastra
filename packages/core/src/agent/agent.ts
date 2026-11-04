@@ -240,6 +240,7 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled, mergeDurableStreamsConfig } from './streams/config';
 import type { AgentStreamsOption } from './streams/config';
+import { AGENT_STREAM_TOPIC } from './streams/constants';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { readAgentRunRecord } from './streams/run-records';
@@ -1820,27 +1821,34 @@ export class Agent<
    * second caller would take over that run's topic and record, and be treated
    * as its owner by `observe()` and the server's run routes.
    *
-   * Runs without a resourceId own nothing to protect, and a scoped record keeps
-   * the id until it expires, so the same owner can still reuse it (a resume, or
-   * a retry after the run finished).
+   * A `running` record means another process is executing that run and listening
+   * for its abort requests, so it is refused even to the same owner: two
+   * publishers on one topic would cross their chunks and abort requests. A
+   * `suspended` or `finished` record keeps the id until it expires, so the same
+   * owner can still reuse it (a resume, or a retry after the run finished).
+   * Runs without a resourceId own nothing to protect.
    *
    * Reading the record and writing our own is not atomic, so two processes
    * starting the same id within one cache round-trip of each other can still
    * overlap. The cache has no compare-and-set to close that.
+   *
+   * Returns the record it accepted, so the caller can tell a fresh id from a
+   * reused one.
    */
-  async #assertRunIdAvailable(runId: string, resourceId: string | undefined): Promise<void> {
+  async #assertRunIdAvailable(runId: string, resourceId: string | undefined): Promise<AgentRunRecord | undefined> {
     const bus = this.#ownStreamBus();
-    if (!bus) return;
+    if (!bus) return undefined;
 
     if (this.#publishedRuns.has(runId)) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
 
     const record = await readAgentRunRecord(bus.runRecordCache, this.id, runId);
-    if (!record?.resourceId) return;
-    if (record.resourceId !== resourceId) {
+    if (!record) return undefined;
+    if (record.status === 'running' || (record.resourceId && record.resourceId !== resourceId)) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
+    return record;
   }
 
   #createStreamPublisher(
@@ -9361,7 +9369,15 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
-    await this.#assertRunIdAvailable(runId, resourceId);
+    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId);
+
+    // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
+    // starts the new run on top of the old frames: a reader replaying from the start would
+    // get the previous finish event and close before the new run says anything. Suspended
+    // runs keep their log, because that is the history the resume continues.
+    if (priorRunRecord?.status === 'finished') {
+      await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+    }
 
     const streamPublisher = this.#createStreamPublisher(runId, {
       resourceId,
