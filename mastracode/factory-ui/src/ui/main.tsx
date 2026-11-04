@@ -6,10 +6,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 
-import { ApiConfigProvider } from '../api/config';
+import { ApiConfigProvider, createApiConfig } from '../api/config';
 import { createQueryClient } from '../query-client';
 import { PwaInstallBanner } from './lib/pwa';
-import { createAppRouter, preloadRoutePage } from './router';
+import { createAppRouter } from './router';
 import '@fontsource-variable/mona-sans/standard.css';
 import '@fontsource-variable/mona-sans/standard-italic.css';
 import './tailwind.css';
@@ -22,8 +22,8 @@ import './tailwind.css';
 // entry mounts the same providers with its own absolute base URL and fetch
 // implementation.
 const queryClient = createQueryClient();
-const router = createAppRouter();
-preloadRoutePage(router.routes, window.location.pathname);
+// Same config as the provider below, for the route loaders that start each page's requests.
+const router = createAppRouter({ queryClient, api: createApiConfig({ baseUrl: '' }) });
 
 if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
   void import('react-grab');

@@ -21,6 +21,11 @@ export interface ApiConfig {
 
 const ApiConfigContext = createContext<ApiConfig | null>(null);
 
+/** The config `ApiConfigProvider` exposes, also built outside React for the route loaders. */
+export function createApiConfig({ baseUrl, fetchImpl }: { baseUrl: string; fetchImpl?: typeof fetch }): ApiConfig {
+  return { baseUrl, client: createApiClient({ baseUrl, fetchImpl }) };
+}
+
 export interface ApiConfigProviderProps {
   baseUrl: string;
   fetchImpl?: typeof fetch;
@@ -28,10 +33,7 @@ export interface ApiConfigProviderProps {
 }
 
 export function ApiConfigProvider({ baseUrl, fetchImpl, children }: ApiConfigProviderProps) {
-  const value = useMemo<ApiConfig>(
-    () => ({ baseUrl, client: createApiClient({ baseUrl, fetchImpl }) }),
-    [baseUrl, fetchImpl],
-  );
+  const value = useMemo(() => createApiConfig({ baseUrl, fetchImpl }), [baseUrl, fetchImpl]);
   return <ApiConfigContext.Provider value={value}>{children}</ApiConfigContext.Provider>;
 }
 

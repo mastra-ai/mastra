@@ -1,17 +1,21 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { DefaultModelResponse } from '../api/types';
 
-export function useDefaultModelQuery({ enabled = true }: { enabled?: boolean } = {}) {
-  const { client } = useApiConfig();
-  return useQuery({
-    enabled,
+export function defaultModelQuery(client: ApiClient) {
+  return queryOptions({
     queryKey: queryKeys.defaultModel(),
     queryFn: () => client.get<DefaultModelResponse>('/web/config/default-model'),
   });
+}
+
+export function useDefaultModelQuery({ enabled = true }: { enabled?: boolean } = {}) {
+  const { client } = useApiConfig();
+  return useQuery({ ...defaultModelQuery(client), enabled });
 }
 
 export function useSetDefaultModel() {

@@ -1,4 +1,4 @@
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -16,13 +16,17 @@ import type { FactoryModelScope } from '../ui/domains/workspaces/services/github
  * applies afterwards. Server state on the `factory_projects` row — not
  * browser/session state — so both hooks are keyed by `factoryProjectId`.
  */
-export function useFactoryProjectQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
+export function factoryProjectQuery(baseUrl: string, factoryProjectId: string | undefined) {
+  return queryOptions({
     queryKey: queryKeys.factoryProject(factoryProjectId),
     queryFn: () => fetchFactoryProject(baseUrl, factoryProjectId!),
     enabled: !!factoryProjectId,
   });
+}
+
+export function useFactoryProjectQuery(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery(factoryProjectQuery(baseUrl, factoryProjectId));
 }
 
 export function useSetFactoryDefaultModelMutation(factoryProjectId: string | undefined) {

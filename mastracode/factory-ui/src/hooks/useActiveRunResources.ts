@@ -11,7 +11,7 @@ interface ActiveRunResourcesOptions {
 }
 
 /** `/active-runs` is the controller's whole registry, so every caller shares one poll. */
-function activeRunsQuery(agentControllerId: string, baseUrl: string) {
+export function activeRunsQuery(agentControllerId: string, baseUrl: string) {
   return queryOptions({
     queryKey: queryKeys.agentControllerActivity(agentControllerId, baseUrl),
     queryFn: async () => {
