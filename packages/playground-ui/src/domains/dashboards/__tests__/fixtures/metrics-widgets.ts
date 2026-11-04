@@ -101,7 +101,7 @@ export const scoresWidget: DashboardWidget = {
         { id: 'average', source: 'scores', request: 'aggregate', aggregation: 'avg' },
         { id: 'series', source: 'scores', request: 'timeSeries', aggregation: 'avg' },
       ],
-      options: { average: 'average', series: 'series', emptyMessage: 'No scores in this range.' },
+      options: { average: 'average', series: 'series' },
     },
   ],
 };

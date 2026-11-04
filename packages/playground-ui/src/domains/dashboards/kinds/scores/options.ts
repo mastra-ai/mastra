@@ -8,7 +8,6 @@ export const scoresOptionsSchema = z
     average: queryRefSchema,
     /** Id of the scores time series giving each scorer's line. */
     series: queryRefSchema,
-    emptyMessage: z.string().optional(),
   })
   .strict();
 

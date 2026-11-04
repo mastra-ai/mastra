@@ -64,7 +64,6 @@ const tokenUsageWidget: DashboardWidget = {
           { dataKey: 'output', label: 'Output', color: 'sky', value: { query: 'output' } },
         ],
         total: { value: 'total' },
-        emptyMessage: 'No model calls in this range.',
       },
     },
     {
@@ -91,7 +90,6 @@ const tokenUsageWidget: DashboardWidget = {
           },
         ],
         total: { value: 'total' },
-        emptyMessage: 'No model calls in this range.',
       },
     },
   ],
@@ -124,7 +122,6 @@ const agentRunsWidget: DashboardWidget = {
           { dataKey: 'failed', label: 'Failed', color: 'error', value: failedRuns },
         ],
         total: { value: 'total' },
-        emptyMessage: 'No agent runs in this range.',
       },
     },
     {
@@ -156,13 +153,12 @@ const agentRunsWidget: DashboardWidget = {
           },
         },
         emptyWhenZero: { sum: [completedRuns, failedRuns] },
-        emptyMessage: 'No agent runs in this range.',
       },
     },
   ],
 };
 
-const latencyView = (label: string, metric: string, rootEntityType: string, noun: string): DashboardWidgetView => ({
+const latencyView = (label: string, metric: string, rootEntityType: string): DashboardWidgetView => ({
   label,
   queries: [
     {
@@ -192,7 +188,6 @@ const latencyView = (label: string, metric: string, rootEntityType: string, noun
       { dataKey: 'p99', label: 'P99', color: 'violet', value: { query: 'latency', percentile: 0.99 }, round: true },
     ],
     total: { value: { peak: 'p95' } },
-    emptyMessage: `No ${noun} in this range.`,
   },
 });
 
@@ -204,9 +199,9 @@ const latencyWidget: DashboardWidget = {
   description: 'Duration percentiles.',
   drilldown: { click: { page: 'traces' } },
   views: [
-    latencyView('Agent latency', 'mastra_agent_duration_ms', 'agent', 'agent runs'),
-    latencyView('Workflow latency', 'mastra_workflow_duration_ms', 'workflow_run', 'workflow runs'),
-    latencyView('Tool latency', 'mastra_tool_duration_ms', 'tool', 'tool calls'),
+    latencyView('Agent latency', 'mastra_agent_duration_ms', 'agent'),
+    latencyView('Workflow latency', 'mastra_workflow_duration_ms', 'workflow_run'),
+    latencyView('Tool latency', 'mastra_tool_duration_ms', 'tool'),
   ],
 };
 
@@ -245,7 +240,6 @@ const distinctIdsWidget: DashboardWidget = {
           value: { query: 'buckets', measure },
           rangeTotal: { query: 'totals', measure },
         })),
-        emptyMessage: 'No traces in this range set a resource, thread, user or session id.',
       },
     },
   ],

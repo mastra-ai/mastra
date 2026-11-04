@@ -568,11 +568,11 @@ describe('DashboardRenderer', () => {
     });
     // jsdom resolves no container queries; the classes are what decide the width.
     const columns = (id: string) => cell(container, id).className.match(/@\w+:col-span-\d+/g);
-    expect(columns('half')).toEqual(['@3xl:col-span-6']);
-    expect(columns('third')).toEqual(['@3xl:col-span-4']);
-    expect(columns('sixth')).toEqual(['@3xl:col-span-2']);
-    expect(columns('quarter')).toEqual(['@3xl:col-span-3']);
-    expect(columns('twelfth')).toEqual(['@3xl:col-span-1']);
+    expect(columns('half')).toEqual(['@5xl:col-span-6']);
+    expect(columns('third')).toEqual(['@5xl:col-span-4']);
+    expect(columns('sixth')).toEqual(['@5xl:col-span-2']);
+    expect(columns('quarter')).toEqual(['@5xl:col-span-3']);
+    expect(columns('twelfth')).toEqual(['@5xl:col-span-1']);
   });
 
   it('stretches every card to its row, so a row of cards shares one height', () => {
@@ -619,7 +619,7 @@ describe('DashboardRenderer', () => {
       views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } }] }],
     };
     const { container } = renderDashboard(definition(staging), { environment: 'production' });
-    expect(await within(cell(container, 'agent-runs')).findByText('No agent runs in this range.')).toBeDefined();
+    expect(await within(cell(container, 'agent-runs')).findByText('No data in this range')).toBeDefined();
     server.events.removeAllListeners();
     expect(sent.filter(path => path.includes('/metrics/'))).toEqual([]);
   });

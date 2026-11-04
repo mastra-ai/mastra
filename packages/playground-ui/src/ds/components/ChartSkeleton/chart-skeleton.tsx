@@ -75,13 +75,24 @@ export function ChartSkeleton({ kind, height = 210, className }: ChartSkeletonPr
   if (height === 'fill') {
     // The loaded chart's footprint: the free height, at least its minimum, out of flow.
     return (
-      <div role="status" aria-label="Loading chart" className={cn('relative min-h-45 w-full flex-1', className)}>
+      <div
+        role="status"
+        aria-label="Loading chart"
+        data-slot="chart-skeleton"
+        className={cn('relative min-h-45 w-full flex-1', className)}
+      >
         <div className="absolute inset-0 flex flex-col">{plot}</div>
       </div>
     );
   }
   return (
-    <div role="status" aria-label="Loading chart" className={cn('flex w-full flex-col', className)} style={{ height }}>
+    <div
+      role="status"
+      aria-label="Loading chart"
+      data-slot="chart-skeleton"
+      className={cn('flex w-full flex-col', className)}
+      style={{ height }}
+    >
       {plot}
     </div>
   );

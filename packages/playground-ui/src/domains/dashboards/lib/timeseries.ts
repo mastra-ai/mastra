@@ -65,7 +65,6 @@ export const timeseriesOptionsSchema = z
       })
       .strict()
       .optional(),
-    emptyMessage: z.string().optional(),
     /** Empty when this is zero over the range; by default, when every plotted value is zero. */
     emptyWhenZero: valueExprSchema.optional(),
   })

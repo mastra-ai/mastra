@@ -1,3 +1,5 @@
+import { createContext } from 'react';
+
 /**
  * Shared plot geometry for the metrics charts.
  *
@@ -14,3 +16,6 @@ export const X_AXIS_HEIGHT = 22;
 
 /** Axis labels of the metrics charts: 11px in the body font, muted. */
 export const CHART_AXIS_FONT_SIZE = 11;
+
+/** Set by a card's chart area while it has nothing to show: charts drop the y-axis and its space. */
+export const ChartHideYAxis = createContext(false);

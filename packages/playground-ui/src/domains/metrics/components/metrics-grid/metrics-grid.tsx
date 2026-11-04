@@ -9,13 +9,13 @@ export type MetricsGridItemSpan = 1 | 2 | 'full';
  * so the sidebar or any surrounding layout doesn't skew the column count.
  */
 const columnClasses: Record<MetricsGridColumns, string> = {
-  2: '@3xl:grid-cols-2',
-  3: '@3xl:grid-cols-2 @7xl:grid-cols-3',
+  2: '@5xl:grid-cols-2',
+  3: '@5xl:grid-cols-2 @7xl:grid-cols-3',
 };
 
 const spanClasses: Record<MetricsGridItemSpan, string> = {
   1: '',
-  2: '@3xl:col-span-2',
+  2: '@5xl:col-span-2',
   full: 'col-span-full',
 };
 

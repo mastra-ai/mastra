@@ -82,7 +82,8 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
     actions: hasDrilldownAction(widget, view, onDrilldown) ? (
       <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
     ) : undefined,
-    total: withRangeTotals ? rangeTotals : undefined,
+    // Range totals per series; with no series in the range, one plain 0.
+    total: withRangeTotals ? (rangeTotals.length ? rangeTotals : format.value(0)) : undefined,
     isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
@@ -105,11 +106,8 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
   }
 
   const totalFormat = FORMATTERS[options.total?.format ?? options.format];
-  const total =
-    options.total &&
-    (typeof options.total.value === 'object' && 'peak' in options.total.value && !shaped.total
-      ? '—'
-      : totalFormat.value(shaped.total ?? 0));
+  // An empty range totals 0, a peak included, like the cards around it.
+  const total = options.total && totalFormat.value(shaped.total ?? 0);
 
   const chart = {
     data: shaped.data,
@@ -129,7 +127,7 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
 
   return (
     <ChartCard {...layout} total={layout.total ?? total} isUpdating={sent.some(r => r.isRefetching)}>
-      <ChartArea isEmpty={!isLoading && shaped.empty} emptyMessage={options.emptyMessage}>
+      <ChartArea isEmpty={!isLoading && shaped.empty}>
         {options.chart === 'stackedBar' ? (
           <MetricsStackedBarChart {...chart} />
         ) : (

@@ -11,15 +11,15 @@ export function MetricsLineChartLegend({
   className?: string;
 }) {
   return (
-    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-1', className)}>
+    <div data-slot="chart-legend" className={cn('flex flex-wrap items-center gap-x-4 gap-y-1', className)}>
       {series.map(s => (
         <div key={s.dataKey} className="inline-flex items-center gap-1.5">
           {s.dashed ? (
             <span className="h-0 w-3 shrink-0 border-t-2 border-dashed" style={{ borderColor: s.color }} />
           ) : (
-            <div className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: s.color }} />
+            <div className="size-[7px] shrink-0 rounded-[1.5px]" style={{ backgroundColor: s.color }} />
           )}
-          <Txt as="span" variant="body-sm" tone="muted" className="max-w-48 truncate">
+          <Txt as="span" variant="body-sm" tone="muted" className="max-w-48 truncate font-[450]">
             {s.label}
           </Txt>
         </div>

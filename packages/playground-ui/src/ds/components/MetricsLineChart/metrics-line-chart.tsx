@@ -1,3 +1,4 @@
+import { useContext } from 'react';
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceLine, Tooltip } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
@@ -6,7 +7,7 @@ import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
+import { CHART_MARGIN, ChartHideYAxis } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
@@ -144,7 +145,9 @@ function LinePlot({
 
   const format = valueFormatter ?? compactNumber.format;
   const isSparse = (key: string) => data.filter(row => typeof row[key] === 'number').length <= SPARSE_POINTS;
-  const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const hideYAxis = useContext(ChartHideYAxis);
+  const withYAxis = showYAxis && !hideYAxis;
+  const plotWidth = size.width - (withYAxis ? Y_AXIS_WIDTH : 0);
   const line = LINE_STYLES[lineStyle];
   const restDot = (s: MetricsLineChartSeries) =>
     dots === 'auto' && (showDots || isSparse(s.dataKey)) ? { r: 3, fill: s.color, strokeWidth: 0 } : false;
@@ -190,7 +193,7 @@ function LinePlot({
         <CartesianGrid {...CHART_GRID_PROPS} />
         {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
         {valueYAxis({
-          show: showYAxis,
+          show: withYAxis,
           size,
           formatter: axisFormatter ?? format,
           domain: yDomain,

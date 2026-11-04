@@ -5,21 +5,21 @@ import { cn } from '@/lib/utils';
 export type DashboardSpan = (typeof DASHBOARD_WIDGET_SPANS)[number];
 
 /**
- * Below `@3xl` every widget takes the row, as in `MetricsGrid`. From `@3xl` up each widget takes its
+ * Below `@5xl` every widget takes the row, as in `MetricsGrid`. From `@5xl` up each widget takes its
  * saved span, so a row keeps the widths it was arranged with and never wraps onto a second line.
  */
 const SPAN_CLASSES: Record<DashboardSpan, string> = {
   12: 'col-span-full',
-  6: '@3xl:col-span-6',
-  4: '@3xl:col-span-4',
-  3: '@3xl:col-span-3',
-  2: '@3xl:col-span-2',
-  1: '@3xl:col-span-1',
+  6: '@5xl:col-span-6',
+  4: '@5xl:col-span-4',
+  3: '@5xl:col-span-3',
+  2: '@5xl:col-span-2',
+  1: '@5xl:col-span-1',
 };
 
 /** One dashboard row: its own grid, so a short row never pulls widgets up from the next. */
 export function DashboardGridRow({ children }: { children: ReactNode }) {
-  return <div className="grid gap-4 @3xl:grid-cols-12">{children}</div>;
+  return <div className="grid gap-4 @5xl:grid-cols-12">{children}</div>;
 }
 
 /**

@@ -135,9 +135,7 @@ describe('when the server answers aggregateTraces()', () => {
     serveCard({ empty: true });
     render(<DistinctIdsCard />);
 
-    expect(
-      await screen.findByText('No traces in this range set a resource, thread, user or session id.'),
-    ).toBeDefined();
+    expect(await screen.findByText('No data in this range')).toBeDefined();
   });
 
   it('loads after Retry when both requests failed', async () => {

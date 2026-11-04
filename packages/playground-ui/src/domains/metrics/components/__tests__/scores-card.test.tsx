@@ -14,7 +14,7 @@ describe('ScoresCard', () => {
   it('says when the range has no scores', async () => {
     emptyMetrics();
     renderInMetrics(<ScoresCard />);
-    expect(await screen.findByText('No scores in this range.')).toBeDefined();
+    expect(await screen.findByText('No data in this range')).toBeDefined();
   });
 
   it('says so when the data fails to load', async () => {
