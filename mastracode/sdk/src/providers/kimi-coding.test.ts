@@ -67,6 +67,40 @@ describe('Kimi For Coding model provider', () => {
     }
   });
 
+  it('reports a token Kimi rejects as a missing sign-in', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify({ error: { message: 'invalid token' } }), { status: 401 })),
+    );
+    try {
+      const credentialStore = {
+        reload: vi.fn(),
+        get: vi.fn(() => ({
+          type: 'oauth' as const,
+          access: 'revoked',
+          refresh: 'rt',
+          expires: Date.now() + 60_000,
+          deviceId: 'd'.repeat(32),
+        })),
+        getStoredApiKey: vi.fn(),
+        getApiKey: vi.fn(async () => 'revoked'),
+      };
+
+      await expect(
+        buildKimiCodingOAuthFetch({ credentialStore })('https://api.kimi.com/coding/v1/messages'),
+      ).rejects.toMatchObject({
+        name: 'ProviderAuthRequiredError',
+        message: 'Kimi For Coding rejected the stored sign-in: invalid token',
+        status: 401,
+        requestUrl: 'https://api.kimi.com/coding/v1/messages',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('requests a reconnect when OAuth credentials lack a valid device ID', async () => {
     const credentialStore = {
       reload: vi.fn(),

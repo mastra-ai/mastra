@@ -166,4 +166,91 @@ describe('NotificationSignalNotice', () => {
       expect(container.textContent).toBe('Notification');
     });
   });
+  describe('when the signal is an MCP event occurrence', () => {
+    const signal = {
+      type: 'notification',
+      contents: 'tickets emitted ticket.created',
+      attributes: {
+        source: 'mcp-events',
+        kind: 'mcp-event',
+        server: 'tickets',
+        event: 'ticket.created',
+        priority: 'medium',
+        status: 'delivered',
+      },
+    } satisfies SignalData;
+
+    it('titles it with the server and event', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('tickets · ticket.created')).not.toBeNull();
+      expect(screen.queryByText('mcp-events / mcp-event')).toBeNull();
+    });
+
+    it('keeps the priority and status badges', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('medium')).not.toBeNull();
+      expect(screen.getByText('delivered')).not.toBeNull();
+    });
+
+    it('labels the opened body as untrusted', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+      expect(screen.queryByText('Untrusted event data from the MCP server')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: /tickets · ticket\.created/ }));
+
+      expect(screen.getByText('Untrusted event data from the MCP server')).not.toBeNull();
+      expect(screen.getAllByText('tickets emitted ticket.created')).toHaveLength(2);
+    });
+
+    it('shows no gap badge', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.queryByText('gap')).toBeNull();
+    });
+  });
+
+  describe('when the MCP event occurrence followed a gap', () => {
+    const signal = {
+      type: 'notification',
+      contents: 'tickets emitted ticket.created',
+      attributes: {
+        source: 'mcp-events',
+        kind: 'mcp-event',
+        server: 'tickets',
+        event: 'ticket.created',
+        truncated: true,
+      },
+    } satisfies SignalData;
+
+    it('marks it with a gap badge that explains the gap', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('gap')).not.toBeNull();
+      expect(screen.getByText('Gap: events may have been skipped')).not.toBeNull();
+    });
+  });
+
+  describe('when the MCP event subscription ended', () => {
+    const signal = {
+      type: 'notification',
+      contents: 'Subscription to tickets ticket.created ended',
+      metadata: {
+        notification: {
+          signal: 'notification',
+          source: 'mcp-events',
+          kind: 'mcp-event-subscription-ended',
+          priority: 'high',
+        },
+      },
+      attributes: { server: 'tickets', event: 'ticket.created' },
+    } satisfies SignalData;
+
+    it('titles it as an ended subscription', () => {
+      render(<NotificationSignalNotice signal={signal} />);
+
+      expect(screen.getByText('tickets · ticket.created · subscription ended')).not.toBeNull();
+      expect(screen.getByText('high')).not.toBeNull();
+    });
+  });
 });

@@ -397,15 +397,13 @@ export class LSPClient {
         if (currentDiagnostics !== undefined && currentDiagnostics !== initialDiagnostics) {
           return currentDiagnostics;
         }
-      } else {
-        if (currentDiagnostics !== undefined) {
-          // Non-empty — the server has real results, return immediately
-          if (currentDiagnostics.length > 0) return currentDiagnostics;
-          // Empty — start a settle window. The server may have published a
-          // clearing notification before the real analysis results arrive.
-          if (emptyReceivedAt === undefined) emptyReceivedAt = Date.now();
-          if (Date.now() - emptyReceivedAt >= settleMs) return currentDiagnostics;
-        }
+      } else if (currentDiagnostics !== undefined) {
+        // Non-empty — the server has real results, return immediately
+        if (currentDiagnostics.length > 0) return currentDiagnostics;
+        // Empty — start a settle window. The server may have published a
+        // clearing notification before the real analysis results arrive.
+        if (emptyReceivedAt === undefined) emptyReceivedAt = Date.now();
+        if (Date.now() - emptyReceivedAt >= settleMs) return currentDiagnostics;
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));

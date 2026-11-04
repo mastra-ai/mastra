@@ -17,12 +17,13 @@ function createCtx(
     },
   };
 
+  const controller = { hasWorkspace: () => false, resolveWorkspace: vi.fn() };
   return {
-    state: { session, latestRequestPromptTokens: overrides.latestPromptTokens ?? 0 },
+    state: { session, local: { controller, session }, latestRequestPromptTokens: overrides.latestPromptTokens ?? 0 },
     showInfo: vi.fn(),
     showError: vi.fn(),
     getResolvedWorkspace: () => (overrides.skills ? { skills: overrides.skills } : undefined),
-    controller: { hasWorkspace: () => false, resolveWorkspace: vi.fn() },
+    controller,
     mcpManager: overrides.mcpManager,
   } as any;
 }

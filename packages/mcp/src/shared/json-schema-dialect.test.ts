@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from './json-schema-dialect';
+import { countJsonValues, JSON_SCHEMA_2020_12, toJsonSchema2020 } from './json-schema-dialect';
 
 const $schema = 'https://json-schema.org/draft/2019-09/schema#';
 
@@ -115,5 +115,30 @@ describe('toJsonSchema2020', () => {
     expect(
       toJsonSchema2020({ $schema, type: 'string', contentSchema: { type: 'array', items: [{ type: 'string' }] } }),
     ).toBeUndefined();
+  });
+});
+
+describe('countJsonValues', () => {
+  it('rejects a container wider than the budget without expanding it', () => {
+    // A container wider than the budget has to be refused, not pushed onto the walk: expanding
+    // it first would cost memory proportional to the container the budget exists to bound.
+    const values = new Proxy([] as unknown[], {
+      get: (target, key, receiver) => {
+        if (key === 'length') return 10_000_000;
+        if (typeof key === 'string' && /^\d+$/.test(key)) {
+          if (Number(key) >= 1_000) throw new Error('expanded an oversized container');
+          return undefined;
+        }
+        return Reflect.get(target, key, receiver);
+      },
+    });
+
+    expect(countJsonValues({ examples: values }, 100)).toBe(101);
+  });
+
+  it('counts scalars, annotations, and nested containers', () => {
+    expect(countJsonValues(true, 10)).toBe(1);
+    expect(countJsonValues({ type: 'object', examples: [1, 2] }, 10)).toBe(5);
+    expect(countJsonValues({ a: { b: true } }, 10)).toBe(3);
   });
 });

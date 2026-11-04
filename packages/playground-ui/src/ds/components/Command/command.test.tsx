@@ -12,7 +12,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     disconnect() {}
   }
 
-  globalThis.ResizeObserver = ResizeObserverPolyfill as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverPolyfill;
 }
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {

@@ -1,9 +1,11 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { screen } from '@testing-library/react';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
+import type { ThreadOwner } from '../../services/reply-credential';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { initialTranscript, transcriptReducer } from '../../services/transcript';
 import type { TimelineEntry } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
@@ -26,6 +28,10 @@ function messageEntry(
 function renderEntries(entries: TimelineEntry[]) {
   return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('message meta', () => {
   it('stamps every message that carries prose with its time', () => {
@@ -109,7 +115,52 @@ describe('message meta', () => {
     expect(container.querySelectorAll('time')).toHaveLength(2);
   });
 
-  it('leaves a message with nothing to copy unstamped, though its tool row still keeps its own clock', () => {
+  it('stamps a finished reply only once its last word has landed on screen', () => {
+    vi.useFakeTimers();
+    const words = Array.from({ length: 30 }, (_, index) => `word${index + 1}`).join(' ');
+    const user = messageEntry('user-1', 'user', [{ type: 'text', text: 'ship it' }]);
+    const reply = (streaming?: boolean) =>
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: words }], streaming);
+    const { container, rerender } = renderWithProviders(
+      <TranscriptEntries entries={[user, reply(true)]} onApprove={() => {}} onRespond={() => {}} running />,
+    );
+
+    rerender(<TranscriptEntries entries={[user, reply()]} onApprove={() => {}} onRespond={() => {}} />);
+    act(() => void vi.advanceTimersByTime(300));
+
+    expect(container.textContent).not.toContain('word30');
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(1);
+
+    act(() => void vi.advanceTimersByTime(5000));
+
+    expect(container.textContent).toContain('word30');
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
+  });
+
+  it('waits for an earlier step of the reply still being written in before stamping the last one', () => {
+    vi.useFakeTimers();
+    const words = Array.from({ length: 60 }, (_, index) => `word${index + 1}`).join(' ');
+    const user = messageEntry('user-1', 'user', [{ type: 'text', text: 'ship it' }]);
+    const first = (streaming?: boolean) =>
+      messageEntry('assistant-1', 'assistant', [{ type: 'text', text: words }], streaming);
+    const last = messageEntry('assistant-2', 'assistant', [{ type: 'text', text: 'done' }]);
+    const { container, rerender } = renderWithProviders(
+      <TranscriptEntries entries={[user, first(true)]} onApprove={() => {}} onRespond={() => {}} running />,
+    );
+
+    rerender(<TranscriptEntries entries={[user, first(), last]} onApprove={() => {}} onRespond={() => {}} />);
+    act(() => void vi.advanceTimersByTime(300));
+
+    expect(container.textContent).not.toContain('word60');
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(1);
+
+    act(() => void vi.advanceTimersByTime(10000));
+
+    expect(container.textContent).toContain('word60');
+    expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
+  });
+
+  it('leaves a message with nothing to copy unstamped, though its tool line still keeps its own clock', () => {
     const { container } = renderEntries([
       messageEntry('assistant-1', 'assistant', [
         {
@@ -122,6 +173,99 @@ describe('message meta', () => {
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
     const times = container.querySelectorAll('time');
     expect(times).toHaveLength(1);
-    expect(screen.getByRole('group', { name: 'Tool: read' })).toContainElement(times[0]);
+    expect(screen.getByRole('group', { name: 'Read' })).toContainElement(times[0]);
+  });
+
+  it('names the model that closed a live reply, not one an earlier step ran on', () => {
+    const liveStep = (id: string, text: string, modelId: string): AgentControllerEvent[] => [
+      {
+        type: 'message_start',
+        message: {
+          id,
+          role: 'assistant',
+          createdAt: CREATED_AT,
+          content: { format: 2, parts: [{ type: 'text', text }], metadata: { modelId } },
+        },
+      },
+      { type: 'message_end', id },
+    ];
+    const { entries } = [
+      ...liveStep('assistant-1', 'reading the file', 'gpt-5'),
+      ...liveStep('assistant-2', 'shipped', 'claude-opus-4-6'),
+    ].reduce((state, event) => transcriptReducer(state, { type: 'event', event }), initialTranscript);
+
+    renderEntries(entries);
+
+    expect(screen.getAllByText('Claude Opus 4.6')).toHaveLength(1);
+    expect(screen.queryByText('GPT-5')).toBeNull();
+  });
+
+  const ward = { id: 'ward', name: 'Ward Peeters' };
+  const opus = { modelId: 'claude-opus-4-6', provider: 'anthropic.messages' };
+  const ownerCases: Array<{
+    case: string;
+    owner?: ThreadOwner;
+    viewerId: string;
+    metadata: Record<string, unknown>;
+    label: string;
+  }> = [
+    {
+      case: 'the thread owner’s credential to a teammate',
+      owner: ward,
+      viewerId: 'damien',
+      metadata: { ...opus, credentialLabel: 'Claude Pro/Max', credentialOwnerId: 'ward' },
+      label: 'Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max',
+    },
+    {
+      case: 'the viewer’s own credential',
+      owner: ward,
+      viewerId: 'ward',
+      metadata: { ...opus, credentialLabel: 'Claude Pro/Max', credentialOwnerId: 'ward' },
+      label: 'Claude Opus 4.6 · Your Claude Pro/Max',
+    },
+    {
+      case: 'a personal credential whose owner is not named',
+      viewerId: 'damien',
+      metadata: { modelId: 'gpt-5', credentialLabel: 'OpenAI API key', credentialOwnerId: 'ward' },
+      label: 'GPT-5 · Personal OpenAI API key',
+    },
+    {
+      case: 'the organization’s credential',
+      owner: ward,
+      viewerId: 'damien',
+      metadata: { modelId: 'grok-4', credentialLabel: 'SuperGrok/X Premium+' },
+      label: 'Grok 4 · Organization SuperGrok/X Premium+',
+    },
+    {
+      case: 'a reply stamped before credentials were recorded',
+      owner: ward,
+      viewerId: 'damien',
+      metadata: opus,
+      label: 'Claude Opus 4.6',
+    },
+  ];
+  it.each(ownerCases)('labels a reply answered by $case as “$label”', ({ owner, viewerId, metadata, label }) => {
+    const reply: TimelineEntry = {
+      kind: 'message',
+      id: 'assistant-1',
+      message: {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: CREATED_AT,
+        content: { format: 2, parts: [{ type: 'text', text: 'shipped' }], metadata },
+      },
+    };
+
+    renderWithProviders(
+      <TranscriptEntries
+        entries={[reply]}
+        viewerId={viewerId}
+        owner={owner}
+        onApprove={() => {}}
+        onRespond={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(label, { exact: true })).toBeVisible();
   });
 });

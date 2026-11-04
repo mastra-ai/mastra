@@ -26,6 +26,7 @@ import {
   MastraFilesystem,
   FileNotFoundError,
   FileExistsError,
+  getMimeType,
   IsDirectoryError,
   NotDirectoryError,
   DirectoryNotFoundError,
@@ -600,13 +601,16 @@ export class AgentFSFilesystem extends MastraFilesystem {
 
     try {
       const st = await agent.fs.stat(normalized);
+      const isDirectory = st.isDirectory();
       return {
         name: getBaseName(normalized) || '',
         path: normalized,
-        type: st.isDirectory() ? 'directory' : 'file',
+        type: isDirectory ? 'directory' : 'file',
         size: st.size,
         createdAt: new Date(st.ctime * 1000),
         modifiedAt: new Date(st.mtime * 1000),
+        // read_file picks media, binary or text from mimeType.
+        ...(!isDirectory && { mimeType: getMimeType(normalized) }),
       };
     } catch (error: unknown) {
       throw mapError(error, normalized, 'file');

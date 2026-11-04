@@ -1,12 +1,15 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildApiSchemaManifest } from '../src/server/server-adapter/api-schema-manifest';
+import { buildApiSchemaManifest, getApiSchemaPropertyNames } from '../src/server/server-adapter/api-schema-manifest';
+import { ALL_SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const outputPath = resolve(rootDir, join('packages', 'cli', 'src', 'commands', 'api', 'route-metadata.generated.ts'));
 
-const apiSchemaManifest = buildApiSchemaManifest();
+// Covers the opt-in routes too: the CLI describes what the package can serve, and a route
+// that is not mounted simply 404s when called.
+const apiSchemaManifest = buildApiSchemaManifest(ALL_SERVER_ROUTES);
 
 const metadata = Object.fromEntries(
   apiSchemaManifest.routes.map(route => [
@@ -15,8 +18,8 @@ const metadata = Object.fromEntries(
       method: route.method,
       path: route.path,
       pathParams: extractPathParams(route.path),
-      queryParams: extractSchemaProperties(route.queryParamSchema),
-      bodyParams: extractSchemaProperties(route.bodySchema),
+      queryParams: getApiSchemaPropertyNames(route.queryParamSchema),
+      bodyParams: getApiSchemaPropertyNames(route.bodySchema),
       hasQuery: Boolean(route.queryParamSchema),
       hasBody: Boolean(route.bodySchema),
       responseShape: route.responseShape,
@@ -34,9 +37,4 @@ function extractPathParams(path: string): string[] {
   return [...path.matchAll(/:([A-Za-z0-9_]+)/g)]
     .map(match => match[1])
     .filter((value): value is string => Boolean(value));
-}
-
-function extractSchemaProperties(schema: { properties?: unknown } | undefined): string[] {
-  if (!schema?.properties || typeof schema.properties !== 'object' || Array.isArray(schema.properties)) return [];
-  return Object.keys(schema.properties).sort();
 }

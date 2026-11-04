@@ -37,8 +37,8 @@ export interface BoardCardStateInput {
   transitionReason?: string;
   /** What the run registry and workspace records say about the card's bound sessions. */
   sessionStatus?: SessionRowStatus;
-  /** Triage classification a person still has to act on, e.g. `feature request`. */
-  heldAs?: string;
+  /** Triage left the card in Intake for a person to decide on. */
+  held?: boolean;
 }
 
 const FREE: BoardCardOwner = { kind: 'free' };
@@ -137,8 +137,8 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   if (sessionIsLive(input.sessionStatus)) return { kind: 'idle' };
   // A held card's live question is the maintainer's decision, even when a run
   // has been suggested for it: the card cannot start that run until it is accepted.
-  if (input.heldAs !== undefined) {
-    return { kind: 'held', label: `${capitalize(input.heldAs)} · needs your approval` };
+  if (input.held) {
+    return { kind: 'held', label: 'Triaged · waiting for you' };
   }
   if (input.proposal) {
     return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
@@ -229,8 +229,4 @@ function runAnnouncedByWick(
  */
 function retriesAfterFailure(decision: Pick<FactoryDecisionSummary, 'status' | 'attempts' | 'lastError'>): boolean {
   return decision.status === 'retry' && (decision.attempts > 0 || Boolean(decision.lastError));
-}
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }

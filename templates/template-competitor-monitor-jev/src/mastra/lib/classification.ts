@@ -59,6 +59,11 @@ type Answers = {
   is_breaking_change: { type: 'boolean'; probability: number };
   is_cosmetic_or_promotional: { type: 'boolean'; probability: number };
 };
+type ClassifierOutput = { [Key in keyof Answers]: Answers[Key] | { type: 'refusal' } };
+
+function answeredEveryQuestion(answers: ClassifierOutput): answers is Answers {
+  return Object.values(answers).every(answer => answer.type !== 'refusal');
+}
 
 export type ClassificationDecision = {
   route: ClassificationRoute;
@@ -84,11 +89,12 @@ function confidence(metadata: unknown, question: string) {
 
 export function routeClassification(
   evidence: Evidence,
-  answers: Answers,
+  answers: ClassifierOutput,
   providerMetadata: unknown,
   overrides: PolicyOverrides = {},
 ): ClassificationDecision {
   const policy = { ...POLICY_DEFAULTS, ...overrides };
+  if (!answeredEveryQuestion(answers)) return decision('review', 'CLASSIFICATION_REFUSED', policy);
   const choiceConfidence = confidence(providerMetadata, 'change_type');
   const relevanceConfidence = confidence(providerMetadata, 'relevance');
   const impactConfidence = confidence(providerMetadata, 'business_impact');

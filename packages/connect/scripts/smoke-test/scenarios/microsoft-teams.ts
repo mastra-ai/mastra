@@ -159,7 +159,7 @@ export const microsoftTeamsScenario: Scenario = {
     steps.push(
       await probeTool(call, tools, 'create chat', 'microsoft_teams_create_chat', {
         chatType: 'oneOnOne',
-        members: [{ user_id: syntheticUser, roles: ['owner'] }],
+        members: [{ userId: syntheticUser, roles: ['owner'] }],
       }),
     );
     steps.push(
@@ -191,6 +191,7 @@ export const microsoftTeamsScenario: Scenario = {
         channelId,
         displayName: `smoke ${runId}`,
         teamsAppOdataBind: 'https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/com.microsoft.teamspace.tab.web',
+        configuration: { contentUrl: 'https://smoke.invalid/tab' },
       }),
     );
     steps.push(

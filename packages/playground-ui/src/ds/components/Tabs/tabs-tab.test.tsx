@@ -30,6 +30,19 @@ afterEach(() => {
 });
 
 describe('Tab', () => {
+  it('marks each tab as swipe-ignored, so pressing one inside a drawer does not start its swipe', () => {
+    render(
+      <Tabs defaultTab="first">
+        <TabList>
+          <Tab value="first">First</Tab>
+        </TabList>
+      </Tabs>,
+    );
+
+    // Base UI's swipe-to-dismiss skips targets inside this attribute, as it does for buttons.
+    expect(screen.getByRole('tab', { name: 'First' }).hasAttribute('data-base-ui-swipe-ignore')).toBe(true);
+  });
+
   it('when a tab with a tooltip receives keyboard focus, then the tooltip shows and the tab stays selectable', async () => {
     render(
       <Tabs defaultTab="first">

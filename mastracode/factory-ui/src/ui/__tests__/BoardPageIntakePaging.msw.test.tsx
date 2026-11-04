@@ -10,6 +10,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -105,22 +106,12 @@ function stubReviewBoard() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -161,22 +152,12 @@ function stubWorkBoard() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -272,17 +253,17 @@ describe('Intake candidate paging', () => {
     scrollSentinel(true);
     const skeleton = await within(triage).findByRole('status', { name: 'Loading more candidates' });
     expect(skeleton.children).toHaveLength(1);
-    expect(skeleton.firstElementChild).toHaveClass('before:animate-[shimmer_2s_infinite]', 'before:bg-linear-to-r');
     releaseSecondPage();
 
     await waitFor(() => expect(within(triage).getByText('Triage signup')).toBeInTheDocument());
+    expect(within(triage).queryByRole('status', { name: 'Loading more candidates' })).not.toBeInTheDocument();
     expect(requestedTriagePages).toEqual(['1', '2']);
   });
 
   it('announces loading without showing a card skeleton while an empty visible column scroll-loads', async () => {
     const { scrollSentinel } = stubIntersectionObserver(false);
     const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
-    const { client } = renderWorkBoard('?q=signup');
+    const { client } = renderWorkBoard('?search=signup');
 
     const triage = await screen.findByTestId('board-column-triage');
     expect(await within(triage).findByRole('button', { name: 'Load more candidates' })).toBeInTheDocument();

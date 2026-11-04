@@ -372,6 +372,14 @@ export type RunClaimRequest =
   | { op: 'raiseRunFence'; tableName: RunClaimTable; fence: RunClaimFence }
   | { op: 'retireRunFence'; tableName: RunClaimTable; fence: RunClaimFence }
   | {
+      /** Deletes up to `limit` claims whose epoch-ms `column` is set and older than `cutoff`. */
+      op: 'pruneRunClaims';
+      tableName: RunClaimTable;
+      column: 'updatedAt' | 'retiredAt';
+      cutoff: number;
+      limit: number;
+    }
+  | {
       /**
        * Runs `request` only if `fence` is the run's current claim in
        * `tableName`, in the same mutation. Without `request`, only checks.

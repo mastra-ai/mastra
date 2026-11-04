@@ -8,7 +8,8 @@ import { createScorer } from '../base';
 import { runEvals } from '.';
 
 describe('runEvals - Score Persistence', () => {
-  it('automatically saves scores to storage when Mastra instance is available', async () => {
+  // The scorer passed to runEvals must persist even without Mastra registration. (#27603)
+  it.each([false, true])('saves scores when scorer is registered on Mastra: %s', async registerScorer => {
     // Create a simple agent
     const dummyModel = new MockLanguageModelV2({
       doGenerate: async () => ({
@@ -56,7 +57,7 @@ describe('runEvals - Score Persistence', () => {
 
     const mastra = new Mastra({
       agents: { testAgent: agent },
-      scorers: { testScorer: scorer },
+      ...(registerScorer ? { scorers: { testScorer: scorer } } : {}),
       logger: false,
       storage,
     });
@@ -85,12 +86,10 @@ describe('runEvals - Score Persistence', () => {
     expect(result.scores.testScorer).toBe(0.85);
     expect(result.summary.totalItems).toBe(2);
 
-    // Verify saveScore was called twice (once per data item)
-    console.log('Number of times saveScore was called:', saveScoreCalls.length);
-    console.log('Save score calls:', saveScoreCalls);
-
-    // Scores should be automatically saved to storage
-    expect(saveScoreCalls.length).toBe(2);
+    expect(saveScoreCalls).toHaveLength(2);
+    const saved = await scoresStore.listScoresByScorerId({ scorerId: scorer.id, pagination: { page: 0, perPage: 10 } });
+    expect(saved.scores).toHaveLength(2);
+    expect(saved.scores.map(row => row.score)).toEqual([0.85, 0.85]);
 
     // Verify first score includes groundTruth in additionalContext
     expect(saveScoreCalls[0]).toMatchObject({

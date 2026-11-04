@@ -50,7 +50,7 @@ const mockMatchMedia = () => {
       mediaQueries.set(query, mql);
     }
     return mql;
-  }) as unknown as typeof window.matchMedia;
+  });
 };
 
 describe('useIsMobile', () => {

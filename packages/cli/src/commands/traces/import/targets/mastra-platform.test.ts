@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { tracePayloadBytes } from '../prepared-traces.js';
 import type { PreparedTraceBatch, TraceImportTrace } from '../types.js';
-import { MastraPlatformTraceTarget, MastraPlatformUploadError } from './mastra-platform.js';
+import type { MastraPlatformUploadError } from './mastra-platform.js';
+import { MastraPlatformTraceTarget } from './mastra-platform.js';
 
 function trace(): TraceImportTrace {
   return {

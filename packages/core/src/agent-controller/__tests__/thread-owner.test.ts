@@ -119,6 +119,35 @@ describe('AgentController thread ownership', () => {
     });
   });
 
+  it('transfers a non-active thread without switching to it', async () => {
+    const { controller } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'session-a', ownerId: 'owner-a' });
+    const otherThreadId = session.thread.getId()!;
+    await session.thread.create({ title: 'Active' });
+    const activeThreadId = session.thread.getId()!;
+    expect(activeThreadId).not.toBe(otherThreadId);
+
+    await session.thread.transferOwnership({ toOwnerId: 'owner-b', threadId: otherThreadId });
+
+    expect(session.thread.getId()).toBe(activeThreadId);
+    expect(await session.thread.getOwner({ threadId: otherThreadId })).toBe('owner-b');
+    expect(await session.thread.getOwner({ threadId: activeThreadId })).toBe('owner-a');
+  });
+
+  it('rejects transferring a thread that belongs to another resource', async () => {
+    const { controller } = createController();
+    await controller.init();
+    const sessionA = await controller.createSession({ id: 'session-a', resourceId: 'resource-a', ownerId: 'owner-a' });
+    const sessionB = await controller.createSession({ id: 'session-b', resourceId: 'resource-b', ownerId: 'owner-b' });
+    const threadA = sessionA.thread.getId()!;
+
+    await expect(sessionB.thread.transferOwnership({ toOwnerId: 'owner-b', threadId: threadA })).rejects.toThrow(
+      `Thread not found: ${threadA}`,
+    );
+    await expect(sessionA.thread.getOwner()).resolves.toBe('owner-a');
+  });
+
   it('serializes concurrent transfers of the active thread', async () => {
     const { controller } = createController();
     await controller.init();

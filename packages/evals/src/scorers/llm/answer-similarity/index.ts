@@ -162,7 +162,7 @@ export function createAnswerSimilarityScorer({
 
       // Normalize by total units (accounting for exact match bonus)
       const maxPossibleScore = totalUnits * (1.0 + mergedOptions.exactMatchBonus);
-      score = score / maxPossibleScore;
+      score /= maxPossibleScore;
 
       // Apply penalties for contradictions
       const contradictionPenalty = analysis.contradictions.length * mergedOptions.contradictionPenalty;

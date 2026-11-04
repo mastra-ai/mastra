@@ -78,25 +78,59 @@ export class TemporalRun<
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);
     await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+    const requestContext = (args.requestContext ?? new RequestContext()) as RequestContext;
+    await this.invokeStartCallback(input, initialState, requestContext);
+
+    let handle: WorkflowHandle;
+    try {
+      handle = await this.dispatch(args, input, initialState, requestContext);
+    } catch (error) {
+      const result = this.failedResult(input, initialState, error);
+      await this.invokeLifecycleCallbacks(result, requestContext);
+      return result;
+    }
+
+    return this.awaitResultOrSuspended(handle, input, initialState, requestContext);
+  }
+
+  private dispatch(
+    args: TemporalRunStartArgs<TState, TInput, TRequestContext>,
+    input: unknown,
+    initialState: unknown,
+    requestContext: RequestContext,
+  ): Promise<WorkflowHandle> {
+    return this.startWorkflow({
+      inputData: input,
+      initialState,
+      requestContext: Object.fromEntries(requestContext.entries()),
+      runId: this.runId,
+      resourceId: this.resourceId,
+      outputOptions: args.outputOptions,
+      tracingOptions: args.tracingOptions,
+      perStep: args.perStep,
+    });
+  }
+
+  private async awaitResult(
+    handle: WorkflowHandle,
+    input: unknown,
+    initialState: unknown,
+    requestContext: RequestContext,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const result = await this.resolveResult(handle, input, initialState);
+    await this.invokeLifecycleCallbacks(result, requestContext);
+    return result;
+  }
+
+  private async queryStatus(handle: WorkflowHandle, afterResumeSignal = false): Promise<unknown> {
+    if (typeof handle.query !== 'function') {
+      return undefined;
+    }
 
     try {
-      const handle = await this.startWorkflow({
-        inputData: input,
-        initialState,
-        requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
-        runId: this.runId,
-        resourceId: this.resourceId,
-        outputOptions: args.outputOptions,
-        tracingOptions: args.tracingOptions,
-        perStep: args.perStep,
-      });
-
-      return await this.awaitResultOrSuspended(handle, input, initialState);
+      return await handle.query('mastra.status');
     } catch (error) {
-      if (error instanceof TemporalWorkflowStatusUnknownError) {
-        throw error;
-      }
-      return this.failedResult(input, initialState, error);
+      throw new TemporalWorkflowStatusUnknownError(this.runId, error, afterResumeSignal);
     }
   }
 
@@ -104,62 +138,56 @@ export class TemporalRun<
     handle: WorkflowHandle,
     input: unknown,
     initialState: unknown,
+    requestContext: RequestContext,
     previousSuspension?: { stepId: string; suspendedAt?: number },
     afterResumeSignal = false,
-  ) {
-    const terminalResult = handle.result().then(
-      output => ({ type: 'terminal' as const, output }),
-      error => ({ type: 'failed' as const, error }),
-    );
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const terminal = this.resolveResult(handle, input, initialState);
 
     while (true) {
-      const result = await Promise.race([terminalResult, delay(100).then(() => ({ type: 'poll' as const }))]);
+      const result = await Promise.race([
+        terminal.then(result => ({ type: 'terminal' as const, result })),
+        delay(100).then(() => ({ type: 'poll' as const })),
+      ]);
+
       if (result.type === 'terminal') {
-        return this.resolveResult(result.output, input, initialState);
-      }
-      if (result.type === 'failed') {
-        return this.failedResult(input, initialState, result.error);
+        await this.invokeLifecycleCallbacks(result.result, requestContext);
+        return result.result;
       }
 
-      if (typeof handle.query !== 'function') {
-        continue;
-      }
-
-      let status: unknown;
-      try {
-        status = await handle.query('mastra.status');
-      } catch (error) {
-        throw new TemporalWorkflowStatusUnknownError(this.runId, error, afterResumeSignal);
-      }
+      const status = await this.queryStatus(handle, afterResumeSignal);
       if (isSuspendedWorkflowResult(status)) {
-        const targetResult = previousSuspension ? status.steps[previousSuspension.stepId] : undefined;
+        const previousStep = previousSuspension ? status.steps[previousSuspension.stepId] : undefined;
         const isPreviousSuspension =
           previousSuspension !== undefined &&
-          targetResult?.status === 'suspended' &&
-          targetResult.suspendedAt === previousSuspension.suspendedAt;
-        if (!isPreviousSuspension) {
-          return this.resolveResult(status, input, initialState);
+          isSuspendedStepResult(previousStep) &&
+          previousStep.suspendedAt === previousSuspension.suspendedAt;
+        if (isPreviousSuspension) {
+          continue;
         }
+
+        const suspended = {
+          ...status,
+          steps: normalizeStepResults(status.steps),
+        } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+        await this.invokeLifecycleCallbacks(suspended, requestContext);
+        return suspended;
       }
     }
   }
 
-  private resolveResult(output: unknown, input: unknown, initialState: unknown) {
-    if (isWorkflowResult(output)) {
+  private async resolveResult(handle: WorkflowHandle, input: unknown, initialState: unknown) {
+    try {
+      // The generated Temporal workflow returns the execution result ({ status, result, state, steps }).
+      const output = (await handle.result()) as WorkflowResult<TState, TInput, TOutput, TSteps>;
       return {
         ...output,
         ...(input !== undefined && { input: input as TInput }),
         steps: normalizeStepResults(output.steps),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+    } catch (error) {
+      return this.failedResult(input, initialState, error);
     }
-
-    return {
-      status: 'success',
-      input: input as TInput,
-      result: output as TOutput,
-      state: initialState,
-      steps: {},
-    } as WorkflowResult<TState, TInput, TOutput, TSteps>;
   }
 
   private failedResult(input: unknown, initialState: unknown, error: unknown) {
@@ -172,68 +200,57 @@ export class TemporalRun<
     } as WorkflowResult<TState, TInput, TOutput, TSteps>;
   }
 
-  private async resumePayload(
-    params: {
-      step?:
-        | Step<string, any, any, any, any, any, TemporalEngineType, any>
-        | Step<string, any, any, any, any, any, TemporalEngineType, any>[]
-        | string
-        | string[];
-      label?: string;
-      resumeData?: unknown;
-    },
-    handle: WorkflowHandle,
+  // Lifecycle hooks are closures that cannot run inside the deterministic Temporal workflow
+  // sandbox, so they run here in the process that started the run, using core hook semantics.
+  private invokeStartCallback(input: unknown, initialState: unknown, requestContext: RequestContext) {
+    return this.executionEngine.invokeStartCallback({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      getInitData: () => input,
+      requestContext,
+      state: (initialState ?? {}) as Record<string, any>,
+    });
+  }
+
+  private invokeLifecycleCallbacks(
+    result: WorkflowResult<TState, TInput, TOutput, TSteps>,
+    requestContext: RequestContext,
   ) {
+    return this.executionEngine.invokeLifecycleCallbacks({
+      status: result.status,
+      result: result.status === 'success' ? result.result : undefined,
+      error: result.status === 'failed' ? result.error : undefined,
+      steps: result.steps,
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      input: result.input,
+      requestContext,
+      state: (result.state ?? {}) as Record<string, any>,
+    });
+  }
+
+  private async resumePayload(params: {
+    step?:
+      | Step<string, any, any, any, any, any, TemporalEngineType, any>
+      | Step<string, any, any, any, any, any, TemporalEngineType, any>[]
+      | string
+      | string[];
+    label?: string;
+    resumeData?: unknown;
+  }) {
     const step = Array.isArray(params.step) ? params.step.at(-1) : params.step;
-    let stepId = typeof step === 'string' ? step : step?.id;
-    let status: unknown;
-    if (typeof handle.query === 'function') {
-      try {
-        status = await handle.query('mastra.status');
-      } catch (error) {
-        throw new TemporalWorkflowStatusUnknownError(this.runId, error);
-      }
-    }
-
-    if (isSuspendedWorkflowResult(status)) {
-      if (stepId === undefined && params.label !== undefined) {
-        stepId = status.resumeLabels?.[params.label]?.stepId;
-        if (stepId === undefined) {
-          throw new Error(`Temporal workflow has no active suspension with label "${params.label}".`);
-        }
-      }
-
-      if (stepId === undefined) {
-        const suspended = status.suspended ?? [];
-        if (suspended.length !== 1 || suspended[0]?.length !== 1) {
-          throw new Error('Temporal resume requires a step or label when multiple steps are suspended.');
-        }
-        stepId = suspended[0][0];
-      }
-
-      if (!(status.suspended ?? []).some(path => path.at(-1) === stepId)) {
-        throw new Error(`Temporal workflow is not suspended at step "${stepId}".`);
-      }
-    } else if (status !== undefined || stepId === undefined) {
-      throw new Error('Temporal resume requires an active suspended step or label.');
-    }
-
-    const targetStepId = stepId;
-    if (targetStepId === undefined) {
-      throw new Error('Temporal resume requires an active suspended step or label.');
-    }
-    const resumeData = await this._validateResumeData(params.resumeData, this.workflowSteps[targetStepId]);
+    const stepId = typeof step === 'string' ? step : step?.id;
+    const resumeData = await this._validateResumeData(
+      params.resumeData,
+      stepId ? this.workflowSteps[stepId] : undefined,
+    );
 
     return {
-      payload: {
-        step: targetStepId,
-        ...(params.label !== undefined && { label: params.label }),
-        resumeData,
-      },
-      previousSuspension: {
-        stepId: targetStepId,
-        suspendedAt: isSuspendedWorkflowResult(status) ? status.steps[targetStepId]?.suspendedAt : undefined,
-      },
+      ...(stepId !== undefined && { step: stepId }),
+      ...(params.label !== undefined && { label: params.label }),
+      resumeData,
     };
   }
 
@@ -286,10 +303,20 @@ export class TemporalRun<
     actor?: any;
   }) {
     await this._validateRequestContext(params.requestContext as RequestContext<unknown> | undefined);
+    const requestContext = (params.requestContext ?? new RequestContext()) as RequestContext;
     const handle = this.client.workflow.getHandle(this.runId);
-    const { payload, previousSuspension } = await this.resumePayload(params, handle);
+    const payload = await this.resumePayload(params);
+    const status = await this.queryStatus(handle);
+    const stepId = isSuspendedWorkflowResult(status)
+      ? (payload.step ??
+        (payload.label ? status.resumeLabels?.[payload.label]?.stepId : undefined) ??
+        (status.suspended?.length === 1 && status.suspended[0]?.length === 1 ? status.suspended[0][0] : undefined))
+      : undefined;
+    const previousStep = stepId && isSuspendedWorkflowResult(status) ? status.steps[stepId] : undefined;
+    const previousSuspension =
+      stepId && isSuspendedStepResult(previousStep) ? { stepId, suspendedAt: previousStep.suspendedAt } : undefined;
     await handle.signal('mastra.resume', payload);
-    return this.awaitResultOrSuspended(handle, undefined, undefined, previousSuspension, true);
+    return this.awaitResultOrSuspended(handle, undefined, undefined, requestContext, previousSuspension, true);
   }
 
   override async resumeAsync<TResume>(params: {
@@ -315,10 +342,8 @@ export class TemporalRun<
     perStep?: boolean;
     actor?: any;
   }) {
-    await this._validateRequestContext(params.requestContext as RequestContext<unknown> | undefined);
     const handle = this.client.workflow.getHandle(this.runId);
-    const { payload } = await this.resumePayload(params, handle);
-    await handle.signal('mastra.resume', payload);
+    await handle.signal('mastra.resume', await this.resumePayload(params));
     return { runId: this.runId };
   }
 
@@ -451,6 +476,7 @@ export class TemporalRun<
       handle,
       timeTravel.inputData as TInput,
       timeTravel.state as TState,
+      requestContext as RequestContext,
     ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
   }
 
@@ -462,32 +488,44 @@ export class TemporalRun<
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);
     await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+    const requestContext = (args.requestContext ?? new RequestContext()) as RequestContext;
+    await this.invokeStartCallback(input, initialState, requestContext);
 
-    await this.startWorkflow({
-      inputData: input,
-      initialState,
-      requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
-      runId: this.runId,
-      resourceId: this.resourceId,
-      outputOptions: args.outputOptions,
-      tracingOptions: args.tracingOptions,
-      perStep: args.perStep,
-    });
+    let handle: WorkflowHandle;
+    try {
+      handle = await this.dispatch(args, input, initialState, requestContext);
+    } catch (error) {
+      await this.invokeLifecycleCallbacks(this.failedResult(input, initialState, error), requestContext);
+      throw error;
+    }
+
+    const { onFinish, onError } = this.executionEngine.options;
+    if (onFinish || onError) {
+      // Like core startAsync(), terminal hooks fire in the background from this process.
+      // They are best-effort: if this process exits before the run ends, they do not fire.
+      void this.awaitResult(handle, input, initialState, requestContext);
+    }
 
     return { runId: this.runId };
   }
 }
 
-function isWorkflowResult(value: unknown): value is { status: string; steps: unknown } {
-  return typeof value === 'object' && value !== null && typeof (value as { status?: unknown }).status === 'string';
-}
-
 function isSuspendedWorkflowResult(value: unknown): value is {
   status: 'suspended';
-  steps: Record<string, { status?: unknown; suspendedAt?: number }>;
+  steps: Record<string, unknown>;
   suspended?: string[][];
-  resumeLabels?: Record<string, { stepId?: string }>;
+  resumeLabels?: Record<string, { stepId: string }>;
 } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { status?: unknown }).status === 'suspended' &&
+    typeof (value as { steps?: unknown }).steps === 'object' &&
+    (value as { steps?: unknown }).steps !== null
+  );
+}
+
+function isSuspendedStepResult(value: unknown): value is { status: 'suspended'; suspendedAt?: number } {
   return typeof value === 'object' && value !== null && (value as { status?: unknown }).status === 'suspended';
 }
 

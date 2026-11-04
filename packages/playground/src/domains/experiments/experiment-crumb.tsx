@@ -44,15 +44,13 @@ export function ExperimentCrumbStatusIcon() {
   return experiment?.status ? <ExperimentStatusIcon status={experiment.status} /> : null;
 }
 
-/** Item count rendered next to the experiment name: progress while running, errors once done. */
+/** Item count rendered next to the experiment name once the run settles; the page body shows an active run's progress. */
 export function ExperimentCrumbItemCount() {
   const experiment = useLiveExperiment();
-  if (!experiment) return null;
+  if (!experiment || experiment.status === 'running' || experiment.status === 'pending') return null;
 
-  const { totalItems, succeededCount, failedCount, status } = experiment;
-  const isActive = status === 'running' || status === 'pending';
-  const noun = totalItems === 1 ? 'item' : 'items';
-  const count = isActive ? `${succeededCount + failedCount}/${totalItems} ${noun}` : `${totalItems} ${noun}`;
+  const { totalItems, failedCount } = experiment;
+  const count = `${totalItems} ${totalItems === 1 ? 'item' : 'items'}`;
 
   return (
     <Txt as="span" variant="caption" tone="muted" className="whitespace-nowrap tabular-nums">

@@ -2140,7 +2140,7 @@ describe('MessageList V5 Support', () => {
         type: 'content',
         value: [
           { type: 'text', text: 'Screenshot captured' },
-          { type: 'image-data', data: 'base64data', mediaType: 'image/png' },
+          { type: 'media', data: 'base64data', mediaType: 'image/png' },
           { type: 'text', text: JSON.stringify({ type: 'audio', mimeType: 'audio/wav' }) },
           {
             type: 'text',

@@ -5,6 +5,7 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'factory-client-mode'
   | 'abort-followup'
   | 'abort-escape-off'
   | 'abort-escape-durable'
@@ -132,6 +133,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'knowledge-browser'
+  | 'knowledge-settings'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
@@ -161,6 +163,9 @@ export type ScenarioName =
   | 'notify-input-request-hook'
   | 'om-settings'
   | 'om-auto-selection'
+  | 'om-auto-preview-google-api-key'
+  | 'om-auto-preview-stored-google-key'
+  | 'om-auto-preview-anthropic-only'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
@@ -181,7 +186,6 @@ export type ScenarioName =
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
-  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
@@ -225,6 +229,7 @@ export type ScenarioName =
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'
+  | 'gateway-web-search'
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
@@ -264,6 +269,8 @@ export type McE2eScenarioRuntime = {
 };
 
 export type McE2ePrepareContext = {
+  /** AIMock server origin, set when the scenario uses `useOpenAIModel`. */
+  aimockUrl?: string;
   appDataDir: string;
   dbPath: string;
   homeDir: string;

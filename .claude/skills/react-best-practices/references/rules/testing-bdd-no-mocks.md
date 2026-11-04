@@ -9,7 +9,7 @@ tags: testing, bdd, mocking, msw, vitest
 
 In `packages/playground` (and `packages/playground-ui`), tests must **drive the real `@mastra/client-js` + React Query stack and only mock the network**, and they must be written **BDD-style**: an outer `describe` names the unit, inner `describe('when …')` blocks name a precondition, and each `it` asserts one outcome.
 
-This rule is **lint-enforced**. `packages/playground/eslint.config.js` adds `no-restricted-syntax` selectors (scoped to `src/**/*.{test,spec}.{ts,tsx}`) that fail CI on any prohibited `vi.mock`. The contract also lives in `packages/playground/AGENTS.md`, and the mechanics live in the `playground-msw-tests` skill — activate it before adding or changing any test here.
+This rule is **lint-enforced**. `packages/playground/oxlint.config.ts` adds `mastra/restricted-syntax` selectors (scoped to `src/**/*.{test,spec}.{ts,tsx}`) that fail CI on any prohibited `vi.mock`. The contract also lives in `packages/playground/AGENTS.md`, and the mechanics live in the `playground-msw-tests` skill — activate it before adding or changing any test here.
 
 ### The no-mock rule
 

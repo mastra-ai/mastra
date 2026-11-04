@@ -704,8 +704,9 @@ describe('environmentBuildContext', () => {
   it('serves recorded heads and mints per-repository access', async () => {
     const getRepositoryAccess = vi.fn(async () => ({ token: 't', cloneUrl: 'u' }) as never);
     const ctx = environmentBuildContext(
-      { id: 'p1', orgId: 'org-1' },
+      { id: 'p1', orgId: 'org-1', name: 'API factory' },
       {
+        factoryName: 'API factory',
         repos: [
           {
             projectRepositoryId: 'l1',
@@ -725,6 +726,8 @@ describe('environmentBuildContext', () => {
       { getRepositoryAccess },
     );
     expect(ctx.sessionId).toBe('environment-build:p1');
+    expect(ctx.factoryId).toBe('p1');
+    expect(ctx.factoryName).toBe('API factory');
     expect(ctx.repos?.[0]?.setupCommand).toBe('pnpm i');
     expect(ctx.workspaceSetupCommand).toBe('pnpm build');
     expect(ctx.workingDirectory).toBe('/workspace');

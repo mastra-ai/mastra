@@ -111,6 +111,7 @@ export async function summarizeConversation(opts: SummarizeConversationOptions):
     providerOptions: OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
     maxTokensPerBatch: OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch,
     bufferOnIdle: false,
+    observeOnContextOverflow: false,
     observeAttachments: 'auto',
     instruction: opts.instructions,
     threadTitle: false,

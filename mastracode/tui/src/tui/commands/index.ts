@@ -31,6 +31,7 @@ export { handleSettingsCommand } from './settings.js';
 export { handleBrowserCommand } from './browser.js';
 export { handleConnectCommand } from './connect.js';
 export { handleLoginCommand } from './login.js';
+export { handleFactoryCommand, handleLocalCommand } from './factory.js';
 export { handleReviewCommand } from './review.js';
 export { handleReportIssueCommand } from './report-issue.js';
 export { handleSetupCommand } from './setup.js';

@@ -48,6 +48,11 @@ export interface WorkflowRun {
   createdAt: Date;
   updatedAt: Date;
   resourceId?: string;
+  /**
+   * Set to 2 for runs stored as a header plus entries. Absent for v1 runs.
+   * @experimental
+   */
+  storageVersion?: 2;
 }
 
 export type PaginationInfo = {
@@ -410,6 +415,15 @@ export interface StorageModelConfig {
   [key: string]: unknown;
 }
 
+/** Serializable model fallback entry stored in agent snapshots. */
+export interface StorageModelListEntry {
+  id: string;
+  provider: string;
+  modelId: string;
+  enabled: boolean;
+  maxRetries: number;
+}
+
 /**
  * Default options stored in agent snapshots.
  * Based on AgentExecutionOptionsBase but omitting non-serializable properties.
@@ -503,6 +517,8 @@ export interface StorageAgentSnapshotType {
   instructions: string | AgentInstructionBlock[];
   /** Model configuration (provider, name, etc.) — static or conditional on request context */
   model: StorageConditionalField<StorageModelConfig>;
+  /** Ordered model fallback list owned by Studio for opted-in code agents. */
+  modelList?: StorageModelListEntry[];
   /** Tool keys with optional per-tool config — static or conditional on request context */
   tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /** Default options for generate/stream calls — static or conditional on request context */
@@ -2343,6 +2359,8 @@ export interface UpdateWorkflowStateOptions {
   };
   /** When an agent resume claimed this suspended run. See `WorkflowRunState.resumeClaimedAt`. */
   resumeClaimedAt?: number;
+  /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
+  resumeLeasedClaimAt?: number;
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a
@@ -2862,6 +2880,11 @@ export interface ListDatasetsFilters extends DatasetTenancyFilters {
    * treated as "no filter" (matches all datasets), not "match none".
    */
   targetIds?: string[];
+  /**
+   * Only return datasets with these IDs. Unlike `targetIds`, an empty array
+   * matches no datasets.
+   */
+  datasetIds?: string[];
   /**
    * Substring match on dataset `name`, case-insensitive.
    */

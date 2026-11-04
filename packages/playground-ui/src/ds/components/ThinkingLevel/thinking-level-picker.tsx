@@ -34,13 +34,17 @@ export interface ThinkingLevelUnavailableProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];
   label: string;
   reason: string;
+  /** The level still in effect, when the control is locked rather than unsupported. */
+  value?: T;
 }
 
 export function ThinkingLevelUnavailable<T extends string>({
   options,
   label,
   reason,
+  value,
 }: ThinkingLevelUnavailableProps<T>) {
+  const levelInEffect = options.find(option => option.value === value)?.label;
   return (
     <Tooltip>
       <TooltipTrigger
@@ -49,7 +53,7 @@ export function ThinkingLevelUnavailable<T extends string>({
             role="button"
             tabIndex={0}
             aria-disabled="true"
-            aria-label={`${label}: unavailable. ${reason}`}
+            aria-label={`${label}: ${levelInEffect ?? 'unavailable'}. ${reason}`}
             className={cn(
               'inline-flex h-control-sm shrink-0 cursor-not-allowed items-center rounded-full border border-transparent px-2.5 text-placeholder',
               focusRing,
@@ -57,7 +61,7 @@ export function ThinkingLevelUnavailable<T extends string>({
           />
         }
       >
-        <ThinkingLevelBars options={options} value={undefined} />
+        <ThinkingLevelBars options={options} value={value} />
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-64">
         {reason}

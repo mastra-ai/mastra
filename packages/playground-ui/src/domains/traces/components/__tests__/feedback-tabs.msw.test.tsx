@@ -32,7 +32,7 @@ const wrapper = ({ children }: { children: ReactNode }) => {
 };
 
 const submit = (text: string) => {
-  fireEvent.change(screen.getByPlaceholderText('Leave feedback...'), { target: { value: text } });
+  fireEvent.change(screen.getByPlaceholderText('Leave feedback'), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
 };
 

@@ -46,12 +46,28 @@ export const TRACE_AGGREGATE_FIXED_MEASURES = [
   'tokens.cached.avg',
   'cost.sum',
   'cost.avg',
+  'timeToFirstToken.avg',
+  'timeToFirstToken.min',
+  'timeToFirstToken.max',
+  'timeToFirstToken.p50',
+  'timeToFirstToken.p90',
+  'timeToFirstToken.p95',
+  'timeToFirstToken.p99',
+  'timeToFirstToken.count',
+  'timeToFirstChunk.avg',
+  'timeToFirstChunk.min',
+  'timeToFirstChunk.max',
+  'timeToFirstChunk.p50',
+  'timeToFirstChunk.p90',
+  'timeToFirstChunk.p95',
+  'timeToFirstChunk.p99',
+  'timeToFirstChunk.count',
 ] as const;
 /** `cost.unit` value for a group whose priced rows use more than one cost unit. */
 export const TRACE_AGGREGATE_MIXED_COST_UNIT = 'mixed';
 export const TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX = 'countDistinct.';
 
-const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
+const hasMaxUtf8Bytes = (value: string, maxBytes: number) => new TextEncoder().encode(value).length <= maxBytes;
 
 export function isTraceAggregateCountDistinctMeasure(name: string): boolean {
   return getTraceAggregateCountDistinctField(name) !== undefined;
@@ -125,6 +141,12 @@ const traceAggregateRequestObjectSchema = z
     limit: z.number().int().min(1).max(TRACE_AGGREGATE_MAX_LIMIT).default(TRACE_AGGREGATE_DEFAULT_LIMIT),
   })
   .strict();
+
+/**
+ * A trace aggregate request without its time range, for callers that store a query and supply the
+ * range at run time (dashboard widgets). Apply `findPredicateComplexityIssue` before parsing.
+ */
+export const traceAggregateQueryObjectSchema = traceAggregateRequestObjectSchema.omit({ timeRange: true });
 
 export const traceAggregateRequestSchema = z.preprocess((input, context) => {
   const issuePath = findPredicateComplexityIssue(input, [['where'], ['having']]);

@@ -493,6 +493,8 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 /**
  * Converts MCP-style tool results (`{ content: [...] }`) to model-native
  * multimodal tool result output without persisting a duplicate modelOutput copy.
+ * Media is emitted in the V2-authored `media` shape; the spec-boundary prompt
+ * converters translate it for V3/V4 models.
  */
 function convertMcpContentToolResultOutput(output: unknown): unknown {
   if (!output || typeof output !== 'object') return undefined;
@@ -516,11 +518,11 @@ function convertMcpContentToolResultOutput(output: unknown): unknown {
           return { type: 'text', text: String(typedPart.text ?? '') };
         case 'image':
           return typeof typedPart.data === 'string'
-            ? { type: 'image-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
+            ? { type: 'media', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
             : { type: 'text', text: JSON.stringify(typedPart) };
         case 'audio':
           return typeof typedPart.data === 'string'
-            ? { type: 'file-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
+            ? { type: 'media', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
             : { type: 'text', text: JSON.stringify(typedPart) };
         default:
           return { type: 'text', text: JSON.stringify(typedPart) };

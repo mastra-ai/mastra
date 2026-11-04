@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useProviderConnection } from '../hooks/useProviderConnection';
+import { companyAccountNeedsAdmin, useProviderConnection } from '../hooks/useProviderConnection';
 import type { PreviewProvider } from '../hooks/useProviderConnection';
 import type { OnboardingModelChoice } from '../services/onboardingFlow';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
@@ -10,7 +10,8 @@ import { ProviderConnectionDialogs } from './ProviderConnectionDialogs';
 
 export interface ModelProviderFactoryStepProps {
   initialChoice?: OnboardingModelChoice;
-  onComplete: (choice?: OnboardingModelChoice) => void;
+  onComplete: (choice: OnboardingModelChoice) => void;
+  onChangeSetup: () => void;
   onPreviewProvider?: PreviewProvider;
   onPreviewModel?: (model: string | undefined) => void;
 }
@@ -18,16 +19,12 @@ export interface ModelProviderFactoryStepProps {
 export function ModelProviderFactoryStep({
   initialChoice,
   onComplete,
+  onChangeSetup,
   onPreviewModel,
   onPreviewProvider,
 }: ModelProviderFactoryStepProps) {
   const connection = useProviderConnection({ scope: 'org', initialSelection: initialChoice });
-  const needsAdmin =
-    !connection.isPending &&
-    !connection.catalogError &&
-    connection.authEnabled &&
-    !connection.orgKeyAdmin &&
-    !connection.hasConfiguredProvider;
+  const needsAdmin = companyAccountNeedsAdmin(connection);
   const connectedProvider = connection.connected ? connection.provider : undefined;
 
   return (
@@ -35,11 +32,11 @@ export function ModelProviderFactoryStep({
       {needsAdmin && (
         <div className="flex flex-col gap-3">
           <Txt variant="caption" tone="muted">
-            An admin connects organization access. You can set up your personal access next.
+            An admin needs to connect the company account first. Choose personal accounts to continue now.
           </Txt>
           <div>
-            <Button variant="primary" onClick={() => onComplete()}>
-              Continue with personal access
+            <Button variant="primary" onClick={onChangeSetup}>
+              Change setup
             </Button>
           </div>
         </div>

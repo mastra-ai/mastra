@@ -5,6 +5,7 @@ import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
 import { FILTER_BAR_SCOPE_ATTR, FilterBarProvider, useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
+import { FilterBarTimeRange } from './filter-bar-time-range';
 import { isFilterBarGroup } from './types';
 import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
@@ -37,6 +38,11 @@ export type FilterBarProps = FilterBarValueProps & {
   /** How deep advanced-filter groups may nest (root-level group = 1). Defaults to 3. */
   maxDepth?: number;
   'aria-label'?: string;
+  /**
+   * Text shown in a value list when the field's `suggestions` resolver rejects, for example
+   * to explain a server limit. Return `undefined` to keep the default "Couldn't load values.".
+   */
+  describeSuggestionsError?: (error: unknown) => string | undefined;
   /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
   className?: string;
@@ -63,7 +69,7 @@ function FilterBarSurface({
         // No chrome of its own: chips and the typeahead input sit directly on the parent surface.
         // Layout: chips, input, then Clear right beside the input — all in one wrapping row so
         // Clear never drifts to the far edge of a wide container.
-        'flex w-full flex-wrap items-center gap-1',
+        'flex w-full flex-wrap items-center gap-1.5',
         className,
       )}
     >
@@ -100,6 +106,7 @@ export function FilterBar({
   createItemId,
   maxDepth,
   'aria-label': ariaLabel = 'Filters',
+  describeSuggestionsError,
   clearLabel = 'Clear filters',
   className,
   children,
@@ -113,6 +120,7 @@ export function FilterBar({
       createItemId={createItemId}
       maxDepth={maxDepth}
       ariaLabel={ariaLabel}
+      describeSuggestionsError={describeSuggestionsError}
     >
       <FilterBarSurface className={className} clearLabel={clearLabel}>
         {children}
@@ -161,3 +169,4 @@ FilterBar.Chips = FilterBarChips;
 FilterBar.Chip = FilterBarChip;
 FilterBar.AdvancedChip = FilterBarAdvancedChip;
 FilterBar.Input = FilterBarInput;
+FilterBar.TimeRange = FilterBarTimeRange;

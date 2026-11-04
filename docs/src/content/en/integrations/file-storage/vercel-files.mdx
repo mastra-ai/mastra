@@ -58,6 +58,7 @@ import { Files } from 'files-sdk'
 import { r2 } from 'files-sdk/r2'
 import { gcs } from 'files-sdk/gcs'
 import { azure } from 'files-sdk/azure'
+import { neon } from 'files-sdk/neon'
 import { fs } from 'files-sdk/fs'
 
 // Cloudflare R2
@@ -68,6 +69,9 @@ const gcsFiles = new Files({ adapter: gcs({ bucket, projectId }) })
 
 // Azure Blob
 const azureFiles = new Files({ adapter: azure({ container, connectionString }) })
+
+// Neon Object Storage (reads AWS_* variables from `neon env pull`)
+const neonFiles = new Files({ adapter: neon({ bucket }) })
 
 // Local filesystem (useful for tests and development)
 const localFiles = new Files({ adapter: fs({ root: './workspace' }) })

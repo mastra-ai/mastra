@@ -344,9 +344,8 @@ export class PosthogExporter extends TrackingExporter<
 
     if (span.isRootSpan) {
       return this.buildRootEventMessage({ span, distinctId, endTime });
-    } else {
-      return this.buildChildEventMessage({ span, distinctId, endTime, traceData });
     }
+    return this.buildChildEventMessage({ span, distinctId, endTime, traceData });
   }
 
   /**
@@ -626,11 +625,10 @@ export class PosthogExporter extends TrackingExporter<
     if (isModelCall) {
       baseProperties.$ai_generation_id = span.id;
       return { ...baseProperties, ...this.buildGenerationProperties(span) };
-    } else {
-      baseProperties.$ai_span_id = span.id;
-      baseProperties.$ai_span_name = span.name;
-      return { ...baseProperties, ...this.buildSpanProperties(span) };
     }
+    baseProperties.$ai_span_id = span.id;
+    baseProperties.$ai_span_name = span.name;
+    return { ...baseProperties, ...this.buildSpanProperties(span) };
   }
 
   private extractErrorProperties(errorInfo?: SpanErrorInfo): Record<string, any> {

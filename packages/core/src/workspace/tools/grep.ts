@@ -4,7 +4,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { UnsupportedGrepPatternError } from '../errors';
 import type { FilesystemGrepResult } from '../filesystem';
 import { isEnoentError, isEnotdirError, isTextFile } from '../filesystem/fs-utils';
-import { loadGitignore } from '../gitignore';
+import { loadWorkspaceIgnore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
@@ -12,6 +12,14 @@ import { applyTokenLimit } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
 const GREP_FILESYSTEM_CONCURRENCY = 8;
+
+/**
+ * Wall-clock budget for the host-side directory walk. On remote filesystems
+ * every directory and file is a round trip, so an unbounded walk over a large
+ * repository can stall an agent run for minutes; past this budget the tool
+ * returns what it found so far and says the search is incomplete.
+ */
+const HOST_WALK_BUDGET_MS = 60_000;
 
 /**
  * Options for {@link createGrepTool}.
@@ -105,6 +113,19 @@ Usage:
       // from a genuinely empty one. In `strict` mode these throw instead.
       let skippedReadErrorCount = 0;
       let targetNotFound = false;
+      let scannedFileCount = 0;
+
+      // The host-side walk stops early (returning partial results) when the run
+      // is aborted or, for directory walks, once the time budget is spent.
+      let walkDeadline: number | undefined;
+      let incomplete: 'aborted' | 'time budget' | undefined;
+      const shouldStop = (): boolean => {
+        if (!incomplete) {
+          if (context?.abortSignal?.aborted) incomplete = 'aborted';
+          else if (walkDeadline !== undefined && Date.now() > walkDeadline) incomplete = 'time budget';
+        }
+        return incomplete !== undefined;
+      };
 
       const span = startWorkspaceSpan(context, workspace, {
         category: 'filesystem',
@@ -142,13 +163,9 @@ Usage:
           searchPath = inputPath;
         }
 
-        // Load gitignore filter.
-        // If the user explicitly targets a gitignored path (e.g. "./dist"), skip
-        // filtering so they can still search there. Otherwise apply as normal.
-        const rawIgnoreFilter = await loadGitignore(filesystem);
-        const searchPathNormalized = searchPath.replace(/^\.\//, '').replace(/\/$/, '');
-        const targetIsIgnored = rawIgnoreFilter && searchPathNormalized && rawIgnoreFilter(searchPathNormalized + '/');
-        const ignoreFilter = targetIsIgnored ? undefined : rawIgnoreFilter;
+        // The walk below adds nested .gitignore files as it finds them.
+        const workspaceIgnore = await loadWorkspaceIgnore(filesystem, searchPath, { requestedPath: inputPath });
+        const isIgnored = (path: string, isDirectory: boolean) => workspaceIgnore.ignores(path, isDirectory);
 
         const MAX_LINE_LENGTH = 500;
         const GLOBAL_CAP = 1000;
@@ -199,7 +216,7 @@ Usage:
                 const reason = error instanceof Error ? error.message : String(error);
                 if (error instanceof UnsupportedGrepPatternError) {
                   workspace.logger?.info(
-                    `Native grep on "${filesystem.provider}" filesystem does not support pattern "${pattern}"; falling back to host-side search`,
+                    `Native grep on "${filesystem.provider}" filesystem could not run pattern "${pattern}" (${reason}); falling back to host-side search`,
                   );
                 } else {
                   workspace.logger?.warn(
@@ -214,12 +231,15 @@ Usage:
               // Directory — walk recursively with bounded concurrent listings
               const entriesByDirectory = new Map<string, Awaited<ReturnType<typeof filesystem.readdir>>>();
               let directoryFrontier = [searchPath];
+              walkDeadline = Date.now() + HOST_WALK_BUDGET_MS;
 
               const pMap = (await import('p-map')).default;
-              while (directoryFrontier.length > 0) {
+              while (directoryFrontier.length > 0 && !shouldStop()) {
                 const directoryEntries = await pMap(
                   directoryFrontier,
                   async dir => {
+                    // Skip listings not yet started once the walk must stop.
+                    if (shouldStop()) return undefined;
                     try {
                       return await filesystem.readdir(dir);
                     } catch (err) {
@@ -232,9 +252,16 @@ Usage:
                 );
                 const nextDirectoryFrontier: string[] = [];
 
+                // Read each listed directory's .gitignore before filtering its
+                // children, so its rules apply to everything below it.
+                await workspaceIgnore.addListings(
+                  directoryFrontier.map((dir, directoryIndex) => [dir, directoryEntries[directoryIndex]]),
+                );
+
                 for (let directoryIndex = 0; directoryIndex < directoryFrontier.length; directoryIndex++) {
                   const dir = directoryFrontier[directoryIndex]!;
-                  const entries = directoryEntries[directoryIndex]!;
+                  const entries = directoryEntries[directoryIndex];
+                  if (!entries) continue;
                   entriesByDirectory.set(dir, entries);
 
                   for (const entry of entries) {
@@ -242,10 +269,7 @@ Usage:
                     if (!includeHidden && entry.name.startsWith('.')) continue;
 
                     const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
-                    if (ignoreFilter) {
-                      const relativePath = fullPath.replace(/^\.\//, '');
-                      if (ignoreFilter(`${relativePath}/`)) continue;
-                    }
+                    if (isIgnored(fullPath, true)) continue;
                     nextDirectoryFrontier.push(fullPath);
                   }
                 }
@@ -265,11 +289,7 @@ Usage:
                   const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
 
                   // Skip gitignored paths
-                  if (ignoreFilter) {
-                    const relativePath = fullPath.replace(/^\.\//, '');
-                    const checkPath = entry.type === 'directory' ? `${relativePath}/` : relativePath;
-                    if (ignoreFilter(checkPath)) continue;
-                  }
+                  if (isIgnored(fullPath, entry.type === 'directory')) continue;
 
                   if (entry.type === 'file') {
                     // Apply glob filter first (createGlobMatcher normalizes leading
@@ -381,6 +401,14 @@ Usage:
         // Format native capability results with the same host-side filtering
         // (gitignore/glob/hidden/.git/text) and limits as the walk path.
         if (nativeResults) {
+          // Providers may return ignored files; load the .gitignore files
+          // between searchPath and each result before filtering.
+          await workspaceIgnore.addParentsOf(
+            nativeResults.map(result => {
+              const rel = result.path.replace(/^\.\//, '');
+              return searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
+            }),
+          );
           for (const result of nativeResults) {
             if (truncated) break;
 
@@ -393,10 +421,7 @@ Usage:
             if (!isText(segments[segments.length - 1]!)) continue;
 
             const fullPath = searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
-            if (ignoreFilter) {
-              const relativePath = fullPath.replace(/^\.\//, '');
-              if (ignoreFilter(relativePath)) continue;
-            }
+            if (isIgnored(fullPath, false)) continue;
             if (globMatcher && !globMatcher(fullPath)) continue;
 
             const lineTextByIndex = new Map<number, string>();
@@ -428,15 +453,17 @@ Usage:
         const pMap = (await import('p-map')).default;
         for (
           let batchStart = 0;
-          batchStart < filePaths.length && !truncated;
+          batchStart < filePaths.length && !truncated && !shouldStop();
           batchStart += GREP_FILESYSTEM_CONCURRENCY
         ) {
           const batchPaths = filePaths.slice(batchStart, batchStart + GREP_FILESYSTEM_CONCURRENCY);
           const batchContents = await pMap(
             batchPaths,
             async filePath => {
+              if (shouldStop()) return undefined;
               try {
                 const raw = await filesystem.readFile(filePath, { encoding: 'utf-8' });
+                scannedFileCount++;
                 return typeof raw === 'string' ? raw : undefined;
               } catch (err) {
                 if (strict) throw err;
@@ -489,6 +516,14 @@ Usage:
         summaryParts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
         if (truncated) {
           summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
+        }
+        if (incomplete) {
+          const scanned = `${scannedFileCount} file${scannedFileCount !== 1 ? 's' : ''} scanned`;
+          summaryParts.push(
+            incomplete === 'aborted'
+              ? `(search incomplete: aborted, ${scanned}; results are partial)`
+              : `(search incomplete: host-side search stopped after ${HOST_WALK_BUDGET_MS / 1000}s, ${scanned}; results are partial, narrow the path or pattern to search everything)`,
+          );
         }
         if (skippedExtensionCount > 0) {
           summaryParts.push(

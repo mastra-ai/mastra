@@ -34,7 +34,7 @@ describe.each(['default', 'factory'] as const)('StudioConfigForm (%s)', variant 
       const setConfig = vi.fn<StudioConfigContextType['setConfig']>();
       renderWithConfig(<StudioConfigForm variant={variant} initialConfig={customConfig} />, setConfig);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
 
       expect(setConfig).toHaveBeenCalledWith(customConfig);
     });
@@ -43,7 +43,7 @@ describe.each(['default', 'factory'] as const)('StudioConfigForm (%s)', variant 
       const onSave = vi.fn();
       renderWithConfig(<StudioConfigForm variant={variant} initialConfig={customConfig} onSave={onSave} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
 
       expect(onSave).toHaveBeenCalledOnce();
     });
@@ -55,7 +55,7 @@ describe.each(['default', 'factory'] as const)('StudioConfigForm (%s)', variant 
       renderWithConfig(<StudioConfigForm variant={variant} initialConfig={customConfig} />, setConfig);
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '  ' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
 
       expect(setConfig).toHaveBeenCalledWith({ ...customConfig, apiPrefix: undefined });
     });
@@ -68,7 +68,7 @@ describe.each(['default', 'factory'] as const)('StudioConfigForm (%s)', variant 
       renderWithConfig(<StudioConfigForm variant={variant} initialConfig={defaultConfig} />, setConfig);
 
       expect(screen.getByRole('textbox', { name: 'API prefix' })).toHaveProperty('value', '/api');
-      fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
 
       expect(setConfig).toHaveBeenCalledWith(defaultConfig);
     });

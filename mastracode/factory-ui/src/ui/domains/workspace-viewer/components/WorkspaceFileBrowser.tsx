@@ -1,23 +1,32 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
+  Eye,
+  EyeOff,
   File,
   FileCode,
   FileJson,
   FileText,
   Folder,
   FolderOpen,
+  FolderSymlink,
   Image,
   NotepadText,
   RefreshCw,
 } from 'lucide-react';
+import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+
+import { queryKeys } from '../../../../api/keys';
+import { WakeSandbox } from './WakeSandbox';
+import type { WorkspaceTreeEntry } from '../../../../api/types';
+import { useWorkspaceTree } from '../../../../hooks/use-fs';
 import { treeRowContainmentClass } from '../layout';
-import { RepositoryGroupHeader } from './WorkspaceChangesPanel';
 
 function getFileIcon(path: string): ReactNode {
   const ext = path.split('.').pop()?.toLowerCase();
@@ -52,172 +61,164 @@ function getFolderIcon(isOpen: boolean): ReactNode {
   );
 }
 
-interface WorkspaceTreeNode {
-  path: string;
-  name: string;
-  type: 'file' | 'directory';
-  children: WorkspaceTreeNode[];
+function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'error' }) {
+  return (
+    <Txt
+      as="span"
+      variant="caption"
+      tone={tone === 'muted' ? 'muted' : undefined}
+      className={tone === 'error' ? 'text-destructive-foreground' : undefined}
+    >
+      {children}
+    </Txt>
+  );
 }
 
-interface WorkspaceFileEntry {
-  path: string;
+/** Tree ids for symlinked folders, which jump to their target instead of expanding. */
+const FOLDER_LINK_ID = 'folder-link:';
+
+/** `→ target` after a symlink's name. */
+function LinkTarget({ target }: { target?: string }) {
+  if (!target) return null;
+  return (
+    <Txt as="span" variant="caption" tone="muted" className="ml-1.5 truncate">
+      → {target}
+    </Txt>
+  );
 }
 
-interface WorkspaceFileRepository {
-  slug: string;
-  prefix: string;
+/** Dotfiles and dot-folders, hidden unless the viewer asks for them. */
+function isHidden(entry: WorkspaceTreeEntry): boolean {
+  return entry.name.startsWith('.');
 }
 
-function ensureDirectory(nodes: WorkspaceTreeNode[], path: string, name: string): WorkspaceTreeNode {
-  const existing = nodes.find(node => node.path === path);
-  if (existing) return existing;
-
-  const directory = { path, name, type: 'directory', children: [] } satisfies WorkspaceTreeNode;
-  nodes.push(directory);
-  return directory;
-}
-
-function addFile(nodes: WorkspaceTreeNode[], file: WorkspaceFileEntry, prefix: string) {
-  const segments = file.path.slice(prefix.length).split('/').filter(Boolean);
-  let siblings = nodes;
-  let currentPath = prefix;
-
-  segments.forEach((segment, index) => {
-    currentPath = currentPath && !currentPath.endsWith('/') ? `${currentPath}/${segment}` : `${currentPath}${segment}`;
-    if (index === segments.length - 1) {
-      siblings.push({ path: file.path, name: segment, type: 'file', children: [] });
-      return;
-    }
-    siblings = ensureDirectory(siblings, currentPath, segment).children;
-  });
-}
-
-function sortTree(nodes: WorkspaceTreeNode[]): WorkspaceTreeNode[] {
-  return nodes
-    .map(node => ({ ...node, children: sortTree(node.children) }))
-    .sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-}
-
-function countFiles(nodes: WorkspaceTreeNode[]): number {
-  return nodes.reduce((total, node) => total + (node.type === 'file' ? 1 : countFiles(node.children)), 0);
-}
-
-/**
- * Build the folder tree of a file list. `prefix` is the repository directory
- * the paths carry in a multi-repository session: it is stripped for display
- * only, every node keeps the prefixed path the file route expects.
- */
-function buildTree(files: WorkspaceFileEntry[], prefix = ''): WorkspaceTreeNode[] {
-  const nodes: WorkspaceTreeNode[] = [];
-  files.forEach(file => addFile(nodes, file, prefix));
-  return sortTree(nodes);
-}
-
-interface FileGroup {
-  repository?: WorkspaceFileRepository;
-  nodes: WorkspaceTreeNode[];
-}
-
-/**
- * One group per repository, in payload order, then a trailing ungrouped tree
- * for the entries no repository prefix claims (root `.artifacts`, paths
- * persisted before the session had a layout).
- */
-function groupFiles(files: WorkspaceFileEntry[], repositories: WorkspaceFileRepository[]): FileGroup[] {
-  const byPrefix = [...repositories].sort((a, b) => b.prefix.length - a.prefix.length);
-  const buckets = new Map<string | undefined, WorkspaceFileEntry[]>();
-  for (const file of files) {
-    const owner = byPrefix.find(repository => file.path.startsWith(repository.prefix));
-    const bucket = buckets.get(owner?.prefix) ?? [];
-    bucket.push(file);
-    buckets.set(owner?.prefix, bucket);
-  }
-  const groups: FileGroup[] = repositories.map(repository => ({
-    repository,
-    nodes: buildTree(buckets.get(repository.prefix) ?? [], repository.prefix),
-  }));
-  const ungrouped = buckets.get(undefined);
-  if (ungrouped?.length) groups.push({ nodes: buildTree(ungrouped) });
-  return groups;
-}
-
-function WorkspaceTreeItem({
-  node,
-  openFolders,
-  onFolderOpenChange,
-}: {
-  node: WorkspaceTreeNode;
+interface TreeLevelProps {
+  workspacePath: string;
+  showHidden: boolean;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
-}) {
-  if (node.type === 'directory') {
-    const isOpen = openFolders[node.path] ?? false;
+}
+
+/** The contents of one open folder: fetched only once it is open. */
+function FolderChildren({ path, ...props }: TreeLevelProps & { path: string }) {
+  const listing = useWorkspaceTree(props.workspacePath, path);
+  if (listing.isLoading) {
+    return (
+      <li className="px-2 py-1">
+        <Spinner size="sm" />
+      </li>
+    );
+  }
+  if (listing.error) {
+    return (
+      <li className="px-2 py-1">
+        <TreeMessage tone="error">{listing.error.message}</TreeMessage>
+      </li>
+    );
+  }
+  const entries = (listing.data?.entries ?? []).filter(entry => props.showHidden || !isHidden(entry));
+  if (entries.length === 0) {
+    return (
+      <li className="px-2 py-1">
+        <TreeMessage>Empty</TreeMessage>
+      </li>
+    );
+  }
+  return entries.map(entry => <WorkspaceTreeItem key={entry.path} entry={entry} {...props} />);
+}
+
+function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: WorkspaceTreeEntry }) {
+  if (entry.type === 'directory' && entry.linkedPath !== undefined) {
+    return (
+      <Tree.File id={`${FOLDER_LINK_ID}${entry.linkedPath}`} className={treeRowContainmentClass}>
+        <Tree.Icon>
+          <FolderSymlink className="text-badge-amber-indicator" />
+        </Tree.Icon>
+        <Tree.Label>
+          {entry.name}
+          <LinkTarget target={entry.symlinkTarget} />
+        </Tree.Label>
+      </Tree.File>
+    );
+  }
+  if (entry.type === 'directory') {
+    const isOpen = props.openFolders[entry.path] ?? false;
     return (
       <Tree.Folder
         className={treeRowContainmentClass}
         open={isOpen}
-        onOpenChange={(open: boolean) => onFolderOpenChange(node.path, open)}
+        onOpenChange={(open: boolean) => props.onFolderOpenChange(entry.path, open)}
       >
         <Tree.FolderTrigger>
           <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
-          <Tree.Label>{node.name}</Tree.Label>
+          <Tree.Label>{entry.name}</Tree.Label>
         </Tree.FolderTrigger>
-        <Tree.FolderContent>
-          {node.children.map(child => (
-            <WorkspaceTreeItem
-              key={child.path}
-              node={child}
-              openFolders={openFolders}
-              onFolderOpenChange={onFolderOpenChange}
-            />
-          ))}
-        </Tree.FolderContent>
+        <Tree.FolderContent>{isOpen ? <FolderChildren path={entry.path} {...props} /> : null}</Tree.FolderContent>
       </Tree.Folder>
     );
   }
 
   return (
-    <Tree.File id={node.path} className={treeRowContainmentClass}>
-      <Tree.Icon>{getFileIcon(node.name)}</Tree.Icon>
-      <Tree.Label>{node.name}</Tree.Label>
+    <Tree.File id={entry.path} className={treeRowContainmentClass}>
+      <Tree.Icon>{getFileIcon(entry.name)}</Tree.Icon>
+      <Tree.Label>
+        {entry.name}
+        <LinkTarget target={entry.symlinkTarget} />
+      </Tree.Label>
     </Tree.File>
   );
 }
 
 interface WorkspaceFileBrowserProps {
-  files?: WorkspaceFileEntry[];
-  /** The environment repositories the paths are prefixed by; grouping applies with two or more. */
-  repositories?: WorkspaceFileRepository[];
+  workspacePath: string;
+  visible?: boolean;
   selectedFilePath?: string;
-  isLoading: boolean;
-  isRefreshing: boolean;
-  error?: Error;
-  onRefresh: () => void;
   onFileSelect: (filePath: string) => void;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
+  showHidden: boolean;
+  onShowHiddenChange: (showHidden: boolean) => void;
   onBack: () => void;
 }
 
+/**
+ * The session's checkouts, read live from its sandbox one folder at a time.
+ * Refresh refetches every folder on screen.
+ */
 export function WorkspaceFileBrowser({
-  files,
-  repositories,
+  workspacePath,
+  visible = true,
   selectedFilePath,
-  isLoading,
-  isRefreshing,
-  error,
-  onRefresh,
   onFileSelect,
   openFolders,
   onFolderOpenChange,
+  showHidden,
+  onShowHiddenChange,
   onBack,
 }: WorkspaceFileBrowserProps) {
-  const persistedFiles = files ?? [];
-  const groups = repositories && repositories.length > 1 ? groupFiles(persistedFiles, repositories) : undefined;
-  const nodes = groups ? [] : buildTree(persistedFiles);
+  const queryClient = useQueryClient();
+  const root = useWorkspaceTree(workspacePath, '', { enabled: visible });
+  const isRefreshing = useIsFetching({ queryKey: queryKeys.workspaceTreeScope(workspacePath) }) > 0;
+  const refresh = () =>
+    void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
+  const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
+  // A symlinked folder opens its target and every folder above it.
+  const select = (id: string) => {
+    if (!id.startsWith(FOLDER_LINK_ID)) return onFileSelect(id);
+    const segments = id.slice(FOLDER_LINK_ID.length).split('/');
+    segments.forEach((_, i) => onFolderOpenChange(segments.slice(0, i + 1).join('/'), true));
+  };
+
+  let content: ReactNode;
+  if (root.isLoading) {
+    content = <Spinner size="sm" />;
+  } else if (root.error) {
+    content = <TreeMessage tone="error">{root.error.message}</TreeMessage>;
+  } else if (root.data && !root.data.available) {
+    content = <WakeSandbox workspacePath={workspacePath} />;
+  } else if (entries.length === 0) {
+    content = <TreeMessage>No files</TreeMessage>;
+  }
 
   return (
     <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
@@ -229,99 +230,51 @@ export function WorkspaceFileBrowser({
         <Txt tone="ink" as="h2" variant="column">
           Files
         </Txt>
-        {!isLoading && !error ? (
-          <Txt tone="muted" variant="meta" className="ml-auto">
-            {persistedFiles.length} {persistedFiles.length === 1 ? 'file' : 'files'}
-          </Txt>
-        ) : null}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                className="ml-auto"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => onShowHiddenChange(!showHidden)}
+                aria-pressed={showHidden}
+                aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
+              >
+                {showHidden ? <Eye /> : <EyeOff />}
+              </Button>
+            }
+          />
+          <TooltipContent>{showHidden ? 'Hide hidden files' : 'Show hidden files'}</TooltipContent>
+        </Tooltip>
         <Button
-          className={isLoading || error ? 'ml-auto' : undefined}
           size="icon-sm"
           variant="ghost"
-          onClick={onRefresh}
+          onClick={refresh}
           disabled={isRefreshing}
           aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
         >
           {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
         </Button>
       </div>
-      {isLoading ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center">
-          <Spinner size="sm" />
-        </div>
-      ) : null}
-      {error ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-destructive-foreground">
-            {error.message}
-          </Txt>
-        </div>
-      ) : null}
-      {!isLoading && !error && !groups && nodes.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt tone="muted" variant="caption">
-            No files
-          </Txt>
-        </div>
-      ) : null}
-      {!isLoading && !error && groups ? (
+      {content ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
+      ) : (
         <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col p-1.5">
-            {groups.map(group =>
-              group.repository ? (
-                <section key={group.repository.prefix} aria-label={`Files in ${group.repository.slug}`}>
-                  <RepositoryGroupHeader
-                    label={group.repository.prefix.replace(/\/$/, '')}
-                    open={openFolders[group.repository.prefix] ?? true}
-                    onOpenChange={open => onFolderOpenChange(group.repository!.prefix, open)}
-                  >
-                    <Txt as="span" tone="muted" variant="meta" className="shrink-0">
-                      {countFiles(group.nodes)} {countFiles(group.nodes) === 1 ? 'file' : 'files'}
-                    </Txt>
-                  </RepositoryGroupHeader>
-                  {(openFolders[group.repository.prefix] ?? true) && group.nodes.length > 0 ? (
-                    <Tree className="pl-2" selectedId={selectedFilePath} onSelect={onFileSelect}>
-                      {group.nodes.map(node => (
-                        <WorkspaceTreeItem
-                          key={node.path}
-                          node={node}
-                          openFolders={openFolders}
-                          onFolderOpenChange={onFolderOpenChange}
-                        />
-                      ))}
-                    </Tree>
-                  ) : null}
-                </section>
-              ) : (
-                <Tree key="ungrouped" selectedId={selectedFilePath} onSelect={onFileSelect}>
-                  {group.nodes.map(node => (
-                    <WorkspaceTreeItem
-                      key={node.path}
-                      node={node}
-                      openFolders={openFolders}
-                      onFolderOpenChange={onFolderOpenChange}
-                    />
-                  ))}
-                </Tree>
-              ),
-            )}
-          </div>
-        </ScrollArea>
-      ) : null}
-      {!isLoading && !error && !groups && nodes.length > 0 ? (
-        <ScrollArea className="min-h-0 flex-1">
-          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={onFileSelect}>
-            {nodes.map(node => (
+          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
+            {entries.map(entry => (
               <WorkspaceTreeItem
-                key={node.path}
-                node={node}
+                key={entry.path}
+                entry={entry}
+                workspacePath={workspacePath}
+                showHidden={showHidden}
                 openFolders={openFolders}
                 onFolderOpenChange={onFolderOpenChange}
               />
             ))}
           </Tree>
         </ScrollArea>
-      ) : null}
+      )}
     </aside>
   );
 }

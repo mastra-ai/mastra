@@ -20,9 +20,31 @@ function createCtx() {
           },
         };
         build(q);
+        const matches = () =>
+          docs.filter(
+            doc =>
+              doc.table === filters.table &&
+              (filters.primaryKey === undefined || doc.primaryKey === filters.primaryKey),
+          );
+        // Convex orders undefined < null < numbers.
+        const rank = (v: unknown) => (v === undefined ? 0 : v === null ? 1 : 2);
+        const cmp = (a: any, b: any) => (rank(a) !== rank(b) ? rank(a) - rank(b) : rank(a) === 2 ? a - b : 0);
+        const val = (doc: Doc, x: any) => (typeof x === 'function' ? x(doc) : x);
+        const fq = {
+          field: (path: string) => (doc: any) => path.split('.').reduce((o, k) => o?.[k], doc),
+          gt: (a: any, b: any) => (doc: Doc) => cmp(val(doc, a), val(doc, b)) > 0,
+          lt: (a: any, b: any) => (doc: Doc) => cmp(val(doc, a), val(doc, b)) < 0,
+          and:
+            (...ps: any[]) =>
+            (doc: Doc) =>
+              ps.every(p => p(doc)),
+        };
         return {
-          unique: async () =>
-            docs.find(doc => doc.table === filters.table && doc.primaryKey === filters.primaryKey) ?? null,
+          unique: async () => matches()[0] ?? null,
+          filter: (build: (q: any) => (doc: Doc) => boolean) => {
+            const pred = build(fq);
+            return { take: async (n: number) => matches().filter(pred).slice(0, n) };
+          },
         };
       },
     })),
@@ -30,6 +52,12 @@ function createCtx() {
       const doc = { _id: `doc-${nextId++}` as GenericId<string>, ...value };
       docs.push(doc);
       return doc._id;
+    }),
+    delete: vi.fn(async (id: GenericId<string>) => {
+      docs.splice(
+        docs.findIndex(doc => doc._id === id),
+        1,
+      );
     }),
     patch: vi.fn(async (id: GenericId<string>, value: Partial<Doc>) => {
       Object.assign(
@@ -183,5 +211,41 @@ describe('Convex run fencing handler', () => {
     expect(await run({ op: 'getRunOwnership', tableName: 'mastra_threads' as any, runId: 'run-1' })).toMatchObject({
       ok: false,
     });
+  });
+
+  it('prunes claims idle past the cutoff and keeps recent ones', async () => {
+    await claim();
+    vi.setSystemTime(NOW + 10_000);
+    await run({
+      op: 'claimRunOwnership',
+      tableName: OWNERS,
+      runId: 'run-2',
+      ownerId: 'a',
+      leaseMs: 1000,
+      force: false,
+    });
+    const res = await run({
+      op: 'pruneRunClaims',
+      tableName: OWNERS,
+      column: 'updatedAt',
+      cutoff: NOW + 5_000,
+      limit: 10,
+    });
+    expect(res.result).toBe(1);
+    expect(docs.map(doc => doc.primaryKey)).toEqual(['run-2']);
+  });
+
+  it('prunes only retired fences, respecting the limit', async () => {
+    for (const runId of ['f1', 'f2', 'live']) {
+      await run({ op: 'raiseRunFence', tableName: FENCES, fence: { runId, ownerId: 'a', generation: 1 } } as any);
+    }
+    await run({ op: 'retireRunFence', tableName: FENCES, fence: { runId: 'f1', ownerId: 'a', generation: 1 } });
+    await run({ op: 'retireRunFence', tableName: FENCES, fence: { runId: 'f2', ownerId: 'a', generation: 1 } });
+    vi.setSystemTime(NOW + 10_000);
+    const prune = (limit: number) =>
+      run({ op: 'pruneRunClaims', tableName: FENCES, column: 'retiredAt', cutoff: NOW + 5_000, limit });
+    expect((await prune(1)).result).toBe(1);
+    expect((await prune(10)).result).toBe(1);
+    expect(docs.map(doc => doc.primaryKey)).toEqual(['live']);
   });
 });

@@ -117,7 +117,7 @@ async function resolveSessionTarget(requestContext: RequestContext, github: Gith
     throw new Error('GitHub subscriptions require an authenticated repository session with an active thread.');
   }
   const sourceControl = github.sourceControlStorage;
-  const session = await sourceControl.sessions.getBySessionId(context.resourceId);
+  const session = await sourceControl.sessions.getBySessionId(context.sessionId);
   if (session && (session.orgId !== orgId || (session.factoryProjectId && session.factoryProjectId !== factoryProjectId))) {
     throw new Error('The active session does not belong to this Factory.');
   }
@@ -184,7 +184,6 @@ function subscriptionInput(target: SessionTarget, pullRequest: PullRequestTarget
     ownerId: target.context.session.ownerId,
     resourceId: pullRequest.connection.factoryProjectId,
     threadId: target.context.threadId!,
-    sessionScope: target.context.scope,
     source: 'explicit-tool' as const,
     subscribedByUserId: target.userId,
   };

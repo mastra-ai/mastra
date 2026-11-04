@@ -1,0 +1,67 @@
+import { once } from 'node:events';
+import type { Server } from 'node:http';
+import { createOpenAI } from '@ai-sdk/openai';
+import { LLMock } from '@copilotkit/aimock';
+import { serve } from '@hono/node-server';
+import { MastraClient } from '@mastra/client-js';
+import type { ChunkType } from '@mastra/core/stream';
+import { createDurableDisconnectTestSuite } from '@mastra/server-adapters-test-suite';
+import { Hono } from 'hono';
+import { afterAll, beforeAll } from 'vitest';
+import { MastraServer } from '../index';
+
+let llm: LLMock;
+beforeAll(async () => {
+  llm = new LLMock({ port: 0 });
+  await llm.start();
+});
+afterAll(async () => {
+  await llm.stop();
+});
+
+createDurableDisconnectTestSuite({
+  observeWithClient: async (baseUrl, runId, offset) => {
+    const client = new MastraClient({ baseUrl, retries: 0 });
+    const response = await client.getAgent('agent').observe({ runId, offset });
+    const frames: ChunkType<unknown>[] = [];
+    await response.processDataStream({
+      onChunk: chunk => {
+        frames.push(chunk);
+      },
+    });
+    return frames;
+  },
+  setupModel: async () => ({
+    model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` })('gpt-4o-mini'),
+    addResponse: (sequenceIndex, response) => {
+      llm.on({ endpoint: 'chat', sequenceIndex }, response);
+    },
+    getRequestCount: () => llm.getRequests().length,
+    close: async () => {
+      llm.clearFixtures();
+      llm.clearRequests();
+      llm.resetMatchCounts();
+    },
+  }),
+  startServer: async (mastra, onDisconnect) => {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.req.raw.signal.addEventListener('abort', () => onDisconnect(c.req.path), { once: true });
+      await next();
+    });
+    await new MastraServer({ app, mastra, prefix: '/api' }).init();
+    const server = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 }) as Server;
+    if (!server.listening) await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+    return {
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      close: async () => {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) => {
+          server.close(error => (error ? reject(error) : resolve()));
+        });
+      },
+    };
+  },
+});

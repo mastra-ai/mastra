@@ -19,6 +19,9 @@ export interface ComparisonSectionProps {
   collapsible?: boolean;
   /** Wraps the content in a card (a destructive box when `tone` is negative), with the clipping inside it so the rounded frame stays intact. */
   framed?: boolean;
+  /** Controls the expansion from outside, so sibling sections can expand together. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   children: ReactNode;
 }
 
@@ -32,9 +35,21 @@ export function ComparisonSection({
   tone = 'default',
   collapsible = true,
   framed = false,
+  expanded,
+  onExpandedChange,
   children,
 }: ComparisonSectionProps) {
-  const box = useCollapsibleBox({ collapsedHeight: 160 });
+  const ownBox = useCollapsibleBox({ collapsedHeight: 160 });
+  // Clipping is still measured per box; only the expanded flag comes from outside when controlled.
+  const box =
+    expanded === undefined || !onExpandedChange
+      ? ownBox
+      : {
+          ...ownBox,
+          isExpanded: expanded,
+          setExpanded: onExpandedChange,
+          toggleExpanded: () => onExpandedChange(!expanded),
+        };
   const content = collapsible ? (
     <CollapsibleBox state={box} expandLabel="Expand">
       {children}

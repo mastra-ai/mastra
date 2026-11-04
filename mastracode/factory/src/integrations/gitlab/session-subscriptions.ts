@@ -103,7 +103,7 @@ async function resolveSessionTarget(
   // the rest. A session filed under no link cannot subscribe.
   const projectRepositoryId =
     context.getState().projectRepositoryId ??
-    (await storage.sessions.getBySessionId(context.resourceId))?.projectRepositoryId;
+    (await storage.sessions.getBySessionId(context.sessionId))?.projectRepositoryId;
   if (!projectRepositoryId) return undefined;
 
   // The handle is scoped to GitLab rows, so a GitHub-linked repository is
@@ -168,7 +168,6 @@ function subscriptionInput(target: SessionTarget, iid: number) {
     ownerId: target.context.session.ownerId,
     resourceId: target.connection.factoryProjectId,
     threadId: target.context.threadId!,
-    sessionScope: target.context.scope,
     source: 'explicit-tool' as GitLabSignalSubscriptionSource,
     subscribedByUserId: target.userId,
   };

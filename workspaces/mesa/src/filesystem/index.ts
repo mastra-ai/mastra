@@ -18,6 +18,7 @@ import {
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
+  getMimeType,
   IsDirectoryError,
   MastraFilesystem,
   NotDirectoryError,
@@ -627,6 +628,8 @@ export class MesaFilesystem extends MastraFilesystem {
       size: stats.isDirectory ? 0 : stats.size,
       createdAt: stats.mtime,
       modifiedAt: stats.mtime,
+      // read_file picks media, binary or text from mimeType.
+      ...(!stats.isDirectory && { mimeType: getMimeType(target) }),
     };
   }
 }

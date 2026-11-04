@@ -780,4 +780,83 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       expect(messages[0]!.content.content).toBe('b');
     });
   });
+
+  // Rows are stamped from the database clock and the cutoff from this
+  // process's clock, so the gap between old and new rows (2s) leaves room for
+  // up to 1s of skew either way around the 1s maxAge.
+  describe('Run fencing: prune', () => {
+    const MAX_AGE = '1s';
+    const GAP_MS = 2_000;
+    let workflows: WorkflowsStorage;
+    let memory: MemoryStorage;
+
+    beforeAll(async () => {
+      workflows = (await storage.getStore('workflows'))!;
+      memory = (await storage.getStore('memory'))!;
+    });
+
+    const prunes = (domain: object, key: string) =>
+      key in ((domain.constructor as { retentionTables?: Record<string, unknown> }).retentionTables ?? {});
+
+    it('deletes claims idle longer than maxAge and keeps recently active ones', async ctx => {
+      if (!prunes(workflows, 'runOwnership')) return ctx.skip();
+      const idle = `run-${randomUUID()}`;
+      const active = `run-${randomUUID()}`;
+      const released = await workflows.claimRunOwnership({ runId: idle, ownerId: 'owner-a', leaseMs: LEASE_MS });
+      expect(released.acquired).toBe(true);
+      await workflows.releaseRunOwnership({ runId: idle, ownerId: 'owner-a', generation: released.record!.generation });
+      await sleep(GAP_MS);
+      expect(
+        (await workflows.claimRunOwnership({ runId: active, ownerId: 'owner-b', leaseMs: LEASE_MS })).acquired,
+      ).toBe(true);
+
+      const results = await workflows.prune({ runOwnership: { maxAge: MAX_AGE } });
+
+      expect(results).toEqual([expect.objectContaining({ domain: 'workflows', done: true })]);
+      expect(results[0]!.deleted).toBeGreaterThanOrEqual(1);
+      expect(await workflows.getRunOwnership({ runId: idle })).toBeNull();
+      expect(await workflows.getRunOwnership({ runId: active })).not.toBeNull();
+    });
+
+    it('claims above a surviving fence after the claim was pruned', async ctx => {
+      if (!prunes(workflows, 'runOwnership')) return ctx.skip();
+      const runId = `run-${randomUUID()}`;
+      const first = await workflows.claimRunOwnership({ runId, ownerId: 'owner-a', leaseMs: SHORT_LEASE_MS });
+      expect(first.acquired).toBe(true);
+      const firstFence = { runId, ownerId: 'owner-a', generation: first.record!.generation };
+      expect(await memory.raiseRunFence(firstFence)).toBe(true);
+      await sleep(GAP_MS);
+
+      await workflows.prune({ runOwnership: { maxAge: MAX_AGE } });
+      expect(await workflows.getRunOwnership({ runId })).toBeNull();
+
+      const second = await workflows.claimRunOwnership({ runId, ownerId: 'owner-b', leaseMs: LEASE_MS });
+      expect(second.acquired).toBe(true);
+      expect(second.record!.generation).toBeGreaterThan(firstFence.generation);
+      expect(await memory.raiseRunFence({ runId, ownerId: 'owner-b', generation: second.record!.generation })).toBe(
+        true,
+      );
+    });
+
+    it('deletes fences retired longer than maxAge and never deletes a fence that is not retired', async ctx => {
+      if (!prunes(memory, 'runFences')) return ctx.skip();
+      const generation = Date.now();
+      const running = { runId: `run-${randomUUID()}`, ownerId: 'owner-a', generation };
+      const retiredOld = { runId: `run-${randomUUID()}`, ownerId: 'owner-a', generation };
+      const retiredNew = { runId: `run-${randomUUID()}`, ownerId: 'owner-a', generation };
+      for (const f of [running, retiredOld, retiredNew]) expect(await memory.raiseRunFence(f)).toBe(true);
+      expect(await memory.retireRunFence(retiredOld)).toBe(true);
+      await sleep(GAP_MS);
+      expect(await memory.retireRunFence(retiredNew)).toBe(true);
+
+      const results = await memory.prune({ runFences: { maxAge: MAX_AGE } });
+
+      expect(results).toEqual([expect.objectContaining({ domain: 'memory', done: true })]);
+      // Another owner can only take a fence's generation once the fence is gone.
+      const other = (f: RunFence) => ({ ...f, ownerId: 'owner-b' });
+      expect(await memory.raiseRunFence(other(retiredOld))).toBe(true);
+      expect(await memory.raiseRunFence(other(running))).toBe(false);
+      expect(await memory.raiseRunFence(other(retiredNew))).toBe(false);
+    });
+  });
 }

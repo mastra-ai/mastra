@@ -1,12 +1,17 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlSession,
-  type SourceControlStorageHandle,
+import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type {
+  SourceControlSession,
+  SourceControlSessionVisibility,
+  SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import { legacyGithubWorkItemBranch } from '../work-item-branch.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';
 
@@ -14,27 +19,44 @@ type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['creat
 
 export class FactorySourceControlConflictError extends Error {}
 
-/**
- * Read the factory project's default model. Best-effort: a missing project or an
- * uninitialized storage domain means "no default", never a failed run.
- */
-export async function resolveFactoryDefaultModelId(
-  projects: FactoryProjectsStorage | undefined,
-  factoryProjectId: string | undefined,
-): Promise<string | undefined> {
-  if (!projects || !factoryProjectId) return undefined;
+/** Resolve the model and exclusive credential scope for a Factory session. */
+export async function resolveFactorySessionModel(args: {
+  projects: FactoryProjectsStorage | undefined;
+  modelDefaults: ModelDefaultsStorage | undefined;
+  factoryProjectId: string | undefined;
+  orgId: string;
+  ownerUserId: string;
+  /** A work-item run or an interactive session; a hybrid Factory resolves a different scope for each. */
+  context: 'run' | 'session';
+}): Promise<{ modelScope: EffectiveModelScope; modelId?: string }> {
+  if (!args.projects || !args.factoryProjectId) throw new Error('Factory model policy is unavailable.');
+
+  const project = await args.projects.getById({ id: args.factoryProjectId });
+  if (!project || project.orgId !== args.orgId) throw new Error('Factory model policy is unavailable.');
+  if (effectiveModelScope(project.modelScope, args.context) === 'factory') {
+    return { modelScope: 'factory', ...(project.defaultModelId ? { modelId: project.defaultModelId } : {}) };
+  }
+
   try {
-    const project = await projects.getById({ id: factoryProjectId });
-    return project?.defaultModelId ?? undefined;
-  } catch {
-    return undefined;
+    const userDefault = await args.modelDefaults?.get({ orgId: args.orgId, userId: args.ownerUserId });
+    return { modelScope: 'user', ...(userDefault?.modelId ? { modelId: userDefault.modelId } : {}) };
+  } catch (error) {
+    console.warn('[Factory] Owner default model lookup failed; using the mode default model', {
+      orgId: args.orgId,
+      ownerUserId: args.ownerUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { modelScope: 'user' };
   }
 }
 
 export interface SourceControlSessionLookup {
   getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
   getSourceControlBySessionId(sessionId: string): Promise<SourceControlStorageHandle | null>;
+  /** Side sessions started by `originSessionId`, across every provider. */
+  listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
   rename(args: { sessionId: string; title: string }): Promise<void>;
+  setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
   markFirstMessage(args: { sessionId: string }): Promise<void>;
   markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
 }
@@ -68,7 +90,10 @@ export function createSourceControlSessionLookup(
   return {
     getBySessionId: async sessionId => (await resolve(sessionId))?.session ?? null,
     getSourceControlBySessionId: async sessionId => (await resolve(sessionId))?.sourceControl ?? null,
+    listByOrigin: async args =>
+      (await Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listByOrigin(args)))).flat(),
     rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
+    setOriginMuted: async args => (await resolve(args.sessionId))?.sourceControl.sessions.setOriginMuted(args),
     markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
     markFirstMeaningfulExec: async args =>
       (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMeaningfulExec(args),
@@ -148,6 +173,12 @@ export interface EnsureFactorySourceSessionArgs {
    * run has an interactive user — e.g. the person who approved a proposed run.
    */
   attributeToUserId?: string;
+  /** A pre-generated session id, so a caller can name the branch after it. Defaults to a fresh UUID. */
+  sessionId?: string;
+  /** Defaults to 'org'. A side session copies its parent's visibility. */
+  visibility?: SourceControlSessionVisibility;
+  /** The session and thread that started this one as a side session. */
+  origin?: { sessionId: string; threadId: string };
 }
 
 export interface EnsuredFactorySourceSession {
@@ -256,15 +287,24 @@ export async function ensureFactorySourceSession(
   if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
+  // Prefer an existing current branch, then the legacy branch on this exact
+  // repository and owner. Never reuse another repository's same-number card.
+  const legacyBranch = legacyGithubWorkItemBranch(branch);
+  const lookup = { projectRepositoryId: resolved.projectRepositoryId, userId };
+  const existing = legacyBranch
+    ? ((await sourceControl.sessions.getForBranch({ ...lookup, branch })) ??
+      (await sourceControl.sessions.getForBranch({ ...lookup, branch: legacyBranch })))
+    : null;
   const session = await sourceControl.sessions.create({
-    sessionId: globalThis.crypto.randomUUID(),
+    sessionId: args.sessionId ?? globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     factoryProjectId,
     orgId,
     userId,
-    branch,
+    branch: existing?.branch ?? branch,
     baseBranch: resolved.baseBranch,
-    visibility: 'org',
+    visibility: args.visibility ?? 'org',
+    ...(args.origin ? { origin: args.origin } : {}),
   });
   return {
     sessionId: session.sessionId,
@@ -277,7 +317,12 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
-  /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
+  modelScope: EffectiveModelScope;
+  ownerUserId: string;
+  /**
+   * The model selected by the Factory scope. Without it the provider default of a connected
+   * provider is applied when the SDK mode default has no credential, else the mode default.
+   */
   defaultModelId?: string;
 }
 
@@ -285,37 +330,61 @@ export interface HydrateFactorySessionArgs {
  * Apply a factory project's main model to a session on every run.
  *
  * The model switch is best-effort. A retired model id must not sink a run that
- * is otherwise ready — the session simply keeps the default it was created with,
- * and the reason is logged. Observational-memory settings are resolved from the
+ * is otherwise ready, and the reason is logged. Observational-memory settings are resolved from the
  * authoritative row per invocation before memory processors run.
  */
-export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
+export async function hydrateFactorySession(
+  session: FactorySession,
+  args: HydrateFactorySessionArgs,
+): Promise<string | undefined> {
   // The org rung knowledge curation scopes on. Seeded first so it lands even if
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
+  await session.state.set({
+    factoryModelScope: args.modelScope,
+    factoryOwnerUserId: args.ownerUserId,
+  });
 
-  if (args.defaultModelId) {
+  let selectedModelId = args.defaultModelId;
+  if (!selectedModelId) {
+    const modeModelId = session.mode.resolve().defaultModelId;
+    const providerModelId = await resolveTenantProviderDefaultModel(
+      { orgId: args.orgId, userId: args.ownerUserId, credentialScope: args.modelScope },
+      modeModelId,
+    ).catch(error => {
+      console.warn('[Factory Start] Failed to resolve a provider default model', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    });
+    selectedModelId = providerModelId ?? modeModelId;
+  }
+  if (!selectedModelId) return undefined;
+
+  let switched = true;
+  try {
+    await session.model.switch(selectedModelId);
+  } catch (error) {
+    switched = false;
+    console.warn('[Factory Start] Failed to apply scoped default model', {
+      modelId: selectedModelId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  // Subagents otherwise keep the server-wide settings (or the SDK's built-in
+  // default), which may name a provider this factory has no credentials for.
+  // Each role is independent, so one failure doesn't strand the others.
+  for (const agentType of ['explore', 'plan', 'execute']) {
     try {
-      await session.model.switch(args.defaultModelId);
+      await session.subagents.model.set({ modelId: selectedModelId, agentType });
     } catch (error) {
-      console.warn('[Factory Start] Failed to apply factory default model', {
-        modelId: args.defaultModelId,
+      console.warn('[Factory Start] Failed to apply scoped default subagent model', {
+        agentType,
+        modelId: selectedModelId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    // Subagents otherwise keep the server-wide settings (or the SDK's built-in
-    // default), which may name a provider this factory has no credentials for.
-    // Each role is independent, so one failure doesn't strand the others.
-    for (const agentType of ['explore', 'plan', 'execute']) {
-      try {
-        await session.subagents.model.set({ modelId: args.defaultModelId, agentType });
-      } catch (error) {
-        console.warn('[Factory Start] Failed to apply factory default subagent model', {
-          agentType,
-          modelId: args.defaultModelId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
   }
+  // Callers pin this id to the thread, so only report a model the session actually runs on.
+  return switched ? selectedModelId : undefined;
 }

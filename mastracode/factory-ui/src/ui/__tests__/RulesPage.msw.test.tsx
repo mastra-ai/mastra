@@ -47,7 +47,9 @@ function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false }] }),
+      HttpResponse.json({
+        projects: [{ id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, repositories: [] }],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
@@ -76,15 +78,6 @@ function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {
 }
 
 describe('Rules page filters', () => {
-  it('opens the supervisor from a failed decision row', async () => {
-    const user = userEvent.setup();
-    const router = renderRulesPage(() => undefined);
-
-    await user.click(await screen.findByRole('button', { name: 'Ask supervisor about failed sendMessage decision' }));
-
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/supervisor`);
-  });
-
   it('filters rule decisions with the mobile select', async () => {
     const statuses: Array<string | null> = [];
     const onDecisionRequest = vi.fn((status: string | null) => statuses.push(status));

@@ -21,8 +21,11 @@ import type {
   ScoreRecord,
   SpanRecord,
 } from '@mastra/core/storage';
-import { EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType, getStringAttribute } from '@mastra/core/storage';
+import { toPgText } from '../../../db/sanitize-json';
+import { storedPreview as buildStoredPreview, readPreview } from './preview-compat';
 import { coerceFeedbackReviewStatus } from './review-status';
+import { encodeJsonbValue } from './sql';
 
 const PROMOTED_KEYS = new Set([
   'experimentId',
@@ -43,6 +46,12 @@ const PROMOTED_KEYS = new Set([
   'executionSource',
   'serviceName',
 ]);
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
 
 function nullableString(value: unknown): string | null {
   if (typeof value === 'string') return value === '' ? null : value;
@@ -237,6 +246,17 @@ function commonContextToRow(record: CommonContextWritable): Record<string, unkno
 // Span ↔ row
 // ---------------------------------------------------------------------------
 
+/**
+ * Serialize a span payload for its jsonb column and build its stored preview from the same value.
+ * Nonblank upstream previews win (trimmed and capped like generated ones). The preview goes into a `text` column, which
+ * rejects NUL, so it gets the same repair `toPgJson` applies to the payload.
+ */
+function spanPayload(value: unknown, upstream: string | null | undefined) {
+  const encoded = encodeJsonbValue(value);
+  const preview = buildStoredPreview(upstream, value, encoded?.json);
+  return { encoded, preview: preview === null ? null : toPgText(preview) };
+}
+
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
   // `endedAt` is both a primary key and a partition key column, so a span that
   // has started but not ended still needs a value there. Synthesize it from
@@ -245,6 +265,9 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
   const isPending = !span.isEvent && span.endedAt == null;
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
+  const input = spanPayload(span.input, span.inputPreview);
+  const output = spanPayload(span.output, span.outputPreview);
+  const error = spanPayload(span.error, span.errorPreview);
   return {
     ...commonContextToRow(span),
     traceId: span.traceId,
@@ -256,16 +279,29 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isPending,
     startedAt: toIsoOrDate(span.startedAt),
     endedAt: toIsoOrDate(endedAt),
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+    externalParentSpanId: span.externalParentSpanId ?? null,
+    resumedFromSpanId: span.resumedFromSpanId ?? null,
+    model: span.model ?? null,
+    provider: span.provider ?? null,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
+    stopReasonContext: jsonField(span.stopReasonContext),
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    errorCount: span.errorCount ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata as Record<string, unknown> | null),
     metadataRaw: jsonField(metadata),
     scope: jsonField(span.scope),
     attributes: jsonField(span.attributes),
     links: jsonField(span.links),
-    input: jsonField(span.input),
-    output: jsonField(span.output),
-    error: jsonField(span.error),
+    input: input.encoded,
+    output: output.encoded,
+    error: error.encoded,
     requestContext: jsonField(span.requestContext),
+    inputPreview: input.preview,
+    outputPreview: output.preview,
+    errorPreview: error.preview,
   };
 }
 
@@ -284,6 +320,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = spanRowEndedAt(row, startedAt);
   const error = parsedJson(row.error);
+  const attributes = parsedJson(row.attributes) as Record<string, unknown> | null;
   // Spans expose the row's `executionSource` column as `source` on the record.
   const { executionSource, ...ctx } = rowToCommonContext(row);
   return {
@@ -297,10 +334,19 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     isEvent: Boolean(row.isEvent),
     startedAt,
     endedAt,
+    externalParentSpanId: nullableString(row.externalParentSpanId),
+    resumedFromSpanId: nullableString(row.resumedFromSpanId),
+    model: nullableString(row.model) ?? getStringAttribute(attributes, 'model'),
+    provider: nullableString(row.provider) ?? getStringAttribute(attributes, 'provider'),
+    outcome: nullableString(row.outcome),
+    stopReason: nullableString(row.stopReason),
+    stopReasonContext: (parsedJson(row.stopReasonContext) as Record<string, unknown> | null) ?? null,
+    timeToFirstTokenMs: nullableNumber(row.timeToFirstTokenMs),
+    errorCount: nullableNumber(row.errorCount),
     tags: normalizeTags(row.tags),
     metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
-    attributes: (parsedJson(row.attributes) as Record<string, unknown> | null) ?? undefined,
+    attributes: attributes ?? undefined,
     links: (parsedJson(row.links) as Record<string, unknown>[] | null) ?? undefined,
     input: parsedJson(row.input) ?? undefined,
     output: parsedJson(row.output) ?? undefined,
@@ -339,6 +385,31 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     error: (parsedJson(row.error) as Record<string, unknown> | null) ?? undefined,
     createdAt: startedAt,
     updatedAt: null,
+  };
+}
+
+/** A stored preview as lists return it: `''` (nothing to preview) and NULL become null. */
+function listPreview(value: unknown): string | null {
+  return readPreview(value);
+}
+
+/**
+ * Build a trace-list {@link LightSpanRecord} from a row that projected the light trace-list columns
+ * (see `TRACE_LIGHT_SELECT_COLUMNS` in traces.ts): the timeline fields plus the memory context,
+ * metadata and the stored previews. Callers fill in previews for rows written before they were
+ * stored first.
+ */
+export function rowToLightTraceRecord(row: Record<string, any>): LightSpanRecord {
+  const record = rowToLightSpanRecord(row);
+  return {
+    ...record,
+    status: computeTraceStatus({ error: record.error, endedAt: record.endedAt }),
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
+    inputPreview: listPreview(row.inputPreview),
+    outputPreview: listPreview(row.outputPreview),
+    errorPreview: listPreview(row.errorPreview),
   };
 }
 

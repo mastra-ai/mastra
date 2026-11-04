@@ -40,11 +40,13 @@ export type ParallelEntry = StepEntry | ChildWorkflowEntry;
 export type WorkflowRuntime = ((startArgs?: {
   runId?: string;
   resourceId?: string;
+  requestContext?: unknown;
+  validateInputs?: boolean;
   inputData?: unknown;
   initialState?: unknown;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
-  thenWorkflow(workflowType: string): WorkflowRuntime;
+  thenWorkflow(workflowType: string, id: string): WorkflowRuntime;
   map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
@@ -65,6 +67,8 @@ export class TemporalExecutionEngine {
     workflowId: string;
     runId?: string;
     resourceId?: string;
+    requestContext?: unknown;
+    validateInputs?: boolean;
     graph: { id: string; steps: unknown[] };
     input?: unknown;
     initialState?: unknown;
