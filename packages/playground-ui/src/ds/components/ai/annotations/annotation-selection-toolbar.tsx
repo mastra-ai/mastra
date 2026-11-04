@@ -21,19 +21,41 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
   const { open, selection, dismiss } = useAnnotationSelection(containerRef, toolbarRef);
   const container = usePortalContainer();
   const addRef = useRef<HTMLElement>(null);
+  const actionsRef = useRef<PopoverPrimitive.Root.Actions>(null);
 
   useEffect(() => {
     if (!open) return;
+    let origin: HTMLElement | undefined;
     const onKeyDown = (event: KeyboardEvent) => {
-      const tabsForward = event.key === 'Tab' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
-      const focusInToolbar = Boolean(toolbarRef.current?.contains(document.activeElement));
-      if (!tabsForward || event.defaultPrevented || focusInToolbar) return;
+      const add = addRef.current;
+      const transcript = containerRef.current;
+      if (!add || !transcript || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      const focused = document.activeElement;
+      // Without a trigger Base UI cannot route focus out of the toolbar, so it goes back to the scroller it came from.
+      if (focused === add) {
+        if (!origin || (event.key !== 'Tab' && event.key !== 'Escape')) return;
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          actionsRef.current?.close();
+        }
+        origin.focus();
+        return;
+      }
+      const holdsTranscript =
+        focused instanceof HTMLElement && focused !== document.body && focused.contains(transcript);
+      if (event.key !== 'Tab' || event.shiftKey || !holdsTranscript) return;
+      add.focus();
+      if (document.activeElement !== add) {
+        actionsRef.current?.close();
+        return;
+      }
       event.preventDefault();
-      addRef.current?.focus();
+      origin = focused;
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open]);
+    // Capture: Base UI handles Escape on the way up and stops it there.
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [open, containerRef]);
 
   const addToChat = () => {
     if (!selection) return;
@@ -45,8 +67,8 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
 
   return (
     <PopoverPrimitive.Root
+      actionsRef={actionsRef}
       open={open}
-      modal={false}
       onOpenChange={next => {
         if (!next) dismiss();
       }}

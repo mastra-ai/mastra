@@ -13,8 +13,7 @@ export interface AnnotatedPassage {
   comment?: string;
 }
 
-/** One numbered list item: the passage as a blockquote, and its comment as a paragraph of the same item. */
-function formatAnnotation({ text, comment }: AnnotatedPassage, number: number): string {
+function formatListItem({ text, comment }: AnnotatedPassage, number: number): string {
   const marker = `${number}. `;
   const pad = ' '.repeat(marker.length);
   const quoted = text.split('\n').map(line => (line ? `> ${line}` : '>'));
@@ -35,6 +34,6 @@ export function formatAnnotatedMessage(text: string, annotations: readonly Annot
     .map(annotation => ({ text: normalizeAnnotationText(annotation.text), comment: annotation.comment }))
     .filter(annotation => annotation.text);
   if (passages.length === 0) return text;
-  const list = passages.map((passage, index) => formatAnnotation(passage, index + 1)).join('\n\n');
+  const list = passages.map((passage, index) => formatListItem(passage, index + 1)).join('\n\n');
   return text.trim() ? `${list}\n\n${text}` : list;
 }

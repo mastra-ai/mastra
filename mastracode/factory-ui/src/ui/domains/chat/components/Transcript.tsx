@@ -5,10 +5,9 @@ import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScr
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { groupTurns, startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode, RefObject } from 'react';
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
-import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { ThreadOwner } from '../services/reply-credential';
@@ -20,7 +19,6 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { ActivityWorkingDirectory } from '@mastra/playground-ui/components/ai/activity';
-import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annotations';
 import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
 import { ActivityDisclosureProvider } from '@mastra/playground-ui/domains/chat/activity';
 import { MessageBubble } from './MessageBubble';
@@ -79,33 +77,21 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
     [respond, resolvePrompt],
   );
 
-  const transcriptRef = useRef<HTMLDivElement>(null);
-
   return (
-    // `contents`: only bounds what can be annotated, so the turns stay direct items of the chat column.
-    <div ref={transcriptRef} className="contents">
-      <ArrivalScope>
-        <TranscriptEntries
-          entries={entries}
-          restoredHistory
-          isSubmitting={approving || responding}
-          onApprove={onApprove}
-          onRespond={onRespond}
-          running={busy}
-          viewerId={viewerId}
-          owner={owner}
-          tail={tail}
-        />
-      </ArrivalScope>
-      <ComposerFocusingAnnotations containerRef={transcriptRef} />
-    </div>
+    <ArrivalScope>
+      <TranscriptEntries
+        entries={entries}
+        restoredHistory
+        isSubmitting={approving || responding}
+        onApprove={onApprove}
+        onRespond={onRespond}
+        running={busy}
+        viewerId={viewerId}
+        owner={owner}
+        tail={tail}
+      />
+    </ArrivalScope>
   );
-}
-
-/** Reads the composer context here, not in `Transcript`: its value changes on every keystroke. */
-function ComposerFocusingAnnotations({ containerRef }: { containerRef: RefObject<HTMLDivElement | null> }) {
-  const { composerInputRef } = useChatCommands();
-  return <TranscriptAnnotations containerRef={containerRef} composerInputRef={composerInputRef} />;
 }
 
 export function TranscriptEntries({

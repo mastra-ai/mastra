@@ -7,14 +7,13 @@ import type { ChatAnnotation } from './chat-annotations';
 import { Button } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { focusRing } from '@/ds/primitives/transitions';
+import { pluralize } from '@/lib/string';
 import { cn } from '@/lib/utils';
 
 export interface ComposerAnnotationListProps {
   annotations: readonly ChatAnnotation[];
   onRemove: (id: string) => void;
 }
-
-const countLabel = (count: number) => (count === 1 ? '1 annotation' : `${count} annotations`);
 
 function revealSource({ source }: ChatAnnotation): boolean {
   const target = rangeFromSource(source)?.startContainer.parentElement;
@@ -23,7 +22,6 @@ function revealSource({ source }: ChatAnnotation): boolean {
   return true;
 }
 
-/** The waiting annotations as one chip at the top of `ComposerBox`; mount it only while there are some. */
 export function ComposerAnnotationList({ annotations, onRemove }: ComposerAnnotationListProps) {
   const [open, setOpen] = useState(false);
 
@@ -32,7 +30,7 @@ export function ComposerAnnotationList({ annotations, onRemove }: ComposerAnnota
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger type="button" size="sm">
           <TextQuote aria-hidden="true" />
-          {countLabel(annotations.length)}
+          {pluralize(annotations.length, 'annotation')}
         </PopoverTrigger>
         <PopoverContent align="start" side="top" className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-1 p-1.5">
           <ol aria-label="Annotations" className="flex flex-col">

@@ -1,11 +1,12 @@
+import { escapeRegExp } from '@/lib/string';
+
 /** Every `Message` marks its content with this slot, in Studio and Factory alike. */
 const ANNOTATABLE_SELECTOR = '[data-slot="message-content"]';
 
 export interface AnnotatablePart {
   element: Element;
   range: Range;
-  /** The selection also covers text outside this message's content, such as its footer. */
-  spills: boolean;
+  extendsPastContent: boolean;
 }
 
 export interface SelectionAnchor {
@@ -28,21 +29,21 @@ function rangeWithin(range: Range, element: Element): Range {
   return within;
 }
 
-/** A selection with text in two messages annotates neither, so it returns `undefined`. */
+const isOutermostMessage = (element: Element) => !element.parentElement?.closest(ANNOTATABLE_SELECTOR);
+
 export function findAnnotatablePart(container: Element, range: Range): AnnotatablePart | undefined {
   if (!range.intersectsNode(container)) return undefined;
   const selected = visibleText(range.toString());
   if (!selected) return undefined;
 
-  // A message nested in another one's content (a subagent transcript) belongs to the outer annotation.
   const withText = Array.from(container.querySelectorAll(ANNOTATABLE_SELECTOR))
-    .filter(element => range.intersectsNode(element) && !element.parentElement?.closest(ANNOTATABLE_SELECTOR))
+    .filter(element => range.intersectsNode(element) && isOutermostMessage(element))
     .map(element => ({ element, range: rangeWithin(range, element) }))
     .filter(part => visibleText(part.range.toString()));
   const [part, other] = withText;
   if (!part || other) return undefined;
 
-  return { ...part, spills: visibleText(part.range.toString()) !== selected };
+  return { ...part, extendsPastContent: visibleText(part.range.toString()) !== selected };
 }
 
 function isBackward(selection: Selection): boolean {
@@ -54,7 +55,6 @@ function isBackward(selection: Selection): boolean {
   return anchor.comparePoint(focusNode, focusOffset) < 0;
 }
 
-/** Trims the visible selection to the message, keeping its direction, so what is highlighted is what gets quoted. */
 export function clampSelection(selection: Selection, part: AnnotatablePart) {
   const { startContainer, startOffset, endContainer, endOffset } = part.range;
   if (isBackward(selection)) selection.setBaseAndExtent(endContainer, endOffset, startContainer, startOffset);
@@ -71,11 +71,7 @@ export function selectionAnchor(part: AnnotatablePart): SelectionAnchor {
   };
 }
 
-/**
- * Where an annotation sits: the message content it came from and the character span of its text there.
- * Offsets rather than a `Range`, so the mark survives the message re-rendering its text nodes; `text`
- * finds the passage again once text before it changes.
- */
+/** Offsets rather than a `Range`, so the mark survives the message re-rendering its text nodes. */
 export interface AnnotationSource {
   element: Element;
   start: number;
@@ -90,12 +86,12 @@ interface Span {
   end: number;
 }
 
-const SURROUNDING_LENGTH = 16;
+const SURROUNDING_VISIBLE_CHARS = 16;
 
 function surroundings(content: string, { start, end }: Span) {
   return {
-    textBefore: visibleText(content.slice(0, start)).slice(-SURROUNDING_LENGTH),
-    textAfter: visibleText(content.slice(end)).slice(0, SURROUNDING_LENGTH),
+    textBefore: visibleText(content.slice(0, start)).slice(-SURROUNDING_VISIBLE_CHARS),
+    textAfter: visibleText(content.slice(end)).slice(0, SURROUNDING_VISIBLE_CHARS),
   };
 }
 
@@ -115,7 +111,7 @@ export function annotationSource({ element, range }: AnnotatablePart): Annotatio
 }
 
 function passagePattern(text: string): RegExp {
-  return new RegExp(Array.from(text, char => char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'), 'g');
+  return new RegExp(Array.from(text, escapeRegExp).join('\\s*'), 'g');
 }
 
 function locate(element: Element, source: AnnotationSource): Span | undefined {
@@ -135,7 +131,6 @@ function locate(element: Element, source: AnnotationSource): Span | undefined {
   return copies.filter(surroundingsAgree).toSorted((a, b) => distance(a) - distance(b))[0];
 }
 
-/** The passage as it is laid out now, or `undefined` once its message left the page or no longer holds it for sure. */
 export function rangeFromSource(source: AnnotationSource): Range | undefined {
   const { element } = source;
   if (!element.isConnected) return undefined;
@@ -148,7 +143,7 @@ export function rangeFromSource(source: AnnotationSource): Range | undefined {
   let started = false;
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const length = node.textContent?.length ?? 0;
-    if (!started && span.start <= seen + length) {
+    if (!started && span.start < seen + length) {
       range.setStart(node, span.start - seen);
       started = true;
     }

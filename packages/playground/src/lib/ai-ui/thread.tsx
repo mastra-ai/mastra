@@ -153,7 +153,6 @@ const ThreadContent = ({
   isLoadingPrevious,
 }: ThreadProps) => {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const { draft, updateDraft } = useThreadInput(threadId);
 
   const messages = useChatMessages();
@@ -247,13 +246,13 @@ const ThreadContent = ({
                   <ChatMessagesLoadingSkeleton />
                 </ChatShell.Column>
               ) : landingShown ? null : (
-                <ChatShell.Column
+                <ChatShell.Transcript
                   ref={messagesContainerRef}
                   data-testid="thread-message-column"
-                  className="relative flex-1 gap-4 py-4"
+                  className="flex-1 gap-4 py-4"
                 >
                   <BracketOverlay containerRef={messagesContainerRef} />
-                  <TranscriptAnnotations containerRef={messagesContainerRef} composerInputRef={composerInputRef} />
+                  <TranscriptAnnotations />
                   {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
                   <ArrivalScope>
                     {turnGroups.map((group, index) => {
@@ -288,7 +287,7 @@ const ThreadContent = ({
                     })}
                   </ArrivalScope>
                   {!isRunning && <SaveFullConversationAction />}
-                </ChatShell.Column>
+                </ChatShell.Transcript>
               )}
             </ChatShell.Content>
             <ChatShell.Dock
@@ -310,7 +309,6 @@ const ThreadContent = ({
                 )}
                 <div className={landingShown ? 'starter-prompt' : undefined}>
                   <AgentComposer
-                    textareaRef={composerInputRef}
                     agentId={agentId}
                     threadId={threadId}
                     hasModelList={hasModelList}
@@ -354,7 +352,6 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
 };
 
 interface AgentComposerProps {
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   agentId?: string;
   threadId?: string;
   hasModelList?: boolean;
@@ -364,7 +361,6 @@ interface AgentComposerProps {
 }
 
 const AgentComposer = ({
-  textareaRef,
   agentId,
   threadId,
   hasModelList,
@@ -373,6 +369,7 @@ const AgentComposer = ({
   refreshThreadList,
 }: AgentComposerProps) => {
   const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const preparing = useRef(false);
   const lifetime = useRef(0);

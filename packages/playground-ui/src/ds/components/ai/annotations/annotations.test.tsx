@@ -2,31 +2,47 @@
 import '@/test/inert-resize-observer';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useRef, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { UserEvent } from '@testing-library/user-event';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatAnnotationsProvider, useChatAnnotations } from './chat-annotations';
 import type { ChatAnnotation } from './chat-annotations';
 import { ComposerAnnotations } from './composer-annotations';
 import { formatAnnotatedMessage } from './format-annotated-message';
 import { TranscriptAnnotations } from './transcript-annotations';
+import { ChatShell } from '@/ds/components/ChatShell';
 import { Composer, ComposerBox, ComposerInput } from '@/ds/components/Composer';
 import { Message, MessageActions } from '@/ds/components/Message';
 
 afterEach(() => {
+  vi.useRealTimers();
   document.getSelection()?.removeAllRanges();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
   cleanup();
 });
 
-const layOutLines = () =>
+const layOutLines = (left = 40) =>
   vi.spyOn(Range.prototype, 'getClientRects').mockImplementation(function (this: Range) {
     const line = Array.from(document.querySelectorAll('p')).findIndex(paragraph =>
       paragraph.contains(this.endContainer),
     );
-    return Object.assign([new DOMRect(40, 120 + 30 * line, 60, 18)], { item: () => null });
+    return Object.assign([new DOMRect(left, 120 + 30 * line, 60, 18)], { item: () => null });
   });
+
+const recordScrollIntoView = () => {
+  const scrolled: Element[] = [];
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value(this: Element) {
+      scrolled.push(this);
+    },
+  });
+  return scrolled;
+};
 
 const REPLY = 'Open rows drop the frame and keep subtle rounded hover.';
 const SECOND = 'Soft rows add faint backgrounds.';
@@ -35,21 +51,21 @@ function AnnotatingChat({
   onSend,
   showReply = true,
   reply = REPLY,
+  children,
 }: {
   onSend: (message: string) => void;
   showReply?: boolean;
   reply?: string;
+  children?: ReactNode;
 }) {
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { takeAnnotations } = useChatAnnotations();
   const [draft, setDraft] = useState('');
 
   return (
-    <>
+    <ChatShell>
       <div role="region" aria-label="Conversation" tabIndex={0}>
-        <div ref={transcriptRef} data-testid="transcript" className="relative">
-          <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={inputRef} />
+        <ChatShell.Transcript data-testid="transcript">
+          <TranscriptAnnotations />
           <Message from="user">Which table style should we use?</Message>
           {showReply && (
             <Message
@@ -64,33 +80,37 @@ function AnnotatingChat({
               <p>{SECOND}</p>
             </Message>
           )}
-        </div>
+        </ChatShell.Transcript>
       </div>
       <Message from="assistant">Outside the transcript</Message>
-      <Composer
-        aria-label="Message composer"
-        onSubmit={event => {
-          event.preventDefault();
-          onSend(formatAnnotatedMessage(draft, takeAnnotations()));
-          setDraft('');
-        }}
-      >
-        <ComposerBox>
-          <ComposerAnnotations />
-          <ComposerInput
-            ref={inputRef}
-            aria-label="Message"
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-          />
-          <button type="submit">Send</button>
-        </ComposerBox>
-      </Composer>
-    </>
+      <ChatShell.Dock>
+        <Composer
+          aria-label="Message composer"
+          onSubmit={event => {
+            event.preventDefault();
+            onSend(formatAnnotatedMessage(draft, takeAnnotations()));
+            setDraft('');
+          }}
+        >
+          <ComposerBox>
+            <ComposerAnnotations />
+            <ComposerInput aria-label="Message" value={draft} onChange={event => setDraft(event.target.value)} />
+            <button type="submit">Send</button>
+          </ComposerBox>
+        </Composer>
+      </ChatShell.Dock>
+      {children}
+    </ChatShell>
   );
 }
 
-const renderChat = () => {
+interface RenderedChat {
+  sent: string[];
+  hideReply: () => void;
+  editReply: (reply: string) => void;
+}
+
+const renderChat = (): RenderedChat => {
   const sent: string[] = [];
   const chat = (showReply: boolean, reply?: string) => (
     <ChatAnnotationsProvider>
@@ -138,160 +158,209 @@ const typeAndSend = (text: string) => {
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 };
 
-describe('AnnotationSelectionToolbar', () => {
+const settleSelection = () =>
+  act(() => {
+    vi.runOnlyPendingTimers();
+  });
+
+describe('TranscriptAnnotations', () => {
+  let chat: RenderedChat;
+  let user: UserEvent;
+
   describe('when the person selects part of a reply and adds it to the chat', () => {
-    it('numbers it in the transcript, counts it in the composer, and sends it as a blockquote first', async () => {
-      const { sent } = renderChat();
-
+    beforeEach(async () => {
+      chat = renderChat();
       await annotate(REPLY, 'Open rows'.length);
+    });
 
+    it('numbers the passage in the transcript', () => {
       expect(markers().map(marker => marker.textContent)).toEqual(['1']);
+    });
+
+    it('counts the annotation in the composer', () => {
       expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+    });
+
+    it('focuses the message box', () => {
       expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message' }));
+    });
+
+    it('clears the selection', () => {
       expect(document.getSelection()?.isCollapsed ?? true).toBe(true);
+    });
 
-      typeAndSend('Why this one?');
+    describe('when the person types a message and sends it', () => {
+      beforeEach(() => {
+        typeAndSend('Why this one?');
+      });
 
-      expect(sent).toEqual(['1. > Open rows\n\nWhy this one?']);
-      expect(markers()).toHaveLength(0);
-      expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
+      it('sends the passage as a blockquote ahead of the message', () => {
+        expect(chat.sent).toEqual(['1. > Open rows\n\nWhy this one?']);
+      });
+
+      it('removes the number from the transcript', () => {
+        expect(markers()).toHaveLength(0);
+      });
+
+      it('clears the annotation from the composer', () => {
+        expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
+      });
     });
   });
 
   describe('when the person adds several passages', () => {
-    it('numbers them in the order added and sends them all in that order', async () => {
-      const { sent } = renderChat();
-
+    beforeEach(async () => {
+      chat = renderChat();
       await annotate(SECOND, 'Soft rows'.length);
       await annotate(REPLY, 'Open rows'.length);
+    });
 
+    it('numbers them in the order added', () => {
       expect(markers().map(marker => marker.textContent)).toEqual(['1', '2']);
-      fireEvent.click(screen.getByRole('button', { name: '2 annotations' }));
-      const list = await screen.findByRole('list', { name: 'Annotations' });
-      expect(
-        within(list)
-          .getAllByRole('listitem')
-          .map(item => item.textContent),
-      ).toEqual(['1Soft rows', '2Open rows']);
+    });
 
+    it('sends them all in that order', () => {
       typeAndSend('Compare them');
 
-      expect(sent).toEqual(['1. > Soft rows\n\n2. > Open rows\n\nCompare them']);
-    });
-  });
-
-  describe('when the person removes an annotation before sending', () => {
-    it('renumbers the rest and leaves the removed passage out of the message', async () => {
-      const { sent } = renderChat();
-      await annotate(SECOND, 'Soft rows'.length);
-      await annotate(REPLY, 'Open rows'.length);
-
-      fireEvent.click(screen.getByRole('button', { name: '2 annotations' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Remove annotation 1' }));
-
-      expect(markers().map(marker => marker.textContent)).toEqual(['1']);
-      typeAndSend('Only this one');
-      expect(sent).toEqual(['1. > Open rows\n\nOnly this one']);
-    });
-  });
-
-  describe('when the person removes the last annotation from the open list and adds another', () => {
-    it('keeps the list closed', async () => {
-      renderChat();
-      await annotate(REPLY, 'Open rows'.length);
-      fireEvent.click(screen.getByRole('button', { name: '1 annotation' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Remove annotation 1' }));
-
-      await annotate(SECOND, 'Soft rows'.length);
-
-      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
-      expect(screen.queryByRole('list', { name: 'Annotations' })).toBeNull();
-    });
-  });
-
-  describe('when the person clicks an annotation and comments on it', () => {
-    it('opens a card on the passage and sends the comment with that annotation', async () => {
-      layOutLines();
-      const { sent } = renderChat();
-      await annotate(SECOND, 'Soft rows'.length);
-      await annotate(REPLY, 'Open rows'.length);
-
-      fireEvent.click(screen.getByRole('button', { name: 'Annotation 1' }));
-      const card = await screen.findByRole('dialog', { name: 'Annotation 1' });
-      expect(within(card).getByText('Soft rows')).toBeTruthy();
-      const comment = within(card).getByRole('textbox', { name: 'Comment on annotation 1' });
-      await waitFor(() => expect(document.activeElement).toBe(comment));
-
-      fireEvent.change(comment, { target: { value: 'Drop this one.' } });
-      fireEvent.click(within(card).getByRole('button', { name: 'Done' }));
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Annotation 1' })).toBeNull());
-
-      expect(screen.getByRole('button', { name: 'Annotation 1, with a comment' })).toBeTruthy();
-      typeAndSend('Thoughts?');
-      expect(sent).toEqual(['1. > Soft rows\n\n   Drop this one.\n\n2. > Open rows\n\nThoughts?']);
-    });
-  });
-
-  describe('when the person removes an annotation from its card', () => {
-    it('closes the card and renumbers the rest', async () => {
-      layOutLines();
-      const { sent } = renderChat();
-      await annotate(SECOND, 'Soft rows'.length);
-      await annotate(REPLY, 'Open rows'.length);
-
-      fireEvent.click(screen.getByRole('button', { name: 'Annotation 1' }));
-      const card = await screen.findByRole('dialog', { name: 'Annotation 1' });
-      fireEvent.click(within(card).getByRole('button', { name: 'Remove annotation 1' }));
-
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-      expect(markers().map(marker => marker.textContent)).toEqual(['1']);
-      typeAndSend('Just this');
-      expect(sent).toEqual(['1. > Open rows\n\nJust this']);
+      expect(chat.sent).toEqual(['1. > Soft rows\n\n2. > Open rows\n\nCompare them']);
     });
   });
 
   describe('when the same passage is added twice', () => {
-    it('keeps a single annotation', async () => {
+    beforeEach(async () => {
       renderChat();
       await annotate(REPLY, 'Open rows'.length);
       await annotate(REPLY, 'Open rows'.length);
+    });
 
+    it('counts it once in the composer', () => {
       expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+    });
+
+    it('numbers it once in the transcript', () => {
       expect(markers()).toHaveLength(1);
     });
   });
 
-  describe('when the message an annotation came from leaves the page', () => {
-    it('drops its mark from the transcript but still sends the passage', async () => {
-      layOutLines();
-      const { sent, hideReply } = renderChat();
-      await annotate(REPLY, 'Open rows'.length);
+  describe('when the person clicks an annotation', () => {
+    let card: HTMLElement;
 
+    beforeEach(async () => {
+      user = userEvent.setup();
+      layOutLines();
+      chat = renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      await annotate(REPLY, 'Open rows'.length);
+      fireEvent.click(screen.getByRole('button', { name: 'Annotation 1' }));
+      card = await screen.findByRole('dialog', { name: 'Annotation 1' });
+    });
+
+    it('opens a card holding its passage', () => {
+      expect(within(card).getByText('Soft rows')).toBeTruthy();
+    });
+
+    it('focuses the comment box', async () => {
+      const comment = within(card).getByRole('textbox', { name: 'Comment on annotation 1' });
+
+      await waitFor(() => expect(document.activeElement).toBe(comment));
+    });
+
+    describe('when the person comments and presses Done', () => {
+      beforeEach(async () => {
+        fireEvent.change(within(card).getByRole('textbox', { name: 'Comment on annotation 1' }), {
+          target: { value: 'Drop this one.' },
+        });
+        fireEvent.click(within(card).getByRole('button', { name: 'Done' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Annotation 1' })).toBeNull());
+      });
+
+      it('marks the annotation as commented', () => {
+        expect(screen.getByRole('button', { name: 'Annotation 1, with a comment' })).toBeTruthy();
+      });
+
+      it('sends the comment with that annotation', () => {
+        typeAndSend('Thoughts?');
+
+        expect(chat.sent).toEqual(['1. > Soft rows\n\n   Drop this one.\n\n2. > Open rows\n\nThoughts?']);
+      });
+    });
+
+    describe('when the person removes it from its card', () => {
+      beforeEach(() => {
+        fireEvent.click(within(card).getByRole('button', { name: 'Remove annotation 1' }));
+      });
+
+      it('closes the card', async () => {
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      });
+
+      it('renumbers the rest', () => {
+        expect(markers().map(marker => marker.textContent)).toEqual(['1']);
+      });
+
+      it('leaves it out of the message', () => {
+        typeAndSend('Just this');
+
+        expect(chat.sent).toEqual(['1. > Open rows\n\nJust this']);
+      });
+    });
+
+    describe('when the person clicks the same annotation again', () => {
+      it('closes its card', async () => {
+        await user.click(screen.getByRole('button', { name: 'Annotation 1' }));
+
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Annotation 1' })).toBeNull());
+      });
+    });
+  });
+
+  describe('when the message an annotation came from leaves the page', () => {
+    beforeEach(async () => {
+      layOutLines();
+      chat = renderChat();
+      await annotate(REPLY, 'Open rows'.length);
+    });
+
+    it('hides its mark', async () => {
       expect(markers().map(mark => mark.hidden)).toEqual([false]);
 
-      hideReply();
+      chat.hideReply();
 
       await waitFor(() => expect(markers().map(mark => mark.hidden)).toEqual([true]));
+    });
+
+    it('still sends the passage', () => {
+      chat.hideReply();
+
       typeAndSend('Still relevant?');
-      expect(sent).toEqual(['1. > Open rows\n\nStill relevant?']);
+
+      expect(chat.sent).toEqual(['1. > Open rows\n\nStill relevant?']);
     });
   });
 
   describe('when text before an annotated passage changes inside its message', () => {
-    it('keeps its mark on that passage and still sends it', async () => {
-      layOutLines();
-      const { sent, editReply } = renderChat();
-      await annotate(SECOND, 'Soft rows'.length);
-      const [marker] = markers();
-      const line = marker?.style.top;
+    let line: string | undefined;
 
-      editReply(`Rewritten: ${REPLY}`);
+    beforeEach(async () => {
+      layOutLines();
+      chat = renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      line = markers()[0]?.style.top;
+      chat.editReply(`Rewritten: ${REPLY}`);
       await act(() => new Promise(requestAnimationFrame));
+    });
+
+    it('keeps its mark on that passage', () => {
+      const [marker] = markers();
 
       expect(marker?.hidden).toBe(false);
       expect(marker?.style.top).toBe(line);
+    });
+
+    it('still sends the passage', () => {
       typeAndSend('Still relevant?');
-      expect(sent).toEqual(['1. > Soft rows\n\nStill relevant?']);
+
+      expect(chat.sent).toEqual(['1. > Soft rows\n\nStill relevant?']);
     });
   });
 
@@ -312,130 +381,166 @@ describe('AnnotationSelectionToolbar', () => {
     });
   });
 
+  describe('when text inside the message scrolls sideways', () => {
+    it('moves the mark with its passage', async () => {
+      layOutLines();
+      renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      const [marker] = markers();
+
+      layOutLines(10);
+      fireEvent.scroll(screen.getByText(SECOND));
+      await act(() => new Promise(requestAnimationFrame));
+
+      expect(marker?.style.left).toBe('69px');
+    });
+  });
+
   describe('when a drag runs past the end of the reply into its footer', () => {
-    it('trims the selection back to the reply and annotates only its text', async () => {
-      const { sent } = renderChat();
+    it('annotates only the text of the reply', async () => {
+      chat = renderChat();
       dragSelect([textNode(SECOND), 'Soft rows add '.length], [textNode('Model reply footer'), 'Model'.length]);
 
       fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
       typeAndSend('More?');
 
-      expect(sent).toEqual(['1. > faint backgrounds.\n\nMore?']);
+      expect(chat.sent).toEqual(['1. > faint backgrounds.\n\nMore?']);
     });
   });
 
   describe('when the selection reaches into a second message', () => {
     it('offers nothing, since no single message holds the passage', async () => {
+      vi.useFakeTimers();
       renderChat();
       dragSelect([textNode('Which table style should we use?'), 6], [textNode(REPLY), 9]);
 
-      await act(() => new Promise(resolve => setTimeout(resolve, 20)));
+      await settleSelection();
+
       expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull();
     });
   });
 
   describe('when the selected message is outside the transcript', () => {
     it('offers nothing', async () => {
+      vi.useFakeTimers();
       renderChat();
       dragSelect([textNode('Outside the transcript'), 0], [textNode('Outside the transcript'), 7]);
 
-      await act(() => new Promise(resolve => setTimeout(resolve, 20)));
+      await settleSelection();
+
       expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull();
     });
   });
 
-  describe('when the person presses Escape', () => {
-    it('hides the toolbar and leaves the selection alone', async () => {
+  describe('when the person selects with the keyboard after a context menu swallowed the pointer release', () => {
+    it('offers Add to chat', async () => {
+      renderChat();
+      const paragraph = screen.getByText(REPLY);
+      fireEvent.pointerDown(paragraph, { button: 2 });
+      fireEvent.contextMenu(paragraph);
+
+      const range = document.createRange();
+      range.setStart(textNode(REPLY), 0);
+      range.setEnd(textNode(REPLY), 'Open rows'.length);
+      document.getSelection()?.addRange(range);
+      fireEvent(document, new Event('selectionchange'));
+
+      expect(await screen.findByRole('button', { name: 'Add to chat' })).toBeTruthy();
+    });
+  });
+
+  describe('when the person presses Escape while Add to chat shows', () => {
+    beforeEach(async () => {
       renderChat();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
       await screen.findByRole('button', { name: 'Add to chat' });
-
       fireEvent.keyDown(document.body, { key: 'Escape' });
+    });
 
+    it('hides Add to chat', async () => {
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
+    });
+
+    it('leaves the selection alone', () => {
       expect(document.getSelection()?.toString()).toBe('Open rows');
     });
   });
 
-  describe('when the person presses Tab while the toolbar shows', () => {
-    it('moves focus to Add to chat, so Enter adds the passage', async () => {
-      const user = userEvent.setup();
-      const { sent } = renderChat();
+  describe('when the person presses Tab while Add to chat shows', () => {
+    let add: HTMLElement;
+    let conversation: HTMLElement;
+
+    beforeEach(async () => {
+      user = userEvent.setup();
+      chat = renderChat();
+      conversation = screen.getByRole('region', { name: 'Conversation' });
+      conversation.focus();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-      const add = await screen.findByRole('button', { name: 'Add to chat' });
-
+      add = await screen.findByRole('button', { name: 'Add to chat' });
       await user.tab();
-      expect(document.activeElement).toBe(add);
-      await user.keyboard('{Enter}');
+    });
 
+    it('moves focus to Add to chat', () => {
+      expect(document.activeElement).toBe(add);
+    });
+
+    it('adds the passage on Enter', async () => {
+      await user.keyboard('{Enter}');
       typeAndSend('Why?');
-      expect(sent).toEqual(['1. > Open rows\n\nWhy?']);
+
+      expect(chat.sent).toEqual(['1. > Open rows\n\nWhy?']);
+    });
+
+    describe('when the person presses Tab again', () => {
+      beforeEach(async () => {
+        await user.tab();
+      });
+
+      it('hands focus back to the conversation', () => {
+        expect(document.activeElement).toBe(conversation);
+      });
+
+      it('hides Add to chat', async () => {
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
+      });
+    });
+
+    describe('when the person presses Escape', () => {
+      it('hands focus back to the conversation', async () => {
+        await user.keyboard('{Escape}');
+
+        expect(document.activeElement).toBe(conversation);
+      });
     });
   });
 
-  describe('when the scrolled conversation took focus from the click and the person presses Tab', () => {
-    it('still moves focus to Add to chat', async () => {
+  describe('when Add to chat is scrolled out of sight and the person presses Tab', () => {
+    it('closes it, so Tab moves on without stopping there', async () => {
       renderChat();
       const conversation = screen.getByRole('region', { name: 'Conversation' });
       conversation.focus();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
       const add = await screen.findByRole('button', { name: 'Add to chat' });
+      vi.spyOn(add, 'focus').mockImplementation(() => {});
 
       fireEvent.keyDown(conversation, { key: 'Tab' });
 
-      expect(document.activeElement).toBe(add);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
     });
   });
 
-  describe('when focus is already on Add to chat and the person presses Tab again', () => {
-    it('lets focus leave the toolbar', async () => {
-      const user = userEvent.setup();
+  describe('when focus is on the page rather than the conversation and the person presses Tab', () => {
+    it('leaves Tab to the browser', async () => {
       renderChat();
       dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-      const add = await screen.findByRole('button', { name: 'Add to chat' });
-      await user.tab();
+      await screen.findByRole('button', { name: 'Add to chat' });
 
-      const tabbedOn = fireEvent.keyDown(add, { key: 'Tab' });
+      const tabbedOn = fireEvent.keyDown(document.body, { key: 'Tab' });
 
       expect(tabbedOn).toBe(true);
     });
   });
-});
 
-describe('ChatAnnotationsProvider', () => {
-  describe('when a comment changes while the message taking its annotation is being prepared', () => {
-    it('still clears the annotation that went out, so the next message does not repeat it', () => {
-      const { result } = renderHook(() => useChatAnnotations(), { wrapper: ChatAnnotationsProvider });
-      act(() =>
-        result.current.addAnnotation({
-          text: 'Open rows',
-          source: {
-            element: document.createElement('p'),
-            start: 0,
-            end: 9,
-            text: 'Openrows',
-            textBefore: '',
-            textAfter: '',
-          },
-        }),
-      );
-      const takeAtSubmit = result.current.takeAnnotations;
-      act(() => {
-        for (const { id } of result.current.annotations) result.current.setAnnotationComment(id, 'Late comment');
-      });
-
-      let taken: ChatAnnotation[] = [];
-      act(() => {
-        taken = takeAtSubmit();
-      });
-
-      expect(taken.map(annotation => annotation.text)).toEqual(['Open rows']);
-      expect(result.current.annotations).toEqual([]);
-    });
-  });
-});
-
-describe('TranscriptAnnotations', () => {
   describe('when two transcripts share the page and one of them goes away', () => {
     it('keeps tinting the passage annotated in the other', async () => {
       const highlights = new Map<string, { ranges: Range[] }>();
@@ -472,6 +577,121 @@ describe('TranscriptAnnotations', () => {
       view.rerender(chats(false));
 
       expect(tinted()).toEqual(['Left reply']);
+    });
+  });
+
+  describe('when another composer sits in the shell outside its dock', () => {
+    it('focuses the conversation composer after adding a passage', async () => {
+      render(
+        <ChatAnnotationsProvider>
+          <AnnotatingChat onSend={() => {}}>
+            <ComposerInput aria-label="Comment" />
+          </AnnotatingChat>
+        </ChatAnnotationsProvider>,
+      );
+
+      await annotate(REPLY, 'Open rows'.length);
+
+      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message' }));
+    });
+  });
+});
+
+describe('ComposerAnnotations', () => {
+  let chat: RenderedChat;
+
+  describe('when the person opens the list of several annotations', () => {
+    beforeEach(async () => {
+      chat = renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      await annotate(REPLY, 'Open rows'.length);
+      fireEvent.click(screen.getByRole('button', { name: '2 annotations' }));
+    });
+
+    it('lists them in the order added', async () => {
+      const list = await screen.findByRole('list', { name: 'Annotations' });
+
+      expect(
+        within(list)
+          .getAllByRole('listitem')
+          .map(item => item.textContent),
+      ).toEqual(['1Soft rows', '2Open rows']);
+    });
+
+    describe('when the person removes the first one', () => {
+      beforeEach(async () => {
+        fireEvent.click(await screen.findByRole('button', { name: 'Remove annotation 1' }));
+      });
+
+      it('renumbers the rest in the transcript', () => {
+        expect(markers().map(marker => marker.textContent)).toEqual(['1']);
+      });
+
+      it('leaves it out of the message', () => {
+        typeAndSend('Only this one');
+
+        expect(chat.sent).toEqual(['1. > Open rows\n\nOnly this one']);
+      });
+    });
+  });
+
+  describe('when the person removes the last annotation from the open list and adds another', () => {
+    it('keeps the list closed', async () => {
+      renderChat();
+      await annotate(REPLY, 'Open rows'.length);
+      fireEvent.click(screen.getByRole('button', { name: '1 annotation' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Remove annotation 1' }));
+
+      await annotate(SECOND, 'Soft rows'.length);
+
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+      expect(screen.queryByRole('list', { name: 'Annotations' })).toBeNull();
+    });
+  });
+
+  describe('when the person shows an annotation that starts a paragraph after the first', () => {
+    it('scrolls that paragraph into view', async () => {
+      const scrolled = recordScrollIntoView();
+      renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      fireEvent.click(screen.getByRole('button', { name: '1 annotation' }));
+
+      fireEvent.click(await screen.findByTitle('Show in chat'));
+
+      expect(scrolled).toEqual([screen.getByText(SECOND)]);
+    });
+  });
+});
+
+describe('ChatAnnotationsProvider', () => {
+  describe('when a comment changes while the message taking its annotation is being prepared', () => {
+    it('still clears the annotation that went out, so the next message does not repeat it', () => {
+      const { result } = renderHook(() => useChatAnnotations(), { wrapper: ChatAnnotationsProvider });
+      act(() =>
+        result.current.addAnnotation({
+          text: 'Open rows',
+          source: {
+            element: document.createElement('p'),
+            start: 0,
+            end: 9,
+            text: 'Openrows',
+            textBefore: '',
+            textAfter: '',
+          },
+        }),
+      );
+      const takeAtSubmit = result.current.takeAnnotations;
+      act(() => {
+        for (const { id } of result.current.annotations) result.current.setAnnotationComment(id, 'Late comment');
+      });
+
+      let taken: ChatAnnotation[] = [];
+      act(() => {
+        taken = takeAtSubmit();
+      });
+
+      expect(taken.map(annotation => annotation.text)).toEqual(['Open rows']);
+      expect(result.current.annotations).toEqual([]);
     });
   });
 });

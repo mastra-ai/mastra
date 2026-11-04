@@ -1,11 +1,13 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { SESSION_ID, releaseSession, renderThread, stubPreparingSession } from './composer-session-test-fixture';
+import type { PreparingSession, StubPreparingSessionOptions } from './composer-session-test-fixture';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const REPLY = 'Open rows drop the frame and keep a subtle rounded hover.';
@@ -49,13 +51,13 @@ async function selectFrom(paragraphText: string, length: number) {
   fireEvent.pointerUp(paragraph);
 }
 
-async function annotate(user: ReturnType<typeof userEvent.setup>, paragraphText: string, length: number) {
+async function annotate(user: UserEvent, paragraphText: string, length: number) {
   await selectFrom(paragraphText, length);
   await user.click(await screen.findByRole('button', { name: 'Add to chat' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).not.toBeInTheDocument());
 }
 
-async function renderSessionWithReply(options: Parameters<typeof stubPreparingSession>[0] = {}) {
+async function renderSessionWithReply(options: StubPreparingSessionOptions = {}): Promise<PreparingSession> {
   const session = stubPreparingSession(options);
   stubReply();
   const { client } = renderThread();
@@ -72,61 +74,117 @@ afterEach(() => {
 
 describe('Composer annotations', () => {
   describe('when part of a reply is added to the chat', () => {
-    it('is numbered in the transcript and reaches the agent as a blockquote ahead of the typed message', async () => {
-      const user = userEvent.setup();
-      const session = await renderSessionWithReply();
+    let user: UserEvent;
+    let session: PreparingSession;
 
+    beforeEach(async () => {
+      user = userEvent.setup();
+      session = await renderSessionWithReply();
       await annotate(user, REPLY, 'Open rows'.length);
+    });
 
+    it('numbers the passage in the transcript', () => {
       expect(markers()).toEqual(['1']);
+    });
+
+    it('counts the annotation in the composer', () => {
       expect(screen.getByRole('button', { name: '1 annotation' })).toBeInTheDocument();
+    });
+
+    it('focuses the message box', () => {
       expect(screen.getByRole('textbox', { name: 'Message' })).toHaveFocus();
+    });
 
-      await user.keyboard('Why this one?');
-      await user.click(screen.getByRole('button', { name: 'Send message' }));
+    describe('when the person types a message and sends it', () => {
+      beforeEach(async () => {
+        await user.keyboard('Why this one?');
+        await user.click(screen.getByRole('button', { name: 'Send message' }));
+      });
 
-      await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows\n\nWhy this one?']));
-      expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument();
-      expect(markers()).toEqual([]);
+      it('reaches the agent as a blockquote ahead of the typed message', async () => {
+        await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows\n\nWhy this one?']));
+      });
+
+      it('clears the annotation from the composer', async () => {
+        await waitFor(() => expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument());
+      });
+
+      it('removes the number from the transcript', async () => {
+        await waitFor(() => expect(markers()).toEqual([]));
+      });
     });
   });
 
   describe('when the person sends an annotation without typing', () => {
-    it('sends the quoted passage on its own', async () => {
-      const user = userEvent.setup();
-      const session = await renderSessionWithReply();
+    let session: PreparingSession;
 
+    beforeEach(async () => {
+      const user = userEvent.setup();
+      session = await renderSessionWithReply();
       await annotate(user, REPLY, 'Open rows'.length);
       await user.click(screen.getByRole('button', { name: 'Send message' }));
+    });
 
+    it('sends the quoted passage on its own', async () => {
       await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows']));
-      expect(markers()).toEqual([]);
+    });
+
+    it('removes the number from the transcript', async () => {
+      await waitFor(() => expect(markers()).toEqual([]));
     });
   });
 
-  describe('when two passages are added and one is removed', () => {
-    it('lists them by number and sends only the one left', async () => {
-      const user = userEvent.setup();
-      const session = await renderSessionWithReply();
+  describe('when two passages are added', () => {
+    let user: UserEvent;
+    let session: PreparingSession;
 
+    beforeEach(async () => {
+      user = userEvent.setup();
+      session = await renderSessionWithReply();
       await annotate(user, SECOND, 'Soft rows'.length);
       await annotate(user, REPLY, 'Open rows'.length);
+    });
+
+    it('numbers both passages in the transcript', () => {
       expect(markers()).toEqual(['1', '2']);
+    });
 
-      await user.click(screen.getByRole('button', { name: '2 annotations' }));
-      const list = await screen.findByRole('list', { name: 'Annotations' });
-      expect(
-        within(list)
-          .getAllByRole('listitem')
-          .map(item => item.textContent),
-      ).toEqual(['1Soft rows', '2Open rows']);
-      await user.click(within(list).getByRole('button', { name: 'Remove annotation 1' }));
+    describe('when the person opens the annotation list', () => {
+      let list: HTMLElement;
 
-      expect(markers()).toEqual(['1']);
-      await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Only this one');
-      await user.click(screen.getByRole('button', { name: 'Send message' }));
+      beforeEach(async () => {
+        await user.click(screen.getByRole('button', { name: '2 annotations' }));
+        list = await screen.findByRole('list', { name: 'Annotations' });
+      });
 
-      await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows\n\nOnly this one']));
+      it('lists the passages by number', () => {
+        expect(
+          within(list)
+            .getAllByRole('listitem')
+            .map(item => item.textContent),
+        ).toEqual(['1Soft rows', '2Open rows']);
+      });
+
+      describe('when the first passage is removed', () => {
+        beforeEach(async () => {
+          await user.click(within(list).getByRole('button', { name: 'Remove annotation 1' }));
+        });
+
+        it('renumbers the remaining passage in the transcript', () => {
+          expect(markers()).toEqual(['1']);
+        });
+
+        describe('when the person types a message and sends it', () => {
+          beforeEach(async () => {
+            await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Only this one');
+            await user.click(screen.getByRole('button', { name: 'Send message' }));
+          });
+
+          it('sends only the passage that is left', async () => {
+            await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows\n\nOnly this one']));
+          });
+        });
+      });
     });
   });
 
@@ -146,8 +204,10 @@ describe('Composer annotations', () => {
   });
 
   describe('when the person answers a plan with feedback that starts with a slash', () => {
-    it('sends the annotation with the feedback instead of keeping it for a command', async () => {
-      const resumed: unknown[] = [];
+    let resumed: unknown[];
+
+    beforeEach(async () => {
+      resumed = [];
       server.use(
         http.post(`${API}/sessions/:resourceId/tool-suspension`, async ({ request }) => {
           resumed.push(await request.json());
@@ -168,7 +228,9 @@ describe('Composer annotations', () => {
 
       await annotate(user, REPLY, 'Open rows'.length);
       await user.type(composer, '/tmp is the wrong place{enter}');
+    });
 
+    it('sends the annotation with the feedback instead of keeping it for a command', async () => {
       await waitFor(() =>
         expect(resumed).toEqual([
           expect.objectContaining({
@@ -176,7 +238,10 @@ describe('Composer annotations', () => {
           }),
         ]),
       );
-      expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument();
+    });
+
+    it('clears the annotation from the composer', async () => {
+      await waitFor(() => expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument());
     });
   });
 });

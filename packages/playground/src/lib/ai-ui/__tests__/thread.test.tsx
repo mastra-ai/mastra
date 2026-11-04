@@ -1354,66 +1354,92 @@ describe('Thread annotations', () => {
       marker => marker.textContent,
     );
 
+  const renderCapturingThread = async () => {
+    const captured: Captured[] = [];
+    server.use(
+      ...baseHandlers(),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        captured.push({ url: request.url, body: await captureBody(request) });
+        return sseResponse();
+      }),
+    );
+    await act(async () => {
+      renderThread(history());
+    });
+    return captured;
+  };
+
+  const addToChat = async () => {
+    await selectFromReply('Open rows'.length);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+  };
+
+  const textarea = () => screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
+
   describe('when part of a reply is added to the chat', () => {
-    it('is numbered in the transcript, counted in the composer, and reaches the agent as a blockquote first', async () => {
-      const captured: Captured[] = [];
-      server.use(
-        ...baseHandlers(),
-        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-          captured.push({ url: request.url, body: await captureBody(request) });
-          return sseResponse();
-        }),
-      );
-      await act(async () => {
-        renderThread(history());
+    let captured: Captured[];
+
+    beforeEach(async () => {
+      captured = await renderCapturingThread();
+      await addToChat();
+    });
+
+    it('numbers the passage in the transcript', () => {
+      expect(markers()).toEqual(['1']);
+    });
+
+    it('counts the annotation in the composer', () => {
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+    });
+
+    it('focuses the message box', () => {
+      expect(document.activeElement).toBe(textarea());
+    });
+
+    describe('when the person types a message and sends it', () => {
+      beforeEach(() => {
+        fireEvent.change(textarea(), { target: { value: 'Why this one?' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       });
 
-      await selectFromReply('Open rows'.length);
-      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+      it('reaches the agent as a blockquote ahead of the typed message', async () => {
+        await waitFor(() => expect(captured).toHaveLength(1));
+        expect(JSON.stringify(captured[0].body.messages)).toContain(
+          JSON.stringify('1. > Open rows\n\nWhy this one?').slice(1, -1),
+        );
+      });
 
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
-      expect(markers()).toEqual(['1']);
-      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
-      expect(document.activeElement).toBe(textarea);
+      it('clears the annotation from the composer', async () => {
+        await waitFor(() => expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull());
+      });
 
-      fireEvent.change(textarea, { target: { value: 'Why this one?' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-
-      await waitFor(() => expect(captured).toHaveLength(1));
-      expect(JSON.stringify(captured[0].body.messages)).toContain(
-        JSON.stringify('1. > Open rows\n\nWhy this one?').slice(1, -1),
-      );
-      expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull();
-      expect(markers()).toEqual([]);
+      it('removes the number from the transcript', async () => {
+        await waitFor(() => expect(markers()).toEqual([]));
+      });
     });
   });
 
   describe('when the person sends an annotation without typing', () => {
-    it('sends the quoted passage on its own', async () => {
-      const captured: Captured[] = [];
-      server.use(
-        ...baseHandlers(),
-        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-          captured.push({ url: request.url, body: await captureBody(request) });
-          return sseResponse();
-        }),
-      );
-      await act(async () => {
-        renderThread(history());
-      });
+    let captured: Captured[];
 
-      await selectFromReply('Open rows'.length);
-      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+    beforeEach(async () => {
+      captured = await renderCapturingThread();
+      await addToChat();
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    });
 
+    it('sends the quoted passage on its own', async () => {
       await waitFor(() => expect(captured).toHaveLength(1));
       expect(JSON.stringify(captured[0].body.messages)).toContain(JSON.stringify('1. > Open rows'));
-      expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull();
+    });
+
+    it('clears the annotation from the composer', async () => {
+      await waitFor(() => expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull());
     });
   });
 
   describe('when the server rejects the message with the annotation', () => {
-    it('puts the annotation back in the composer with the typed text', async () => {
+    beforeEach(async () => {
       let requests = 0;
       server.use(
         ...baseHandlers(),
@@ -1425,17 +1451,22 @@ describe('Thread annotations', () => {
       await act(async () => {
         renderThread(history());
       });
-
-      await selectFromReply('Open rows'.length);
-      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
-      fireEvent.change(textarea, { target: { value: 'Why this one?' } });
+      await addToChat();
+      fireEvent.change(textarea(), { target: { value: 'Why this one?' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() => expect(requests).toBeGreaterThan(0));
+    });
 
+    it('tells the person the message could not be sent', async () => {
       expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
-      expect(textarea.value).toBe('Why this one?');
-      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+    }, 10_000);
+
+    it('puts the typed text back in the composer', async () => {
+      await waitFor(() => expect(textarea().value).toBe('Why this one?'), { timeout: 5000 });
+    }, 10_000);
+
+    it('puts the annotation back in the composer and the transcript', async () => {
+      expect(await screen.findByRole('button', { name: '1 annotation' }, { timeout: 5000 })).toBeTruthy();
       expect(markers()).toEqual(['1']);
     }, 10_000);
   });
@@ -1447,10 +1478,8 @@ describe('Thread annotations', () => {
       await act(async () => {
         rendered = render(renderThreadTree(history(), { threadId: 'thread-1' }));
       });
-
-      await selectFromReply('Open rows'.length);
-      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
-      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+      await addToChat();
+      await screen.findByRole('button', { name: '1 annotation' });
 
       await act(async () => {
         rendered?.rerender(renderThreadTree(history(), { threadId: 'thread-2' }));

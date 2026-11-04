@@ -21,11 +21,6 @@ const CLOSED: AnnotationSelectionState = { open: false };
 
 const closing = (state: AnnotationSelectionState) => (state.open ? { ...state, open: false } : state);
 
-/**
- * Follows the document selection and reports it once it rests on text in one message inside
- * `containerRef`. A drag reports when the pointer is released, not while it moves; a keyboard
- * selection reports as it changes. Selection changes are ignored while focus is in `toolbarRef`.
- */
 export function useAnnotationSelection(containerRef: RefObject<Element | null>, toolbarRef: RefObject<Element | null>) {
   const [state, setState] = useState<AnnotationSelectionState>(CLOSED);
   const dismiss = () => setState(closing);
@@ -35,14 +30,13 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>, 
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const close = () => setState(closing);
 
-    // `settled`: the pointer was released, so a drag that ran past the message can be trimmed back to it.
-    const read = (settled: boolean) => {
+    const reportSelection = (pointerReleased: boolean) => {
       const container = containerRef.current;
       const selection = document.getSelection();
       if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) return close();
       const part = findAnnotatablePart(container, selection.getRangeAt(0));
-      if (!part || (part.spills && !settled)) return close();
-      if (part.spills) clampSelection(selection, part);
+      if (!part || (part.extendsPastContent && !pointerReleased)) return close();
+      if (part.extendsPastContent) clampSelection(selection, part);
       const text = normalizeAnnotationText(selection.toString());
       if (!text) return close();
       setState({ open: true, selection: { text, source: annotationSource(part), anchor: selectionAnchor(part) } });
@@ -51,31 +45,34 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>, 
     const onPointerDown = () => {
       pressing = true;
     };
-    const onPointerCancel = () => {
+    const endPress = () => {
       pressing = false;
     };
     // Read after the browser finishes the gesture: a click inside a selection collapses it only after release.
     const onPointerUp = () => {
       pressing = false;
       clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => read(true));
+      settleTimer = setTimeout(() => reportSelection(true));
     };
     const onSelectionChange = () => {
       // Focus moving into the toolbar can collapse the selection it acts on.
       if (toolbarRef.current?.contains(document.activeElement)) return;
       if (pressing) close();
-      else read(false);
+      else reportSelection(false);
     };
 
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('pointerup', onPointerUp, true);
-    document.addEventListener('pointercancel', onPointerCancel, true);
+    document.addEventListener('pointercancel', endPress, true);
+    // macOS swallows the pointer release behind a context menu.
+    document.addEventListener('contextmenu', endPress, true);
     document.addEventListener('selectionchange', onSelectionChange);
     return () => {
       clearTimeout(settleTimer);
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('pointerup', onPointerUp, true);
-      document.removeEventListener('pointercancel', onPointerCancel, true);
+      document.removeEventListener('pointercancel', endPress, true);
+      document.removeEventListener('contextmenu', endPress, true);
       document.removeEventListener('selectionchange', onSelectionChange);
     };
   }, [containerRef, toolbarRef]);

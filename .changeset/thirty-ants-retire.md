@@ -2,11 +2,22 @@
 '@mastra/playground-ui': minor
 ---
 
-Added chat annotations, so a person can point the agent at parts of the transcript and comment on them. Select text in a message and click **Add to chat**, or press Tab to reach it: the passage gets a numbered comment bubble that stays with the text as you scroll, clicking the bubble opens a card to comment on the passage or remove it, and the composer counts what is waiting. The agent receives a numbered Markdown list, each passage quoted with its comment, ahead of the typed text. Count waiting `annotations` as content when enabling Send, so they can go out without typed text.
+Added chat annotations, so a person can point the agent at parts of the transcript and comment on them.
 
-Mount `ChatAnnotationsProvider` once per conversation, render `TranscriptAnnotations` inside the scrolled transcript and `ComposerAnnotations` in the composer, and format the outgoing message with `takeAnnotations()`:
+- Select text in a message and choose **Add to chat**, or press Tab to reach it.
+- The passage gets a numbered comment bubble that stays with the text as you scroll. Selecting the bubble opens a card to comment on the passage or remove it.
+- The composer counts what is waiting.
+- The agent receives a numbered Markdown list, each passage quoted with its comment, ahead of the typed text.
+
+Added `ChatShell.Transcript`, the conversation's reading column. It is positioned, so overlays such as annotation bubbles travel with the text.
+
+**Usage**
+
+Mount `ChatAnnotationsProvider` once per conversation, below whatever remounts when the thread changes. Render `TranscriptAnnotations` in `ChatShell.Transcript` and `ComposerAnnotations` in the composer inside `ChatShell.Dock`; adding an annotation focuses that composer's `ComposerInput`. Format the outgoing message with `takeAnnotations()`, and count waiting `annotations` as content when enabling Send, so they can go out without typed text.
 
 ```tsx
+import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
+import { ComposerBox, ComposerInput } from '@mastra/playground-ui/components/Composer';
 import {
   ChatAnnotationsProvider,
   ComposerAnnotations,
@@ -16,14 +27,24 @@ import {
 } from '@mastra/playground-ui/components/ai/annotations';
 
 <ChatAnnotationsProvider>
-  <div ref={transcriptRef} className="relative">
-    <TranscriptAnnotations containerRef={transcriptRef} composerInputRef={inputRef} />
-    {messages}
-  </div>
-  <ComposerBox>
-    <ComposerAnnotations />
-    <ComposerInput ref={inputRef} />
-  </ComposerBox>
+  <ChatShell>
+    <ChatShell.Stage>
+      <ChatShell.Viewport>
+        <ChatShell.Content>
+          <ChatShell.Transcript>
+            <TranscriptAnnotations />
+            {messages}
+          </ChatShell.Transcript>
+        </ChatShell.Content>
+        <ChatShell.Dock>
+          <ComposerBox>
+            <ComposerAnnotations />
+            <ComposerInput />
+          </ComposerBox>
+        </ChatShell.Dock>
+      </ChatShell.Viewport>
+    </ChatShell.Stage>
+  </ChatShell>
 </ChatAnnotationsProvider>;
 
 // When sending, inside the provider:

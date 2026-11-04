@@ -1,39 +1,12 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
-import type { Ref, RefObject } from 'react';
+import type { RefObject } from 'react';
 
 import { passageEndRect, rangeFromSource } from './annotatable-selection';
 import { AnnotationCommentCard } from './annotation-comment-card';
-import { annotationBubbleStyle } from './annotation-number';
+import { paintHighlights } from './annotation-highlights';
+import { AnnotationMarker } from './annotation-marker';
 import type { ChatAnnotation } from './chat-annotations';
 import { Popover, PopoverContent } from '@/ds/components/Popover';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
-
-import './annotation-markers.css';
-
-/** Named in `annotation-markers.css`. */
-const HIGHLIGHT = 'chat-annotation';
-const ACTIVE_HIGHLIGHT = 'chat-annotation-active';
-
-const paintedByTranscript = new Map<string, { ranges: Range[]; active: Range | undefined }>();
-
-function paintHighlights(transcript: string, ranges: Range[], active: Range | undefined) {
-  if (typeof CSS === 'undefined' || !('highlights' in CSS)) return;
-  if (ranges.length === 0) paintedByTranscript.delete(transcript);
-  else paintedByTranscript.set(transcript, { ranges, active });
-  const painted = Array.from(paintedByTranscript.values());
-  const allRanges = painted.flatMap(entry => entry.ranges);
-  const activeRanges = painted.flatMap(entry => (entry.active ? [entry.active] : []));
-  if (allRanges.length === 0) CSS.highlights.delete(HIGHLIGHT);
-  else CSS.highlights.set(HIGHLIGHT, new Highlight(...allRanges));
-  if (activeRanges.length === 0) {
-    CSS.highlights.delete(ACTIVE_HIGHLIGHT);
-    return;
-  }
-  const emphasis = new Highlight(...activeRanges);
-  emphasis.priority = 1;
-  CSS.highlights.set(ACTIVE_HIGHLIGHT, emphasis);
-}
 
 export interface AnnotationMarkersProps {
   containerRef: RefObject<Element | null>;
@@ -42,16 +15,23 @@ export interface AnnotationMarkersProps {
   onRemove: (id: string) => void;
 }
 
+interface CommentCard {
+  id: string;
+  anchor: HTMLElement;
+  open: boolean;
+}
+
 export function AnnotationMarkers({ containerRef, annotations, onCommentChange, onRemove }: AnnotationMarkersProps) {
-  const transcript = useId();
+  const transcriptId = useId();
   const layerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef(new Map<string, HTMLButtonElement>());
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const [hovered, setHovered] = useState<string>();
-  const [open, setOpen] = useState<{ id: string; anchor: HTMLElement }>();
-  const openIndex = open ? annotations.findIndex(annotation => annotation.id === open.id) : -1;
-  const openAnnotation = annotations[openIndex];
-  const emphasized = openAnnotation?.id ?? hovered;
+  const [card, setCard] = useState<CommentCard>();
+  const cardIndex = card ? annotations.findIndex(annotation => annotation.id === card.id) : -1;
+  const cardAnnotation = annotations[cardIndex];
+  const openId = card?.open ? card.id : undefined;
+  const emphasized = openId ?? hovered;
   const tracking = annotations.length > 0;
 
   // Written straight to the bubbles: layout is read after commit, and nothing renders from it.
@@ -76,7 +56,7 @@ export function AnnotationMarkers({ containerRef, annotations, onCommentChange, 
       marker.style.top = `${end.top - origin.top + 7}px`;
       marker.style.setProperty('--room-right', `${origin.width - left}px`);
     }
-    paintHighlights(transcript, ranges, active);
+    paintHighlights(transcriptId, ranges, active);
   });
 
   useEffect(() => {
@@ -96,15 +76,17 @@ export function AnnotationMarkers({ containerRef, annotations, onCommentChange, 
     resizes.observe(layer);
     const mutations = new MutationObserver(schedule);
     mutations.observe(container, { childList: true, characterData: true, subtree: true });
+    container.addEventListener('scroll', schedule, { capture: true, passive: true });
     return () => {
       cancelAnimationFrame(frame);
       resizes.disconnect();
       mutations.disconnect();
-      paintHighlights(transcript, [], undefined);
+      container.removeEventListener('scroll', schedule, { capture: true });
+      paintHighlights(transcriptId, [], undefined);
     };
-  }, [tracking, containerRef, transcript]);
+  }, [tracking, containerRef, transcriptId]);
 
-  const close = () => setOpen(undefined);
+  const close = () => setCard(current => current && { ...current, open: false });
 
   return (
     <div
@@ -126,101 +108,54 @@ export function AnnotationMarkers({ containerRef, annotations, onCommentChange, 
           annotation={annotation}
           number={index + 1}
           active={annotation.id === emphasized}
-          expanded={openAnnotation?.id === annotation.id}
+          expanded={annotation.id === openId}
           onHoverStart={() => setHovered(annotation.id)}
           onHoverEnd={() => setHovered(current => (current === annotation.id ? undefined : current))}
           onToggle={anchor =>
-            setOpen(current => (current?.id === annotation.id ? undefined : { id: annotation.id, anchor }))
+            setCard(current =>
+              current?.open && current.id === annotation.id
+                ? { ...current, open: false }
+                : { id: annotation.id, anchor, open: true },
+            )
           }
         />
       ))}
-      <Popover
-        open={openAnnotation !== undefined}
-        onOpenChange={next => {
-          if (!next) close();
-        }}
-      >
-        <PopoverContent
-          anchor={open?.anchor}
-          side="top"
-          align="start"
-          sideOffset={8}
-          initialFocus={commentRef}
-          aria-label={openAnnotation ? `Annotation ${openIndex + 1}` : undefined}
-          className="w-80 max-w-[calc(100vw-2rem)] p-3"
+      {card && cardAnnotation && (
+        <Popover
+          open={card.open}
+          onOpenChange={(next, { reason, event }) => {
+            const target = event instanceof FocusEvent ? event.relatedTarget : event.target;
+            // The bubble's own click toggles the card, so pressing or focusing it must not close the card first.
+            const towardBubble =
+              (reason === 'outside-press' || reason === 'focus-out') &&
+              target instanceof Node &&
+              card.anchor.contains(target);
+            if (!next && !towardBubble) close();
+          }}
         >
-          {openAnnotation && (
+          <PopoverContent
+            anchor={card.anchor}
+            side="top"
+            align="start"
+            sideOffset={8}
+            initialFocus={commentRef}
+            aria-label={`Annotation ${cardIndex + 1}`}
+            className="w-80 max-w-[calc(100vw-2rem)] p-3"
+          >
             <AnnotationCommentCard
-              annotation={openAnnotation}
-              number={openIndex + 1}
+              annotation={cardAnnotation}
+              number={cardIndex + 1}
               commentRef={commentRef}
-              onCommentChange={comment => onCommentChange(openAnnotation.id, comment)}
+              onCommentChange={comment => onCommentChange(cardAnnotation.id, comment)}
               onRemove={() => {
                 close();
-                onRemove(openAnnotation.id);
+                onRemove(cardAnnotation.id);
               }}
               onDone={close}
             />
-          )}
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
-interface AnnotationMarkerProps {
-  ref: Ref<HTMLButtonElement>;
-  annotation: ChatAnnotation;
-  number: number;
-  active: boolean;
-  expanded: boolean;
-  onHoverStart: () => void;
-  onHoverEnd: () => void;
-  onToggle: (anchor: HTMLElement) => void;
-}
-
-/** Starts hidden: `AnnotationMarkers` shows it once the passage is laid out. */
-function AnnotationMarker({
-  ref,
-  annotation,
-  number,
-  active,
-  expanded,
-  onHoverStart,
-  onHoverEnd,
-  onToggle,
-}: AnnotationMarkerProps) {
-  const commented = Boolean(annotation.comment?.trim());
-  return (
-    <button
-      ref={ref}
-      type="button"
-      data-slot="annotation-marker"
-      data-active={active || undefined}
-      data-commented={commented || undefined}
-      hidden
-      aria-label={commented ? `Annotation ${number}, with a comment` : `Annotation ${number}`}
-      aria-expanded={expanded}
-      aria-haspopup="dialog"
-      className={cn(
-        annotationBubbleStyle,
-        'pointer-events-auto absolute origin-bottom-left -translate-y-full cursor-pointer shadow-raised',
-        'translate-x-[min(0px,calc(var(--room-right)_-_100%))]',
-        'motion-safe:transition-[scale,background-color] motion-safe:duration-fast motion-safe:ease-out-custom',
-        'hover:scale-115 hover:bg-info-bright data-[active]:scale-115 data-[active]:bg-info-bright',
-        focusRing,
+          </PopoverContent>
+        </Popover>
       )}
-      onPointerEnter={onHoverStart}
-      onPointerLeave={onHoverEnd}
-      // Keyboard focus only: focus returns here when the card closes, which must not look hovered.
-      onFocus={event => {
-        if (event.currentTarget.matches(':focus-visible')) onHoverStart();
-      }}
-      onBlur={onHoverEnd}
-      onClick={event => onToggle(event.currentTarget)}
-    >
-      {number}
-      {commented && <span aria-hidden="true" className="size-1 rounded-full bg-current" />}
-    </button>
+    </div>
   );
 }
