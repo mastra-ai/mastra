@@ -308,10 +308,20 @@ describe('storage v2 result steps loader', () => {
     const run = await workflow.createRun();
     await run.start({ inputData: { n: 0 } });
 
+    const { reads } = recordStepReads(storage);
+    const store = storage.stores.workflows!;
+    const load = store.loadWorkflowRun.bind(store);
+    const fullReads: string[] = [];
+    store.loadWorkflowRun = async args => {
+      if (args.successfulSteps === 'full') fullReads.push(args.runId);
+      return load(args);
+    };
     const restarted = await (await workflow.createRun({ runId: run.runId })).restart();
     expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual({ n: 4 });
     expectOnlyStubs(restarted);
-    const { reads } = recordStepReads(storage);
+    expect(fullReads).toEqual([]);
+    expect(reads).toEqual([]);
     expect(await (restarted.steps as unknown as () => Promise<unknown>)()).toMatchObject(fullChain);
     expect(reads).toHaveLength(1);
   });

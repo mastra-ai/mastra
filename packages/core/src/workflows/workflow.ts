@@ -576,8 +576,8 @@ export function createStep<
   TProcessorId extends string,
   // Inferred from the previous step when chained, so a processor step accepts another processor step's output.
   TInput extends
-    | InferPublicSchema<typeof ProcessorStepInputSchema>
-    | InferPublicSchema<typeof ProcessorStepOutputSchema> = InferPublicSchema<typeof ProcessorStepInputSchema>,
+    InferPublicSchema<typeof ProcessorStepInputSchema> | InferPublicSchema<typeof ProcessorStepOutputSchema> =
+    InferPublicSchema<typeof ProcessorStepInputSchema>,
 >(
   processor:
     | (Processor<TProcessorId> & { processInput: Function })
@@ -1546,8 +1546,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 (streamParts ?? []).length,
               );
               let processorSpan = mutableState[spanKey] as
-                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
-                | undefined;
+                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -5881,7 +5880,10 @@ export class Run<
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const snapshot = await this.runStorage.loadFull();
+    let snapshot =
+      this.storageVersion === 2
+        ? await this.runStorage.loadForResume({ wait: false })
+        : await this.runStorage.loadFull();
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
@@ -5920,7 +5922,7 @@ export class Run<
         steps: (v2Store && lastSeq !== undefined
           ? loadedStepResults(
               { store: v2Store, workflowName: this.workflowId, runId: this.runId, lastSeq },
-              steps,
+              snapshot.context ?? {},
               clean,
             )
           : steps) as WorkflowStepResults<typeof steps, TStorageVersion>,
@@ -5954,6 +5956,13 @@ export class Run<
         TSteps,
         TStorageVersion
       >;
+    }
+
+    if (this.storageVersion === 2) {
+      snapshot = await this.runStorage.loadFull();
+      if (!snapshot) {
+        throw new Error(`Snapshot not found for run ${this.runId}`);
+      }
     }
 
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
