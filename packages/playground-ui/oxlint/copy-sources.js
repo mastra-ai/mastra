@@ -4,6 +4,7 @@ const technicalName =
   /^(?:classNames?|styles?|schema|instructions|prompt|systemPrompt|sql|script|code|commandOutput|args|regex|pattern)$/i;
 const codeElement = /^(?:code|pre|CodeBlock|InlineCode|Markdown|MarkdownRenderer|CodeEditor|JsonEditor)$/;
 const functionTypes = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+const DELIMITER = 'delimiter';
 
 function nameOf(node) {
   if (node?.type === 'Identifier' || node?.type === 'JSXIdentifier') return node.name;
@@ -21,6 +22,7 @@ function excludedSyntax(node) {
     if (functionTypes.has(current.type) && technicalName.test(nameOf(current.id))) return true;
     if (current.type === 'CallExpression' && nameOf(current.callee) === 'createTool') return true;
     if (current.type === 'JSXOpeningElement' && codeElement.test(nameOf(current.name))) return true;
+    if (current.type === 'AssignmentExpression' && isDocumentTitle(current.left)) return true;
     if (
       current.type === 'AssignmentExpression' &&
       current.left.type === 'MemberExpression' &&
@@ -156,7 +158,7 @@ export function copySources(context, check) {
       visit(node.alternate, separator);
     } else if (node.type === 'LogicalExpression') {
       if (node.operator !== '&&') visit(node.left, separator);
-      visit(node.right, node.operator === '&&' ? separator : false);
+      visit(node.right, node.operator === '&&' || separator === DELIMITER ? separator : false);
     } else if (node.type === 'BinaryExpression' && node.operator === '+') {
       visit(node.left, true);
       visit(node.right, true);
@@ -167,7 +169,8 @@ export function copySources(context, check) {
       if (callee.type === 'Identifier') resolve(callee).forEach(definition => visit(definition, separator));
       if (callee.type === 'MemberExpression' && ['join', 'concat'].includes(nameOf(callee.property))) {
         visit(callee.object, separator);
-        node.arguments.forEach(argument => visit(argument, true));
+        const argumentContext = nameOf(callee.property) === 'join' ? DELIMITER : true;
+        node.arguments.forEach(argument => visit(argument, argumentContext));
       }
       if (callee.type === 'MemberExpression' && ['map', 'flatMap'].includes(nameOf(callee.property))) {
         node.arguments.forEach(argument => visit(argument, separator));
@@ -203,7 +206,6 @@ export function copySources(context, check) {
       if (copyName.test(nameOf(node.left))) addRoot(node.right);
     },
     AssignmentExpression(node) {
-      if (isDocumentTitle(node.left)) return;
       const target = node.left.type === 'MemberExpression' ? node.left.property : node.left;
       if (copyName.test(nameOf(target))) addRoot(node.right);
     },

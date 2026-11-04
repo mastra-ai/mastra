@@ -42,6 +42,10 @@ tester.run('no-text-separators', noTextSeparators, {
       name: 'allows a separator in the browser tab title',
       code: 'useEffect(() => { document.title = `${title} | Mastra`; }, [title]);',
     },
+    {
+      name: 'allows a browser tab title bound before assignment',
+      code: 'const pageTitle = `${title} | Mastra`; document.title = pageTitle;',
+    },
     { name: 'allows a conditional placeholder', code: 'const label = present ? value : "—";' },
     { name: 'ignores CSS strings', code: '<div className="before:content-[\'·\']" />;' },
     { name: 'ignores CSS content assignments', code: 'style.content = "·";' },
@@ -158,6 +162,12 @@ tester.run('no-text-separators', noTextSeparators, {
     },
     { name: 'reports join separators in UI labels', code: 'const label = names.join(" · ");', errors: 1 },
     { name: 'reports em dash join separators', code: 'const title = names.join(" — ");', errors: 1 },
+    { name: 'reports a fallback join separator', code: 'const label = names.join(delimiter ?? "—");', errors: 1 },
+    {
+      name: 'reports a browser tab title that is also rendered',
+      code: 'const pageTitle = `${title} | Mastra`; document.title = pageTitle; <h1>{pageTitle}</h1>;',
+      errors: 1,
+    },
     { name: 'reports interpolated em dash separators', code: 'const title = `${name} — ${detail}`;', errors: 1 },
     { name: 'reports an interpolated prefix separator', code: 'const label = `— ${name}`;', errors: 1 },
     {
