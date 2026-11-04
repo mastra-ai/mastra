@@ -256,6 +256,41 @@ describe('DepsService custom pnpm workspace settings', () => {
     });
   });
 
+  it('points overrides scoped to the app at the output package (#29348)', async () => {
+    await writeFile(join(sourceRoot, 'package.json'), JSON.stringify({ name: '@my/app', version: '1.2.0' }));
+    await writeFile(join(outputDir, 'package.json'), JSON.stringify({ name: 'server', version: '1.0.0' }));
+    await writeFile(
+      join(sourceRoot, 'pnpm-lock.yaml'),
+      `lockfileVersion: '9.0'
+
+overrides:
+  '@mastra/core': 1.67.0
+  '@my/app>@mastra/core': 1.82.0
+  '@my/app@^1.0.0>zod': 4.5.4
+  '@my/app@^2.0.0>lodash': 4.18.1
+  '@my/app@>=1.0.0>ms@<3': 2.1.3
+  '@my/app-utils>ms': 2.1.3
+  '@my/worker>ms': 2.1.2
+
+importers: {}
+`,
+    );
+
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.overrides).toEqual({
+      '@mastra/core': '1.67.0',
+      'server>@mastra/core': '1.82.0',
+      'server>zod': '4.5.4',
+      'server>ms@<3': '2.1.3',
+      // The app is 1.2.0, so `@my/app@^2.0.0` didn't apply in the source install either.
+      '@my/app-utils>ms': '2.1.3',
+      // Packed workspace packages keep their names in the output.
+      '@my/worker>ms': '2.1.2',
+    });
+  });
+
   it('copies source package extensions with catalog specs resolved', async () => {
     await writeFile(
       join(sourceRoot, 'pnpm-workspace.yaml'),
