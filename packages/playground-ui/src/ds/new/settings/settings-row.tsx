@@ -77,7 +77,7 @@ export function SettingsRowLayout({
         {description != null && (
           <FieldDescription
             render={isSectionLayout ? undefined : <div />}
-            className={cn('mt-0', isSectionLayout ? 'mt-1 max-w-[62ch] text-pretty' : 'flex flex-col gap-0.5')}
+            className={cn('mt-0', isSectionLayout ? 'mt-1 max-w-[62ch]' : 'flex flex-col gap-0.5')}
           >
             {description}
           </FieldDescription>

@@ -57,7 +57,7 @@ function StatusDotPopoverInner<T>({
           <Txt variant="column" tone="ink">
             {resolved.label}
           </Txt>
-          <p className="mt-1 text-pretty text-muted-foreground">{resolved.description}</p>
+          <p className="mt-1 text-muted-foreground">{resolved.description}</p>
         </PopoverContent>
       </Popover>
     </span>
@@ -99,7 +99,7 @@ export function StatusDot<T>({
           />
         }
       />
-      <TooltipContent side="top" className="max-w-xs text-pretty">
+      <TooltipContent side="top" className="max-w-xs">
         {presented.description}
       </TooltipContent>
     </Tooltip>

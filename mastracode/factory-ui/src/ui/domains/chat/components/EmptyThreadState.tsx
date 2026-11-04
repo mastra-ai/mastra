@@ -40,7 +40,7 @@ export function EmptyThreadState() {
       <Txt as="h1" variant="display" tone="ink" id="empty-thread-title" className="mt-7 text-balance">
         What can I help you build?
       </Txt>
-      <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
+      <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg">
         Ask about this codebase, plan a change, or describe something that isn&apos;t working.
       </Txt>
 
