@@ -1619,7 +1619,7 @@ describe('Observability Handlers', () => {
         score: scoreData,
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createScore).toHaveBeenCalledWith({
         score: expect.objectContaining({ ...scoreData, scoreId: expect.any(String), timestamp: expect.any(Date) }),
       });
@@ -1974,7 +1974,7 @@ describe('Observability Handlers', () => {
         },
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
         feedback: expect.objectContaining({ feedbackUserId: 'authenticated-user' }),
       });
@@ -1997,10 +1997,13 @@ describe('Observability Handlers', () => {
               ...(feedbackUserId ? { feedbackUserId } : {}),
             },
           });
-          expect(result).toEqual({ success: true });
+          expect(result).toMatchObject({
+            success: true,
+            data: { traceId: 'trace-123', timestamp: expect.any(String) },
+          });
           const stored = mockObservabilityStore.createFeedback.mock.lastCall?.[0].feedback;
           if (feedbackUserId) expect(stored.feedbackUserId).toBe(feedbackUserId);
-          else expect(stored).not.toHaveProperty('feedbackUserId');
+          else expect(stored.feedbackUserId).toBeNull();
         }
       },
     );
@@ -2022,7 +2025,7 @@ describe('Observability Handlers', () => {
         feedback: feedbackData,
       });
 
-      expect(result).toEqual({ success: true });
+      expect(result).toMatchObject({ success: true, data: { traceId: 'trace-123', timestamp: expect.any(String) } });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
         feedback: expect.objectContaining({
           ...feedbackData,

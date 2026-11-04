@@ -18,6 +18,17 @@ export type WidgetKindProps<Options> = {
   expand?: DashboardExpand;
   /** A grip to drag the widget by, shown left of its title: the host is arranging the dashboard. */
   dragHandle?: MetricsCardDragHandleProps;
+  /** The widget's pin button, shown with its card's actions: the host can pin widgets. */
+  pin?: WidgetPin;
+};
+
+/** A widget's pinned state, as the host holds it, and the call that asks the host to change it. */
+export type WidgetPin = {
+  isPinned: boolean;
+  /** Called with the state the user asked for. */
+  onPin: (isPinned: boolean) => void;
+  /** The widget's name in the button's label ("Pin Agent runs"), so each card's button is told apart. */
+  name: string;
 };
 
 /**
