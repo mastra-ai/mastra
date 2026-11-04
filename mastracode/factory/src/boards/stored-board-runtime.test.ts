@@ -944,13 +944,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       it('brings back an app board a project deleted, in the projects named, and nowhere else', async () => {
         stubModel();
         const orgId = `org-${randomUUID()}`;
+        const shipped = vi.fn(() => undefined);
         const release = compileBoardDefinition({
           id: 'release',
           name: 'Release',
           initialPhase: 'queued',
           phases: {
             queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
-            shipping: { name: 'Shipping', kind: 'working', runner: { context: 'work' }, nextPhases: ['shipped'] },
+            shipping: {
+              name: 'Shipping',
+              kind: 'working',
+              runner: { context: 'work' },
+              nextPhases: ['shipped'],
+              onEnter: { manual: shipped },
+            },
             shipped: { name: 'Shipped', kind: 'terminal' },
           },
         });
@@ -985,7 +992,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         });
         const back = await catalog(replica, gone);
         expect(back.find(board => board.id === 'release')).toMatchObject({ source: 'app' });
-        // Served as the app board again; the project not named stays without it.
+        // It runs with the app board's code behaviour again; the project not named stays without it.
+        const base = `/web/factory/projects/${gone}`;
+        const card = (await replica.send('POST', `${base}/work-items`, { board: 'release', title: 'Ship it' })).json
+          .workItem;
+        const moved = await replica.send('POST', `${base}/work-items/${card.id}/transition`, {
+          board: 'release',
+          stage: 'shipping',
+          expectedRevision: card.revision,
+          requestId: randomUUID(),
+          cause: 'test',
+        });
+        expect(moved.status).toBe(200);
+        await vi.waitFor(() => expect(shipped).toHaveBeenCalled(), { timeout: 10_000 });
         expect((await replica.boards.get({ orgId, factoryProjectId: gone }, 'release'))!.revision).toBe(1);
         expect(await replica.boards.get({ orgId, factoryProjectId: other }, 'release')).toBeNull();
 

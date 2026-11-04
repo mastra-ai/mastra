@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Added editing of the built-in Work board and app boards per project. An admin can edit Work, or any board passed to `MastraFactory({ boards })`, under the board's own key: the first edit stores the project's own copy, and Factory runs the edited board with its code behaviour still attached. For example, Planning can start and approve its plan on its own for cards labelled `effort:low`:
+Added editing of the built-in Work board and app boards per project. An admin can edit Work, or any board passed to `MastraFactory({ boards })`, under the board's own key, and Factory runs the edited board with its code behaviour still attached. For example, Planning can start and approve its plan on its own for cards labelled `effort:low`:
 
 ```bash
 # Edit the project's Work board (the whole board, with its revision)
