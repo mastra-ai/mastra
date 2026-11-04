@@ -1,5 +1,4 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { DynamicToolPart, ToolInvocationPart } from '../ui/MessageFactory/types';
 import type { GenUIToolPhase } from './registry';
 
 /** Tool call fields shared by the `tool-invocation` and `dynamic-tool` / `tool-${name}` part shapes. */
@@ -18,26 +17,33 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 const isErrorResult = (result: unknown) => isRecord(result) && result.isError === true;
 
-export function normalizeToolPart(part: ToolInvocationPart | DynamicToolPart): NormalizedToolCall | undefined {
+const field = (source: object, key: string): unknown => (key in source ? Reflect.get(source, key) : undefined);
+const stringField = (source: object, key: string) => {
+  const value = field(source, key);
+  return typeof value === 'string' ? value : undefined;
+};
+
+/**
+ * Read a tool part from a live or stored message. Parts are read field by field because hydrated
+ * history and streaming runtimes carry fields (`argsText`, `errorText`, `dynamic-tool`) the static
+ * part types do not declare.
+ */
+export function normalizeToolPart(part: { type: string }): NormalizedToolCall | undefined {
   if (part.type === 'tool-invocation') {
-    const invocation = (part as ToolInvocationPart).toolInvocation as {
-      toolCallId?: string;
-      toolName?: string;
-      state?: string;
-      args?: unknown;
-      result?: unknown;
-      errorText?: string;
-      isError?: boolean;
-    };
-    if (!invocation?.toolCallId || !invocation.toolName) return undefined;
-    const argsText = (part as { argsText?: unknown }).argsText;
+    const invocation = field(part, 'toolInvocation');
+    if (!isRecord(invocation)) return undefined;
+    const toolCallId = stringField(invocation, 'toolCallId');
+    const toolName = stringField(invocation, 'toolName');
+    if (!toolCallId || !toolName) return undefined;
+    const argsText = stringField(part, 'argsText');
+    const errorText = stringField(invocation, 'errorText');
     let phase: NormalizedToolCall['phase'];
     switch (invocation.state) {
       case 'partial-call':
         phase = 'input-streaming';
         break;
       case 'result':
-        phase = invocation.isError || isErrorResult(invocation.result) ? 'output-error' : 'output-available';
+        phase = invocation.isError === true || isErrorResult(invocation.result) ? 'output-error' : 'output-available';
         break;
       case 'output-error':
         phase = 'output-error';
@@ -49,26 +55,29 @@ export function normalizeToolPart(part: ToolInvocationPart | DynamicToolPart): N
         phase = 'input-available';
     }
     return {
-      toolCallId: invocation.toolCallId,
-      toolName: invocation.toolName,
+      toolCallId,
+      toolName,
       phase,
-      ...(typeof argsText === 'string' ? { argsText } : {}),
+      ...(argsText !== undefined ? { argsText } : {}),
       args: invocation.args,
       output: invocation.result,
-      ...(invocation.errorText ? { errorText: invocation.errorText } : {}),
+      ...(errorText ? { errorText } : {}),
     };
   }
 
-  const dynamic = part as DynamicToolPart;
-  const toolName = dynamic.toolName ?? (dynamic.type.startsWith('tool-') ? dynamic.type.slice(5) : undefined);
-  if (!dynamic.toolCallId || !toolName) return undefined;
+  if (part.type !== 'dynamic-tool' && !part.type.startsWith('tool-')) return undefined;
+  const toolCallId = stringField(part, 'toolCallId');
+  const toolName = stringField(part, 'toolName') ?? (part.type.startsWith('tool-') ? part.type.slice(5) : undefined);
+  if (!toolCallId || !toolName) return undefined;
+  const output = field(part, 'output');
+  const errorText = stringField(part, 'errorText');
   let phase: NormalizedToolCall['phase'];
-  switch (dynamic.state) {
+  switch (field(part, 'state')) {
     case 'input-streaming':
       phase = 'input-streaming';
       break;
     case 'output-available':
-      phase = isErrorResult(dynamic.output) ? 'output-error' : 'output-available';
+      phase = isErrorResult(output) ? 'output-error' : 'output-available';
       break;
     case 'output-error':
       phase = 'output-error';
@@ -80,12 +89,12 @@ export function normalizeToolPart(part: ToolInvocationPart | DynamicToolPart): N
       phase = 'input-available';
   }
   return {
-    toolCallId: dynamic.toolCallId,
+    toolCallId,
     toolName,
     phase,
-    args: dynamic.input,
-    output: dynamic.output,
-    ...(dynamic.errorText ? { errorText: dynamic.errorText } : {}),
+    args: field(part, 'input'),
+    output,
+    ...(errorText ? { errorText } : {}),
   };
 }
 
@@ -103,7 +112,7 @@ export function collectToolCallMeta(messages: ReadonlyArray<MastraDBMessage>): M
   const meta = new Map<string, ToolCallMeta>();
   for (const message of messages) {
     if (message.role !== 'assistant') continue;
-    const metadata = message.content.metadata as Record<string, unknown> | undefined;
+    const metadata = message.content.metadata;
     if (!metadata) continue;
     for (const key of ['requireApprovalMetadata', 'pendingToolApprovals', 'suspendedTools'] as const) {
       const entries = metadata[key];
