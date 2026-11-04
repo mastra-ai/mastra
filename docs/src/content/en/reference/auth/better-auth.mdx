@@ -113,8 +113,8 @@ The `Session` and `User` types are exported by the Better Auth package.
 
 - `public` and `protected` accept exact paths, wildcard patterns (like `/api/*`), and path params (like `/users/:id`).
 - For method-specific rules, use tuples like `["/api/agents", ["GET", "POST"]]`.
-- If a route matches both `public` and `protected`, `public` wins and no auth is required.
-- If neither matches, routes are treated as protected by default (unless a route is explicitly marked `requiresAuth: false`).
+- If a route matches both `public` and `protected`, `public` wins and no auth is required, unless the route is marked `requiresAuth: true`. Those routes still authenticate.
+- If neither matches, a route requires auth when it's under `/api/*` (the built-in default `protected` pattern) or is a custom route registered with `registerApiRoute()` that isn't marked `requiresAuth: false`, and other paths don't require auth.
 
 ## Related
 

@@ -28,10 +28,10 @@ const SCORER_COLORS = [
   CHART_COLORS.indigo,
 ];
 
-export function ScoresWidget({ widget, views, expand }: WidgetKindProps<ScoresOptions>) {
+export function ScoresWidget({ widget, views, expand, dragHandle }: WidgetKindProps<ScoresOptions>) {
   const [view] = views;
   // Scores show their first view only, so the title is plain or, with somewhere to expand to, a link.
-  const heading = viewTitle(widget, [view], 0, () => {}, expand);
+  const heading = { ...viewTitle(widget, [view], 0, () => {}, expand), dragHandle };
   return (
     <ViewGate queries={view.queries} pending={() => null}>
       {page => <ScoresView heading={heading} view={view} page={page} />}

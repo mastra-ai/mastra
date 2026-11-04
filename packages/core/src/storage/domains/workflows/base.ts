@@ -149,14 +149,19 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * The latest result of each given step of a storage v2 run (as `latestStepResults` rebuilds it).
-   * Steps without an entry are left out.
+   * Steps without an entry are left out. Null when the run isn't stored, or when `expectedLastSeq`
+   * is given and the run's `lastSeq` differs from it (the run was written to since). Stores that
+   * return `runToken` must also reject a differing `expectedRunToken` (the run was deleted and
+   * recreated). The identity/sequence checks and the read see the same version of the run.
    * @experimental
    */
   async loadWorkflowRunSteps(_args: {
     workflowName: string;
     runId: string;
     stepIds: string[];
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    expectedLastSeq?: number;
+    expectedRunToken?: string;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | null> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 
@@ -194,7 +199,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
     statePatch?: StatePatchOp[];
     fence?: RunFence;
     expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
-  }): Promise<{ lastSeq: number } | null> {
+  }): Promise<{ lastSeq: number; runToken?: string } | null> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 
@@ -224,7 +229,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
     startStateSeq?: number;
     fence?: RunFence;
     expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
-  }): Promise<{ lastSeq: number } | null> {
+  }): Promise<{ lastSeq: number; runToken?: string } | null> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 

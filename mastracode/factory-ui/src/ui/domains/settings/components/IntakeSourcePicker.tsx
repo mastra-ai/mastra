@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
@@ -26,8 +27,13 @@ import { settingsRowLayout } from './common/settings-row-layout';
 export interface SourcePickerItem {
   id: string;
   label: string;
+  detail?: string;
   hint?: string;
   disabled?: boolean;
+}
+
+export function sourcePickerItemText(item: SourcePickerItem): string {
+  return item.detail ? `${item.detail}: ${item.label}` : item.label;
 }
 
 export interface SourcePickerGroup {
@@ -98,7 +104,7 @@ export function SourcePicker(props: SourcePickerProps) {
                 id,
                 label: fallbackLabel?.(id) ?? id,
               };
-              const context = [groups.length > 1 ? group?.label : undefined, item.hint].filter(Boolean).join(' · ');
+              const groupLabel = groups.length > 1 ? group?.label : undefined;
               const description = itemDescription?.(id);
               const details = itemDetails?.(item);
               return (
@@ -111,11 +117,17 @@ export function SourcePicker(props: SourcePickerProps) {
                     )}
                     <div className="flex min-w-0 flex-1 flex-col">
                       <Txt as="span" variant="caption" className="wrap-anywhere">
-                        {item.label}
+                        <Metadata>
+                          {item.detail && <Metadata.Item>{item.detail}</Metadata.Item>}
+                          <Metadata.Item>{item.label}</Metadata.Item>
+                        </Metadata>
                       </Txt>
-                      {context && (
+                      {(groupLabel || item.hint) && (
                         <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                          {context}
+                          <Metadata>
+                            {groupLabel && <Metadata.Item>{groupLabel}</Metadata.Item>}
+                            {item.hint && <Metadata.Item>{item.hint}</Metadata.Item>}
+                          </Metadata>
                         </Txt>
                       )}
                       {description && (
@@ -131,7 +143,7 @@ export function SourcePicker(props: SourcePickerProps) {
                       size="sm"
                       variant="ghost"
                       icon={<Trash2 />}
-                      aria-label={`Remove ${item.label}`}
+                      aria-label={`Remove ${sourcePickerItemText(item)}`}
                       disabled={pending || item.disabled}
                       onClick={async () => {
                         await onToggleItem(id);
@@ -204,7 +216,9 @@ function SourcePickerDrawer({
   const matchingGroups = groups
     .map(group => ({
       ...group,
-      items: group.items.filter(item => !selected.has(item.id) && item.label.toLowerCase().includes(normalizedQuery)),
+      items: group.items.filter(
+        item => !selected.has(item.id) && sourcePickerItemText(item).toLowerCase().includes(normalizedQuery),
+      ),
     }))
     .filter(group => group.items.length > 0);
 
@@ -259,13 +273,22 @@ function SourcePickerDrawer({
                     />
                   )}
                   {group.items.map(item => (
-                    <SettingsRow key={`${group.id}:${item.id}`} label={item.label} description={item.hint}>
+                    <SettingsRow
+                      key={`${group.id}:${item.id}`}
+                      label={
+                        <Metadata>
+                          {item.detail && <Metadata.Item>{item.detail}</Metadata.Item>}
+                          <Metadata.Item>{item.label}</Metadata.Item>
+                        </Metadata>
+                      }
+                      description={item.hint}
+                    >
                       {addControl ? (
                         addControl(item, () => searchInput.current?.focus())
                       ) : (
                         <Checkbox
                           checked={false}
-                          aria-label={item.label}
+                          aria-label={sourcePickerItemText(item)}
                           disabled={pending || item.disabled}
                           onCheckedChange={() => {
                             onToggleItem(item.id);
