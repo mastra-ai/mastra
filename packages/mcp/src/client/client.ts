@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 import type { Stream } from 'node:stream';
+import type { ToolBackgroundConfig } from '@mastra/core/background-tasks';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -17,6 +18,7 @@ import {
 } from '@modelcontextprotocol/client';
 import type {
   Transport,
+  CallToolResult,
   GetPromptResult,
   ListPromptsResult,
   ListResourcesResult,
@@ -54,22 +56,26 @@ import type {
 import { JSON_SCHEMA_2020_12, jsonSchemaComplexity, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
+import { DEFAULT_TASK_TTL_MS, taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
+import type { MCPTask, MCPTaskInputResponses } from '../shared/tasks';
 import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
 import { EventClientActions } from './actions/events';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
-import { isReconnectableMCPError } from './error-utils';
+import { isReconnectableMCPError, isRecoverableTaskPollError } from './error-utils';
 import type { DeliveryDriver } from './events/mode';
 import { EventStreamRouter } from './events/stream-router';
 import { EventSubscription } from './events/subscription';
-import type {
-  EventsPort,
-  EventsWebhookSetup,
-  MCPEventSubscribeOptions,
-  MCPEventSubscription,
-} from './events/types';
+import type { EventsPort, EventsWebhookSetup, MCPEventSubscribeOptions, MCPEventSubscription } from './events/types';
 import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
+import { interceptTaskResults, takeTaskHandle } from './tasks/intercept';
+import { resolveTasksOptions } from './tasks/options';
+import { TaskRequester } from './tasks/requester';
+import { MCP_INPUT_REQUEST_SUSPEND_TYPE, readInputRequestResume } from './tasks/suspend';
+import type { ToolSuspendHost } from './tasks/suspend';
+import { TaskWaitError, waitForTask } from './tasks/wait';
+import type { MCPInputRequiredTask, MCPTerminalTask } from './tasks/wait';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -78,7 +84,9 @@ import type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   MCPClientProtocolVersion,
+  MCPClientTasksOptions,
   MCPServerImplementation,
+  MCPTaskProgress,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
@@ -176,6 +184,14 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
     return false;
   }
 }
+
+const TASK_WAIT_ERROR_IDS = {
+  timeout: 'MCP_CLIENT_TOOL_TASK_TIMEOUT',
+  expired: 'MCP_CLIENT_TOOL_TASK_EXPIRED',
+  input_unhandled: 'MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED',
+  input_unsupported: 'MCP_CLIENT_TOOL_TASK_INPUT_UNSUPPORTED',
+  unreachable: 'MCP_CLIENT_TOOL_TASK_POLL_FAILED',
+} as const satisfies Record<TaskWaitError['reason'], Uppercase<string>>;
 
 /**
  * Reports the JSON-RPC id of each `events/stream` request as it goes out on `transport`. The
@@ -422,6 +438,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private priorDiscovery?: PriorDiscovery;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
+  private readonly taskOptions: MCPClientTasksOptions | undefined;
+  private readonly taskRequester: TaskRequester;
   private jsonSchemaValidator?: jsonSchemaValidator;
   private jsonSchemaValidatorPromise?: Promise<jsonSchemaValidator>;
 
@@ -465,6 +483,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.requireToolApproval = server.requireToolApproval;
     this.onToolError = server.onToolError ?? 'throw';
     this.jsonSchemaValidator = server.jsonSchemaValidator;
+    this.taskOptions = resolveTasksOptions(name, server.tasks);
 
     const configured = server.capabilities ?? {};
     if (configured.elicitation !== undefined && !server.inputRequests) {
@@ -478,6 +497,7 @@ export class InternalMastraMCPClient extends MastraBase {
       extensions: {
         ...(configured.extensions ?? {}),
         'io.modelcontextprotocol/ui': {},
+        ...(this.taskOptions ? tasksCapabilityEntry() : {}),
       },
     };
 
@@ -489,6 +509,7 @@ export class InternalMastraMCPClient extends MastraBase {
         versionNegotiation: { mode: negotiationMode(server.protocolVersion) },
       },
     );
+    this.taskRequester = new TaskRequester(this.client, { timeout: this.timeout, meta: () => this.requestMeta() });
 
     if (server.inputRequests) {
       const handler = server.inputRequests;
@@ -582,7 +603,7 @@ export class InternalMastraMCPClient extends MastraBase {
     return { ...getDefaultEnvironment(), ...configured };
   }
 
-  private async connectStdio(command: string) {
+  private async connectStdio(command: string, generation: number) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
     // Held locally until the connect succeeds, mirroring connectHttp, so a failed
     // attempt leaves `this.transport` unset. connect()'s failure branch keys the
@@ -595,11 +616,14 @@ export class InternalMastraMCPClient extends MastraBase {
       cwd: this.serverConfig.cwd,
     });
     observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.connectingTransport = transport;
     try {
+      this.assertSameLifecycle(generation);
       await this.client.connect(transport, {
         timeout: this.serverConfig.timeout ?? this.timeout,
         prior: this.priorDiscovery,
       });
+      if (this.taskOptions) interceptTaskResults(transport);
       this.transport = transport;
       this.log('debug', `Successfully connected to MCP server via Stdio`);
     } catch (e) {
@@ -609,10 +633,12 @@ export class InternalMastraMCPClient extends MastraBase {
       // outlives the failed attempt.
       await transport.close().catch(() => {});
       throw e;
+    } finally {
+      if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
   }
 
-  private async connectHttp(url: URL) {
+  private async connectHttp(url: URL, generation: number) {
     const { requestInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } = this.serverConfig;
 
     // Fail fast with a clear error before any transport is constructed.
@@ -653,11 +679,14 @@ export class InternalMastraMCPClient extends MastraBase {
     // transport that started the authorization flow (finishAuth must run on it).
     const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
     observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.connectingTransport = transport;
     try {
+      this.assertSameLifecycle(generation);
       await this.client.connect(transport, {
         timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         prior: this.priorDiscovery,
       });
+      if (this.taskOptions) interceptTaskResults(transport);
       this.transport = transport;
       this.log('debug', 'Successfully connected using Streamable HTTP transport.');
       // Close any transport left pending from an earlier 401: authorization is satisfied.
@@ -674,6 +703,8 @@ export class InternalMastraMCPClient extends MastraBase {
         this.markNeedsAuth(transport);
       }
       throw error;
+    } finally {
+      if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
   }
 
@@ -781,6 +812,39 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
   private reconnectPromise: Promise<void> | null = null;
+  /**
+   * Transport of the connect attempt still in flight. The SDK only attaches it to
+   * the client once version negotiation finishes, so a server that never answers
+   * would otherwise leave nothing that disconnect() or a newer attempt can close.
+   */
+  private connectingTransport?: Transport;
+
+  /**
+   * Closes the transport of an unfinished connect attempt. Closing makes the SDK
+   * reject that attempt and reap the child (and any negotiation probe) it spawned.
+   */
+  private async abandonPendingConnect(): Promise<void> {
+    const pending = this.connectingTransport;
+    if (!pending) return;
+    this.connectingTransport = undefined;
+    await pending.close().catch(() => {});
+  }
+
+  /**
+   * Whether a connect or reconnect is still running on this client. A failed attempt
+   * that a newer one replaced reports true here, since the newer attempt owns the client.
+   *
+   * @internal
+   */
+  hasPendingConnect(): boolean {
+    return this.isConnected !== null || this.reconnectPromise !== null;
+  }
+
+  private assertSameLifecycle(generation: number): void {
+    if (this.lifecycleGeneration !== generation) {
+      throw new Error('MCP client was disconnected while connecting');
+    }
+  }
 
   /**
    * Change notifications the caller has asked for. The client keeps exactly one
@@ -816,21 +880,23 @@ export class InternalMastraMCPClient extends MastraBase {
    *
    * @internal
    */
-  async connect() {
+  async connect(generation = this.lifecycleGeneration) {
     if (this.isConnected) {
       return this.isConnected;
     }
 
-    this.isConnected = new Promise<boolean>(async (resolve, reject) => {
+    const attempt: Promise<boolean> = new Promise<boolean>(async (resolve, reject) => {
       try {
+        // An attempt that a reconnect replaced must not keep its child running.
+        await this.abandonPendingConnect();
         await this.detachStaleClientTransport();
 
         const { command, url } = this.serverConfig;
 
         if (command) {
-          await this.connectStdio(command);
+          await this.connectStdio(command, generation);
         } else if (url) {
-          await this.connectHttp(url);
+          await this.connectHttp(url, generation);
         } else {
           throw new Error('Server configuration must include either a command or a url.');
         }
@@ -883,18 +949,23 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
-        // A connect that never reached a transport leaves nothing for disconnect() to
-        // tear down, so the process hooks must not outlive the failed attempt. A live
-        // transport means an earlier connection still owns them.
-        if (!this.transport) {
-          this.unregisterProcessHooks();
+        // A newer attempt that abandoned this one already owns the connection state
+        // and the process hooks, so leave both to it.
+        if (this.isConnected === attempt) {
+          // A connect that never reached a transport leaves nothing for disconnect() to
+          // tear down, so the process hooks must not outlive the failed attempt. A live
+          // transport means an earlier connection still owns them.
+          if (!this.transport) {
+            this.unregisterProcessHooks();
+          }
+          this.isConnected = null;
         }
-        this.isConnected = null;
         // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
         this.priorDiscovery = undefined;
         reject(e);
       }
     });
+    this.isConnected = attempt;
 
     // Registered before the connection settles so an exit during a connect attempt still
     // tears down anything the transport already started (a spawned stdio child, say).
@@ -1010,6 +1081,8 @@ export class InternalMastraMCPClient extends MastraBase {
     // recovery path must not establish a replacement connection afterwards.
     this.lifecycleGeneration++;
 
+    // A connect that never finishes would otherwise hold the reconnect awaited below forever.
+    await this.abandonPendingConnect();
     const reconnectPromise = this.reconnectPromise;
     if (reconnectPromise) {
       await reconnectPromise.catch(() => {});
@@ -1058,6 +1131,7 @@ export class InternalMastraMCPClient extends MastraBase {
       return await this.reconnectPromise;
     }
 
+    const generation = this.lifecycleGeneration;
     const reconnectPromise = (async () => {
       this.log('debug', 'Forcing reconnection to MCP server...');
 
@@ -1087,7 +1161,8 @@ export class InternalMastraMCPClient extends MastraBase {
         this.serverImplementation = undefined;
       }
 
-      await this.connect();
+      this.assertSameLifecycle(generation);
+      await this.connect(generation);
       this.log('debug', 'Successfully reconnected to MCP server');
     })();
     this.reconnectPromise = reconnectPromise;
@@ -1673,6 +1748,7 @@ export class InternalMastraMCPClient extends MastraBase {
         strict: getMastraToolStrictMeta(toolMeta),
         ...mcpToolProps,
         requireApproval,
+        ...(this.taskOptions ? { background: this.taskToolBackgroundConfig() } : {}),
         mcpMetadata: {
           serverName: this.name,
           serverVersion: serverMeta.version,
@@ -1689,6 +1765,9 @@ export class InternalMastraMCPClient extends MastraBase {
             abortSignal?: AbortSignal;
             _meta?: Record<string, unknown>;
             tracingContext?: TracingContext;
+            writer?: { write(data: unknown): Promise<void> };
+            agent?: ToolSuspendHost;
+            workflow?: ToolSuspendHost;
           },
         ) => {
           // A hydrated tool was rebuilt from cache without ever opening a connection, so the
@@ -1700,7 +1779,44 @@ export class InternalMastraMCPClient extends MastraBase {
           const operationContext = context?.requestContext ?? null;
 
           return this.operationContextStore.run(operationContext, async () => {
+            const suspendHost = context?.agent ?? context?.workflow;
+            const toolCallSpan = context?.tracingContext?.currentSpan;
+
             const executeToolCall = async () => {
+              // A call that suspended on MCP task input resumes on that task: never call the tool again.
+              const resume = this.taskOptions
+                ? readInputRequestResume(suspendHost, { serverName: this.name, toolName: tool.name })
+                : undefined;
+              if (resume) {
+                if (!resume.ok) {
+                  throw new MastraError({
+                    id: 'MCP_CLIENT_TOOL_TASK_RESUME_INVALID',
+                    domain: ErrorDomain.MCP,
+                    category: ErrorCategory.USER,
+                    text: `Can't resume MCP tool ${tool.name}: ${resume.reason}`,
+                    details: { toolName: tool.name, serverName: this.name },
+                  });
+                }
+                const { payload, inputResponses } = resume;
+                this.log('debug', `Resuming tool ${tool.name} on MCP task ${payload.taskId}`);
+                toolCallSpan?.update({ metadata: { mcpTaskKey: taskKeyOf(payload.taskId) } });
+                const waiting: MCPInputRequiredTask = {
+                  taskId: payload.taskId,
+                  status: 'input_required',
+                  createdAt: payload.createdAt,
+                  lastUpdatedAt: payload.createdAt,
+                  ttlMs: null,
+                  inputRequests: payload.requests,
+                };
+                const res = await this.awaitToolTask(tool.name, waiting, {
+                  signal: context?.abortSignal,
+                  writer: context?.writer,
+                  suspend: suspendHost?.suspend,
+                  inputResponses,
+                });
+                return res && finishToolCall(res);
+              }
+
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
               // progressToken spreads last so the Mastra-managed token takes precedence.
               const progressMeta = this.enableProgressTracking
@@ -1719,9 +1835,26 @@ export class InternalMastraMCPClient extends MastraBase {
               );
               // A Mastra server names the span that served the call. The tool call span ends
               // after this returns, and its end export carries the link.
-              const toolCallSpan = context?.tracingContext?.currentSpan;
               if (toolCallSpan && serverSpan) toolCallSpan.links = [...(toolCallSpan.links ?? []), serverSpan];
 
+              const task = this.taskOptions ? takeTaskHandle(res) : undefined;
+              if (!task) return finishToolCall(res);
+
+              this.log('debug', `Tool ${tool.name} continues as MCP task ${task.taskId}`);
+              // The server tags its task spans with the same key, so both sides can be matched
+              // without the task id (a bearer credential) reaching either trace.
+              toolCallSpan?.update({ metadata: { mcpTaskKey: taskKeyOf(task.taskId) } });
+              // Agents with background tasks run this executor off the agent loop (see
+              // `taskToolBackgroundConfig`), so waiting here doesn't block the agent.
+              const taskResult = await this.awaitToolTask(tool.name, task, {
+                signal: context?.abortSignal,
+                writer: context?.writer,
+                suspend: suspendHost?.suspend,
+              });
+              return taskResult && finishToolCall(taskResult);
+            };
+
+            const finishToolCall = async (res: CallToolResult) => {
               // Per the MCP spec, tool *execution* failures are reported in-band with
               // `isError: true`. Map that onto Mastra's failed-tool-call path unless the
               // consumer opted into `'return'`.
@@ -1778,7 +1911,10 @@ export class InternalMastraMCPClient extends MastraBase {
               return await executeToolCall();
             } catch (e) {
               // In-band tool errors are semantic failures, never transport issues.
-              const isToolExecutionError = e instanceof MastraError && e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED';
+              // So are task failures: retrying would start a second remote task.
+              const isToolExecutionError =
+                e instanceof MastraError &&
+                (e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED' || e.id.startsWith('MCP_CLIENT_TOOL_TASK_'));
 
               if (!isToolExecutionError && isReconnectableMCPError(e)) {
                 this.log('debug', `Transport error detected for tool ${tool.name}, attempting reconnection...`, {
@@ -1821,6 +1957,123 @@ export class InternalMastraMCPClient extends MastraBase {
         mcpToolDefinition: tool,
       });
       return undefined;
+    }
+  }
+
+  /** Reads, answers and cancels this server's tasks (SEP-2663). */
+  get tasks(): Pick<TaskRequester, 'get' | 'update' | 'cancel'> {
+    return this.taskRequester;
+  }
+
+  /**
+   * Background settings for tools of a tasks-enabled server: they may run for as long as the
+   * remote task, and must never be retried, as a retry would start a second task.
+   */
+  private taskToolBackgroundConfig(): ToolBackgroundConfig {
+    return {
+      enabled: true,
+      defaultDisposition: 'deferred',
+      timeoutMs: this.taskOptions?.maxWaitMs ?? DEFAULT_TASK_TTL_MS,
+      maxRetries: 0,
+    };
+  }
+
+  /**
+   * Waits for a remote task created by a tool call and returns its `CallToolResult`.
+   *
+   * When the task needs input that no `inputRequests` handler answers and the caller can `suspend`,
+   * suspends with the requests and returns `undefined`, leaving the task open for the answers.
+   */
+  private async awaitToolTask(
+    toolName: string,
+    task: MCPTask,
+    {
+      signal,
+      writer,
+      suspend,
+      inputResponses,
+    }: {
+      signal?: AbortSignal;
+      writer?: { write(data: unknown): Promise<void> };
+      suspend?: ToolSuspendHost['suspend'];
+      inputResponses?: MCPTaskInputResponses;
+    },
+  ): Promise<CallToolResult | undefined> {
+    const details = { toolName, serverName: this.name, taskId: task.taskId };
+    // Studio's tool-call card shows the MCP task (id, status, elapsed time) from these progress
+    // writes. They are live only: tool progress isn't saved with the conversation.
+    const onStatus = (current: MCPTask) => {
+      const progress: MCPTaskProgress = {
+        type: 'mcp-task',
+        taskId: current.taskId,
+        status: current.status,
+        createdAt: current.createdAt,
+        serverName: this.name,
+      };
+      void writer?.write(progress).catch(() => {});
+    };
+    const fail = (id: Uppercase<string>, text: string, cause?: unknown) =>
+      new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, text, details }, cause);
+
+    // Captured once, like the tool-call path: a disconnect during the wait must not reconnect, and a
+    // recovery must compare against the transport the failed poll used, not whatever is current.
+    const lifecycleGeneration = this.lifecycleGeneration;
+    let polledTransport: Transport | undefined;
+    let terminal: MCPTerminalTask | MCPInputRequiredTask;
+    try {
+      terminal = await waitForTask(
+        {
+          get: (taskId, options) => {
+            polledTransport = this.transport;
+            return this.taskRequester.get(taskId, options);
+          },
+          update: (taskId, responses, options) => this.taskRequester.update(taskId, responses, options),
+          cancel: taskId => this.taskRequester.cancel(taskId),
+          isRecoverable: isRecoverableTaskPollError,
+          recover: () => this.reconnectAfterTransportFailure(polledTransport, lifecycleGeneration),
+        },
+        task,
+        {
+          signal,
+          inputRequests: this.serverConfig.inputRequests,
+          stopAtInput: !this.serverConfig.inputRequests && suspend !== undefined,
+          inputResponses,
+          pollIntervalMs: this.taskOptions?.pollIntervalMs,
+          maxWaitMs: this.taskOptions?.maxWaitMs,
+          onStatus,
+        },
+      );
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      if (error instanceof TaskWaitError) throw fail(TASK_WAIT_ERROR_IDS[error.reason], error.message, error.cause);
+      const reason = error instanceof Error ? error.message : String(error);
+      throw fail('MCP_CLIENT_TOOL_TASK_POLL_FAILED', `Polling MCP task ${task.taskId} failed: ${reason}`, error);
+    }
+
+    switch (terminal.status) {
+      case 'input_required':
+        // The remote task stays open; resuming the call answers it (see `readInputRequestResume`).
+        await suspend!({
+          type: MCP_INPUT_REQUEST_SUSPEND_TYPE,
+          serverName: this.name,
+          toolName,
+          taskId: terminal.taskId,
+          createdAt: terminal.createdAt,
+          requestedAt: new Date().toISOString(),
+          requests: terminal.inputRequests,
+        });
+        return undefined;
+      case 'completed':
+        return terminal.result as CallToolResult;
+      case 'cancelled':
+        throw fail('MCP_CLIENT_TOOL_TASK_CANCELLED', terminal.statusMessage ?? `MCP task ${task.taskId} was cancelled`);
+      case 'failed': {
+        const message = typeof terminal.error.message === 'string' ? terminal.error.message : undefined;
+        throw fail(
+          'MCP_CLIENT_TOOL_TASK_FAILED',
+          message ?? terminal.statusMessage ?? `MCP task ${task.taskId} failed`,
+        );
+      }
     }
   }
 

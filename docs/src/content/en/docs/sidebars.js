@@ -220,6 +220,55 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Knowledge',
+          link: {
+            type: 'doc',
+            id: 'knowledge/overview',
+          },
+          customProps: {
+            contextualSidebar: true,
+            tags: ['alpha'],
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/scopes-and-access',
+              label: 'Scopes and access',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/agents-and-tools',
+              label: 'Agents and tools',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/pinned-context',
+              label: 'Pinned context',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/search',
+              label: 'Search',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/load-your-content',
+              label: 'Load your content',
+            },
+            {
+              type: 'link',
+              label: 'Studio',
+              href: '/docs/studio/knowledge',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/patterns',
+              label: 'Patterns',
+            },
+          ],
+        },
       ],
     },
     {
@@ -329,6 +378,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser',
           label: 'Browser',
+        },
+        {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
         },
         {
           type: 'category',
@@ -445,6 +499,11 @@ const sidebars = {
               type: 'doc',
               id: 'studio/auth',
               label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/knowledge',
+              label: 'Knowledge',
             },
             {
               type: 'doc',

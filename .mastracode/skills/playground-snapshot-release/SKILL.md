@@ -1,11 +1,11 @@
 ---
 name: playground-snapshot-release
-description: Publish a Playground UI snapshot (`@mastra/playground-ui` and its workspace dependencies) from `main` or the current branch via the `playground-snapshot` mode of the Publish to npm workflow, wait for it to finish, then open a PR on `mastra-ai/platform` bumping the frontend to the published snapshot version. Use when asked to release, publish, or ship a playground/studio UI snapshot to the platform frontend.
+description: Publish a Playground UI snapshot (`@mastra/playground-ui`, `@mastra/observability`, and their workspace dependencies) from `main` or the current branch via the `playground-snapshot` mode of the Publish to npm workflow, wait for it to finish, then open a PR on `mastra-ai/platform` bumping the frontend to the published snapshot version. Use when asked to release, publish, or ship a playground/studio UI snapshot to the platform frontend.
 ---
 
 # Playground Snapshot Release
 
-Dispatches `.github/workflows/npm-publish.yml` with `publish_type=playground-snapshot`. That job publishes only `@mastra/playground-ui` and its non-private workspace dependencies (currently `@mastra/ai-sdk`, `@mastra/client-js`, `@mastra/core`, `@mastra/schema-compat`, `@mastra/react`) at version `0.0.0-<tag>-<timestamp>`. It refuses to run on `main`, and publishes real immutable npm versions.
+Dispatches `.github/workflows/npm-publish.yml` with `publish_type=playground-snapshot`. That job publishes only `@mastra/playground-ui`, `@mastra/observability`, and their non-private workspace dependencies (currently `@mastra/ai-sdk`, `@mastra/client-js`, `@mastra/core`, `@mastra/schema-compat`, `@mastra/react`) at version `0.0.0-<tag>-<timestamp>`. It refuses to run on `main`, and publishes real immutable npm versions.
 
 ## 1. Ask which branch
 
@@ -116,7 +116,7 @@ cd "$workdir/platform"
 git checkout -b "chore/bump-playground-ui-$tag"
 ```
 
-In `frontend/package.json`, set every `@mastra/*` dependency that belongs to the published set (`@mastra/playground-ui`, `@mastra/ai-sdk`, `@mastra/client-js`, `@mastra/core`, `@mastra/schema-compat`, `@mastra/react`) to the exact `$version`. Leave other `@mastra/*` packages (e.g. `@mastra/memory`) untouched, but mention in the PR body if they now differ from the bumped version, since they may need a full snapshot instead. Do not touch `admin-portal` unless the user asks.
+In `frontend/package.json`, set every `@mastra/*` dependency that belongs to the published set (`@mastra/playground-ui`, `@mastra/observability`, `@mastra/ai-sdk`, `@mastra/client-js`, `@mastra/core`, `@mastra/schema-compat`, `@mastra/react`) to the exact `$version`. Leave other `@mastra/*` packages (e.g. `@mastra/memory`) untouched, but mention in the PR body if they now differ from the bumped version, since they may need a full snapshot instead. Do not touch `admin-portal` unless the user asks.
 
 Update the lockfile, then commit, push, and open the PR:
 

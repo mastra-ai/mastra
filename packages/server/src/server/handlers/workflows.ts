@@ -122,7 +122,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   let workflow;
 
   // First check registry for temporary workflows
-  workflow = WorkflowRegistry.getWorkflow(workflowId);
+  workflow = WorkflowRegistry.getWorkflow(workflowId, mastra);
 
   if (!workflow) {
     workflow = getPublicWorkflowById(mastra, workflowId);

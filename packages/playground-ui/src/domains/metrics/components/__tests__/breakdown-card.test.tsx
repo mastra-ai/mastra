@@ -26,6 +26,8 @@ import {
 import { emptyBreakdownFixture } from './fixtures/metrics';
 import { aggregateCapabilities, traceAggregateCapabilities } from './fixtures/trace-aggregate';
 import {
+  openViewMenu,
+  pickView,
   renderInMetrics,
   serveCapabilities,
   serveOrgAggregate,
@@ -83,20 +85,30 @@ function serveSpans(previous: AggregateTracesResponse = previousAgentRunsByName)
   return requests;
 }
 
+/** Body rows' names; the first row is the header. */
 const rowNames = () =>
-  screen.getAllByRole('listitem').map(item => item.querySelector('[title]')?.getAttribute('title'));
+  screen
+    .getAllByRole('row')
+    .slice(1)
+    .map(row => row.querySelector('[title]')?.getAttribute('title'));
+
+/** The text a column header's tooltip gives screen readers. */
+const headerDescription = (name: string) => {
+  const id = screen.getByRole('button', { name }).getAttribute('aria-describedby');
+  return id ? document.getElementById(id)?.textContent : undefined;
+};
 
 const rowOf = async (name: string) => {
-  const li = (await screen.findByTitle(name)).closest('li');
-  if (!li) throw new Error(`${name} row not found`);
-  return li;
+  const row = (await screen.findByTitle(name)).closest<HTMLElement>('[role="row"]');
+  if (!row) throw new Error(`${name} row not found`);
+  return row;
 };
 
 describe('BreakdownCard', () => {
   beforeEach(() => serveUsageTotals(agentTotals));
 
   describe('when the page covers one project', () => {
-    it('opens on agents, ranks them by the traces they ran in, nested ones included, and has no Projects tab', async () => {
+    it('opens on agents, ranks them by the traces they ran in, nested ones included, and has no projects view', async () => {
       serveCapabilities(aggregateCapabilities);
       const spans = serveSpans();
       renderInMetrics(<BreakdownCard onRowClick={() => {}} />);
@@ -104,7 +116,7 @@ describe('BreakdownCard', () => {
       expect(await screen.findByTitle('Explore Subagent')).toBeDefined();
       expect(rowNames()).toEqual(['Explore Subagent', 'Code Agent', 'Reflector']);
       expect(within(await rowOf('Explore Subagent')).getByText('30')).toBeDefined();
-      expect(screen.queryByRole('tab', { name: 'Projects' })).toBeNull();
+      expect(await openViewMenu('Breakdown by agent')).not.toContain('Breakdown by project');
       expect(spans[0]).toMatchObject({
         groupBy: ['entityName'],
         where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
@@ -136,9 +148,9 @@ describe('BreakdownCard', () => {
       await screen.findByTitle('Code Agent');
 
       const headers = screen.getAllByRole('columnheader').map(h => h.textContent);
-      expect(headers).toEqual(['Errors', 'P95 latency', 'Tokens', 'Cost', 'Traces ↓', '% Change']);
+      expect(headers).toEqual(['Agent', 'Errors', 'P95 latency', 'Tokens', 'Cost', 'Traces', '% Change']);
       // A plain table: no share strip, and no colour swatch on the rows.
-      expect(screen.queryAllByTestId('metrics-share-segment')).toHaveLength(0);
+      expect(screen.queryAllByTestId('share-bar-segment')).toHaveLength(0);
       expect((await rowOf('Code Agent')).querySelector('.size-2')).toBeNull();
     });
 
@@ -148,10 +160,9 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard />);
       await screen.findByTitle('Code Agent');
 
-      expect(screen.getByRole('button', { name: 'About Traces' })).toBeDefined();
-      expect(screen.getByText('A trace is one end-to-end request, with every step it took.')).toBeDefined();
+      expect(headerDescription('Traces')).toBe('A trace is one end-to-end request, with every step it took.');
       expect(screen.queryByText(/A span is/)).toBeNull();
-      expect(screen.getByRole('button', { name: 'About % Change' })).toBeDefined();
+      expect(headerDescription('% Change')).toMatch(/^Change in traces/);
       expect(screen.getByText(/^Change in traces from the previous range of the same length/)).toBeDefined();
       expect(screen.getByText(/^Selected: /)).toBeDefined();
       expect(screen.getByText(/^Previous: /)).toBeDefined();
@@ -172,7 +183,7 @@ describe('BreakdownCard', () => {
     });
   });
 
-  describe('when the Tools tab opens', () => {
+  describe('when the tools view opens', () => {
     it('counts every tool and MCP tool call as a span, without usage columns or a usage request', async () => {
       serveCapabilities(aggregateCapabilities);
       const spans = serveSpans();
@@ -181,11 +192,10 @@ describe('BreakdownCard', () => {
       await screen.findByTitle('Code Agent');
       const sentBefore = totals.length;
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Tools' }));
+      await pickView('Breakdown by agent', 'Breakdown by tool');
       const search = await rowOf('search');
       expect(within(search).getByText('300')).toBeDefined();
-      expect(screen.getByRole('button', { name: 'About Spans' })).toBeDefined();
-      expect(screen.getByText(/^A span is one step inside a trace/)).toBeDefined();
+      expect(headerDescription('Spans')).toMatch(/^A span is one step inside a trace/);
       expect(screen.queryByText(/A trace is one end-to-end request/)).toBeNull();
       expect(spans.at(-1)?.where).toEqual({
         op: 'in',
@@ -206,7 +216,7 @@ describe('BreakdownCard', () => {
       const onRowClick = vi.fn();
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
-      fireEvent.click(screen.getByRole('tab', { name: 'Tools' }));
+      await pickView('Breakdown by agent', 'Breakdown by tool');
       fireEvent.click(await screen.findByTitle('search'));
       expect(onRowClick).toHaveBeenCalledWith({
         span: { spanTypes: ['tool_call', 'mcp_tool_call'], entityName: 'search' },
@@ -214,7 +224,7 @@ describe('BreakdownCard', () => {
     });
   });
 
-  describe('when the Environments tab opens', () => {
+  describe('when the environments view opens', () => {
     it('lists traces per environment, from trace aggregates, and opens one from its row', async () => {
       serveCapabilities(aggregateCapabilities);
       serveSpans();
@@ -226,7 +236,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Environments' }));
+      await pickView('Breakdown by agent', 'Breakdown by environment');
       fireEvent.click(await screen.findByTitle('staging'));
       expect(rowNames()).toEqual(['production', 'staging']);
       expect(within(await rowOf('production')).getByText('$1.00')).toBeDefined();
@@ -248,7 +258,7 @@ describe('BreakdownCard', () => {
     it('renders nothing, as the page keeps its earlier cards', async () => {
       serveCapabilities(traceAggregateCapabilities);
       const { container } = renderInMetrics(<BreakdownCard />);
-      await waitFor(() => expect(screen.queryByText('Breakdown')).toBeNull());
+      await waitFor(() => expect(screen.queryByText(/^Breakdown/)).toBeNull());
       expect(container.textContent).toBe('');
     });
   });
@@ -309,34 +319,35 @@ describe('BreakdownCard', () => {
     });
   });
 
-  describe('when the Models tab opens', () => {
-    it('ranks models by their spans with tokens and cost, without errors, and opens one from its row', async () => {
+  describe('when the models view opens', () => {
+    it('ranks models by their spans with tokens and cost, names each one’s provider, and opens one from its row', async () => {
       serveCapabilities(aggregateCapabilities);
       serveSpans();
       const totals = serveUsageTotals(request => {
-        if (!request.current || request.groupBy[0] !== 'model') return agentTotals(request);
+        if (!request.current || !request.groupBy.includes('model')) return agentTotals(request);
         return request.aggregation === 'count' ? modelSpansByModel : usageByModel;
       });
       const onRowClick = vi.fn();
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Models' }));
+      await pickView('Breakdown by agent', 'Breakdown by model');
       fireEvent.click(await screen.findByTitle('gpt-5'));
       expect(rowNames()).toEqual(['claude-haiku-4-5', 'gpt-5']);
       const haiku = await rowOf('claude-haiku-4-5');
       expect(within(haiku).getByText('900')).toBeDefined();
       expect(within(haiku).getByText('$4.00')).toBeDefined();
+      expect(haiku.textContent).toContain('anthropic›claude-haiku-4-5');
       expect(screen.getByRole('button', { name: 'Spans' })).toBeDefined();
       expect(screen.queryByRole('button', { name: 'Errors' })).toBeNull();
       expect(totals).toContainEqual(
-        expect.objectContaining({ groupBy: ['model'], aggregation: 'count', current: false }),
+        expect.objectContaining({ groupBy: ['provider', 'model'], aggregation: 'count', current: false }),
       );
       expect(onRowClick).toHaveBeenCalledWith({ model: 'gpt-5' });
     });
   });
 
-  describe('when the Threads tab opens', () => {
+  describe('when the threads view opens', () => {
     it('lists threads with their resource, traces and spend, leaves out usage outside any thread, and opens one', async () => {
       serveCapabilities(aggregateCapabilities);
       serveSpans();
@@ -352,7 +363,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
       await screen.findByTitle('Code Agent');
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Threads' }));
+      await pickView('Breakdown by agent', 'Breakdown by thread');
       const thread = await rowOf('thread-a');
       expect(within(thread).getByText('$0.40')).toBeDefined();
       expect(within(thread).getByText('user-1')).toBeDefined();
@@ -375,8 +386,9 @@ describe('BreakdownCard', () => {
 
       fireEvent.click(await screen.findByTitle('Project p2'));
       expect(rowNames()).toEqual(['Project p1', 'Project p2']);
-      expect(screen.getByRole('tab', { name: 'Projects', selected: true })).toBeDefined();
-      expect(screen.queryByRole('columnheader', { name: 'Project' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Breakdown by project' })).toBeDefined();
+      // Only the name column: the rows are the projects.
+      expect(screen.getAllByRole('columnheader', { name: 'Project' })).toHaveLength(1);
       expect(onRowClick).toHaveBeenCalledWith({ projectId: 'p2' });
     });
 
@@ -393,11 +405,11 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />, { scope });
       await screen.findByTitle('Project p1');
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Agents' }));
+      await pickView('Breakdown by project', 'Breakdown by agent');
       const code = await rowOf('Code Agent');
       // Right after the name: the row's texts start with the name, then its project.
       expect(code.textContent?.startsWith('Code AgentProject p1')).toBe(true);
-      expect(screen.getAllByRole('columnheader')[0]?.textContent).toBe('Project');
+      expect(screen.getAllByRole('columnheader')[1]?.textContent).toBe('Project');
       expect(within(code).getByTitle('Project p1')).toBeDefined();
       fireEvent.click(screen.getByTitle('Code Agent'));
       expect(new Set(groupings.map(g => g.join()))).toEqual(new Set(['projectId,entityName']));
@@ -420,7 +432,7 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard onRowClick={onRowClick} />, { scope });
       await screen.findByTitle('Project p1');
 
-      fireEvent.click(screen.getByRole('tab', { name: 'Threads' }));
+      await pickView('Breakdown by project', 'Breakdown by thread');
       const thread = await rowOf('thread-a');
       expect(within(thread).getByText('Project p1')).toBeDefined();
       expect(await within(thread).findByText('user-1')).toBeDefined();
@@ -428,7 +440,7 @@ describe('BreakdownCard', () => {
         screen
           .getAllByRole('columnheader')
           .map(h => h.textContent)
-          .slice(0, 2),
+          .slice(1, 3),
       ).toEqual(['Project', 'Resource']);
       expect(new Set(groupings)).toEqual(new Set(['projectId', 'projectId,threadId', 'resourceId,threadId']));
       fireEvent.click(screen.getByTitle('thread-a'));
@@ -444,17 +456,17 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard />, { scope: { projectLabel: id => id } });
 
       expect(await screen.findByTitle('Code Agent')).toBeDefined();
-      expect(screen.getByRole('tab', { name: 'Agents', selected: true })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Breakdown by agent' })).toBeDefined();
     });
   });
 
   describe('when the data fails to load', () => {
-    it('keeps the tabs and says so', async () => {
+    it('keeps the view menu and says so', async () => {
       serveCapabilities(aggregateCapabilities);
       serveSpanAggregate(() => HttpResponse.json({ error: 'boom' }, { status: 500 }));
       renderInMetrics(<BreakdownCard />);
       expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
-      expect(screen.getByRole('tab', { name: 'Tools' })).toBeDefined();
+      expect(await openViewMenu('Breakdown by agent')).toContain('Breakdown by tool');
     });
   });
 });

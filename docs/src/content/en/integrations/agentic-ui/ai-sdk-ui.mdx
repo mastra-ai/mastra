@@ -311,6 +311,8 @@ sendMessage(
 
 `suspended` is the `data` of the latest `data-tool-call-suspended` part in `messages`.
 
+When the tool runs inside a [subagent](/docs/agents/human-in-the-loop#identify-which-subagent-tool-paused), `toolCallId` on `data-tool-call-suspended` and `data-tool-call-approval` parts is the supervisor's call to the subagent. The parts also include `delegatedToolCallId` and `delegatedToolName`, which name the subagent's tool call that paused. Use them to label the prompt you render, and keep using `runId` and `toolCallId` to resume.
+
 ## Using Mastra Memory
 
 When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.

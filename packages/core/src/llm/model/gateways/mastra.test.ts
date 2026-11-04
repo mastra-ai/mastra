@@ -18,12 +18,14 @@ describe('MastraGateway', () => {
     expect(gateway.shouldEnable()).toBe(false);
   });
 
-  it('returns no providers when MASTRA_GATEWAY_API_KEY is not set', async () => {
+  it('still lists the mastra provider when MASTRA_GATEWAY_API_KEY is not set', async () => {
     const gateway = new MastraGateway();
 
     const providers = await gateway.fetchProviders();
 
-    expect(providers).toEqual({});
+    expect(providers.mastra).toBeDefined();
+    expect(providers.mastra?.apiKeyEnvVar).toBe('MASTRA_GATEWAY_API_KEY');
+    expect(providers.mastra?.models.length).toBeGreaterThan(0);
   });
 
   it('returns the mastra provider when MASTRA_GATEWAY_API_KEY is set', async () => {

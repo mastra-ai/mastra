@@ -188,7 +188,7 @@ export async function validateStepRequestContext({
   validateInputs,
 }: {
   requestContext?: RequestContext;
-  step: Step<string, any, any>;
+  step: Pick<Step<string, any, any>, 'id' | 'requestContextSchema'>;
   validateInputs: boolean;
 }) {
   let validationError: Error | undefined;

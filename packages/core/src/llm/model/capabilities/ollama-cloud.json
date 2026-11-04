@@ -7,6 +7,8 @@
     "kimi-k2.6",
     "kimi-k2.7-code",
     "kimi-k3",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
     "minimax-m3",
     "minimax-m3.1-flash",
     "mistral-large-3:675b",
@@ -26,6 +28,8 @@
     "gpt-oss:120b",
     "gpt-oss:20b",
     "kimi-k2.6",
+    "mimo-v2.6-flash",
+    "mimo-v2.6-pro",
     "minimax-m2.7",
     "minimax-m3",
     "minimax-m3.1-flash",
@@ -37,21 +41,7 @@
     "nemotron-3-ultra"
   ],
   "reasoning": {
-    "muse-spark-open": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "nemotron-3-nano:30b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -71,26 +61,35 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "nemotron-3-ultra": [
+    "kimi-k2.6": [
       {
         "type": "toggle"
       }
     ],
-    "mistral-large-4": [
+    "beam": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "nemotron-3-super": [
+    "mimo-v2.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "kimi-k3": [
+    "gpt-oss:20b": [
       {
-        "type": "toggle"
-      },
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -102,13 +101,36 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "beam": [
+    "nemotron-3-nano:30b": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
-    "deepseek-v4-pro": [
+    "nemotron-3-ultra": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.7-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-super": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "muse-spark-open": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "deepseek-v4-pro:0813": [
       {
         "type": "toggle"
       },
@@ -117,37 +139,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash:1017": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "minimax-m3.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-v4-pro:0813": [
       {
         "type": "toggle"
       },
@@ -165,20 +172,27 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "kimi-k2.7-code": [
+    "glm-5.2": [
       {
         "type": "toggle"
-      }
-    ],
-    "gpt-oss:20b": [
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["high", "max"]
       }
     ],
-    "kimi-k2.6": [
+    "mimo-v2.6-pro": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

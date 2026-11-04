@@ -13,6 +13,7 @@
  */
 
 import type { RequestContext } from '@mastra/core/request-context';
+import type { RequestContextReader } from '../auth/account-routing-context.js';
 import type { CredentialStore } from '../auth/types.js';
 
 export type CredentialScope = 'factory' | 'user';
@@ -206,20 +207,22 @@ export function resolveCredentialScope(requestContext?: RequestContext): Credent
  *
  * Session state and HTTP-supplied policy values never establish credential authority.
  */
-export function resolveTenantFromRequestContext(requestContext?: RequestContext): CredentialTenant | undefined {
+export function resolveTenantFromRequestContext(requestContext?: RequestContextReader): CredentialTenant | undefined {
   if (!credentialTenantResolver) return resolveAuthenticatedCredentialTenant(requestContext);
   const token = requestContext?.get(CREDENTIAL_POLICY_KEY);
   return token && typeof token === 'object' ? trustedTenants.get(token)?.tenant : undefined;
 }
 
 /** Authenticated principal only, for hosts resolving durable session ownership. */
-export function resolveAuthenticatedCredentialTenant(requestContext?: RequestContext): CredentialTenant | undefined {
+export function resolveAuthenticatedCredentialTenant(
+  requestContext?: RequestContextReader,
+): CredentialTenant | undefined {
   const principal = readPrincipal(requestContext);
   return 'tenant' in principal ? principal.tenant : undefined;
 }
 
 function readPrincipal(
-  requestContext?: RequestContext,
+  requestContext?: RequestContextReader,
 ): { tenant: CredentialTenant } | { failure: Exclude<CredentialTenantFailureReason, 'no-policy-for-principal'> } {
   const raw = requestContext?.get('user') as (RequestContextUser & RequestContextSession) | undefined;
   if (!raw || typeof raw !== 'object') return { failure: 'missing-user-context' };
@@ -242,7 +245,7 @@ function readPrincipal(
  * provider, missing tenant identity or unavailable tenant storage fails closed
  * through an empty store that also disables process-environment fallback.
  */
-export function resolveCredentialStore(requestContext?: RequestContext): CredentialStore | undefined {
+export function resolveCredentialStore(requestContext?: RequestContextReader): CredentialStore | undefined {
   if (!credentialStoreProvider) return undefined;
   const tenant = resolveTenantFromRequestContext(requestContext);
   if (!tenant) {

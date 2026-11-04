@@ -1,7 +1,14 @@
 import type { SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { Classifier, ClassifierAnswers, ClassifierQuestions, ClassifierResult } from '../../classifier';
+import type { TripWireOptions } from '../../agent/trip-wire';
+import type {
+  Classifier,
+  ClassifierAnswers,
+  ClassifierDecisionIds,
+  ClassifierQuestions,
+  ClassifierResult,
+} from '../../classifier';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
@@ -10,19 +17,48 @@ import { executeWithContext } from '../../observability/utils';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { createDecisionReporter, messageDecisionIds, streamDecisionIds, tripwireOf } from './classifier-decision';
+import type {
+  ClassifierOnDecision,
+  ClassifierPhase,
+  ClassifierProcessorErrorMetadata,
+  ReportDecision,
+} from './classifier-decision';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 import { handleModelError } from './model-error-strategy';
 import type { ModelErrorStrategy } from './model-error-strategy';
 
+type RunnerAbort = (reason?: string, options?: TripWireOptions) => never;
+// `retry` is left out because the agent only retries tripwires from processOutputStep, which this processor doesn't implement.
+type ClassifierAbort = (reason?: string, options?: Pick<TripWireOptions, 'metadata'>) => never;
+
+type ProcessorCallArgs = {
+  abort: RunnerAbort;
+  abortSignal?: AbortSignal;
+  requestContext?: RequestContext;
+} & Partial<ObservabilityContext>;
+
+type ProcessMessagesArgs = ProcessorCallArgs & { messages: MastraDBMessage[] };
+
+type ClassifyOptions = Pick<ProcessorCallArgs, 'abort' | 'abortSignal' | 'requestContext'> & {
+  observabilityContext: ObservabilityContext;
+  getIds: () => ClassifierDecisionIds;
+};
+
+const CLASSIFIER_FAILED_REASON = 'Classification failed because the classifier call failed';
+
 /** Context passed to `onResult` alongside the typed answers. */
 export interface ClassifierResultContext<Q extends ClassifierQuestions> {
   /** Where the text came from. */
-  phase: 'input' | 'output' | 'stream';
+  phase: ClassifierPhase;
   /** Full classifier result, including probability distributions, usage, and provider metadata. */
   result: ClassifierResult<Q>;
-  /** Abort the request with a TripWire. The reason is what the caller sees; never pass model output. */
-  abort: (reason?: string) => never;
+  /**
+   * Abort the request with a TripWire. The reason is what the caller sees; never pass model output.
+   * `options.metadata` is passed to the tripwire, for example to tell the caller which policy blocked.
+   */
+  abort: ClassifierAbort;
   /** Drop this message (input/output) or skip emitting this chunk (stream) and continue. */
   filter: () => void;
 }
@@ -41,6 +77,8 @@ interface ClassifierProcessorBaseOptions<Q extends ClassifierQuestions> extends 
   id?: string;
   /** Receives the answers and decides what to do. Application policy lives here. */
   onResult: ClassifierOnResult<Q>;
+  /** Receives each decision with its outcome and the ids of the run, for example to write an audit record. */
+  onDecision?: ClassifierOnDecision<Q>;
   /**
    * What to do when the classifier call fails.
    * - 'strict' (default): abort the request.
@@ -89,6 +127,7 @@ export class ClassifierProcessor<
   private classifierOrId: Classifier<any> | string;
   private resolvedClassifier?: Classifier<any>;
   private onResult: ClassifierOnResult<Q>;
+  private onDecision?: ClassifierOnDecision<Q>;
   private errorStrategy: ModelErrorStrategy;
   private chunkWindow: number;
   private maxInputLength?: number;
@@ -102,6 +141,7 @@ export class ClassifierProcessor<
     this.id = options.id ?? 'classifier';
     this.classifierOrId = options.classifier;
     this.onResult = options.onResult;
+    this.onDecision = options.onDecision;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.chunkWindow = options.chunkWindow ?? 0;
     this.maxInputLength = options.maxInputLength;
@@ -143,36 +183,22 @@ export class ClassifierProcessor<
     this.mastra = mastra;
   }
 
-  async processInput(
-    args: {
-      messages: MastraDBMessage[];
-      abort: (reason?: string) => never;
-      requestContext?: RequestContext;
-    } & Partial<ObservabilityContext>,
-  ): Promise<MastraDBMessage[]> {
+  async processInput(args: ProcessMessagesArgs): Promise<MastraDBMessage[]> {
     return this.processMessages(args, 'input');
   }
 
-  async processOutputResult(
-    args: {
-      messages: MastraDBMessage[];
-      abort: (reason?: string) => never;
-      requestContext?: RequestContext;
-    } & Partial<ObservabilityContext>,
-  ): Promise<MastraDBMessage[]> {
+  async processOutputResult(args: ProcessMessagesArgs): Promise<MastraDBMessage[]> {
     return this.processMessages(args, 'output');
   }
 
   async processOutputStream(
-    args: {
+    args: ProcessorCallArgs & {
       part: ChunkType;
       streamParts: ChunkType[];
       state: Record<string, any>;
-      abort: (reason?: string) => never;
-      requestContext?: RequestContext;
-    } & Partial<ObservabilityContext>,
+    },
   ): Promise<ChunkType | null | undefined> {
-    const { part, streamParts, abort, requestContext: _requestContext, state: _state, ...rest } = args;
+    const { part, streamParts, abort, abortSignal, requestContext, state: _state, ...rest } = args;
     if (part.type !== 'text-delta') {
       return part;
     }
@@ -183,19 +209,24 @@ export class ClassifierProcessor<
     }
 
     const observabilityContext = resolveObservabilityContext(rest);
-    const filtered = await this.classify(text, 'stream', abort, observabilityContext);
-    return filtered ? null : part;
+    try {
+      const filtered = await this.classify(text, 'stream', {
+        abort,
+        abortSignal,
+        requestContext,
+        observabilityContext,
+        getIds: () => streamDecisionIds(part.runId, requestContext, observabilityContext),
+      });
+      return filtered ? null : part;
+    } catch (error) {
+      // Rethrowing would make the runner log the user's cancel as a stream error. The stream is closing anyway.
+      if (isCancellation(error, abortSignal)) return null;
+      throw error;
+    }
   }
 
-  private async processMessages(
-    args: {
-      messages: MastraDBMessage[];
-      abort: (reason?: string) => never;
-      requestContext?: RequestContext;
-    } & Partial<ObservabilityContext>,
-    phase: 'input' | 'output',
-  ): Promise<MastraDBMessage[]> {
-    const { messages, abort, requestContext: _requestContext, ...rest } = args;
+  private async processMessages(args: ProcessMessagesArgs, phase: 'input' | 'output'): Promise<MastraDBMessage[]> {
+    const { messages, abort, abortSignal, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
     const checkSet = new Set(messagesToCheck);
@@ -213,7 +244,13 @@ export class ClassifierProcessor<
         continue;
       }
 
-      const filtered = await this.classify(text, phase, abort, observabilityContext);
+      const filtered = await this.classify(text, phase, {
+        abort,
+        abortSignal,
+        requestContext,
+        observabilityContext,
+        getIds: () => messageDecisionIds(message, requestContext, observabilityContext),
+      });
       if (!filtered) {
         passed.push(message);
       }
@@ -223,47 +260,107 @@ export class ClassifierProcessor<
   }
 
   /**
-   * Evaluate text and run `onResult`. Returns `true` when the content should be dropped.
-   * Aborts never return. Classifier failures return `false` under 'warn'.
+   * Classifies the text and applies `onResult`. Returns `true` when the content should be dropped.
+   * Throws when the request is aborted or the run is cancelled.
    */
-  private async classify(
-    text: string,
-    phase: 'input' | 'output' | 'stream',
-    abort: (reason?: string) => never,
-    observabilityContext: ObservabilityContext,
-  ): Promise<boolean> {
-    const state = this.maxInputLength !== undefined ? text.slice(0, this.maxInputLength) : text;
-
+  private async classify(text: string, phase: ClassifierPhase, options: ClassifyOptions): Promise<boolean> {
     const classifier = this.resolveClassifier();
+    const state = this.maxInputLength === undefined ? text : text.slice(0, this.maxInputLength);
+    const report = createDecisionReporter<Q>({
+      onDecision: this.onDecision,
+      processorId: this.id,
+      classifierId: classifier.id,
+      phase,
+      state,
+      requestContext: options.requestContext,
+      getIds: options.getIds,
+    });
+
+    const startedAt = Date.now();
     let result: ClassifierResult<Q>;
     try {
-      result = (await executeWithContext({
-        span: observabilityContext.tracing.currentSpan,
-        fn: () => classifier.decide({ state, providerOptions: this.providerOptions }),
-      })) as ClassifierResult<Q>;
+      result = await this.decide(classifier, state, options);
     } catch (error) {
-      if (error instanceof TripWire) {
-        throw error;
-      }
-      handleModelError({
-        error,
-        errorStrategy: this.errorStrategy,
-        abort,
-        warningMessage: `[ClassifierProcessor:${this.id}] Classifier evaluation failed, allowing content:`,
-        abortMessage: 'Classification failed because the classifier call failed',
-      });
+      if (error instanceof TripWire || isCancellation(error, options.abortSignal)) throw error;
+      await this.handleClassifierFailure(error, classifier.id, Date.now() - startedAt, report, options.abort);
       return false;
     }
 
-    let filtered = false;
-    await this.onResult(result.answers, {
-      phase,
-      result,
-      abort,
-      filter: () => {
-        filtered = true;
-      },
+    return this.applyOnResult(result, phase, Date.now() - startedAt, report, options.abort);
+  }
+
+  private async decide(
+    classifier: Classifier<ClassifierQuestions>,
+    state: string,
+    { abortSignal, observabilityContext }: ClassifyOptions,
+  ): Promise<ClassifierResult<Q>> {
+    const result = await executeWithContext({
+      span: observabilityContext.tracing.currentSpan,
+      fn: () => classifier.decide({ state, providerOptions: this.providerOptions, abortSignal }),
     });
+    return result as ClassifierResult<Q>;
+  }
+
+  /** Reports the failed call, then aborts under 'strict' or logs a warning under 'warn'. */
+  private async handleClassifierFailure(
+    error: unknown,
+    classifierId: string,
+    durationMs: number,
+    report: ReportDecision<Q>,
+    abort: RunnerAbort,
+  ): Promise<void> {
+    const metadata: ClassifierProcessorErrorMetadata = {
+      processorId: this.id,
+      classifierId,
+      code: 'CLASSIFIER_FAILED',
+    };
+    if (this.errorStrategy === 'strict') {
+      await report({ outcome: 'aborted', error, durationMs, tripwire: { reason: CLASSIFIER_FAILED_REASON, metadata } });
+    } else {
+      await report({ outcome: 'allowed', error, durationMs });
+    }
+
+    handleModelError({
+      error,
+      errorStrategy: this.errorStrategy,
+      abort: reason => abort(reason, { metadata }),
+      warningMessage: `[ClassifierProcessor:${this.id}] Classifier evaluation failed, allowing content:`,
+      abortMessage: CLASSIFIER_FAILED_REASON,
+    });
+  }
+
+  /** Runs `onResult` and reports its outcome. Returns `true` when `onResult` called `filter()`. */
+  private async applyOnResult(
+    result: ClassifierResult<Q>,
+    phase: ClassifierPhase,
+    durationMs: number,
+    report: ReportDecision<Q>,
+    abort: RunnerAbort,
+  ): Promise<boolean> {
+    let filtered = false;
+    let aborted = false;
+
+    try {
+      await this.onResult(result.answers, {
+        phase,
+        result,
+        abort: (...args) => {
+          aborted = true;
+          return abort(...args);
+        },
+        filter: () => {
+          filtered = true;
+        },
+      });
+    } catch (error) {
+      if (aborted && error instanceof TripWire) {
+        await report({ outcome: 'aborted', result, durationMs, tripwire: tripwireOf(error) });
+      }
+
+      throw error;
+    }
+
+    await report({ outcome: filtered ? 'filtered' : 'allowed', result, durationMs });
     return filtered;
   }
 
@@ -302,6 +399,11 @@ export class ClassifierProcessor<
       .map(part => (part.type === 'text-delta' ? part.payload.text : ''))
       .join('');
   }
+}
+
+/** A cancelled run is not a classifier failure, so it gets neither a tripwire nor a decision. */
+function isCancellation(error: unknown, abortSignal: AbortSignal | undefined): boolean {
+  return abortSignal?.aborted === true && !(error instanceof TripWire);
 }
 
 function extractTextContent(message: MastraDBMessage): string {

@@ -85,6 +85,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -122,6 +123,7 @@ jobs:
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
       experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
       mastracode_e2e_changed: ${{ steps.compute.outputs.mastracode_e2e_changed }}
+      durable_streams_changed: ${{ steps.compute.outputs.durable_streams_changed }}
       stores_changed: ${{ steps.compute.outputs.stores_changed }}
       workspaces_changed: ${{ steps.compute.outputs.workspaces_changed }}
       memory_changed: ${{ steps.compute.outputs.memory_changed }}
@@ -132,6 +134,7 @@ jobs:
       affected_memory_tests: ${{ steps.compute.outputs.affected_memory_tests }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -266,6 +269,22 @@ jobs:
             file === '.github/workflows/mastracode-e2e.yml'
           );
 
+          // The worker-takeover suite drives real child processes against Redis streams and a
+          // Postgres workflow store; it only exercises the paths that matter when lease
+          // ownership, evented delivery, or the workflow store change.
+          const durableStreamsChanged = fullSuite || changed(file =>
+            file.startsWith('packages/core/src/agent/') ||
+            file.startsWith('packages/core/src/mastra/') ||
+            file.startsWith('packages/core/src/workflows/evented/') ||
+            file.startsWith('pubsub/redis-streams/') ||
+            file.startsWith('stores/pg/') ||
+            file.startsWith('packages/memory/') ||
+            file === '.github/workflows/test-durable-streams.yml' ||
+            file === '.github/workflows/test-suite.yml' ||
+            file === '.github/workflows/prebuild.yml' ||
+            file === 'pnpm-lock.yaml'
+          );
+
           output(`affected_store_tests=${affectedStoreTests}\n`);
           const workspaceDockerPackages = workspaceSelection.packages.filter(packageName =>
             ['s3', 'gcs', 'azure'].includes(packageName),
@@ -292,6 +311,7 @@ jobs:
           output(`e2e_changed=${e2eChanged}\n`);
           output(`experiment_worker_e2e_changed=${experimentWorkerChanged}\n`);
           output(`mastracode_e2e_changed=${mastracodeE2eChanged}\n`);
+          output(`durable_streams_changed=${durableStreamsChanged}\n`);
 
           console.error(`Affected: ${count}/${total} tests (${(ratio * 100).toFixed(1)}%)`);
           console.error(`Affected unit/type tests: ${unitTestFiles.length}`);
@@ -363,12 +383,14 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
       has_unit_tests: ${{ needs.affected-tests.outputs.has_unit_tests }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
+      durable_streams_changed: ${{ needs.affected-tests.outputs.durable_streams_changed }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -380,6 +402,7 @@ jobs:
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       experiment_worker_e2e_changed: ${{ needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' }}
@@ -394,6 +417,7 @@ jobs:
     uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
@@ -407,6 +431,7 @@ jobs:
     uses: ./.github/workflows/test-combined-stores.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
@@ -425,6 +450,7 @@ jobs:
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
+      id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       workspace_packages: ${{ needs.affected-tests.outputs.workspace_packages }}
@@ -440,6 +466,7 @@ jobs:
     runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
+      id-token: write
     timeout-minutes: 15
     services:
       postgres:
@@ -607,3 +634,5 @@ jobs:
         with:
           token: ${{ secrets.SLACK_BOT_TOKEN }}
           text: ${{ steps.state.outputs.text }}
+          # #eng-release-alerts
+          channel: 'C0CD83YFFNF'

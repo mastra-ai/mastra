@@ -1,4 +1,6 @@
 import { toPersistedErrorIdentity } from '@mastra/core/error';
+import * as coreObservability from '@mastra/core/observability';
+import type { AnySpan, ObserverFailureMetadata } from '@mastra/core/observability';
 
 import { hasAbortInChain, isTransientLLMError } from './retry';
 
@@ -35,12 +37,29 @@ export type OmFailurePolicy = 'abort' | 'continue';
 export type OmFailureKind = 'observer-model' | 'reflector-model';
 
 export class OmModelExecutionError extends Error {
+  #observerSpanId?: string;
+
+  get observerSpanId(): string | undefined {
+    return this.#observerSpanId;
+  }
   constructor(
     readonly failureKind: OmFailureKind,
     cause: unknown,
+    observerSpan?: AnySpan,
   ) {
     super(formatOmError(cause), { cause });
     this.name = 'OmModelExecutionError';
+    // Keep the reference out of serialized errors, and omit excluded spans rather
+    // than accidentally linking back to the interrupted parent execution.
+    try {
+      this.#observerSpanId =
+        observerSpan &&
+        (typeof observerSpan.getExportedSpanId !== 'function' || observerSpan.getExportedSpanId() === observerSpan.id)
+          ? observerSpan.id
+          : undefined;
+    } catch {
+      // Custom tracing implementations must not replace the original failure.
+    }
   }
 }
 
@@ -58,9 +77,29 @@ export interface OmProviderError {
 }
 
 export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
-  if (!isOmModelExecutionError(error)) return { failurePolicy };
-  const providerError = readProviderError(error);
-  return { failurePolicy, failureKind: error.failureKind, ...(providerError ? { providerError } : {}) };
+  let observerFailure: ObserverFailureMetadata['observerFailure'] | undefined;
+  if (typeof coreObservability.executionFailureTermination === 'function') {
+    try {
+      const modelFailure = isOmModelExecutionError(error);
+      observerFailure = {
+        ...(modelFailure && error.observerSpanId ? { observerSpanId: error.observerSpanId } : {}),
+        cause: coreObservability.executionFailureTermination(
+          modelFailure ? error.cause : error,
+          modelFailure ? 'model_error' : 'runtime_error',
+        ),
+      };
+    } catch {
+      // Malformed error getters must not turn tracing into a new failure.
+      observerFailure = { cause: { outcome: 'error', stopReason: 'runtime_error' } };
+    }
+  }
+  const providerError = isOmModelExecutionError(error) ? readProviderError(error) : undefined;
+  return {
+    failurePolicy,
+    ...(observerFailure ? { observerFailure } : {}),
+    ...(isOmModelExecutionError(error) ? { failureKind: error.failureKind } : {}),
+    ...(providerError ? { providerError } : {}),
+  };
 }
 
 function readProviderError(error: OmModelExecutionError): OmProviderError | undefined {

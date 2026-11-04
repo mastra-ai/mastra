@@ -7,7 +7,14 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, ObservabilityContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
+import type {
+  AnySpan,
+  ObservabilityContext,
+  ResumeTracingContext,
+  TracingOptions,
+  TracingPolicy,
+  TracingProperties,
+} from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
 import type { OutputSchema } from '../stream';
@@ -330,11 +337,7 @@ export type WorkflowStateSingleStepResult = {
 
 export type WorkflowStateStepResult = WorkflowStateSingleStepResult | WorkflowStateSingleStepResult[];
 
-export type WorkflowStateTracingContext = {
-  traceId?: string;
-  spanId?: string;
-  parentSpanId?: string;
-};
+export type WorkflowStateTracingContext = ResumeTracingContext;
 
 /**
  * Unified workflow state that combines metadata with processed execution state.
@@ -614,6 +617,15 @@ export interface WorkflowOptions {
    * @internal Set by durable agent workflows.
    */
   isForeignExecution?: (eventRequestContext: unknown, requestContext: RequestContext) => boolean;
+
+  /**
+   * Call `onLost` if the execution `requestContext` claims loses the run before its caller receives a result,
+   * so a caller waiting on the evented engine stops waiting for a finish that will never be its own.
+   * Returns a function that stops watching.
+   *
+   * @internal Set by durable agent workflows.
+   */
+  watchExecutionLoss?: (requestContext: RequestContext, runId: string, onLost: (error: Error) => void) => () => void;
 
   /**
    * Transforms the run snapshot immediately before it is persisted.
@@ -1412,6 +1424,11 @@ export type ExecutionContext = {
  */
 export type MutableContext = {
   state: Record<string, any>;
+  /**
+   * @internal Set when `state` is a nested run's state: the JSON state its changes are relative
+   * to. Applying it applies those changes to the state then, not `state` itself.
+   */
+  stateBase?: Record<string, unknown>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

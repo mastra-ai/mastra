@@ -91,24 +91,51 @@ export interface IntakeSourceBinding {
   factoryProjectId: string;
   /** Installed board the source feeds; `null` keeps the built-in routing (issues → Work, PRs → Review). */
   board: string | null;
+  /**
+   * Jira only: labels whose issues this factory takes; `null` takes every issue no other factory's
+   * labels claim. Absent from servers that predate label filters, which means `null`.
+   */
+  labels?: string[] | null;
+  /** ISO timestamp; when two label filters match one issue, the older binding takes it. */
+  createdAt?: string;
 }
 
-async function requestIntakeBindings(baseUrl: string, init?: RequestInit): Promise<IntakeSourceBinding[]> {
-  const res = await fetch(`${baseUrl}/web/intake/bindings`, {
+/** Another factory's binding that already takes some of the requested issues. */
+export interface IntakeBindingConflict {
+  factoryProjectId: string;
+  /** Overlapping labels, or `null` when both bindings would take all issues. */
+  labels: string[] | null;
+}
+
+/** The server refused a binding because another factory already takes some of the same issues. */
+export class IntakeBindingConflictError extends Error {
+  readonly conflicts: IntakeBindingConflict[];
+
+  constructor(message: string, conflicts: IntakeBindingConflict[]) {
+    super(message);
+    this.name = 'IntakeBindingConflictError';
+    this.conflicts = conflicts;
+  }
+}
+
+async function requestIntakeBindings(baseUrl: string, init?: RequestInit, query = ''): Promise<IntakeSourceBinding[]> {
+  const res = await fetch(`${baseUrl}/web/intake/bindings${query}`, {
     headers: { Accept: 'application/json', ...(init?.body ? { 'content-type': 'application/json' } : {}) },
     credentials: 'include',
     ...init,
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
+    let conflicts: IntakeBindingConflict[] | undefined;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as { error?: string; message?: string; conflicts?: IntakeBindingConflict[] };
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
+      if (body.error === 'binding_conflict') conflicts = body.conflicts ?? [];
     } catch {
       /* ignore non-JSON */
     }
-    throw new Error(message);
+    throw conflicts ? new IntakeBindingConflictError(message, conflicts) : new Error(message);
   }
   const { bindings } = (await res.json()) as { bindings?: IntakeSourceBinding[] };
   return bindings ?? [];
@@ -166,10 +193,29 @@ export async function saveIntakeLabelRoute(
   return requestIntakeLabelRoutes(baseUrl, '', { method: 'PUT', body: JSON.stringify(route) });
 }
 
-/** Route one source to a Factory project, or clear it with `factoryProjectId: null`. */
+/**
+ * Route one source to a Factory project, or clear it with `factoryProjectId: null`. Jira sources
+ * can feed several factories, each with its own `labels` filter (omitted keeps the current one);
+ * remove a Jira binding with {@link deleteIntakeBinding}. Rejects with
+ * {@link IntakeBindingConflictError} when another factory already takes the same issues.
+ */
 export async function saveIntakeBinding(
   baseUrl: string,
-  binding: { integrationId: string; sourceId: string; factoryProjectId: string | null; board?: string | null },
+  binding: {
+    integrationId: string;
+    sourceId: string;
+    factoryProjectId: string | null;
+    board?: string | null;
+    labels?: string[] | null;
+  },
 ): Promise<IntakeSourceBinding[]> {
   return requestIntakeBindings(baseUrl, { method: 'PUT', body: JSON.stringify(binding) });
+}
+
+/** Remove one factory's binding of a source, leaving other factories' bindings of it in place. */
+export async function deleteIntakeBinding(
+  baseUrl: string,
+  binding: { integrationId: string; sourceId: string; factoryProjectId: string },
+): Promise<IntakeSourceBinding[]> {
+  return requestIntakeBindings(baseUrl, { method: 'DELETE' }, `?${new URLSearchParams(binding)}`);
 }

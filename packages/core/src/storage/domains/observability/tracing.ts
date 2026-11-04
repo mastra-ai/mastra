@@ -153,9 +153,10 @@ export const spanRecordSchema = z
 
     // Native span fields. Copied from the exported span as supplied; a value the producer did not
     // set is stored as null, never derived on write. On read, `getSpan` / `getTrace` fall back to
-    // the `attributes` strings for `model` and `provider` when the column is null, so rows written
-    // before the columns agree with the trace and span queries. `outcome` / `stopReason` values
-    // follow the shared outcome contract and are not validated here.
+    // the `attributes` strings for `model` and `provider` when the column is null, matching trace
+    // queries and span-query results, which use the same fallback. Span-query filters read only the
+    // columns. `outcome` / `stopReason` values follow the shared outcome contract and are not
+    // validated here.
     externalParentSpanId: z
       .string()
       .nullish()

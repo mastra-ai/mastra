@@ -15,10 +15,11 @@ import type { ObservabilityContext, Span } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
+import { HAND_BACK_STATE_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import type { Step, SuspendOptions } from '../step';
-import { getStepResult } from '../step';
+import { getStepResult, getStepResultAsync } from '../step';
 import type {
   ExecutionContext,
   OutputWriter,
@@ -208,6 +209,7 @@ export async function executeStep(
     options: {
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
+      outcome: null,
       entityType: EntityType.WORKFLOW_STEP,
       entityId: step.id,
       input: inputData,
@@ -266,7 +268,7 @@ export async function executeStep(
     await engine.endStepSpan({
       span: stepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
-      endOptions: { attributes: { status: 'canceled' } },
+      endOptions: { ...workflowTermination({ status: 'canceled' }), attributes: { status: 'canceled' } },
     });
     const canceledResult = {
       ...omitPriorCompletionFields(stepInfo),
@@ -313,6 +315,7 @@ export async function executeStep(
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
             errorOptions: {
+              ...workflowTermination(workflowResult),
               error:
                 workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
               attributes: { status: 'failed' },
@@ -328,6 +331,7 @@ export async function executeStep(
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
             endOptions: {
+              ...workflowTermination(workflowResult),
               output,
               attributes: { status: workflowResult.status },
             },
@@ -392,6 +396,7 @@ export async function executeStep(
         suspendedPaths: Record<string, number[]>;
         resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
         stateUpdate: any;
+        stateBase?: Record<string, unknown>;
         requestContextUpdate: Record<string, any> | null;
       } = {
         suspendedPaths: {},
@@ -410,7 +415,7 @@ export async function executeStep(
           : wrapMastra(engine.mastra, { currentSpan: stepSpan })
         : undefined;
 
-      let completedNestedOutput: { found: boolean; value?: unknown } = { found: false };
+      let completedNestedOutput: { found: boolean; value?: unknown; state?: unknown } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
         const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -418,11 +423,21 @@ export async function executeStep(
           runId: persistedNestedRunId,
         });
         if (nestedSnapshot?.status === 'success') {
-          completedNestedOutput = { found: true, value: nestedSnapshot.result };
+          completedNestedOutput = { found: true, value: nestedSnapshot.result, state: nestedSnapshot.value };
         }
       }
 
       if (completedNestedOutput.found) {
+        // The finished run isn't run again, so its state changes are merged as its run would have.
+        const { stateData, validationError: stateValidationError } = await validateStepStateData({
+          stateData: completedNestedOutput.state,
+          step,
+          validateInputs: engine.options?.validateInputs ?? true,
+        });
+        if (stateValidationError) {
+          throw stateValidationError;
+        }
+        contextMutations.stateUpdate = stateData;
         if (engine.requiresDurableContextSerialization()) {
           contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
         }
@@ -434,6 +449,19 @@ export async function executeStep(
           nestedWflowStepPaused: !!perStep,
         };
       }
+
+      const setState = async (state: any, base?: Record<string, unknown>) => {
+        const { stateData, validationError: stateValidationError } = await validateStepStateData({
+          stateData: state,
+          step,
+          validateInputs: engine.options?.validateInputs ?? true,
+        });
+        if (stateValidationError) {
+          throw stateValidationError;
+        }
+        contextMutations.stateUpdate = stateData;
+        contextMutations.stateBase = base;
+      };
 
       const stepParams = {
         runId: nestedRunId ?? runId,
@@ -447,24 +475,14 @@ export async function executeStep(
         actor,
         inputData,
         state: executionContext.state,
-        setState: async (state: any) => {
-          const { stateData, validationError: stateValidationError } = await validateStepStateData({
-            stateData: state,
-            step,
-            validateInputs: engine.options?.validateInputs ?? true,
-          });
-          if (stateValidationError) {
-            throw stateValidationError;
-          }
-          // executionContext.state = stateData;
-          contextMutations.stateUpdate = stateData;
-        },
+        setState: (state: any) => setState(state),
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
         ...createObservabilityContext({ currentSpan: stepSpan }),
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
+        getStepResultAsync: getStepResultAsync.bind(null, stepResults),
         suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
@@ -519,7 +537,9 @@ export async function executeStep(
             : undefined,
         // Only pass restart data if this step is part of activeStepsPath
         // This prevents pending nested workflows from trying to restart instead of start
-        restart: !!restart?.activeStepsPath?.[step.id],
+        // A foreach item's nested run gets a fresh id unless one was recorded, so an item that was
+        // running at the crash has no stored run to restart and starts over instead (COR-1501).
+        restart: !!restart?.activeStepsPath?.[step.id] && (foreachIndex === undefined || !!persistedNestedRunId),
         timeTravel:
           timeTravelSteps.length > 0
             ? {
@@ -531,6 +551,7 @@ export async function executeStep(
             : undefined,
         [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
+        [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
         outputWriter,
@@ -642,6 +663,7 @@ export async function executeStep(
       span: stepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
       endOptions: {
+        ...workflowTermination(execResults),
         output: execResults.output,
         attributes: {
           status: execResults.status,
@@ -662,12 +684,15 @@ export async function executeStep(
   return {
     result: stepResult,
     stepResults: { [step.id]: stepResult },
-    mutableContext: engine.buildMutableContext({
-      ...executionContext,
-      state: stepRetryResult.ok
-        ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
-        : executionContext.state,
-    }),
+    mutableContext: {
+      ...engine.buildMutableContext({
+        ...executionContext,
+        state: stepRetryResult.ok
+          ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
+          : executionContext.state,
+      }),
+      stateBase: stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateBase : undefined,
+    },
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps
     // the original reference and never reads this field, so serializing

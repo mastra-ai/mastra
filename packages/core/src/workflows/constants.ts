@@ -5,6 +5,10 @@ export const PUBSUB_SYMBOL = Symbol('pubsub');
 // Symbol used to pass stream format preferences through step context.
 export const STREAM_FORMAT_SYMBOL = Symbol('stream_format');
 
+// Symbol used to give a nested workflow step's run a `setState` that hands back its state with
+// the state its changes are relative to, so they're applied to the parent's state then.
+export const HAND_BACK_STATE_SYMBOL = Symbol('hand_back_state');
+
 // Abort reason used when workflow code explicitly cancels a run.
 export const WORKFLOW_CANCELLED_SYMBOL = Symbol('workflow_cancelled');
 

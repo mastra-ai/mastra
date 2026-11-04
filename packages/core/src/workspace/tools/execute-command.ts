@@ -64,27 +64,20 @@ export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
   ...executeCommandWithBackgroundSchema.shape,
 });
 
+/** A command whose final pipeline stage is `tail`, e.g. `make test 2>&1 | tail -20`. */
+const TRAILING_TAIL_PIPE = /(?:^|[^|])\|\s*tail(?:\s[^|;&]*)?$/;
+
 /**
- * Extract `| tail -N` or `| tail -n N` from the end of a command.
- * LLMs are trained to pipe to tail for long outputs, but this prevents streaming —
- * the user sees nothing until the command finishes. By stripping the tail pipe and
- * applying it programmatically afterward, all output streams in real time while
- * the final result sent to the model is still truncated.
- *
- * Returns the cleaned command and extracted tail line count (if any).
+ * POSIX shells report a pipeline's status from its last command, so `cmd | tail -N` exits 0 even
+ * when `cmd` fails. Enable `pipefail` (where the shell supports it) for pipelines ending in `tail`
+ * so the upstream failure is reported. `tail` reads all of its input, so upstream commands are
+ * not cut off by SIGPIPE. LocalSandbox on Windows runs commands through cmd.exe, which has no
+ * `set -o`.
  */
-function extractTailPipe(command: string): { command: string; tail?: number } {
-  const match = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
-  if (match) {
-    const lines = Math.abs(parseInt(match[1]!, 10));
-    if (lines > 0) {
-      return {
-        command: command.replace(/\|\s*tail\s+(?:-n\s+)?-?\d+\s*$/, '').trim(),
-        tail: lines,
-      };
-    }
-  }
-  return { command };
+function reportUpstreamPipelineFailure(command: string, sandboxProvider: string): string {
+  if (sandboxProvider === 'local' && process.platform === 'win32') return command;
+  if (!TRAILING_TAIL_PIPE.test(command.trim())) return command;
+  return `(set -o pipefail) 2>/dev/null && set -o pipefail; ${command}`;
 }
 
 const ABORTED_COMMAND_NOTE =
@@ -117,20 +110,11 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
-  let { command, cwd, tail } = input;
+  let { command } = input;
+  const { cwd, tail } = input;
   const timeout = input.timeout != null ? (input.timeout as number) * 1000 : undefined;
   const background = input.background as boolean | undefined;
   const { workspace, sandbox } = requireSandbox(context);
-
-  // Extract tail pipe from command so output can stream in real time
-  if (!background) {
-    const extracted = extractTailPipe(command);
-    command = extracted.command;
-    // Extracted tail overrides schema tail param (explicit pipe intent takes priority)
-    if (extracted.tail != null) {
-      tail = extracted.tail;
-    }
-  }
 
   // Lazy browser launch and CDP URL injection for browser CLI commands
   const browser = workspace.browser;
@@ -285,7 +269,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
   let abortedWhenSettled = false;
   try {
     const result = await sandbox
-      .executeCommand(command, [], {
+      .executeCommand(reportUpstreamPipelineFailure(command, sandbox.provider), [], {
         timeout: timeout ?? undefined,
         cwd: cwd ?? undefined,
         abortSignal: context?.abortSignal, // foreground processes use agent's abort signal

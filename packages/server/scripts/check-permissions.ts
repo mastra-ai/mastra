@@ -1,5 +1,6 @@
 /**
- * Checks if permissions.generated.ts is up-to-date with SERVER_ROUTES.
+ * Checks if permissions.generated.ts is up-to-date with the routes the package can serve
+ * (SERVER_ROUTES plus the opt-in routes).
  *
  * This script:
  * 1. Generates permissions and compares with existing file
@@ -10,7 +11,7 @@
 
 import * as fs from 'node:fs';
 
-import { SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
+import { SERVER_ROUTES, OPT_IN_ROUTES } from '../src/server/server-adapter/routes/index.js';
 import { getEffectivePermission } from '../src/server/server-adapter/routes/permissions.js';
 import { OUTPUT_PATH, derivePermissionData, generatePermissionFileContent } from './permission-generator.js';
 
@@ -22,7 +23,7 @@ const generatedPermissions = new Set(data.permissions);
 const runtimePermissions = new Set<string>();
 const mismatches: string[] = [];
 
-for (const route of SERVER_ROUTES) {
+for (const route of [...SERVER_ROUTES, ...OPT_IN_ROUTES]) {
   if (route.method === 'ALL') continue;
 
   const runtimePerm = getEffectivePermission(route);

@@ -13,7 +13,6 @@ import type {
   TraceCustomColumn,
   TraceOptionalColumn,
 } from '../trace-list-columns';
-import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import {
   Dialog,
@@ -40,6 +39,7 @@ const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   duration: 'Duration',
   traceCount: 'Messages',
   timeToFirstChunk: 'Time to first chunk',
+  timeToFirstToken: 'Time to first token',
   endTime: 'End',
   environment: 'Environment',
   model: 'Model',
@@ -121,15 +121,10 @@ export function TraceColumnsMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenu.Trigger
-          disabled={disabled}
-          render={
-            <Button variant="ghost" size="md" icon={<Columns3Icon aria-hidden />}>
-              Columns
-            </Button>
-          }
-        />
-        <DropdownMenu.Content align="end" className="min-w-56">
+        <DropdownMenu.Trigger disabled={disabled} size="icon-sm" tooltip="Columns">
+          <Columns3Icon aria-hidden />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" className="min-w-56">
           <DropdownMenu.Label>Standard columns</DropdownMenu.Label>
           {catalog.standardColumns.map(column => (
             <DropdownMenu.CheckboxItem
@@ -228,8 +223,8 @@ export function TraceColumnsMenu({
                       setMetadataError(undefined);
                     }}
                     allowCustomValue
-                    placeholder="Select a metadata key…"
-                    searchPlaceholder="Search metadata keys…"
+                    placeholder="Select a metadata key"
+                    searchPlaceholder="Search metadata keys"
                     emptyText="No metadata keys observed. Type one to add it."
                   />
                   <FieldError>{metadataError}</FieldError>

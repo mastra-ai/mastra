@@ -3,6 +3,9 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
+import { workLaneForRole } from '../boards/legacy-plan-role.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
@@ -28,7 +31,7 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.js';
@@ -72,7 +75,8 @@ export interface FactorySessionToolDependencies {
     | 'listSessionSubscriptions'
     | 'listWorkItemSubscribers'
   >;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   auditRecorder: AuditRecorder;
   intake?: Pick<IntakeStorage, 'getConfig'>;
   /** The browser Start's coordinator; absent until the Factory runtime is ready. */
@@ -93,7 +97,7 @@ function startErrorMessage(error: unknown): string | null {
   return null;
 }
 
-function workItemLabel(item: WorkItemRow): string {
+function workItemLabel(item: Card): string {
   const number = workItemNumber(item);
   return number === null ? `"${item.title}"` : `#${number}`;
 }
@@ -381,8 +385,11 @@ export function createFactorySessionTools(
     const item = await findWorkItem(deps.workItems, scope, workItem);
     if (!item) throw workItemNotFound(workItem);
     const label = workItemLabel(item);
-    const board = deps.boards.get(boardForWorkItem(item));
-    if (!board?.phaseForRole(role)) throw new Error(`${label}'s board has no ${role} role.`);
+    const board = (await toBoardSource(deps.boards).load(scope)).get(boardForWorkItem(item));
+    // Work's old `plan` role still names Planning, though no phase runs in a `plan` context any more.
+    if (!workLaneForRole(board, role) && !board?.phaseForRole(role)) {
+      throw new Error(`${label}'s board has no ${role} role.`);
+    }
     const seated = item.sessions[role];
     if (seated) {
       throw new Error(
@@ -548,7 +555,7 @@ export function createFactorySessionTools(
     };
   }
 
-  async function resolveRepository(sourceControl: SourceControlStorageHandle, item: WorkItemRow): Promise<string> {
+  async function resolveRepository(sourceControl: SourceControlStorageHandle, item: Card): Promise<string> {
     const intakeConfig = await deps.intake?.getConfig({ orgId: scope.orgId, integrationIds: ['linear'] });
     const repository = await resolveWorkItemRepository({
       sourceControl,

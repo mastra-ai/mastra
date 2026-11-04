@@ -26,6 +26,12 @@ import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-d
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
+import {
+  activeBrowserGeneration,
+  closeActiveBrowser,
+  discardBrowser,
+  replaceActiveBrowser,
+} from './browser-lifecycle.js';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
 import { initialMessageOptions, pipedInputConflict, takeInitialPrompt, takePackFlag } from './initial-prompt.js';
 import {
@@ -42,7 +48,7 @@ import {
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
-import { getCurrentVersion } from './version.js';
+import { getCurrentVersion, isVersionCommand } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
@@ -265,9 +271,16 @@ async function bootLocal(
   if (settings.browser.enabled) {
     // Captured once: the Stagehand instance is fixed at launch and shared by every thread.
     const chatModelId = session.model.get();
+    // The TUI is already running, so /browser can replace the browser while this one loads.
+    const startGeneration = activeBrowserGeneration();
     void loadBrowser(chatModelId)
-      .then(browser => {
+      .then(async browser => {
         if (!browser) return;
+        if (activeBrowserGeneration() !== startGeneration) {
+          await discardBrowser(browser);
+          return;
+        }
+        if (!(await replaceActiveBrowser(browser))) return;
         controller.setBrowser(browser);
         void session.state
           .set({
@@ -282,6 +295,10 @@ async function bootLocal(
 
 const asyncCleanup = (): Promise<void> => {
   cleanupPromise ??= (async () => {
+    // A local browser is a detached process holding its profile lock; left
+    // running, it breaks the next launch on that profile. Start closing it first
+    // so it finishes inside the shutdown deadline whatever the steps below take.
+    const browserClosed = closeActiveBrowser();
     releaseAllThreadLocks();
     // Release thread claims before the slow teardown below, so a restarted
     // session can claim its thread (and peers can reach it) right away.
@@ -306,7 +323,7 @@ const asyncCleanup = (): Promise<void> => {
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
     remoteSession?.disconnect();
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), browserClosed]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
@@ -379,14 +396,18 @@ process.on('exit', () => {
   }
   // Belt-and-suspenders: always write terminal reset sequences directly,
   // regardless of whether tui.stop() succeeded. Writing them twice is harmless
-  // but missing them leaves the terminal in a corrupted state.
+  // but missing them leaves the terminal in a corrupted state. Skipped when
+  // stdout isn't a terminal, so piped output (`mastracode --version | cat`)
+  // stays clean.
   try {
-    process.stdout.write(
-      '\x1b[?2004l' + // disable bracketed paste
-        '\x1b[<u' + // pop kitty keyboard protocol
-        '\x1b[>4;0m' + // disable modifyOtherKeys
-        '\x1b[?25h', // show cursor
-    );
+    if (process.stdout.isTTY) {
+      process.stdout.write(
+        '\x1b[?2004l' + // disable bracketed paste
+          '\x1b[<u' + // pop kitty keyboard protocol
+          '\x1b[>4;0m' + // disable modifyOtherKeys
+          '\x1b[?25h', // show cursor
+      );
+    }
     if (process.stdin.setRawMode) {
       process.stdin.setRawMode(false);
     }
@@ -504,6 +525,11 @@ const handleFatalError = createOneShotFatalErrorHandler((error: unknown): void =
 });
 
 async function main() {
+  if (isVersionCommand(process.argv)) {
+    process.stdout.write(`${getCurrentVersion()}\n`);
+    return;
+  }
+
   if (process.argv[2] === 'plugin') {
     return pluginMain(process.argv.slice(3));
   }

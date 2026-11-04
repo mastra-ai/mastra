@@ -309,9 +309,10 @@ describe('create (platform provisioning)', () => {
     expect(clack.select).toHaveBeenCalledWith({
       message: 'Where should your Factory project run?',
       options: [
-        { value: 'eu', label: '🇪🇺 eu' },
         { value: 'us', label: '🇺🇸 us' },
+        { value: 'eu', label: '🇪🇺 eu' },
       ],
+      initialValue: 'us',
     });
     expect(platform.createServerProject).toHaveBeenCalledWith({
       token: 'wos-token',
