@@ -1,8 +1,8 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
-Added an experimental `storageVersion` workflow option. With `storageVersion: 2`, a run saves only what changed at each step instead of rewriting the whole run, and keeps less of it in memory. This cuts storage writes and memory use for long workflows and loops, including loops whose state grows every iteration.
+Added an experimental `storageVersion` workflow option. With `storageVersion: 2`, a run saves only what changed at each step instead of rewriting the whole run. This cuts storage writes for long workflows and loops, including loops whose state grows every iteration.
 
 ```ts
 const workflow = createWorkflow({
