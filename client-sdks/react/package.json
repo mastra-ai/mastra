@@ -46,6 +46,16 @@
         "default": "./dist/chat/index.cjs"
       }
     },
+    "./gen-ui": {
+      "import": {
+        "types": "./dist/gen-ui/index.d.ts",
+        "default": "./dist/gen-ui/index.js"
+      },
+      "require": {
+        "types": "./dist/gen-ui/index.d.ts",
+        "default": "./dist/gen-ui/index.cjs"
+      }
+    },
     "./hooks/shared": null,
     "./hooks/*": {
       "import": {
