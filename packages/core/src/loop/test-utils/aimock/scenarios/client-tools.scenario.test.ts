@@ -194,4 +194,119 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
     // above still pass (issue #23295 — durable only).
     expect(requests.length).toBe(1);
   });
+
+  // Technical: client tools arrive over HTTP with a plain JSON Schema inputSchema. Converting
+  // that JSON Schema to Zod turned every anyOf into intersection(any, union), which the OpenAI
+  // compat layer then closed into an empty object, so the model was offered `{}` instead of
+  // the union and could only send empty values.
+  it('offers the model every branch of a union in a JSON Schema client tool', async () => {
+    const action = (op: string, fields: Record<string, unknown>, required: string[] = []) => ({
+      type: 'object',
+      properties: { op: { type: 'string', enum: [op] }, ...fields },
+      required: ['op', ...required],
+    });
+    // Shape of a client tool after @mastra/client-js serializes it for the request body.
+    const editDocument = {
+      id: 'edit-document',
+      description: 'Apply edits to a document',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          edits: {
+            type: 'array',
+            items: {
+              anyOf: [
+                action('insert', { text: { type: 'string' }, at: { type: 'integer' } }, ['text']),
+                action('delete', { from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+              ],
+            },
+          },
+          cursor: { anyOf: [{ type: 'string' }, { type: 'integer' }] },
+        },
+        required: ['edits', 'cursor'],
+      },
+      renderOnly: true,
+    };
+    const args = {
+      edits: [
+        { op: 'insert', text: 'Hi', at: 0 },
+        { op: 'delete', from: 2, to: 4 },
+      ],
+      cursor: 3,
+    };
+
+    const { chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Insert Hi at the start and delete characters 2 to 4',
+      clientTools: { 'edit-document': editDocument as any },
+      stopWhen: stepCountIs(3),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call-edit', name: 'edit-document', arguments: args }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-edit', hasToolResult: true }, { content: 'Edited.' });
+      },
+    });
+
+    const tool = (requests[0]?.body?.tools ?? []).find((t: any) => t.function.name === 'edit-document');
+    const parameters = tool?.function.parameters;
+    const branches = parameters?.properties?.edits?.items?.anyOf ?? [];
+    expect(branches.map((b: any) => b.properties?.op?.enum)).toEqual([['insert'], ['delete']]);
+    expect(Object.keys(branches[0].properties)).toEqual(['op', 'text', 'at']);
+    expect(Object.keys(branches[1].properties)).toEqual(['op', 'from', 'to']);
+    expect(parameters?.properties?.cursor?.anyOf?.map((b: any) => b.type)).toEqual(['string', 'integer']);
+
+    // A call that matches the union is accepted and keeps its values.
+    const toolCall = (chunks ?? []).find((c: any) => c.type === 'tool-call' && c.payload?.toolCallId === 'call-edit');
+    expect((toolCall as any)?.payload?.args).toEqual(args);
+    expect((chunks ?? []).some((c: any) => c.type === 'tool-error')).toBe(false);
+    expect(
+      (chunks ?? []).find((c: any) => c.type === 'tool-result' && c.payload?.toolCallId === 'call-edit'),
+    ).toMatchObject({ payload: { result: { acknowledged: true } } });
+  });
+
+  it('rejects client tool arguments that match no branch of a JSON Schema union', async () => {
+    const pickColor = {
+      id: 'pick-color',
+      description: 'Pick a color',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          color: {
+            anyOf: [
+              { type: 'object', properties: { hex: { type: 'string' } }, required: ['hex'] },
+              { type: 'object', properties: { name: { type: 'string', enum: ['red', 'blue'] } }, required: ['name'] },
+            ],
+          },
+        },
+        required: ['color'],
+      },
+      renderOnly: true,
+    };
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Pick green',
+      clientTools: { 'pick-color': pickColor as any },
+      stopWhen: stepCountIs(2),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call-color', name: 'pick-color', arguments: { color: { name: 'green' } } }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Could not pick that color.' });
+      },
+    });
+
+    const result = (chunks ?? []).find(
+      (c: any) => (c.type === 'tool-result' || c.type === 'tool-error') && c.payload?.toolCallId === 'call-color',
+    ) as any;
+    expect(result?.payload?.result).not.toEqual({ acknowledged: true });
+    expect(JSON.stringify(result?.payload)).toMatch(/validation failed/i);
+  });
 });
