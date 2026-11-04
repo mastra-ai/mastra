@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
@@ -23,9 +24,14 @@ export function RunErrorCredential({ entryId, modelId }: { entryId: string; mode
   const modelCredential = useModelCredential(failedModelId === activeModelId ? failedModelId : undefined);
   if (!modelCredential || transcript.transcript.entries.at(-1)?.id !== entryId) return null;
   return (
-    <Txt variant="body-sm" tone="muted" className="flex items-center gap-1.5">
-      <HolderBadge holder={modelCredential.holder} />
-      Runs on {modelCredential.credential} · {modelCredential.holderDescription}
+    <Txt variant="body-sm" tone="muted">
+      <Metadata>
+        <Metadata.Item className="gap-1.5">
+          <HolderBadge holder={modelCredential.holder} />
+          Runs on {modelCredential.credential}
+        </Metadata.Item>
+        <Metadata.Item>{modelCredential.holderDescription}</Metadata.Item>
+      </Metadata>
     </Txt>
   );
 }

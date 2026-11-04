@@ -308,7 +308,9 @@ describe('storage v2 writes that overlap', () => {
                     ...(isDeepStrictEqual(result.result, scenario.expected)
                       ? []
                       : [`read back ${JSON.stringify(result.result)}`]),
-                    ...wrongSteps(result.steps as any, scenario.expected).map(problem => `result: ${problem}`),
+                    ...wrongSteps(await (result.steps as any)(), scenario.expected).map(
+                      problem => `result: ${problem}`,
+                    ),
                     ...wrongSteps(stored?.steps, scenario.expected).map(problem => `stored: ${problem}`),
                     ...(isDeepStrictEqual(stored?.state, scenario.expectedState)
                       ? []

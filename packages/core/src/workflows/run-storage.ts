@@ -31,7 +31,7 @@ export interface RunStorage {
    * What the store reported for the state of a snapshot loaded by `loadForResume` or `loadFull`:
    * the run's `lastSeq` it is as of, and its `statePatchBytes`.
    */
-  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number } | undefined;
+  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number; runToken?: string } | undefined;
   /**
    * The state the run's current drive started from: as of its latest checkpoint, or as of the
    * resume that started the drive. Undefined for v1, or when the run or that version isn't stored.
@@ -146,7 +146,7 @@ class RunStorageV1 implements RunStorage {
 // Keyed by the loaded snapshot, not the RunStorage: the parent-claim path loads a parent's
 // snapshot through a throwaway RunStorage, and the parent Run's own RunStorage releases it.
 const claimedSeqs = new WeakMap<WorkflowRunState, number>();
-const storedStates = new WeakMap<WorkflowRunState, { seq: number; patchBytes: number }>();
+const storedStates = new WeakMap<WorkflowRunState, { seq: number; patchBytes: number; runToken?: string }>();
 
 class RunStorageV2 implements RunStorage {
   readonly #workflowName: string;
@@ -172,7 +172,7 @@ class RunStorageV2 implements RunStorage {
     }
     const snapshot = { ...run.header, context, value: run.state } as WorkflowRunState;
     claimedSeqs.set(snapshot, run.lastSeq);
-    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes });
+    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes, runToken: run.runToken });
     return snapshot;
   }
 
@@ -212,7 +212,7 @@ class RunStorageV2 implements RunStorage {
     });
     if (!run) return null;
     const snapshot = { ...run.header, context: run.steps, value: run.state } as WorkflowRunState;
-    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes });
+    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes, runToken: run.runToken });
     return snapshot;
   }
 
@@ -233,7 +233,7 @@ class RunStorageV2 implements RunStorage {
     });
   }
 
-  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number } | undefined {
+  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number; runToken?: string } | undefined {
     return storedStates.get(snapshot);
   }
 

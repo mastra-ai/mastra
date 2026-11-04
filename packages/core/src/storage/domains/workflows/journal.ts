@@ -58,6 +58,8 @@ export type StepResultSummary = Pick<
 export type StoredWorkflowRunHeader = {
   header: WorkflowRunHeader;
   lastSeq: number;
+  /** Opaque stored-run identity, stable until deletion. Distinguishes reused public run IDs. */
+  runToken?: string;
   /**
    * The state version the run's current drive started from: the `state` or `state-base` entry its
    * latest checkpoint wrote, or the `seq` a later append passed as `startStateSeq` (a resumed drive).

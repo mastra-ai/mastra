@@ -101,7 +101,7 @@ it.each(['board', 'list'])(
 
     await user.click(within(card).getByRole('button', { name: 'Details for Repair source facts' }));
     const details = await screen.findByRole('dialog', { name: 'Repair source facts' });
-    expect(details).toHaveTextContent('acme/app#73 · reporter');
+    expect(within(details).getByText('reporter').closest('[data-slot="metadata"]')).toHaveTextContent('acme/app#73');
     expect(within(details).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(details).getByText('customer-visible')).toBeVisible();
     expect(within(details).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(
