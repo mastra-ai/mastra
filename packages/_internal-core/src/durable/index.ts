@@ -61,6 +61,40 @@ export function expandDurableSteps<T>(steps: T[]): T[] {
   });
 }
 
+export type DurableToolResultPart = { type: 'tool-result'; toolCallId?: string; toolName?: string; dynamic?: boolean };
+
+/** A step as `stopWhen` sees it: tool results are the AI SDK parts from its content. */
+export type DurableStopConditionStep<T> = Omit<T, 'toolResults'> & {
+  toolResults: DurableToolResultPart[];
+  staticToolResults: DurableToolResultPart[];
+  dynamicToolResults: DurableToolResultPart[];
+};
+
+function isToolResultPart(part: unknown): part is DurableToolResultPart {
+  return (part as { type?: unknown } | null)?.type === 'tool-result';
+}
+
+/**
+ * Step records for a user's `stopWhen`. It is an AI SDK stop condition, so each
+ * step's tool results must be the AI SDK tool-result parts from its content, as
+ * the default loop builds them (#28519). The records themselves keep tool-call
+ * payloads in `toolResults`, which compaction reads. Records written before
+ * steps carried content are returned as stored.
+ */
+export function durableStopConditionSteps<T>(steps: T[]): Array<DurableStopConditionStep<T> | T> {
+  return expandDurableSteps(steps).map(step => {
+    const content = (step as { content?: unknown } | null)?.content;
+    if (!Array.isArray(content)) return step;
+    const toolResults = content.filter(isToolResultPart);
+    return {
+      ...step,
+      toolResults,
+      staticToolResults: toolResults.filter(part => part.dynamic === false),
+      dynamicToolResults: toolResults.filter(part => part.dynamic === true),
+    };
+  });
+}
+
 export function buildDurableStepContent(state: DurableStepFinishState): unknown[] {
   const step = state.accumulatedSteps.at(-1) as any;
   if (!step) return [];
