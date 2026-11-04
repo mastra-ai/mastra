@@ -6189,16 +6189,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
     });
 
-    it('files a pull request on an issue still in Triage, which stays there: Work has no Triage → PR review move', async () => {
+    it('gives a pull request for an issue in Triage its own card in PR review, and reviews it right away', async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'triage');
 
       await h.ingest(openedPullRequest(17, 'Fixes #42'));
 
       const cards = await h.cards();
-      expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['triage'] });
-      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards).toHaveLength(2);
+      const issueAfter = cards.find(card => card.id === issue.id)!;
+      expect(issueAfter).toMatchObject({ stages: ['triage'], revision: issue.revision });
+      expect(sourceTypes(issueAfter)).toEqual(['issue']);
+      const own = cards.find(card => card.id !== issue.id)!;
+      expect(own).toMatchObject({ board: 'work', stages: ['pr-review'] });
+      expect(sourceTypes(own)).toEqual(['pull-request']);
+      expect(await reviewsStarted(h, own.id)).toEqual([
+        expect.objectContaining({ decision: expect.objectContaining({ role: 'review', skillName: 'factory-review' }) }),
+      ]);
       expect(await reviewsStarted(h, issue.id)).toEqual([]);
     });
 

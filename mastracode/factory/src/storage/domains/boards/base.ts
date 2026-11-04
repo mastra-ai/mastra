@@ -200,8 +200,8 @@ export const REOPENED_ROUTE: StoredIntakeRouteInput = {
 
 /**
  * A pull request from someone with write access that closes an issue nobody has started work on
- * joins that issue's card, which goes to PR review. "Started" is the project's call: drop `triage`
- * from the phases to give a triaged issue's pull request its own card. Its condition stands on its
+ * joins that issue's card, which goes to PR review. Once the issue has left Intake, the pull request
+ * gets its own card in PR review instead; projects can widen the phases. Its condition stands on its
  * own, so it is tried first.
  */
 export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
@@ -212,7 +212,7 @@ export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
       { field: 'source.kind', operator: 'equals', value: 'pull_request' },
       { field: 'author.trusted', operator: 'equals', value: true },
       { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
-      { field: 'closedIssue.phase', operator: 'in', value: ['intake', 'triage'] },
+      { field: 'closedIssue.phase', operator: 'in', value: ['intake'] },
       { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },
     ],
   },

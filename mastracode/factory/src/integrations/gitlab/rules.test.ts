@@ -1638,16 +1638,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
     });
 
-    it('files a merge request on an issue still in Triage, which stays there', async () => {
+    it('gives a merge request for an issue in Triage its own card in PR review, and reviews it right away', async () => {
       const h = await harness();
       const issue = await h.issueCard('triage');
 
       await h.ingest(mergeRequest(17, 'Closes #42'));
 
       const cards = await h.cards();
-      expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['triage'] });
-      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards).toHaveLength(2);
+      const issueAfter = cards.find(card => card.id === issue.id)!;
+      expect(issueAfter).toMatchObject({ stages: ['triage'] });
+      expect(sourceTypes(issueAfter)).toEqual(['issue']);
+      const own = cards.find(card => card.id !== issue.id)!;
+      expect(own).toMatchObject({ board: 'work', stages: ['pr-review'] });
+      expect(sourceTypes(own)).toEqual(['pull-request']);
+      expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([
+        expect.objectContaining({ workItemId: own.id, decision: expect.objectContaining({ role: 'review' }) }),
+      ]);
     });
 
     const builderSession = {
