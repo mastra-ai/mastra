@@ -4,8 +4,8 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  findDeclarationLine,
   generateSourceMap,
+  indexDeclarationLines,
   parseModuleExports,
   SourceMapResolver,
 } from './package-docs-source-map';
@@ -88,21 +88,23 @@ describe('parseModuleExports', () => {
   });
 });
 
-describe('findDeclarationLine', () => {
+describe('indexDeclarationLines', () => {
   it('finds the declaration of the chunk identifier', () => {
-    const lines = [
-      'import { x } from "./x.js";',
-      'var Agent = class Agent extends MastraBase {',
-      '};',
-      'async function embed$1() {}',
-      'function createTool(opts) {}',
-      'const LIMIT = 3;',
-    ];
-    assert.equal(findDeclarationLine(lines, 'Agent'), 2);
-    assert.equal(findDeclarationLine(lines, 'embed$1'), 4);
-    assert.equal(findDeclarationLine(lines, 'createTool'), 5);
-    assert.equal(findDeclarationLine(lines, 'LIMIT'), 6);
-    assert.equal(findDeclarationLine(lines, 'n'), undefined);
+    const lines = indexDeclarationLines(
+      [
+        'import { x } from "./x.js";',
+        'var Agent = class Agent extends MastraBase {',
+        '};',
+        'async function embed$1() {}',
+        'function createTool(opts) {}',
+        'const LIMIT = 3;',
+      ].join('\n'),
+    );
+    assert.equal(lines.get('Agent'), 2);
+    assert.equal(lines.get('embed$1'), 4);
+    assert.equal(lines.get('createTool'), 5);
+    assert.equal(lines.get('LIMIT'), 6);
+    assert.equal(lines.get('n'), undefined);
   });
 });
 

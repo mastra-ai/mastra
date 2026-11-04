@@ -128,27 +128,34 @@ export function parseModuleExports(content: string): ModuleExport[] {
   return exports;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Both patterns only match at the start of a line (after `\n`), so they find top-level declarations.
+const DECLARATION_LINE_RE =
+  /(?<![^\n])(?:export\s+)?(?:declare\s+)?(?:(?:var|let|const)\s+([\w$]+)\s*=|(?:async\s+)?function\s*\*?\s*([\w$]+)\s*\(|(?:abstract\s+)?class\s+([\w$]+))/g;
+const TYPE_DECLARATION_RE =
+  /(?<![^\n])(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\*?|class|const|let|var|enum|namespace|interface|type)\s+([\w$]+)/g;
+
+/**
+ * Maps each identifier declared at the top level of `content` to the 1-indexed line of its first
+ * declaration. Built in one pass so looking up many exports in a large chunk stays linear.
+ */
+export function indexDeclarationLines(content: string): Map<string, number> {
+  const result = new Map<string, number>();
+  let line = 1;
+  let newline = content.indexOf('\n');
+  for (const match of content.matchAll(DECLARATION_LINE_RE)) {
+    while (newline !== -1 && newline < match.index) {
+      line++;
+      newline = content.indexOf('\n', newline + 1);
+    }
+    const name = match[1] ?? match[2] ?? match[3]!;
+    if (!result.has(name)) result.set(name, line);
+  }
+  return result;
 }
 
-/** Returns the 1-indexed line that declares `identifier` at the top level of `lines`, if any. */
-export function findDeclarationLine(lines: string[], identifier: string): number | undefined {
-  const name = escapeRegExp(identifier);
-  const pattern = new RegExp(
-    `^(?:export\\s+)?(?:declare\\s+)?(?:(?:var|let|const)\\s+${name}\\s*=|(?:async\\s+)?function\\s*\\*?\\s*${name}\\s*\\(|(?:abstract\\s+)?class\\s+${name}\\b)`,
-  );
-  const index = lines.findIndex(line => pattern.test(line));
-  return index === -1 ? undefined : index + 1;
-}
-
-/** Returns whether `.d.ts` content declares `identifier` itself (exported or not). */
-function declaresType(content: string, identifier: string): boolean {
-  const name = escapeRegExp(identifier);
-  return new RegExp(
-    `^(?:export\\s+)?(?:default\\s+)?(?:declare\\s+)?(?:abstract\\s+)?(?:async\\s+)?(?:function\\*?|class|const|let|var|enum|namespace|interface|type)\\s+${name}\\b`,
-    'm',
-  ).test(content);
+/** Lists the identifiers `.d.ts` content declares itself (exported or not). */
+function indexDeclaredTypes(content: string): Set<string> {
+  return new Set(Array.from(content.matchAll(TYPE_DECLARATION_RE), match => match[1]!));
 }
 
 type PublicExport = Exclude<ModuleExport, { kind: 'star' }> & { from: string };
@@ -164,7 +171,8 @@ export class SourceMapResolver {
   private readonly contents = new Map<string, string | null>();
   private readonly parsed = new Map<string, ModuleExport[]>();
   private readonly publicCache = new Map<string, Map<string, PublicExport>>();
-  private readonly linesCache = new Map<string, string[] | null>();
+  private readonly declarationLines = new Map<string, Map<string, number>>();
+  private readonly declaredTypes = new Map<string, Set<string>>();
 
   constructor(private readonly readFile: (file: string) => string | null = defaultReadFile) {}
 
@@ -200,13 +208,23 @@ export class SourceMapResolver {
     return result;
   }
 
-  lines(file: string): string[] | null {
-    let lines = this.linesCache.get(file);
-    if (lines === undefined) {
-      lines = this.read(file)?.split('\n') ?? null;
-      this.linesCache.set(file, lines);
+  /** Returns the 1-indexed line that declares `identifier` at the top level of `file`, if any. */
+  declarationLine(file: string, identifier: string): number | undefined {
+    let index = this.declarationLines.get(file);
+    if (!index) {
+      index = indexDeclarationLines(this.read(file) ?? '');
+      this.declarationLines.set(file, index);
     }
-    return lines;
+    return index.get(identifier);
+  }
+
+  private declaresType(file: string, identifier: string): boolean {
+    let index = this.declaredTypes.get(file);
+    if (!index) {
+      index = indexDeclaredTypes(this.read(file) ?? '');
+      this.declaredTypes.set(file, index);
+    }
+    return index.has(identifier);
   }
 
   private collectPublicExports(file: string, seen: Set<string>): Map<string, PublicExport> {
@@ -249,12 +267,11 @@ export class SourceMapResolver {
     if (depth > MAX_DEPTH || seen.has(key)) return undefined;
     seen.add(key);
 
-    const content = this.read(file);
-    if (content === null) return undefined;
+    if (this.read(file) === null) return undefined;
 
     for (const entry of this.exportsOf(file)) {
       if (entry.kind === 'star' || entry.name !== name) continue;
-      if (entry.kind === 'local') return declaresType(content, entry.local) ? file : undefined;
+      if (entry.kind === 'local') return this.declaresType(file, entry.local) ? file : undefined;
       const target = this.resolveDts(file, entry.source);
       if (!target) return undefined;
       if (entry.imported === '*') return target;
@@ -349,8 +366,7 @@ export function generateSourceMap(
         (hasIndexTypes && resolver.resolveTypes(indexTypes, name)) || (hasIndexTypes ? indexTypes : undefined);
       if (!types) continue;
 
-      const lines = resolver.lines(impl.file);
-      const line = impl.identifier === '*' || !lines ? undefined : findDeclarationLine(lines, impl.identifier);
+      const line = impl.identifier === '*' ? undefined : resolver.declarationLine(impl.file, impl.identifier);
 
       sourceMap.exports[name] = {
         types: toPackagePath(types),
