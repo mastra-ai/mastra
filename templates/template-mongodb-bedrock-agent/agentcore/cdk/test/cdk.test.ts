@@ -30,6 +30,8 @@ test('deploys the documentation agent with MongoDB settings, HTTP access, and Be
     ...config,
     runtimes: config.runtimes.map((runtime: Record<string, unknown>) => ({ ...runtime, codeLocation: sourceDir })),
   });
+  const mongodbSecretArn = spec.runtimes[0].envVars?.find(variable => variable.name === 'MONGODB_SECRET_ARN')?.value;
+  expect(mongodbSecretArn).toMatch(/^arn:[^:]+:secretsmanager:[^:]+:\d{12}:secret:.+$/);
   setSessionProjectRoot(resolve(__dirname, '../../..'));
 
   const app = new App();
@@ -45,7 +47,7 @@ test('deploys the documentation agent with MongoDB settings, HTTP access, and Be
     NetworkConfiguration: { NetworkMode: 'PUBLIC' },
     EnvironmentVariables: Match.objectLike({
       MONGODB_DATABASE: 'mastra_docs',
-      MONGODB_SECRET_ARN: 'arn:aws:secretsmanager:us-east-1:123456789012:secret:mastra-docs-mongodb-ABCDEF',
+      MONGODB_SECRET_ARN: mongodbSecretArn,
       AWS_REGION: 'us-east-1',
       EMBED_DIMENSION: '1024',
     }),
@@ -59,7 +61,7 @@ test('deploys the documentation agent with MongoDB settings, HTTP access, and Be
         {
           Effect: 'Allow',
           Action: 'secretsmanager:GetSecretValue',
-          Resource: 'arn:aws:secretsmanager:us-east-1:123456789012:secret:mastra-docs-mongodb-ABCDEF',
+          Resource: mongodbSecretArn,
         },
       ]),
     },
