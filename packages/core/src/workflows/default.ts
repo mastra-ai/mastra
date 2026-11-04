@@ -37,7 +37,7 @@ import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepU
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
 import { rebaseNestedState } from './nested-state';
-import { RunJournal } from './run-journal';
+import { lazyStepResults, RunJournal } from './run-journal';
 import type { StateBase } from './run-journal';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
@@ -90,6 +90,17 @@ export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
 const retryCountStorage = new AsyncLocalStorage<number>();
 /** The journal of the storage-v2 execution whose entries run in the current async context. */
 const executionJournal = new AsyncLocalStorage<RunJournal | undefined>();
+
+/** A step result without the `nestedRunId` metadata kept to find its nested run. */
+function withoutNestedRunId(stepResult: any): any {
+  if (!stepResult || typeof stepResult !== 'object' || Array.isArray(stepResult) || !('metadata' in stepResult)) {
+    return stepResult;
+  }
+  const { metadata, ...rest } = stepResult;
+  if (!metadata) return stepResult;
+  const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
+  return Object.keys(userMetadata).length > 0 ? { ...rest, metadata: userMetadata } : rest;
+}
 
 /**
  * Default implementation of the ExecutionEngine
@@ -616,75 +627,44 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     error?: Error | unknown,
     stepExecutionPath?: string[],
   ): Promise<TOutput> {
-    // Strip nestedRunId from metadata (internal tracking for nested workflow retrieval)
-    const cleanStepResults: Record<string, StepResult<any, any, any, any>> = {};
-    for (const [stepId, stepResult] of Object.entries(stepResults)) {
-      if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult) && 'metadata' in stepResult) {
-        const { metadata, ...rest } = stepResult as any;
-        if (metadata) {
-          const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
-          if (Object.keys(userMetadata).length > 0) {
-            cleanStepResults[stepId] = { ...rest, metadata: userMetadata };
-          } else {
-            cleanStepResults[stepId] = rest;
-          }
-        } else {
-          cleanStepResults[stepId] = stepResult;
-        }
-      } else {
-        cleanStepResults[stepId] = stepResult;
-      }
-    }
+    const { status, ...envelope } = this.fmtResultEnvelope(stepResults, lastOutput, error, stepExecutionPath);
+    return { status, steps: this.fmtResultSteps(stepResults, stepExecutionPath), ...envelope } as TOutput;
+  }
 
-    const base: FormattedWorkflowResult = {
+  /**
+   * `fmtReturnValue` for the result `execute` returns. On storage v2 its `steps` is a loader
+   * (`lazyStepResults`), so returning the result reads none of the steps the journal evicted.
+   */
+  async #fmtResult(
+    journal: RunJournal | undefined,
+    pubsub: PubSub,
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    lastOutput: StepResult<any, any, any, any>,
+    error?: Error | unknown,
+    stepExecutionPath?: string[],
+  ): Promise<any> {
+    if (!journal) return this.fmtReturnValue(pubsub, stepResults, lastOutput, error, stepExecutionPath);
+    const { status, ...envelope } = this.fmtResultEnvelope(stepResults, lastOutput, error, stepExecutionPath);
+    const steps = lazyStepResults(journal, stepResults, results => this.fmtResultSteps(results, stepExecutionPath));
+    return { status, steps, ...envelope };
+  }
+
+  /**
+   * Every field of a result except `steps`. Reads only `input` and results that aren't successful,
+   * which storage v2 never evicts.
+   */
+  protected fmtResultEnvelope(
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    lastOutput: StepResult<any, any, any, any>,
+    error?: Error | unknown,
+    stepExecutionPath?: string[],
+  ): Omit<FormattedWorkflowResult, 'steps'> {
+    const base: Omit<FormattedWorkflowResult, 'steps'> = {
       status: lastOutput.status,
-      steps: cleanStepResults,
-      input: cleanStepResults.input,
+      input: withoutNestedRunId(stepResults.input),
     };
-
     if (stepExecutionPath) {
       base.stepExecutionPath = stepExecutionPath;
-
-      // Create a shallow copy of steps to modify without affecting the original reference
-      const optimizedSteps: Record<string, StepResult<any, any, any, any>> = { ...cleanStepResults };
-
-      let previousOutput: unknown;
-      let hasPreviousOutput = 'input' in cleanStepResults;
-      if (hasPreviousOutput) {
-        previousOutput = cleanStepResults.input;
-      }
-
-      for (const stepId of stepExecutionPath) {
-        const originalStep = cleanStepResults[stepId];
-        if (!originalStep) continue;
-
-        // Clone step result to avoid mutating the original object in memory
-        const optimizedStep = { ...originalStep };
-
-        // Remove payload if it matches the output of the previous step (structural comparison
-        // handles deserialized data where reference equality would fail)
-        let payloadMatchesPrevious = false;
-        if (hasPreviousOutput) {
-          try {
-            payloadMatchesPrevious =
-              optimizedStep.payload === previousOutput || deepEqual(optimizedStep.payload, previousOutput);
-          } catch {
-            // Values that cannot be structurally compared are treated as not matching.
-          }
-        }
-        if (payloadMatchesPrevious) {
-          delete optimizedStep.payload;
-        }
-
-        if (optimizedStep.status === 'success') {
-          previousOutput = optimizedStep.output;
-          hasPreviousOutput = true;
-        }
-
-        optimizedSteps[stepId] = optimizedStep;
-      }
-
-      base.steps = optimizedSteps;
     }
 
     if (lastOutput.status === 'success') {
@@ -725,7 +705,63 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       base.suspendPayload = suspendPayload;
     }
 
-    return base as TOutput;
+    return base;
+  }
+
+  /**
+   * The `steps` of a result: internal metadata stripped and, with an execution path, each payload
+   * that repeats the previous step's output left out. Needs every result in full.
+   */
+  protected fmtResultSteps(
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    stepExecutionPath?: string[],
+  ): Record<string, StepResult<any, any, any, any>> {
+    const cleanStepResults: Record<string, StepResult<any, any, any, any>> = {};
+    for (const [stepId, stepResult] of Object.entries(stepResults)) {
+      cleanStepResults[stepId] = withoutNestedRunId(stepResult);
+    }
+    if (!stepExecutionPath) return cleanStepResults;
+
+    // Create a shallow copy of steps to modify without affecting the original reference
+    const optimizedSteps: Record<string, StepResult<any, any, any, any>> = { ...cleanStepResults };
+
+    let previousOutput: unknown;
+    let hasPreviousOutput = 'input' in cleanStepResults;
+    if (hasPreviousOutput) {
+      previousOutput = cleanStepResults.input;
+    }
+
+    for (const stepId of stepExecutionPath) {
+      const originalStep = cleanStepResults[stepId];
+      if (!originalStep) continue;
+
+      // Clone step result to avoid mutating the original object in memory
+      const optimizedStep = { ...originalStep };
+
+      // Remove payload if it matches the output of the previous step (structural comparison
+      // handles deserialized data where reference equality would fail)
+      let payloadMatchesPrevious = false;
+      if (hasPreviousOutput) {
+        try {
+          payloadMatchesPrevious =
+            optimizedStep.payload === previousOutput || deepEqual(optimizedStep.payload, previousOutput);
+        } catch {
+          // Values that cannot be structurally compared are treated as not matching.
+        }
+      }
+      if (payloadMatchesPrevious) {
+        delete optimizedStep.payload;
+      }
+
+      if (optimizedStep.status === 'success') {
+        previousOutput = optimizedStep.output;
+        hasPreviousOutput = true;
+      }
+
+      optimizedSteps[stepId] = optimizedStep;
+    }
+
+    return optimizedSteps;
   }
 
   // =============================================================================
@@ -1026,8 +1062,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 attributes: { status: 'waiting' },
               });
 
-              await journal?.hydrate(stepResults);
-              const formattedResult = await this.fmtReturnValue<any>(
+              const formattedResult = await this.#fmtResult(
+                journal,
                 params.pubsub,
                 stepResults,
                 { status: 'waiting', payload: undefined, startedAt: Date.now() },
@@ -1075,8 +1111,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
           });
 
-          await journal?.hydrate(stepResults);
-          const formattedResult = await this.fmtReturnValue<any>(
+          const formattedResult = await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             { status: 'canceled' },
@@ -1084,6 +1120,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepExecutionPath,
           );
 
+          // The run writes nothing more; a callback awaiting `steps()` waits for the journal to close.
+          journal?.close();
           await this.invokeLifecycleCallbacks({
             status: 'canceled',
             result: undefined,
@@ -1194,8 +1232,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             attributes: { status: 'waiting' },
           });
 
-          await journal?.hydrate(stepResults);
-          const formattedResult = await this.fmtReturnValue<any>(
+          const formattedResult = await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             lastOutput.result,
@@ -1211,8 +1249,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }
 
         if (perStep && lastOutput.result.status === 'success') {
-          await journal?.hydrate(stepResults);
-          const result = (await this.fmtReturnValue(
+          const result = (await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             lastOutput.result,
@@ -1277,8 +1315,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             }
           }
 
-          await journal?.hydrate(stepResults);
-          let result = (await this.fmtReturnValue(
+          let result = (await this.#fmtResult(
+            journal,
             params.pubsub,
             stepResults,
             lastOutput.result,
@@ -1317,7 +1355,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           if (this.writeRejectedByCancellation(runId, result.status)) {
             // The store rejected the write because the run was canceled meanwhile.
             lastOutput.result = { status: 'canceled' };
-            result = await this.fmtReturnValue(
+            result = await this.#fmtResult(
+              journal,
               params.pubsub,
               stepResults,
               lastOutput.result,
@@ -1346,6 +1385,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
           if (lastOutput.result.status !== 'paused') {
             // Invoke lifecycle callbacks before returning
+            // The run writes nothing more; a callback awaiting `steps()` waits for the journal to close.
+            journal?.close();
             await this.invokeLifecycleCallbacks({
               status: result.status,
               result: result.result,
@@ -1390,7 +1431,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }
 
         // Every write of this entry has been awaited. Keep this entry: it's the next one's `prevStep`.
-        // After the last entry, the end of the run reads every result back anyway.
+        // The last entry stays too; once the final write settles, the result's `steps()` loader keeps
+        // only stubs of every stored successful result (see `lazyStepResults`).
         if (i + 1 < steps.length) journal?.evict(stepResults, getStepIds(entry));
       }
 
@@ -1427,8 +1469,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       // after all steps are successful, return result
-      await journal?.hydrate(stepResults);
-      let result = (await this.fmtReturnValue(
+      let result = (await this.#fmtResult(
+        journal,
         params.pubsub,
         stepResults,
         lastOutput.result,
@@ -1452,7 +1494,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       if (this.writeRejectedByCancellation(runId, result.status)) {
         // The store rejected the final write because the run was canceled meanwhile.
-        result = await this.fmtReturnValue(
+        result = await this.#fmtResult(
+          journal,
           params.pubsub,
           stepResults,
           { status: 'canceled' },
@@ -1469,6 +1512,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
+      // The run writes nothing more; a callback awaiting `steps()` waits for the journal to close.
+      journal?.close();
       await this.invokeLifecycleCallbacks({
         status: result.status,
         result: result.result,

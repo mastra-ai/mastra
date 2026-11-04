@@ -16,6 +16,13 @@ import { createWorkflow } from '../create';
 import { createStep } from '../workflow';
 import type { Workflow } from '../workflow';
 
+/** A storage v2 result's `steps` is a loader; the suite checks the steps it loads. */
+async function withLoadedSteps(result: unknown): Promise<WorkflowResult> {
+  const { steps } = result as { steps: unknown };
+  if (typeof steps !== 'function') return result as WorkflowResult;
+  return { ...(result as WorkflowResult), steps: await steps() };
+}
+
 /**
  * Runs the shared workflow test suite on the default engine. Test files that call this must
  * unmock `crypto` and `node:crypto`, since these runs rely on real, unique run ids.
@@ -140,7 +147,7 @@ export function createDefaultEngineTestSuite({
 
       const result = await streamResult.result;
 
-      return result as WorkflowResult;
+      return withLoadedSteps(result);
     },
 
     resumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<WorkflowResult> => {
@@ -154,7 +161,7 @@ export function createDefaultEngineTestSuite({
         forEachIndex: options.forEachIndex,
       });
 
-      return result as WorkflowResult;
+      return withLoadedSteps(result);
     },
 
     timetravelWorkflow: async (workflow, options: TimeTravelWorkflowOptions): Promise<WorkflowResult> => {
@@ -170,7 +177,7 @@ export function createDefaultEngineTestSuite({
         resumeData: options.resumeData as any,
       });
 
-      return result as WorkflowResult;
+      return withLoadedSteps(result);
     },
 
     streamWorkflow: async (workflow, inputData, options = {}, api = 'stream'): Promise<StreamWorkflowResult> => {
@@ -196,7 +203,7 @@ export function createDefaultEngineTestSuite({
         }
 
         const result = await getWorkflowState();
-        return { events, result: result as WorkflowResult };
+        return { events, result: await withLoadedSteps(result) };
       } else {
         const streamResult = run.stream({
           inputData,
@@ -211,7 +218,7 @@ export function createDefaultEngineTestSuite({
         }
 
         const result = await streamResult.result;
-        return { events, result: result as WorkflowResult };
+        return { events, result: await withLoadedSteps(result) };
       }
     },
 
@@ -233,7 +240,7 @@ export function createDefaultEngineTestSuite({
       }
 
       const result = await streamResult.result;
-      return { events, result: result as WorkflowResult };
+      return { events, result: await withLoadedSteps(result) };
     },
   });
 }
