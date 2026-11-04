@@ -108,6 +108,24 @@ describe('signal writes over HTTP', () => {
     expect(received).toHaveLength(1);
   });
 
+  it.each(['feedback', 'score'] as const)(
+    'returns the server validation error for a missing %s wrapper',
+    async kind => {
+      replies = [400];
+      const body = { traceId: 'trace', value: 1 };
+      const result =
+        kind === 'feedback'
+          ? // @ts-expect-error Exercise malformed requests from JavaScript callers.
+            client.createFeedback(body)
+          : // @ts-expect-error Exercise malformed requests from JavaScript callers.
+            client.createScore(body);
+
+      await expect(result).rejects.toMatchObject({ status: 400 });
+      expect(received).toHaveLength(1);
+      expect(received[0].body).toEqual(body);
+    },
+  );
+
   it('bounds anchor retries and supports per-operation cancellation', async () => {
     replies = Array(100).fill(404);
     errorCode = 'TRACE_NOT_FOUND';

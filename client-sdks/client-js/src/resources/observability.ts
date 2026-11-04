@@ -515,11 +515,13 @@ export class Observability extends BaseResource {
   createScore(params: CreateScoreBody, options?: SignalWriteOptions): Promise<CreateScoreResponse> {
     const body = {
       ...params,
-      score: {
-        ...params.score,
-        scoreId: params.score.scoreId ?? uuid(),
-        timestamp: params.score.timestamp ?? new Date().toISOString(),
-      },
+      ...(params?.score && {
+        score: {
+          ...params.score,
+          scoreId: params.score.scoreId ?? uuid(),
+          timestamp: params.score.timestamp ?? new Date().toISOString(),
+        },
+      }),
     };
     return writeSignal(this, '/observability/scores', 'POST', body, options);
   }
@@ -595,11 +597,13 @@ export class Observability extends BaseResource {
   createFeedback(params: CreateFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
     const body = {
       ...params,
-      feedback: {
-        ...params.feedback,
-        feedbackId: params.feedback.feedbackId ?? uuid(),
-        timestamp: params.feedback.timestamp ?? new Date().toISOString(),
-      },
+      ...(params?.feedback && {
+        feedback: {
+          ...params.feedback,
+          feedbackId: params.feedback.feedbackId ?? uuid(),
+          timestamp: params.feedback.timestamp ?? new Date().toISOString(),
+        },
+      }),
     };
     return writeSignal(this, '/observability/feedback', 'POST', body, options);
   }
