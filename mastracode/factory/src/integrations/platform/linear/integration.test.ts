@@ -227,7 +227,7 @@ describe('PlatformLinearIntegration', () => {
         });
         await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 1, failed: 0 });
         await expect(seed.workItems.get({ orgId: project.orgId, id: item.id })).resolves.toMatchObject({
-          metadata: { linearProjectId: expected },
+          workItem: expect.objectContaining({ metadata: expect.objectContaining({linearProjectId: expected}) }),
         });
         await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 0, failed: 0 });
       },

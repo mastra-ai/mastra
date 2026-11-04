@@ -170,7 +170,9 @@ export type CreateFeedbackArgs = z.infer<typeof createFeedbackArgsSchema>;
 /** Schema for createFeedback operation body in client/server */
 export const createFeedbackBodySchema = z
   .object({
-    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }),
+    feedback: createFeedbackRecordObjectSchema.omit({ timestamp: true }).extend({
+      traceId: traceIdField.regex(/\S/, 'traceId must not be empty or whitespace-only'),
+    }),
   })
   .describe('Arguments for creating feedback');
 

@@ -117,7 +117,7 @@ export function BoardContent({
     if (!card) return;
     void repositoryChoice.choose(
       card.source,
-      card.metadata,
+      { ...card.metadata, ...('workItem' in card ? card.workItem?.metadata : undefined) },
       stage,
       slug => {
         if (payload.kind === 'work-item') items.move(payload.id, stage, { cause, repositorySlug: slug });
@@ -245,7 +245,7 @@ export function BoardContent({
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
     const canCreate =
-      !review && !loading && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
+      !review && !items.isPending && stage.kind !== 'terminal' && (composer.stage === undefined || composerOpen);
     const canConnectSource = isInitialPhase && !hasIntakeSource;
     const showEmptyStateActions = isInitialPhase && (filtersExcludeAll || canCreate || canConnectSource);
     const collapsed =
@@ -343,7 +343,7 @@ export function BoardContent({
                 onMove={toStage =>
                   void repositoryChoice.choose(
                     item.source,
-                    item.metadata,
+                    { ...item.metadata, ...item.workItem?.metadata },
                     toStage,
                     slug => items.move(item.id, toStage, { repositorySlug: slug }),
                     () => items.move(item.id, toStage),
@@ -361,6 +361,7 @@ export function BoardContent({
               cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)
             }
             factoryProjectId={factoryProjectId}
+            board={builtin ? kind : undefined}
             onRun={(candidate, move, prompt) =>
               dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }
@@ -415,7 +416,6 @@ export function BoardContent({
                 <BoardAutomationSettings
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
-                  autoApprovePlans={factory.autoApprovePlans ?? false}
                   reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
                   selfReviewEnabled={factory.selfReviewEnabled ?? false}
                 />

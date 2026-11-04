@@ -185,7 +185,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         pushNotice(
           !usage?.totalTokens
             ? 'No token usage recorded yet.'
-            : `Tokens — prompt: ${usage.promptTokens ?? 0}, completion: ${usage.completionTokens ?? 0}, total: ${usage.totalTokens}`,
+            : `Used ${usage.totalTokens} tokens (${usage.promptTokens ?? 0} prompt, ${usage.completionTokens ?? 0} completion).`,
         );
       },
     },
@@ -298,10 +298,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     requiresSession: false,
     execute: async () => {
       const commands = [...commandsWithoutHelp, helpCommand];
-      const width = Math.max(...commands.map(command => `/${command.name} ${command.args ?? ''}`.length));
       const lines = commands.map(command => {
-        const signature = `/${command.name} ${command.args ?? ''}`.padEnd(width);
-        return `  ${signature}  — ${command.description}`;
+        return `/${command.name}${command.args ? ` ${command.args}` : ''}: ${command.description}`;
       });
       pushNotice(['Available commands:', ...lines].join('\n'));
     },

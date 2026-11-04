@@ -3,6 +3,8 @@ import type { NotificationsStorage } from '@mastra/core/notifications';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
 
 import { boardForWorkItem } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -44,7 +46,8 @@ export interface FactorySessionsStateDependencies {
     | 'findActiveRunBindingForSession'
     | 'listWorkItemSubscribers'
   >;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   /** Whether the session's agent is mid-run in this process; `idle` when it isn't live here. */
   isRunning: (sessionId: string) => Promise<boolean>;
   /** When a thread last changed; tells a long run that is still moving from one that stopped. */
@@ -220,7 +223,8 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       );
       if (!item) continue;
       const stage = item.stages[0] ?? 'unknown';
-      const terminal = this.#deps.boards.get(boardForWorkItem(item))?.isTerminal(stage) ?? false;
+      const boards = await toBoardSource(this.#deps.boards).load(scope);
+      const terminal = boards.get(boardForWorkItem(item))?.isTerminal(stage) ?? false;
       if (terminal && now - item.updatedAt.getTime() > FACTORY_SESSIONS_MAX_AGE_MS) continue;
       const bindings = await this.#deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id);
       const active = bindings.find(binding => binding.status === 'active');

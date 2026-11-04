@@ -27,7 +27,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
 
   // Get memory config to check if working memory is enabled
   const { data, isLoading: isConfigLoading } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -152,7 +152,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
               language={editState.value.trim().startsWith('{') ? 'json' : 'markdown'}
               lineNumbers={false}
               showCopyButton={false}
-              placeholder="Enter working memory content..."
+              placeholder="Enter working memory content"
               value={editState.value}
               onChange={value => setEditState(state => ({ ...state, value }))}
               editable={!isUpdating}

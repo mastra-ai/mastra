@@ -201,7 +201,7 @@ export function WorkspaceAddSkillDialog({
         <DialogBody layout="fill">
           <SearchInput
             label="Search skills"
-            placeholder="Search skills..."
+            placeholder="Search skills"
             value={searchQuery}
             onValueChange={handleSearch}
           />

@@ -443,6 +443,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
   if (route.path.includes(':eventName')) params.eventName = 'ticket.created';
+  if (route.path.includes(':taskKey')) params.taskKey = 'test-task-key';
 
   // Workspace route params
   if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';

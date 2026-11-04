@@ -16,10 +16,10 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 const memory = new Memory({
   storage: new LibSQLStore({
     id: 'learning-memory-storage',
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+    url: process.env.MASTRA_DB_URL!, // resolves against the working directory — set MASTRA_DB_URL to an absolute path
   }),
   vector: new LibSQLVector({
-    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+    url: process.env.MASTRA_VECTOR_DB_URL!, // resolves against the working directory — set MASTRA_VECTOR_DB_URL to an absolute path
   }),
   embedder: 'openai/text-embedding-3-small',
   options: {

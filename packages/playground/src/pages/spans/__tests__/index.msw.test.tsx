@@ -254,7 +254,7 @@ describe('Spans page', () => {
 
       renderPage();
 
-      const filterInput = await screen.findByPlaceholderText('Filter spans…');
+      const filterInput = await screen.findByPlaceholderText('Filter spans');
       expect(filterInput.closest('main')).not.toBeNull();
     });
 
@@ -354,7 +354,7 @@ describe('Spans page', () => {
       const header = screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header');
       fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
 
-      await screen.findByPlaceholderText('Filter threads…');
+      await screen.findByPlaceholderText('Filter threads');
       expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).toBe(header);
     });
   });
@@ -389,7 +389,8 @@ describe('Spans page', () => {
       renderPage('/spans?traceId=trace-1&spanId=span-2');
 
       const panel = within(getSidePanel());
-      expect(await panel.findByRole('region', { name: 'Span details' })).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
+      fireEvent.click(panel.getByRole('tab', { name: /^Output/ }));
       expect(await panel.findByText('Weather API timed out')).toBeTruthy();
     });
   });
@@ -400,7 +401,7 @@ describe('Spans page', () => {
 
       renderPage('/spans?traceId=trace-1&spanId=span-2');
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(screen.getByRole('link', { name: 'Open bare spans page' }));
 
       await waitFor(() => expect(panel.queryByRole('region', { name: 'Span details' })).toBeNull());
@@ -415,7 +416,7 @@ describe('Spans page', () => {
       renderPage();
       fireEvent.click(await screen.findByText('tool: get-weather'));
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(panel.getByRole('button', { name: 'Go to trace' }));
 
       expect(screen.getByTestId('location').textContent).toBe('/traces?traceId=trace-1&spanId=span-2');
@@ -472,7 +473,7 @@ describe('Spans page', () => {
       fireEvent.click(panel.getByRole('button', { name: 'Go to next span' }));
 
       await waitFor(() => expect(panel.queryByText('session-weather-42')).toBeNull());
-      expect(await panel.findByText('Weather API timed out')).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
     });
 
     it('moves the URL to the next span', async () => {
@@ -577,7 +578,7 @@ describe('Spans page', () => {
 
       expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
       expect(
-        screen.getByText('Pick a wider time range — older spans may fall outside the current window.'),
+        screen.getByText('Pick a wider time range. Older spans may fall outside the current window.'),
       ).toBeTruthy();
     });
 
@@ -596,7 +597,7 @@ describe('Spans page', () => {
       renderPage();
 
       await screen.findByRole('heading', { name: 'No spans for the last 7 days' });
-      expect(screen.getByPlaceholderText('Filter spans…')).toBeTruthy();
+      expect(screen.getByPlaceholderText('Filter spans')).toBeTruthy();
     });
   });
 

@@ -6,6 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
+import { seedWorkflowRun } from '../seed-run';
 
 /**
  * Create all workflows needed for time travel tests.
@@ -75,8 +76,8 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
 
     workflow
       .then(step1)
-      .sleep(async ({ getStepResult }) => {
-        const step1Result = getStepResult(step1);
+      .sleep(async ({ getStepResultAsync }) => {
+        const step1Result = await getStepResultAsync(step1);
         return step1Result?.value ?? 50;
       })
       .then(step2)
@@ -145,9 +146,9 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should preserve step results across sleep
   {
     const step1Fn = vi.fn().mockResolvedValue({ value: 'before-sleep' });
-    const step2Fn = vi.fn().mockImplementation(async ({ getStepResult }) => {
+    const step2Fn = vi.fn().mockImplementation(async ({ getStepResultAsync }) => {
       // Access step1 result after the sleep to verify it's preserved
-      const step1Result = getStepResult('step1');
+      const step1Result = await getStepResultAsync('step1');
       return { combined: `${step1Result?.value || 'missing'} + after-sleep` };
     });
 
@@ -1638,8 +1639,9 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         expect(workflowsStore).toBeDefined();
 
         // Persist a snapshot that indicates the workflow is still running
-        await workflowsStore?.persistWorkflowSnapshot({
+        await seedWorkflowRun(workflowsStore!, {
           workflowName: 'tt-error-running-workflow',
+          storageVersion: workflow.options.storageVersion,
           runId,
           snapshot: {
             runId,

@@ -26,7 +26,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
   const { data, isLoading } = useProviderTools({
-    providerId: providerId,
+    providerId,
     params: {
       toolkit,
       search: search || undefined,
@@ -41,7 +41,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
         <SearchInput
           label="Search tools"
           size="sm"
-          placeholder="Search tools..."
+          placeholder="Search tools"
           value={query}
           onValueChange={value => {
             setQuery(value);

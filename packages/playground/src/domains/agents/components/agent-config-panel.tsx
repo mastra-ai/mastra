@@ -18,13 +18,23 @@ import { RouteSidePanel } from '@/lib/route-side-panel';
  * Below the breakpoint it opens in a drawer instead, whose trigger is the header Config button
  * (`AgentConfigToggle`), so wrap the page in it.
  */
-export function AgentConfigPanel({ agentId, children }: { agentId: string; children: ReactNode }) {
+export function AgentConfigPanel({
+  agentId,
+  children,
+  disabled = false,
+}: {
+  agentId: string;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
   const isMobile = useIsMobile();
   const panel = (
     <ActivatedSkillsProvider key={agentId}>
       <AgentOverviewPanel agentId={agentId} />
     </ActivatedSkillsProvider>
   );
+
+  if (disabled) return children;
 
   return (
     <Drawer side="right">

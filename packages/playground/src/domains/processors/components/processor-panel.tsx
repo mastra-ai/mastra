@@ -39,11 +39,7 @@ const PHASE_LABELS: Record<ProcessorPhase, string> = {
 };
 
 export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
-  const {
-    data: processor,
-    isLoading,
-    error,
-  } = useProcessor({ processorId: processorId, queryOptions: { enabled: !!processorId } });
+  const { data: processor, isLoading, error } = useProcessor({ processorId, queryOptions: { enabled: !!processorId } });
 
   useEffect(() => {
     if (error) {
@@ -63,7 +59,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (error) return null;
 
-  if (!processor)
+  if (!processor) {
     return (
       <div className="px-4 py-8 text-center">
         <Txt variant="heading" tone="muted">
@@ -71,6 +67,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
         </Txt>
       </div>
     );
+  }
 
   return <ProcessorDetailPanel processor={processor} />;
 }
@@ -182,7 +179,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             <Textarea
               value={testMessage}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
-              placeholder="Enter a test message..."
+              placeholder="Enter a test message"
               rows={4}
             />
           </Field>

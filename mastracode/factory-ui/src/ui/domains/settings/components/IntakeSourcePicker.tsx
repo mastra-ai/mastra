@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
@@ -26,8 +27,13 @@ import { settingsRowLayout } from './common/settings-row-layout';
 export interface SourcePickerItem {
   id: string;
   label: string;
+  detail?: string;
   hint?: string;
   disabled?: boolean;
+}
+
+export function sourcePickerItemText(item: SourcePickerItem): string {
+  return item.detail ? `${item.detail}: ${item.label}` : item.label;
 }
 
 export interface SourcePickerGroup {
@@ -48,7 +54,11 @@ export interface SourcePickerProps {
   onRetry?: () => void;
   onToggleItem: (id: string) => Promise<void>;
   itemDescription?: (id: string) => string | undefined;
+  /** Label for a saved source that is no longer listed; defaults to its ID. */
+  fallbackLabel?: (id: string) => string;
   itemActions?: (item: SourcePickerItem) => ReactNode;
+  /** Full-width content under a selected item's row, for routing that doesn't fit beside it. */
+  itemDetails?: (item: SourcePickerItem) => ReactNode;
   addControl?: (item: SourcePickerItem, focusSearch: () => void) => ReactNode;
 }
 
@@ -65,7 +75,9 @@ export function SourcePicker(props: SourcePickerProps) {
     onRetry,
     onToggleItem,
     itemDescription,
+    fallbackLabel,
     itemActions,
+    itemDetails,
   } = props;
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
@@ -88,9 +100,13 @@ export function SourcePicker(props: SourcePickerProps) {
           <ul className="divide-border border-border divide-y border-b">
             {selected.map(id => {
               const group = groups.find(candidate => candidate.items.some(item => item.id === id));
-              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? { id, label: id };
-              const context = [groups.length > 1 ? group?.label : undefined, item.hint].filter(Boolean).join(' · ');
+              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? {
+                id,
+                label: fallbackLabel?.(id) ?? id,
+              };
+              const groupLabel = groups.length > 1 ? group?.label : undefined;
               const description = itemDescription?.(id);
+              const details = itemDetails?.(item);
               return (
                 <li key={id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
                   <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
@@ -101,11 +117,17 @@ export function SourcePicker(props: SourcePickerProps) {
                     )}
                     <div className="flex min-w-0 flex-1 flex-col">
                       <Txt as="span" variant="caption" className="wrap-anywhere">
-                        {item.label}
+                        <Metadata>
+                          {item.detail && <Metadata.Item>{item.detail}</Metadata.Item>}
+                          <Metadata.Item>{item.label}</Metadata.Item>
+                        </Metadata>
                       </Txt>
-                      {context && (
+                      {(groupLabel || item.hint) && (
                         <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                          {context}
+                          <Metadata>
+                            {groupLabel && <Metadata.Item>{groupLabel}</Metadata.Item>}
+                            {item.hint && <Metadata.Item>{item.hint}</Metadata.Item>}
+                          </Metadata>
                         </Txt>
                       )}
                       {description && (
@@ -121,7 +143,7 @@ export function SourcePicker(props: SourcePickerProps) {
                       size="sm"
                       variant="ghost"
                       icon={<Trash2 />}
-                      aria-label={`Remove ${item.label}`}
+                      aria-label={`Remove ${sourcePickerItemText(item)}`}
                       disabled={pending || item.disabled}
                       onClick={async () => {
                         await onToggleItem(id);
@@ -131,6 +153,7 @@ export function SourcePicker(props: SourcePickerProps) {
                       Remove
                     </Button>
                   </div>
+                  {details && <div className="min-w-0 basis-full">{details}</div>}
                 </li>
               );
             })}
@@ -193,7 +216,9 @@ function SourcePickerDrawer({
   const matchingGroups = groups
     .map(group => ({
       ...group,
-      items: group.items.filter(item => !selected.has(item.id) && item.label.toLowerCase().includes(normalizedQuery)),
+      items: group.items.filter(
+        item => !selected.has(item.id) && sourcePickerItemText(item).toLowerCase().includes(normalizedQuery),
+      ),
     }))
     .filter(group => group.items.length > 0);
 
@@ -211,7 +236,7 @@ function SourcePickerDrawer({
           <SearchInput
             ref={searchInput}
             label={`Search ${label}`}
-            placeholder="Search…"
+            placeholder="Search"
             value={query}
             onValueChange={setQuery}
             className="w-full"
@@ -248,13 +273,22 @@ function SourcePickerDrawer({
                     />
                   )}
                   {group.items.map(item => (
-                    <SettingsRow key={`${group.id}:${item.id}`} label={item.label} description={item.hint}>
+                    <SettingsRow
+                      key={`${group.id}:${item.id}`}
+                      label={
+                        <Metadata>
+                          {item.detail && <Metadata.Item>{item.detail}</Metadata.Item>}
+                          <Metadata.Item>{item.label}</Metadata.Item>
+                        </Metadata>
+                      }
+                      description={item.hint}
+                    >
                       {addControl ? (
                         addControl(item, () => searchInput.current?.focus())
                       ) : (
                         <Checkbox
                           checked={false}
-                          aria-label={item.label}
+                          aria-label={sourcePickerItemText(item)}
                           disabled={pending || item.disabled}
                           onCheckedChange={() => {
                             onToggleItem(item.id);

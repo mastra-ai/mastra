@@ -607,6 +607,40 @@ describe('transcript reducer message entries', () => {
     expect(drawn[0]).toMatchObject({ toolInvocation: { state: 'result', toolCallId: 'tool-1' } });
   });
 
+  it("draws a new turn's first call under the reader's new message, not inside the previous reply", () => {
+    const reply = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'All done' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: reply },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: reply.id } });
+    state = transcriptReducer(state, { type: 'localUser', id: 'local-ask', text: 'Now look at the tests' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'find_files', args: { pattern: '*.test.ts' } },
+    });
+
+    expect(state.entries.map(entry => entry.id)).toEqual(['turn-1', 'local-ask', expect.any(String)]);
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'All done' }]);
+    expect(messageParts(state.entries[2]).filter(isToolInvocationPart)).toHaveLength(1);
+  });
+
+  it('keeps a call the run starts before a steer is delivered in the reply that was running', () => {
+    const reply = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Looking around' }]);
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'message_start', message: reply },
+    });
+    state = transcriptReducer(state, { type: 'localUser', id: 'local-steer', text: 'Also check docs', steer: true });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+
+    expect(state.entries.map(entry => entry.id)).toEqual(['turn-1', 'local-steer']);
+    expect(messageParts(state.entries[0]).filter(isToolInvocationPart)).toHaveLength(1);
+  });
+
   it("folds a dropped copy's result into the drawn row when its tool_end was lost", () => {
     const first = dbMessage('turn-1', 'assistant', [{ type: 'text', text: 'Looking around' }]);
     let state = transcriptReducer(initialTranscript, {
@@ -2070,5 +2104,30 @@ describe('live user signals sent by someone else', () => {
     expect(drawable).toHaveLength(2);
     expect(drawable[0]?.id).toMatch(/^local-/);
     expect(drawable[1]?.id).toBe('sig-5');
+  });
+});
+
+describe('transcript reducer shell output', () => {
+  it('keeps a bounded tail of live shell output', () => {
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'shell-1', toolName: 'execute_command', args: { command: 'build' } },
+    });
+    const chunk = 'x'.repeat(600 * 1024);
+    for (let i = 0; i < 4; i++) {
+      state = transcriptReducer(state, {
+        type: 'event',
+        event: { type: 'shell_output', toolCallId: 'shell-1', output: chunk, stream: 'stdout' },
+      });
+    }
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'shell_output', toolCallId: 'shell-1', output: 'last line\n', stream: 'stdout' },
+    });
+
+    const entry = state.entries.at(-1) as unknown as { runtimeTools?: Record<string, { output: string }> };
+    const output = entry.runtimeTools?.['shell-1']?.output ?? '';
+    expect(output.length).toBe(1024 * 1024);
+    expect(output.endsWith('last line\n')).toBe(true);
   });
 });

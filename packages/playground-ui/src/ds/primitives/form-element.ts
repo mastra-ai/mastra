@@ -50,9 +50,12 @@ export const surfaceRimFocus = 'focus-visible:outline-hidden focus-visible:[--su
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
-const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
+const surfaceTintHoverWithin =
+  '[&:hover:not(:has(:focus-visible)):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
 const fieldRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--field-rim-focus)]';
-const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
+// `:has(:focus-visible)`, not `:focus-within`: focus moved in code after a click (a filter chip's
+// neighbour once it is removed) must not light the rim. Text fields always match `:focus-visible`.
+const fieldRimFocusWithin = 'has-[:focus-visible]:[--surface-rim:var(--field-rim-focus)]';
 export const fieldErrorRim =
   'aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 export const fieldErrorRimWithin =

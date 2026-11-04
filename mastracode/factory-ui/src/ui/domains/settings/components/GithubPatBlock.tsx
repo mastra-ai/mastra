@@ -152,7 +152,7 @@ function TokenEditor({
           type="password"
           size="sm"
           aria-label={`${title} GitHub Personal Access Token`}
-          placeholder="Paste classic Personal Access Token"
+          placeholder="Paste a classic personal access token"
           value={draft}
           disabled={saveMutation.isPending}
           onChange={event => setDraft(event.target.value)}

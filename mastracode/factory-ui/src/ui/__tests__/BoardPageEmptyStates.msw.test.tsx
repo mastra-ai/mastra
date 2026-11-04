@@ -4,12 +4,13 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { closePropertiesMenus, openPropertiesMenu } from '../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
-import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
+import { FACTORY_ID, OTHER_FACTORY_ID, REPO_ID, stubWorkBoard } from './workBoardStubs';
 
 function renderBoard(search = '', board = 'work') {
   const router = createMemoryRouter(createAppRoutes(), {
@@ -23,8 +24,17 @@ describe('Board empty-state actions', () => {
   it('offers repository setup before rendering a Review board without repositories', async () => {
     stubWorkBoard();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            { id: FACTORY_ID, name: 'Acme Factory', repositories: [] },
+            {
+              id: OTHER_FACTORY_ID,
+              name: 'Other Factory',
+              repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            },
+          ],
+        }),
       ),
     );
     renderBoard('', 'review');

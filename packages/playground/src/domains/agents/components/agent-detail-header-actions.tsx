@@ -11,12 +11,13 @@ import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export interface AgentDetailHeaderActionsProps {
   agentId: string;
+  showConfig?: boolean;
 }
 
 /** Edit / Share / Config actions shown in the route header on every agent sub-page. */
-export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsProps) {
+export function AgentDetailHeaderActions({ agentId, showConfig = true }: AgentDetailHeaderActionsProps) {
   const { data: agent } = useAgent({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -50,7 +51,7 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
       >
         {isShareCopied ? <Check /> : <LinkIcon />}
       </Button>
-      <AgentConfigToggle />
+      {showConfig && <AgentConfigToggle />}
     </>
   );
 }

@@ -98,6 +98,9 @@ export function useLinkRepositoryMutation() {
       );
       const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo);
       await onLinked?.(linked);
+      // Refresh the list alongside the intake write and wait for both, so the row
+      // goes straight from "Linking…" to linked instead of flashing "Link" first.
+      const refreshed = invalidateFactoryRepositories(queryClient, factoryProjectId);
       try {
         const config = await fetchIntakeConfig(baseUrl);
         if (gitlab) {
@@ -112,7 +115,7 @@ export function useLinkRepositoryMutation() {
           }
         }
       } finally {
-        await invalidateFactoryRepositories(queryClient, factoryProjectId);
+        await refreshed;
       }
       return linked;
     },

@@ -109,7 +109,7 @@ export function MemorySidebarBody({
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
   const { data: memory, isLoading: isMemoryLoading } = useMemory({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -136,13 +136,13 @@ export function MemorySidebarBody({
   // progress yet. Fall back to the durable OM record the same way the expanded OM
   // section and the timeline panel do, otherwise the bar stays empty after a reload.
   const { data: thread } = useThread({
-    threadId: threadId,
-    agentId: agentId,
+    threadId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId) },
   });
   const { data: memoryConfigData } = useMemoryConfig({
-    agentId: agentId,
+    agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
@@ -312,7 +312,7 @@ export function MemorySidebarBody({
                       icon={Search}
                       tooltip={
                         semanticRecallOn
-                          ? 'Semantic recall is on - retrieves relevant past messages'
+                          ? 'Semantic recall is on and retrieves relevant past messages'
                           : 'Semantic recall is off'
                       }
                       enabled={semanticRecallOn}
@@ -321,7 +321,7 @@ export function MemorySidebarBody({
                       icon={NotebookPen}
                       tooltip={
                         workingMemoryOn
-                          ? 'Working memory is on - persists notes across the conversation'
+                          ? 'Working memory is on and persists notes across the conversation'
                           : 'Working memory is off'
                       }
                       enabled={workingMemoryOn}
@@ -330,7 +330,7 @@ export function MemorySidebarBody({
                       icon={Eye}
                       tooltip={
                         observationalOn
-                          ? 'Observational memory is on - learns from the conversation'
+                          ? 'Observational memory is on and learns from the conversation'
                           : 'Observational memory is off'
                       }
                       enabled={observationalOn}

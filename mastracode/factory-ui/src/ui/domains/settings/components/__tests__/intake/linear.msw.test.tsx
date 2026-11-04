@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import {
@@ -53,20 +54,8 @@ describe('IntakeSection linear', () => {
         http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
           HttpResponse.json({
             projects: [
-              { id: 'fp-1', name: 'mastra' },
-              { id: 'fp-2', name: 'Other Factory' },
-            ],
-          }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2/source-control-connections`, () =>
-          HttpResponse.json({
-            connections: [
-              {
-                id: 'conn-fp-2',
-                repositories: [
-                  { id: 'ghp-2', branch: null, repository: { slug: 'unrelated/repo', defaultBranch: 'main' } },
-                ],
-              },
+              { id: 'fp-1', name: 'mastra', repositories: [listedRepository('ghp-1', 'mastra')] },
+              { id: 'fp-2', name: 'Other Factory', repositories: [listedRepository('ghp-2', 'unrelated/repo')] },
             ],
           }),
         ),
@@ -134,7 +123,9 @@ describe('IntakeSection linear', () => {
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-          HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+          HttpResponse.json({
+            projects: [{ id: 'fp-1', name: 'mastra', repositories: [listedRepository('ghp-1', 'mastra')] }],
+          }),
         ),
       );
 
@@ -292,7 +283,8 @@ describe('IntakeSection linear', () => {
       const project = await screen.findByRole('button', { name: 'Remove Q3 Roadmap' });
       expect(project).toBeEnabled();
       const linearSection = screen.getByRole('region', { name: 'Linear' });
-      expect(within(linearSection).getByText('Engineering · project takes precedence')).toBeInTheDocument();
+      const precedence = within(linearSection).getByText('project takes precedence');
+      expect(within(precedence.parentElement!).getByText('Engineering')).toBeInTheDocument();
 
       await userEvent.click(project);
       await waitFor(() => expect(saved).toHaveLength(1));
@@ -301,6 +293,101 @@ describe('IntakeSection linear', () => {
 
       expect(screen.getAllByText('included via team').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByRole('checkbox', { name: /Design refresh/ })).not.toHaveAttribute('aria-disabled');
+    });
+  });
+
+  describe('given saved sources from a Linear workspace that is no longer connected', () => {
+    const encode = (prefix: string, payload: Record<string, string>) =>
+      `${prefix}${Buffer.from(JSON.stringify(payload)).toString('base64url')}`;
+    const liveProject = encode('linear-project:', { workspaceId: 'ws-live', projectId: 'p-live' });
+    const liveTeam = encode('linear-team:', { workspaceId: 'ws-live', teamId: 't-live' });
+    const deletedProject = encode('linear-project:', { workspaceId: 'ws-live', projectId: 'p-deleted' });
+    const goneProject = encode('linear-project:', { workspaceId: 'ws-gone', projectId: 'p-gone' });
+    const goneTeam = encode('linear-team:', { workspaceId: 'ws-gone', teamId: 't-gone' });
+
+    function useWorkspaceHandlers(sourceIds: string[]) {
+      const saved = useIntakeHandlers({ config: { ...baseConfig(), linear: { enabled: true, sourceIds } } });
+      server.use(
+        http.get(LINEAR_PROJECTS_URL, () =>
+          HttpResponse.json({
+            projects: [{ id: liveProject, name: 'Live roadmap', state: 'started', teams: [], workspaceId: 'ws-live' }],
+          }),
+        ),
+        http.get(LINEAR_TEAMS_URL, () =>
+          HttpResponse.json({
+            teams: [{ id: 't-live', key: 'LIV', name: 'Live team', sourceId: liveTeam, workspaceId: 'ws-live' }],
+          }),
+        ),
+      );
+      return saved;
+    }
+
+    it('collapses them into one disconnected row instead of listing raw source IDs', async () => {
+      useWorkspaceHandlers([liveProject, goneProject, goneTeam]);
+
+      renderIntakeSection();
+
+      const disconnected = await screen.findByRole('list', { name: 'Disconnected Linear workspaces' });
+      expect(within(disconnected).getByText('Other Linear workspace')).toBeInTheDocument();
+      expect(within(disconnected).getByText('Disconnected')).toBeInTheDocument();
+      expect(within(disconnected).getByText(/2 projects and teams paused/)).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Remove Live roadmap' })).toBeInTheDocument();
+      expect(screen.queryByText(goneProject)).not.toBeInTheDocument();
+      expect(screen.queryByText(goneTeam)).not.toBeInTheDocument();
+    });
+
+    it('removes only that workspace’s sources from the saved config', async () => {
+      const saved = useWorkspaceHandlers([liveProject, goneProject, goneTeam]);
+
+      renderIntakeSection();
+      await userEvent.click(await screen.findByRole('button', { name: 'Remove Other Linear workspace' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject]));
+    });
+
+    it('labels a source missing from a connected workspace instead of showing its ID', async () => {
+      useWorkspaceHandlers([liveProject, deletedProject]);
+
+      renderIntakeSection();
+
+      expect(await screen.findByRole('button', { name: 'Remove Unknown Linear project' })).toBeInTheDocument();
+      expect(screen.queryByText(deletedProject)).not.toBeInTheDocument();
+      expect(screen.queryByRole('list', { name: 'Disconnected Linear workspaces' })).not.toBeInTheDocument();
+    });
+
+    it('numbers missing sources so each Remove targets a distinct one', async () => {
+      const otherDeleted = encode('linear-project:', { workspaceId: 'ws-live', projectId: 'p-deleted-2' });
+      const saved = useWorkspaceHandlers([liveProject, deletedProject, otherDeleted]);
+
+      renderIntakeSection();
+      expect(await screen.findByRole('button', { name: 'Remove Unknown Linear project 1' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Unknown Linear project 2' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject, deletedProject]));
+    });
+
+    it('does not call saved sources unknown when the Linear lists fail to load', async () => {
+      useWorkspaceHandlers([liveProject, liveTeam]);
+      server.use(http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+
+      renderIntakeSection();
+
+      expect(await screen.findByText("Couldn't load Linear projects and teams.")).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove Linear project' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove All issues in Live team' })).toBeInTheDocument();
+      expect(screen.queryByText(/Unknown Linear/)).not.toBeInTheDocument();
+      expect(screen.queryByText(liveProject)).not.toBeInTheDocument();
+    });
+
+    it('labels a team missing from a connected workspace as an unknown team', async () => {
+      const deletedTeam = encode('linear-team:', { workspaceId: 'ws-live', teamId: 't-deleted' });
+      const saved = useWorkspaceHandlers([liveProject, deletedProject, deletedTeam]);
+
+      renderIntakeSection();
+      expect(await screen.findByRole('button', { name: 'Remove Unknown Linear project' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Unknown Linear team' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject, deletedProject]));
     });
   });
 

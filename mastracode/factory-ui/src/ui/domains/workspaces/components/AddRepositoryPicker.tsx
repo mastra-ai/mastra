@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   DrawerBody,
@@ -94,7 +95,7 @@ export function AddRepositoryPicker({
         <div className="mt-3 flex items-center gap-2">
           <SearchInput
             label="Search repositories"
-            placeholder="Search repositories…"
+            placeholder="Search repositories"
             value={query}
             onValueChange={setQuery}
             ref={searchInput}
@@ -144,9 +145,10 @@ export function AddRepositoryPicker({
                   </span>
                 }
                 description={
-                  isGitLabRepository(repo)
-                    ? `Default branch: ${repo.defaultBranch}`
-                    : `${repo.private ? 'Private' : 'Public'} · Default branch: ${repo.defaultBranch}`
+                  <Metadata>
+                    {!isGitLabRepository(repo) && <Metadata.Item>{repo.private ? 'Private' : 'Public'}</Metadata.Item>}
+                    <Metadata.Item>Default branch: {repo.defaultBranch}</Metadata.Item>
+                  </Metadata>
                 }
               >
                 <Button

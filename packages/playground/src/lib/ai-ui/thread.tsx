@@ -387,8 +387,9 @@ const AgentComposer = ({
       draftStatus?.restoring ||
       isAddingAttachments ||
       preparing.current
-    )
+    ) {
       return;
+    }
     preparing.current = true;
     const currentLifetime = lifetime.current;
     const submittedAttachments = attachments;
@@ -397,12 +398,12 @@ const AgentComposer = ({
     const withSubmittedText = (typed: string) => (typed ? `${text}\n\n${typed}` : text);
     const restoreSubmission = () => {
       if (lifetime.current !== currentLifetime) return;
-      if (updateDraft)
+      if (updateDraft) {
         updateDraft(previous => ({
           text: withSubmittedText(previous.text),
           attachments: [...submittedAttachments, ...previous.attachments],
         }));
-      else {
+      } else {
         setThreadInput(withSubmittedText);
         restore(submittedAttachments);
       }
@@ -413,12 +414,12 @@ const AgentComposer = ({
       const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
       if (lifetime.current !== currentLifetime) return;
       // Clear only the submitted snapshot; edits made during file conversion belong to the next draft.
-      if (updateDraft)
+      if (updateDraft) {
         updateDraft(previous => ({
           text: previous.text === text ? '' : previous.text,
           attachments: previous.attachments.filter(attachment => !submittedIds.has(attachment.id)),
         }));
-      else {
+      } else {
         setThreadInput('');
         clear();
       }
@@ -427,8 +428,9 @@ const AgentComposer = ({
         if (delivered === false) restoreSubmission();
       });
     } catch {
-      if (lifetime.current === currentLifetime)
+      if (lifetime.current === currentLifetime) {
         setSubmitError('Attachments could not be prepared. Your draft has been kept.');
+      }
     } finally {
       preparing.current = false;
     }
@@ -463,7 +465,7 @@ const AgentComposer = ({
               <ComposerInput
                 ref={textareaRef}
                 value={text}
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                placeholder={canExecuteAgent ? 'Enter your message' : "You don't have permission to execute agents"}
                 onChange={event => {
                   setThreadInput(event.target.value);
                 }}

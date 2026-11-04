@@ -2228,7 +2228,9 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
-      ...(untilIdle !== undefined && { untilIdle }),
+      // Sessions report background work inside the run that started it, and their
+      // completion notices only persist, so runs stay open until that work is done.
+      untilIdle: untilIdle ?? true,
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);

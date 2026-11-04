@@ -106,7 +106,7 @@ export function WorkItemCard({
   const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
-  const primaryMove = primaryCardMove(moves, columnStage, sessions);
+  const primaryMove = primaryCardMove(moves, columnStage, { sessions, stageHistory: item.stageHistory });
   const threadSession = itemThreadSession(sessions);
   const nextPhase = nextBoardPhase(definition, columnStage);
   const sessionHref =
@@ -125,7 +125,7 @@ export function WorkItemCard({
     decision,
     transitionReason,
     sessionStatus,
-    heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
+    held: awaitsTriageDecision(item, columnStage),
   });
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
@@ -138,7 +138,9 @@ export function WorkItemCard({
     item,
     columnStage,
     move: primaryMove,
-    resumeStage: custom ? undefined : resumeStage(columnStage, sessions),
+    resumeStage: custom
+      ? undefined
+      : resumeStage(columnStage, { board: boardId, sessions, stageHistory: item.stageHistory }),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,

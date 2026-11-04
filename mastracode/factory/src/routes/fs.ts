@@ -1227,6 +1227,21 @@ export function resolveCodebase(projectPath: string): ResolvedCodebase {
 }
 
 /**
+ * Guard the routes that read the server's own filesystem root. They are
+ * registered with `requiresAuth: false` so local (auth-disabled) factories keep
+ * working, which means the gate never runs for them: in tenant mode they must
+ * authenticate the caller themselves, or an anonymous request could enumerate
+ * the server's directories. Returns a 401 response to send, or `null` to
+ * continue.
+ */
+async function requireSignedIn(c: Context, sessionFs: SessionFsDeps | undefined): Promise<Response | null> {
+  const auth = sessionFs?.auth;
+  if (!auth?.enabled()) return null;
+  await auth.ensureUser(c);
+  return auth.tenant(c) ? null : c.json({ error: 'unauthorized' }, 401);
+}
+
+/**
  * Build the web filesystem routes as Mastra `apiRoutes`:
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
  *   - `GET /web/codebase/resolve?path=...` — TUI-compatible codebase resourceId
@@ -1240,6 +1255,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
+        const unauthorized = await requireSignedIn(c, sessionFs);
+        if (unauthorized) return unauthorized;
         const path = c.req.query('path');
         try {
           const listing = await listDirectory(root, path);
@@ -1254,6 +1271,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
+        const unauthorized = await requireSignedIn(c, sessionFs);
+        if (unauthorized) return unauthorized;
         const path = c.req.query('path');
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
         try {
@@ -1278,6 +1297,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
           if (session && sessionFs) {
             return c.json(await listSessionRenderedPath(session, renderedRoot));
           }
+          const unauthorized = await requireSignedIn(loose(c), sessionFs);
+          if (unauthorized) return unauthorized;
           return c.json(await listWorkspaceRenderedPath(root, workspacePath, renderedRoot));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1360,6 +1381,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
           if (session && sessionFs) return c.json(await readSessionWorkspaceFile(session, path));
+          const unauthorized = await requireSignedIn(loose(c), sessionFs);
+          if (unauthorized) return unauthorized;
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -1383,6 +1406,8 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
+        const unauthorized = await requireSignedIn(c, sessionFs);
+        if (unauthorized) return unauthorized;
         const path = c.req.query('path');
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
         // Confine resolution to the browsable root (following symlinks), so this

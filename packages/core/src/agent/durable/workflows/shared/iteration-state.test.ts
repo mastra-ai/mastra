@@ -142,6 +142,30 @@ describe('calculateAccumulatedUsage', () => {
 });
 
 describe('createBaseIterationStateUpdate', () => {
+  it.each([10, 20, 40])('does not replicate model input in %i accumulated tool-result steps', count => {
+    const prompt = 'unique-model-input-'.repeat(1000);
+    let state = iterationState();
+    for (let index = 0; index < count; index++) {
+      const output = executionOutput();
+      output.toolResults = [
+        {
+          toolCallId: `call-${index}`,
+          toolName: 'lookup',
+          args: { index },
+          result: { value: `result-${index}` },
+          stepSpanData: { input: { system: prompt, messages: [prompt] } },
+        },
+      ];
+      state = createBaseIterationStateUpdate({ currentState: state, executionOutput: output });
+    }
+    const serialized = JSON.stringify(state);
+    expect(serialized.split('unique-model-input-').length - 1).toBe(0);
+    expect(state.accumulatedSteps).toHaveLength(count);
+    expect(state.accumulatedSteps[count - 1].toolResults).toMatchObject([
+      { toolCallId: `call-${count - 1}`, toolName: 'lookup', result: { value: `result-${count - 1}` } },
+    ]);
+  });
+
   it('preserves a cold input rejection across preemption and clears it after the terminal step (COR-1481)', () => {
     const runId = 'cold-input-tripwire';
     const inputTripwire = {

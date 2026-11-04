@@ -214,6 +214,10 @@ const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
   pull_requests: 'write',
+  // Read-only CI visibility so sessions can verify checks and workflow runs.
+  checks: 'read',
+  actions: 'read',
+  statuses: 'read',
 } as const;
 
 /** The Platform mints one installation token for at most this many named repositories. */
@@ -1171,6 +1175,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       expiresAt: Date.now() + INSTALLATION_REPOS_CACHE_TTL_MS,
     });
     return repos;
+  }
+
+  /**
+   * The Platform has no single-repository endpoint, so read the (cached)
+   * installation listing. The repo picker's search warms that cache.
+   */
+  async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
+    const repositories = await this.listInstallationRepos(installationId);
+    return repositories.find(repository => repository.fullName === repoFullName) ?? null;
   }
 
   async mintInstallationToken(installationId: number): Promise<string> {
