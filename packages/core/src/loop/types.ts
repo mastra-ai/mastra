@@ -213,6 +213,12 @@ export type LoopConfig<OUTPUT = undefined> = {
    */
   onAbort?: (event: { steps: any[]; text?: string }) => Promise<void> | void;
   abortSignal?: AbortSignal;
+  /**
+   * @internal The object this run's steps report themselves as running under: the signal the thread runtime prepared
+   * for the run. Later replacements of `abortSignal` — the publisher's signal, then a total timeout — are derived from
+   * it and the runtime never asks about those, so they must not stand in for it.
+   */
+  stepOwner?: object;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;
 };

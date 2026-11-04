@@ -23,21 +23,10 @@ export async function verifyRunLease(runId: string | undefined): Promise<void> {
 }
 
 /**
- * Steps register against the abort signal the loop was handed; the thread runtime asks about the signal it prepared.
- * A published run has two, because its stream publisher derives a controller that can also be stopped from another
- * process. Without this link the runtime sees no running step, so lease loss kills the step mid-flight instead of
- * waiting for it. Chains collapse to the base signal. Durable runs key on a registry entry, so they never need this.
- */
-const stepOwners = new WeakMap<object, object>();
-
-export function setRunStepOwner(owner: object, parent: object): void {
-  stepOwners.set(owner, stepOwners.get(parent) ?? parent);
-}
-
-/**
- * The steps (model requests and tool calls) each run has running now, keyed by an object owned by that one run
- * instance: the abort signal the thread runtime prepared for it, or a durable run's registry entry. Runs that share
- * a run id, agent or thread never share one.
+ * The steps (model requests and tool calls) each run has running now, keyed by the object that run's caller declares
+ * as its owner: the abort signal the thread runtime prepared for it, or a durable run's registry entry. It has to be
+ * that object and not a signal derived from it further down — the runtime only knows the one it prepared, so a derived
+ * signal would silently read as idle. Runs that share a run id, agent or thread never share one.
  */
 const runningSteps = new WeakMap<object, { count: number; onSettled: Array<() => void> }>();
 /** When each run's last step settled, so the moment between one step and the next doesn't read as idle. */
@@ -46,7 +35,6 @@ const lastStepSettledAt = new WeakMap<object, number>();
 /** Marks a step of the run this object owns as running. Call the returned function once the step has settled. */
 export function startRunStep(owner: object | undefined): () => void {
   if (!owner) return () => {};
-  owner = stepOwners.get(owner) ?? owner;
   const entry = runningSteps.get(owner) ?? { count: 0, onSettled: [] };
   entry.count++;
   runningSteps.set(owner, entry);
@@ -63,7 +51,6 @@ export function startRunStep(owner: object | undefined): () => void {
 
 /** Calls `callback` once no step of the run this object owns is running: right away when none is. */
 export function whenRunStepsSettle(owner: object | undefined, callback: () => void): void {
-  if (owner) owner = stepOwners.get(owner) ?? owner;
   const entry = owner ? runningSteps.get(owner) : undefined;
   if (entry) entry.onSettled.push(callback);
   else callback();
@@ -77,7 +64,6 @@ export function isRunStepActive(owner: object | undefined, withinMs: number): bo
   if (!owner) return false;
   const signal = owner instanceof AbortSignal ? owner : (owner as { abortSignal?: unknown }).abortSignal;
   if (signal instanceof AbortSignal && signal.aborted) return false;
-  owner = stepOwners.get(owner) ?? owner;
   if (runningSteps.has(owner)) return true;
   const settledAt = lastStepSettledAt.get(owner);
   return settledAt !== undefined && Date.now() - settledAt < withinMs;
