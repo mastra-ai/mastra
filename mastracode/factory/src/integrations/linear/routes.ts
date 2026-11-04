@@ -22,7 +22,7 @@ import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import type { LinearIntegration } from './integration.js';
+import type { LinearIntegration, LinearProject, LinearTeam } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
 
@@ -45,19 +45,23 @@ export interface LinearFeatureDiagnostics {
   appDbConfigured: boolean;
 }
 
+export interface LinearWorkspaceListingError {
+  workspaceId: string;
+  name: string;
+}
+
+/** Platform connection inventory entry, including disconnected workspaces. Never contains tokens. */
+export interface LinearConnectionWorkspace {
+  id: string;
+  name: string;
+  urlKey: string | null;
+  connected: boolean;
+}
+
 export interface MountLinearRoutesOptions {
-  listProjectsWithStatus?: () => Promise<{
-    projects: Awaited<ReturnType<LinearIntegration['listProjects']>>;
-    workspaceErrors: Array<{ workspaceId: string; name: string }>;
-  }>;
-  listTeamsWithStatus?: () => Promise<{
-    teams: Awaited<ReturnType<LinearIntegration['listTeams']>>;
-    workspaceErrors: Array<{ workspaceId: string; name: string }>;
-  }>;
-  /** Platform connection inventory, including disconnected workspaces. Never contains tokens. */
-  listConnectionWorkspaces?: () => Promise<
-    Array<{ id: string; name: string; urlKey: string | null; connected: boolean }>
-  >;
+  listProjectsWithStatus?: () => Promise<{ projects: LinearProject[]; workspaceErrors: LinearWorkspaceListingError[] }>;
+  listTeamsWithStatus?: () => Promise<{ teams: LinearTeam[]; workspaceErrors: LinearWorkspaceListingError[] }>;
+  listConnectionWorkspaces?: () => Promise<LinearConnectionWorkspace[]>;
   /**
    * The integration instance providing OAuth + GraphQL access. Required for
    * everything beyond the disabled `status` route.

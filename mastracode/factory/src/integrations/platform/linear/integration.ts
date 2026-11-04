@@ -23,6 +23,7 @@ import {
   linearIssueReconciliationInterval,
 } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
+import type { LinearWorkspaceListingError } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
 import {
@@ -87,7 +88,6 @@ type LinearProject = {
 type LinearTeam = { id: string; key: string; name: string };
 type ProjectSource = { workspace: LinearWorkspace; project: LinearProject };
 type TeamSource = { workspace: LinearWorkspace; team: LinearTeam };
-type WorkspaceListingError = { workspaceId: string; name: string };
 type LinearWorkflowState = {
   id: string;
   name: string;
@@ -433,41 +433,20 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       ...buildLinearRoutes({
         auth: ctx.auth,
         linear: this as unknown as LinearIntegration,
-        listConnectionWorkspaces: async () => {
-          const result = await this.#client.request<{ workspaces: LinearWorkspace[] }>(
-            'GET',
-            `${API_PREFIX}/workspaces`,
-          );
-          return result.workspaces.map(workspace => ({
+        listConnectionWorkspaces: async () =>
+          (await this.#listAllWorkspaces()).map(workspace => ({
             id: workspace.linearWorkspaceId,
             name: workspace.linearWorkspaceName,
             urlKey: workspace.urlKey,
             connected: workspace.connected,
-          }));
-        },
+          })),
         listProjectsWithStatus: async () => {
-          const workspaceErrors: WorkspaceListingError[] = [];
-          const sources = await this.#listProjectSources(undefined, workspaceErrors);
-          return {
-            projects: sources.map(({ workspace, project }) => ({
-              ...project,
-              id: encodeSourceId(workspace.linearWorkspaceId, project.id),
-              workspaceId: workspace.linearWorkspaceId,
-            })),
-            workspaceErrors,
-          };
+          const workspaceErrors: LinearWorkspaceListingError[] = [];
+          return { projects: await this.#listProjects(workspaceErrors), workspaceErrors };
         },
         listTeamsWithStatus: async () => {
-          const workspaceErrors: WorkspaceListingError[] = [];
-          const sources = await this.#listTeamSources(undefined, workspaceErrors);
-          return {
-            teams: sources.map(({ workspace, team }) => ({
-              ...team,
-              sourceId: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
-              workspaceId: workspace.linearWorkspaceId,
-            })),
-            workspaceErrors,
-          };
+          const workspaceErrors: LinearWorkspaceListingError[] = [];
+          return { teams: await this.#listTeams(workspaceErrors), workspaceErrors };
         },
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
@@ -489,16 +468,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
-        const returnTo = localReturnPath(c.req.query('return_to'));
+        const returnUrl = localReturnUrl(c.req.query('return_to'));
+        const returnTo = `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`;
         const originator = routeBaseUrl(ctx, c.req.url);
         const workspaceId = c.req.query('workspace_id');
         let authorizationReturnTo = returnTo;
         if (workspaceId) {
-          const result = await this.#client.request<{ workspaces: LinearWorkspace[] }>(
-            'GET',
-            `${API_PREFIX}/workspaces`,
-          );
-          if (!result.workspaces.some(workspace => workspace.linearWorkspaceId === workspaceId)) {
+          const workspaces = await this.#listAllWorkspaces();
+          if (!workspaces.some(workspace => workspace.linearWorkspaceId === workspaceId)) {
             return c.json({ error: 'linear_workspace_not_found' }, 404);
           }
           // Platform owns OAuth. Verify the intended workspace after it returns;
@@ -524,7 +501,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       handler: async c => {
         await ctx.auth.ensureUser(loose(c));
         if (!ctx.auth.tenant(loose(c))?.orgId) return c.json({ error: 'unauthorized' }, 401);
-        const destination = new URL(localReturnPath(c.req.query('return_to')), 'https://factory.invalid');
+        const destination = localReturnUrl(c.req.query('return_to'));
         const workspaceId = c.req.query('workspace_id');
         try {
           const workspaces = await this.#listWorkspaces();
@@ -548,15 +525,25 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   async listProjects(): Promise<Array<LinearProject & { workspaceId: string }>> {
-    return (await this.#listProjectSources()).map(({ workspace, project }) => ({
+    return this.#listProjects();
+  }
+
+  async listTeams(_accessToken: string): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
+    return this.#listTeams();
+  }
+
+  async #listProjects(errors?: LinearWorkspaceListingError[]): Promise<Array<LinearProject & { workspaceId: string }>> {
+    return (await this.#listProjectSources(undefined, errors)).map(({ workspace, project }) => ({
       ...project,
       id: encodeSourceId(workspace.linearWorkspaceId, project.id),
       workspaceId: workspace.linearWorkspaceId,
     }));
   }
 
-  async listTeams(_accessToken: string): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
-    return (await this.#listTeamSources()).map(({ workspace, team }) => ({
+  async #listTeams(
+    errors?: LinearWorkspaceListingError[],
+  ): Promise<Array<LinearTeam & { workspaceId: string; sourceId: string }>> {
+    return (await this.#listTeamSources(undefined, errors)).map(({ workspace, team }) => ({
       ...team,
       workspaceId: workspace.linearWorkspaceId,
       sourceId: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
@@ -610,7 +597,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async #listProjectSources(
     workspaceIds?: ReadonlySet<string>,
-    errors?: WorkspaceListingError[],
+    errors?: LinearWorkspaceListingError[],
   ): Promise<ProjectSource[]> {
     const workspaces = await this.#listWorkspaces();
     const scopedWorkspaces = workspaceIds
@@ -639,7 +626,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return collectWorkspaceListings(scopedWorkspaces, projectGroups, errors);
   }
 
-  async #listTeamSources(workspaceIds?: ReadonlySet<string>, errors?: WorkspaceListingError[]): Promise<TeamSource[]> {
+  async #listTeamSources(
+    workspaceIds?: ReadonlySet<string>,
+    errors?: LinearWorkspaceListingError[],
+  ): Promise<TeamSource[]> {
     const workspaces = await this.#listWorkspaces();
     const scopedWorkspaces = workspaceIds
       ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
@@ -672,8 +662,13 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
+    return (await this.#listAllWorkspaces()).filter(workspace => workspace.connected);
+  }
+
+  /** Includes workspaces whose connection stopped working. */
+  async #listAllWorkspaces(): Promise<LinearWorkspace[]> {
     const result = await this.#client.request<{ workspaces: LinearWorkspace[] }>('GET', `${API_PREFIX}/workspaces`);
-    return result.workspaces.filter(workspace => workspace.connected);
+    return result.workspaces;
   }
 
   async #listIssues(sourceIds: string[], cursor?: string, labels?: string[], attributionSourceIds = sourceIds) {
@@ -754,15 +749,12 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     }
 
     const cursors = await decodeCursor(cursor, sourceIds, attributionSourceIds);
+    const unfinished = descriptors.filter(({ sourceId }) => cursors[sourceId] !== null);
     const normalizedLabels = normalizeLabels(labels);
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
     const pages = await Promise.allSettled(
-      descriptors.map(async ({ kind, sourceId, workspace, query }) => {
-        if (cursors[sourceId] === null) {
-          nextState[sourceId] = null;
-          return [] as ListedIssue[];
-        }
+      unfinished.map(async ({ kind, sourceId, workspace, query }) => {
         const after = cursors[sourceId];
         if (after) query.set('after', after);
         const result = await this.#client.request<{ issues: LinearIssue[]; pageInfo: PageInfo }>(
@@ -792,7 +784,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       // successful workspaces can finish their own pagination in this cycle.
       issues: dedupeIssuesBySource(
         collectWorkspaceListings(
-          descriptors.map(source => source.workspace),
+          unfinished.map(source => source.workspace),
           pages,
         ),
         sourceIds,
@@ -1115,7 +1107,7 @@ function isNotFound(error: unknown): boolean {
 function collectWorkspaceListings<T>(
   workspaces: LinearWorkspace[],
   results: PromiseSettledResult<T[]>[],
-  errors?: WorkspaceListingError[],
+  errors?: LinearWorkspaceListingError[],
 ): T[] {
   const items: T[] = [];
   let firstFailure: unknown;
@@ -1133,17 +1125,18 @@ function collectWorkspaceListings<T>(
       workspaceId: workspace.linearWorkspaceId,
     });
   }
-  // Keep retry/backoff behavior when no workspace could be read. Browser
-  // listings receive explicit workspace errors, including a complete outage.
-  if (!errors && !succeeded && firstFailure) throw firstFailure;
+  if (!succeeded && firstFailure) throw firstFailure;
   return items;
 }
 
+const LOCAL_RETURN_ORIGIN = 'https://factory.invalid';
+
 /** OAuth may only return to a path on this Factory host. */
-function localReturnPath(value: string | undefined): string {
-  if (!value?.startsWith('/') || value.startsWith('//') || /[\\\r\n]/.test(value)) return '/';
-  const url = new URL(value, 'https://factory.invalid');
-  return `${url.pathname}${url.search}${url.hash}`;
+function localReturnUrl(value: string | undefined): URL {
+  const url = value?.startsWith('/') ? URL.parse(value, LOCAL_RETURN_ORIGIN) : null;
+  // Dot segments can normalize `/.//host` into a protocol-relative `//host`.
+  if (url?.origin === LOCAL_RETURN_ORIGIN && !url.pathname.startsWith('//')) return url;
+  return new URL('/', LOCAL_RETURN_ORIGIN);
 }
 
 function optionalPositiveIntegerEnv(name: string): number | undefined {

@@ -131,7 +131,7 @@ describe('PlatformLinearIntegration', () => {
     }
 
     it.each([true, false])(
-      'retains disconnected workspace names when a healthy workspace exists: %s',
+      'lists disconnected workspaces by name (healthy workspace present: %s)',
       async healthy => {
         provider.use(
           http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
@@ -185,7 +185,12 @@ describe('PlatformLinearIntegration', () => {
       expect((await app.request('/auth/linear/connect?workspace_id=another-org')).status).toBe(404);
     });
 
-    it.each(['https://example.org/steal', '//example.org/steal', '/\\example.org/steal'])(
+    it.each([
+      'https://example.org/steal',
+      '//example.org/steal',
+      '/\\example.org/steal',
+      '/.//factory.example//example.org/steal',
+    ])(
       'keeps the reconnect return on the Factory host for %s',
       async returnTo => {
         provider.use(
@@ -249,6 +254,52 @@ describe('PlatformLinearIntegration', () => {
         expect(intake.issues.map(item => item.identifier)).toEqual(['ENG-42']);
       },
     );
+
+    it('reports a failed listing when no workspace could be read', async () => {
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => HttpResponse.json({ workspaces: [workspace] })),
+        http.get(
+          `${config.baseUrl}/v1/server/linear/workspaces/workspace-1/projects`,
+          () => new HttpResponse(null, { status: 503 }),
+        ),
+      );
+      const { app } = await recoveryApp();
+      const response = await app.request('/web/linear/projects');
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({ error: 'linear_fetch_failed' });
+    });
+
+    it('fails a later issue page instead of ending the list when every remaining source fails', async () => {
+      const project3SourceId = sourceId('workspace-1', 'project-3');
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => HttpResponse.json({ workspaces: [workspace] })),
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/projects`, () =>
+          HttpResponse.json({
+            projects: [project, { ...project, id: 'project-3' }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          }),
+        ),
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/issues`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          if (query.get('after')) return new HttpResponse(null, { status: 503 });
+          return query.get('projectIds') === 'project-3'
+            ? HttpResponse.json({
+                issues: [{ ...issue, id: 'issue-3', identifier: 'ENG-43', project: { id: 'project-3' } }],
+                pageInfo: { hasNextPage: true, endCursor: 'page-2' },
+              })
+            : HttpResponse.json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
+        }),
+      );
+      const { integration } = await recoveryApp();
+      const sourceIds = [project1SourceId, project3SourceId];
+      const connection = { type: 'oauth' as const, accessToken: 'unused' };
+      const first = await integration.intake.listIssues({ connection, sourceIds });
+      expect(first.issues.map(item => item.identifier).sort()).toEqual(['ENG-42', 'ENG-43']);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      await expect(
+        integration.intake.listIssues({ connection, sourceIds, cursor: first.nextCursor ?? undefined }),
+      ).rejects.toMatchObject({ status: 503 });
+    });
   });
   describe('when issues belong to a Linear project', () => {
     function projectIntegration() {

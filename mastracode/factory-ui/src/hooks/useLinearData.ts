@@ -6,8 +6,8 @@ import {
   fetchLinearStatus,
   getLinearIssue,
   listLinearIssues,
-  listLinearProjectsWithStatus,
-  listLinearTeamsWithStatus,
+  listLinearProjects,
+  listLinearTeams,
 } from '../ui/domains/factory/services/linear';
 import { RequestError } from '../ui/domains/factory/services/request';
 import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
@@ -71,7 +71,7 @@ export function useLinearProjectsQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearProjects(),
-    queryFn: () => listLinearProjectsWithStatus(baseUrl),
+    queryFn: () => listLinearProjects(baseUrl),
     select: data => data.projects,
     enabled,
   });
@@ -81,27 +81,17 @@ export function useLinearProjectListingQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearProjects(),
-    queryFn: () => listLinearProjectsWithStatus(baseUrl),
+    queryFn: () => listLinearProjects(baseUrl),
     enabled,
   });
 }
 
-/** The connected workspace's teams (Settings intake-source picker). */
-export function useLinearTeamsQuery(enabled: boolean) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.linearTeams(),
-    queryFn: () => listLinearTeamsWithStatus(baseUrl),
-    select: data => data.teams,
-    enabled,
-  });
-}
-
+/** The connected workspaces' teams (Settings intake-source picker). */
 export function useLinearTeamListingQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearTeams(),
-    queryFn: () => listLinearTeamsWithStatus(baseUrl),
+    queryFn: () => listLinearTeams(baseUrl),
     enabled,
   });
 }

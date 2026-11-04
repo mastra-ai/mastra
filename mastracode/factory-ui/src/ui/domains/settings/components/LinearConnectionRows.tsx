@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Link2, Plus, RotateCcw, Settings2 } from 'lucide-react';
+import { Link2, Plus, Settings2 } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -9,6 +9,7 @@ import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { connectLinear } from '../../factory/services/linear';
 import { IntegrationLabel } from './IntegrationLabel';
 import { LinearWorkspaceControl } from './LinearWorkspaceControl';
+import { accessDescription, NotConfiguredRow, RetryRow } from './common/ConnectionStateRows';
 
 export function LinearConnectionRows({ showAvailable }: { showAvailable: boolean }) {
   const { baseUrl } = useApiConfig();
@@ -30,23 +31,11 @@ export function LinearConnectionRows({ showAvailable }: { showAvailable: boolean
   const label = <IntegrationLabel provider="linear" name="Linear" />;
   if (query.isPending) return <SettingsRowsSkeleton label="Loading Linear connections" rows={1} />;
   if (query.isError || status?.reason === 'unavailable') {
-    return (
-      <SettingsRow label={label} errorMsg="Couldn't load Linear connections.">
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void retry()}>
-          Retry
-        </Button>
-      </SettingsRow>
-    );
+    return <RetryRow label={label} errorMsg="Couldn't load Linear connections." onRetry={() => void retry()} />;
   }
-  if (status?.reason === 'auth_required') {
-    return <SettingsRow label={label} description="Sign in to manage organization connections." />;
-  }
-  if (status?.reason === 'organization_required') {
-    return <SettingsRow label={label} description="Select an organization to connect Linear." />;
-  }
-  if (!status?.enabled) {
-    return showAvailable ? <SettingsRow label={label} description="Not configured on this server." /> : null;
-  }
+  const access = accessDescription(status?.reason, 'Linear');
+  if (access) return <SettingsRow label={label} description={access} />;
+  if (!status?.enabled) return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
   const workspaces =
     status.workspaces ??
     (status.connected

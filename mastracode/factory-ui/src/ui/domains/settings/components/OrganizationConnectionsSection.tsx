@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Check, Link2, Plus, RotateCcw } from 'lucide-react';
+import { Check, Link2, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
-import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -23,18 +22,13 @@ import { LinearConnectionRows } from './LinearConnectionRows';
 import { connectionName, ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
+import { accessDescription, NotConfiguredRow, RetryRow } from './common/ConnectionStateRows';
 
 const platformIcons = {
   gitlab: 'gitlab',
   jira: 'jira',
   'incident-io': 'incidentio',
 } as const satisfies Record<PlatformConnectProviderId, string>;
-
-function accessDescription(reason: string | undefined, name: string): string | undefined {
-  if (reason === 'auth_required') return 'Sign in to manage organization connections.';
-  if (reason === 'organization_required') return `Select an organization to connect ${name}.`;
-  return undefined;
-}
 
 export function OrganizationConnectionsSection() {
   const [searchParams] = useSearchParams();
@@ -70,21 +64,6 @@ export function OrganizationConnectionsSection() {
       </div>
     </SettingsSubsection>
   );
-}
-
-function RetryRow({ label, errorMsg, onRetry }: { label: ReactNode; errorMsg: string; onRetry: () => void }) {
-  return (
-    <SettingsRow label={label} errorMsg={errorMsg}>
-      <Button size="sm" icon={<RotateCcw />} onClick={onRetry}>
-        Retry
-      </Button>
-    </SettingsRow>
-  );
-}
-
-function NotConfiguredRow({ label, showAvailable }: { label: ReactNode; showAvailable: boolean }) {
-  if (!showAvailable) return null;
-  return <SettingsRow label={label} description="Not configured on this server." />;
 }
 
 function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {

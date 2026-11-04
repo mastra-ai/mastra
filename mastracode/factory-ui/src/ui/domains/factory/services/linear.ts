@@ -10,7 +10,12 @@
 import { RequestError } from './request';
 
 export type LinearStatusReason =
-  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready'
+  | 'unavailable';
 
 export interface LinearStatus {
   mode?: 'platform';
@@ -167,21 +172,20 @@ export async function getLinearIssue(
   );
 }
 
-/** List the connected workspace's projects (Settings intake-source picker). */
-export async function listLinearProjects(baseUrl: string): Promise<LinearProject[]> {
-  const { projects } = await listLinearProjectsWithStatus(baseUrl);
-  return projects;
-}
-
 export interface LinearWorkspaceListingError {
   workspaceId: string;
   name: string;
 }
-export function listLinearProjectsWithStatus(baseUrl: string) {
-  return getLinearResource<{ projects: LinearProject[]; workspaceErrors?: LinearWorkspaceListingError[] }>(
-    baseUrl,
-    '/web/linear/projects',
-  );
+
+export interface LinearProjectListing {
+  projects: LinearProject[];
+  /** Workspaces that failed to list while others succeeded; absent on older servers. */
+  workspaceErrors?: LinearWorkspaceListingError[];
+}
+
+/** List the connected workspaces' projects (Settings intake-source picker). */
+export function listLinearProjects(baseUrl: string): Promise<LinearProjectListing> {
+  return getLinearResource<LinearProjectListing>(baseUrl, '/web/linear/projects');
 }
 
 /** A Linear team, selectable as an intake source in its own right. */
@@ -196,17 +200,14 @@ export interface LinearTeam {
   workspaceId?: string;
 }
 
-/** List the connected workspace's teams (Settings intake-source picker). */
-export async function listLinearTeams(baseUrl: string): Promise<LinearTeam[]> {
-  const { teams } = await listLinearTeamsWithStatus(baseUrl);
-  return teams;
+export interface LinearTeamListing {
+  teams: LinearTeam[];
+  workspaceErrors?: LinearWorkspaceListingError[];
 }
 
-export function listLinearTeamsWithStatus(baseUrl: string) {
-  return getLinearResource<{ teams: LinearTeam[]; workspaceErrors?: LinearWorkspaceListingError[] }>(
-    baseUrl,
-    '/web/linear/teams',
-  );
+/** List the connected workspaces' teams (Settings intake-source picker). */
+export function listLinearTeams(baseUrl: string): Promise<LinearTeamListing> {
+  return getLinearResource<LinearTeamListing>(baseUrl, '/web/linear/teams');
 }
 
 /**
