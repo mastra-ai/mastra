@@ -39,7 +39,7 @@ export function LogDataPanel({
             <DataPanel.CloseButton onClick={onClose} />
             <DataPanel.Heading>Log</DataPanel.Heading>
             <DataPanel.Metadata>
-              <DataPanel.Meta>{formattedDate}</DataPanel.Meta>
+              <DataPanel.Meta tooltip={formattedDate}>{formattedDate}</DataPanel.Meta>
             </DataPanel.Metadata>
             <DataPanel.HeaderActions>
               <DataPanel.NextPrevNav
