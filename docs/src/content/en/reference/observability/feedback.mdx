@@ -103,6 +103,8 @@ await mastraClient.createFeedback({
 })
 ```
 
+For OSS HTTP requests, the authenticated user's ID takes precedence as `feedbackUserId`. Without an authenticated user, supply `feedbackUserId` explicitly or leave it null for anonymous feedback. `userId` describes the span user and isn't used as the HTTP feedback author. Direct storage calls retain the deprecated `userId` author alias when `feedbackUserId` is omitted. An explicit null author stays null.
+
 ### `batchCreateFeedback(args)`
 
 Creates multiple feedback records through the observability storage domain. This method isn't exposed by the HTTP routes or `@mastra/client-js`.
