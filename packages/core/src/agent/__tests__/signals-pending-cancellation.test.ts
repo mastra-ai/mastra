@@ -2014,11 +2014,18 @@ describe('Agent signals: pending cancellation', () => {
 
     it('counts a slow lease read once when the next check comes due before it returns', async () => {
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-      const { scope, pubsub, model, getStreamCount, deliver, releaseFollowUp, cleanup } = await forwardToFollowUpRun(
-        'slow-lease-read',
-        { silentRunEnds: true },
-      );
+      const { scope, pubsub, model, stream, getStreamCount, deliver, releaseFollowUp, cleanup } =
+        await forwardToFollowUpRun('slow-lease-read', { silentRunEnds: true });
       try {
+        // As above: a registration handled after the run ended would mark it active again, and the swallowed run-end
+        // event is the only thing that could clear it, so the next run would wait out a whole lease TTL.
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.some(data => data.type === 'run-registered' && data.runId !== stream.runId)).toBe(
+            true,
+          ),
+        );
+        await pubsub.flush();
+        await nextTick();
         releaseFollowUp();
         await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
         deliver();
