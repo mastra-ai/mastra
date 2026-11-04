@@ -44,6 +44,16 @@ describe('input stamped in the same millisecond as the stored history it follows
     expect(all[2]!.createdAt.getTime()).toBeGreaterThan(tie.getTime());
   });
 
+  it('keeps a response stamped in the stored history millisecond after the input it answers', () => {
+    const tie = new Date('2026-11-01T09:03:24.929Z');
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(stored('input', 'user', 'input', tie), 'input');
+    list.add(stored('history', 'user', 'history', tie), 'memory');
+    list.add(stored('response', 'assistant', 'response', tie), 'response');
+
+    expect(list.get.all.db().map(message => message.id)).toEqual(['history', 'input', 'response']);
+  });
+
   it('leaves live messages that tie only with each other untouched', () => {
     const same = new Date('2026-11-01T09:03:24.929Z');
     const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });

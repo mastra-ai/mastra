@@ -576,7 +576,7 @@ export class MessageList {
         options,
       );
     }
-    if (messageSource === 'memory') this.moveLiveMessagesPastStoredTies();
+    this.moveLiveMessagesPastStoredTies();
     return this;
   }
 
@@ -2822,8 +2822,13 @@ export class MessageList {
   // timestamps would then put the stored answer last, and this turn's response would merge
   // into it. Stored history sits underneath the live turn, so a live message tied with a stored
   // one moves 1 ms later. Live messages that tie only with each other keep their timestamps.
+  // A live message that ties later (a response stamped in the same millisecond) lands after the
+  // ones already moved off that time, so the turn keeps the order it was added in.
+  private movedPastStoredTie = new Map<number, number>();
+
   private moveLiveMessagesPastStoredTies(): void {
     const memory = this.memoryMessages;
+    if (!memory.size) return;
     const live = this.messages.filter(message => !memory.has(message));
     if (!live.length) return;
 
@@ -2836,8 +2841,9 @@ export class MessageList {
     for (const message of live) {
       const original = message.createdAt.getTime();
       if (!storedTimes.has(original)) continue;
-      let time = original + 1;
+      let time = (this.movedPastStoredTie.get(original) ?? original) + 1;
       while (storedTimes.has(time)) time++;
+      this.movedPastStoredTie.set(original, time);
 
       const previous = message.createdAt.toISOString();
       message.createdAt = new Date(time);
