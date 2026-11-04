@@ -8,9 +8,9 @@
  */
 import './_env.js'; // MUST be first — loads .env before any env-reading module.
 import { randomUUID } from 'node:crypto';
-import { embedMany } from 'ai';
-import { MDocument } from '@mastra/rag';
 import { MongoDBVector } from '@mastra/mongodb';
+import { MDocument } from '@mastra/rag';
+import { embedMany } from 'ai';
 import { EMBED_DIMENSION, embeddingModel } from '../src/mastra/bedrock.js';
 import { MONGODB_DATABASE, MONGODB_URI, VECTOR_INDEX } from '../src/mastra/mongo.js';
 
@@ -73,7 +73,11 @@ async function main() {
       const texts = chunks.map(c => c.text);
       const vectors: number[][] = [];
       for (let b = 0; b < texts.length; b += EMBED_BATCH) {
-        const { embeddings } = await embedMany({ model: embeddingModel, values: texts.slice(b, b + EMBED_BATCH) });
+        const { embeddings } = await embedMany({
+          model: embeddingModel,
+          values: texts.slice(b, b + EMBED_BATCH),
+          providerOptions: { bedrock: { dimensions: EMBED_DIMENSION } },
+        });
         vectors.push(...embeddings);
       }
 

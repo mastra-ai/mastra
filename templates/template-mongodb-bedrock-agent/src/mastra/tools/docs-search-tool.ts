@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { embed } from 'ai';
 import { z } from 'zod';
-import { embeddingModel } from '../bedrock.js';
+import { EMBED_DIMENSION, embeddingModel } from '../bedrock.js';
 import { VECTOR_INDEX, VECTOR_STORE_NAME } from '../mongo.js';
 
 /**
@@ -35,7 +35,11 @@ export const docsSearchTool = createTool({
 
     // 1) Bedrock: embed the query.
     await writer?.write({ type: 'status', stage: 'embedding', message: '🟠 Bedrock Titan — embedding your question…' });
-    const { embedding } = await embed({ model: embeddingModel, value: query });
+    const { embedding } = await embed({
+      model: embeddingModel,
+      value: query,
+      providerOptions: { bedrock: { dimensions: EMBED_DIMENSION } },
+    });
 
     // 2) MongoDB: Atlas Vector Search.
     await writer?.write({ type: 'status', stage: 'retrieving', message: '🍃 MongoDB Atlas — running vector search…' });
