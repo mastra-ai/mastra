@@ -41,6 +41,11 @@
         "type": "toggle"
       }
     ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm5.2": [
       {
         "type": "effort",
@@ -51,11 +56,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
       }
     ]
   }

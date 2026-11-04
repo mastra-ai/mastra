@@ -3813,7 +3813,7 @@ export class Workflow<
     });
   }
 
-  async deleteWorkflowRunById(runId: string) {
+  async deleteWorkflowRunById(runId: string, options?: { storageVersion: 1 | 2 }) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot delete workflow run by ID. Mastra storage is not initialized');
@@ -3826,7 +3826,7 @@ export class Workflow<
       return;
     }
 
-    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id });
+    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
     // deleting the run from the in memory runs
     this.#runs.delete(runId);
   }
