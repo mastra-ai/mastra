@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { factoryVoiceSettingsUserId } from '../../storage/domains/voice-settings/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { transcribeVoiceClips } from './voice-clips.js';
 
@@ -103,6 +104,36 @@ describe('transcribeVoiceClips', () => {
 
     expect((await transcriptOf(msg)).text).toBe('hello from whisper');
     expect(calls.openai.map(c => c.authorization)).toEqual(['Bearer sk-org']);
+  });
+
+  it("follows the routed Factory's model scope: factory scope uses its model and the org key, ignoring personal ones", async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org1',
+      userId: 'user-a',
+      input: { name: 'Voice', modelScope: 'factory' },
+    });
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    await seed.voiceSettings.set({ ...SENDER, provider: 'mistral', model: 'voxtral-mini-latest' });
+    await seed.voiceSettings.set({
+      orgId: 'org1',
+      userId: factoryVoiceSettingsUserId(project.id),
+      provider: 'openai',
+      model: 'whisper-1',
+    });
+    const msg = message('m1', [voiceClip()]);
+
+    await transcribeVoiceClips(
+      [msg],
+      SENDER,
+      { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings, projects: seed.projects },
+      project.id,
+    );
+
+    expect((await transcriptOf(msg)).text).toBe('hello from whisper');
+    expect(calls.openai.map(c => c.authorization)).toEqual(['Bearer sk-org']);
+    expect(calls.mistral).toEqual([]);
   });
 
   it('transcribes clips from earlier messages batched into the same run', async () => {

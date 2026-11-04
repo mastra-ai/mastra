@@ -174,7 +174,7 @@ describe('resolveLinkedSender', () => {
 
 const linkKey = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-sender' };
 
-function makeProjects(factories: Array<{ id: string; name?: string }>) {
+function makeProjects(factories: Array<{ id: string; name?: string; orgId?: string; modelScope?: string }>) {
   const projects = factories.map(factory => ({ ...factory }));
   return {
     get: vi.fn(async ({ id }: { id: string }) => projects.find(f => f.id === id) ?? null),
@@ -751,7 +751,7 @@ describe('handler dispatch gating', () => {
   describe('voice clips', () => {
     const linked = () => ({
       accountLinks: fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
-      projects: makeProjects([{ id: 'fp-1' }]),
+      projects: makeProjects([{ id: 'fp-1', orgId: 'org-1', modelScope: 'hybrid' }]),
     });
 
     it('attaches a note to a voice clip before dispatch when the sender has no speech-to-text key', async () => {
