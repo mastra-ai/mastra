@@ -739,6 +739,23 @@ describe('Mastra Gateway routes with a tenant', () => {
     },
   );
 
+  it("sends no revoke while the user's Mastra session is on another organization, and still removes the credential", async () => {
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
+      type: 'api_key',
+      key: 'msk_factory',
+      keyId: 'key_1',
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const platform = fakePlatform({}, { organizationId: 'org-other' });
+
+    const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
+
+    expect(res.status).toBe(200);
+    expect(platform.requests.map(r => r.path)).toEqual(['/auth/me']);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
+    warn.mockRestore();
+  });
+
   it('reports the remaining gateway credits and where to add more', async () => {
     const platform = fakePlatform({
       'GET /billing/customer': () =>

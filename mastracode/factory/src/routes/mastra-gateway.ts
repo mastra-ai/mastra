@@ -99,8 +99,9 @@ export async function createGatewayKey(auth: RouteAuth, c: Context, orgId: strin
   return { apiKey, keyId: keyId || undefined };
 }
 
-/** A key the platform no longer has counts as revoked. */
-export async function revokeGatewayKey(auth: RouteAuth, c: Context, keyId: string): Promise<void> {
+/** A key the platform no longer has counts as revoked; it answers 404 for another organization's key too. */
+export async function revokeGatewayKey(auth: RouteAuth, c: Context, orgId: string, keyId: string): Promise<void> {
+  await platformMember(auth, c, orgId);
   const res = await platformFetch(auth, c, `${GATEWAY_KEYS_PATH}/${encodeURIComponent(keyId)}`, {
     method: 'DELETE',
   });

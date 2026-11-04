@@ -1196,7 +1196,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   : undefined;
               if (stored?.type === 'api_key' && stored.keyId) {
                 const keyId = stored.keyId;
-                await revokeGatewayKey(auth, loose(c), keyId).catch(error => {
+                await revokeGatewayKey(auth, loose(c), ctx.orgId, keyId).catch(error => {
                   console.warn('[factory] Mastra Gateway key left unrevoked on Mastra', {
                     keyId,
                     error: error instanceof Error ? error.message : String(error),
