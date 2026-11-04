@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import type { LanguageModelV3Prompt } from '@ai-sdk/provider';
+import type { LanguageModelV4Prompt } from '@ai-sdk/provider';
 import { wrapLanguageModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildOpenAICodexOAuthFetch, createCodexMiddleware, stripCodexInputItemIds } from '../openai-codex.js';
@@ -12,7 +12,7 @@ const storage = {
 
 // A thread's second turn: the stored assistant message carries the ids the
 // Responses API returned on the first turn.
-const prompt: LanguageModelV3Prompt = [
+const prompt: LanguageModelV4Prompt = [
   { role: 'user', content: [{ type: 'text', text: 'Fix the bug' }] },
   {
     role: 'assistant',

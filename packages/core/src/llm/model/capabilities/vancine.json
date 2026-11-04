@@ -25,10 +25,13 @@
         "max": 262144
       }
     ],
-    "hy4-preview": [
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-5.3": [
@@ -61,18 +64,15 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "MiniMax-M3": [
       {
         "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

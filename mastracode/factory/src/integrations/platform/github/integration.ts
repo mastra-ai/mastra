@@ -214,6 +214,10 @@ const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
   pull_requests: 'write',
+  // Read-only CI visibility so sessions can verify checks and workflow runs.
+  checks: 'read',
+  actions: 'read',
+  statuses: 'read',
 } as const;
 
 /** The Platform mints one installation token for at most this many named repositories. */
