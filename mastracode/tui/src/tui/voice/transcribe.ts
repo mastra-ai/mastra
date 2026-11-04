@@ -6,16 +6,17 @@
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { resolveSTTModel } from '@mastra/code-sdk/voice/stt-registry';
-import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
 import { createSTTTranscriber, resolveSTTApiKey, sttApiKeyEnvVar } from '@mastra/code-sdk/voice/transcribe';
+
+function credentialMessage(provider: string): string {
+  const envVar = sttApiKeyEnvVar(provider);
+  const action = envVar ? `Set ${envVar} or add one with /api-keys` : 'Add one with /api-keys';
+  return `Voice input needs a ${provider} API key. ${action} (OAuth tokens are not supported for transcription).`;
+}
 
 export class VoiceCredentialError extends Error {
   constructor(provider: string) {
-    super(
-      `Voice input needs a ${provider} API key. Set ${
-        sttApiKeyEnvVar(provider) ?? `${provider.toUpperCase()}_API_KEY`
-      } or add one with /api-keys (OAuth tokens are not supported for transcription).`,
-    );
+    super(credentialMessage(provider));
     this.name = 'VoiceCredentialError';
   }
 }
@@ -26,23 +27,6 @@ export interface TranscribeOptions {
   /** Model id within the provider. Defaults to the provider's default model. */
   model?: string;
   authStorage?: AuthStorage;
-}
-
-function resolveEntryAndKey(options: TranscribeOptions): { entry: STTModel; apiKey: string } {
-  const entry = resolveSTTModel(options.provider, options.model);
-  const apiKey = resolveSTTApiKey(entry.provider, options.authStorage);
-  if (!apiKey) throw new VoiceCredentialError(entry.provider);
-  return { entry, apiKey };
-}
-
-/**
- * Transcribe recorded WAV audio to text via the configured cloud provider.
- * Throws VoiceCredentialError if no API key is available for the provider.
- */
-export async function transcribeAudio(audio: Buffer, options: TranscribeOptions = {}): Promise<string> {
-  const { entry, apiKey } = resolveEntryAndKey(options);
-  const transcriber = await createSTTTranscriber(entry, apiKey);
-  return transcriber.transcribe(audio, 'wav');
 }
 
 /**
@@ -60,7 +44,9 @@ export interface ReusableTranscriber {
  * and call `transcribe()` per tick.
  */
 export function createTranscriber(options: TranscribeOptions = {}): ReusableTranscriber {
-  const { entry, apiKey } = resolveEntryAndKey(options);
+  const entry = resolveSTTModel(options.provider, options.model);
+  const apiKey = resolveSTTApiKey(entry.provider, options.authStorage);
+  if (!apiKey) throw new VoiceCredentialError(entry.provider);
   const transcriber = createSTTTranscriber(entry, apiKey);
   // A failed load surfaces from transcribe(); don't also report it as unhandled.
   transcriber.catch(() => {});

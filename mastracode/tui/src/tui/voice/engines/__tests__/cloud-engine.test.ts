@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type * as TranscribeModule from '../../transcribe.js';
+
 const mocks = vi.hoisted(() => ({
   detectRecorder: vi.fn(),
   stop: vi.fn(),
@@ -29,7 +31,8 @@ vi.mock('../../mic-capture.js', () => ({
   },
 }));
 
-vi.mock('../../transcribe.js', () => ({
+vi.mock('../../transcribe.js', async importOriginal => ({
+  ...(await importOriginal<typeof TranscribeModule>()),
   createTranscriber: mocks.createTranscriber,
   hasProviderCredential: mocks.hasProviderCredential,
 }));
@@ -68,7 +71,13 @@ describe('CloudSTTEngine', () => {
   it('checkReady reports a missing API key with the provider env var', () => {
     mocks.hasProviderCredential.mockReturnValue(false);
     const engine = new CloudSTTEngine({ provider: 'groq' });
-    expect(engine.checkReady()).toMatch(/GROQ_API_KEY/);
+    expect(engine.checkReady()).toMatch(/Set GROQ_API_KEY or add one with \/api-keys/);
+  });
+
+  it('checkReady names the env var the provider registry lists, not one derived from the provider id', () => {
+    mocks.hasProviderCredential.mockReturnValue(false);
+    const engine = new CloudSTTEngine({ provider: 'alibaba' });
+    expect(engine.checkReady()).toMatch(/Set DASHSCOPE_API_KEY or add one with \/api-keys/);
   });
 
   it('records, transcribes on stop, and emits the final transcript', async () => {

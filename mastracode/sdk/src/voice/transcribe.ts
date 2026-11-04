@@ -2,9 +2,7 @@
 
 import { Readable } from 'node:stream';
 
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
-
+import { providerApiKeyEnvVar } from '../agents/mastracode-gateway.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { STTModel } from './stt-registry.js';
 
@@ -12,11 +10,9 @@ import type { STTModel } from './stt-registry.js';
 const STT_ONLY_API_KEY_ENV_VARS: Record<string, string> = { deepgram: 'DEEPGRAM_API_KEY' };
 
 export function sttApiKeyEnvVar(provider: string): string | undefined {
-  const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[provider]?.apiKeyEnvVar;
-  return STT_ONLY_API_KEY_ENV_VARS[provider] ?? (Array.isArray(envVars) ? envVars[0] : envVars);
+  return STT_ONLY_API_KEY_ENV_VARS[provider] ?? providerApiKeyEnvVar(provider);
 }
 
-/** The provider's env var wins, then the stored `/api-keys` credential. */
 export function resolveSTTApiKey(provider: string, authStorage?: AuthStorage): string | undefined {
   const envVar = sttApiKeyEnvVar(provider);
   const fromEnv = envVar ? process.env[envVar]?.trim() : undefined;
