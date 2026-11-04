@@ -15,16 +15,6 @@
         "default": "./dist/dashboard-renderer.cjs"
       }
     },
-    "./request-tool": {
-      "import": {
-        "types": "./dist/request-tool.d.ts",
-        "default": "./dist/request-tool.js"
-      },
-      "require": {
-        "types": "./dist/request-tool.d.ts",
-        "default": "./dist/request-tool.cjs"
-      }
-    },
     "./package.json": "./package.json"
   },
   "files": [

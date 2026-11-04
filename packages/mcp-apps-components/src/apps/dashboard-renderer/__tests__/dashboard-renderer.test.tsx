@@ -3,10 +3,10 @@ import type { DashboardDefinition } from '@mastra/client-js';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { REQUEST_TOOL_NAME } from '../../../request-tool';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
+import { DASHBOARD_DATA_TOOL_NAME } from '../data';
 import {
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
   DASHBOARD_WIDGET_PIN_NOTIFICATION,
@@ -38,13 +38,13 @@ describe('dashboard renderer app', () => {
       expect(await screen.findByText('Agent runs')).toBeTruthy();
       expect(await screen.findByText('693')).toBeTruthy();
       // The iframe never reaches the network itself: MSW fails any request it didn't expect,
-      // and every read went through the server's request tool, carrying the route MastraClient built.
+      // and every read went through the server's data tool, named after the MastraClient call.
       expect(host.toolCalls.length).toBeGreaterThan(0);
       expect(host.toolCalls).toEqual(
         host.toolCalls.map(() =>
           expect.objectContaining({
-            name: REQUEST_TOOL_NAME,
-            request: expect.objectContaining({ method: 'POST', path: '/observability/metrics/aggregate' }),
+            name: DASHBOARD_DATA_TOOL_NAME,
+            call: expect.objectContaining({ operation: 'getMetricAggregate' }),
           }),
         ),
       );

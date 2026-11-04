@@ -7,6 +7,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { defineMcpApp } from '../../runtime/define-mcp-app';
 import { MastraServerProvider } from '../../runtime/mastra-server-provider';
 import { useMcpApp } from '../../runtime/mcp-app-context';
+import { createDashboardDataFetch } from './data-fetch';
 import { drilldownContext, drilldownMessage, drilldownPrompt } from './drilldown';
 import { dashboardRendererInputSchema } from './input';
 import type { DashboardRendererInput } from './input';
@@ -74,7 +75,7 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
   const pin = pinnedWidgets ? { onPin, isPinned: (widgetId: string) => pinnedWidgets.includes(widgetId) } : {};
 
   return (
-    <MastraServerProvider>
+    <MastraServerProvider createFetch={createDashboardDataFetch}>
       <MetricsProvider
         preset={preset}
         onPresetChange={setPreset}
