@@ -1494,14 +1494,17 @@ describe('Thread annotations', () => {
       await waitFor(() => expect(textarea().value).toBe('Why this one?'), { timeout: 5000 });
     }, 10_000);
 
-    it('puts the annotation back in the composer and the transcript', async () => {
+    it('puts the annotation back in the composer', async () => {
       expect(await screen.findByRole('button', { name: '1 annotation' }, { timeout: 5000 })).toBeTruthy();
-      expect(markers()).toEqual(['1']);
+    }, 10_000);
+
+    it('puts the annotation back on the transcript', async () => {
+      await waitFor(() => expect(markers()).toEqual(['1']), { timeout: 5000 });
     }, 10_000);
   });
 
   describe('when the person opens another thread before sending the annotation', () => {
-    it('starts the other thread without annotations', async () => {
+    beforeEach(async () => {
       server.use(...baseHandlers());
       let rendered: ReturnType<typeof render> | undefined;
       await act(async () => {
@@ -1513,8 +1516,13 @@ describe('Thread annotations', () => {
       await act(async () => {
         rendered?.rerender(renderThreadTree(history(), { threadId: 'thread-2' }));
       });
+    });
 
+    it('starts the other thread with an empty composer annotation list', () => {
       expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
+    });
+
+    it('starts the other thread without annotation bubbles', () => {
       expect(markers()).toEqual([]);
     });
   });

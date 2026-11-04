@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { useChatAnnotations } from '../chat-annotations';
+import { ChatAnnotationsProvider, useChatAnnotations } from '../chat-annotations';
 import { ComposerAnnotations } from '../composer-annotations';
 import { formatAnnotatedMessage } from '../format-annotated-message';
 import { TranscriptAnnotations } from '../transcript-annotations';
@@ -66,5 +66,21 @@ export function AnnotatingChat({
       </ChatShell.Dock>
       {children}
     </ChatShell>
+  );
+}
+
+export function ProvidedChat({
+  onSend,
+  showReply,
+  reply,
+}: {
+  onSend: (message: string) => void;
+  showReply: boolean;
+  reply?: string;
+}) {
+  return (
+    <ChatAnnotationsProvider>
+      <AnnotatingChat onSend={onSend} showReply={showReply} reply={reply} />
+    </ChatAnnotationsProvider>
   );
 }

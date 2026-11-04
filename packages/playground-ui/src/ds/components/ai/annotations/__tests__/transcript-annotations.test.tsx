@@ -176,11 +176,10 @@ describe('TranscriptAnnotations', () => {
       layOutLines();
       chat = renderChat();
       await annotate(REPLY, 'Open rows'.length);
+      await waitFor(() => expect(markers().map(mark => mark.hidden)).toEqual([false]));
     });
 
     it('hides its mark', async () => {
-      expect(markers().map(mark => mark.hidden)).toEqual([false]);
-
       chat.hideReply();
 
       await waitFor(() => expect(markers().map(mark => mark.hidden)).toEqual([true]));
@@ -207,11 +206,12 @@ describe('TranscriptAnnotations', () => {
       await act(() => new Promise(requestAnimationFrame));
     });
 
-    it('keeps its mark on that passage', () => {
-      const [marker] = markers();
+    it('keeps showing its mark', () => {
+      expect(markers()[0]?.hidden).toBe(false);
+    });
 
-      expect(marker?.hidden).toBe(false);
-      expect(marker?.style.top).toBe(line);
+    it('keeps its mark on the line of that passage', () => {
+      expect(markers()[0]?.style.top).toBe(line);
     });
 
     it('still sends the passage', () => {
@@ -222,18 +222,25 @@ describe('TranscriptAnnotations', () => {
   });
 
   describe('when the annotated words also appear earlier in the message and a long line lands before both', () => {
-    it('keeps its mark on the copy that was annotated', async () => {
+    let marker: HTMLElement | undefined;
+    let line: string | undefined;
+
+    beforeEach(async () => {
       layOutLines();
       const { editReply } = renderChat();
       editReply('Soft rows or open rows?');
       await annotate(SECOND, 'Soft rows'.length);
-      const [marker] = markers();
-      const line = marker?.style.top;
-
+      [marker] = markers();
+      line = marker?.style.top;
       editReply('A much longer opening line now comes first. Soft rows or open rows?');
       await act(() => new Promise(requestAnimationFrame));
+    });
 
+    it('keeps showing its mark', () => {
       expect(marker?.hidden).toBe(false);
+    });
+
+    it('keeps its mark on the copy that was annotated', () => {
       expect(marker?.style.top).toBe(line);
     });
   });
@@ -290,6 +297,21 @@ describe('TranscriptAnnotations', () => {
     });
   });
 
+  function TwoChats({ showRight }: { showRight: boolean }) {
+    return (
+      <>
+        <ChatAnnotationsProvider>
+          <AnnotatingChat onSend={() => {}} reply="Left reply about open rows." />
+        </ChatAnnotationsProvider>
+        {showRight && (
+          <ChatAnnotationsProvider>
+            <AnnotatingChat onSend={() => {}} reply="Right reply about soft rows." />
+          </ChatAnnotationsProvider>
+        )}
+      </>
+    );
+  }
+
   describe('when two transcripts share the page and one of them goes away', () => {
     it('keeps tinting the passage annotated in the other', async () => {
       const highlights = new Map<string, { ranges: Range[] }>();
@@ -306,24 +328,12 @@ describe('TranscriptAnnotations', () => {
       );
       layOutLines();
       const tinted = () => highlights.get('chat-annotation')?.ranges.map(range => range.toString());
-      const chats = (showRight: boolean) => (
-        <>
-          <ChatAnnotationsProvider>
-            <AnnotatingChat onSend={() => {}} reply="Left reply about open rows." />
-          </ChatAnnotationsProvider>
-          {showRight && (
-            <ChatAnnotationsProvider>
-              <AnnotatingChat onSend={() => {}} reply="Right reply about soft rows." />
-            </ChatAnnotationsProvider>
-          )}
-        </>
-      );
-      const view = render(chats(true));
+      const view = render(<TwoChats showRight />);
       await annotate('Left reply about open rows.', 'Left reply'.length);
       await annotate('Right reply about soft rows.', 'Right reply'.length);
       await waitFor(() => expect(tinted()).toEqual(['Left reply', 'Right reply']));
 
-      view.rerender(chats(false));
+      view.rerender(<TwoChats showRight={false} />);
 
       expect(tinted()).toEqual(['Left reply']);
     });

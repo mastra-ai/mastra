@@ -189,17 +189,21 @@ describe('Composer annotations', () => {
   });
 
   describe('when the message with the annotation fails to send', () => {
-    it('puts the annotation back in the composer and the transcript', async () => {
+    beforeEach(async () => {
       const user = userEvent.setup();
       const session = await renderSessionWithReply({ failDispatch: true });
-
       await annotate(user, REPLY, 'Open rows'.length);
       await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Why this one?');
       await user.click(screen.getByRole('button', { name: 'Send message' }));
-
       await waitFor(() => expect(session.posted).toEqual(['1. > Open rows\n\nWhy this one?']));
+    });
+
+    it('puts the annotation back in the composer', async () => {
       expect(await screen.findByRole('button', { name: '1 annotation' })).toBeInTheDocument();
-      expect(markers()).toEqual(['1']);
+    });
+
+    it('puts the annotation back on the transcript', async () => {
+      await waitFor(() => expect(markers()).toEqual(['1']));
     });
   });
 

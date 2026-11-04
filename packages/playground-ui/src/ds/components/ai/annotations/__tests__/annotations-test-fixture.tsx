@@ -2,8 +2,7 @@ import '@/test/inert-resize-observer';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, vi } from 'vitest';
 
-import { ChatAnnotationsProvider } from '../chat-annotations';
-import { AnnotatingChat } from './annotating-chat';
+import { ProvidedChat } from './annotating-chat';
 
 export const cleanUpAnnotationTests = () => {
   vi.useRealTimers();
@@ -45,16 +44,12 @@ export interface RenderedChat {
 
 export const renderChat = (): RenderedChat => {
   const sent: string[] = [];
-  const chat = (showReply: boolean, reply?: string) => (
-    <ChatAnnotationsProvider>
-      <AnnotatingChat onSend={message => sent.push(message)} showReply={showReply} reply={reply} />
-    </ChatAnnotationsProvider>
-  );
-  const view = render(chat(true));
+  const onSend = (message: string) => sent.push(message);
+  const view = render(<ProvidedChat onSend={onSend} showReply />);
   return {
     sent,
-    hideReply: () => view.rerender(chat(false)),
-    editReply: (reply: string) => view.rerender(chat(true, reply)),
+    hideReply: () => view.rerender(<ProvidedChat onSend={onSend} showReply={false} />),
+    editReply: (reply: string) => view.rerender(<ProvidedChat onSend={onSend} showReply reply={reply} />),
   };
 };
 

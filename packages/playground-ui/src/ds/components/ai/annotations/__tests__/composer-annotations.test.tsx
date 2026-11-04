@@ -54,15 +54,19 @@ describe('ComposerAnnotations', () => {
   });
 
   describe('when the person removes the last annotation from the open list and adds another', () => {
-    it('keeps the list closed', async () => {
+    beforeEach(async () => {
       renderChat();
       await annotate(REPLY, 'Open rows'.length);
       fireEvent.click(screen.getByRole('button', { name: '1 annotation' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Remove annotation 1' }));
-
       await annotate(SECOND, 'Soft rows'.length);
+    });
 
+    it('counts only the new one', () => {
       expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+    });
+
+    it('keeps the list closed', () => {
       expect(screen.queryByRole('list', { name: 'Annotations' })).toBeNull();
     });
   });
