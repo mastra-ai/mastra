@@ -1,4 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import {
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
+import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
@@ -36,7 +42,7 @@ import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFrom
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
-import { commandRequiresReadySession } from '../services/commands';
+import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
@@ -76,6 +82,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
@@ -97,7 +104,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
   const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
   const shownText = preview?.text ?? draft;
-  const hasSubmittableDraft = shownText.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
+  const hasSubmittableDraft =
+    shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -178,12 +186,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
-    if (onUserDraft && modelLoading && !text.startsWith('/')) {
+    if (onUserDraft && modelLoading && !isSlashCommand(text)) {
       setHeldDraftText(text);
       return;
     }
+    const runsCommand = !planFeedback.pending && isSlashCommand(text);
+    const sentAnnotations = runsCommand ? [] : takeAnnotations();
     updateDraft('');
-    void handleInput(text).catch(error => {
+    void handleInput(text, sentAnnotations).catch(error => {
+      restoreAnnotations(sentAnnotations);
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
@@ -225,13 +236,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  async function handleInput(text: string) {
+  async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
+    const message = formatAnnotatedMessage(text, sentAnnotations);
     if (planFeedback.pending) {
-      await planFeedback.submitFeedback(text);
+      await planFeedback.submitFeedback(message);
       setImages([]);
       return;
     }
-    if (onUserDraft && text.startsWith('/')) {
+    if (onUserDraft && isSlashCommand(text)) {
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
@@ -242,24 +254,24 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await withPendingImages(async files => createSessionFromDraft({ prompt: text, files }));
+        await withPendingImages(async files => createSessionFromDraft({ prompt: message, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
+    if (preparingThreadId && isSlashCommand(text) && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
     }
     if (await runComposerCommand(text)) return;
     if (liveRun) {
-      await steer(text);
+      await steer(message);
       return;
     }
-    await withPendingImages(files => send(text, files));
+    await withPendingImages(files => send(message, files));
   }
 
   return (
@@ -270,6 +282,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
+          <ComposerAnnotations />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             {...commandMenu.inputProps}

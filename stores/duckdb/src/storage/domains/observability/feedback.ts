@@ -308,7 +308,7 @@ function getComparisonDateRange(
 export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackArgs): Promise<void> {
   const f = args.feedback as LegacyFeedbackRecord;
   const feedbackSource = f.feedbackSource ?? f.source ?? '';
-  const feedbackUserId = f.feedbackUserId ?? f.userId ?? null;
+  const feedbackUserId = f.feedbackUserId !== undefined ? f.feedbackUserId : (f.userId ?? null);
   await db.execute(
     `INSERT INTO feedback_events (
       feedbackId, timestamp, cursorId, traceId, spanId, experimentId,
@@ -370,7 +370,8 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
   const tuples = [...currentFeedback.values()].map(f => {
     const legacyFeedback = f as LegacyFeedbackRecord;
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
-    const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
+    const feedbackUserId =
+      legacyFeedback.feedbackUserId !== undefined ? legacyFeedback.feedbackUserId : (legacyFeedback.userId ?? null);
     return `(${[
       v(legacyFeedback.feedbackId),
       v(legacyFeedback.timestamp),
