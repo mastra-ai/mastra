@@ -23,7 +23,7 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   web_fetch: { pose: 'fetching', label: 'Read website', detailKeys: ['url'] },
   web_extract: { pose: 'fetching', label: 'Extract website', detailKeys: ['url'] },
   lsp_inspect: { pose: 'inspecting', label: 'Inspect code', detailKeys: ['path'] },
-  file_stat: { pose: 'notice', label: 'File info', detailKeys: ['path'] },
+  file_stat: { pose: 'reading', label: 'File info', detailKeys: ['path'] },
   delete_file: { pose: 'deleting', label: 'Delete', detailKeys: ['path'] },
   mkdir: { pose: 'creating', label: 'New folder', detailKeys: ['path'] },
   index: { pose: 'knowledge', label: 'Index content', detailKeys: ['path'] },

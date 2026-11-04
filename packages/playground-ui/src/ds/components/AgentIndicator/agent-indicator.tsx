@@ -10,6 +10,7 @@ import './agent-indicator.css';
 
 export interface AgentIndicatorProps {
   state: AgentIndicatorState;
+  /** Holds idle and waiting without their ambient motion, for a state that is over rather than live. */
   still?: boolean;
   className?: string;
 }

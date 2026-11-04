@@ -15,7 +15,7 @@ const pose = callPose(call.toolName);
 **After**
 
 ```ts
-import { presentTool } from '@mastra/playground-ui/domains/chat/activity';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
 
 const pose = presentTool(call.toolName, call.args).pose;
 ```

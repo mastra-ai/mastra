@@ -1,7 +1,17 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
 Added distinct chat icons for Knowledge, files, terminal, browser, delegation, workflows, schedules, notifications, source control and skills. Running calls animate to show their action. Icons are clearer at small sizes.
 
-Knowledge moves, merges, deletions, notes and pins show the actual operation in live activity and in completed cards, so deleting a page no longer looks like editing it. Namespaced tools such as `mcp__workspace__read_file` or `workspace.read_file`, and common aliases, get the same icon as the tool they wrap. Unknown tools keep the generic icon.
+`presentTool` reads a call's arguments, so the same tool can show a different icon per operation. For example, deleting a Knowledge page no longer looks like editing one:
+
+```tsx
+import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+const { pose, icon: Icon, label } = presentTool('knowledge_page', { op: 'delete', page: 'Refund policy' });
+
+<AgentIndicator state={pose} />; // live, while the call runs
+<Icon aria-hidden />; // still, on the settled row; label is "Delete page"
+```

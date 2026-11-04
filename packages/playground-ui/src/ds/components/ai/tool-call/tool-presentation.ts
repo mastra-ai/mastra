@@ -6,14 +6,24 @@ import type { AgentIndicatorState } from '@/ds/components/AgentIndicator';
 import { humanize } from '@/lib/string';
 
 export interface ToolPresentation {
+  /** What the agent indicator turns into while this call runs. */
   pose: AgentIndicatorState;
+  /** The pose held still, so the call's row and the live indicator draw the same thing. */
   icon: LucideIcon;
+  /** Stable name of the kind of tool, e.g. "Run"; also groups calls by kind. */
   label: string;
+  /** Salient argument shown next to the label: command, path, pattern… */
   detail?: string;
+  /**
+   * What a command does, in the agent's words. `ActivityHeadline` shows it alone in place of
+   * label and detail; both stay set for consumers that render them directly.
+   */
   description?: string;
+  /** Shell command, when the tool is terminal-style. Drives the expanded body. */
   command?: string;
 }
 
+/** Tool arguments and results as the mono body shows them: strings verbatim, the rest pretty JSON. */
 export function stringifyToolValue(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
@@ -42,6 +52,7 @@ function firstStringArg(args: unknown, keys: string[]): string | undefined {
   return undefined;
 }
 
+/** Agents prefix commands with `cd <workspace> &&`, which crowds out the command itself on a one-line row. */
 function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
 }
@@ -54,6 +65,8 @@ export function presentTool(toolName: string, args: unknown): ToolPresentation {
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
   if (!detail) return dressed;
   if (!style.isCommand) return { ...dressed, detail };
+  // Workspaces with `requireDescription` have the agent say what a command does; that reads better
+  // on a one-line row than "Run" and the command, which stays in the expanded body.
   const description = stringArg(args, 'description')?.replace(/\s+/g, ' ').trim() || undefined;
   return { ...dressed, detail: withoutCdPrefix(detail), description, command: detail };
 }
@@ -97,6 +110,7 @@ export function hasToolArguments(input: ToolArgumentsInput): boolean {
   return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
 }
 
+/** Task tools draw in the docked task list, never as a transcript row. */
 const TASK_TOOLS = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 
 export function isTaskTool(toolName: string): boolean {

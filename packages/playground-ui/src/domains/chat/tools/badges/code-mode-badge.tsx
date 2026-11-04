@@ -37,6 +37,9 @@ export const CodeModeBadge = ({
 
   const toolCalled = toolCalledProp ?? result !== undefined;
 
+  // The model usually emits the program as a single line; pretty-print it so the
+  // highlighted block is readable. Falls back to the raw code if formatting fails
+  // (e.g. the program is still streaming and not yet syntactically valid).
   const [formattedCode, setFormattedCode] = useState(code);
   useEffect(() => {
     let cancelled = false;

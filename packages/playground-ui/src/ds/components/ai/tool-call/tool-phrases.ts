@@ -1,3 +1,4 @@
+/** How a line words one kind of tool: while it runs, done alone, and once or many times in a summary. */
 export interface ToolPhrases {
   live: string;
   done: string;
@@ -244,6 +245,7 @@ const KIND_PHRASES = {
   ),
 } satisfies Record<string, ToolPhrases>;
 
+/** The kinds `presentTool` labels a call with; each one has its phrases. */
 export type ToolKind = keyof typeof KIND_PHRASES;
 
 function isToolKind(label: string): label is ToolKind {

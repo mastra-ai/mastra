@@ -65,6 +65,10 @@ describe('presentTool', () => {
     expect(presentTool('fetch_pull_request', undefined).pose).toBe('tool');
   });
 
+  it('draws a file info call as a file read, not as a system notice', () => {
+    expect(presentTool('mastra_workspace_file_stat', { path: 'a.ts' }).pose).toBe('reading');
+  });
+
   it('recognizes namespaced tools without guessing ambiguous provider operations', () => {
     expect(presentTool('mcp__workspace__read_file', { path: 'src/a.ts' })).toMatchObject({
       pose: 'reading',

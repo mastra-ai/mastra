@@ -11,6 +11,7 @@ export interface Ring extends Ball {
   width: string;
 }
 
+/** A segment with no width keeps its last `d`, so the live painter skips rewriting it. */
 export interface Stroke {
   width: string;
   d?: string;

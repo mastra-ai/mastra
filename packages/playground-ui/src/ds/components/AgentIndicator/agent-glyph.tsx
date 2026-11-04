@@ -76,6 +76,7 @@ function glyph(state: AgentIndicatorState): LucideIcon {
 
 const glyphs = new Map<AgentIndicatorState, LucideIcon>();
 
+/** An indicator pose as a still icon: what a row shows for the work the indicator morphs into. */
 export function agentGlyph(state: AgentIndicatorState): LucideIcon {
   const known = glyphs.get(state);
   if (known) return known;
