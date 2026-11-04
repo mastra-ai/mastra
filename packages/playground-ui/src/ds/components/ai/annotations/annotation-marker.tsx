@@ -42,7 +42,6 @@ export function AnnotationMarker({
       className={cn(
         annotationBubbleStyle,
         'pointer-events-auto absolute origin-bottom-left -translate-y-full cursor-pointer shadow-raised',
-        'translate-x-[min(0px,calc(var(--room-right)_-_100%))]',
         'motion-safe:transition-[scale,background-color] motion-safe:duration-fast motion-safe:ease-out-custom',
         'hover:scale-115 hover:bg-info-bright data-[active]:scale-115 data-[active]:bg-info-bright',
         focusRing,

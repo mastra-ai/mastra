@@ -14,13 +14,17 @@ export const cleanUpAnnotationTests = () => {
   cleanup();
 };
 
-export const layOutLines = (left = 40) =>
+export const TRANSCRIPT_WIDTH = 800;
+
+export const layOutLines = (left = 40) => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, TRANSCRIPT_WIDTH, 600));
   vi.spyOn(Range.prototype, 'getClientRects').mockImplementation(function (this: Range) {
     const line = Array.from(document.querySelectorAll('p')).findIndex(paragraph =>
       paragraph.contains(this.endContainer),
     );
     return Object.assign([new DOMRect(left, 120 + 30 * line, 60, 18)], { item: () => null });
   });
+};
 
 export const recordScrollIntoView = () => {
   const scrolled: Element[] = [];
@@ -73,8 +77,8 @@ export const dragSelect = (start: [Node, number], end: [Node, number]) => {
   fireEvent.pointerUp(target);
 };
 
-export const annotate = async (paragraph: string, length: number) => {
-  dragSelect([textNode(paragraph), 0], [textNode(paragraph), length]);
+export const annotate = async (paragraph: string, end: number, start = 0) => {
+  dragSelect([textNode(paragraph), start], [textNode(paragraph), end]);
   fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
 };

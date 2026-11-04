@@ -12,6 +12,7 @@ import {
   layOutLines,
   markers,
   renderChat,
+  TRANSCRIPT_WIDTH,
   typeAndSend,
 } from './annotations-test-fixture';
 import type { RenderedChat } from './annotations-test-fixture';
@@ -249,6 +250,43 @@ describe('TranscriptAnnotations', () => {
       await act(() => new Promise(requestAnimationFrame));
 
       expect(marker?.style.left).toBe('69px');
+    });
+  });
+
+  describe('when two passages end on the same letter', () => {
+    const BUBBLE_WIDTH = 20;
+    const bubbleLefts = () => markers().map(marker => Number.parseFloat(marker.style.left));
+
+    beforeEach(() => {
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(BUBBLE_WIDTH);
+    });
+
+    it('sets the later bubble beside the earlier one, so both stay clickable', async () => {
+      layOutLines();
+      renderChat();
+      await annotate(REPLY, 'Open rows'.length);
+      await annotate(REPLY, 'Open rows'.length, 'Open '.length);
+
+      const [first = 0, second = 0] = bubbleLefts();
+      expect(second).toBeGreaterThanOrEqual(first + BUBBLE_WIDTH);
+    });
+
+    describe('when that letter sits at the right edge of the transcript', () => {
+      beforeEach(async () => {
+        layOutLines(TRANSCRIPT_WIDTH - 60);
+        renderChat();
+        await annotate(REPLY, 'Open rows'.length);
+        await annotate(REPLY, 'Open rows'.length, 'Open '.length);
+      });
+
+      it('keeps both bubbles inside the transcript', () => {
+        expect(Math.max(...bubbleLefts()) + BUBBLE_WIDTH).toBeLessThanOrEqual(TRANSCRIPT_WIDTH);
+      });
+
+      it('still keeps them apart', () => {
+        const [first = 0, second = 0] = bubbleLefts();
+        expect(Math.abs(second - first)).toBeGreaterThanOrEqual(BUBBLE_WIDTH);
+      });
     });
   });
 

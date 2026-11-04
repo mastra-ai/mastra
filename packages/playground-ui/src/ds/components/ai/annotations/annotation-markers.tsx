@@ -21,6 +21,42 @@ interface CommentCard {
   open: boolean;
 }
 
+interface PlacedBubble {
+  marker: HTMLButtonElement;
+  left: number;
+  top: number;
+  width: number;
+}
+
+// Leaves room for a hovered bubble's 115% scale.
+const BUBBLE_GAP = 4;
+
+/** Bubbles on one line sit side by side, in the order their passages end, inside the transcript. */
+function spreadLine(line: readonly PlacedBubble[], layerWidth: number): PlacedBubble[] {
+  const pushedRight: PlacedBubble[] = [];
+  for (const bubble of line.toSorted((a, b) => a.left - b.left)) {
+    const previous = pushedRight.at(-1);
+    const left = previous ? Math.max(bubble.left, previous.left + previous.width + BUBBLE_GAP) : bubble.left;
+    pushedRight.push({ ...bubble, left });
+  }
+  const fitted: PlacedBubble[] = [];
+  for (const bubble of pushedRight.toReversed()) {
+    const next = fitted.at(-1);
+    const limit = next ? next.left - BUBBLE_GAP : layerWidth;
+    fitted.push({ ...bubble, left: Math.min(bubble.left, limit - bubble.width) });
+  }
+  return fitted;
+}
+
+function spreadBubbles(bubbles: readonly PlacedBubble[], layerWidth: number): PlacedBubble[] {
+  const lines = new Map<number, PlacedBubble[]>();
+  for (const bubble of bubbles) {
+    const line = Math.round(bubble.top);
+    lines.set(line, [...(lines.get(line) ?? []), bubble]);
+  }
+  return [...lines.values()].flatMap(line => spreadLine(line, layerWidth));
+}
+
 export function AnnotationMarkers({ containerRef, annotations, onCommentChange, onRemove }: AnnotationMarkersProps) {
   const transcriptId = useId();
   const layerRef = useRef<HTMLDivElement>(null);
@@ -39,24 +75,30 @@ export function AnnotationMarkers({ containerRef, annotations, onCommentChange, 
     const layer = layerRef.current;
     if (!layer) return;
     const origin = layer.getBoundingClientRect();
-    const ranges: Range[] = [];
-    let active: Range | undefined;
-    for (const annotation of annotations) {
+    const passages = annotations.flatMap(annotation => {
       const marker = markersRef.current.get(annotation.id);
-      if (!marker) continue;
+      if (!marker) return [];
       const range = rangeFromSource(annotation.source);
-      const end = range && passageEndRect(range);
-      marker.hidden = !end;
-      if (!range || !end) continue;
-      ranges.push(range);
-      if (annotation.id === emphasized) active = range;
+      return [{ id: annotation.id, marker, range, end: range && passageEndRect(range) }];
+    });
+    const shown = passages.flatMap(({ id, marker, range, end }) => (range && end ? [{ id, marker, range, end }] : []));
+    for (const { marker, end } of passages) marker.hidden = !end;
+    const bubbles = shown.map(({ marker, end }) => ({
+      marker,
       // The bubble's tail (its square corner) sits just inside the top of the passage's last letter.
-      const left = end.right - origin.left - 1;
+      left: end.right - origin.left - 1,
+      top: end.top - origin.top + 7,
+      width: marker.offsetWidth,
+    }));
+    for (const { marker, left, top } of spreadBubbles(bubbles, origin.width)) {
       marker.style.left = `${left}px`;
-      marker.style.top = `${end.top - origin.top + 7}px`;
-      marker.style.setProperty('--room-right', `${origin.width - left}px`);
+      marker.style.top = `${top}px`;
     }
-    paintHighlights(transcriptId, ranges, active);
+    paintHighlights(
+      transcriptId,
+      shown.map(passage => passage.range),
+      shown.find(passage => passage.id === emphasized)?.range,
+    );
   });
 
   useEffect(() => {
