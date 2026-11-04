@@ -11,6 +11,7 @@ export interface PlatformKnowledgeOptions extends Omit<
   accessToken?: string;
   projectId?: string;
   instanceId?: string;
+  /** Knowledge API URL. Falls back to `MASTRA_KNOWLEDGE_API_URL`, then `https://knowledge-api.mastra.ai`. */
   apiUrl?: string;
 }
 
@@ -111,14 +112,16 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
   }
 }
 
+const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
+
 export class PlatformKnowledge extends Knowledge {
   constructor(options: PlatformKnowledgeOptions = {}) {
     const token =
       options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
-    const apiUrl = options.apiUrl ?? process.env.MASTRA_PLATFORM_API_URL;
-    if (!token || !instanceId || !apiUrl) {
-      throw new Error('PlatformKnowledge requires a Platform access token, Knowledge instance ID, and API URL');
+    const apiUrl = options.apiUrl ?? process.env.MASTRA_KNOWLEDGE_API_URL ?? DEFAULT_API_URL;
+    if (!token || !instanceId) {
+      throw new Error('PlatformKnowledge requires a Platform access token and Knowledge instance ID');
     }
     const {
       accessToken: _accessToken,

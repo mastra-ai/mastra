@@ -9,7 +9,7 @@ export interface PlatformMemoryClientOptions {
   environmentId?: string;
   /** Sent as `x-acting-user-id`, used by the API when the token is not tied to a user. */
   actingUserId?: string;
-  /** Platform API URL. Falls back to `MASTRA_PLATFORM_API_URL`, then `https://platform.mastra.ai`. */
+  /** Memory API URL. Falls back to `MASTRA_MEMORY_API_URL`, then `https://memory-api.mastra.ai`. */
   apiUrl?: string;
   fetch?: typeof fetch;
 }
@@ -118,7 +118,7 @@ export interface MemoryObservationRun {
   error: string | null;
 }
 
-const DEFAULT_API_URL = 'https://platform.mastra.ai';
+const DEFAULT_API_URL = 'https://memory-api.mastra.ai';
 
 function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
@@ -139,7 +139,7 @@ export function resolvePlatformMemoryOptions(options: PlatformMemoryClientOption
     projectId: options.projectId ?? env('MASTRA_PROJECT_ID'),
     environmentId: options.environmentId ?? env('MASTRA_ENVIRONMENT_ID'),
     actingUserId: options.actingUserId,
-    apiUrl: (options.apiUrl ?? env('MASTRA_PLATFORM_API_URL') ?? DEFAULT_API_URL).replace(/\/$/, ''),
+    apiUrl: (options.apiUrl ?? env('MASTRA_MEMORY_API_URL') ?? DEFAULT_API_URL).replace(/\/$/, ''),
     fetch: options.fetch ?? fetch,
   };
 }

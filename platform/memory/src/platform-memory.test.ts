@@ -5,7 +5,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PlatformMemoryClient } from './client';
 import { PlatformMemory } from './platform-memory';
 
-type StoredMessage = { id: string; role: string; content: string; parts?: { type: string; text?: string }[]; createdAt: string };
+type StoredMessage = {
+  id: string;
+  role: string;
+  content: string;
+  parts?: { type: string; text?: string }[];
+  createdAt: string;
+};
 
 /** In-memory stand-in for `/v1/memory/:instanceId/*`, with the server's observation already applied. */
 function fakeMemoryApi() {
@@ -63,7 +69,13 @@ function fakeMemoryApi() {
           const stored = {
             id: msg.id,
             role: msg.role,
-            content: msg.content.content ?? msg.content.parts?.filter((part: { type: string }) => part.type === 'text').map((part: { text: string }) => part.text).join('\n') ?? '',
+            content:
+              msg.content.content ??
+              msg.content.parts
+                ?.filter((part: { type: string }) => part.type === 'text')
+                .map((part: { text: string }) => part.text)
+                .join('\n') ??
+              '',
             parts: msg.content.parts,
             createdAt: msg.createdAt,
           };
@@ -154,7 +166,9 @@ describe('PlatformMemory', () => {
 
     const system = prompts[0].filter((m: any) => m.role === 'system').map((m: any) => m.content);
     expect(system.join('\n')).toContain('User prefers TypeScript.');
-    expect(api.requests.some(r => r.path === '/threads/thread_2/processors' && r.body.phase === 'inputStep')).toBe(true);
+    expect(api.requests.some(r => r.path === '/threads/thread_2/processors' && r.body.phase === 'inputStep')).toBe(
+      true,
+    );
   });
 
   it('maps thread lookups and recall onto the API', async () => {
@@ -186,7 +200,7 @@ describe('PlatformMemoryClient', () => {
   it('falls back to Platform env vars', () => {
     process.env.MASTRA_PLATFORM_SECRET_KEY = 'sk_env';
     process.env.MASTRA_MEMORY_INSTANCE_ID = 'mem_env';
-    process.env.MASTRA_PLATFORM_API_URL = 'https://api.example/';
+    process.env.MASTRA_MEMORY_API_URL = 'https://api.example/';
     try {
       const client = new PlatformMemoryClient();
       expect(client.instanceId).toBe('mem_env');
@@ -194,8 +208,13 @@ describe('PlatformMemoryClient', () => {
     } finally {
       delete process.env.MASTRA_PLATFORM_SECRET_KEY;
       delete process.env.MASTRA_MEMORY_INSTANCE_ID;
-      delete process.env.MASTRA_PLATFORM_API_URL;
+      delete process.env.MASTRA_MEMORY_API_URL;
     }
+  });
+
+  it('defaults to the hosted Memory API', () => {
+    const client = new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' });
+    expect(client.mcpUrl).toBe('https://memory-api.mastra.ai/v1/memory/mem_1/mcp');
   });
 
   it('requires an access token and instance id', () => {
