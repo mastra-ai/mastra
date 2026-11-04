@@ -66,6 +66,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agents/generative-ui',
+              label: 'Generative UI',
+            },
+            {
+              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },

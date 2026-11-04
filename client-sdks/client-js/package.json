@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./gen-ui": {
+      "import": {
+        "types": "./dist/gen-ui/index.d.ts",
+        "default": "./dist/gen-ui/index.js"
+      },
+      "require": {
+        "types": "./dist/gen-ui/index.d.ts",
+        "default": "./dist/gen-ui/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "repository": {

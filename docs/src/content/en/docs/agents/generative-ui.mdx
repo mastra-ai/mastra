@@ -1,0 +1,308 @@
+---
+title: 'Generative UI | Agents'
+description: 'Let agents render React components in chat: tool-specific UI, components the model calls as tools, and declarative surfaces streamed from tools or composed by the model.'
+packages:
+  - '@mastra/client-js'
+  - '@mastra/core'
+  - '@mastra/react'
+---
+
+# Generative UI
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+Generative UI lets an agent show interactive components instead of plain text. You register React components in your frontend, and the agent decides when to show them and with which props. Components can collect input, call actions, and send results back to the agent.
+
+Generative UI is opt-in. It lives in the `@mastra/react/gen-ui` and `@mastra/client-js/gen-ui` entry points, and the regular `useChat` hook doesn't change.
+
+## When to use Generative UI
+
+Mastra supports three ways for an agent to produce UI. You can combine them in one registry.
+
+| Approach | The agent… | Use it when |
+| - | - | - |
+| [Tool renderers](#render-backend-tools) | Calls a backend tool. You render its arguments and result. | You want a custom view for a tool that already exists, such as a weather card for `getWeather`. |
+| [Component tools](#let-the-model-call-components) | Calls a component as a frontend tool and picks its props. | You want the model to choose when to show a component, or to wait for the user's answer. |
+| [Surfaces](#stream-surfaces-from-a-tool) | Streams a tree of components that can update over time. | A tool or workflow builds a dashboard, form, or report step by step, or the model composes a layout. |
+
+Agents only use components you register. Props are validated against your schema before a component renders. Unknown components and invalid props show a fallback instead.
+
+## Quickstart
+
+Create a registry with `createGenUI()`, then replace `useChat` with `useGenUIChat`. Pass `genUI.renderers` to `MessageFactory` so tool calls and surfaces render inside messages.
+
+```tsx title="src/chat.tsx"
+import { MessageFactory } from '@mastra/react/ui'
+import { createGenUI, defineGenUIComponent, useGenUIChat } from '@mastra/react/gen-ui'
+import { z } from 'zod'
+
+const WeatherCard = defineGenUIComponent({
+  description: 'Current weather for a city',
+  schema: z.object({ city: z.string(), temp: z.number() }),
+  component: ({ props }) => (
+    <p>
+      {props.city}: {props.temp}°
+    </p>
+  ),
+  tool: true,
+})
+
+// Create the registry once, at module scope
+const genUI = createGenUI({ components: { WeatherCard } })
+
+export function Chat() {
+  const chat = useGenUIChat({
+    agentId: 'weather-agent',
+    threadId: 'thread-1',
+    resourceId: 'user-1',
+    genUI,
+  })
+
+  return (
+    <>
+      {chat.messages.map(message => (
+        <MessageFactory key={message.id} message={message} {...chat.genUI.renderers} />
+      ))}
+      <button onClick={() => chat.sendMessage({ message: 'Weather in Paris?' })}>Ask</button>
+    </>
+  )
+}
+```
+
+With `tool: true`, `WeatherCard` is sent to the agent as a frontend tool named `ui_WeatherCard`. Its input schema is the component's props schema. When the model calls it, the card renders in the message with the validated props.
+
+`useGenUIChat` accepts every `useChat` option and returns the same values, plus a `genUI` handle with the controller and renderers. To keep your own `MessageFactory` renderers, combine them with `useGenUIRenderers(chat.genUI, baseRenderers)`.
+
+## Let the model call components
+
+A component tool runs in one of two modes:
+
+- **`display`** (default): The component renders from the tool arguments. The server answers the tool call right away, so the run doesn't wait for the browser.
+- **`interactive`**: The run waits until the user answers. The component calls `respond()`, and the value is returned to the model as the tool result.
+
+```tsx title="src/gen-ui/confirm-booking.tsx"
+import { defineGenUIComponent, useGenUIToolResponse } from '@mastra/react/gen-ui'
+import { z } from 'zod'
+
+export const ConfirmBooking = defineGenUIComponent({
+  description: 'Ask the user to confirm a hotel booking',
+  schema: z.object({ hotel: z.string(), nights: z.number() }),
+  tool: { mode: 'interactive', responseSchema: z.object({ confirmed: z.boolean() }) },
+  component: ({ props }) => {
+    const { canRespond, respond } = useGenUIToolResponse()
+    return (
+      <div>
+        Book {props.hotel} for {props.nights} nights?
+        <button disabled={!canRespond} onClick={() => respond({ confirmed: true })}>
+          Confirm
+        </button>
+        <button disabled={!canRespond} onClick={() => respond({ confirmed: false })}>
+          Cancel
+        </button>
+      </div>
+    )
+  },
+})
+```
+
+`respond()` validates the value against `responseSchema` before sending it. `canRespond` is `false` once the call has an answer, or when the run that waited for it no longer exists, for example after a page reload.
+
+Set `tool: { name: 'confirm_booking' }` to choose the tool name. If a name collides with a tool you pass in `clientTools`, `useGenUIChat` throws an error.
+
+## Render backend tools
+
+Register a tool renderer under the name of a tool defined on your agent. The renderer receives the tool call's phase, its arguments while they stream, and the validated arguments and output.
+
+```tsx title="src/gen-ui/registry.tsx"
+import { createGenUI, defineGenUIToolRenderer } from '@mastra/react/gen-ui'
+import { z } from 'zod'
+
+const deleteFiles = defineGenUIToolRenderer({
+  argsSchema: z.object({ paths: z.array(z.string()) }),
+  outputSchema: z.object({ deleted: z.number() }),
+  component: ({ phase, partialArgs, args, output, approval }) => {
+    if (phase === 'input-streaming') return <p>Preparing… {JSON.stringify(partialArgs)}</p>
+    if (phase === 'awaiting-approval' && approval) {
+      return (
+        <div>
+          Delete {args?.paths.join(', ')}?
+          <button disabled={approval.status === 'pending'} onClick={() => approval.approve()}>
+            Approve
+          </button>
+          <button disabled={approval.status === 'pending'} onClick={() => approval.decline()}>
+            Decline
+          </button>
+          {approval.error && <p role="alert">{approval.error}</p>}
+        </div>
+      )
+    }
+    if (phase === 'output-available') return <p>Deleted {output?.deleted} files</p>
+    if (phase === 'output-denied') return <p>Deletion declined</p>
+    return null
+  },
+})
+
+export const genUI = createGenUI({ tools: { deleteFiles } })
+```
+
+The `phase` is one of `input-streaming`, `input-available`, `awaiting-approval`, `suspended`, `output-available`, `output-error`, or `output-denied`.
+
+`partialArgs` is a best-effort parse of the arguments streamed so far. Treat it as unvalidated. `args` and `output` are set only after they pass `argsSchema` and `outputSchema`. If validation fails, `validationError` describes the problem.
+
+For tools that use [human-in-the-loop](/docs/agents/human-in-the-loop), `approval` is set while the call waits. `approval.approve(resumeData)` resumes a suspended tool with data, and `approval.decline()` declines it. A second call made while the first is pending is ignored, so a double click sends one request. Approval works after a page reload because the run ID is restored from the message history.
+
+## Stream surfaces from a tool
+
+A surface is a tree of registered components that the server builds and updates over time. Each node references a component by name and holds its props and child IDs. Use `createGenUIEmitter()` with the tool's `writer` to stream updates:
+
+```typescript title="src/mastra/tools/weather-report.ts"
+import { createTool } from '@mastra/core/tools'
+import { createGenUIEmitter } from '@mastra/client-js/gen-ui'
+import { z } from 'zod'
+
+export const weatherReport = createTool({
+  id: 'weather-report',
+  description: 'Show a live weather report for a city',
+  inputSchema: z.object({ city: z.string() }),
+  execute: async ({ city }, { writer }) => {
+    const ui = createGenUIEmitter(writer).surface(`weather-${city}`)
+
+    await ui.create({
+      nodes: [{ id: 'card', component: 'WeatherCard', props: { city, temp: 0 } }],
+    })
+
+    const temp = await getTemperature(city)
+    await ui.updateProps('card', { temp })
+    await ui.setStatus('ready')
+
+    return { city, temp }
+  },
+})
+```
+
+The emitter validates operations on the server with the same rules as the client and throws on invalid input. Updates are written as `data-gen-ui` message parts. They're saved with the message, so a reloaded thread rebuilds the same surface.
+
+On the client, nothing extra is needed. The renderers from `useGenUIChat` show inline surfaces where they were created in the message. Updating a node's props doesn't remount its component, so local component state is kept.
+
+### Place surfaces outside the chat
+
+Set `placement` when creating the surface to show it somewhere else, then render a `GenUISurfaceOutlet` where it should appear:
+
+```tsx title="src/side-panel.tsx"
+import { GenUISurfaceOutlet } from '@mastra/react/gen-ui'
+
+export function SidePanel({ chat }) {
+  return (
+    <GenUISurfaceOutlet
+      controller={chat.genUI.controller}
+      placement="panel"
+      empty={<p>No reports yet</p>}
+    />
+  )
+}
+```
+
+Surfaces streamed from somewhere other than the chat, such as a workflow run, can be added with `chat.genUI.controller.ingest(envelope)`.
+
+## Let the model compose surfaces
+
+Set `surfaceTool: true` to give the model a `ui_surface` tool. The tool description lists your declarative components and their props schemas, so the model can build a surface from them.
+
+```tsx title="src/gen-ui/registry.tsx"
+export const genUI = createGenUI({
+  components: { WeatherCard, Chart, Filters },
+  surfaceTool: { instructions: 'Use a Filters component above every Chart.' },
+})
+```
+
+The tool runs in the browser. It checks the model's operations against the current surfaces and your registry before applying them. When the operations reference an unregistered component or produce an invalid tree, the tool returns `{ ok: false }` with the reason, so the model can retry. Rejected calls aren't applied.
+
+Set `declarative: false` on a component to keep it out of the surface tool.
+
+## Handle actions
+
+Components inside a surface can dispatch named actions with `useGenUIAction`. Define the handlers in `useGenUIChat`:
+
+```tsx title="src/chat.tsx"
+import { defineGenUIChatAction, useGenUIAction, useGenUIChat } from '@mastra/react/gen-ui'
+import { z } from 'zod'
+
+const applyFilter = defineGenUIChatAction({
+  schema: z.object({ city: z.string() }),
+  handle: async ({ city }, { chat }) => {
+    await chat.sendMessage(`Filter by ${city}`)
+  },
+})
+
+function CityFilter({ props }) {
+  const { dispatch, isPending } = useGenUIAction('applyFilter')
+  return (
+    <button disabled={isPending} onClick={() => dispatch({ city: props.city })}>
+      {props.city}
+    </button>
+  )
+}
+
+const chat = useGenUIChat({ agentId: 'weather-agent', genUI, actions: { applyFilter } })
+```
+
+The handler receives the validated payload and a context with `chat` (`sendMessage`, `approveToolCall`, `declineToolCall`), the local state store, and the context store. `dispatch()` resolves to a result with a `status`:
+
+- `success` or `error`: The handler ran.
+- `invalid`: The payload failed the schema.
+- `stale`: The node changed since the user saw it, or the surface failed or was stopped. Set `allowStale: true` on the handler to accept these.
+- `busy`: Another run of this action is still in progress. Set `allowConcurrent: true` to allow parallel runs.
+- `unhandled`: No handler is registered under that name.
+
+## Share state and context
+
+Use these hooks inside surface components:
+
+| Hook | Purpose |
+| - | - |
+| `useGenUISurfaceData()` | Read the surface's data. The agent owns it and updates it with `replaceData` or `patchData`. |
+| `useGenUISharedData()` | Read surface data with the user's local edits applied. Call `set(key, value)` to edit. When the agent changes a key the user has edited, the key is listed in `conflicts`. Call `keepLocal(key)` or `discard(key)` to resolve it. |
+| `useGenUILocalState(scope)` | Browser-only state for the `'surface'` (default) or `'thread'` scope. It isn't sent to the agent unless you include it in an action or message. |
+| `useGenUIPublishedContext(key, value)` | Share a value with the agent while the component is mounted. It's added to the system prompt of the next message. |
+
+```tsx title="src/gen-ui/page-tracker.tsx"
+import { useGenUIPublishedContext } from '@mastra/react/gen-ui'
+
+export function PageTracker({ page }: { page: number }) {
+  useGenUIPublishedContext('currentPage', page, { description: 'Page the user is viewing' })
+  return null
+}
+```
+
+Published context is marked as data, not instructions, and is limited to 16 KB.
+
+## Recovery and status
+
+Surfaces are rebuilt from the message history in order. That makes reloads, reconnects, and replays safe:
+
+- Each update has an event ID. An event that was already applied is ignored.
+- Updates that arrive out of order wait until the earlier revision arrives.
+- When a run ends, surfaces still marked `streaming` are shown as ready. When the user calls `cancelRun()`, they're shown as interrupted, and their actions are rejected as `stale`.
+- Surfaces added with `ingest()` keep their own status, because they don't depend on the chat run.
+
+## Fallbacks and catalogs
+
+Pass `fallbacks` to `createGenUI()` to replace the default views:
+
+- `Fallback`: Shown for unknown components, invalid props, render errors, invalid surfaces, and incompatible catalogs. It receives `kind`, `reason`, and `component`.
+- `Loading`: Shown while a surface or component is still streaming.
+- `SurfaceStatus`: Shown for `streaming`, `failed`, and `aborted` surfaces.
+
+Each node renders inside an error boundary, so a component that throws doesn't break the rest of the message.
+
+Set `catalog: { id, version }` when several apps or versions share an agent. When a surface also sets `catalogId` and `catalogVersion`, a different catalog ID or major version renders the fallback instead of guessing.
+
+## Related
+
+- [Tools](/docs/agents/tools)
+- [Human-in-the-loop](/docs/agents/human-in-the-loop)
+- [Mastra client](/docs/server/mastra-client)
