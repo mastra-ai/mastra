@@ -117,11 +117,6 @@ interface SlackChannelDeps extends VoiceClipDeps {
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Overrides applied to the Slack channel adapter entry. */
   adapterOptions?: SlackAdapterChannelConfig;
-  /**
-   * Slack channel ids (`C…`/`G…`) where every new top-level message starts a
-   * session without tagging the bot, e.g. a dedicated voice-notes channel.
-   */
-  listenChannels?: readonly string[];
 }
 
 function configuredSourceControls(deps: SlackChannelDeps): readonly SourceControlStorageHandle[] {
@@ -1068,7 +1063,6 @@ async function ingestAside(
 
 export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
-  const listenChannels = new Set(deps.listenChannels ?? []);
 
   return {
     onSubscribedMessage: async (thread, message, defaultHandler, ctx) => {
@@ -1106,29 +1100,8 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       await newSessionChatHandler(thread, message, defaultHandler, ctx);
     },
     onDirectMessage: newSessionChatHandler,
-    // Registered only with listening channels: an `onMessage` handler also takes
-    // the unmentioned sender runs of a batch that holds a mention.
-    ...(listenChannels.size > 0
-      ? {
-          onMessage: async (thread, message, defaultHandler, ctx) => {
-            if (!listenChannels.has(slackChannelId(thread)) || !isTopLevelMessage(message)) return;
-            await newSessionChatHandler(thread, message, defaultHandler, ctx);
-          },
-        }
-      : {}),
   };
 };
-
-/** `slack:C123` → `C123`. */
-function slackChannelId(thread: HandlerThread): string {
-  return thread.channelId.split(':').pop() ?? '';
-}
-
-/** A thread reply in a listening channel only runs once the bot is in that thread. */
-function isTopLevelMessage(message: HandlerMessage): boolean {
-  const raw = message.raw as { ts?: unknown; thread_ts?: unknown } | undefined;
-  return raw?.thread_ts === undefined || raw.thread_ts === raw.ts;
-}
 
 /** Thread metadata key; one Factory runs one Slack app, so this is per bot. */
 const MUTED_KEY = 'factory_muted';

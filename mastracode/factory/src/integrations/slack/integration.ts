@@ -95,18 +95,6 @@ export interface SlackIntegrationConfig {
    * ```
    */
   tools?: Partial<SlackToolSettings>;
-  /**
-   * Channels where every new top-level message starts a session without
-   * tagging the bot, such as a dedicated voice-notes channel. Voice clips are
-   * transcribed with the sender's speech-to-text key in every channel; this only
-   * removes the need for an @mention. Invite the app to each channel.
-   *
-   * @example
-   * ```ts
-   * new SlackIntegration({ signingSecret, listenChannels: ['C0123456789'] });
-   * ```
-   */
-  listenChannels?: string[];
 }
 
 /** Slack renders the status inline next to the app name; keep it to one short line. */
@@ -306,7 +294,6 @@ export class SlackIntegration implements FactoryIntegration {
       modelDefaults: ctx.storage.modelDefaults,
       modelCredentials: ctx.storage.modelCredentials,
       voiceSettings: ctx.storage.voiceSettings,
-      listenChannels: this.#config.listenChannels,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
       adapterOptions: this.#adapterOptions,

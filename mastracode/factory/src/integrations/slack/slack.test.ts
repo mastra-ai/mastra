@@ -748,63 +748,26 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).toHaveBeenCalledTimes(1);
   });
 
-  describe('listening channels', () => {
-    function unsubscribedThread(channelId = 'slack:C-VOICE') {
-      const thread = makeThread();
-      thread.channelId = channelId;
-      thread.isSubscribed = vi.fn().mockResolvedValue(false);
-      return thread;
-    }
-
-    function topLevel(raw: Record<string, unknown> = {}) {
-      const message = makeMessage('T-1');
-      message.raw = { team_id: 'T-1', ts: '171.1', ...raw };
-      return message;
-    }
-
+  describe('voice clips', () => {
     const linked = () => ({
       accountLinks: fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' }),
       projects: makeProjects([{ id: 'fp-1' }]),
     });
 
-    it('does not take unmentioned messages without listening channels', () => {
-      expect(createHandlers(linked()).onMessage).toBeUndefined();
-      expect(createHandlers({ ...linked(), listenChannels: [] }).onMessage).toBeUndefined();
-    });
-
-    it('starts a session from an untagged top-level message in a listening channel', async () => {
-      const handlers = createHandlers({ ...linked(), listenChannels: ['C-VOICE'] });
-      const defaultHandler = vi.fn();
-      const ctx = handlerCtx(chatOnlyMastra());
-
-      await handlers.onMessage!(unsubscribedThread(), topLevel(), defaultHandler, ctx);
-
-      expect(defaultHandler).toHaveBeenCalledTimes(1);
-      expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
-    });
-
-    it('ignores other channels and thread replies the bot was not part of', async () => {
-      const handlers = createHandlers({ ...linked(), listenChannels: ['C-VOICE'] });
-      const defaultHandler = vi.fn();
-
-      await handlers.onMessage!(unsubscribedThread('slack:C-OTHER'), topLevel(), defaultHandler, handlerCtx());
-      await handlers.onMessage!(unsubscribedThread(), topLevel({ thread_ts: '170.9' }), defaultHandler, handlerCtx());
-
-      expect(defaultHandler).not.toHaveBeenCalled();
-    });
-
     it('attaches a note to a voice clip before dispatch when the sender has no speech-to-text key', async () => {
       const handlers = createHandlers({
         ...linked(),
-        listenChannels: ['C-VOICE'],
         modelCredentials: { listCredentials: vi.fn().mockResolvedValue([]) } as any,
       });
-      const message = topLevel();
+      const message = makeMessage('T-1');
+      message.isMention = true;
       message.text = '';
       message.attachments = [{ type: 'audio', mimeType: 'audio/mp4', name: 'audio_message.m4a' }];
+      const thread = makeThread();
+      thread.isSubscribed = vi.fn().mockResolvedValue(false);
       const defaultHandler = vi.fn();
 
-      await handlers.onMessage!(unsubscribedThread(), message, defaultHandler, handlerCtx(chatOnlyMastra()));
+      await handlers.onMention!(thread, message, defaultHandler, handlerCtx(chatOnlyMastra()));
 
       expect(defaultHandler).toHaveBeenCalledTimes(1);
       const dispatched = defaultHandler.mock.calls[0]![1];
