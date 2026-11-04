@@ -361,16 +361,6 @@ describe('TracesExplorer.Histogram', () => {
 
     describe('when the user picked a range by hand after zooming', () => {
       const openRangeEditor = () => fireEvent.click(screen.getByRole('button', { name: /^Oct 21/, hidden: true }));
-      const pickTimePart = async (time: string, part: string, value: string) => {
-        const group = screen.getByRole('group', { name: time, hidden: true });
-        const select = within(group).getByRole('combobox', { name: part, hidden: true });
-        fireEvent.click(select);
-        // Base UI only commits a pick on a real press: pointerdown followed by click.
-        const option = await screen.findByRole('option', { name: value, hidden: true });
-        fireEvent.pointerDown(option);
-        fireEvent.click(option);
-        await waitFor(() => expect(select.textContent).toBe(value));
-      };
       const apply = () => fireEvent.click(screen.getByRole('button', { name: /apply/i, hidden: true }));
 
       it('resets to the default preset even when that range matches the zoom', async () => {
@@ -380,17 +370,16 @@ describe('TracesExplorer.Histogram', () => {
         await dragAcross(12, 23);
         await settle(queryClient);
 
-        // The editor opens on the zoomed days, ending at 11:59 PM: another range.
+        // Ending the zoomed days at 11:59 PM: another range.
         openRangeEditor();
+        fireEvent.change(screen.getByLabelText('End time'), { target: { value: '23:59' } });
         apply();
         await settle(queryClient);
         expect(lastBody(onTraceQuery)?.timeRange).toEqual({ ...zoomed, to: '2026-10-22T23:59:00.000Z' });
 
         // Ending at 12:00 AM instead picks the zoomed bounds again.
         openRangeEditor();
-        await pickTimePart('End time', 'Hour', '12');
-        await pickTimePart('End time', 'Minute', '00');
-        await pickTimePart('End time', 'AM or PM', 'AM');
+        fireEvent.change(screen.getByLabelText('End time'), { target: { value: '00:00' } });
         apply();
         await settle(queryClient);
         expect(lastBody(onTraceQuery)?.timeRange).toEqual(zoomed);
