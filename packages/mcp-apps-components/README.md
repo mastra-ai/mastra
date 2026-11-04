@@ -74,6 +74,50 @@ export const dashboardServer = new MCPServer({
 
 Each tool runs its read-only observability route in-process as the caller, with the route's own validation, authentication, permission and FGA checks, so the app sees the same data the signed-in user can.
 
+### Pinning widgets
+
+Each widget shows a pin button when the host says it can pin. The host owns the pinned widgets; the app only asks it to change them.
+
+1. The host sets `mastra.ai/dashboard-pinned-widgets` in its host context to the ids of the widgets it has pinned (`[]` for none). Without it, no pin buttons show.
+2. When the user clicks a widget's button, the app sends a `mastra.ai/dashboard-widget-pin` notification with `{ widget, scope, defaults, isPinned }`: the widget definition, the dashboard's scope, the date range and filters the user had on, and the state the user wants. Together, `widget`, `scope`, and `defaults` render the pinned widget on its own as the user saw it.
+3. The host stores the change and sends the new list of ids back in its host context. Each button follows the host, not the click.
+
+The params come from the app's iframe, so parse them with `dashboardWidgetPinNotificationParamsSchema` before storing or rendering anything.
+
+```typescript
+import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
+import {
+  DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
+  DASHBOARD_WIDGET_PIN_NOTIFICATION,
+  dashboardWidgetPinNotificationParamsSchema,
+} from '@mastra/mcp-apps-components/dashboard-renderer';
+
+let hostContext = { theme: 'dark' as const, [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: [] as string[] };
+const bridge = new AppBridge(client, hostInfo, capabilities, { hostContext });
+
+bridge.fallbackNotificationHandler = async ({ method, params }) => {
+  if (method !== DASHBOARD_WIDGET_PIN_NOTIFICATION) return;
+  const parsed = dashboardWidgetPinNotificationParamsSchema.safeParse(params);
+  if (!parsed.success) return;
+  const { widget, scope, defaults, isPinned } = parsed.data;
+
+  const pinned = hostContext[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY];
+  if (isPinned === pinned.includes(widget.id)) return;
+  await (isPinned ? savePinnedWidget({ widget, scope, defaults }) : deletePinnedWidget(widget.id));
+
+  const ids = isPinned ? [...pinned, widget.id] : pinned.filter(id => id !== widget.id);
+  // setHostContext replaces the whole context, so keep the other fields
+  hostContext = { ...hostContext, [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ids };
+  bridge.setHostContext(hostContext);
+};
+```
+
+Keep in mind:
+
+- To turn pinning off, set the key to a non-array value such as `null`. Deleting the key does nothing, because `AppBridge` only sends the fields that changed, so the app keeps the last ids it got.
+- Widget ids are only unique within one dashboard definition. Keep pinned ids per bridge (one tool call), not across dashboards.
+- A widget that no longer parses shows no pin button, so the host owns unpinning it.
+
 ## Documentation
 
 - [Build MCP Apps](https://mastra.ai/docs/connections/mcp)
