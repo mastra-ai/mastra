@@ -651,7 +651,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('board')
     .description("Manage a Factory project's boards; the built-in Work board and app boards are edited per project");
   addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
-    description: "Get a board's definition and, for a board the project stored, its revision",
+    description: "Get a board's definition and, except for the legacy Review board, its revision",
     routePlacement: 'origin',
   });
   addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
@@ -667,12 +667,12 @@ export function registerApiCommand(program: CommanderCommand): void {
   });
   addAction(factoryBoard, 'update', FACTORY_API_ROUTE_CATALOG.boardReplace, {
     description:
-      "Replace a board's definition using its expected revision; the first edit of the Work board or an app board stores the project's copy, at expectedRevision 0",
+      "Replace a board's definition, including the project's Work and app boards, using its expected revision",
     input: 'required',
     routePlacement: 'origin',
   });
   addAction(factoryBoard, 'delete', FACTORY_API_ROUTE_CATALOG.boardDelete, {
-    description: 'Delete a stored board that has no cards, using its expected revision',
+    description: 'Delete a board that has no cards (not the Work board), using its expected revision',
     input: 'required',
     routePlacement: 'origin',
     examples: [
@@ -684,7 +684,7 @@ export function registerApiCommand(program: CommanderCommand): void {
   });
   addAction(factoryBoard, 'reset', FACTORY_API_ROUTE_CATALOG.boardReset, {
     description:
-      "Reset a project's edited copy of the Work board or an app board to its code default at the next revision, using its expected revision",
+      "Rewrite a project's Work, app or seed board to Factory's current definition at the next revision, using its expected revision",
     input: 'required',
     routePlacement: 'origin',
     examples: [
