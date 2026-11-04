@@ -280,8 +280,8 @@ The tool returns an object with:
 ```typescript oxfmt:false
 {
   id: string;         // Unique chunk/document identifier
-  metadata: any;      // All metadata fields (document ID, etc.)
-  vector: number[];   // Embedding vector (if available)
+  metadata?: any;     // All metadata fields (document ID, etc.)
+  vector?: number[];  // Embedding vector (if available)
   score: number;      // Similarity score for this retrieval
   document: string;   // Full chunk/document text (if available)
 }

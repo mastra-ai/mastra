@@ -151,7 +151,7 @@ Each value in the `providers` record form is `true`, `false`, or a `ToolsProvide
 
 ### ConnectClientOptions
 
-Every field falls back to an environment variable, so a fully env-configured app can pass nothing.
+Every field except `fetch` falls back to an environment variable, and `fetch` defaults to `globalThis.fetch`, so a fully env-configured app can pass nothing.
 
 <PropertiesTable
   content={[

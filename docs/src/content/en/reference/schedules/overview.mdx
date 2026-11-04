@@ -286,7 +286,7 @@ const schedules = await mastra.schedules.list({
           {
             name: 'resourceId',
             type: 'string',
-            description: 'Return only agent schedules for this resource.',
+            description: 'Return only agent and workflow schedules for this resource.',
             isOptional: true,
           },
           {
@@ -323,7 +323,7 @@ const updated = await mastra.schedules.update('pinger', {
 
 Agent schedule patches can update `cron`, `timezone`, `prompt`, `name`, `signalType`, `tagName`, `attributes`, `providerOptions`, `ifActive`, `ifIdle`, `metadata`, and `status`. `threadId` and `resourceId` aren't patchable. Create a new schedule when the thread target needs to change.
 
-Workflow schedule patches can update `cron`, `timezone`, `inputData`, `initialState`, `requestContext`, `metadata`, and `status`. Agent-only patch fields such as `prompt`, `signalType`, and `ifIdle` throw on workflow schedules.
+Workflow schedule patches can update `cron`, `timezone`, `inputData`, `initialState`, `requestContext`, `resourceId`, `metadata`, and `status`. Agent-only patch fields such as `prompt`, `signalType`, and `ifIdle` throw on workflow schedules.
 
 ### Lifecycle
 
@@ -365,6 +365,6 @@ await mastra.schedules.delete('pinger')
 
 - Agent schedule IDs use the `agent_` prefix. Workflow schedule IDs created through `mastra.schedules.create()` use the `schedule_` prefix.
 - Threaded agent schedules require `resourceId` when `threadId` is set.
-- `signalType`, `ifActive`, `ifIdle`, and `resourceId` require `threadId`.
+- On agent schedules, `signalType`, `ifActive`, `ifIdle`, and `resourceId` require `threadId`. Workflow schedules accept `resourceId` without a thread.
 - Workflow schedules don't accept agent-only patch fields such as `prompt`, `signalType`, or `ifIdle`.
 - `run()` publishes a manual fire immediately and doesn't change the stored cron cadence.

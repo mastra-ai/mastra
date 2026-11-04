@@ -242,7 +242,7 @@ Checks if noise causes the agent to generate false or fabricated information tha
 ### Formula
 
 ```
-Final Score = max(0, min(llm_score, calculated_score): issues_penalty)
+Final Score = max(0, min(llm_score, calculated_score) - issues_penalty)
 ```
 
 Where:
