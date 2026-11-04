@@ -282,3 +282,13 @@ export const ThinLines: Story = {
     </div>
   ),
 };
+
+/** `markers`: dashed vertical lines at buckets, e.g. where a billing period starts, with an optional label. */
+export const Markers: Story = {
+  args: { lineStyle: 'thin', markers: [{ x: '12:00', label: 'Period starts' }] },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <MetricsLineChart {...args} />
+    </div>
+  ),
+};

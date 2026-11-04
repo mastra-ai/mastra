@@ -138,7 +138,44 @@ const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema }
 
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
-const workItemResponseSchema = z.object({ workItem: entitySchema });
+
+/**
+ * A repository linked to a project, as the project list returns it: fields of the link and of the repository
+ * only, never the installation behind the connection.
+ */
+export const projectListRepositorySchema = z.object({
+  projectRepositoryId: z.string(),
+  connectionId: z.string(),
+  integrationId: z.string(),
+  repositoryId: z.string(),
+  // These three are null when the repository row behind the link is missing.
+  externalId: z.string().nullable(),
+  slug: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
+  /** The branch set on the link; null means the repository's default branch. */
+  branch: z.string().nullable(),
+  sandboxWorkdir: z.string(),
+});
+export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
+
+const projectListItemSchema = projectSchema.and(z.object({ repositories: z.array(projectListRepositorySchema) }));
+const cardSchema = z
+  .object({
+    workItem: z
+      .object({
+        provider: z.string(),
+        key: z.string().nullable(),
+        url: z.string().nullable(),
+        title: z.string(),
+        state: z.string().nullable(),
+        labels: z.array(z.string()),
+        author: z.string().nullable(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
 export const createProjectBodySchema = z.object({
@@ -155,6 +192,7 @@ export const updateProjectBodySchema = z
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
@@ -367,7 +405,6 @@ export const updateWorkItemBodySchema = z
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
-    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 
@@ -593,8 +630,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
     path: '/web/factory/projects',
-    description: 'List Factory projects for the current organization',
-    responseSchema: z.object({ projects: z.array(projectSchema) }),
+    description: 'List Factory projects for the current organization, each with its linked repositories',
+    responseSchema: z.object({ projects: z.array(projectListItemSchema) }),
   },
   projectCreate: {
     method: 'POST',
@@ -839,7 +876,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
     responseSchema: z.object({
-      workItems: z.array(entitySchema),
+      workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
     }),

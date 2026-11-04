@@ -36,10 +36,14 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-oss-120b": [
+    "qwen3.8-27b": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
+      }
+    ],
+    "gemma4-31b": [
+      {
+        "type": "toggle"
       }
     ],
     "glm5.2": [
@@ -48,14 +52,10 @@
         "values": ["high", "max"]
       }
     ],
-    "gemma4-31b": [
+    "gpt-oss-120b": [
       {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

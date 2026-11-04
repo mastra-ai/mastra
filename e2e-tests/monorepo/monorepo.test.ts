@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import getPort from 'get-port';
@@ -209,7 +209,7 @@ process.once('SIGTERM', async () => {
   process.exit(143);
 });
 
-describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
   let fixturePath: string;
 
   let buildQueue: Promise<unknown> = Promise.resolve();
@@ -413,7 +413,7 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
     });
   }
 
-  describe.sequential('dev', async () => {
+  describe('dev', { concurrent: false }, async () => {
     const buildReservation = reserveBuildQueue();
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
@@ -705,7 +705,7 @@ export const environmentRoute = registerApiRoute('/environment', {
   });
 
   // Runs after the `dev` suite's server has stopped, since two dev servers can't share the app directory.
-  describe.sequential('dev Ctrl-C', () => {
+  describe('dev Ctrl-C', { concurrent: false }, () => {
     it(
       'reports the model tokens when `mastra dev` is stopped with Ctrl-C',
       async () => {
@@ -749,7 +749,7 @@ export const environmentRoute = registerApiRoute('/environment', {
     );
   });
 
-  describe.sequential('dev --root', () => {
+  describe('dev --root', { concurrent: false }, () => {
     it(
       'writes dev pre-bundle output under <root>/.mastra/.build instead of the cwd (#29140)',
       async () => {
@@ -788,7 +788,7 @@ export const environmentRoute = registerApiRoute('/environment', {
     );
   });
 
-  describe.sequential('build', async () => {
+  describe('build', { concurrent: false }, async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -1231,7 +1231,7 @@ export const mastra = new Mastra({
     });
   });
 
-  describe.sequential('start', async () => {
+  describe('start', { concurrent: false }, async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -1509,7 +1509,7 @@ export const mastra = new Mastra({
     );
   });
 
-  describe.sequential('build without externals', async () => {
+  describe('build without externals', { concurrent: false }, async () => {
     let originalConfig: string;
     let port = await getPort();
     let proc: ReturnType<typeof execaNode> | undefined;
@@ -1611,7 +1611,7 @@ export const mastra = new Mastra({
     });
   });
 
-  describe.sequential('deployer module aliases', () => {
+  describe('deployer module aliases', { concurrent: false }, () => {
     it(
       'should replace aliased dependencies in every bundling pass',
       async () => {
@@ -1717,7 +1717,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('bundler options with file-based agents', () => {
+  describe('bundler options with file-based agents', { concurrent: false }, () => {
     // `mastra build` reads options from a generated wrapper when file-based agents exist; the
     // wrapper has no `new Mastra({...})`, so the `bundler` block was dropped for defaults (#29048).
     it(
@@ -1756,7 +1756,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('workspace subpath externals', () => {
+  describe('workspace subpath externals', { concurrent: false }, () => {
     it(
       'should package an external workspace dependency without an optimized workspace parent',
       async () => {
@@ -1990,7 +1990,7 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
   });
 
-  describe.sequential('Studio control route authentication', () => {
+  describe('Studio control route authentication', { concurrent: false }, () => {
     it(
       'keeps Studio control routes public during development when server auth is configured',
       async () => {
@@ -2079,7 +2079,7 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
   });
 
-  describe.sequential('Browser stream route authentication', () => {
+  describe('Browser stream route authentication', { concurrent: false }, () => {
     /**
      * Browser stream routes are registered outside the route-registration pipeline,
      * and a browser cannot set an Authorization header on a WebSocket handshake, so
@@ -2257,7 +2257,7 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
   });
 
-  describe.sequential('pnpm build approvals', () => {
+  describe('pnpm build approvals', { concurrent: false }, () => {
     it(
       'reports blocked native build scripts as a user configuration error',
       async () => {
@@ -2288,7 +2288,7 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
   });
 
-  describe.sequential('reproducible bundles', () => {
+  describe('reproducible bundles', { concurrent: false }, () => {
     it(
       'produces identical bundles when invoked from the app and monorepo roots',
       async () => {
@@ -2330,7 +2330,7 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
   });
 
-  describe.sequential('MASTRA_BUILD_SKIP_INSTALL', () => {
+  describe('MASTRA_BUILD_SKIP_INSTALL', { concurrent: false }, () => {
     it(
       'skips dependency installation in the build output when the env var is set',
       async () => {
@@ -2375,9 +2375,9 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
   });
 
-  describe.sequential('pnpm patched dependencies', () => {
+  describe('pnpm patched dependencies', { concurrent: false }, () => {
     it(
-      'keeps source workspace patches applied in the built output',
+      'keeps source workspace patches and overrides applied in the built output',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-patch-test-${pkgManager}-`));
         try {
@@ -2402,9 +2402,12 @@ assert.equal(subpathOnlyValue, 'c');`,
           const workspace = await readFile(workspacePath, 'utf8');
           await writeFile(
             workspacePath,
-            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
+            // read-excel-file asks for fflate ^0.8.3, so only the override can install 0.8.2 (#29192).
+            // The output package has another name, so the app-scoped nodemailer override must be retargeted
+            // to keep winning over the repo-wide one (#29348).
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n\noverrides:\n  fflate: 0.8.2\n  nodemailer: 10.0.0\n  '@inner/app>nodemailer': 10.2.1\n`,
           );
-          // The new patch entry changes the lockfile config, which CI's default frozen install rejects.
+          // The new patch and override entries change the lockfile config, which CI's default frozen install rejects.
           await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
             cwd: isolatedFixturePath,
             env: process.env,
@@ -2427,6 +2430,15 @@ assert.equal(subpathOnlyValue, 'c');`,
           expect(
             await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
           ).toContain('patched-by-mastra-e2e');
+
+          const readExcelFileDir = await realpath(join(outputDir, 'node_modules', 'read-excel-file'));
+          const fflate = JSON.parse(await readFile(join(readExcelFileDir, '..', 'fflate', 'package.json'), 'utf8'));
+          expect(fflate.version).toBe('0.8.2');
+
+          const nodemailer = JSON.parse(
+            await readFile(join(outputDir, 'node_modules', 'nodemailer', 'package.json'), 'utf8'),
+          );
+          expect(nodemailer.version).toBe('10.2.1');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
@@ -2435,7 +2447,7 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
   });
 
-  describe.sequential('patches applied in node_modules', () => {
+  describe('patches applied in node_modules', { concurrent: false }, () => {
     it(
       'applies patches to node_modules during install from the workspace config',
       async () => {

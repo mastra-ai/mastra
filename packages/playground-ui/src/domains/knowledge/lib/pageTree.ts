@@ -109,3 +109,8 @@ export function pageAncestorIds(pages: KnowledgePagePayload[], pageId: string): 
   }
   return path;
 }
+
+/** A page's child count as shown: `1000+` when the server capped the count, so it never reads low. */
+export function childCountLabel(page: KnowledgePagePayload): string {
+  return page.childCountCapped ? `${page.childCount ?? 0}+` : String(page.childCount ?? 0);
+}

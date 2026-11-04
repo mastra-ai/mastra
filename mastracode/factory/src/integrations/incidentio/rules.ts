@@ -10,7 +10,7 @@ import { selectEventRule } from '../../rules/event-rules.js';
 import type { FactoryIncidentioRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { IncidentioEventRules } from './default-rules.js';
 
@@ -94,7 +94,7 @@ export class IncidentioRules {
   async #ingestIssue(
     input: IncidentioRulesIngress,
     issue: IncidentioIssueIngress,
-    relatedItem: WorkItemRow | undefined,
+    relatedItem: Card | undefined,
     attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `incidentio:${issue.id}:${issue.updatedAt}`;
@@ -126,6 +126,7 @@ export class IncidentioRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              workItem: relatedItem.workItem,
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
