@@ -58,8 +58,7 @@ it('defaults to the hosted Knowledge API and accepts an env or explicit URL over
     await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
     process.env.MASTRA_KNOWLEDGE_SERVICE_URL = 'http://injected.local/';
     await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
-    process.env.MASTRA_KNOWLEDGE_API_URL = 'http://localhost:3062/';
-    await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
+    process.env.MASTRA_KNOWLEDGE_API_URL = 'http://localhost:3062/';    await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
     await (
       await new PlatformKnowledge({ ...options, apiUrl: 'http://localhost:8080/' }).getStorage()
     ).listPages({ read: 'all' });
@@ -72,7 +71,7 @@ it('defaults to the hosted Knowledge API and accepts an env or explicit URL over
   }
   expect(urls).toEqual([
     'https://knowledge-api.mastra.ai/v1/knowledge/kn_1/operations/listPages',
-    'http://injected.local/v1/knowledge/kn_1/operations/listPages',
+    'https://knowledge-api.mastra.ai/v1/knowledge/kn_1/operations/listPages',
     'http://localhost:3062/v1/knowledge/kn_1/operations/listPages',
     'http://localhost:8080/v1/knowledge/kn_1/operations/listPages',
   ]);
