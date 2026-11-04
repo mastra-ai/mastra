@@ -1850,6 +1850,40 @@ describe('audit trail', () => {
     });
   });
 
+  it('records from for custom-board phases and skips same-phase commits', async () => {
+    const seed = await createFactoryStorageForTests();
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'approval',
+      phases: {
+        approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'resting' },
+      },
+    });
+    const item = await createItem(seed.workItems, { board: board.id, stages: ['approval'] });
+    const service = new FactoryTransitionService({
+      storage: seed.workItems,
+      configVersion: 'audit-test',
+      audit: seed.audit,
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+
+    const moved = await service.transition(request(item, { stage: 'shipped', identity: 'ship-1' }));
+    expect(moved.status).toBe('accepted');
+    const current = await seed.workItems.get({ orgId: 'org-1', id: item.id });
+    assert(current);
+    const same = await service.transition(request(current, { stage: 'shipped', identity: 'ship-2' }));
+    expect(same.status).toBe('accepted');
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      action: 'factory.work_item.stage_moved',
+      metadata: { from: 'approval', to: 'shipped' },
+    });
+  });
+
   it('names the agent whose consent the dispatcher carries as a human actor', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await createItem(seed.workItems, { stages: ['planning'] });
