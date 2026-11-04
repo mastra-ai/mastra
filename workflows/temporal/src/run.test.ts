@@ -7,6 +7,26 @@ import { z } from 'zod';
 import { createWorkflow } from './workflow';
 
 describe('TemporalRun', () => {
+  it('propagates workflow validateInputs to synchronous and asynchronous runs', async () => {
+    const start = vi.fn().mockResolvedValue({
+      result: async () => ({ status: 'success', result: undefined, state: undefined, steps: {} }),
+    });
+    const workflow = createWorkflow(
+      {
+        id: 'test-workflow',
+        inputSchema: z.unknown(),
+        outputSchema: z.unknown(),
+        options: { validateInputs: false },
+      },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+
+    await (await workflow.createRun({ runId: 'run-1' })).start({ inputData: {} });
+    await (await workflow.createRun({ runId: 'run-2' })).startAsync({ inputData: {} });
+
+    expect(start.mock.calls.map(([, options]) => options.args[0].validateInputs)).toEqual([false, false]);
+  });
+
   it('does not execute stream runs with the local workflow engine', async () => {
     const execute = vi.fn().mockResolvedValue({ value: 2 });
     const start = vi.fn();

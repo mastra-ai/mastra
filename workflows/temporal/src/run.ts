@@ -100,6 +100,7 @@ export class TemporalRun<
           outputOptions: args.outputOptions,
           tracingOptions: args.tracingOptions,
           perStep: args.perStep,
+          validateInputs: this.validateInputs,
         },
       ],
     });
