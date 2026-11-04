@@ -15,6 +15,16 @@
         "default": "./dist/dashboard-renderer.cjs"
       }
     },
+    "./observability-protocol": {
+      "import": {
+        "types": "./dist/observability-protocol.d.ts",
+        "default": "./dist/observability-protocol.js"
+      },
+      "require": {
+        "types": "./dist/observability-protocol.d.ts",
+        "default": "./dist/observability-protocol.cjs"
+      }
+    },
     "./observability-tools": {
       "import": {
         "types": "./dist/observability-tools.d.ts",

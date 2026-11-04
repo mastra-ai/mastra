@@ -74,6 +74,12 @@ export const dashboardServer = new MCPServer({
 
 Each tool runs its read-only observability route in-process as the caller, with the route's own validation, authentication, permission and FGA checks, so the app sees the same data the signed-in user can.
 
+### Servers that serve many projects
+
+A server that reads observability data for many projects, rather than its own, can set `projectId` in the tool result. The app then adds it to every data tool call under the `_mastraProjectId` argument (`OBSERVABILITY_PROJECT_ID_ARGUMENT`), and the server's own data tools read the project from it and drop it before running the query. Import the tool names, routes and argument key from `@mastra/mcp-apps-components/observability-protocol`, which has no server dependencies.
+
+Leave `projectId` out when you serve the app with `observabilityAppTools`: they read the server's own data and don't accept the extra argument.
+
 ### Pinning widgets
 
 Each widget shows a pin button when the host says it can pin. The host owns the pinned widgets; the app only asks it to change them.

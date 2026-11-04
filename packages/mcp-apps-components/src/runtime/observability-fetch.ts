@@ -1,5 +1,9 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import { OBSERVABILITY_APP_TOOLS, routeResponseSchema } from '../observability-protocol';
+import {
+  OBSERVABILITY_APP_TOOLS,
+  OBSERVABILITY_PROJECT_ID_ARGUMENT,
+  routeResponseSchema,
+} from '../observability-protocol';
 import type { ObservabilityAppToolName } from '../observability-protocol';
 import { firstText, structuredOutput } from './tool-result';
 
@@ -27,25 +31,20 @@ function queryArguments(params: URLSearchParams) {
 /**
  * A `fetch` for `MastraClient` that answers each observability request by calling the server's
  * matching app-only tool over the host's MCP connection, with the route's own status and body.
- * Requests no tool covers fail without leaving the iframe.
+ * Requests no tool covers fail without leaving the iframe. With `projectId`, every call also
+ * carries it as `OBSERVABILITY_PROJECT_ID_ARGUMENT`.
  */
-export function createObservabilityFetch(app: App): typeof fetch {
+export function createObservabilityFetch(app: App, { projectId }: { projectId?: string } = {}): typeof fetch {
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), ORIGIN);
     const method = (init?.method ?? 'GET').toUpperCase();
     const name = TOOL_BY_ROUTE.get(`${method} ${url.pathname}`);
     if (!name) return failure(`${method} ${url.pathname} isn't available to MCP Apps.`, 404);
 
+    const args =
+      method === 'GET' ? queryArguments(url.searchParams) : typeof init?.body === 'string' ? JSON.parse(init.body) : {};
     const result = await app.callServerTool(
-      {
-        name,
-        arguments:
-          method === 'GET'
-            ? queryArguments(url.searchParams)
-            : typeof init?.body === 'string'
-              ? JSON.parse(init.body)
-              : {},
-      },
+      { name, arguments: projectId ? { ...args, [OBSERVABILITY_PROJECT_ID_ARGUMENT]: projectId } : args },
       { signal: init?.signal ?? undefined },
     );
     if (result.isError) return failure(firstText(result.content) ?? `The ${name} tool failed.`);

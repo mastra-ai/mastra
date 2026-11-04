@@ -87,3 +87,36 @@ export const supportRunsChart: DashboardDefinition = {
 };
 
 export const emptyTimeSeries: TimeSeriesResponse = { series: [] };
+
+type ListScoresResponse = Awaited<ReturnType<MastraClient['listScores']>>;
+
+/** A scores widget that names no scorer, so it lists the range's recent scores to find them. */
+export const discoveredScoresDashboard: DashboardDefinition = {
+  schemaVersion: 1,
+  rows: [
+    {
+      widgets: [
+        {
+          id: 'scores',
+          span: 12,
+          kind: 'scores',
+          title: 'Scores',
+          views: [
+            {
+              queries: [
+                { id: 'average', source: 'scores', request: 'aggregate', aggregation: 'avg' },
+                { id: 'series', source: 'scores', request: 'timeSeries', aggregation: 'avg' },
+              ],
+              options: { average: 'average', series: 'series', emptyMessage: 'No scores in this range.' },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export const emptyScores: ListScoresResponse = {
+  pagination: { total: 0, page: 0, perPage: 100, hasMore: false },
+  scores: [],
+};

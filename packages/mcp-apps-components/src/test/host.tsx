@@ -5,7 +5,7 @@ import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextproto
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { OBSERVABILITY_APP_TOOLS } from '../observability-protocol';
+import { OBSERVABILITY_APP_TOOLS, OBSERVABILITY_PROJECT_ID_ARGUMENT } from '../observability-protocol';
 import type { McpAppDefinition } from '../runtime/define-mcp-app';
 
 /** Where the test host's server answers the observability tools; MSW handlers mock its routes. */
@@ -60,14 +60,18 @@ export async function renderWithHost<Input>(
 ) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
-  const toolCalls: string[] = [];
+  const toolCalls: Array<{ name: string; arguments: Record<string, unknown> }> = [];
   const messages: string[] = [];
   const modelContexts: unknown[] = [];
   // What the app asked of the host's chat, in order: a model context update or a message.
   const chat: Array<'context' | 'message'> = [];
-  bridge.oncalltool = async ({ name, arguments: args }) => {
-    toolCalls.push(name);
-    return relayToServer(name, args);
+  bridge.oncalltool = async ({ name, arguments: args = {} }) => {
+    toolCalls.push({ name, arguments: args });
+    // A hosted server reads the project from the call and runs the route without it.
+    const routeArgs = Object.fromEntries(
+      Object.entries(args).filter(([key]) => key !== OBSERVABILITY_PROJECT_ID_ARGUMENT),
+    );
+    return relayToServer(name, routeArgs);
   };
   bridge.onupdatemodelcontext = async params => {
     chat.push('context');

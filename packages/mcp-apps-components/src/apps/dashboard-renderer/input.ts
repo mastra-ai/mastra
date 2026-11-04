@@ -10,6 +10,12 @@ import { z } from 'zod';
 export const dashboardRendererInputSchema = z.object({
   definition: dashboardDefinitionSchema,
   scope: z.enum(DASHBOARD_SCOPES).default('project'),
+  /**
+   * For hosted servers that serve many projects: the project the dashboard reads. The app sends it
+   * with every data tool call as `OBSERVABILITY_PROJECT_ID_ARGUMENT`. Leave it out on self-hosted
+   * servers, whose `observabilityAppTools` don't accept the extra argument.
+   */
+  projectId: z.string().min(1).optional(),
 });
 
 export type DashboardRendererInput = z.output<typeof dashboardRendererInputSchema>;

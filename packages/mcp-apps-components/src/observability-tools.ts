@@ -19,7 +19,7 @@ import type { ServerRoute } from '@mastra/server/server-adapter';
 import { OBSERVABILITY_APP_TOOLS, routeQuerySchema, routeResponseSchema } from './observability-protocol';
 import type { ObservabilityAppToolName, RouteResponse } from './observability-protocol';
 
-export { OBSERVABILITY_APP_TOOLS } from './observability-protocol';
+export { OBSERVABILITY_APP_TOOLS, OBSERVABILITY_PROJECT_ID_ARGUMENT } from './observability-protocol';
 export type { ObservabilityAppToolName, RouteResponse } from './observability-protocol';
 
 /** The server route behind each tool. */

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition } from '@mastra/client-js';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
+import { OBSERVABILITY_PROJECT_ID_ARGUMENT } from '../../../observability-protocol';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
@@ -11,10 +12,18 @@ import {
   DASHBOARD_WIDGET_PIN_NOTIFICATION,
   dashboardWidgetPinNotificationParamsSchema,
 } from '../pin';
-import { agentRunsAggregate, agentRunsDashboard, emptyTimeSeries, supportRunsChart } from './fixtures/dashboard';
+import {
+  agentRunsAggregate,
+  agentRunsDashboard,
+  discoveredScoresDashboard,
+  emptyScores,
+  emptyTimeSeries,
+  supportRunsChart,
+} from './fixtures/dashboard';
 
 const AGGREGATE_API = `${MASTRA_SERVER}/observability/metrics/aggregate`;
 const TIME_SERIES_API = `${MASTRA_SERVER}/observability/metrics/timeseries`;
+const SCORES_API = `${MASTRA_SERVER}/observability/scores`;
 
 type AggregateBody = { filters: { timestamp: { start: string; end: string } } };
 
@@ -39,7 +48,7 @@ describe('dashboard renderer app', () => {
       // The iframe never reaches the network itself: MSW fails any request it didn't expect,
       // and every read went through the server's metrics tool.
       expect(host.toolCalls.length).toBeGreaterThan(0);
-      expect(host.toolCalls.every(name => name === 'observabilityMetricAggregate')).toBe(true);
+      expect(host.toolCalls.every(call => call.name === 'observabilityMetricAggregate')).toBe(true);
     });
   });
 
@@ -90,6 +99,71 @@ describe('dashboard renderer app', () => {
       });
 
       expect(await screen.findByText('693')).toBeTruthy();
+    });
+  });
+
+  describe('when a hosted server says which project the dashboard reads', () => {
+    const PROJECT = 'project-a';
+    // A KPI and a chart read through POST tools; a scores widget with no scorer lists recent
+    // scores through the GET tool.
+    const everyToolDashboard: DashboardDefinition = {
+      schemaVersion: 1,
+      rows: [...agentRunsDashboard.rows, ...supportRunsChart.rows, ...discoveredScoresDashboard.rows],
+    };
+    const everyTool = ['observabilityListScores', 'observabilityMetricAggregate', 'observabilityMetricTimeSeries'];
+
+    async function showDashboard(input: Record<string, unknown>) {
+      server.use(
+        http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)),
+        http.post(TIME_SERIES_API, () => HttpResponse.json(emptyTimeSeries)),
+        http.get(SCORES_API, () => HttpResponse.json(emptyScores)),
+      );
+      const host = await renderWithHost(app);
+      await host.sendToolResult({ content: [], structuredContent: { definition: everyToolDashboard, ...input } });
+      expect(await screen.findByText('693')).toBeTruthy();
+      await expect.poll(() => new Set(host.toolCalls.map(call => call.name))).toEqual(new Set(everyTool));
+      return host;
+    }
+
+    it('names the project on every data tool call, GET and POST alike', async () => {
+      const host = await showDashboard({ projectId: PROJECT });
+
+      for (const call of host.toolCalls) {
+        expect(call.arguments).toHaveProperty([OBSERVABILITY_PROJECT_ID_ARGUMENT], PROJECT);
+      }
+    });
+
+    it('still names the project when the dashboard refetches its data', async () => {
+      const host = await showDashboard({ projectId: PROJECT });
+      const initialCalls = host.toolCalls.length;
+
+      // Returning to the tab refetches stale data.
+      await act(async () => {
+        window.dispatchEvent(new Event('visibilitychange'));
+      });
+
+      await expect.poll(() => host.toolCalls.length).toBeGreaterThan(initialCalls);
+      for (const call of host.toolCalls.slice(initialCalls)) {
+        expect(call.arguments).toHaveProperty([OBSERVABILITY_PROJECT_ID_ARGUMENT], PROJECT);
+      }
+    });
+
+    it('sends self-hosted servers no project argument when the dashboard names no project', async () => {
+      const host = await showDashboard({});
+
+      for (const call of host.toolCalls) {
+        expect(Object.keys(call.arguments)).not.toContain(OBSERVABILITY_PROJECT_ID_ARGUMENT);
+      }
+    });
+
+    it('refuses an empty project instead of reading without one', async () => {
+      const host = await renderWithHost(app);
+
+      await host.sendToolResult({ content: [], structuredContent: { definition: agentRunsDashboard, projectId: '' } });
+
+      expect(await screen.findByText("Couldn't show this dashboard")).toBeTruthy();
+      expect(screen.getByText(/`projectId`/)).toBeTruthy();
+      expect(host.toolCalls).toEqual([]);
     });
   });
 

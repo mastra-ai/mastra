@@ -21,6 +21,14 @@ export const OBSERVABILITY_APP_TOOLS = {
 
 export type ObservabilityAppToolName = keyof typeof OBSERVABILITY_APP_TOOLS;
 
+/**
+ * The argument the dashboard app adds to every observability tool call when its input sets
+ * `projectId`, so a hosted server that serves many projects knows which one to read. It sits next
+ * to the route's own query or body fields, so tools that read it drop it before running the route.
+ * `observabilityAppTools` don't accept it: self-hosted servers serve one project.
+ */
+export const OBSERVABILITY_PROJECT_ID_ARGUMENT = '_mastraProjectId';
+
 /** A GET route's query string, one entry per key; repeated keys become arrays. */
 export const routeQuerySchema = z.record(z.string(), z.union([z.string(), z.array(z.string())]));
 
