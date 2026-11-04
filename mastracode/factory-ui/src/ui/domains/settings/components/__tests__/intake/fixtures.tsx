@@ -295,9 +295,9 @@ export function seedFactories() {
   );
 }
 
-export function renderIntakeSection() {
+export function renderIntakeSection(path = '/factories/fp-1/settings/intake') {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/intake']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/factories/:factoryId/settings/intake" element={<IntakeSection />} />
       </Routes>
