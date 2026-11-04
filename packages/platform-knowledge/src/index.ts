@@ -3,7 +3,10 @@ import type { KnowledgeConfig } from '@mastra/core/knowledge';
 import { MastraCompositeStore, KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 
-export interface PlatformKnowledgeOptions extends Omit<KnowledgeConfig, 'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes'> {
+export interface PlatformKnowledgeOptions extends Omit<
+  KnowledgeConfig,
+  'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes'
+> {
   scopes?: KnowledgeConfig['scopes'];
   accessToken?: string;
   projectId?: string;
@@ -13,12 +16,41 @@ export interface PlatformKnowledgeOptions extends Omit<KnowledgeConfig, 'storage
 
 // These are the schema-v4 page-store methods, not arbitrary object properties or storage lifecycle methods.
 const operations = [
-  'materializeScope', 'getScopesByAddress', 'listScopeDeclarations', 'renameScopeDeclaration',
-  'listChildScopes', 'getPage', 'getPages', 'getPageByPath', 'findPagesByName',
-  'listChildPages', 'countChildPages', 'listPages', 'createPage', 'updatePage', 'movePage',
-  'mergePages', 'deletePage', 'getNote', 'countNotes', 'listNotes', 'listNotesMentioning',
-  'addNote', 'restampNote', 'removeNote', 'restoreNote', 'searchPages', 'listPageActivity',
-  'addPinAudience', 'removePinAudience', 'listPins',
+  'materializeScope',
+  'getScopesByAddress',
+  'listScopeDeclarations',
+  'renameScopeDeclaration',
+  'listChildScopes',
+  'countChildScopes',
+  'getPage',
+  'getPages',
+  'getPageByPath',
+  'findPagesByName',
+  'listChildPages',
+  'countChildPages',
+  'listPages',
+  'createPage',
+  'updatePage',
+  'movePage',
+  'mergePages',
+  'deletePage',
+  'getNote',
+  'countNotes',
+  'listNotes',
+  'listNotesMentioning',
+  'addNote',
+  'restampNote',
+  'removeNote',
+  'restoreNote',
+  'searchPages',
+  'listPageActivity',
+  'addPinAudience',
+  'removePinAudience',
+  'listPins',
+  'countPageLinks',
+  'listPageLinks',
+  'replacePageBodyLinks',
+  'listPageBodyLinkSources',
 ] as const satisfies readonly (keyof KnowledgePageStore)[];
 
 function encode(value: unknown): string {
@@ -38,7 +70,10 @@ function decode<T>(text: string): T {
 }
 
 class RemoteKnowledgeStorage extends KnowledgeStorage {
-  constructor(private readonly endpoint: string, private readonly token: string) {
+  constructor(
+    private readonly endpoint: string,
+    private readonly token: string,
+  ) {
     super({ storageIsolationKey: endpoint });
     return new Proxy(this, {
       get(target, key) {
@@ -63,7 +98,12 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
   }
 
   override getCapabilities() {
-    return { contractVersion: 4, schemaVersion: 4, supportsSchemaInspection: false, supportsExplicitReset: false } as const;
+    return {
+      contractVersion: 4,
+      schemaVersion: 4,
+      supportsSchemaInspection: false,
+      supportsExplicitReset: false,
+    } as const;
   }
 
   override async dangerouslyClearAll(): Promise<void> {
@@ -73,19 +113,31 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
 
 export class PlatformKnowledge extends Knowledge {
   constructor(options: PlatformKnowledgeOptions = {}) {
-    const token = options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY;
+    const token =
+      options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
     const apiUrl = options.apiUrl ?? process.env.MASTRA_PLATFORM_API_URL;
     if (!token || !instanceId || !apiUrl) {
       throw new Error('PlatformKnowledge requires a Platform access token, Knowledge instance ID, and API URL');
     }
-    const { accessToken: _accessToken, projectId: _projectId, instanceId: _instanceId, apiUrl: _apiUrl, ...config } = options;
+    const {
+      accessToken: _accessToken,
+      projectId: _projectId,
+      instanceId: _instanceId,
+      apiUrl: _apiUrl,
+      ...config
+    } = options;
     const endpoint = `${apiUrl.replace(/\/$/, '')}/v1/knowledge/${encodeURIComponent(instanceId)}`;
     const storage = new MastraCompositeStore({
       id: `platform-knowledge-${instanceId}`,
       domains: { knowledge: new RemoteKnowledgeStorage(endpoint, token) },
     });
-    super({ ...config, tools: config.tools ?? { read: true }, scopes: config.scopes ?? knowledgeMemoryScopes(), storage });
+    super({
+      ...config,
+      tools: config.tools ?? { read: true },
+      scopes: config.scopes ?? knowledgeMemoryScopes(),
+      storage,
+    });
   }
 }
 
