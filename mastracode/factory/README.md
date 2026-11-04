@@ -910,6 +910,12 @@ const incidentio = new PlatformIncidentioIntegration(); // Reads Platform creden
 
 Both integrations expose incidents and incident follow-ups as separate Intake sources. Their provider-neutral Intake items can be imported onto any installed board, including custom boards. A reconciliation worker polls imported incidents and follow-ups every five minutes by default to refresh their provider state and metadata. Set `MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED=false` to disable it or `MASTRACODE_INCIDENT_IO_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence. Follow-up state updates map Factory completion and cancellation to incident.io's `completed` and `not_doing` statuses. incident.io does not expose Intake comments through these adapters.
 
+### Linear workspace connections
+
+For Platform-managed Linear connections, Settings → Connections lists each workspace, including disconnected workspaces. Healthy workspaces offer **Manage**; disconnected workspaces offer **Reconnect**. To add another workspace, open **Add connection**, then choose **Add workspace**. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
+
+Work Intake keeps disconnected workspaces' saved sources and routing. Their issues remain paused until access is restored. A request failure shows a retry action and does not mark the workspace disconnected. Sources and polling from healthy workspaces remain available when another workspace's source request fails.
+
 ### Linear event rules
 
 Both `LinearIntegration` and `PlatformLinearIntegration` automatically install the built-in `issueObserved` and `issueClosed` handlers. No default-rule imports or configuration are needed, including for `new PlatformLinearIntegration()` or direct construction with credentials only.

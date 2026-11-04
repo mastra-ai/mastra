@@ -44,6 +44,8 @@ describe('useCreateFeedback', () => {
 
       expect(onPost).toHaveBeenCalledWith({
         feedback: {
+          feedbackId: expect.any(String),
+          timestamp: expect.any(String),
           traceId: TRACE_ID,
           feedbackType: 'comment',
           feedbackSource: 'user',
