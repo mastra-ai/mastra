@@ -95,7 +95,7 @@ export async function validateStepResumeData({
   resumeData?: any;
   step: Partial<Pick<Step<string, any, any>, 'resumeSchema'>>;
 }) {
-  if (!resumeData) {
+  if (resumeData === undefined) {
     return { resumeData: undefined, validationError: undefined };
   }
 
@@ -456,8 +456,8 @@ export const createTimeTravelExecutionParams = (params: {
 
   for (const [index, entry] of graph.steps.entries()) {
     const currentExecPathLength = executionPath.length;
-    //if there is resumeData, steps down the graph until the suspended step will have stepResult info to use
-    if (currentExecPathLength > 0 && !resumeData) {
+    //if resumeData was provided (any value but undefined), steps down the graph until the suspended step will have stepResult info to use
+    if (currentExecPathLength > 0 && resumeData === undefined) {
       break;
     }
     const stepIds = getStepIds(entry);
