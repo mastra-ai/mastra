@@ -11,11 +11,13 @@ import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
+import { embedInSubprocess } from './fastembed-subprocess.js';
 import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /**
- * `fastembed.small`, loaded on the first embedding. Importing `@mastra/fastembed` up front loads ONNX
- * Runtime and a native tokenizer (~11 MB) into every session, including ones that never embed.
+ * `fastembed.small`, run in a short-lived child process per call (see `embedInSubprocess`) so ONNX
+ * Runtime never loads into the agent process. `MASTRACODE_EMBED_IN_PROCESS=1` loads it here instead, on
+ * the first embedding.
  */
 const lazyFastembedSmall: typeof fastembed.small = {
   specificationVersion: 'v3',
@@ -24,8 +26,11 @@ const lazyFastembedSmall: typeof fastembed.small = {
   maxEmbeddingsPerCall: 256,
   supportsParallelCalls: true,
   async doEmbed(options) {
-    const { fastembed } = await import('@mastra/fastembed');
-    return fastembed.small.doEmbed(options);
+    if (process.env.MASTRACODE_EMBED_IN_PROCESS === '1') {
+      const { fastembed } = await import('@mastra/fastembed');
+      return fastembed.small.doEmbed(options);
+    }
+    return embedInSubprocess(options);
   },
 };
 
