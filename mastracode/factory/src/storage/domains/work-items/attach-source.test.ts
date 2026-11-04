@@ -6,7 +6,8 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
 import { WorkItemSourceConflictError } from './base.js';
 import type { ExternalWorkItemSource } from './base.js';
-import { FACTORY_BOARD_ITEMS_SCHEMA } from './work-item-schema.js';
+import { FACTORY_BOARD_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SOURCES_SCHEMA } from './work-item-schema.js';
+import type { WorkItemSourceDbRecord } from './work-item-schema.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -136,6 +137,76 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('one card for an
     expect(stored.workItem.state).toBe('open');
     expect(stored.workItem.sources[0]).toMatchObject({ sourceType: 'issue', state: 'open' });
     expect(stored.workItem.sources[1]).toMatchObject({ sourceType: 'pull-request', state: 'merged' });
+  });
+
+  describe("keeps the issue as the card's primary source whatever the timestamps say", () => {
+    /** File issue `n`, attach its pull request, then set the pull request source's `created_at` relative to the issue's. */
+    async function attachAt(
+      { storage, workItems, scope, file }: Awaited<ReturnType<typeof setup>>,
+      n: number,
+      offsetMs: number,
+    ) {
+      const card = await file({ ...issue12, externalId: `github:10:issue:${n}` }, { state: 'open' });
+      const attached = await workItems.attachSource({
+        orgId: scope.orgId,
+        id: card.id,
+        source: { ...pullRequest34, externalId: `github:10:pull-request:${n + 1000}` },
+        metadata: { state: 'open' },
+      });
+      const [issueSource, pullRequestSource] = await storage.ops.findMany<WorkItemSourceDbRecord>(
+        FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+        { work_item_id: attached!.item.workItem.id },
+        { orderBy: [['role', 'desc']] },
+      );
+      expect([issueSource!.source_type, pullRequestSource!.source_type]).toEqual(['issue', 'pull-request']);
+      await storage.ops.updateMany(
+        FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+        { id: pullRequestSource!.id },
+        { created_at: new Date(new Date(issueSource!.created_at).getTime() + offsetMs) },
+      );
+      return card.id;
+    }
+
+    async function expectIssuePrimary({ workItems, scope }: Awaited<ReturnType<typeof setup>>, id: string) {
+      const stored = (await workItems.get({ orgId: scope.orgId, id }))!;
+      expect(stored.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
+      expect(stored.externalSource).toMatchObject({ type: 'issue' });
+      const pullRequestSource = stored.workItem.sources[1]!;
+      await workItems.syncWorkItemSource({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        provider: pullRequestSource.provider,
+        externalId: pullRequestSource.externalId,
+        patch: { state: 'merged', metadata: { state: 'closed', merged: true } },
+      });
+      const synced = (await workItems.get({ orgId: scope.orgId, id }))!;
+      expect(synced.workItem.sources[0]).toMatchObject({ sourceType: 'issue', state: 'open' });
+      expect(synced.workItem.sources[1]).toMatchObject({ sourceType: 'pull-request', state: 'merged' });
+    }
+
+    it('when the pull request source was written in the same millisecond', async () => {
+      const harness = await setup();
+      // Ten cards: an id tie-break would put the pull request first on about half of them.
+      const ids = await Promise.all(Array.from({ length: 10 }, (_, n) => attachAt(harness, n + 1, 0)));
+      for (const id of ids) await expectIssuePrimary(harness, id);
+    });
+
+    it('when the pull request source is older than the issue source', async () => {
+      const harness = await setup();
+      await expectIssuePrimary(harness, await attachAt(harness, 1, -60_000));
+    });
+
+    it('when the issue source predates the role column', async () => {
+      const harness = await setup();
+      const id = await attachAt(harness, 1, -60_000);
+      const card = (await harness.workItems.get({ orgId: harness.scope.orgId, id }))!;
+      await harness.storage.ops.updateMany(
+        FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+        { work_item_id: card.workItem.id, source_type: 'issue' },
+        { role: null },
+      );
+      await expectIssuePrimary(harness, id);
+    });
   });
 
   it('reads a card stored on the retired Review board as Work and stores Work on its next write', async () => {
