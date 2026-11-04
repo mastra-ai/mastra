@@ -374,6 +374,39 @@ function runOutsideDatadogTraceScope<T>(callback: () => T): T {
   return scope.activate(null, callback);
 }
 
+const LOGGABLE_ERROR_NAMES = new Set([
+  'Error',
+  'TypeError',
+  'RangeError',
+  'SyntaxError',
+  'AbortError',
+  'TimeoutError',
+  'McpError',
+  'ProtocolError',
+  'SdkError',
+  'SdkHttpError',
+  'SseError',
+  'StreamableHTTPError',
+  'UnauthorizedError',
+  'OAuthError',
+  'UnsupportedProtocolVersionError',
+]);
+
+const LOGGABLE_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EPIPE',
+  'EAI_AGAIN',
+  'ABORT_ERR',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
+
 /**
  * Names a tool-call failure for logs without its message: server error text can echo the submitted
  * arguments back (Issue #29318). The full error still reaches the caller.
@@ -381,12 +414,12 @@ function runOutsideDatadogTraceScope<T>(callback: () => T): T {
 function errorKind(error: unknown): string {
   if (error instanceof MastraError) return error.id;
   if (error instanceof Error) {
-    // `name` and `code` can be set to anything, so only log class-style names and fixed codes
-    // (JSON-RPC numbers, Node-style constants like ECONNRESET).
-    const name = /^[A-Z][A-Za-z0-9]{0,63}$/.test(error.name) ? error.name : 'Error';
+    // `name` and `code` can be set to anything, so only log known names and codes (plus numeric
+    // JSON-RPC codes).
+    const name = LOGGABLE_ERROR_NAMES.has(error.name) ? error.name : 'Error';
     const code = (error as { code?: unknown }).code;
-    const isFixedCode = typeof code === 'number' || (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/.test(code));
-    return isFixedCode ? `${name} (${code})` : name;
+    const isKnownCode = typeof code === 'number' || (typeof code === 'string' && LOGGABLE_ERROR_CODES.has(code));
+    return isKnownCode ? `${name} (${code})` : name;
   }
   return typeof error;
 }

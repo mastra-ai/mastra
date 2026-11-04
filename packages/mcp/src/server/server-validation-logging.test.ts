@@ -153,27 +153,30 @@ describe('MCPServer validation failure logging (Issue #29318)', () => {
     }
   });
 
-  it('keeps arbitrary error names and codes out of MCPClient failure logs', async () => {
-    const mcpClient = new InternalMastraMCPClient({ name: 'error-code', server: { url: served.url } });
-    mcpClient.__setLogger(new ConsoleLogger({ level: 'silent' }));
-    const clientLogger = mcpClient['logger'];
-    const clientSpies = (['debug', 'info', 'warn', 'error'] as const).map(level => vi.spyOn(clientLogger, level));
-    try {
-      await mcpClient.connect();
-      const tools = await mcpClient.tools();
-      vi.spyOn(mcpClient['client'], 'callTool').mockRejectedValueOnce(
-        Object.assign(new Error('failed'), { name: SECRET, code: SECRET }),
-      );
+  it.each([SECRET, 'SECRET_TOKEN'])(
+    'keeps arbitrary error names and codes out of MCPClient failure logs (%s)',
+    async secret => {
+      const mcpClient = new InternalMastraMCPClient({ name: 'error-code', server: { url: served.url } });
+      mcpClient.__setLogger(new ConsoleLogger({ level: 'silent' }));
+      const clientLogger = mcpClient['logger'];
+      const clientSpies = (['debug', 'info', 'warn', 'error'] as const).map(level => vi.spyOn(clientLogger, level));
+      try {
+        await mcpClient.connect();
+        const tools = await mcpClient.tools();
+        vi.spyOn(mcpClient['client'], 'callTool').mockRejectedValueOnce(
+          Object.assign(new Error('failed'), { name: secret, code: secret }),
+        );
 
-      await expect(tools.explode!.execute!({ email: 'x' }, {} as never)).rejects.toThrow('failed');
+        await expect(tools.explode!.execute!({ email: 'x' }, {} as never)).rejects.toThrow('failed');
 
-      const clientLogs = JSON.stringify(clientSpies.flatMap(spy => spy.mock.calls));
-      expect(clientLogs).toContain('Error calling tool: explode');
-      expect(clientLogs).not.toContain(SECRET);
-    } finally {
-      await mcpClient.disconnect();
-    }
-  });
+        const clientLogs = JSON.stringify(clientSpies.flatMap(spy => spy.mock.calls));
+        expect(clientLogs).toContain('Error calling tool: explode');
+        expect(clientLogs).not.toContain(secret);
+      } finally {
+        await mcpClient.disconnect();
+      }
+    },
+  );
 
   it('keeps transport error text out of the MCPClient reconnect log', async () => {
     const mcpClient = new InternalMastraMCPClient({ name: 'reconnect', server: { url: served.url } });
