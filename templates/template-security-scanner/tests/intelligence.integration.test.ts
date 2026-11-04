@@ -633,6 +633,93 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     );
   });
 
+  it('accepts unclassified package ranges without inventing ecosystem or versions', () => {
+    const original = detail('CVE-2026-12006');
+    const affected = { package: 'owned-package', ranges: [{ unsupported: 'range semantics' }] };
+    const parsed = detailSchema.parse({ ...original, affected: [affected] });
+    expect(parsed.affected).toEqual([affected]);
+    expect(versionApplicability(parsed, '1.0')).toBe('APPLICABILITY_UNKNOWN');
+    expect(materialHash(detailSchema.parse(parsed))).toBe(materialHash(parsed));
+    expect(
+      materialHash(detailSchema.parse({ ...original, affected: [{ ...affected, package: 'changed-package' }] })),
+    ).not.toBe(materialHash(parsed));
+    for (const row of [
+      { ranges: [] },
+      { package: 'owned-package' },
+      { ...affected, package: null },
+      { ...affected, package: {} },
+      { ...affected, package: 'x'.repeat(501) },
+      { ...affected, ranges: null },
+      { ...affected, ranges: Array(51).fill('1.0') },
+      { ...affected, unknown: true },
+      { ...affected, ecosystem: 'npm' },
+      { ...affected, ecosystem: null },
+      { ...affected, versions: ['1.0'] },
+      { ...affected, vendor: null },
+      { ...affected, product: 'partial-product' },
+    ]) {
+      expect(detailSchema.safeParse({ ...original, affected: [row] }).success).toBe(false);
+    }
+    const bounded = { package: 'x'.repeat(500), ranges: Array(50).fill('uninterpreted') };
+    expect(detailSchema.parse({ ...original, affected: [bounded] }).affected).toEqual([bounded]);
+  });
+
+  it('imports unclassified package ranges from rotation through HTTP and retains metadata-only hypotheses', async () => {
+    const fixture = await startAdvisoryFixture();
+    const head = detail('CVE-2026-12007');
+    const rotation = {
+      ...detail('CVE-2026-12008', 'PRIVATE_ROTATION_PROSE'),
+      affected: [{ package: 'UNCLASSIFIED_PACKAGE_MARKER', ranges: [{ unsupported: 'range semantics' }] }],
+    };
+    fixture.page(null, [head.id], 'rotation');
+    fixture.page('rotation', [rotation.id], null);
+    fixture.setDetail(head);
+    fixture.details.set(rotation.id, { status: 302, location: `/public/entries/${rotation.id}.json` });
+    fixture.details.set(`/public/entries/${rotation.id}.json`, { body: rotation });
+    const seen: unknown[] = [];
+    const models: AdvisoryModels = {
+      async plan(candidate) {
+        seen.push(candidate);
+        return {
+          value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+          modelId: 'owned-local-model',
+        };
+      },
+    };
+    const app = await startHarness(fixture, models);
+    const synced = await app.request('/api/advisories/sync', 'POST', {});
+    expect(synced).toMatchObject({ status: 200, body: { hypotheses: { ready: 2, pending: 0 } } });
+    expect(fixture.requests).toContain(`/public/entries/${rotation.id}.json`);
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({
+      stale: false,
+      failureCount: 0,
+      failureCode: null,
+    });
+    const saved = await app.request(`/api/advisories/${rotation.id}`);
+    expect(saved.body.detail.affected).toEqual(rotation.affected);
+    const stored = await app.query(`SELECT detail FROM scanner_advisories WHERE id='${rotation.id}'`);
+    expect(JSON.parse(String(stored[0]?.detail)).affected).toEqual(rotation.affected);
+    expect(seen).toContainEqual(
+      expect.objectContaining({ id: rotation.id, affectedProducts: [], applicability: 'APPLICABILITY_UNKNOWN' }),
+    );
+    expect(JSON.stringify(seen)).not.toContain('UNCLASSIFIED_PACKAGE_MARKER');
+    expect(JSON.stringify(seen)).not.toContain('PRIVATE_ROTATION_PROSE');
+    const state = await app.request(`/api/advisories/${rotation.id}/triage-state`);
+    expect(state.body).toMatchObject({
+      targetRelevance: 'unknown',
+      checkerAvailability: 'none_available',
+      hypothesis: { state: 'ready', recommendation: 'monitor_advisory' },
+    });
+    expect((await app.request('/api/findings')).body.items).toHaveLength(0);
+    expect(await app.query('SELECT id FROM scanner_verification_jobs')).toHaveLength(0);
+    await app.restart();
+    expect((await app.request(`/api/advisories/${rotation.id}`)).body.detail.affected).toEqual(rotation.affected);
+    expect((await app.request(`/api/advisories/${rotation.id}/triage-state`)).body).toMatchObject(state.body);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
+    expect((await app.request(`/api/advisories/${rotation.id}`)).body.revision).toBe(saved.body.revision);
+    expect(seen).toHaveLength(2);
+  }, 120000);
+
   it('imports vendor versions and ecosystem metadata through HTTP without inferring applicability', async () => {
     const fixture = await startAdvisoryFixture();
     const entry = detail('CVE-2026-12002');

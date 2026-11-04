@@ -72,6 +72,14 @@ const affectedSchema = z.union([
       versions: z.array(short).max(1000),
     })
     .strict(),
+  z
+    .object({
+      /** Unclassified upstream package name; no ecosystem or version is inferred. */
+      package: short,
+      /** Uninterpreted affected-version ranges; no positive applicability is inferred. */
+      ranges: z.array(z.unknown()).max(50),
+    })
+    .strict(),
 ]);
 /** Validated detail contract; bounds and cross-field rules are enforced before use. */
 export const detailSchema = z
