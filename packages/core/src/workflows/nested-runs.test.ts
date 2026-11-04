@@ -852,4 +852,31 @@ describe('what a parked nested run exposes to callers', () => {
     const storedItems = parkedMeta(stored).foreachOutput as any[];
     expect(storedItems[0].suspendPayload.__workflow_meta).not.toHaveProperty('startState');
   });
+
+  it('leaves the workflow input alone when it happens to look like a step result', async () => {
+    // The input is the caller's data. Cleaning it like a step result would rewrite what they passed in.
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      stateSchema: items,
+    })
+      .then(
+        createStep({
+          id: 'echo-input',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ inputData }) => inputData,
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const inputData = { suspendPayload: { __workflow_meta: { startState: { items: ['mine'] } } } };
+    const result: any = await run.start({ inputData, initialState: { items: [] } });
+    expect(result.status).toBe('success');
+    expect(result.input).toEqual(inputData);
+    expect(result.steps.input).toEqual(inputData);
+  });
 });

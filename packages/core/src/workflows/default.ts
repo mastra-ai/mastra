@@ -600,6 +600,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     // workflow retrieval), and the base a re-driven nested run is rebased against from its metadata.
     const cleanStepResults: Record<string, StepResult<any, any, any, any>> = {};
     for (const [stepId, stepResult] of Object.entries(stepResults)) {
+      // `input` holds the caller's data, not a step result: it is returned as `input` and `steps.input`.
+      if (stepId === 'input') {
+        cleanStepResults.input = stepResult;
+        continue;
+      }
       if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult) && 'metadata' in stepResult) {
         const { metadata, ...rest } = stepResult as any;
         if (metadata) {
