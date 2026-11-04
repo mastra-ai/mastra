@@ -130,6 +130,9 @@ export async function extractMastraOption<T extends keyof MastraConfig>(
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    // Chunks are written outside any package with "type": "module", so a `.js` chunk would be loaded as CommonJS
+    // (#28491). The hash keeps them distinct from the main bundle's chunks in `.mastra/output`.
+    chunkFileNames: '[name]-[hash].mjs',
   });
 
   if (result.hasCustomConfig) {

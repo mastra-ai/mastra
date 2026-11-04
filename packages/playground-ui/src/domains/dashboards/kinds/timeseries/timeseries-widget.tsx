@@ -10,6 +10,7 @@ import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { hasDrilldownAction, useDrilldown, useViewMenu } from '../../hooks/use-widget-views';
 import type { ViewHeading } from '../../lib/chrome';
 import { chartColor, FORMATTERS } from '../../lib/format';
+import { pinActions } from '../../lib/pin-actions';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeTimeseries } from '../../lib/timeseries';
@@ -29,7 +30,9 @@ type ViewProps = Props & {
 };
 
 export function TimeseriesWidget(props: Props) {
-  const { view, heading } = useViewMenu(props.widget, props.views, 0, props.expand);
+  const menu = useViewMenu(props.widget, props.views, 0, props.expand);
+  const { view } = menu;
+  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
   return (
     <ViewGate queries={view.queries} pending={gate => <PendingChartCard gate={gate} heading={heading} />}>
       {page => <TimeseriesView {...props} view={view} heading={heading} page={page} />}
@@ -78,8 +81,13 @@ function TimeseriesView({ widget, view, heading, page, onDrilldown }: ViewProps)
   const layout = {
     ...heading,
     actions: hasDrilldownAction(widget, view, onDrilldown) ? (
-      <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
-    ) : undefined,
+      <>
+        <DrilldownAction widget={widget} view={view} onDrilldown={onDrilldown} />
+        {heading.actions}
+      </>
+    ) : (
+      heading.actions
+    ),
     total: withRangeTotals ? rangeTotals : undefined,
     isLoading,
     toolbar: lines.length > 0 && (

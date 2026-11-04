@@ -14,7 +14,7 @@ const SHARED_REMARK_PLUGINS = [
   [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
 ] as const
 const ADMONITIONS_CONFIG = {
-  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'beta'],
+  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'beta', 'alpha'],
 }
 
 // Search and "Ask AI" silently disappear when their credentials are missing at

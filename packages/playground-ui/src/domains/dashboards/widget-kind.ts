@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import type { z } from 'zod/v4';
 import type { ChartCardProps } from '../metrics/components/chart-card';
 import type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
+import type { MetricsCardDragHandleProps } from '@/ds/components/MetricsCard';
 
 /** A view whose options passed its kind's schema. */
 export type ResolvedView<Options> = DashboardWidgetView & { options: Options };
@@ -15,6 +16,19 @@ export type WidgetKindProps<Options> = {
   onDrilldown?: OnDashboardDrilldown;
   /** Where a chart card expands to; see `DashboardExpand`. */
   expand?: DashboardExpand;
+  /** A grip to drag the widget by, shown left of its title: the host is arranging the dashboard. */
+  dragHandle?: MetricsCardDragHandleProps;
+  /** The widget's pin button, shown with its card's actions: the host can pin widgets. */
+  pin?: WidgetPin;
+};
+
+/** A widget's pinned state, as the host holds it, and the call that asks the host to change it. */
+export type WidgetPin = {
+  isPinned: boolean;
+  /** Called with the state the user asked for. */
+  onPin: (isPinned: boolean) => void;
+  /** The widget's name in the button's label ("Pin Agent runs"), so each card's button is told apart. */
+  name: string;
 };
 
 /**

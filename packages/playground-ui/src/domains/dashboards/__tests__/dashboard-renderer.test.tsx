@@ -2,6 +2,7 @@
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -23,6 +24,7 @@ import { ChartCard } from '../../metrics/components/chart-card';
 import { MetricsProvider, useMetrics } from '../../metrics/hooks/use-metrics';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
+import type { DashboardRendererProps } from '../components/dashboard-renderer';
 import { DrilldownAction } from '../components/widget-controls';
 import { useViewMenu } from '../hooks/use-widget-views';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
@@ -31,7 +33,7 @@ import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const agentRunsWidget = metricsWidget('agent-runs');
 const distinctIdsWidget = metricsWidget('distinct-ids');
@@ -101,10 +103,17 @@ function renderDashboard(
     filterTokens = environment ? [{ fieldId: 'environment', value: environment }] : [],
     onDrilldown,
     expand,
+    dragHandle,
+    pin,
   }: {
     kinds?: AnyWidgetKind[];
     onDrilldown?: OnDashboardDrilldown;
     expand?: DashboardExpand;
+    dragHandle?: DashboardRendererProps['dragHandle'];
+    pin?: {
+      onPin: NonNullable<DashboardRendererProps['onPin']>;
+      isPinned: NonNullable<DashboardRendererProps['isPinned']>;
+    };
     scope?: { metrics: MetricsScope; dashboard: DashboardScope };
     environment?: string;
     filterTokens?: { fieldId: string; value: string }[];
@@ -129,6 +138,8 @@ function renderDashboard(
         scope={scope?.dashboard ?? 'project'}
         onDrilldown={onDrilldown}
         expand={expand}
+        dragHandle={dragHandle}
+        {...pin}
       />,
     ),
   );
@@ -226,10 +237,11 @@ describe('DashboardRenderer', () => {
         if (failing) return HttpResponse.json({ error: 'boom' }, { status: 500 });
         return request.interval ? distinctIdsSeriesFixture(request.timeRange) : distinctIdsTotalsFixture;
       });
-      const { container } = renderDashboard(definition(distinctIdsWidget));
+      const { container, queryClient } = renderDashboard(definition(distinctIdsWidget));
       const widget = cell(container, 'distinct-ids');
       // The client retries an aggregate itself before the widget sees the error.
       expect(await within(widget).findByText(LOAD_ERROR, undefined, { timeout: 5000 })).toBeDefined();
+      await waitForMutationsIdle(queryClient);
       failing = false;
       fireEvent.click(within(widget).getByRole('button', { name: 'Retry' }));
       expect(await within(widget).findAllByText('Resources', undefined, { timeout: 5000 })).not.toHaveLength(0);
@@ -434,6 +446,164 @@ describe('DashboardRenderer', () => {
     });
   });
 
+  describe('when the host passes drag handles, as a layout editor does', () => {
+    const onDragStart = vi.fn();
+    const dragHandle = (widgetId: string) => ({ 'aria-label': `Move ${widgetId}`, draggable: true, onDragStart });
+    const firstControl = (card: HTMLElement) => card.querySelector('button, a');
+
+    beforeEach(() => {
+      onDragStart.mockClear();
+    });
+
+    it.each([
+      ['a timeseries card', metricsWidget('agent-runs')],
+      ['a table card', models()],
+      ['a scores card', scoresWidget],
+      ['a KPI group', kpisWidget],
+    ])("puts the handle before the title of %s, and dragging it starts the host's drag", async (_, widget) => {
+      const { container } = renderDashboard(definition(widget), { dragHandle });
+      const card = cell(container, widget.id);
+      const handle = await within(card).findByRole('button', { name: `Move ${widget.id}` }, { timeout: 5000 });
+      expect(handle.getAttribute('draggable')).toBe('true');
+      await waitFor(() => expect(firstControl(card)).toBe(handle));
+      fireEvent.dragStart(handle);
+      expect(onDragStart).toHaveBeenCalledTimes(1);
+    });
+
+    it('puts the handle before a linked title', async () => {
+      const expand: DashboardExpand = { href: () => '/query', LinkComponent: props => <a {...props} /> };
+      const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand, dragHandle });
+      const card = cell(container, 'token-usage');
+      await within(card).findByRole('link', { name: 'Token usage' });
+      expect(firstControl(card)).toBe(within(card).getByRole('button', { name: 'Move token-usage' }));
+    });
+
+    it("gives a widget that can't render a handle too, so it can still be moved", () => {
+      const { container } = renderDashboard(definition({ ...note('gone', 'x'), kind: 'heatmap' }), { dragHandle });
+      const card = cell(container, 'gone');
+      expect(within(card).getByText('This widget needs a newer version.')).toBeDefined();
+      expect(firstControl(card)).toBe(within(card).getByRole('button', { name: 'Move gone' }));
+    });
+
+    it('shows no handle without them', async () => {
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
+      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /^Move / })).toBeNull();
+    });
+  });
+
+  describe('when the host can pin widgets', () => {
+    /** A host that owns which widgets are pinned and passes that back down, as the MCP app's host does. */
+    function PinningHost({ widgets, onPin }: { widgets: DashboardWidget[]; onPin: DashboardRendererProps['onPin'] }) {
+      const [pinned, setPinned] = useState<string[]>([]);
+      return (
+        <MetricsProvider preset="24h" filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+          <DashboardRenderer
+            definition={definition(...widgets)}
+            kinds={[noteKind, brokenKind]}
+            scope="project"
+            isPinned={id => pinned.includes(id)}
+            onPin={(widget, next) => {
+              onPin?.(widget, next);
+              setPinned(ids => (next ? [...ids, widget.id] : ids.filter(id => id !== widget.id)));
+            }}
+          />
+        </MetricsProvider>
+      );
+    }
+
+    /** The pin button's name: the widget's title, or "widget" for an untitled one like the KPI group. */
+    const pinLabel = (verb: 'Pin' | 'Unpin', widget: DashboardWidget) => `${verb} ${widget.title?.trim() || 'widget'}`;
+    /** Whether the button only shows while the card is hovered. */
+    const waitsForHover = (button: HTMLElement) => button.closest('.opacity-0') !== null;
+
+    it.each([
+      ['a timeseries card', metricsWidget('agent-runs')],
+      ['a table card', models()],
+      ['a scores card', scoresWidget],
+      ['a KPI group', kpisWidget],
+    ])('pins and unpins %s, sending the host the widget itself', async (_, widget) => {
+      const onPin = vi.fn();
+      const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={onPin} />);
+      const card = cell(container, widget.id);
+
+      fireEvent.click(await within(card).findByRole('button', { name: pinLabel('Pin', widget) }, { timeout: 5000 }));
+      expect(onPin).toHaveBeenLastCalledWith(expect.objectContaining({ id: widget.id, kind: widget.kind }), true);
+
+      fireEvent.click(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }));
+      expect(onPin).toHaveBeenLastCalledWith(expect.objectContaining({ id: widget.id }), false);
+      expect(within(card).getByRole('button', { name: pinLabel('Pin', widget) })).toBeDefined();
+    });
+
+    it('names each pin button after its widget', async () => {
+      const { container } = renderWithProviders(
+        <PinningHost widgets={[metricsWidget('agent-runs'), metricsWidget('token-usage')]} onPin={() => {}} />,
+      );
+      expect(
+        await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Pin Agent runs' }),
+      ).toBeDefined();
+      expect(within(cell(container, 'token-usage')).getByRole('button', { name: 'Pin Token usage' })).toBeDefined();
+    });
+
+    it('pins only the widget clicked', async () => {
+      const { container } = renderWithProviders(
+        <PinningHost widgets={[metricsWidget('agent-runs'), metricsWidget('token-usage')]} onPin={() => {}} />,
+      );
+      fireEvent.click(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Pin Agent runs' }));
+      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Unpin Agent runs' })).toBeDefined();
+      expect(within(cell(container, 'token-usage')).getByRole('button', { name: 'Pin Token usage' })).toBeDefined();
+    });
+
+    it.each([
+      ['a timeseries card', metricsWidget('agent-runs')],
+      ['a table card', models()],
+      ['a scores card', scoresWidget],
+    ])('keeps the unpin button of a pinned %s in view, and the pin of an unpinned one for hover', async (_, widget) => {
+      const { container } = renderWithProviders(<PinningHost widgets={[widget]} onPin={() => {}} />);
+      const card = cell(container, widget.id);
+      const pin = await within(card).findByRole('button', { name: pinLabel('Pin', widget) }, { timeout: 5000 });
+      expect(waitsForHover(pin)).toBe(true);
+
+      fireEvent.click(pin);
+      expect(waitsForHover(within(card).getByRole('button', { name: pinLabel('Unpin', widget) }))).toBe(false);
+    });
+
+    it("shows the host's pinned widgets without a click", async () => {
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), metricsWidget('token-usage')), {
+        pin: { onPin: () => {}, isPinned: id => id === 'token-usage' },
+      });
+      expect(
+        await within(cell(container, 'token-usage')).findByRole('button', { name: 'Unpin Token usage' }),
+      ).toBeDefined();
+      expect(within(cell(container, 'agent-runs')).getByRole('button', { name: 'Pin Agent runs' })).toBeDefined();
+    });
+
+    it('keeps the pin on a widget that breaks while rendering, so it can still be unpinned', () => {
+      const onPin = vi.fn();
+      const { container } = renderDashboard(definition({ ...note('boom', 'x', { title: 'Boom' }), kind: 'broken' }), {
+        pin: { onPin, isPinned: () => true },
+      });
+      const card = cell(container, 'boom');
+      expect(within(card).getByText('Render failed.')).toBeDefined();
+      fireEvent.click(within(card).getByRole('button', { name: 'Unpin Boom' }));
+      expect(onPin).toHaveBeenCalledWith(expect.objectContaining({ id: 'boom' }), false);
+    });
+
+    it("offers no pin on a widget that can't be read", () => {
+      const { container } = renderDashboard(definition({ ...note('gone', 'x'), kind: 'heatmap' }), {
+        pin: { onPin: () => {}, isPinned: () => true },
+      });
+      expect(within(cell(container, 'gone')).getByText('This widget needs a newer version.')).toBeDefined();
+      expect(screen.queryByRole('button', { name: /pin/i })).toBeNull();
+    });
+
+    it('shows no pin buttons for a host that does not pin', async () => {
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
+      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /pin/i })).toBeNull();
+    });
+  });
+
   describe('scope', () => {
     const scoped = definition(
       note('org', 'Org only', { scope: 'org' }),
@@ -506,6 +676,33 @@ describe('DashboardRenderer', () => {
     expect(cell(container, 'third').getAttribute('data-span')).toBe('4');
     // Each row is its own grid, so a short row doesn't pull widgets up from the next.
     expect(cell(container, 'full').parentElement).not.toBe(cell(container, 'half').parentElement);
+  });
+
+  it('keeps every saved span once the container has 12 columns, so a saved row never wraps', () => {
+    const { container } = renderDashboard({
+      schemaVersion: 1,
+      rows: [
+        { widgets: [note('half', 'x', { span: 6 }), note('third', 'x', { span: 4 }), note('sixth', 'x', { span: 2 })] },
+        { widgets: [note('quarter', 'x', { span: 3 }), note('twelfth', 'x', { span: 1 })] },
+      ],
+    });
+    // jsdom resolves no container queries; the classes are what decide the width.
+    const columns = (id: string) => cell(container, id).className.match(/@\w+:col-span-\d+/g);
+    expect(columns('half')).toEqual(['@3xl:col-span-6']);
+    expect(columns('third')).toEqual(['@3xl:col-span-4']);
+    expect(columns('sixth')).toEqual(['@3xl:col-span-2']);
+    expect(columns('quarter')).toEqual(['@3xl:col-span-3']);
+    expect(columns('twelfth')).toEqual(['@3xl:col-span-1']);
+  });
+
+  it('stretches every card to its row, so a row of cards shares one height', () => {
+    const { container } = renderDashboard({
+      schemaVersion: 1,
+      rows: [{ widgets: [note('short', 'x', { span: 6 }), note('narrow', 'x', { span: 2 })] }],
+    });
+    // jsdom lays nothing out; the cell sizing its card to the (stretched) grid row is what equalises them.
+    expect(cell(container, 'short').className.split(' ')).toContain('*:size-full');
+    expect(cell(container, 'narrow').className.split(' ')).toContain('*:size-full');
   });
 
   it("adds the page's filters to every widget's queries", async () => {

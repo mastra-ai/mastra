@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { RepositoriesSection } from '../RepositoriesSection';
@@ -11,6 +12,11 @@ import { environmentPayload, environmentRepository } from './fixtures/environmen
 
 const FACTORY_ID = 'fp-1';
 const PRIMARY_PROJECT = 'rhys-group1/factory-validation-rhys-20260916/factory-gitlab-primary';
+const primaryRepository = listedRepository('repo-1', PRIMARY_PROJECT, {
+  integrationId: 'gitlab',
+  branch: 'main',
+  sandboxWorkdir: '~/factory-gitlab-primary',
+});
 
 function repositoryEnvironment() {
   return environmentPayload({
@@ -35,29 +41,12 @@ describe('Repositories settings', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] }),
+        HttpResponse.json({
+          projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [primaryRepository] }],
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
         HttpResponse.json({ environment: repositoryEnvironment() }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: [
-            {
-              id: 'conn-1',
-              integrationId: 'gitlab',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '~/factory-gitlab-primary',
-                  repository: { slug: PRIMARY_PROJECT, defaultBranch: 'main' },
-                },
-              ],
-            },
-          ],
-        }),
       ),
       http.get(`${TEST_BASE_URL}/web/github/status`, () =>
         HttpResponse.json({
@@ -168,16 +157,28 @@ describe('Repositories settings', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              integrationId: 'github',
-              installationId: 'inst-1',
-              repositories: linked ? [repository] : [],
+              id: FACTORY_ID,
+              name: 'factory-gitlab-primary',
+              repositories: linked
+                ? [
+                    listedRepository('repo-2', 'acme/widget', {
+                      externalId: '42',
+                      branch: 'main',
+                      sandboxWorkdir: '~/widget',
+                    }),
+                  ]
+                : [],
             },
           ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [{ id: 'conn-1', integrationId: 'github', installationId: 'inst-1', repositories: [] }],
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
@@ -317,18 +318,17 @@ describe('Repositories settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
         HttpResponse.json({ environment }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              integrationId: 'gitlab',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'factory-gitlab-primary',
               repositories: [
                 ...(linked
-                  ? [{ id: 'repo-1', branch: 'main', repository: { slug: PRIMARY_PROJECT, defaultBranch: 'main' } }]
+                  ? [listedRepository('repo-1', PRIMARY_PROJECT, { integrationId: 'gitlab', branch: 'main' })]
                   : []),
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository('repo-2', 'acme/other', { integrationId: 'gitlab', branch: 'main' }),
               ],
             },
           ],
@@ -401,7 +401,9 @@ describe('Repositories settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
         factoryRequests++;
         return factoryRequests === 1
-          ? HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] })
+          ? HttpResponse.json({
+              projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [primaryRepository] }],
+            })
           : HttpResponse.json({ error: 'Factories unavailable' }, { status: 503 });
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
@@ -434,8 +436,8 @@ describe('Repositories settings', () => {
     });
     let fail = true;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary', repositories: [] }] }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, async () => {
         await environmentPending;
@@ -472,32 +474,21 @@ describe('Repositories settings', () => {
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'personal-factory' }] }),
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'personal-factory',
+              repositories: [listedRepository('repo-1', 'octo/agent', { branch: 'main', sandboxWorkdir: '~/agent' })],
+            },
+          ],
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
         HttpResponse.json({
           environment: environmentPayload({
             repositories: [environmentRepository({ projectRepositoryId: 'repo-1', slug: 'octo/agent' })],
           }),
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: [
-            {
-              id: 'conn-1',
-              integrationId: 'github',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '~/agent',
-                  repository: { slug: 'octo/agent', defaultBranch: 'main' },
-                },
-              ],
-            },
-          ],
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/github/status`, async () => {

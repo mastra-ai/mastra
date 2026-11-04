@@ -1,6 +1,7 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ThreadOwner } from '../../services/reply-credential';
-import { act, screen } from '@testing-library/react';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -160,7 +161,7 @@ describe('message meta', () => {
     expect(screen.getAllByRole('button', { name: 'Copy message' })).toHaveLength(2);
   });
 
-  it('leaves a message with nothing to copy unstamped, though its tool line still keeps its own clock', () => {
+  it('leaves a message with nothing to copy unstamped, its tool line included', () => {
     const { container } = renderEntries([
       messageEntry('assistant-1', 'assistant', [
         {
@@ -170,10 +171,31 @@ describe('message meta', () => {
       ]),
     ]);
 
+    expect(screen.getByRole('group', { name: 'Read' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull();
-    const times = container.querySelectorAll('time');
-    expect(times).toHaveLength(1);
-    expect(screen.getByRole('group', { name: 'Read' })).toContainElement(times[0]);
+    expect(container.querySelector('time')).toBeNull();
+  });
+
+  it('says how long ago each message was sent, with the full date on hover', async () => {
+    vi.useFakeTimers({ now: CREATED_AT.getTime() + 7 * 60_000, shouldAdvanceTime: true });
+    const user = userEvent.setup();
+    renderEntries([
+      messageEntry('user-1', 'user', [{ type: 'text', text: 'ship it' }]),
+      messageEntry('assistant-1', 'assistant', [
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'read', args: {}, result: 'contents' },
+        },
+        { type: 'text', text: 'shipped' },
+      ]),
+    ]);
+
+    const stamps = screen.getAllByText('7 minutes ago');
+    expect(stamps).toHaveLength(2);
+
+    await user.hover(stamps[1]);
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent(formatDate(CREATED_AT, 'date-time') ?? '');
   });
 
   it('names the model that closed a live reply, not one an earlier step ran on', () => {
@@ -207,44 +229,44 @@ describe('message meta', () => {
     owner?: ThreadOwner;
     viewerId: string;
     metadata: Record<string, unknown>;
-    label: string;
+    parts: readonly string[];
   }> = [
     {
       case: 'the thread owner’s credential to a teammate',
       owner: ward,
       viewerId: 'damien',
       metadata: { ...opus, credentialLabel: 'Claude Pro/Max', credentialOwnerId: 'ward' },
-      label: 'Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max',
+      parts: ['Claude Opus 4.6', 'Ward Peeters’s Claude Pro/Max'],
     },
     {
       case: 'the viewer’s own credential',
       owner: ward,
       viewerId: 'ward',
       metadata: { ...opus, credentialLabel: 'Claude Pro/Max', credentialOwnerId: 'ward' },
-      label: 'Claude Opus 4.6 · Your Claude Pro/Max',
+      parts: ['Claude Opus 4.6', 'Your Claude Pro/Max'],
     },
     {
       case: 'a personal credential whose owner is not named',
       viewerId: 'damien',
       metadata: { modelId: 'gpt-5', credentialLabel: 'OpenAI API key', credentialOwnerId: 'ward' },
-      label: 'GPT-5 · Personal OpenAI API key',
+      parts: ['GPT-5', 'Personal OpenAI API key'],
     },
     {
       case: 'the organization’s credential',
       owner: ward,
       viewerId: 'damien',
       metadata: { modelId: 'grok-4', credentialLabel: 'SuperGrok/X Premium+' },
-      label: 'Grok 4 · Organization SuperGrok/X Premium+',
+      parts: ['Grok 4', 'Organization SuperGrok/X Premium+'],
     },
     {
       case: 'a reply stamped before credentials were recorded',
       owner: ward,
       viewerId: 'damien',
       metadata: opus,
-      label: 'Claude Opus 4.6',
+      parts: ['Claude Opus 4.6'],
     },
   ];
-  it.each(ownerCases)('labels a reply answered by $case as “$label”', ({ owner, viewerId, metadata, label }) => {
+  it.each(ownerCases)('labels a reply answered by $case', ({ owner, viewerId, metadata, parts }) => {
     const reply: TimelineEntry = {
       kind: 'message',
       id: 'assistant-1',
@@ -256,7 +278,7 @@ describe('message meta', () => {
       },
     };
 
-    renderWithProviders(
+    const { container } = renderWithProviders(
       <TranscriptEntries
         entries={[reply]}
         viewerId={viewerId}
@@ -266,6 +288,8 @@ describe('message meta', () => {
       />,
     );
 
-    expect(screen.getByText(label, { exact: true })).toBeVisible();
+    const fields = Array.from(container.querySelectorAll<HTMLElement>('[data-slot="metadata-item"]'));
+    expect(fields.map(field => field.textContent)).toEqual(parts);
+    for (const field of fields) expect(field).toBeVisible();
   });
 });

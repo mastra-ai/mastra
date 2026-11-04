@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { expect } from 'vitest';
 
+import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import type { GitLabProject, GitLabStatus } from '../../../../factory/services/gitlab';
@@ -75,23 +76,8 @@ export const linearTeams = [engTeam, designTeam];
 export function seedGithubProject() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-fp-1',
-            repositories: [
-              {
-                id: 'ghp-1',
-                branch: null,
-                sandboxWorkdir: null,
-                repository: { slug: 'mastra', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
+        projects: [{ id: 'fp-1', name: 'mastra', repositories: [listedRepository('ghp-1', 'mastra')] }],
       }),
     ),
   );
@@ -275,7 +261,7 @@ export function useGitLabHandlers(config: IntakeConfig, status: GitLabStatus = g
     http.get(GITLAB_STATUS_URL, () => HttpResponse.json(status)),
     http.get(GITLAB_PROJECTS_URL, () => HttpResponse.json({ projects: gitlabProjects })),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web' }] }),
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme Web', repositories: [] }] }),
     ),
     http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: savedBindings })),
     http.put<Record<string, never>, BindingUpdate>(BINDINGS_URL, async ({ request }) => {
@@ -301,17 +287,17 @@ export function seedFactories() {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: FACTORY_A, name: 'Acme Web' },
-          { id: FACTORY_B, name: 'Acme API' },
+          { id: FACTORY_A, name: 'Acme Web', repositories: [] },
+          { id: FACTORY_B, name: 'Acme API', repositories: [] },
         ],
       }),
     ),
   );
 }
 
-export function renderIntakeSection() {
+export function renderIntakeSection(path = '/factories/fp-1/settings/intake') {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/intake']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/factories/:factoryId/settings/intake" element={<IntakeSection />} />
       </Routes>

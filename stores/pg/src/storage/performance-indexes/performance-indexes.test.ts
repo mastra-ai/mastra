@@ -122,12 +122,35 @@ describe('PostgresStore Domain Performance Indexes', () => {
 
       const indexes = workflows.getDefaultIndexDefinitions();
 
-      expect(indexes.length).toBe(1);
+      // 1 v1 snapshot index + 3 storage v2 run indexes + 1 storage v2 entries index
+      expect(indexes.length).toBe(5);
       expect(indexes).toContainEqual({
         name: 'test_schema_mastra_workflow_snapshot_name_createdat_idx',
         table: 'mastra_workflow_snapshot',
         columns: ['workflow_name', 'createdAt DESC'],
       });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_workflow_runs_name_status_createdat_idx',
+        table: 'mastra_workflow_runs',
+        columns: ['workflow_name', 'status', 'createdAt DESC'],
+      });
+    });
+
+    it('should keep storage v2 index names distinct and within the identifier limit for long schemas', () => {
+      const workflows = new WorkflowsPG({
+        client: mockClient as any,
+        schemaName: 'a_rather_long_deployment_specific_schema',
+      });
+
+      const names = workflows
+        .getDefaultIndexDefinitions()
+        .filter(idx => idx.table !== 'mastra_workflow_snapshot')
+        .map(idx => idx.name);
+
+      expect(new Set(names).size).toBe(names.length);
+      for (const name of names) {
+        expect(Buffer.byteLength(name, 'utf-8')).toBeLessThanOrEqual(63);
+      }
     });
 
     it('should work with default schema (public)', () => {
@@ -142,6 +165,20 @@ describe('PostgresStore Domain Performance Indexes', () => {
         table: 'mastra_workflow_snapshot',
         columns: ['workflow_name', 'createdAt DESC'],
       });
+    });
+
+    it('should export the storage v2 tables and their indexes in the schema DDL', () => {
+      const ddl = WorkflowsPG.getExportDDL('test_schema').join('\n');
+
+      expect(ddl).toContain('CREATE TABLE IF NOT EXISTS "test_schema"."mastra_workflow_runs"');
+      expect(ddl).toContain('PRIMARY KEY ("workflow_name", "run_id")');
+      expect(ddl).toContain('CREATE TABLE IF NOT EXISTS "test_schema"."mastra_workflow_run_entries"');
+      expect(ddl).toContain('PRIMARY KEY ("workflow_name", "run_id", "seq")');
+      for (const idx of new WorkflowsPG({ client: mockClient as any, schemaName: 'test_schema' })
+        .getDefaultIndexDefinitions()
+        .filter(idx => idx.table !== 'mastra_workflow_snapshot')) {
+        expect(ddl).toContain(`CREATE INDEX IF NOT EXISTS "${idx.name}" ON "test_schema"."${idx.table}"`);
+      }
     });
 
     it('should export the status expression index in the schema DDL', () => {

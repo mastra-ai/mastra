@@ -229,6 +229,16 @@ describe('IntakeSection common', () => {
         expect(within(unavailableSources).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
       },
     );
+
+    it('keeps Linear with saved sources out of the connected list while its status is unknown', async () => {
+      const config = baseConfig();
+      useIntakeHandlers({ config: { ...config, linear: { ...config.linear, sourceIds: ['project-1'] } } });
+      server.use(http.get(LINEAR_STATUS_URL, () => HttpResponse.json({ error: 'unavailable' }, { status: 500 })));
+      renderIntakeSection();
+      const unavailableSources = await screen.findByRole('region', { name: 'Unavailable sources' });
+      expect(within(unavailableSources).getByRole('region', { name: 'Linear' })).toBeInTheDocument();
+      expect(within(unavailableSources).getByText("Couldn't load Linear status.")).toBeInTheDocument();
+    });
   });
 
   describe('given no source is connected', () => {
