@@ -284,6 +284,52 @@ describe('DurableAgent usage accumulation', () => {
     }
   });
 
+  it('observed usage adds the counts a provider reported when it omits some of them', async () => {
+    const model = createToolThenReplyingModelWithUsage(
+      { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      { outputTokens: 5 },
+    );
+    const baseAgent = new Agent({
+      id: 'observed-partial-usage-agent',
+      name: 'Observed Partial Usage Agent',
+      instructions: 'Use the tool, then answer.',
+      model: model as LanguageModelV2,
+      tools: { usageTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    let callbackObserved: unknown;
+    const seenByProcessor: unknown[] = [];
+    const result = await durableAgent.stream('Run the tool', {
+      maxSteps: 3,
+      onFinish: ({ observedUsage }) => {
+        callbackObserved = observedUsage;
+      },
+      outputProcessors: [
+        {
+          id: 'usage-audit',
+          processOutputResult: ({ messages, result: outputResult }) => {
+            seenByProcessor.push(outputResult.observedUsage);
+            return messages;
+          },
+        },
+      ],
+    });
+
+    try {
+      for await (const _chunk of result.fullStream) {
+        // Drain the durable workflow before reading its final output.
+      }
+      const output = await result.output.getFullOutput();
+      const expected = { inputTokens: 10, outputTokens: 25, totalTokens: 35, incomplete: true };
+      expect(output.observedUsage).toMatchObject(expected);
+      expect(callbackObserved).toMatchObject(expected);
+      expect(seenByProcessor).toEqual([expect.objectContaining(expected)]);
+      expect(output.totalUsage).toMatchObject({ inputTokens: undefined, outputTokens: 25, totalTokens: undefined });
+    } finally {
+      result.cleanup();
+    }
+  });
+
   it('keeps usage unknown when the model errors before reporting usage', async () => {
     const model = new MockLanguageModelV2({
       doStream: async () => ({

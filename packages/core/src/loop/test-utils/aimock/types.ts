@@ -471,6 +471,7 @@ export interface RunApprovalScenarioOptions extends Pick<
   | 'engine'
   | 'observability'
   | 'afterStream'
+  | 'errorProcessors'
 > {
   tracingOptions?: TracingOptions;
   /**
