@@ -11,7 +11,7 @@ import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import { GatewayManager } from '../llm/model/gateways';
-import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import type { GatewayModel, MastraModelGatewayInterface } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
@@ -266,6 +266,8 @@ export class AgentController<TState = {}> {
   #externalMastra: Mastra | undefined = undefined;
   #gatewayManager: GatewayManager | undefined = undefined;
   readonly #modelCatalog: ModelCatalogCache;
+  /** Last {@link listAvailableModels} result, reused while its inputs are unchanged. */
+  #availableModels: { catalog: readonly GatewayModel[]; useCountsKey: string; models: AvailableModel[] } | undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
   /** Chat channels running this controller inside messaging threads (from `config.channels`). */
   #channels: AgentControllerChannels | null = null;
@@ -1875,12 +1877,20 @@ export class AgentController<TState = {}> {
   async listAvailableModels(): Promise<AvailableModel[]> {
     const catalog = await this.#modelCatalog.list();
     const useCounts = this.config.modelUseCountProvider?.() ?? {};
+    // The catalog holds thousands of models: rebuild the list only when the
+    // catalog or the use counts changed since the last call.
+    const useCountsKey = JSON.stringify(useCounts);
+    const previous = this.#availableModels;
+    if (previous?.catalog === catalog && previous.useCountsKey === useCountsKey) return previous.models.slice();
+
     const modelsById = new Map<string, AvailableModel>();
     for (const model of catalog) {
       if (!model.id || !model.provider || !model.modelName) continue;
       modelsById.set(model.id, { ...model, useCount: useCounts[model.id] ?? 0 });
     }
-    return [...modelsById.values()];
+    const models = [...modelsById.values()];
+    this.#availableModels = { catalog, useCountsKey, models };
+    return models.slice();
   }
 
   /**
