@@ -29,6 +29,27 @@ export type {
 } from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
+  KnowledgeImporterConnection,
+  KnowledgeImporterConnectionStatus,
+  KnowledgeImporterOptionField,
+  KnowledgeImporterOptionValue,
+  KnowledgeImporterPreviewDestination,
+  KnowledgeImporterRunEvent,
+  KnowledgeImporterRunEventLevel,
+  KnowledgeImporterRunPreview,
+  KnowledgeImporterRunSummary,
+  KnowledgeImporterSettings,
+  KnowledgeImporterSummary,
+  KnowledgeImporterPlacement,
+  KnowledgeImporterRoot,
+  ListKnowledgeImporterConnectionsResponse,
+  ListKnowledgeImporterRunEventsResponse,
+  ListKnowledgeImporterRunsResponse,
+  ListKnowledgeImportersResponse,
+  SaveKnowledgeImporterSettingsParams,
+  StartKnowledgeImporterRunResponse,
+} from './resources/knowledge-importers';
+export type {
   MastraDBMessage,
   MastraMessageContentV2,
   MastraMessagePart,

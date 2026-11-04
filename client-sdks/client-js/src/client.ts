@@ -8,6 +8,7 @@ import {
   Workflow,
   Vector,
   Knowledge,
+  KnowledgeImporters,
   BaseResource,
   A2A,
   A2AV1,
@@ -2168,6 +2169,13 @@ export class MastraClient extends BaseResource {
    */
   public listVectors(): Promise<ListVectorsResponse> {
     return this.request('/vectors');
+  }
+
+  /**
+   * Settings, dry runs and run history for the knowledge importers deployment
+   */
+  public getKnowledgeImporters() {
+    return new KnowledgeImporters(this.options);
   }
 
   /**
