@@ -1,4 +1,3 @@
-import { BookOpen } from 'lucide-react';
 import { createContext, useContext } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
@@ -11,7 +10,7 @@ import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-appro
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '@/domains/knowledge/lib/remarkKnowledgeLinks';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { ToolCallOutput } from '@/ds/components/ai/tool-call';
+import { presentTool, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
@@ -480,34 +479,39 @@ export function knowledgeCard(
 
 export interface KnowledgeToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   card: KnowledgeCard;
+  args: unknown;
   metadata?: MessageMetadata;
   status?: ActivityStatus;
 }
 
 export const KnowledgeToolBadge = ({
   card,
+  args,
   toolName,
   metadata,
   toolCallId,
   toolApprovalMetadata,
   isNetwork,
   status = 'idle',
-}: KnowledgeToolBadgeProps) => (
-  <ToolApprovalBadge
-    approval={{
-      toolCalled: true,
-      toolCallId,
-      toolApprovalMetadata,
-      toolName,
-      isNetwork,
-      isGenerateMode: metadata?.mode === 'generate',
-    }}
-    data-testid="knowledge-tool-badge"
-    icon={<BookOpen aria-hidden />}
-    title={card.title}
-    detail={card.detail}
-    status={status}
-  >
-    {card.body}
-  </ToolApprovalBadge>
-);
+}: KnowledgeToolBadgeProps) => {
+  const { icon: KnowledgeIcon } = presentTool(toolName, args);
+  return (
+    <ToolApprovalBadge
+      approval={{
+        toolCalled: true,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
+      data-testid="knowledge-tool-badge"
+      icon={<KnowledgeIcon aria-hidden />}
+      title={card.title}
+      detail={card.detail}
+      status={status}
+    >
+      {card.body}
+    </ToolApprovalBadge>
+  );
+};

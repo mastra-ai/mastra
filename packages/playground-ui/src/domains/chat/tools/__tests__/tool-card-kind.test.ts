@@ -51,6 +51,13 @@ describe('toolCardKind', () => {
       expect(toolCardKind(fields('request_connection', { output: 'oops' }), {})).toBe('plain');
     });
 
+    it('detects a request_connection call paused on its connect prompt', () => {
+      const metadata: MessageMetadata = {
+        suspendedTools: { 'call-1': { suspendPayload: { type: 'connect-prompt', providers: [] } } },
+      };
+      expect(toolCardKind(fields('request_connection'), { metadata })).toBe('connect_prompt');
+    });
+
     it('detects submit_plan by tool name', () => {
       expect(toolCardKind(fields('submit_plan'), {})).toBe('submit_plan');
     });

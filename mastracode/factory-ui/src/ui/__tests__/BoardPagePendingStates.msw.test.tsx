@@ -5,6 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { GithubIssue } from '../domains/factory/services/factory';
@@ -152,22 +153,12 @@ function stubBoardEndpoints() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -696,15 +687,15 @@ describe('Board card pending states', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],
@@ -1402,15 +1393,15 @@ describe('Board card pending states', () => {
     const { transitionGate, transitionRequests } = stubBoardEndpoints();
     const configGate = deferred();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],

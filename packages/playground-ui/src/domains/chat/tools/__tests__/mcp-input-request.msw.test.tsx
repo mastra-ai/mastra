@@ -379,6 +379,43 @@ describe('a deferred call whose server asks for more than Studio shows', () => {
   });
 });
 
+describe('a deferred call whose request keys share names with object built-ins', () => {
+  it('answers each one and sends every answer', async () => {
+    // Built from JSON so `__proto__` is an own key, as it is when the payload arrives over the wire.
+    const payload = JSON.parse(
+      JSON.stringify({
+        ...confirmRequest,
+        requests: {},
+      }).replace(
+        '"requests":{}',
+        '"requests":{"constructor":{"method":"elicitation/create","params":{"message":"First?","mode":"url","url":"https://a.example.com"}},"__proto__":{"method":"elicitation/create","params":{"message":"Second?","mode":"url","url":"https://b.example.com"}}}',
+      ),
+    ) as McpInputRequestPayload;
+    expect(Object.keys(payload.requests)).toEqual(['constructor', '__proto__']);
+    const backend = serveBackground(suspendedBackgroundTask(payload));
+    renderWithProviders(<Shell props={deferredCall} />);
+
+    const request = await screen.findByTestId('mcp-input-request');
+    const done = (key: string) =>
+      within(within(request).getByRole('region', { name: `Input request ${key}` })).getByRole('button', {
+        name: 'Done',
+      });
+    expect(done('constructor')).toHaveProperty('disabled', false);
+    expect(done('__proto__')).toHaveProperty('disabled', false);
+
+    fireEvent.click(done('constructor'));
+    expect(backend.resumes).toHaveLength(0);
+    fireEvent.click(done('__proto__'));
+
+    await waitFor(() => expect(backend.resumes).toHaveLength(1));
+    const sent = (backend.resumes[0] as { resumeData: { inputResponses: Record<string, unknown> } }).resumeData
+      .inputResponses;
+    expect(Object.keys(sent)).toEqual(['constructor', '__proto__']);
+    expect(Object.getOwnPropertyDescriptor(sent, 'constructor')?.value).toEqual({ action: 'accept' });
+    expect(Object.getOwnPropertyDescriptor(sent, '__proto__')?.value).toEqual({ action: 'accept' });
+  });
+});
+
 describe('a live deferred call with no MCP task progress yet', () => {
   it('shows input required on the chip while its task waits', async () => {
     serveBackground(suspendedBackgroundTask());

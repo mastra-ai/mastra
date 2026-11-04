@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -113,6 +113,34 @@ describe('ConnectionsPage', () => {
       // The server never answered, so neither section may claim emptiness.
       expect(screen.queryByText("You haven't connected any accounts yet.")).toBeNull();
       expect(screen.queryByText('No global connections are linked to this project.')).toBeNull();
+    });
+  });
+
+  describe('when the connect surface probe is still in flight', () => {
+    it('shows the loading table instead of a bare spinner', async () => {
+      server.use(
+        // Never resolves within the test: the page is still detecting the surface.
+        http.get(`${BASE_URL}/connect/providers`, () => new Promise<never>(() => {})),
+      );
+
+      renderPage();
+
+      const table = await screen.findByRole('table', { name: 'Connections' });
+      expect(table.getAttribute('aria-busy')).toBe('true');
+    });
+  });
+
+  describe('when the browser is offline before the surface probe starts', () => {
+    it('keeps the table loading instead of claiming there are no connections', async () => {
+      onlineManager.setOnline(false);
+      try {
+        renderPage();
+
+        const table = await screen.findByRole('table', { name: 'Connections' });
+        expect(table.getAttribute('aria-busy')).toBe('true');
+      } finally {
+        onlineManager.setOnline(true);
+      }
     });
   });
 

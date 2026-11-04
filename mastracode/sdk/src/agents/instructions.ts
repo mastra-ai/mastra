@@ -2,6 +2,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { MastraCodeComposedState, MastraCodeState } from '../schema.js';
 import { detectCommonBinariesAsync } from '../utils/binaries.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
+import { prepareProviderWebSearchRoute } from './model.js';
 import type { PromptContext, PromptSection } from './prompts/index.js';
 import { buildFullPromptSections, joinPromptSections } from './prompts/index.js';
 
@@ -11,12 +12,17 @@ export async function getDynamicInstructions({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  plansDir,
+  disabledTools,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
   coAuthor?: { name?: string; email?: string };
   hasSubagents?: boolean;
   disabledBuiltinTools?: readonly string[];
+  plansDir?: string;
+  /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
+  disabledTools?: readonly string[];
 }): Promise<string> {
   return joinPromptSections(
     await getDynamicInstructionSections({
@@ -25,6 +31,8 @@ export async function getDynamicInstructions({
       coAuthor,
       hasSubagents,
       disabledBuiltinTools,
+      plansDir,
+      disabledTools,
     }),
   );
 }
@@ -40,6 +48,8 @@ export async function getDynamicInstructionSections({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  plansDir,
+  disabledTools,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
@@ -47,6 +57,10 @@ export async function getDynamicInstructionSections({
   hasSubagents?: boolean;
   /** Controller built-in tools removed via `disableBuiltinTools`; their prompt guidance is omitted. */
   disabledBuiltinTools?: readonly string[];
+  /** Host-configured workspace-relative plans directory; overrides the per-session default. */
+  plansDir?: string;
+  /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
+  disabledTools?: readonly string[];
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -57,6 +71,9 @@ export async function getDynamicInstructionSections({
   // sessions), the prompt gets no working directory and no git probe — the
   // server's own cwd/branch must never leak into a session's prompt.
   const projectPath = state?.projectPath ?? '';
+  const modelId = agentControllerContext?.session?.modelId || undefined;
+  // The web search guidance reads tenant credentials in deployed Factory; prepare them first if needed.
+  await prepareProviderWebSearchRoute(modelId, { requestContext });
 
   const promptCtx: PromptContext = {
     projectPath,
@@ -66,7 +83,7 @@ export async function getDynamicInstructionSections({
     commonBinaries: await detectCommonBinariesAsync(),
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
-    modelId: agentControllerContext?.session?.modelId || undefined,
+    modelId,
     coAuthorName: coAuthor?.name,
     coAuthorEmail: coAuthor?.email,
     activePlan: state?.activePlan ?? null,
@@ -77,6 +94,9 @@ export async function getDynamicInstructionSections({
     hostInstructions,
     hasSubagents,
     disabledBuiltinTools,
+    plansDir,
+    disabledTools,
+    requestContext,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);

@@ -1,4 +1,5 @@
 import { useMastraClient } from '@mastra/react';
+import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -150,6 +151,23 @@ export function useConnectSurface() {
 
 const connectionsQueryKey = ['user-connect', 'connections'] as const;
 
+/**
+ * A connection that activates or goes away changes which tools resolve for
+ * this user, so the connection list and every agent / tool listing are
+ * refetched. The server drops its cached tool snapshot when it reports the
+ * change, so the refetch already sees the new tools.
+ */
+function invalidateAfterConnectionChange(queryClient: QueryClient) {
+  return Promise.all(
+    [connectionsQueryKey, ['agent'], ['agents'], ['tools']].map(async queryKey => {
+      // A first fetch still in flight would otherwise be reused by the
+      // invalidation, and its pre-change answer would land as fresh data.
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey });
+    }),
+  );
+}
+
 /** Lists the caller's visible connections (global + their own). */
 export function useUserConnections({ enabled }: { enabled: boolean }) {
   const connectFetch = useConnectFetch();
@@ -212,7 +230,7 @@ export function useConnectionStatus({ connectionId }: { connectionId: string | n
         throw error;
       }
       if (status.status !== 'pending') {
-        void queryClient.invalidateQueries({ queryKey: connectionsQueryKey });
+        void invalidateAfterConnectionChange(queryClient);
       }
       return status;
     },
@@ -502,6 +520,6 @@ export function useDisconnectUserConnection() {
   return useMutation<void, UserConnectRequestError, { connectionId: string }>({
     mutationFn: ({ connectionId }) =>
       connectFetch<void>(`/connections/${encodeURIComponent(connectionId)}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: connectionsQueryKey }),
+    onSuccess: () => invalidateAfterConnectionChange(queryClient),
   });
 }

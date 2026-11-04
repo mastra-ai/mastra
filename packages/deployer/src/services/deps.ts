@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@internal/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
 import type { BundlerConfig } from '@internal/deployer';
+import { parsePkgAndParentSelector } from '@pnpm/config.parse-overrides';
+import type { PackageSelector } from '@pnpm/config.parse-overrides';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
+import semver from 'semver';
 import type { PackageJson } from 'type-fest';
 import { parse, parseAllDocuments, stringify } from 'yaml';
 
@@ -541,6 +544,58 @@ async function readPnpmLockfileOverrides(
   return portable;
 }
 
+interface PackageIdentity {
+  name: string;
+  version?: string;
+}
+
+async function readPackageIdentity(manifestPath: string): Promise<PackageIdentity | undefined> {
+  try {
+    const manifest: unknown = await readJSON(manifestPath);
+    if (!isRecord(manifest) || typeof manifest.name !== 'string') return undefined;
+    return { name: manifest.name, version: typeof manifest.version === 'string' ? manifest.version : undefined };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Points overrides scoped to the app (`app>dep`, `app@range>dep`) at the output package, which has a
+ * different name, so they keep winning over repo-wide overrides as in the source install (#29348).
+ * A ranged selector is dropped unless the app's version satisfies it, because the lockfile also lists
+ * overrides the source install didn't apply. Selectors scoped to other packages stay as they are:
+ * packed workspace packages keep their names in the output.
+ */
+function retargetAppScopedOverrides(
+  overrides: Record<string, string>,
+  app: PackageIdentity | undefined,
+  outputName: string | undefined,
+): Record<string, string> {
+  if (!app || !outputName) return overrides;
+
+  const retargeted: Record<string, string> = {};
+  for (const [selector, spec] of Object.entries(overrides)) {
+    let parsed: { parentPkg?: PackageSelector; targetPkg: PackageSelector } | undefined;
+    try {
+      parsed = parsePkgAndParentSelector(selector);
+    } catch {
+      // pnpm rejects selectors it can't parse, so the source install could not have used this one.
+    }
+    if (!parsed?.parentPkg || parsed.parentPkg.name !== app.name) {
+      retargeted[selector] = spec;
+      continue;
+    }
+
+    const range = parsed.parentPkg.bareSpecifier;
+    if (!range || (app.version && semver.satisfies(app.version, range))) {
+      // Rebuilt from the parsed target, because a parent range like `>=1` also contains `>`.
+      const { name, bareSpecifier } = parsed.targetPkg;
+      retargeted[`${outputName}>${bareSpecifier ? `${name}@${bareSpecifier}` : name}`] = spec;
+    }
+  }
+  return retargeted;
+}
+
 // `catalog:` reads the top-level `catalog`, or `catalogs.default` when that is where it is declared.
 function resolveCatalogSpec(workspace: Record<string, unknown>, name: string, spec: string): unknown {
   const catalogName = spec.slice('catalog:'.length) || 'default';
@@ -733,7 +788,13 @@ export class Deps extends MastraBase {
 
     const warn = (message: string) => this.logger.warn(message);
     const sourceOverrides =
-      this.lockFile?.packageManager === 'pnpm' ? await readPnpmLockfileOverrides(this.lockFile.path, warn) : {};
+      this.lockFile?.packageManager === 'pnpm'
+        ? retargetAppScopedOverrides(
+            await readPnpmLockfileOverrides(this.lockFile.path, warn),
+            await readPackageIdentity(path.join(this.rootDir, 'package.json')),
+            (await readPackageIdentity(path.join(dir, 'package.json')))?.name,
+          )
+        : {};
     const pnpmManifestSettings = await this.readPnpm10ManifestSettings(
       this.lockFile
         ? path.dirname(this.lockFile.path)
