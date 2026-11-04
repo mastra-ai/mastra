@@ -75,7 +75,12 @@ async function setup() {
         orgId: 'org-1',
         userId: 'someone',
         factoryProjectId: project.id,
-        input: { title: `Item ${number}`, stages, metadata: { number } },
+        input: {
+          title: `Item ${number}`,
+          stages,
+          metadata: { number },
+          externalSource: { integrationId: 'github', type: 'issue', externalId: String(number) },
+        },
       })
     ).item;
   const follow = (workItemId: string, sessionId = 'parent', threadId = 'parent-thread') =>

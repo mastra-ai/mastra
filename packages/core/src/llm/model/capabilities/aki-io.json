@@ -23,13 +23,19 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
+    "mistral4-119b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "gemma4-26b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "mistral4-119b": [
+    "qwen3.6-35b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -51,12 +57,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "qwen3.6-35b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

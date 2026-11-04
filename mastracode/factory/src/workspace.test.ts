@@ -515,9 +515,9 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain(
-      'This records the classification without advancing; stop until a maintainer moves the card',
+      'use `Route: Await approval` and request `stage: "intake"`. The card rests in Intake until a maintainer moves it on',
     );
-    expect(triage).toContain('triageType');
+    expect(triage).toContain('never pass a `triageType` argument');
     expect(triage).toContain('approval_required');
     const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',

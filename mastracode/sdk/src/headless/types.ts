@@ -161,6 +161,7 @@ export interface RunMCResult {
   maxRuns?: number;
   /** Underlying finish reason from `agent_end`, when the run finished normally. */
   finishReason?: string;
+  /** Cumulative token usage for this run, summed from per-step usage events. */
   usage?: RunMCUsage;
   toolCalls: RunMCToolCall[];
   toolResults: RunMCToolResult[];

@@ -60,3 +60,7 @@ allowBuilds:
   snyk: false
 patchedDependencies:
   'body-parser@1.20.9': patches/body-parser@1.20.9.patch
+minimumReleaseAgeExclude:
+  - '@vitest/mocker@5.1.0'
+  - '@vitest/spy@5.1.0'
+  - vitest@5.1.0

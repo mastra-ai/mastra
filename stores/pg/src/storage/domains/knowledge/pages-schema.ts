@@ -77,7 +77,9 @@ async function pgKnowledgeSnapshot(
 
 /** Drops exactly the Knowledge tables (never Memory's) and recreates schema 4. */
 export async function resetPgKnowledgePagesSchema(client: DbClient, schemaName?: string): Promise<void> {
-  const tables = KNOWLEDGE_RESETTABLE_TABLE_NAMES.map(table => qualify(schemaName, table)).join(', ');
+  const tables = [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, PG_KNOWLEDGE_PAGES_TABLES.links]
+    .map(table => qualify(schemaName, table))
+    .join(', ');
   await client.query(`DROP TABLE IF EXISTS ${tables} CASCADE`);
   await initPgKnowledgePagesSchema(client, schemaName);
 }

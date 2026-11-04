@@ -1,8 +1,9 @@
-import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt } from './boardItems';
-import { belongsToBoard, boardStages, itemAppearsInStage } from './boardStages';
+import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt, sourceMetadata } from './boardItems';
+import { belongsToBoard, itemAppearsInStage, itemStageOptions } from './boardStages';
 import { awaitsTriageDecision, TRIAGE_DECISIONS } from './cardPrimaryAction';
 import { reviewVerdict } from './reviewVerdict';
 import type { FactoryDecisionSummary } from './services/decisions';
+import { isPullRequestSource } from './services/workItems';
 import type { WorkItem } from './services/workItems';
 import { BOARD_STAGES, isTerminalStage } from './stages';
 
@@ -43,13 +44,13 @@ const TRIAGE_CHOICES = new Intl.ListFormat('en', { type: 'disjunction' }).format
 const PROMPTS: Record<StarterKind, string> = {
   unblock: `Look at the open cards whose last run failed, ${BATCH} at most. For each one, find out why the run failed. Retry the ones you can fix, and tell me what the others need.`,
   feedback: `Find Factory's open pull requests whose latest review asked for changes, ${BATCH} at most. Make the changes each review comment asks for, push them, and request a new review.`,
-  review: `Start a review session for each of the ${BATCH} oldest open pull requests in Intake on the Review board that were opened in the last month.`,
-  decide: `Go through the ${BATCH} oldest cards on the Work board that triage classified and nobody has accepted yet. For each one, say in a line what it is and suggest ${TRIAGE_CHOICES}, with your reason. Change nothing until I say so.`,
+  review: `Start a review session for each of the ${BATCH} oldest open pull requests in Intake on the Work board, or still in Intake on the Review board, that were opened in the last month.`,
+  decide: `Go through the ${BATCH} oldest cards triage left in Intake on the Work board for a person to decide on. For each one, say in a line what it is and suggest ${TRIAGE_CHOICES}, with your reason. Change nothing until I say so.`,
   triage: `Triage the ${BATCH} newest untriaged cards in Intake on the Work board. Accept the clear ones and flag the rest for me.`,
   bug: 'Of the open bugs on the Work board that nobody has planned yet, pick the one with the biggest impact and draft a plan to fix it.',
   sweep:
     'Find the area label with the most open cards on the Work board that nobody has started yet. Group those cards by root cause, point out duplicates, and draft a plan for the biggest group. Change nothing until I say so.',
-  stale: `Go through the ${BATCH} oldest pull requests that have waited in Intake on the Review board for over a month. For each one, suggest closing it or keeping it open, and say why. Close nothing until I say so.`,
+  stale: `Go through the ${BATCH} oldest pull requests that have waited in Intake on the Work board, or on the Review board, for over a month. For each one, suggest closing it or keeping it open, and say why. Close nothing until I say so.`,
 };
 
 function upTo(total: number, verb: string): string {
@@ -61,7 +62,7 @@ function theBatch(total: number, verb: string, which: string): string {
 }
 
 function openedAt(item: WorkItem): number {
-  return Date.parse(sourceCreatedAt(item.metadata) ?? item.createdAt);
+  return Date.parse(sourceCreatedAt(sourceMetadata(item)) ?? item.createdAt);
 }
 
 function isOpen(item: WorkItem): boolean {
@@ -69,23 +70,35 @@ function isOpen(item: WorkItem): boolean {
 }
 
 function inIntake(item: WorkItem): boolean {
-  return belongsToBoard(item, 'work') && itemAppearsInStage(item, 'intake', BOARD_STAGES);
+  return (
+    belongsToBoard(item, 'work') &&
+    !isPullRequestSource(item.source) &&
+    itemAppearsInStage(item, 'intake', BOARD_STAGES)
+  );
 }
 
 function notStarted(item: WorkItem): boolean {
-  return inIntake(item) || (belongsToBoard(item, 'work') && item.stages.includes('triage'));
+  return (
+    inIntake(item) ||
+    (belongsToBoard(item, 'work') && !isPullRequestSource(item.source) && item.stages.includes('triage'))
+  );
+}
+
+/** A pull request's own card, on Work or on the Review board it used to be filed on. */
+function reviewedPullRequest(item: WorkItem): boolean {
+  return isPullRequestSource(item.source) && (belongsToBoard(item, 'work') || belongsToBoard(item, 'review'));
 }
 
 function waitsForReview(item: WorkItem): boolean {
   return (
-    belongsToBoard(item, 'review') &&
-    itemAppearsInStage(item, 'intake', boardStages('review')) &&
+    reviewedPullRequest(item) &&
+    itemAppearsInStage(item, 'intake', itemStageOptions(item)) &&
     pullRequestStatusForItem(item) === 'open'
   );
 }
 
 function areaLabels(item: WorkItem): string[] {
-  return metadataLabels(item.metadata).filter(
+  return metadataLabels(sourceMetadata(item)).filter(
     label => !label.includes(':') && !GITHUB_TYPE_LABELS.has(label.toLowerCase()),
   );
 }
@@ -98,7 +111,7 @@ function unblock(cards: readonly WorkItem[], effectByItem: ReadonlyMap<string, F
 
 function feedback(cards: readonly WorkItem[]) {
   const changesRequested = cards.filter(item => {
-    if (!belongsToBoard(item, 'review') || item.metadata.factoryAuthored !== true) return false;
+    if (!reviewedPullRequest(item) || item.metadata.factoryAuthored !== true) return false;
     if (pullRequestStatusForItem(item) !== 'open') return false;
     const verdict = reviewVerdict(item.metadata);
     return verdict !== undefined && !verdict.approved && !verdict.outdated;
@@ -124,15 +137,13 @@ function review(cards: readonly WorkItem[], now: number) {
 }
 
 function decide(cards: readonly WorkItem[]) {
-  const undecided = cards.filter(
-    item => notStarted(item) && awaitsTriageDecision(item, inIntake(item) ? 'intake' : 'triage'),
-  ).length;
+  const undecided = cards.filter(item => inIntake(item) && awaitsTriageDecision(item, 'intake')).length;
   if (undecided === 0) return undefined;
-  return { label: 'Not yet accepted', value: undecided, action: 'Help me decide' };
+  return { label: 'Triaged, waiting for you', value: undecided, action: 'Help me decide' };
 }
 
 function triage(cards: readonly WorkItem[]) {
-  const untriaged = cards.filter(item => inIntake(item) && item.triageType === null).length;
+  const untriaged = cards.filter(item => inIntake(item) && item.sessions.triage === undefined).length;
   if (untriaged === 0) return undefined;
   return { label: 'Untriaged in Intake', value: untriaged, action: theBatch(untriaged, 'Triage', 'newest') };
 }
@@ -140,9 +151,7 @@ function triage(cards: readonly WorkItem[]) {
 function bug(cards: readonly WorkItem[]) {
   const unplanned = cards.filter(
     item =>
-      notStarted(item) &&
-      (item.triageType === 'bug' || hasLabel(metadataLabels(item.metadata), 'bug')) &&
-      item.sessions.plan === undefined,
+      notStarted(item) && hasLabel(metadataLabels(sourceMetadata(item)), 'bug') && item.sessions.plan === undefined,
   ).length;
   if (unplanned === 0) return undefined;
   return {

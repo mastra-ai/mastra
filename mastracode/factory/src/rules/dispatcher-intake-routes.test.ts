@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
-import { DEFAULT_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
+import { DEFAULT_INTAKE_ROUTE, PULL_REQUEST_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
 import type { StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
@@ -36,7 +36,7 @@ const docsBoard = {
 
 /**
  * A real dispatcher over real storage, with the project's stored boards and intake routes.
- * Tests start without the default route every project gets, unless they pass `withDefaultRoute`.
+ * Tests start without the default routes every project gets, unless they pass `withDefaultRoute`.
  */
 async function setup(
   options: {
@@ -49,9 +49,13 @@ async function setup(
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Routes' } });
   const scope = { orgId: 'org-1', factoryProjectId: project.id };
-  const [defaultRoute] = await seeded.boards.listIntakeRoutes(scope);
+  const defaults = await seeded.boards.listIntakeRoutes(scope);
+  const [defaultRoute] = defaults;
   if (!options.withDefaultRoute) {
-    await seeded.boards.deleteIntakeRoute(scope, defaultRoute!.id, { expectedRevision: defaultRoute!.revision });
+    // Last first, so no delete moves (and re-revisions) a route still to delete.
+    for (const seededRoute of defaults.toReversed()) {
+      await seeded.boards.deleteIntakeRoute(scope, seededRoute.id, { expectedRevision: seededRoute.revision });
+    }
   }
   const boards = new ProjectBoardCache({
     codeRegistry: options.codeRegistry ?? createBoardRegistry(),
@@ -195,6 +199,36 @@ describe('intake routes placing linked cards', () => {
     }
   });
 
+  it("files trusted pull requests in Work › PR review by the default route, and outside authors' in Intake", async () => {
+    const { boards, scope, deliver, runs } = await setup({ withDefaultRoute: true });
+    const pullRequestRoute = (await boards.listIntakeRoutes(scope))[1]!;
+    expect(pullRequestRoute).toMatchObject({
+      name: PULL_REQUEST_INTAKE_ROUTE.name,
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+    });
+
+    for (const arrival of [
+      { sourceKey: 'github-pr:1', source: 'github-pr' as const },
+      { sourceKey: 'gitlab-mr:2', source: 'gitlab-pr' as const },
+    ]) {
+      const card = await deliver({ ...arrival, metadata: { authorTrusted: true } });
+      expect(placed(card), arrival.sourceKey).toEqual({ board: 'work', stages: ['pr-review'] });
+      expect(card?.metadata).toMatchObject({ intakeRouteId: pullRequestRoute.id });
+      // Filed in Intake, then moved by a recorded transition, which asks for the review.
+      expect(card?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'pr-review']);
+      // Auto-run is off: the review waits for a person to approve it.
+      expect(await runs(card!.id)).toEqual(['proposed']);
+    }
+
+    const outside = await deliver({
+      sourceKey: 'github-pr:3',
+      source: 'github-pr',
+      metadata: { authorTrusted: false },
+    });
+    expect(placed(outside)).toEqual({ board: 'work', stages: ['intake'] });
+    expect(await runs(outside!.id)).toEqual([]);
+  });
+
   it('places outside work wherever an admin edits the default route to send it, and nowhere once it is disabled', async () => {
     const { boards, scope, defaultRoute, deliver } = await setup({ withDefaultRoute: true });
     await boards.create(scope, docsBoard, 'admin');
@@ -272,8 +306,8 @@ describe('intake routes placing linked cards', () => {
       target: { boardKey: 'work', phaseKey: 'planning' },
     });
 
-    // The built-in Work board holds no pull requests, so the GitLab route skips Work for a merge
-    // request; a route to Review places it.
+    // A merge request can't land in Work › Triage, so the GitLab route skips it; a route to
+    // Review places it.
     await route({
       name: 'GitLab reviews',
       when: { operator: 'AND', conditions: [{ field: 'source.integration', operator: 'equals', value: 'gitlab' }] },

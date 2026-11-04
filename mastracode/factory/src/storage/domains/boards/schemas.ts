@@ -91,6 +91,9 @@ export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     locked_at: { type: 'timestamp' },
+    // Keys of the default routes Factory added to the project (`DEFAULT_INTAKE_ROUTES`), so each is
+    // added once. Null on rows written before the list: those projects got `outside-authors`.
+    seeded_defaults: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_intake_route_locks_project', columns: ['org_id', 'factory_project_id'] }],
 };

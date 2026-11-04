@@ -2080,6 +2080,7 @@ export class Workflow<
       persistResumeClaim: options.persistResumeClaim,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
+      watchExecutionLoss: options.watchExecutionLoss,
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,

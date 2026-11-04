@@ -56,6 +56,12 @@ const KIND_PHRASES = {
     many: 'searched knowledge',
   },
   'Read page': { live: 'Reading page', done: 'Read page', one: 'read a page', many: 'read pages' },
+  'List knowledge': {
+    live: 'Listing knowledge',
+    done: 'Listed knowledge',
+    one: 'listed knowledge',
+    many: 'listed knowledge',
+  },
   // knowledge_page/note/pin also move, merge, delete, remove and unpin, so these name no one operation.
   'Edit page': { live: 'Editing page', done: 'Edited page', one: 'edited a page', many: 'edited pages' },
   'Edit note': { live: 'Editing note', done: 'Edited note', one: 'edited a note', many: 'edited notes' },
