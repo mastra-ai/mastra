@@ -95,6 +95,14 @@ describe('formatAnnotatedMessage', () => {
     });
   });
 
+  describe('when the typed message starts with a numbered item holding 999 slashes in a row', () => {
+    it('still hides what ends the annotation list', () => {
+      const message = formatAnnotatedMessage(`2. ${'/'.repeat(999)}`, [{ text: 'Open rows' }]);
+
+      expect(renderMarkdown(message).textContent).not.toContain(']: #');
+    });
+  });
+
   describe('when the typed message starts indented', () => {
     it('keeps it out of the last annotation', () => {
       const message = formatAnnotatedMessage('    indented note', [{ text: 'Open rows' }]);

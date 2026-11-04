@@ -27,13 +27,15 @@ function formatListItem({ text, comment }: AnnotatedPassage, number: number): st
 // CommonMark keeps a numbered or indented line that follows the list inside it; an empty link definition ends the list and renders nothing.
 const JOINS_LIST = /^(?:\s|\d{1,9}[.)](?:\s|$))/;
 
-/** Labelled with more slashes than any run in the message, so no `[//]` the person wrote turns into a link. */
+/**
+ * Labelled with the shortest run of slashes the message never holds, so no `[//]` the person wrote turns into
+ * a link; that run stays far below CommonMark's 999-character label limit.
+ */
 function listEnd(message: string): string {
-  const longestSlashRun = Array.from(message.matchAll(/\/+/g)).reduce(
-    (longest, match) => Math.max(longest, match[0].length),
-    1,
-  );
-  return `\n\n[${'/'.repeat(longestSlashRun + 1)}]: #\n\n`;
+  const runs = new Set(Array.from(message.matchAll(/\/+/g), match => match[0].length));
+  let length = 2;
+  while (runs.has(length)) length += 1;
+  return `\n\n[${'/'.repeat(length)}]: #\n\n`;
 }
 
 /**
