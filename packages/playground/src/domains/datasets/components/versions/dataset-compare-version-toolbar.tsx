@@ -45,11 +45,16 @@ export function DatasetCompareVersionToolbar({
       ),
     };
   });
+  const items = options.map(({ value, label }) => ({ value, label }));
 
   return (
     <Column.Toolbar className="grid w-full grid-cols-[1fr_1fr_1fr_10rem] gap-4">
       <div />
-      <Select value={versionA ?? ''} onValueChange={(val: string) => onVersionChange?.(val, versionB ?? '')}>
+      <Select
+        items={items}
+        value={versionA ?? ''}
+        onValueChange={(val: string) => onVersionChange?.(val, versionB ?? '')}
+      >
         <SelectTrigger aria-label="Version A" size="md">
           <SelectValue placeholder="Select version" />
         </SelectTrigger>
@@ -61,7 +66,11 @@ export function DatasetCompareVersionToolbar({
           ))}
         </SelectContent>
       </Select>
-      <Select value={versionB ?? ''} onValueChange={(val: string) => onVersionChange?.(versionA ?? '', val)}>
+      <Select
+        items={items}
+        value={versionB ?? ''}
+        onValueChange={(val: string) => onVersionChange?.(versionA ?? '', val)}
+      >
         <SelectTrigger aria-label="Version B" size="md">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
