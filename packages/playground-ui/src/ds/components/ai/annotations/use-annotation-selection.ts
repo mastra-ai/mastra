@@ -33,7 +33,8 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>, 
     const reportSelection = (pointerReleased: boolean) => {
       const container = containerRef.current;
       const selection = document.getSelection();
-      if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) return close();
+      // Firefox can hold several ranges at once; a passage is exactly one.
+      if (!container || !selection || selection.isCollapsed || selection.rangeCount !== 1) return close();
       const part = findAnnotatablePart(container, selection.getRangeAt(0));
       if (!part || (part.extendsPastContent && !pointerReleased)) return close();
       if (part.extendsPastContent) clampSelection(selection, part);

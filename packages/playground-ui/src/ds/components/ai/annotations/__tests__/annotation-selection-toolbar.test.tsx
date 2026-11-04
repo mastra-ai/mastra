@@ -45,6 +45,19 @@ describe('AnnotationSelectionToolbar', () => {
     });
   });
 
+  describe('when the browser holds a second selection range, as Firefox allows', () => {
+    it('offers nothing, since one passage is one range', async () => {
+      vi.useFakeTimers();
+      renderChat();
+      vi.spyOn(Selection.prototype, 'rangeCount', 'get').mockReturnValue(2);
+      dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
+
+      await settleSelection();
+
+      expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull();
+    });
+  });
+
   describe('when the selected message is outside the transcript', () => {
     it('offers nothing', async () => {
       vi.useFakeTimers();
