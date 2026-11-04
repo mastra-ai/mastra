@@ -1,4 +1,5 @@
 import type { Attachment, Message } from 'chat';
+import { stringifyMarkdown } from 'chat';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -61,17 +62,15 @@ function voiceClip(overrides: Partial<Attachment> = {}): Attachment {
 }
 
 function message(id: string, attachments: Attachment[]): Message {
-  return { id, text: '', attachments } as unknown as Message;
+  return { id, text: '', formatted: { type: 'root', children: [] }, attachments } as unknown as Message;
 }
 
-async function transcriptOf(msg: Message): Promise<{ name?: string; text: string }> {
-  const transcript = msg.attachments.find(a => a.mimeType === 'text/plain');
-  if (!transcript?.fetchData) throw new Error('no transcript attachment');
-  return { name: transcript.name, text: (await transcript.fetchData()).toString('utf8') };
+function agentReads(msg: Message): string {
+  return stringifyMarkdown(msg.formatted).trim();
 }
 
 describe('transcribeVoiceClips', () => {
-  it("transcribes a clip with the sender's saved model and key, keeping the clip", async () => {
+  it("replaces a clip with its transcript, using the sender's saved model and key", async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'openai-codex', { type: 'api_key', key: 'sk-openai' });
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
@@ -84,8 +83,9 @@ describe('transcribeVoiceClips', () => {
       voiceSettings: seed.voiceSettings,
     });
 
-    expect(msg.attachments[0]).toBe(clip);
-    expect(await transcriptOf(msg)).toEqual({ name: 'audio_message.m4a (transcript)', text: 'ship the fix' });
+    expect(msg.attachments).toEqual([]);
+    expect(agentReads(msg)).toBe('ship the fix');
+    expect(msg.text).toBe('ship the fix');
     expect(calls.openai).toEqual([]);
     expect(calls.mistral).toEqual([
       { authorization: 'Bearer sk-mistral', model: 'voxtral-mini-latest', filename: expect.stringMatching(/\.m4a$/) },
@@ -102,7 +102,7 @@ describe('transcribeVoiceClips', () => {
       voiceSettings: seed.voiceSettings,
     });
 
-    expect((await transcriptOf(msg)).text).toBe('hello from whisper');
+    expect(agentReads(msg)).toBe('hello from whisper');
     expect(calls.openai.map(c => c.authorization)).toEqual(['Bearer sk-org']);
   });
 
@@ -131,7 +131,7 @@ describe('transcribeVoiceClips', () => {
       project.id,
     );
 
-    expect((await transcriptOf(msg)).text).toBe('hello from whisper');
+    expect(agentReads(msg)).toBe('hello from whisper');
     expect(calls.openai.map(c => c.authorization)).toEqual(['Bearer sk-org']);
     expect(calls.mistral).toEqual([]);
   });
@@ -144,18 +144,20 @@ describe('transcribeVoiceClips', () => {
 
     await transcribeVoiceClips([earlier, latest], SENDER, { modelCredentials: seed.credentials });
 
-    expect((await transcriptOf(earlier)).text).toBe('ship the fix');
-    expect((await transcriptOf(latest)).name).toBe('second.m4a (transcript)');
+    expect(agentReads(earlier)).toBe('ship the fix');
+    expect(agentReads(latest)).toBe('ship the fix');
     expect(calls.mistral).toHaveLength(2);
   });
 
-  it('notes a missing speech-to-text key without calling a provider', async () => {
+  it('keeps the clip and notes a missing speech-to-text key without calling a provider', async () => {
     const seed = await createFactoryStorageForTests();
-    const msg = message('m1', [voiceClip()]);
+    const clip = voiceClip();
+    const msg = message('m1', [clip]);
 
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect((await transcriptOf(msg)).text).toMatch(/^Not transcribed: .*API key/);
+    expect(msg.attachments).toEqual([clip]);
+    expect(agentReads(msg)).toMatch(/^Voice clip not transcribed: .*API key/);
     expect(calls.openai).toEqual([]);
     expect(calls.mistral).toEqual([]);
   });
@@ -167,7 +169,7 @@ describe('transcribeVoiceClips', () => {
 
     await transcribeVoiceClips([msg], undefined, { modelCredentials: seed.credentials });
 
-    expect((await transcriptOf(msg)).text).toContain('linked Mastra account');
+    expect(agentReads(msg)).toContain('linked Mastra account');
     expect(calls.mistral).toEqual([]);
   });
 
@@ -187,7 +189,7 @@ describe('transcribeVoiceClips', () => {
 
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect((await transcriptOf(msg)).text).toContain('too long');
+    expect(agentReads(msg)).toContain('too long');
     expect(downloaded).toBe(false);
     expect(calls.mistral).toEqual([]);
   });
@@ -200,7 +202,7 @@ describe('transcribeVoiceClips', () => {
 
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect((await transcriptOf(msg)).text).toMatch(/^Not transcribed: /);
+    expect(agentReads(msg)).toContain('Voice clip not transcribed');
   });
 
   it('leaves messages without voice clips untouched', async () => {

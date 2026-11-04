@@ -462,7 +462,15 @@ describe('handler dispatch gating', () => {
     const sourceControl = {
       sessions: {
         getBySessionId: vi.fn(async (sessionId: string) =>
-          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' } : null,
+          sessionId === 'session-1'
+            ? {
+                orgId: 'org-1',
+                userId: 'owner-1',
+                factoryProjectId: 'fp-1',
+                branch: 'slack/1700-42',
+                visibility: 'org',
+              }
+            : null,
         ),
       },
     } as any;
@@ -492,7 +500,15 @@ describe('handler dispatch gating', () => {
     const sourceControl = {
       sessions: {
         getBySessionId: vi.fn(async (sessionId: string) =>
-          sessionId === 'session-1' ? { orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' } : null,
+          sessionId === 'session-1'
+            ? {
+                orgId: 'org-1',
+                userId: 'owner-1',
+                factoryProjectId: 'fp-1',
+                branch: 'slack/1700-42',
+                visibility: 'org',
+              }
+            : null,
         ),
       },
     } as any;
@@ -526,7 +542,18 @@ describe('handler dispatch gating', () => {
     const sourceControl = {
       sessions: {
         getBySessionId: vi.fn(async (sessionId: string) =>
-          sessionId === 'session-1' ? { ...{ orgId: 'org-1', userId: 'owner-1', factoryProjectId: 'fp-1', branch: 'slack/1700-42', visibility: 'org' }, ...overrides } : null,
+          sessionId === 'session-1'
+            ? {
+                ...{
+                  orgId: 'org-1',
+                  userId: 'owner-1',
+                  factoryProjectId: 'fp-1',
+                  branch: 'slack/1700-42',
+                  visibility: 'org',
+                },
+                ...overrides,
+              }
+            : null,
         ),
       },
     } as any;
@@ -754,7 +781,7 @@ describe('handler dispatch gating', () => {
       projects: makeProjects([{ id: 'fp-1', orgId: 'org-1', modelScope: 'hybrid' }]),
     });
 
-    it('attaches a note to a voice clip before dispatch when the sender has no speech-to-text key', async () => {
+    it('tells the agent why a voice clip was not transcribed when the sender has no speech-to-text key', async () => {
       const handlers = createHandlers({
         ...linked(),
         modelCredentials: { listCredentials: vi.fn().mockResolvedValue([]) } as any,
@@ -762,6 +789,7 @@ describe('handler dispatch gating', () => {
       const message = makeMessage('T-1');
       message.isMention = true;
       message.text = '';
+      Object.assign(message, { formatted: { type: 'root', children: [] } });
       message.attachments = [{ type: 'audio', mimeType: 'audio/mp4', name: 'audio_message.m4a' }];
       const thread = makeThread();
       thread.isSubscribed = vi.fn().mockResolvedValue(false);
@@ -771,12 +799,8 @@ describe('handler dispatch gating', () => {
 
       expect(defaultHandler).toHaveBeenCalledTimes(1);
       const dispatched = defaultHandler.mock.calls[0]![1];
-      expect(dispatched.attachments.map((a: { name?: string }) => a.name)).toEqual([
-        'audio_message.m4a',
-        'audio_message.m4a (transcript)',
-      ]);
-      const note = await dispatched.attachments[1].fetchData();
-      expect(note.toString('utf8')).toMatch(/^Not transcribed: .*API key/);
+      expect(dispatched.attachments.map((a: { name?: string }) => a.name)).toEqual(['audio_message.m4a']);
+      expect(dispatched.text).toMatch(/^Voice clip not transcribed: .*API key/);
     });
   });
 });
@@ -1307,7 +1331,11 @@ describe('channel session creation context (resolveSession)', () => {
         }),
       },
     };
-    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn().mockResolvedValue(null),
+      createSession: vi.fn().mockResolvedValue({ identity: 'session' }),
+    };
     const requestContext = new RequestContext();
 
     const session = await createChannelSessionResolver({ sourceControl } as any)({
@@ -1341,7 +1369,11 @@ describe('channel session creation context (resolveSession)', () => {
     const sourceControl = {
       sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? row : null)) },
     };
-    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn().mockResolvedValue(null),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1373,8 +1405,8 @@ describe('channel session creation context (resolveSession)', () => {
 
     expect(controller.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'thread-9', resourceId: 'fp-1', threadId: 'thread-9' }),
-      );
-    });
+    );
+  });
 
   it('resolves a migrated legacy thread passed without metadata through its stored session stamp', async () => {
     const row = {
@@ -1418,7 +1450,11 @@ describe('channel session creation context (resolveSession)', () => {
       sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? dm : null)) },
     };
     const forged = { id: 'thread-atk', resourceId: 'fp-1', metadata: { factorySessionId: 'session-1' } };
-    const controller = { id: 'code', queryThreadById: vi.fn(async () => null), createSession: vi.fn().mockResolvedValue({}) };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn(async () => null),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
 
     await createChannelSessionResolver({ sourceControl } as any)({ controller, thread: forged } as any);
 
@@ -1462,7 +1498,11 @@ describe('channel session creation context (resolveSession)', () => {
           .mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1', factoryProjectId: null }),
       },
     };
-    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn().mockResolvedValue(null),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
@@ -1476,7 +1516,11 @@ describe('channel session creation context (resolveSession)', () => {
     const sourceControl = {
       sessions: { getBySessionId: vi.fn() },
     };
-    const controller = { id: 'code', queryThreadById: vi.fn().mockResolvedValue(null), createSession: vi.fn().mockResolvedValue({}) };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn().mockResolvedValue(null),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
 
     await createChannelSessionResolver({ sourceControl } as any)({
       controller,
