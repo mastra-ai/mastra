@@ -10,7 +10,7 @@ export interface ServerFeatures {
   mcp?: boolean;
 }
 
-export function serverFeaturesQuery(client: ApiClient) {
+export function serverFeaturesQueryOptions(client: ApiClient) {
   return queryOptions({
     queryKey: queryKeys.serverFeatures(),
     queryFn: () => client.get<ServerFeatures>('/web/config/features'),
@@ -20,5 +20,5 @@ export function serverFeaturesQuery(client: ApiClient) {
 
 export function useServerFeatures() {
   const { client } = useApiConfig();
-  return useQuery(serverFeaturesQuery(client));
+  return useQuery(serverFeaturesQueryOptions(client));
 }

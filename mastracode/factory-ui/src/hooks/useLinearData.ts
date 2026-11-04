@@ -17,13 +17,13 @@ import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
  * service degrades to a disabled status instead of throwing, so consumers read
  * `data`, never `error`. Pass `enabled: false` to gate the request.
  */
-export function linearStatusQuery(baseUrl: string) {
+export function linearStatusQueryOptions(baseUrl: string) {
   return queryOptions({ queryKey: queryKeys.linearStatus(), queryFn: () => fetchLinearStatus(baseUrl) });
 }
 
 export function useLinearStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({ ...linearStatusQuery(baseUrl), enabled });
+  return useQuery({ ...linearStatusQueryOptions(baseUrl), enabled });
 }
 
 /**

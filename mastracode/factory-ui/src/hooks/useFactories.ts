@@ -43,7 +43,7 @@ async function fetchFactoryProjects(baseUrl: string): Promise<FactoryProject[]> 
 }
 
 /** The signed-in user's Factories with their repositories, shared by every reader and the startup prefetch. */
-export function factoriesQuery(baseUrl: string) {
+export function factoriesQueryOptions(baseUrl: string) {
   return queryOptions({
     queryKey: queryKeys.factories(),
     queryFn: () => fetchFactoryProjects(baseUrl),
@@ -52,13 +52,13 @@ export function factoriesQuery(baseUrl: string) {
 
 export function useFactoriesQuery() {
   const { baseUrl } = useApiConfig();
-  return useQuery(factoriesQuery(baseUrl));
+  return useQuery(factoriesQueryOptions(baseUrl));
 }
 
 export function useFactoryQuery(factoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    ...factoriesQuery(baseUrl),
+    ...factoriesQueryOptions(baseUrl),
     select: (factories: FactoryProject[]) => factories.find(factory => factory.id === factoryId),
     enabled: Boolean(factoryId),
   });

@@ -12,13 +12,13 @@ import {
 } from '../ui/domains/factory/services/gitlab';
 import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
 
-export function gitLabStatusQuery(baseUrl: string) {
+export function gitLabStatusQueryOptions(baseUrl: string) {
   return queryOptions({ queryKey: queryKeys.gitlabStatus(baseUrl), queryFn: () => fetchGitLabStatus(baseUrl) });
 }
 
 export function useGitLabStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({ ...gitLabStatusQuery(baseUrl), enabled });
+  return useQuery({ ...gitLabStatusQueryOptions(baseUrl), enabled });
 }
 
 export function useGitLabProjectsQuery(enabled: boolean) {

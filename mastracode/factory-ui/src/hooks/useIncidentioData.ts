@@ -25,13 +25,13 @@ export function useIncidentioSourcesQuery(enabled: boolean = true) {
  * failures throw, so a failed background refetch keeps the last known status
  * instead of collapsing the feed. Pass `enabled: false` to gate the request.
  */
-export function incidentioStatusQuery(baseUrl: string) {
+export function incidentioStatusQueryOptions(baseUrl: string) {
   return queryOptions({ queryKey: queryKeys.incidentioStatus(), queryFn: () => fetchIncidentioStatus(baseUrl) });
 }
 
 export function useIncidentioStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({ ...incidentioStatusQuery(baseUrl), enabled });
+  return useQuery({ ...incidentioStatusQueryOptions(baseUrl), enabled });
 }
 
 /**

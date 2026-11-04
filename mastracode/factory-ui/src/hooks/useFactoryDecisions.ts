@@ -17,7 +17,7 @@ import type {
   FactoryDecisionStatus,
 } from '../ui/domains/factory/services/decisions';
 
-export function factoryDecisionStatusQuery(
+export function factoryDecisionStatusQueryOptions(
   baseUrl: string,
   githubProjectId: string | undefined,
   statuses: FactoryDecisionStatus[],
@@ -34,7 +34,7 @@ export function factoryDecisionStatusQuery(
 
 export function useFactoryDecisionStatus(githubProjectId: string | undefined, statuses: FactoryDecisionStatus[]) {
   const { baseUrl } = useApiConfig();
-  return useQuery(factoryDecisionStatusQuery(baseUrl, githubProjectId, statuses));
+  return useQuery(factoryDecisionStatusQueryOptions(baseUrl, githubProjectId, statuses));
 }
 
 /** Release, turn down, or requeue one queued effect. */
@@ -56,7 +56,7 @@ export function useFactoryDecisionAction(githubProjectId: string | undefined, ac
 type DecisionCursor = string | undefined;
 const FIRST_DECISION_PAGE: DecisionCursor = undefined;
 
-export function factoryDecisionHistoryQuery(
+export function factoryDecisionHistoryQueryOptions(
   baseUrl: string,
   githubProjectId: string | undefined,
   statusKey: string,
@@ -81,5 +81,5 @@ export function useFactoryDecisionHistory(
   statuses: FactoryDecisionStatus[] | undefined,
 ) {
   const { baseUrl } = useApiConfig();
-  return useInfiniteQuery(factoryDecisionHistoryQuery(baseUrl, githubProjectId, statusKey, statuses));
+  return useInfiniteQuery(factoryDecisionHistoryQueryOptions(baseUrl, githubProjectId, statusKey, statuses));
 }

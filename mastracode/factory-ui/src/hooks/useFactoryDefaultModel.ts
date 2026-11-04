@@ -23,7 +23,7 @@ import type { FactoryModelScope } from '../ui/domains/workspaces/services/github
  * applies afterwards. Server state on the `factory_projects` row — not
  * browser/session state — so both hooks are keyed by `factoryProjectId`.
  */
-export function factoryProjectQuery(baseUrl: string, factoryProjectId: string | undefined) {
+export function factoryProjectQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.factoryProject(factoryProjectId),
     queryFn: factoryProjectId ? () => fetchFactoryProject(baseUrl, factoryProjectId) : skipToken,
@@ -32,7 +32,7 @@ export function factoryProjectQuery(baseUrl: string, factoryProjectId: string | 
 
 export function useFactoryProjectQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  return useQuery(factoryProjectQuery(baseUrl, factoryProjectId));
+  return useQuery(factoryProjectQueryOptions(baseUrl, factoryProjectId));
 }
 
 export function useSetFactoryDefaultModelMutation(factoryProjectId: string | undefined) {

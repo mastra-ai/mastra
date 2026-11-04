@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
 import {
-  factoryDecisionStatusQuery,
+  factoryDecisionStatusQueryOptions,
   useFactoryDecisionAction,
   useFactoryDecisionStatus,
 } from '../../../../hooks/useFactoryDecisions';
@@ -10,8 +10,8 @@ import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
 /** The decisions every board and the session list show on their cards. */
-export function boardDecisionsQuery(baseUrl: string, factoryProjectId: string | undefined) {
-  return factoryDecisionStatusQuery(baseUrl, factoryProjectId, BOARD_STATUSES);
+export function boardDecisionsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return factoryDecisionStatusQueryOptions(baseUrl, factoryProjectId, BOARD_STATUSES);
 }
 
 /** Per card: the run proposed on it, and the effect already in flight or failed behind it. */

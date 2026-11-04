@@ -8,9 +8,6 @@
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can choose the active factory's board or draft composer.
  *
- * Route loaders only start requests, so pages load alongside that check
- * instead of after it; see `routeLoaders.ts`.
- *
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
@@ -26,6 +23,7 @@ import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
 import { lazyPage } from './layouts/PageSuspense';
+import type { LazyPageComponent } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import {
   createLoadOnEntry,
@@ -36,7 +34,7 @@ import {
   prefetchRuleDecisions,
   prefetchSidebar,
 } from './routeLoaders';
-import type { RouteLoaderServices } from './routeLoaders';
+import type { Prefetch, RouteLoaderServices } from './routeLoaders';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
@@ -150,13 +148,12 @@ function KnowledgeRoute() {
   return <KnowledgePage />;
 }
 
-/**
- * The app's routes. `services` lets their loaders start each page's requests
- * early (see `routeLoaders.ts`); without it, as in most tests, routes have no
- * loaders.
- */
 export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
   const loadOnEntry = createLoadOnEntry(services);
+  const lazyRoute = (Page: LazyPageComponent, prefetch?: Prefetch) => ({
+    element: <Page />,
+    ...loadOnEntry(prefetch, Page),
+  });
 
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
   // root (src/ui), or dev deep-links serve the module source instead of
@@ -168,75 +165,49 @@ export function createAppRoutes(services?: RouteLoaderServices): RouteObject[] {
       errorElement: <RouteErrorPage />,
       children: [
         {
-          // Pathless, so `RootGuards` above renders in the first frame and sends
-          // the sign-in check at once; only this subtree waits for the loaders,
-          // and the guards cover it until both checks pass.
+          // Pathless, so `RootGuards` renders and sends the sign-in check before these loaders settle.
           hydrateFallbackElement: <AuthPendingSkeleton />,
-          ...loadOnEntry(undefined, prefetchFactories),
+          ...loadOnEntry(prefetchFactories),
           children: [
             { index: true, element: <RootLanding /> },
-            { path: 'onboarding', element: <OnboardingPage />, ...loadOnEntry(OnboardingPage) },
+            { path: 'onboarding', ...lazyRoute(OnboardingPage) },
             {
               path: 'factories/:factoryId',
               element: <FactoryLayout />,
-              ...loadOnEntry(undefined, prefetchFactoryLayout),
+              ...loadOnEntry(prefetchFactoryLayout),
               children: [
                 {
                   element: <AppLayout />,
-                  ...loadOnEntry(undefined, prefetchSidebar),
+                  ...loadOnEntry(prefetchSidebar),
                   children: [
                     {
                       // Errors replace only the page, preserving the shell and its providers.
                       errorElement: <AppRouteErrorPage />,
                       children: [
                         { index: true, element: <FactoryHomeRedirect /> },
-                        {
-                          path: 'workspaces/:sessionId',
-                          element: <NewPage />,
-                          ...loadOnEntry(NewPage, prefetchComposer),
-                        },
-                        {
-                          path: 'workspaces/:sessionId/threads/:threadId',
-                          element: <ThreadPage />,
-                          ...loadOnEntry(ThreadPage),
-                        },
-                        {
-                          path: 'user/new/:draftSessionId',
-                          element: <NewPage />,
-                          ...loadOnEntry(NewPage, prefetchComposer),
-                        },
-                        { path: 'user/threads/:threadId', element: <ThreadPage />, ...loadOnEntry(ThreadPage) },
-                        { path: 'new', element: <NewPage />, ...loadOnEntry(NewPage, prefetchComposer) },
-                        { path: 'new-factory', element: <CreateFactoryPage />, ...loadOnEntry(CreateFactoryPage) },
-                        { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(undefined, prefetchBoard) },
-                        { path: 'review', element: <ReviewBoardPage />, ...loadOnEntry(undefined, prefetchBoard) },
-                        {
-                          path: 'boards/:boardId',
-                          element: <CustomBoardPage />,
-                          ...loadOnEntry(undefined, prefetchBoard),
-                        },
+                        { path: 'workspaces/:sessionId', ...lazyRoute(NewPage, prefetchComposer) },
+                        { path: 'workspaces/:sessionId/threads/:threadId', ...lazyRoute(ThreadPage) },
+                        { path: 'user/new/:draftSessionId', ...lazyRoute(NewPage, prefetchComposer) },
+                        { path: 'user/threads/:threadId', ...lazyRoute(ThreadPage) },
+                        { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
+                        { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
+                        { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
+                        { path: 'review', element: <ReviewBoardPage />, ...loadOnEntry(prefetchBoard) },
+                        { path: 'boards/:boardId', element: <CustomBoardPage />, ...loadOnEntry(prefetchBoard) },
                         { path: 'activity', element: <FactoryHomeRedirect /> },
                         { path: 'overview', element: <FactoryHomeRedirect /> },
                         { path: 'attention', element: <FactoryHomeRedirect /> },
                         { path: 'metrics', element: <FactoryHomeRedirect /> },
                         { path: 'audit', element: <FactoryHomeRedirect /> },
-                        {
-                          path: 'rules',
-                          element: <RulesPage />,
-                          ...loadOnEntry(RulesPage, prefetchRuleDecisions),
-                        },
+                        { path: 'rules', ...lazyRoute(RulesPage, prefetchRuleDecisions) },
                         // No preload: the page redirects away unless the server enables Knowledge.
                         { path: 'knowledge', element: <KnowledgeRoute /> },
                         {
                           path: 'settings',
                           children: [
                             { index: true, element: <Navigate to="preferences" replace /> },
-                            {
-                              path: 'connections/slack',
-                              element: <SlackConnectionPage />,
-                              ...loadOnEntry(SlackConnectionPage),
-                            },
-                            { path: ':section', element: <SettingsPage />, ...loadOnEntry(SettingsPage) },
+                            { path: 'connections/slack', ...lazyRoute(SlackConnectionPage) },
+                            { path: ':section', ...lazyRoute(SettingsPage) },
                           ],
                         },
                       ],

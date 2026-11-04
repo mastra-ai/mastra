@@ -5,7 +5,7 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { BoardCatalogResponse } from '../api/types';
 
-export function boardCatalogQuery(client: ApiClient, factoryProjectId: string | undefined) {
+export function boardCatalogQueryOptions(client: ApiClient, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.boardCatalog(factoryProjectId),
     queryFn: factoryProjectId
@@ -16,5 +16,5 @@ export function boardCatalogQuery(client: ApiClient, factoryProjectId: string | 
 
 export function useBoardCatalog(factoryProjectId: string | undefined) {
   const { client } = useApiConfig();
-  return useQuery({ ...boardCatalogQuery(client, factoryProjectId), select: data => data.boards });
+  return useQuery({ ...boardCatalogQueryOptions(client, factoryProjectId), select: data => data.boards });
 }
