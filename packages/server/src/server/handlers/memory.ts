@@ -679,9 +679,9 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       const historyOptions = { from, to, offset };
 
       // Gateway OM: proxy to gateway API
-      if (await isGatewayAgentAsync(agent)) {
-        const gwClient = getGatewayClient();
-        if (gwClient && resourceId && threadId) {
+      const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
+      if (gwClient) {
+        if (resourceId && threadId) {
           const [recordResult, historyResult] = await Promise.all([
             gwClient.getObservationRecord(threadId, resourceId),
             gwClient.getObservationHistory(threadId, { resourceId, limit: historyLimit, from, to, offset }),
@@ -766,9 +766,9 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       }
 
       // Gateway proxy: poll the gateway OM record until buffering flags clear
-      if (await isGatewayAgentAsync(agent)) {
-        const gwClient = getGatewayClient();
-        if (gwClient && resourceId && threadId) {
+      const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
+      if (gwClient) {
+        if (resourceId && threadId) {
           const maxWaitMs = 30_000;
           const pollIntervalMs = 1_000;
           const deadline = Date.now() + maxWaitMs;
