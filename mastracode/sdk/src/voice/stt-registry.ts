@@ -11,8 +11,10 @@
  * built on the OpenAI client — `openai` uses the default endpoint, every other
  * OpenAI-compatible host supplies its `baseURL`. Deepgram is the exception: it
  * is not OpenAI-compatible, so it resolves through `@mastra/voice-deepgram`
- * (`DeepgramVoice`). Deepgram is not in the models.dev STT snapshot but is a
- * first-class hosted STT provider, so it is added deliberately.
+ * (`DeepgramVoice`). Mistral's Voxtral transcription likewise resolves through
+ * `@mastra/voice-mistral` (`MistralVoice`). Neither Deepgram nor Mistral STT is
+ * in the models.dev STT snapshot, but both are first-class hosted STT
+ * providers, so they are added deliberately.
  *
  * The accompanying snapshot test (`__tests__/stt-registry.test.ts`) re-derives
  * the models.dev-backed entries from a checked-in snapshot so this list stays
@@ -26,8 +28,10 @@
  *   (its `/audio/transcriptions` endpoint follows the OpenAI shape).
  * - `deepgram`: `DeepgramVoice` from `@mastra/voice-deepgram` (not
  *   OpenAI-compatible; uses the Deepgram SDK).
+ * - `mistral`: `MistralVoice` from `@mastra/voice-mistral` (Voxtral; uses
+ *   the Mistral SDK).
  */
-export type STTResolver = 'openai' | 'openai-compatible' | 'deepgram';
+export type STTResolver = 'openai' | 'openai-compatible' | 'deepgram' | 'mistral';
 
 export interface STTModel {
   /** models.dev provider id (also the AuthStorage key for the API key). */
@@ -74,6 +78,8 @@ export const STT_MODELS: readonly STTModel[] = [
   },
   // Deepgram — dedicated STT provider (not OpenAI-compatible); via @mastra/voice-deepgram.
   { provider: 'deepgram', model: 'nova-3', label: 'Deepgram Nova-3', resolver: 'deepgram' },
+  // Mistral Voxtral — dedicated transcription endpoint; via @mastra/voice-mistral.
+  { provider: 'mistral', model: 'voxtral-mini-latest', label: 'Mistral Voxtral Mini', resolver: 'mistral' },
   // Alibaba Qwen ASR (OpenAI-compatible endpoints).
   {
     provider: 'alibaba',

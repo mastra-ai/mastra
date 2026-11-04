@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const openaiCalls: Array<Record<string, any>> = [];
 const deepgramCalls: Array<Record<string, any>> = [];
+const mistralCalls: Array<Record<string, any>> = [];
+const mistralListenOptions: Array<Record<string, any> | undefined> = [];
 
 vi.mock('@mastra/voice-openai', () => ({
   OpenAIVoice: class {
@@ -30,6 +32,18 @@ vi.mock('@mastra/voice-deepgram', () => ({
   },
 }));
 
+vi.mock('@mastra/voice-mistral', () => ({
+  MistralVoice: class {
+    constructor(config: Record<string, any>) {
+      mistralCalls.push(config);
+    }
+    async listen(_audio: unknown, options?: Record<string, any>) {
+      mistralListenOptions.push(options);
+      return '  mistral transcript  ';
+    }
+  },
+}));
+
 import { transcribeAudio, VoiceCredentialError, resolveProviderApiKey } from '../transcribe.js';
 
 const AUDIO = Buffer.from('fake-wav');
@@ -38,6 +52,8 @@ describe('transcribeAudio provider routing', () => {
   beforeEach(() => {
     openaiCalls.length = 0;
     deepgramCalls.length = 0;
+    mistralCalls.length = 0;
+    mistralListenOptions.length = 0;
     vi.unstubAllEnvs();
   });
 
@@ -74,6 +90,22 @@ describe('transcribeAudio provider routing', () => {
     expect(deepgramCalls).toHaveLength(1);
     expect(deepgramCalls[0]!.listeningModel.name).toBe('nova-3');
     expect(deepgramCalls[0]!.listeningModel.apiKey).toBe('dg-key');
+  });
+
+  it('routes Mistral through the dedicated MistralVoice with the Voxtral model', async () => {
+    vi.stubEnv('MISTRAL_API_KEY', 'mistral-key');
+    const text = await transcribeAudio(AUDIO, { provider: 'mistral' });
+    expect(text).toBe('mistral transcript');
+    expect(openaiCalls).toHaveLength(0);
+    expect(deepgramCalls).toHaveLength(0);
+    expect(mistralCalls).toHaveLength(1);
+    expect(mistralCalls[0]!.listeningModel).toEqual({ name: 'voxtral-mini-latest', apiKey: 'mistral-key' });
+    expect(mistralListenOptions[0]).toEqual({ filetype: 'wav' });
+  });
+
+  it('throws VoiceCredentialError for Mistral without MISTRAL_API_KEY', async () => {
+    vi.stubEnv('MISTRAL_API_KEY', '');
+    await expect(transcribeAudio(AUDIO, { provider: 'mistral' })).rejects.toThrow(/MISTRAL_API_KEY/);
   });
 
   it('throws VoiceCredentialError when the provider has no key', async () => {

@@ -2847,6 +2847,9 @@ importers:
       '@mastra/voice-deepgram':
         specifier: workspace:*
         version: link:../../voice/deepgram
+      '@mastra/voice-mistral':
+        specifier: workspace:*
+        version: link:../../voice/mistral
       '@mastra/voice-openai':
         specifier: workspace:*
         version: link:../../voice/openai

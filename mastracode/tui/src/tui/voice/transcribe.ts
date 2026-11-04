@@ -6,8 +6,9 @@
  * through Mastra's own voice abstraction — `OpenAIVoice` (a `MastraVoice`) from
  * `@mastra/voice-openai`. The `openai` provider uses the default endpoint; every
  * other OpenAI-compatible host is reached by pointing the underlying client at
- * its `baseURL`. Deepgram is not OpenAI-compatible, so it is driven through
- * `DeepgramVoice` from `@mastra/voice-deepgram` instead.
+ * its `baseURL`. Deepgram and Mistral (Voxtral) are not driven through the
+ * OpenAI client: they use `DeepgramVoice` from `@mastra/voice-deepgram` and
+ * `MistralVoice` from `@mastra/voice-mistral` instead.
  *
  * Using `MastraVoice.listen()` keeps this aligned with the framework's voice
  * ecosystem and normalizes provider responses to a transcript string. The voice
@@ -46,6 +47,7 @@ const PROVIDER_ENV_VAR: Record<string, string> = {
   nearai: 'NEAR_AI_API_KEY',
   evroc: 'EVROC_API_KEY',
   deepgram: 'DEEPGRAM_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
 };
 
 export class VoiceCredentialError extends Error {
@@ -74,6 +76,7 @@ export function resolveProviderApiKey(provider: string, authStorage?: AuthStorag
 /**
  * Build a `MastraVoice` for an STT registry entry.
  * - `deepgram`: `DeepgramVoice` (Deepgram SDK; not OpenAI-compatible).
+ * - `mistral`: `MistralVoice` (Mistral SDK; Voxtral transcription).
  * - everything else: `OpenAIVoice`, where `listeningModel.name` is the model id
  *   and `options.baseURL` redirects OpenAI-compatible hosts at their endpoint.
  */
@@ -85,6 +88,10 @@ async function buildVoice(entry: STTModel, apiKey: string): Promise<VoiceListene
       // `name` is typed for Deepgram's own ids; the model string is passed verbatim.
       listeningModel: { name: entry.model as never, apiKey },
     });
+  }
+  if (entry.resolver === 'mistral') {
+    const { MistralVoice } = await import('@mastra/voice-mistral');
+    return new MistralVoice({ listeningModel: { name: entry.model, apiKey } });
   }
   const { OpenAIVoice } = await import('@mastra/voice-openai');
   return new OpenAIVoice({
