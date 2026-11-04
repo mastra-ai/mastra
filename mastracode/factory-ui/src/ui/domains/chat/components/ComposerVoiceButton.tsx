@@ -5,6 +5,7 @@ import type { VoiceDictationState } from './useVoiceDictation';
 
 const LABELS: Record<VoiceDictationState, string> = {
   idle: 'Dictate',
+  requesting: 'Waiting for microphone…',
   recording: 'Stop dictation',
   transcribing: 'Transcribing…',
 };
@@ -29,7 +30,7 @@ export function ComposerVoiceButton({
 }) {
   const recording = state === 'recording';
   // Stopping must always work, so a recording clip can be ended even after the composer locks.
-  const blocked = state === 'transcribing' || (disabled && !recording);
+  const blocked = state === 'requesting' || state === 'transcribing' || (disabled && !recording);
   return (
     <Button
       type="button"

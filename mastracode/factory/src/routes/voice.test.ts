@@ -107,7 +107,7 @@ describe('POST /web/voice/transcribe (local mode)', () => {
     process.env.MISTRAL_API_KEY = 'env-mistral';
     const app = mount({ authStorage: localAuthStorage({ mistral: 'stored-mistral' }) });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4', provider: 'mistral' });
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4' });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ text: 'hello from voxtral', provider: 'mistral', model: 'voxtral-mini-latest' });
@@ -125,15 +125,6 @@ describe('POST /web/voice/transcribe (local mode)', () => {
     expect((await res.json()).error).toMatch(/speech-to-text API key/);
     expect(calls.openai).toHaveLength(0);
     expect(calls.mistral).toHaveLength(0);
-  });
-
-  it('rejects an unknown provider', async () => {
-    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
-
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', provider: 'anthropic' });
-
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/not a supported speech-to-text provider/);
   });
 
   it('rejects a malformed body', async () => {
@@ -175,7 +166,7 @@ describe('POST /web/voice/transcribe (tenant mode)', () => {
     });
     const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4', provider: 'mistral' });
+    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4' });
 
     expect(res.status).toBe(200);
     expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
@@ -428,8 +419,23 @@ describe('Factory voice model and model scope', () => {
       effective: { provider: 'openai', model: 'whisper-1' },
       canEditFactory: true,
     });
-    expect(body.keys.find(k => k.provider === 'openai')).toEqual({ provider: 'openai', user: false, org: true });
-    expect(body.keys.find(k => k.provider === 'mistral')).toEqual({ provider: 'mistral', user: true, org: false });
+    expect(body.keys.find(k => k.provider === 'openai')).toEqual({
+      provider: 'openai',
+      envVar: 'OPENAI_API_KEY',
+      user: false,
+      org: true,
+    });
+    expect(body.keys.find(k => k.provider === 'deepgram')).toEqual({
+      provider: 'deepgram',
+      envVar: 'DEEPGRAM_API_KEY',
+      user: false,
+      org: false,
+    });
+    expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({
+      provider: 'mistral',
+      user: true,
+      org: false,
+    });
   });
 
   it('only lets org admins change the Factory voice model', async () => {

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 
-export type VoiceDictationState = 'idle' | 'recording' | 'transcribing';
+export type VoiceDictationState = 'idle' | 'requesting' | 'recording' | 'transcribing';
 
 interface TranscribeResponse {
   text: string;
@@ -20,7 +20,8 @@ export function voiceDictationSupported(): boolean {
   );
 }
 
-function dictationState(recording: boolean, transcribing: boolean): VoiceDictationState {
+function dictationState(requesting: boolean, recording: boolean, transcribing: boolean): VoiceDictationState {
+  if (requesting) return 'requesting';
   if (recording) return 'recording';
   if (transcribing) return 'transcribing';
   return 'idle';
@@ -54,8 +55,10 @@ export function useVoiceDictation({
   onError: (message: string) => void;
 }) {
   const { client } = useApiConfig();
+  const [requesting, setRequesting] = useState(false);
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder>(undefined);
+  const mountedRef = useRef(true);
 
   const transcribe = useMutation({
     mutationFn: async (clip: Blob) =>
@@ -71,26 +74,34 @@ export function useVoiceDictation({
     onError: error => onError(error.message),
   });
 
-  const stopTracks = (recorder: MediaRecorder) => recorder.stream.getTracks().forEach(track => track.stop());
+  const stopTracks = (stream: MediaStream) => stream.getTracks().forEach(track => track.stop());
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       const recorder = recorderRef.current;
       if (!recorder) return;
       recorder.ondataavailable = null;
       recorder.onstop = null;
       if (recorder.state !== 'inactive') recorder.stop();
-      stopTracks(recorder);
-    },
-    [],
-  );
+      stopTracks(recorder.stream);
+    };
+  }, []);
 
   const start = async () => {
+    setRequesting(true);
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       onError('Microphone access was blocked. Allow it in your browser to use voice input.');
+      return;
+    } finally {
+      setRequesting(false);
+    }
+    if (!mountedRef.current) {
+      stopTracks(stream);
       return;
     }
     const recorder = new MediaRecorder(stream);
@@ -99,7 +110,7 @@ export function useVoiceDictation({
       if (event.data.size > 0) chunks.push(event.data);
     };
     recorder.onstop = () => {
-      stopTracks(recorder);
+      stopTracks(recorder.stream);
       recorderRef.current = undefined;
       setRecording(false);
       const clip = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type || 'audio/webm' });
@@ -115,5 +126,5 @@ export function useVoiceDictation({
     if (recorder && recorder.state !== 'inactive') recorder.stop();
   };
 
-  return { state: dictationState(recording, transcribe.isPending), start, stop };
+  return { state: dictationState(requesting, recording, transcribe.isPending), start, stop };
 }

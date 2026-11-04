@@ -138,30 +138,24 @@ async function policyModel(
 export type STTChoice = { entry: STTModel; apiKey: string } | { error: string };
 
 /**
- * An explicit request wins, then the saved choice, then the first provider
- * with a key. A chosen provider without a key is an error rather than a
- * silent switch to another provider.
+ * The saved choice wins, then the first provider with a key. A saved provider
+ * without a key is an error rather than a silent switch to another provider.
  */
 export async function chooseSTTModel(
   policy: VoicePolicy,
   voiceSettings: VoiceSettingsStorage | undefined,
-  requested: { provider?: string; model?: string } = {},
 ): Promise<STTChoice> {
-  if (requested.provider && !sttProviders().includes(requested.provider)) {
-    return { error: `${requested.provider} is not a supported speech-to-text provider.` };
-  }
-  const saved = requested.provider ? undefined : await policyModel(voiceSettings, policy);
-  const chosen = requested.provider ?? saved?.provider;
-  const provider = chosen ?? sttProviders().find(p => policy.keyFor(p) !== undefined);
+  const saved = await policyModel(voiceSettings, policy);
+  const provider = saved?.provider ?? sttProviders().find(p => policy.keyFor(p) !== undefined);
   const apiKey = provider ? policy.keyFor(provider) : undefined;
   if (!provider || !apiKey) {
     return {
-      error: chosen
-        ? `Voice input needs a ${chosen} API key. Add one or pick another model in Settings → Models → Voice input.`
+      error: saved
+        ? `Voice input needs a ${saved.provider} API key. Add one or pick another model in Settings → Models → Voice input.`
         : 'Voice input needs a speech-to-text API key (for example OpenAI or Mistral). Add one in Settings → Models → Voice input.',
     };
   }
-  return { entry: resolveSTTModel(provider, requested.model ?? saved?.model), apiKey };
+  return { entry: saved ?? resolveSTTModel(provider), apiKey };
 }
 
 export async function transcribeAudio(

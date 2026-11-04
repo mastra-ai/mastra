@@ -10,6 +10,7 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { STT_MODELS, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
 import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
+import { sttApiKeyEnvVar } from '@mastra/code-sdk/voice/transcribe';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -40,8 +41,6 @@ function loose(c: unknown): Context {
 const transcribeBodySchema = z.object({
   audio: z.string().min(1),
   mimeType: z.string().min(1),
-  provider: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
   factoryId: z.string().min(1).optional(),
 });
 
@@ -119,6 +118,7 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
       })),
       keys: sttProviders().map(provider => ({
         provider,
+        envVar: sttApiKeyEnvVar(provider),
         user: caller.userKey(provider) !== undefined,
         org: caller.orgKey(provider) !== undefined,
       })),
@@ -194,10 +194,7 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
 
           const request = await this.#request(c, parsed.data.factoryId);
           if ('response' in request) return request.response;
-          const chosen = await chooseSTTModel(voicePolicy(request.caller, request.factory), this.deps.voiceSettings, {
-            provider: parsed.data.provider,
-            model: parsed.data.model,
-          });
+          const chosen = await chooseSTTModel(voicePolicy(request.caller, request.factory), this.deps.voiceSettings);
           if ('error' in chosen) return c.json({ error: chosen.error }, 400);
           try {
             const text = await transcribeAudio(chosen, audio, parsed.data.mimeType);
