@@ -604,6 +604,20 @@ describe('UnsupportedFileHandler, for a file or image in a tool result the provi
     expect(toolTexts(prompts[2]!)).toContain(NOTE('image/png'));
   });
 
+  it('leaves a matching tool image alone when an unreadable user file may be the rejected part', async () => {
+    const workbook = file('PK workbook', 'leads.xlsx', XLSX);
+    const { agent, prompts } = createViewAgent([{ path: 'diagram.png', bytes: PNG, mediaType: 'image/png' }], prompt =>
+      userFileParts(prompt).some(part => part.mediaType === XLSX) ? openAIInvalidFile() : undefined,
+    );
+
+    const result = await agent.generate(turnWith(workbook), { memory: MEMORY });
+
+    expect(result.text).toBe('ok');
+    expect(prompts).toHaveLength(3);
+    expect(holds(prompts[2]!, PNG, 'image/png')).toBe(true);
+    expect(userTexts(prompts[2]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
+  });
+
   it('leaves the history alone on a 400 that is not about a file part', async () => {
     const { agent, prompts } = createViewAgent(
       [{ path: 'screenshot.png', bytes: WEBP, mediaType: 'image/png' }],

@@ -84,7 +84,11 @@ export class UnsupportedFileHandler implements Processor<'unsupported-file-handl
     // Only once: if the call fails again after the files are replaced, the note didn't fix it.
     if (retryCount > 0) return;
     // A tool result's file or image the provider called invalid would fail every later call too, so it leaves the history.
-    if (isRejectedPartError(error) && omitRejectedToolMedia(messageList)) return { retry: true };
+    // The error rarely says which part it means. With a user file the model may not read in the request, only a tool
+    // part whose bytes contradict its type is taken; otherwise the user-file fallback below handles the rejection.
+    if (isRejectedPartError(error) && omitRejectedToolMedia(messageList, !hasUnreadableFile(messageList))) {
+      return { retry: true };
+    }
     const mediaType = rejectedMediaTypeOf(error);
     if (mediaType) {
       if (!hasFile(messageList)) return;
@@ -221,9 +225,10 @@ function matchesItsMediaType({ data, mediaType = '' }: ToolMediaItem): boolean {
 /**
  * Replaces, in the stored history, the tool-result file or image the provider rejected with a text note, and
  * returns whether it replaced any. The error rarely says which part it means, so this takes every part whose
- * bytes don't match its media type, or else the newest one: the call before it went through without that part.
+ * bytes don't match its media type, or else (when `allowNewest`) the newest one: the call before it went through
+ * without that part.
  */
-function omitRejectedToolMedia(messageList: MessageList): boolean {
+function omitRejectedToolMedia(messageList: MessageList, allowNewest: boolean): boolean {
   const found: { part: MastraToolInvocationPart; index: number; item: ToolMediaItem }[] = [];
   for (const message of messageList.get.all.db()) {
     if (message.role !== 'assistant') continue;
@@ -235,7 +240,7 @@ function omitRejectedToolMedia(messageList: MessageList): boolean {
     }
   }
   const mislabeled = found.filter(({ item }) => !matchesItsMediaType(item));
-  const omitted = mislabeled.length > 0 ? mislabeled : found.slice(-1);
+  const omitted = mislabeled.length > 0 ? mislabeled : allowNewest ? found.slice(-1) : [];
   for (const part of new Set(omitted.map(({ part }) => part))) {
     const output = toolModelOutputOf(part)!;
     const value = output.value.map((item, index) =>
