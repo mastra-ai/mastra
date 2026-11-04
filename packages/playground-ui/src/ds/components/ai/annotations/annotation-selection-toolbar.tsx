@@ -16,10 +16,12 @@ export interface AnnotationSelectionToolbarProps {
   onAnnotate: (annotation: NewChatAnnotation) => void;
 }
 
+const hasModifier = (event: KeyboardEvent | ReactKeyboardEvent) => event.altKey || event.ctrlKey || event.metaKey;
+
 export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: AnnotationSelectionToolbarProps) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const { open, selection, dismiss } = useAnnotationSelection(containerRef, toolbarRef);
-  const container = usePortalContainer();
+  const portalContainer = usePortalContainer();
   const addRef = useRef<HTMLElement>(null);
   const actionsRef = useRef<PopoverPrimitive.Root.Actions>(null);
   const originRef = useRef<HTMLElement>(undefined);
@@ -31,7 +33,7 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
       const add = addRef.current;
       const transcript = containerRef.current;
       const { target } = event;
-      if (!add || !transcript || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (!add || !transcript || hasModifier(event)) return;
       const holdsTranscript = target instanceof HTMLElement && target !== document.body && target.contains(transcript);
       if (event.key !== 'Tab' || event.shiftKey || !holdsTranscript) return;
       add.focus();
@@ -52,7 +54,7 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
   // Without a trigger Base UI cannot route focus out of the toolbar, so it goes back to the scroller it came from.
   const returnFocus = (event: ReactKeyboardEvent) => {
     const origin = originRef.current;
-    if (!origin || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!origin || hasModifier(event)) return;
     if (event.key !== 'Tab' && event.key !== 'Escape') return;
     if (event.key === 'Tab') {
       event.preventDefault();
@@ -77,7 +79,7 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
         if (!next) dismiss();
       }}
     >
-      <PopoverPrimitive.Portal container={container}>
+      <PopoverPrimitive.Portal container={portalContainer}>
         <PopoverPrimitive.Positioner
           anchor={selection?.anchor}
           side="top"

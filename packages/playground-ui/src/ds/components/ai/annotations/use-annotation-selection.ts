@@ -21,6 +21,13 @@ const CLOSED: AnnotationSelectionState = { open: false };
 
 const closing = (state: AnnotationSelectionState) => (state.open ? { ...state, open: false } : state);
 
+// Firefox can hold several ranges at once; a passage is exactly one.
+function singleRange(selection: Selection | null): Range | undefined {
+  if (!selection || selection.isCollapsed) return undefined;
+  if (selection.rangeCount !== 1) return undefined;
+  return selection.getRangeAt(0);
+}
+
 export function useAnnotationSelection(containerRef: RefObject<Element | null>, toolbarRef: RefObject<Element | null>) {
   const [state, setState] = useState<AnnotationSelectionState>(CLOSED);
   const dismiss = () => setState(closing);
@@ -33,9 +40,9 @@ export function useAnnotationSelection(containerRef: RefObject<Element | null>, 
     const reportSelection = (pointerReleased: boolean) => {
       const container = containerRef.current;
       const selection = document.getSelection();
-      // Firefox can hold several ranges at once; a passage is exactly one.
-      if (!container || !selection || selection.isCollapsed || selection.rangeCount !== 1) return close();
-      const part = findAnnotatablePart(container, selection.getRangeAt(0));
+      const range = singleRange(selection);
+      if (!container || !selection || !range) return close();
+      const part = findAnnotatablePart(container, range);
       if (!part || (part.extendsPastContent && !pointerReleased)) return close();
       if (part.extendsPastContent) clampSelection(selection, part);
       const text = normalizeAnnotationText(selection.toString());
