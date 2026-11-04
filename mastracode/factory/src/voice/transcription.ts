@@ -1,18 +1,4 @@
-/**
- * Speech-to-text for the web composer's voice input. Providers and models come
- * from the shared STT registry (`@mastra/code-sdk/voice/stt-registry`), the
- * same catalog the TUI `/voice` command uses.
- *
- * Which model and key a caller transcribes with follows the Factory's model
- * scope, the same way chat models do:
- * - `factory`: the Factory's voice model and the org's keys.
- * - `user`: the caller's model (or the Factory's) and the caller's own keys.
- * - `hybrid`, or no Factory: the caller's model (or the Factory's), the
- *   caller's key first, then the org's.
- *
- * Only `api_key` credentials qualify: OAuth subscriptions (e.g. ChatGPT via
- * `openai-codex`) do not authorize the transcription endpoints.
- */
+/** Only `api_key` credentials qualify: OAuth subscriptions (e.g. ChatGPT via `openai-codex`) don't authorize transcription endpoints. */
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
@@ -21,7 +7,8 @@ import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
 import { createSTTTranscriber, resolveSTTApiKey } from '@mastra/code-sdk/voice/transcribe';
 
 import type { CredentialRecord } from '../storage/domains/credentials/base.js';
-import type { FactoryModelScope } from '../storage/domains/projects/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryModelScope } from '../storage/domains/projects/base.js';
 import { factoryVoiceSettingsUserId } from '../storage/domains/voice-settings/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 
@@ -30,8 +17,8 @@ export const MAX_TRANSCRIBE_AUDIO_BYTES = 8 * 1024 * 1024;
 
 /** Map a browser recording MIME type to the file extension providers expect. */
 export function audioFiletype(mimeType: string): string {
-  const base = mimeType.split(';')[0]!.trim().toLowerCase();
-  switch (base) {
+  const [base = ''] = mimeType.split(';');
+  switch (base.trim().toLowerCase()) {
     case 'audio/webm':
     case 'video/webm':
       return 'webm';
@@ -91,25 +78,18 @@ export function factoryVoiceSettingsKey(factory: VoiceFactory): { orgId: string;
   return { orgId: factory.orgId, userId: factoryVoiceSettingsUserId(factory.id) };
 }
 
-/** Which key a provider resolves to and which saved choices apply, in order, under a Factory's model scope. */
+/** Like an interactive chat: `factory` scope bills the Factory's model and org keys, anything else the caller's own. */
 export interface VoicePolicy {
+  scope: EffectiveModelScope;
   keyFor(provider: string): string | undefined;
-  settingsKeys: Array<{ orgId: string; userId: string }>;
+  settingsKey: { orgId: string; userId: string };
 }
 
 export function voicePolicy(caller: VoiceCaller, factory: VoiceFactory | undefined): VoicePolicy {
-  if (!factory) {
-    return { keyFor: p => caller.userKey(p) ?? caller.orgKey(p), settingsKeys: [caller.settingsKey] };
+  if (factory && effectiveModelScope(factory.modelScope, 'session') === 'factory') {
+    return { scope: 'factory', keyFor: p => caller.orgKey(p), settingsKey: factoryVoiceSettingsKey(factory) };
   }
-  const factoryKey = factoryVoiceSettingsKey(factory);
-  switch (factory.modelScope) {
-    case 'factory':
-      return { keyFor: p => caller.orgKey(p), settingsKeys: [factoryKey] };
-    case 'user':
-      return { keyFor: p => caller.userKey(p), settingsKeys: [caller.settingsKey, factoryKey] };
-    case 'hybrid':
-      return { keyFor: p => caller.userKey(p) ?? caller.orgKey(p), settingsKeys: [caller.settingsKey, factoryKey] };
-  }
+  return { scope: 'user', keyFor: p => caller.userKey(p), settingsKey: caller.settingsKey };
 }
 
 /** A saved choice, if storage holds one the registry still lists. */
@@ -123,18 +103,6 @@ export async function savedSTTModel(
   return saved ? STT_MODELS.find(m => m.provider === saved.provider && m.model === saved.model) : undefined;
 }
 
-/** The first saved choice the policy honors (personal before the Factory's). */
-async function policyModel(
-  voiceSettings: VoiceSettingsStorage | undefined,
-  policy: VoicePolicy,
-): Promise<STTModel | undefined> {
-  for (const key of policy.settingsKeys) {
-    const saved = await savedSTTModel(voiceSettings, key);
-    if (saved) return saved;
-  }
-  return undefined;
-}
-
 export type STTChoice = { entry: STTModel; apiKey: string } | { error: string };
 
 /**
@@ -145,7 +113,7 @@ export async function chooseSTTModel(
   policy: VoicePolicy,
   voiceSettings: VoiceSettingsStorage | undefined,
 ): Promise<STTChoice> {
-  const saved = await policyModel(voiceSettings, policy);
+  const saved = await savedSTTModel(voiceSettings, policy.settingsKey);
   const provider = saved?.provider ?? sttProviders().find(p => policy.keyFor(p) !== undefined);
   const apiKey = provider ? policy.keyFor(provider) : undefined;
   if (!provider || !apiKey) {

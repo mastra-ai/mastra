@@ -1,10 +1,9 @@
-import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import type { ProviderInfo } from '../../../../../api/types';
 import { useOrgKeyAdminQuery, useProvidersQuery } from '../../../../../hooks/use-providers';
-import type { VoiceKeyStatus } from '../../../../../hooks/use-voice-settings';
+import type { VoiceKeyStatus, VoiceSettings } from '../../../../../hooks/use-voice-settings';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { AddApiKeyDialog } from '../AddApiKeyDialog';
 import { ConnectedProviderRow } from '../models/providers/ConnectedProviderRow';
@@ -16,15 +15,7 @@ import {
   sharedSourceStatus,
   storedCredentialScope,
 } from '../provider-credential';
-import type { CredentialScope } from '../provider-credential';
 import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
-import type { VoiceKeyScope } from './key-scope';
-
-const ORG_FALLBACK_STATUS: StatusPresentation = {
-  label: 'Organization key',
-  tone: 'neutral',
-  description: 'Used when you have no personal key',
-};
 
 /** Deepgram only transcribes, so the chat provider catalog does not list it. */
 function speechProviderInfo(status: VoiceKeyStatus, catalog: ProviderInfo[] | undefined): ProviderInfo {
@@ -37,24 +28,15 @@ function speechProviderInfo(status: VoiceKeyStatus, catalog: ProviderInfo[] | un
   );
 }
 
-function voiceKeyConnection(
-  status: VoiceKeyStatus,
-  provider: ProviderInfo,
-  scope: CredentialScope,
-  keyScope: VoiceKeyScope,
-): ProviderConnection | undefined {
-  if (scope === 'org' ? status.org : status.user) {
-    const shared = sharedSourceStatus(provider.source);
-    return shared
-      ? { provider, status: shared, credential: undefined, signInExpired: false }
-      : { provider, status: CREDENTIAL_STATUS.api_key, credential: 'api_key', signInExpired: false };
-  }
-  return keyScope === undefined && status.org
-    ? { provider, status: ORG_FALLBACK_STATUS, credential: undefined, signInExpired: false }
-    : undefined;
+function voiceKeyConnection(status: VoiceKeyStatus, provider: ProviderInfo): ProviderConnection | undefined {
+  if (!status.saved) return undefined;
+  const shared = sharedSourceStatus(provider.source);
+  return shared
+    ? { provider, status: shared, credential: undefined, signInExpired: false }
+    : { provider, status: CREDENTIAL_STATUS.api_key, credential: 'api_key', signInExpired: false };
 }
 
-export function SpeechToTextKeys({ keys, keyScope }: { keys: VoiceKeyStatus[]; keyScope: VoiceKeyScope }) {
+export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scope: VoiceSettings['scope'] }) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
@@ -64,12 +46,12 @@ export function SpeechToTextKeys({ keys, keyScope }: { keys: VoiceKeyStatus[]; k
   if (providersQuery.isPending) return <ProviderRowsSkeleton />;
 
   const authEnabled = authQuery.data?.authEnabled === true;
-  const scope = storedCredentialScope(keyScope ?? 'user', authEnabled);
-  const readOnly = scope === 'org' && orgKeyAdminQuery.data === false;
+  const credentialScope = storedCredentialScope(scope === 'factory' ? 'org' : 'user', authEnabled);
+  const readOnly = credentialScope === 'org' && orgKeyAdminQuery.data === false;
   const actionsDisabled = authQuery.isPending || readOnly;
   const options = keys.map(status => {
     const provider = speechProviderInfo(status, providersQuery.data);
-    return { provider, connection: voiceKeyConnection(status, provider, scope, keyScope) };
+    return { provider, connection: voiceKeyConnection(status, provider) };
   });
 
   const openKeyDialog = (provider: ProviderInfo) => {
@@ -85,7 +67,7 @@ export function SpeechToTextKeys({ keys, keyScope }: { keys: VoiceKeyStatus[]; k
             <ConnectedProviderRow
               key={connection.provider.provider}
               connection={connection}
-              requestScope={authEnabled ? scope : undefined}
+              requestScope={authEnabled ? credentialScope : undefined}
               disabled={actionsDisabled}
               onUpdateKey={() => setKeyDialogProvider(connection.provider)}
             />
@@ -109,7 +91,7 @@ export function SpeechToTextKeys({ keys, keyScope }: { keys: VoiceKeyStatus[]; k
         <AddApiKeyDialog
           provider={keyDialogProvider}
           authEnabled={authEnabled}
-          fixedScope={authEnabled ? keyScope : undefined}
+          fixedScope={authEnabled ? credentialScope : undefined}
           onClose={() => setKeyDialogProvider(undefined)}
         />
       )}

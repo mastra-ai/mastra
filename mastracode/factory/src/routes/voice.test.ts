@@ -5,7 +5,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { audioFiletype, MAX_TRANSCRIBE_AUDIO_BYTES } from '../voice/transcription.js';
+import { audioFiletype, factoryVoiceSettingsKey, MAX_TRANSCRIBE_AUDIO_BYTES } from '../voice/transcription.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { VoiceRoutes } from './voice.js';
 import type { VoiceRoutesDeps } from './voice.js';
@@ -157,7 +157,7 @@ describe('POST /web/voice/transcribe (local mode)', () => {
 });
 
 describe('POST /web/voice/transcribe (tenant mode)', () => {
-  it("uses the caller's personal key over the organization's", async () => {
+  it("uses the caller's personal key, not the organization's", async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1' }, 'mistral', { type: 'api_key', key: 'org-mistral' });
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'mistral', {
@@ -172,15 +172,16 @@ describe('POST /web/voice/transcribe (tenant mode)', () => {
     expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
   });
 
-  it('falls back to an organization-shared key', async () => {
+  it('never uses an organization key outside a factory-scoped Factory', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
     const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
 
     const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
 
-    expect(res.status).toBe(200);
-    expect(calls.openai[0]!.authorization).toBe('Bearer sk-org');
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/speech-to-text API key/);
+    expect(calls.openai).toEqual([]);
   });
 
   it('ignores OAuth subscriptions and deployment env keys', async () => {
@@ -219,7 +220,7 @@ function putSettings(app: Hono, body: Record<string, unknown>) {
 }
 
 describe('/web/voice/settings', () => {
-  it('lists every registry model, marks the ones the caller has a key for, and starts on auto', async () => {
+  it('lists every registry model, reports which providers have a key, and starts on auto', async () => {
     const seed = await createFactoryStorageForTests();
     const app = mount({ authStorage: localAuthStorage({ mistral: 'sk-mistral' }), voiceSettings: seed.voiceSettings });
 
@@ -227,15 +228,22 @@ describe('/web/voice/settings', () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      personal: unknown;
-      models: Array<{ provider: string; model: string; available: boolean }>;
+      scope: string;
+      selected: unknown;
+      effective: unknown;
+      canEdit: boolean;
+      models: Array<{ provider: string; model: string }>;
+      keys: Array<{ provider: string; saved: boolean }>;
     };
-    expect(body.personal).toBeNull();
-    expect(body.models.find(m => m.model === 'voxtral-mini-latest')).toMatchObject({
-      provider: 'mistral',
-      available: true,
+    expect(body).toMatchObject({
+      scope: 'user',
+      selected: null,
+      canEdit: true,
+      effective: { provider: 'mistral', model: 'voxtral-mini-latest' },
     });
-    expect(body.models.find(m => m.model === 'whisper-1')).toMatchObject({ provider: 'openai', available: false });
+    expect(body.models.map(m => m.model)).toEqual(expect.arrayContaining(['voxtral-mini-latest', 'whisper-1']));
+    expect(body.keys.find(k => k.provider === 'mistral')?.saved).toBe(true);
+    expect(body.keys.find(k => k.provider === 'openai')?.saved).toBe(false);
   });
 
   it('transcribes with the saved model instead of the first provider with a key', async () => {
@@ -247,7 +255,7 @@ describe('/web/voice/settings', () => {
 
     const saved = await putSettings(app, { provider: 'mistral', model: 'voxtral-mini-latest' });
     expect(saved.status).toBe(200);
-    expect(((await saved.json()) as { personal: unknown }).personal).toEqual({
+    expect(((await saved.json()) as { selected: unknown }).selected).toEqual({
       provider: 'mistral',
       model: 'voxtral-mini-latest',
     });
@@ -268,7 +276,7 @@ describe('/web/voice/settings', () => {
     await putSettings(app, { provider: 'mistral', model: 'voxtral-mini-latest' });
 
     const cleared = await putSettings(app, { provider: null });
-    expect(((await cleared.json()) as { personal: unknown }).personal).toBeNull();
+    expect(((await cleared.json()) as { selected: unknown }).selected).toBeNull();
 
     const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
     expect(await res.json()).toMatchObject({ provider: 'openai', model: 'whisper-1' });
@@ -303,7 +311,6 @@ describe('/web/voice/settings', () => {
 
   it("keeps each signed-in user's choice separate", async () => {
     const seed = await createFactoryStorageForTests();
-    await seed.credentials.setCredential({ orgId: 'org1' }, 'mistral', { type: 'api_key', key: 'org-mistral' });
     const app = mount(
       { auth: fakeRouteAuth(), modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings },
       { org: 'org1' },
@@ -336,7 +343,7 @@ describe('Factory voice model and model scope', () => {
       },
       { org: 'org1' },
     );
-    return { seed, app, factoryId: project.id };
+    return { seed, app, factoryId: project.id, factoryKey: factoryVoiceSettingsKey({ ...project, modelScope }) };
   }
 
   async function keys(seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>) {
@@ -351,7 +358,7 @@ describe('Factory voice model and model scope', () => {
     const { seed, app, factoryId } = await tenantFactory('factory');
     await keys(seed);
     await putSettings(app, { provider: 'mistral' });
-    const saved = await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
+    const saved = await putSettings(app, { factoryId, provider: 'openai', model: 'whisper-1' });
     expect(saved.status).toBe(200);
 
     const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
@@ -374,79 +381,99 @@ describe('Factory voice model and model scope', () => {
     expect(calls.mistral).toEqual([]);
   });
 
-  it('user scope follows the Factory model without a personal choice but only uses personal keys', async () => {
-    const { seed, app, factoryId } = await tenantFactory('user');
-    await keys(seed);
-    await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
+  it.each(['user', 'hybrid'] as const)(
+    "%s scope uses the member's own choice and key, never the org key or Factory model",
+    async modelScope => {
+      const { seed, app, factoryId, factoryKey } = await tenantFactory(modelScope);
+      await keys(seed);
+      await seed.voiceSettings.set({ ...factoryKey, provider: 'openai', model: 'whisper-1' });
 
-    const missing = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
-    expect(missing.status).toBe(400);
-    expect(((await missing.json()) as { error: string }).error).toContain('openai API key');
-    expect(calls.openai).toEqual([]);
+      const auto = await transcribe(app, { audio: clip, mimeType: 'audio/mp4', factoryId });
+      expect(await auto.json()).toMatchObject({ provider: 'mistral', model: 'voxtral-mini-latest' });
+      expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
+      expect(calls.openai).toEqual([]);
 
-    await putSettings(app, { provider: 'mistral' });
+      await putSettings(app, { factoryId, provider: 'openai', model: 'whisper-1' });
+      const chosen = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+      expect(chosen.status).toBe(400);
+      expect(((await chosen.json()) as { error: string }).error).toContain('openai API key');
+      expect(calls.openai).toEqual([]);
+    },
+  );
+
+  it('hybrid scope with only an org key asks the member to add their own key', async () => {
+    const { seed, app, factoryId, factoryKey } = await tenantFactory('hybrid');
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'org-openai' });
+    await seed.voiceSettings.set({ ...factoryKey, provider: 'openai', model: 'whisper-1' });
+
     const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
-    expect(await res.json()).toMatchObject({ provider: 'mistral' });
-    expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/speech-to-text API key/);
+    expect(calls.openai).toEqual([]);
   });
 
-  it('hybrid scope prefers the personal choice and falls back to the Factory model with the org key', async () => {
-    const { seed, app, factoryId } = await tenantFactory('hybrid');
+  it('factory scope reports the Factory model and which organization keys exist', async () => {
+    const { seed, app, factoryId } = await tenantFactory('factory');
     await keys(seed);
-    await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
-
-    const fallback = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
-    expect(await fallback.json()).toMatchObject({ provider: 'openai' });
-    expect(calls.openai[0]!.authorization).toBe('Bearer org-openai');
-
-    await putSettings(app, { provider: 'mistral' });
-    const personal = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
-    expect(await personal.json()).toMatchObject({ provider: 'mistral' });
-  });
-
-  it('reports both saved choices, the effective model, and which keys exist at each scope', async () => {
-    const { seed, app, factoryId } = await tenantFactory('hybrid');
-    await keys(seed);
-    await putSettings(app, { target: 'factory', factoryId, provider: 'openai', model: 'whisper-1' });
+    await putSettings(app, { factoryId, provider: 'openai', model: 'whisper-1' });
 
     const res = await app.request(`/web/voice/settings?factoryId=${factoryId}`);
 
     const body = (await res.json()) as Record<string, unknown> & { keys: Array<Record<string, unknown>> };
     expect(body).toMatchObject({
-      modelScope: 'hybrid',
-      personal: null,
-      factory: { provider: 'openai', model: 'whisper-1' },
+      scope: 'factory',
+      selected: { provider: 'openai', model: 'whisper-1' },
       effective: { provider: 'openai', model: 'whisper-1' },
-      canEditFactory: true,
+      canEdit: true,
     });
     expect(body.keys.find(k => k.provider === 'openai')).toEqual({
       provider: 'openai',
       envVar: 'OPENAI_API_KEY',
-      user: false,
-      org: true,
+      saved: true,
     });
-    expect(body.keys.find(k => k.provider === 'deepgram')).toEqual({
-      provider: 'deepgram',
-      envVar: 'DEEPGRAM_API_KEY',
-      user: false,
-      org: false,
-    });
-    expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({
-      provider: 'mistral',
-      user: true,
-      org: false,
-    });
+    expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({ provider: 'mistral', saved: false });
   });
 
-  it('only lets org admins change the Factory voice model', async () => {
-    const { seed, app, factoryId } = await tenantFactory('hybrid', false);
+  it("hybrid scope reports the member's own choice and personal keys", async () => {
+    const { seed, app, factoryId, factoryKey } = await tenantFactory('hybrid', false);
+    await keys(seed);
+    await seed.voiceSettings.set({ ...factoryKey, provider: 'openai', model: 'whisper-1' });
 
-    const res = await putSettings(app, { target: 'factory', factoryId, provider: 'openai' });
+    const res = await app.request(`/web/voice/settings?factoryId=${factoryId}`);
+
+    const body = (await res.json()) as Record<string, unknown> & { keys: Array<Record<string, unknown>> };
+    expect(body).toMatchObject({
+      scope: 'user',
+      selected: null,
+      effective: { provider: 'mistral', model: 'voxtral-mini-latest' },
+      canEdit: true,
+    });
+    expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({ saved: true });
+    expect(body.keys.find(k => k.provider === 'openai')).toMatchObject({ saved: false });
+  });
+
+  it('only lets org admins change the Factory voice model under factory scope', async () => {
+    const { seed, app, factoryId, factoryKey } = await tenantFactory('factory', false);
+
+    const res = await putSettings(app, { factoryId, provider: 'openai' });
 
     expect(res.status).toBe(403);
-    expect(await seed.voiceSettings.get({ orgId: 'org1', userId: `factory-project:${factoryId}` })).toBeNull();
+    expect(await seed.voiceSettings.get(factoryKey)).toBeNull();
+    expect(await seed.voiceSettings.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
     const settings = await app.request(`/web/voice/settings?factoryId=${factoryId}`);
-    expect(((await settings.json()) as { canEditFactory: boolean }).canEditFactory).toBe(false);
+    expect(((await settings.json()) as { canEdit: boolean }).canEdit).toBe(false);
+  });
+
+  it('lets any member save their own voice model under user scope', async () => {
+    const { seed, app, factoryId, factoryKey } = await tenantFactory('user', false);
+
+    const res = await putSettings(app, { factoryId, provider: 'mistral' });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ scope: 'user', canEdit: true, selected: { provider: 'mistral' } });
+    expect(await seed.voiceSettings.get({ orgId: 'org1', userId: 'user-a' })).toMatchObject({ provider: 'mistral' });
+    expect(await seed.voiceSettings.get(factoryKey)).toBeNull();
   });
 
   it("does not reveal another org's Factory", async () => {

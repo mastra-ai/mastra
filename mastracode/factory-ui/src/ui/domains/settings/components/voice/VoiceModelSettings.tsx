@@ -3,84 +3,57 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { useUpdateVoiceSettings } from '../../../../../hooks/use-voice-settings';
-import type { UpdateVoiceSettingsArgs, VoiceModel, VoiceSettings } from '../../../../../hooks/use-voice-settings';
+import type { VoiceModel, VoiceSettings } from '../../../../../hooks/use-voice-settings';
+import type { VoiceChoice } from '../../../../../api/types';
 import { VoiceModelPicker, offeredVoiceModels, voiceModelLabel } from './VoiceModelPicker';
 
-const FACTORY_MODEL_HINT = {
-  editable: 'Auto uses the first provider with a key',
-  readOnly: 'Only organization admins can change the Factory model',
+const MODEL_ROW: Record<VoiceSettings['scope'], { label: string; picker: string; noKey: string }> = {
+  factory: {
+    label: 'Factory model',
+    picker: 'Factory voice model',
+    noKey: 'Add an organization speech-to-text key below to pick a model',
+  },
+  user: {
+    label: 'Your model',
+    picker: 'Your voice model',
+    noKey: 'Add a speech-to-text key below to pick a model',
+  },
 };
 
-const PERSONAL_MODEL_HINT = {
-  user: 'Transcribed with your personal keys',
-  hybrid: 'Your personal key is tried first',
-};
+const READ_ONLY_HINT = 'Only organization admins can change the Factory model';
+const AUTO_HINT = 'Auto uses the first provider with a key';
 
-const NO_KEY_HINT = {
-  personal: 'Add a speech-to-text key below to pick a model',
-  org: 'Add an organization speech-to-text key below to pick a model',
-};
-
-function factoryModelHint(settings: VoiceSettings, needsKey: boolean): string {
-  if (!settings.canEditFactory) return FACTORY_MODEL_HINT.readOnly;
-  if (!needsKey) return FACTORY_MODEL_HINT.editable;
-  return settings.modelScope === 'user' ? NO_KEY_HINT.personal : NO_KEY_HINT.org;
+function modelHint(settings: VoiceSettings, needsKey: boolean): string {
+  if (!settings.canEdit) return READ_ONLY_HINT;
+  return needsKey ? MODEL_ROW[settings.scope].noKey : AUTO_HINT;
 }
 
-const IN_USE_HINT = {
-  factory: 'This Factory transcribes with organization keys',
-  member: 'What the mic uses right now',
-};
-
-/** The Factory's voice model, the caller's override (unless the Factory bills the org), and what applies now. */
 export function VoiceModelSettings({ factoryId, settings }: { factoryId: string; settings: VoiceSettings }) {
   const update = useUpdateVoiceSettings(factoryId);
-  const { modelScope, models } = settings;
-  const orgKeys = new Set(settings.keys.filter(k => k.org).map(k => k.provider));
-  const factoryHasKey = (m: VoiceModel) => (modelScope === 'user' ? m.available : orgKeys.has(m.provider));
-  const personalHasKey = (m: VoiceModel) => m.available;
-  const factoryNeedsKey = offeredVoiceModels(models, factoryHasKey, settings.factory).length === 0;
-  const personalNeedsKey = offeredVoiceModels(models, personalHasKey, settings.personal).length === 0;
-  const factoryLabel = voiceModelLabel(models, settings.factory) ?? 'Auto';
+  const keyed = new Set(settings.keys.filter(k => k.saved).map(k => k.provider));
+  const hasKey = (m: VoiceModel) => keyed.has(m.provider);
+  const needsKey = offeredVoiceModels(settings.models, hasKey, settings.selected).length === 0;
+  const row = MODEL_ROW[settings.scope];
 
-  const save = (args: UpdateVoiceSettingsArgs) =>
-    update.mutate(args, { onError: error => toast.error(`Failed to update voice input: ${error.message}`) });
+  const save = (choice: VoiceChoice | undefined) =>
+    update.mutate(choice, { onError: error => toast.error(`Failed to update voice input: ${error.message}`) });
 
   return (
     <SettingsContainer>
-      <SettingsRow label="Factory model" description={factoryModelHint(settings, factoryNeedsKey)}>
+      <SettingsRow label={row.label} description={modelHint(settings, needsKey)}>
         <VoiceModelPicker
-          label="Factory voice model"
+          label={row.picker}
           unsetLabel="Auto"
-          selected={settings.factory}
-          models={models}
-          hasKey={factoryHasKey}
-          disabled={!settings.canEditFactory || factoryNeedsKey || update.isPending}
-          onPick={choice => save({ target: 'factory', choice })}
+          selected={settings.selected}
+          models={settings.models}
+          hasKey={hasKey}
+          disabled={!settings.canEdit || needsKey || update.isPending}
+          onPick={save}
         />
       </SettingsRow>
-      {modelScope !== 'factory' && (
-        <SettingsRow
-          label="Your model"
-          description={personalNeedsKey ? NO_KEY_HINT.personal : PERSONAL_MODEL_HINT[modelScope]}
-        >
-          <VoiceModelPicker
-            label="Your voice model"
-            unsetLabel={`Use Factory's (${factoryLabel})`}
-            selected={settings.personal}
-            models={models}
-            hasKey={personalHasKey}
-            disabled={personalNeedsKey || update.isPending}
-            onPick={choice => save({ target: 'personal', choice })}
-          />
-        </SettingsRow>
-      )}
-      <SettingsRow
-        label="In use for you"
-        description={modelScope === 'factory' ? IN_USE_HINT.factory : IN_USE_HINT.member}
-      >
+      <SettingsRow label="In use for you" description="What the mic uses right now">
         <Txt as="span" variant="caption">
-          {voiceModelLabel(models, settings.effective) ?? 'No speech-to-text key yet'}
+          {voiceModelLabel(settings.models, settings.effective) ?? 'No speech-to-text key yet'}
         </Txt>
       </SettingsRow>
     </SettingsContainer>

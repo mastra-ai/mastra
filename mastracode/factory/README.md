@@ -1040,6 +1040,17 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
+### Voice input
+
+The composer mic records a clip in the browser and posts it to `POST /web/voice/transcribe`. The server transcribes it with a provider from the Mastra Code speech-to-text registry (`@mastra/code-sdk/voice/stt-registry`), so keys never reach the browser.
+
+Voice input resolves its model and key the way an interactive chat in the same Factory does:
+
+- `factory` model scope: the Factory's voice model with organization keys. Only organization admins change the model.
+- `user` or `hybrid` model scope: each member's own voice model with personal keys. Organization keys are never used.
+
+Either side starts on auto, the first registry provider with a key. OAuth subscriptions are never used. With sign-in enabled, keys come only from stored credentials; in local mode the provider env var applies before a stored key. `GET`/`PUT /web/voice/settings` back **Settings → Models → Voice input**.
+
 ### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:

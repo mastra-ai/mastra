@@ -50,10 +50,9 @@ function acceptTranscribe(reply: () => Response): unknown[] {
 
 function stubVoiceSettings(effective: VoiceSettingsResponse['effective']) {
   const response: VoiceSettingsResponse = {
-    modelScope: 'user',
-    personal: null,
-    factory: null,
-    canEditFactory: true,
+    scope: 'user',
+    selected: null,
+    canEdit: true,
     effective,
     models: [],
     keys: [],
@@ -111,6 +110,44 @@ describe('Composer voice dictation', () => {
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
 
     expect(await screen.findByText(/Microphone access was blocked/)).toBeVisible();
+    expect(bodies).toEqual([]);
+  });
+
+  it.each([
+    ['NotFoundError', 'No microphone found. Connect one to use voice input.'],
+    ['NotReadableError', 'Your microphone is busy in another app. Close it and try again.'],
+  ])('tells you what to fix when the microphone fails with %s', async (name, message) => {
+    getUserMedia.mockRejectedValue(new DOMException('mic failed', name));
+    const user = userEvent.setup();
+    await composerReady();
+
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+
+    expect(await screen.findByText(message)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
+  });
+
+  it('releases the microphone and explains when the browser cannot start recording', async () => {
+    vi.stubGlobal(
+      'MediaRecorder',
+      class {
+        constructor() {
+          throw new DOMException('unsupported', 'NotSupportedError');
+        }
+      },
+    );
+    const bodies = acceptTranscribe(() => HttpResponse.json({ text: 'unused' }));
+    const user = userEvent.setup();
+    await composerReady();
+
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+
+    expect(
+      await screen.findByText('This browser could not start recording. Try again or use another browser.'),
+    ).toBeVisible();
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Stop dictation' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
     expect(bodies).toEqual([]);
   });
 
