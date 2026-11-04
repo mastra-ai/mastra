@@ -3,7 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AWAIT_BUFFER_STATUS_ROUTE, GET_OBSERVATIONAL_MEMORY_ROUTE } from './memory';
+import { AWAIT_BUFFER_STATUS_ROUTE, GET_MEMORY_STATUS_ROUTE, GET_OBSERVATIONAL_MEMORY_ROUTE } from './memory';
 import { createTestServerContext } from './test-utils';
 
 // Kept in its own file: getGatewayClient() caches the client for the module's lifetime.
@@ -145,5 +145,45 @@ describe('observational memory for gateway agents with a v2 key', () => {
 
     expect(result.record).toBeNull();
     expect(waitForBuffering).not.toHaveBeenCalled();
+  });
+
+  describe('GET_MEMORY_STATUS_ROUTE', () => {
+    const getStatus = (mastra: Mastra, resourceId: string, threadId: string) =>
+      (GET_MEMORY_STATUS_ROUTE.handler as any)({
+        ...createTestServerContext({ mastra }),
+        agentId: 'gateway-agent',
+        resourceId,
+        threadId,
+      });
+
+    it('reports the local record for the thread owner', async () => {
+      const { mastra, fetchMock } = await setupLocalOM();
+
+      const result = await getStatus(mastra, 'resource-1', 'thread-1');
+
+      expect(result.memoryType).toBe('local');
+      expect(result.observationalMemory).toMatchObject({ enabled: true, hasRecord: true });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a thread owned by another resource', async () => {
+      const { mastra } = await setupLocalOM();
+
+      await expect(getStatus(mastra, 'resource-2', 'thread-1')).rejects.toThrow('Access denied');
+    });
+
+    it('does not report a thread-scoped record whose thread is gone', async () => {
+      const { mastra, store } = await setupLocalOM();
+      await store.initializeObservationalMemory({
+        threadId: 'deleted-thread',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      const result = await getStatus(mastra, 'resource-2', 'deleted-thread');
+
+      expect(result.observationalMemory).toEqual({ enabled: true, hasRecord: false });
+    });
   });
 });

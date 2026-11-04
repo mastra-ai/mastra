@@ -541,14 +541,24 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 
         if (agent) {
           const omConfig = await getOMConfigFromAgent(agent, requestContext);
-          if (omConfig?.enabled && resourceId) {
+          const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+          let threadMissing = false;
+          if (omConfig?.enabled && effectiveResourceId && threadId) {
+            const thread = await memory.getThreadById({ threadId });
+            await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+            // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
+            threadMissing = !thread && omConfig.scope !== 'resource';
+          }
+          if (omConfig?.enabled && effectiveResourceId && threadMissing) {
+            omStatus = { enabled: true, hasRecord: false };
+          } else if (omConfig?.enabled && effectiveResourceId) {
             // For resource-scoped OM, lookup by resourceId only (threadId=null)
             const omThreadId = omConfig.scope === 'resource' ? undefined : threadId;
             // Get OM status from the agent's memory storage (not mastra.getStorage())
             try {
               const memoryStore = await memory.storage.getStore('memory');
               if (memoryStore) {
-                const status = await getOMStatus(memoryStore, resourceId, omThreadId);
+                const status = await getOMStatus(memoryStore, effectiveResourceId, omThreadId);
                 if (status) {
                   omStatus = {
                     enabled: true,
