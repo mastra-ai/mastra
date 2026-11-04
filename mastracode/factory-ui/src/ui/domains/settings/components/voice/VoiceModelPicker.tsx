@@ -14,9 +14,15 @@ export function voiceModelLabel(models: VoiceModel[], choice: VoiceChoice | unde
   return models.find(m => voiceOptionValue(m) === voiceOptionValue(choice))?.label;
 }
 
-function isOffered(model: VoiceModel, hasKey: (model: VoiceModel) => boolean, selected: VoiceChoice | undefined) {
-  // A saved model stays listed after its key is removed, so the picker shows what voice input will try.
-  return hasKey(model) || (selected !== undefined && voiceOptionValue(model) === voiceOptionValue(selected));
+/** A saved model stays listed after its key is removed, so the picker shows what voice input will try. */
+export function offeredVoiceModels(
+  models: VoiceModel[],
+  hasKey: (model: VoiceModel) => boolean,
+  selected: VoiceChoice | undefined,
+): VoiceModel[] {
+  return models.filter(
+    model => hasKey(model) || (selected !== undefined && voiceOptionValue(model) === voiceOptionValue(selected)),
+  );
 }
 
 export function VoiceModelPicker({
@@ -36,17 +42,13 @@ export function VoiceModelPicker({
   disabled: boolean;
   onPick: (choice?: VoiceChoice) => void;
 }) {
-  const options = models.filter(m => isOffered(m, hasKey, selected));
+  const options = offeredVoiceModels(models, hasKey, selected);
   const pick = (value: string) => {
     const model = options.find(m => voiceOptionValue(m) === value);
     onPick(model && { provider: model.provider, model: model.model });
   };
   return (
-    <Select
-      value={selected ? voiceOptionValue(selected) : UNSET}
-      disabled={disabled || options.length === 0}
-      onValueChange={pick}
-    >
+    <Select value={selected ? voiceOptionValue(selected) : UNSET} disabled={disabled} onValueChange={pick}>
       <SelectTrigger size="sm" aria-label={label} className="w-64">
         {voiceModelLabel(models, selected) ?? unsetLabel}
       </SelectTrigger>
