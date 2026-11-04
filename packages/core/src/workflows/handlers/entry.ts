@@ -176,10 +176,15 @@ export interface PersistStepUpdateParams {
    */
   stepIds?: string[];
   /**
-   * Storage v2: the journal of the execution this write belongs to, set by a step's start write.
-   * The step can still be running after its run stopped (see `RunJournal.close`), when the engine
-   * no longer has the run's journal, or has the journal of a later execution of the run. Unset,
-   * the write uses the run's current journal.
+   * Storage v2: set by a running foreach's progress write. The foreach's result differs from the
+   * one it last wrote only by these indices' `metadata.foreachProgress` entries, so the journal can
+   * send just those (see `RunJournal.write`).
+   */
+  foreachItems?: { stepId: string; indices: readonly number[] };
+  /**
+   * Storage v2: the journal of the execution this write belongs to, set by the engine's own writes,
+   * which aren't made from one of the execution's entries. Unset, the write uses the journal of the
+   * execution it is made from (see `getRunJournal`).
    */
   journal?: RunJournal;
 }
@@ -223,6 +228,7 @@ export async function persistStepUpdate(
     phase,
     recordResumedStepStart,
     stepIds,
+    foreachItems,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
@@ -289,6 +295,7 @@ export async function persistStepUpdate(
         resourceId,
         snapshot,
         stepIds,
+        foreachItems,
         ...(guardCancellation ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
       });
       if (!written) {
@@ -561,38 +568,82 @@ async function executeEntryBody(
     const idx = resume.resumePath.shift();
     const branchStep = entry.steps[idx!]!;
 
-    // Through executeEntry, like a resumed parallel branch, so the branch's result is written
-    // when it ends.
-    const branchResult = await executeEntry(engine, {
-      workflowId,
-      runId,
-      resourceId,
-      entry: branchStep,
-      prevStep,
-      serializedStepGraph,
-      stepResults,
-      resume,
-      executionContext: {
+    let branchResult: EntryExecutionResult;
+
+    if (branchStep.type !== 'step' || engine.getRunJournal(runId)) {
+      // Through executeEntry for nested block types (parallel, conditional, etc.). Storage v2 takes a
+      // plain step this way too, like a resumed parallel branch, so its result is written when it ends.
+      branchResult = await executeEntry(engine, {
         workflowId,
         runId,
-        parentWorkflow: executionContext.parentWorkflow,
-        executionPath: [...executionContext.executionPath, idx!],
-        stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
-        suspendedPaths: executionContext.suspendedPaths,
-        resumeLabels: executionContext.resumeLabels,
-        retryConfig: executionContext.retryConfig,
-        activeStepsPath: executionContext.activeStepsPath,
-        state: executionContext.state,
-      },
-      ...observabilityContext,
-      pubsub,
-      abortController,
-      requestContext,
-      actor,
-      outputWriter,
-      disableScorers,
-      perStep,
-    });
+        resourceId,
+        entry: branchStep,
+        prevStep,
+        serializedStepGraph,
+        stepResults,
+        resume,
+        executionContext: {
+          workflowId,
+          runId,
+          parentWorkflow: executionContext.parentWorkflow,
+          executionPath: [...executionContext.executionPath, idx!],
+          stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
+          retryConfig: executionContext.retryConfig,
+          activeStepsPath: executionContext.activeStepsPath,
+          state: executionContext.state,
+        },
+        ...observabilityContext,
+        pubsub,
+        abortController,
+        requestContext,
+        actor,
+        outputWriter,
+        disableScorers,
+        perStep,
+      });
+    } else {
+      const resumePrevOutput = getResumeStepPrevOutput({
+        isResumedStep: true,
+        stepId: branchStep.step.id,
+        stepResults,
+        prevOutput,
+      });
+
+      branchResult = await engine.executeStep({
+        workflowId,
+        runId,
+        resourceId,
+        step: branchStep.step,
+        prevOutput: resumePrevOutput,
+        stepResults,
+        serializedStepGraph,
+        resume,
+        restart,
+        timeTravel,
+        executionContext: {
+          workflowId,
+          runId,
+          parentWorkflow: executionContext.parentWorkflow,
+          executionPath: [...executionContext.executionPath, idx!],
+          stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
+          retryConfig: executionContext.retryConfig,
+          activeStepsPath: executionContext.activeStepsPath,
+          state: executionContext.state,
+        },
+        ...observabilityContext,
+        pubsub,
+        abortController,
+        requestContext,
+        actor,
+        outputWriter,
+        disableScorers,
+        perStep,
+      });
+    }
 
     // Apply context changes from resumed step
     engine.applyMutableContext(executionContext, branchResult.mutableContext);

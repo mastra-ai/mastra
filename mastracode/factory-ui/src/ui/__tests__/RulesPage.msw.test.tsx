@@ -47,7 +47,9 @@ function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false }] }),
+      HttpResponse.json({
+        projects: [{ id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, repositories: [] }],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),

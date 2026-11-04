@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
+import {
+  FACTORY_BOARD_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEMS_SCHEMA,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+} from './work-item-schema.js';
+
 /**
  * One row per project whose `version` is replaced after every committed write to that project's
- * `work_items`. Readers of the full card list compare it against the version their snapshot was
+ * cards (board items and work items). Readers of the full card list compare it against the version their snapshot was
  * taken at, so an unchanged board costs one indexed row read instead of every card.
  */
 export const FACTORY_BOARD_VERSIONS_SCHEMA: CollectionSchema = {
@@ -24,6 +30,17 @@ export interface BoardScope {
   factoryProjectId?: string;
 }
 
+/** The tables a card is stored in. */
+const CARD_TABLES = new Set([
+  FACTORY_BOARD_ITEMS_SCHEMA.name,
+  FACTORY_WORK_ITEMS_SCHEMA.name,
+  FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+  'work_items',
+]);
+function isCardTable(collection: string): boolean {
+  return CARD_TABLES.has(collection);
+}
+
 const scopeKey = (scope: BoardScope) => `${scope.orgId}\u0000${scope.factoryProjectId ?? ''}`;
 
 function scopeOfRow(row: Record<string, unknown> | null): BoardScope | undefined {
@@ -41,7 +58,7 @@ function scopeOfWhere(where: CollectionWhere): BoardScope | undefined {
 }
 
 /**
- * Wrap `ops` so every write to `work_items` reports the board it changed, once the write has
+ * Wrap `ops` so every write to a card table reports the board it changed, once the write has
  * resolved. Writes outside any tenant (`dangerouslyClearAll`) report nothing.
  */
 export function trackBoardWrites(
@@ -70,21 +87,21 @@ export function trackBoardWrites(
               },
               ...args,
             );
-            if (collection === 'work_items' && patched) await report(scopeOfRow(row));
+            if (isCardTable(collection) && patched) await report(scopeOfRow(row));
             return row;
           };
         case 'insertOne':
         case 'upsertOne':
           return async (collection: string, ...args: unknown[]) => {
             const row = await value.call(target, collection, ...args);
-            if (collection === 'work_items') await report(scopeOfRow(row));
+            if (isCardTable(collection)) await report(scopeOfRow(row));
             return row;
           };
         case 'updateMany':
         case 'deleteMany':
           return async (collection: string, where: CollectionWhere, ...args: unknown[]) => {
             const count: number = await value.call(target, collection, where, ...args);
-            if (collection === 'work_items' && count > 0) await report(scopeOfWhere(where));
+            if (isCardTable(collection) && count > 0) await report(scopeOfWhere(where));
             return count;
           };
         default:

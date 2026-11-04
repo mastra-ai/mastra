@@ -9,6 +9,7 @@ import { knowledgeScopeReadable, parseKnowledgePageRef } from '../storage/domain
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast, knowledgeRunScopes } from './declarations';
 import type { KnowledgeRole } from './declarations';
+import { knowledgePageRefs } from './page-refs';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
 
 /** What tools receive as their second argument. */
@@ -19,13 +20,16 @@ export type KnowledgeRunContext = {
 
 /** A page reference the run can't resolve; identical for missing and unreadable pages. */
 export class KnowledgeNotFoundError extends Error {
-  constructor(ref: string) {
-    super(`Knowledge page "${ref}" not found.`);
+  constructor(ref: string, closeMatches: string[] = []) {
+    super(
+      `Knowledge page "${ref}" not found.${closeMatches.length ? ` Close matches: ${closeMatches.join('; ')}.` : ''}`,
+    );
     this.name = 'KnowledgeNotFoundError';
   }
 }
 
 const NAME_CANDIDATES = 5;
+const CLOSE_MATCHES = 3;
 
 /**
  * One call's view of Knowledge: the run's principals, its read scope and its provenance. Built per
@@ -45,6 +49,7 @@ export class KnowledgeRun {
     runtime: KnowledgeScopeRuntime,
     storage: KnowledgeStorage,
     context: KnowledgeRunContext | undefined,
+    options: { write?: boolean } = {},
   ): Promise<KnowledgeRun> {
     const principals = knowledgeRunPrincipals(runtime, context);
     const author = context?.agent?.agentId ? `agent:${context.agent.agentId}` : 'agent';
@@ -52,8 +57,11 @@ export class KnowledgeRun {
       author,
       ...(context?.agent?.threadId ? { sourceThreadId: context.agent.threadId } : {}),
     };
-    // Held scopes are host-vouched, so they materialize (and late-link) on first use.
-    for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
+    // Held scopes are host-vouched, so a writing run materializes (and late-links) them. Reads create
+    // nothing: a scope with no pages yet reads the same as one that doesn't exist.
+    if (options.write) {
+      for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
+    }
     const read = (await runtime.readScopeFor(principals)) as Exclude<KnowledgeReadScope, 'all'>;
     return new KnowledgeRun(runtime, storage, principals, read, provenance);
   }
@@ -130,13 +138,47 @@ export class KnowledgeRun {
     const named = await this.storage.findPagesByName({ name: ref, read: this.read, limit: NAME_CANDIDATES });
     if (named.length === 1) return named[0]!;
     if (named.length > 1) {
+      const { refs } = await knowledgePageRefs(this.storage, this.read, named);
       throw new Error(
-        `Knowledge page name "${ref}" is ambiguous; use one of these ids: ${named
-          .map(page => `${page.id} (in ${page.scopeId})`)
+        `Knowledge page name "${ref}" is ambiguous; use one of these refs: ${named
+          .map(page => refs.get(page.id) ?? page.id)
           .join(', ')}.`,
       );
     }
     throw new KnowledgeNotFoundError(ref);
+  }
+
+  /**
+   * {@link page}, but a miss names up to a few readable pages whose name or path matches the ref's last
+   * segment, by full ref, so a model that guessed a path can read the right one next. Costs one search on a miss.
+   */
+  async pageOrCloseMatches(ref: string): Promise<KnowledgePage> {
+    try {
+      return await this.page(ref);
+    } catch (error) {
+      if (!(error instanceof KnowledgeNotFoundError)) throw error;
+      const hash = ref.indexOf('#');
+      const parsed = hash > 0 ? parseKnowledgePageRef(ref) : null;
+      const last = parsed ? parsed.path[parsed.path.length - 1]! : ref;
+      const query = last.replace(/[-_]+/g, ' ').trim();
+      if (!query) throw error;
+      const scope = parsed ? (await this.storage.getScopesByAddress([parsed.scope]))[0] : undefined;
+      const hits = await this.storage.searchPages({
+        query,
+        read: this.read,
+        ...(scope && knowledgeScopeReadable(scope, this.read) ? { scopeIds: [scope.id] } : {}),
+        limit: CLOSE_MATCHES * 2,
+      });
+      const pages = [...new Map(hits.map(hit => [hit.page.id, hit.page])).values()]
+        .filter(page => !page.isScope)
+        .slice(0, CLOSE_MATCHES);
+      if (pages.length === 0) throw error;
+      const { refs } = await knowledgePageRefs(this.storage, this.read, pages);
+      throw new KnowledgeNotFoundError(
+        ref,
+        pages.map(page => `${refs.get(page.id) ?? page.id} (${page.name})`),
+      );
+    }
   }
 
   async #readableScope(address: string, createAt: KnowledgeRole | undefined): Promise<KnowledgePage | null> {

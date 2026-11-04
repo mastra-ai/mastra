@@ -264,14 +264,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const record = this.db.workflowRunHeaders.get(key);
     if (!record) return null;
     const entries = this.db.workflowRunEntries.get(key) ?? [];
+    const ref = stateBaseOf(entries);
+    const base = ref ? this.stateOf(ref.workflowName, ref.runId, ref).state : undefined;
     return {
       workflow_name: record.workflow_name,
       run_id: record.run_id,
       resourceId: record.resourceId,
-      snapshot: {
-        ...materializeWorkflowRun(record.header, entries),
-        value: this.stateOf(record.workflow_name, record.run_id).state,
-      },
+      snapshot: materializeWorkflowRun(record.header, entries, base),
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       storageVersion: 2,
@@ -616,6 +615,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       | { state: Record<string, any> }
     ),
   ): Promise<{ seq: number }> {
+    this.assertFence(undefined, args.runId, 'appendWorkflowRunStateDraft');
     const key = this.getWorkflowKey(args.workflowName, args.runId);
     const record = this.db.workflowRunHeaders.get(key);
     if (!record) throw new Error(`Storage v2 run ${args.workflowName}/${args.runId} is not stored`);

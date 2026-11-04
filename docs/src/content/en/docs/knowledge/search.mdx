@@ -1,0 +1,71 @@
+---
+title: "Search"
+description: "How Knowledge search ranks results, and how to add search by meaning."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# Search
+
+Agents find pages with `knowledge_search`, which matches words out of the box. This page explains how keyword search finds pages, and how to add search by meaning.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+## How search finds pages
+
+`knowledge_search` matches the words in the query against page names, descriptions and bodies, and against note text. A page that has more of the query's words ranks higher. A word in the name counts for more than one in the description, and a word in the description counts for more than one in the body. Pages come before notes.
+
+To help search find a page, put the words people search for in its name and description. For the full ranking order, see [`knowledge_search`](/reference/knowledge/knowledge-tools#knowledge_search).
+
+A search returns only what the run can read.
+
+With `MongoDBStore`, pass `scope` to keep searches fast when runs can read many scopes. A search without `scope` first collects every scope the run can read, so it slows down as that number grows.
+
+## Add search by meaning
+
+Pass a `vector` store and an `embedder` to match pages and notes by meaning as well as by keyword. A search for "reimbursement" then finds a page about getting money back, with no shared word:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  vector: new LibSQLVector({ id: 'knowledge-vector', url: 'file:./knowledge.db' }),
+  embedder: new ModelRouterEmbeddingModel('__GATEWAY_OPENAI_EMBEDDING_MODEL__'),
+  scopes: { ...knowledgeMemoryScopes() },
+  tools: true,
+})
+```
+
+Pass both or neither. [`embedderOptions`](/reference/knowledge/knowledge-class#constructor-options) works the same way it does in Memory.
+
+`knowledge_search` then merges keyword and meaning results by rank, so a close meaning match can come before a name match. Every semantic hit is read again with the run's access before it can take a place in the results, so hits the run can't read are dropped and don't take a slot. Like all access checks in the alpha, this isn't a guaranteed [isolation boundary](/docs/knowledge/scopes-and-access). Search checks at most 1,000 semantic candidates, though, so when most close matches are unreadable, readable ones further down can be missed.
+
+Pages and notes are embedded when they're written. Scope pages aren't embedded, but notes on them are. Long pages are embedded in parts, and search still returns each page once. See [Limits](/reference/knowledge/limits) for the sizes.
+
+Knowledge doesn't embed content that already exists. Pages and notes written before you add `vector` and `embedder` stay keyword-only until they change.
+
+Avoid switching embedders on a store that already has embedded content. Knowledge can't re-embed it yet:
+
+- **Different dimension:** search uses a new index, so existing content is keyword-only until it changes.
+- **Same dimension:** search keeps using the old vectors and compares them with the new model's queries, which gives poor matches until each page changes.
+
+### When embedding fails
+
+If embedding or the vector write fails when a page or note is written, Knowledge tries again after about half a second, 2 seconds and 7.5 seconds. That covers a database that scales to zero and takes a few seconds to wake. Errors the provider marks as not retryable, such as a bad API key, aren't tried again.
+
+If every attempt fails, the write still succeeds and Mastra logs a warning. A new page or note stays keyword-only. An updated one keeps its previous vectors, so meaning search matches its old content. Both last until it's written again with a change. An `upsertPage()` call that comes back `unchanged` writes nothing, so it doesn't embed the page either.
+
+If the embedder or vector store fails during a search, the search returns keyword results and logs a warning.
+
+## Next steps
+
+Next, [load your content](/docs/knowledge/load-your-content) into Knowledge so agents have something to search before they start writing.

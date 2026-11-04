@@ -249,6 +249,61 @@ describe('restarting a nested run whose process died', () => {
     return { calls, storage, innerStatuses, build: buildForeach };
   }
 
+  it('reads a parent once for every leftover nested run it decides on', async () => {
+    const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
+    const store = storage.stores.workflows!;
+
+    // Two more leftovers under the same parent, as a second and third crash would leave them: a
+    // crashed foreach of 50 items leaves 50 of these pointing at one parent run.
+    const [orphan] = (await store.listWorkflowRuns({ workflowName: 'inner' })).runs.filter(
+      run => (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot).status === 'running',
+    );
+    expect(orphan).toBeDefined();
+    for (const suffix of ['b', 'c']) {
+      await store.persistWorkflowSnapshot({
+        workflowName: 'inner',
+        runId: `inner-${suffix}`,
+        snapshot: JSON.parse(JSON.stringify(orphan!.snapshot)),
+      });
+    }
+
+    const lookups = vi.spyOn(store, 'loadWorkflowRunStatus');
+    const third = build(calls);
+    new Mastra({ logger: false, storage, workflows: third });
+    await third.inner.restartAllActiveWorkflowRuns();
+
+    const parentLookups = lookups.mock.calls.filter(([args]) => args.workflowName === 'outer');
+    expect(parentLookups).toHaveLength(1);
+    expect(calls).toEqual([0, 1]);
+    expect(await innerStatuses()).toContain('running');
+  });
+
+  it('reads a parent once per run when the Mastra sweep decides on the leftovers', async () => {
+    const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
+    const store = storage.stores.workflows!;
+
+    const [orphan] = (await store.listWorkflowRuns({ workflowName: 'inner' })).runs.filter(
+      run => (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot).status === 'running',
+    );
+    for (const suffix of ['b', 'c']) {
+      await store.persistWorkflowSnapshot({
+        workflowName: 'inner',
+        runId: `inner-${suffix}`,
+        snapshot: JSON.parse(JSON.stringify(orphan!.snapshot)),
+      });
+    }
+
+    // The Mastra-level sweep is a separate loop over every active run, so its cache is its own.
+    const lookups = vi.spyOn(store, 'loadWorkflowRunStatus');
+    const third = build(calls);
+    await new Mastra({ logger: false, storage, workflows: third }).restartAllActiveWorkflowRuns();
+
+    const parentLookups = lookups.mock.calls.filter(([args]) => args.workflowName === 'outer');
+    expect(parentLookups).toHaveLength(1);
+    expect(calls).toEqual([0, 1]);
+    expect(await innerStatuses()).toContain('running');
+  });
+
   it('restarts a nested run on its own while its parent is suspended', async () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('suspended');
 
@@ -415,6 +470,161 @@ describe('restarting a nested run whose process died', () => {
       expect(result.state).toEqual(state);
       expect((await storedStates(storage))['outer/run-1']).toEqual({ status: 'success', state });
     });
+
+    it('does not apply again the changes a foreach item made before it suspended', async () => {
+      const build = () => {
+        const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+          .then(appendItem('inner-a'))
+          .then(appendItem('inner-wait', { suspends: true }))
+          .then(appendItem('inner-b'))
+          .commit();
+        return createWorkflow({
+          id: 'outer',
+          inputSchema: z.array(num),
+          outputSchema: z.array(num),
+          stateSchema: items,
+        })
+          .foreach(inner)
+          .commit();
+      };
+
+      const storage = new MockStore();
+      const first = build();
+      new Mastra({ logger: false, storage, workflows: { outer: first } });
+      const run = await first.createRun({ runId: 'run-1' });
+      expect((await run.start({ inputData: [{ n: 0 }], initialState: { items: [] } })).status).toBe('suspended');
+
+      // The first suspension hands back this item's `inner-a:0`; the resume adds the rest, then
+      // the process dies before the parent saves what the resume handed back.
+      const dead = dieAfterNestedSuccess(storage);
+      void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
+      await dead;
+
+      const outer = build();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const result = await (
+        await outer.createRun({ runId: 'run-1' })
+      ).restart({ outputOptions: { includeState: true } });
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ items: ['inner-a:0', 'inner-wait:1', 'inner-b:2'] });
+    });
+
+    it('does not apply again the changes a nested run made before it suspended', async () => {
+      const build = () => {
+        const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+          .then(appendItem('inner-a'))
+          .then(appendItem('inner-wait', { suspends: true }))
+          .then(appendItem('inner-b'))
+          .commit();
+        return createWorkflow({ id: 'outer', inputSchema: num, outputSchema: num, stateSchema: items })
+          .then(inner)
+          .commit();
+      };
+
+      const storage = new MockStore();
+      const first = build();
+      new Mastra({ logger: false, storage, workflows: { outer: first } });
+      const run = await first.createRun({ runId: 'run-1' });
+      expect((await run.start({ inputData: { n: 0 }, initialState: { items: [] } })).status).toBe('suspended');
+
+      // The first suspension hands back `inner-a:0`; the resume adds the rest, then the process dies.
+      const dead = dieAfterNestedSuccess(storage);
+      void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
+      await dead;
+
+      const outer = build();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const result = await (
+        await outer.createRun({ runId: 'run-1' })
+      ).restart({ outputOptions: { includeState: true } });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ items: ['inner-a:0', 'inner-wait:1', 'inner-b:2'] });
+    });
+
+    it('keeps a key the nested run never touched at the value a sibling left it', async () => {
+      const stateSchema = z.object({ items: z.array(z.string()), tag: z.string() });
+      let childStarted!: () => void;
+      const started = new Promise<void>(resolve => (childStarted = resolve));
+      let siblingWrote!: () => void;
+      const wrote = new Promise<void>(resolve => (siblingWrote = resolve));
+
+      // Writes `tag` once, only after the nested run has started. The restart re-runs this branch,
+      // and `inner`'s own copy of the state still says 'base', so the merge alone has to keep 'newer'.
+      let wroteTag = false;
+      const sibling = createStep({
+        id: 'sibling',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema,
+        execute: async ({ inputData, state, setState }) => {
+          await started;
+          if (!wroteTag) {
+            wroteTag = true;
+            await setState({ ...state, tag: 'newer' });
+            siblingWrote();
+          }
+          return inputData;
+        },
+      });
+      const innerWait = createStep({
+        id: 'inner-wait',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema,
+        resumeSchema: z.boolean(),
+        execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+          childStarted();
+          if (resumeData === undefined) {
+            await wrote;
+            return suspend({});
+          }
+          await setState({ ...state, items: [...state.items, `inner-wait:${inputData.n}`] });
+          return inputData;
+        },
+      });
+      const innerB = createStep({
+        id: 'inner-b',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema,
+        execute: async ({ inputData, state, setState }) => {
+          const n = inputData.n + 1;
+          await setState({ ...state, items: [...state.items, `inner-b:${n}`] });
+          return { n };
+        },
+      });
+      const buildParallel = () => {
+        const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema })
+          .then(innerWait)
+          .then(innerB)
+          .commit();
+        return createWorkflow({ id: 'outer', inputSchema: num, outputSchema: num, stateSchema })
+          .parallel([sibling, inner])
+          .commit();
+      };
+
+      const storage = new MockStore();
+      const dying = buildParallel();
+      new Mastra({ logger: false, storage, workflows: { outer: dying } });
+      const run = await dying.createRun({ runId: 'run-1' });
+      expect((await run.start({ inputData: { n: 0 }, initialState: { items: [], tag: 'base' } })).status).toBe(
+        'suspended',
+      );
+      const dead = dieAfterNestedSuccess(storage);
+      void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
+      await dead;
+
+      const outer = buildParallel();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const result = await (
+        await outer.createRun({ runId: 'run-1' })
+      ).restart({ outputOptions: { includeState: true } });
+
+      expect(result.status).toBe('success');
+      // `inner` hands back the items it appended; `tag` is the sibling's write, which it never saw.
+      expect(result.state).toEqual({ items: ['inner-wait:0', 'inner-b:1'], tag: 'newer' });
+    });
   });
 });
 
@@ -537,5 +747,136 @@ describe('a nested run hands back only its changes', () => {
     expect(result.status).toBe('success');
     const appended = (result.state as { items: string[] }).items;
     expect(unordered ? [...appended].sort() : appended).toEqual(expected);
+  });
+});
+
+describe('what a parked nested run exposes to callers', () => {
+  /** `inner` suspends on its first step, so the parent parks on it holding the state it started from. */
+  const build = (nested: 'then' | 'foreach') => {
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+      .then(appendItem('inner-wait', { suspends: true }))
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: nested === 'then' ? num : z.array(num),
+      outputSchema: nested === 'then' ? num : z.array(num),
+      stateSchema: items,
+    });
+    return (nested === 'then' ? outer.then(inner) : outer.foreach(inner)).commit();
+  };
+
+  const parkedMeta = (result: any) => result.steps.inner.suspendPayload.__workflow_meta;
+
+  it('keeps the state a re-driven nested run starts from out of the result and the stored run', async () => {
+    const outer = build('then');
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const result: any = await run.start({ inputData: { n: 0 }, initialState: { items: ['hidden'] } });
+    expect(result.status).toBe('suspended');
+    // Callers only see workflow state through `includeState`, so a base kept for the recovery sweep
+    // has no business riding out inside the step metadata they do get.
+    expect(result).not.toHaveProperty('state');
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    expect(parkedMeta(result).runId).toBe('run-1');
+    expect(parkedMeta(result)).not.toHaveProperty('startState');
+
+    // The stored run goes through a different projection, and had to strip it as well.
+    const stored: any = await outer.getWorkflowRunById('run-1');
+    expect(parkedMeta(stored).runId).toBe('run-1');
+    expect(parkedMeta(stored)).not.toHaveProperty('startState');
+  });
+
+  it('keeps a .foreach() item base out of the result too', async () => {
+    const outer = build('foreach');
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const result: any = await run.start({ inputData: [{ n: 0 }, { n: 1 }], initialState: { items: ['hidden'] } });
+    expect(result.status).toBe('suspended');
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    expect(parkedMeta(result)).not.toHaveProperty('startState');
+    // Each parked iteration carries its own base for the re-drive.
+    const parkedItems = parkedMeta(result).foreachOutput as any[];
+    expect(parkedItems.length).toBeGreaterThan(0);
+    for (const item of parkedItems) {
+      expect(item.suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+      expect(item.suspendPayload.__workflow_meta.runId).toBeTypeOf('string');
+    }
+  });
+
+  it('keeps a parked item base out of the result when a sibling item failed', async () => {
+    // The failing sibling leaves the step metadata without a base of its own, so an item's base is
+    // only reachable through `foreachOutput`.
+    const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num, stateSchema: items })
+      .then(
+        createStep({
+          id: 'inner-wait',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          resumeSchema: z.boolean(),
+          execute: async ({ inputData, state, setState, resumeData, suspend }) => {
+            if (inputData.n === 1) {
+              // Slow enough that the other item is parked before this one fails.
+              await new Promise(resolve => setTimeout(resolve, 30));
+              throw new Error('item failed');
+            }
+            if (resumeData === undefined) {
+              await setState({ items: [...state.items, `inner-wait:${inputData.n}`] });
+              return suspend({});
+            }
+            return { n: inputData.n + 1 };
+          },
+        }),
+      )
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: z.array(num),
+      outputSchema: z.array(num),
+      stateSchema: items,
+    })
+      .foreach(inner, { concurrency: 2 })
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const result: any = await run.start({ inputData: [{ n: 0 }, { n: 1 }], initialState: { items: ['hidden'] } });
+    expect(result.status).toBe('failed');
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    const parkedItems = parkedMeta(result).foreachOutput as any[];
+    expect(parkedItems[0].suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+
+    const stored: any = await outer.getWorkflowRunById('run-1');
+    const storedItems = parkedMeta(stored).foreachOutput as any[];
+    expect(storedItems[0].suspendPayload.__workflow_meta).not.toHaveProperty('startState');
+  });
+
+  it('leaves the workflow input alone when it happens to look like a step result', async () => {
+    // The input is the caller's data. Cleaning it like a step result would rewrite what they passed in.
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      stateSchema: items,
+    })
+      .then(
+        createStep({
+          id: 'echo-input',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ inputData }) => inputData,
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+    const run = await outer.createRun({ runId: 'run-1' });
+
+    const inputData = { suspendPayload: { __workflow_meta: { startState: { items: ['mine'] } } } };
+    const result: any = await run.start({ inputData, initialState: { items: [] } });
+    expect(result.status).toBe('success');
+    expect(result.input).toEqual(inputData);
+    expect(result.steps.input).toEqual(inputData);
   });
 });

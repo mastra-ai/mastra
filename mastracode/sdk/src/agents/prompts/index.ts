@@ -8,10 +8,12 @@ export { fastModePrompt } from './fast.js';
 
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
+import type { RequestContextReader } from '../../auth/account-routing-context.js';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
+import { resolveProviderWebSearchRoute } from '../model.js';
 import { loadSessionInstructions, formatInstructionSource, AGENT_INSTRUCTIONS_HEADING } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
@@ -24,8 +26,14 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
   hostInstructions?: string;
+  /** Request whose credentials decide the model's transport, and so its web search tool. */
+  requestContext?: RequestContextReader;
   /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
   disabledBuiltinTools?: readonly string[];
+  /** Host-configured workspace-relative plans directory (see `MastraCodeConfig.plansDir`). */
+  plansDir?: string;
+  /** Agent tools removed via `disabledTools` (e.g. `web_search`); treated as denied. */
+  disabledTools?: readonly string[];
   /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
   submitPlanAvailable?: boolean;
   currentDate: string;
@@ -82,11 +90,10 @@ export function buildFullPrompt(ctx: PromptContext): string {
  */
 export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // Determine whether web search tools are available
-  const modelId = ctx.modelId;
+  // Parallel/Tavily register web_search and web_extract; provider search registers only web_search.
+  const hasWebExtract = hasParallelKey() || hasTavilyKey();
   const hasWebSearch =
-    hasParallelKey() ||
-    hasTavilyKey() ||
-    (!!modelId && (modelId.startsWith('anthropic/') || modelId.startsWith('openai/')));
+    hasWebExtract || resolveProviderWebSearchRoute(ctx.modelId, { requestContext: ctx.requestContext }) !== undefined;
 
   // Collect per-tool deny rules so guidance omits denied tools
   const deniedTools = new Set<string>();
@@ -99,6 +106,8 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
 
   // Disabled built-ins are never registered, so they are denied for guidance too.
   for (const name of ctx.disabledBuiltinTools ?? []) deniedTools.add(name);
+  // `createDynamicTools` drops disabled agent tools (such as web_search), so omit their guidance too.
+  for (const name of ctx.disabledTools ?? []) deniedTools.add(name);
 
   // LSP is opt-in — when it is off the tool is never registered, so its
   // guidance must not be advertised either.
@@ -108,9 +117,10 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
+    hasWebExtract,
     hasSubagents: ctx.hasSubagents,
     deniedTools,
-    plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
+    plansDir: getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir }),
   });
 
   // Map new context to base context

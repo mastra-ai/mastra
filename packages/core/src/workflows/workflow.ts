@@ -86,7 +86,13 @@ import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
-import { cancelNestedRun, nestedRunParentOf, nestedRunRecoveryAction, nestedRunStatusOf } from './nested-run-recovery';
+import {
+  cancelNestedRun,
+  createNestedRunParentStatusLookup,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from './nested-run-recovery';
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
@@ -2121,6 +2127,7 @@ export class Workflow<
       persistResumeClaim: options.persistResumeClaim,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
+      watchExecutionLoss: options.watchExecutionLoss,
       pruneSnapshot: options.pruneSnapshot,
       storageVersion: options.storageVersion,
       tracingPolicy: options.tracingPolicy,
@@ -3593,6 +3600,11 @@ export class Workflow<
     if (res.state) {
       await (handBackBase && handBackState ? handBackState(res.state, handBackBase) : setState(res.state));
     }
+    // What this nested run has handed back so far. A suspended nested run may have changed state
+    // before parking, and the hand-back above already merged those changes into the parent. If the
+    // parent crashes and re-executes this step, the finished run's state is rebased onto the
+    // parent's current state from here, so the changes it already handed back aren't applied twice.
+    const handedBack = handBackBase ? toJsonState(res.state) : undefined;
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
@@ -3618,6 +3630,11 @@ export class Workflow<
             __workflow_meta: {
               ...nestedMeta,
               ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+              // The state this nested run had already handed back when it parked. If the parent
+              // crashes and re-executes this step, the finished nested run's state is rebased onto
+              // the parent's current state with this base, so keys a sibling changed meanwhile are
+              // not overwritten and nothing this nested run already handed back is applied twice.
+              ...(handedBack ? { startState: handedBack } : {}),
               runId: run.runId,
               path: suspendPath,
             },
@@ -3690,6 +3707,9 @@ export class Workflow<
     }
     const activeRuns = await this.listActiveWorkflowRuns();
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
     const runs: typeof activeRuns.runs = [];
     for (const runSnapshot of activeRuns.runs) {
       const parent = nestedRunParentOf(runSnapshot.snapshot);
@@ -3700,7 +3720,7 @@ export class Workflow<
       // Restarting a nested run standalone while its parent drives it runs the item twice, and
       // after the parent finished nothing collects the result, so the item runs a second time.
       try {
-        const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
+        const parentStatus = await parentStatusOf(parent);
         const recovery = nestedRunRecoveryAction(parentStatus);
         if (recovery === 'restart') {
           runs.push(runSnapshot);

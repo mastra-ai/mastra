@@ -103,6 +103,7 @@ import {
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import {
   cancelNestedRun,
+  createNestedRunParentStatusLookup,
   nestedRunParentOf,
   nestedRunRecoveryAction,
   nestedRunStatusOf,
@@ -4330,6 +4331,9 @@ export class Mastra<
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
     const workflowsStore = await this.#storage?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
     const runs: WorkflowRuns['runs'] = [];
     for (const run of activeRuns.runs) {
       const parent = nestedRunParentOf(run.snapshot);
@@ -4341,7 +4345,7 @@ export class Mastra<
       // restarting it standalone would do: run it twice while the parent drives it, or re-run the
       // item after the parent already finished it.
       try {
-        const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
+        const parentStatus = await parentStatusOf(parent);
         const recovery = nestedRunRecoveryAction(parentStatus);
         if (recovery === 'restart') {
           runs.push(run);

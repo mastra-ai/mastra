@@ -9,7 +9,7 @@ import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { describeIssue, prepareWidget } from '../lib/prepare-widget';
 import type { PreparedWidget, StoredWidget } from '../lib/prepare-widget';
-import type { AnyWidgetKind } from '../widget-kind';
+import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
 import { DashboardGrid, DashboardGridCell, DashboardGridRow } from './dashboard-grid';
 import type { DashboardSpan } from './dashboard-grid';
 import { WidgetError } from './widget-error';
@@ -22,6 +22,8 @@ export type DashboardRendererProps = {
   scope: DashboardScope;
   /** Opens a drilldown; each host routes to its own Traces or Logs page. */
   onDrilldown?: OnDashboardDrilldown;
+  /** Where chart cards expand to, e.g. the host's query page; see `DashboardExpand`. */
+  expand?: DashboardExpand;
   /** Kinds beyond the built-in ones; a kind of the same name replaces the built-in. */
   kinds?: AnyWidgetKind[];
   className?: string;
@@ -40,7 +42,14 @@ const spanOf = (widget: StoredWidget) => (isDashboardSpan(widget.span) ? widget.
  * owns the range and filters. Each widget is checked and rendered on its own: one that fails to
  * parse, query or render shows its own error, and the rest of the dashboard still renders.
  */
-export function DashboardRenderer({ definition, scope, onDrilldown, kinds = [], className }: DashboardRendererProps) {
+export function DashboardRenderer({
+  definition,
+  scope,
+  onDrilldown,
+  expand,
+  kinds = [],
+  className,
+}: DashboardRendererProps) {
   // A widget that threw renders again once the page's range or filters change, or the widget does.
   const { datePreset, customRange, filterTokens } = useMetrics();
   const pageKey = JSON.stringify([datePreset, customRange, filterTokens]);
@@ -83,6 +92,7 @@ export function DashboardRenderer({ definition, scope, onDrilldown, kinds = [], 
                       views={prepared.views}
                       scope={scope}
                       onDrilldown={onDrilldown}
+                      expand={expand}
                     />
                   ) : (
                     <WidgetError widget={heading} message={prepared.message} />

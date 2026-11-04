@@ -193,7 +193,7 @@ function timeWrites(storage: Storage, timing: WriteTiming | undefined): Recorded
         steps: Object.fromEntries(
           Object.entries(args.steps).map(([stepId, result]) => [stepId, (result as { status: string }).status]),
         ),
-        state: args.state !== undefined,
+        state: args.state !== undefined || args.statePatch !== undefined || args.stateBase !== undefined,
         issued: clock++,
         committed: -1,
         replied: -1,

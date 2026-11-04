@@ -36,7 +36,7 @@ import type { ExecuteSleepParams, ExecuteSleepUntilParams } from './handlers/sle
 import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepUntilHandler } from './handlers/sleep';
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
-import { rebaseNestedState } from './nested-state';
+import { rebaseNestedState, withoutNestedRunStartState } from './nested-state';
 import { RunJournal } from './run-journal';
 import type { StateBase } from './run-journal';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
@@ -88,6 +88,8 @@ export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
 };
 
 const retryCountStorage = new AsyncLocalStorage<number>();
+/** The journal of the storage-v2 execution whose entries run in the current async context. */
+const executionJournal = new AsyncLocalStorage<RunJournal | undefined>();
 
 /**
  * Default implementation of the ExecutionEngine
@@ -115,12 +117,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    */
   protected lastPersistedStatusByRun = new Map<string, { status?: WorkflowRunStatus; replayingCanceled: boolean }>();
 
-  /** Journals of the storage-v2 runs executing on this engine. A run is on v2 when it has one. */
-  #journals = new Map<string, RunJournal>();
-
-  /** @internal Returns the journal of a storage-v2 run while it executes. */
+  /**
+   * @internal Returns the journal of the storage-v2 execution of `runId` this is called from; a run
+   * is on v2 when it has one. Each execution has its own: a restart or resume can start another
+   * execution of the run before a hung one ends, and neither may write through the other's.
+   */
   getRunJournal(runId: string): RunJournal | undefined {
-    return this.#journals.get(runId);
+    const journal = executionJournal.getStore();
+    return journal?.runId === runId ? journal : undefined;
   }
 
   /** Returns the last status persisted for a given run in this process, if any. */
@@ -612,23 +616,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     error?: Error | unknown,
     stepExecutionPath?: string[],
   ): Promise<TOutput> {
-    // Strip nestedRunId from metadata (internal tracking for nested workflow retrieval)
+    // Strip internals from the step results: nestedRunId from metadata (internal tracking for nested
+    // workflow retrieval), and the base a re-driven nested run is rebased against from its metadata.
     const cleanStepResults: Record<string, StepResult<any, any, any, any>> = {};
     for (const [stepId, stepResult] of Object.entries(stepResults)) {
+      // `input` holds the caller's data, not a step result: it is returned as `input` and `steps.input`.
+      if (stepId === 'input') {
+        cleanStepResults.input = stepResult;
+        continue;
+      }
       if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult) && 'metadata' in stepResult) {
         const { metadata, ...rest } = stepResult as any;
         if (metadata) {
           const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
           if (Object.keys(userMetadata).length > 0) {
-            cleanStepResults[stepId] = { ...rest, metadata: userMetadata };
+            cleanStepResults[stepId] = withoutNestedRunStartState({ ...rest, metadata: userMetadata });
           } else {
-            cleanStepResults[stepId] = rest;
+            cleanStepResults[stepId] = withoutNestedRunStartState(rest);
           }
         } else {
-          cleanStepResults[stepId] = stepResult;
+          cleanStepResults[stepId] = withoutNestedRunStartState(stepResult);
         }
       } else {
-        cleanStepResults[stepId] = stepResult;
+        cleanStepResults[stepId] = withoutNestedRunStartState(stepResult);
       }
     }
 
@@ -915,7 +925,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         inherited: params.inheritedState,
         resumed: !!resume,
       });
-      this.#journals.set(runId, journal);
     }
 
     try {
@@ -958,6 +967,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           replayingCanceled: this.lastPersistedStatusByRun.get(runId)?.replayingCanceled === true,
         });
         await this.persistStepUpdate({
+          journal,
           workflowId,
           runId,
           resourceId,
@@ -1003,6 +1013,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             };
 
             await this.persistStepUpdate({
+              journal,
               workflowId,
               runId,
               resourceId,
@@ -1039,6 +1050,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           }
 
           await this.persistStepUpdate({
+            journal,
             workflowId,
             runId,
             resourceId,
@@ -1126,27 +1138,29 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         await journal?.hydrate(stepResults, [...getStepIds(entry), ...(i > 0 ? getStepIds(steps[i - 1]!) : [])]);
 
         try {
-          lastOutput = await this.executeEntry({
-            workflowId,
-            runId,
-            resourceId,
-            entry,
-            executionContext,
-            serializedStepGraph: params.serializedStepGraph,
-            prevStep: steps[i - 1]!,
-            stepResults,
-            resume,
-            timeTravel,
-            restart: entryRestart,
-            ...createObservabilityContext({ currentSpan: workflowSpan }),
-            abortController: params.abortController,
-            pubsub: params.pubsub,
-            requestContext: currentRequestContext,
-            actor: params.actor,
-            outputWriter: params.outputWriter,
-            disableScorers,
-            perStep,
-          });
+          lastOutput = await executionJournal.run(journal, () =>
+            this.executeEntry({
+              workflowId,
+              runId,
+              resourceId,
+              entry,
+              executionContext,
+              serializedStepGraph: params.serializedStepGraph,
+              prevStep: steps[i - 1]!,
+              stepResults,
+              resume,
+              timeTravel,
+              restart: entryRestart,
+              ...createObservabilityContext({ currentSpan: workflowSpan }),
+              abortController: params.abortController,
+              pubsub: params.pubsub,
+              requestContext: currentRequestContext,
+              actor: params.actor,
+              outputWriter: params.outputWriter,
+              disableScorers,
+              perStep,
+            }),
+          );
         } catch (error) {
           // A thrown control-flow error bypasses settled-result finalization. End
           // this execution and any still-open children without rewriting completed
@@ -1212,6 +1226,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepExecutionPath,
           )) as any;
           await this.persistStepUpdate({
+            journal,
             workflowId,
             runId,
             resourceId,
@@ -1254,14 +1269,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
           if (lastOutput.result.status === 'bailed') {
-            // Replace rather than mutate: the bailed result is also this entry's stepResults
-            // value, and storage v2 only rewrites step results whose reference changed.
-            const bailed = lastOutput.result;
-            const succeeded = { ...bailed, status: 'success' } as typeof bailed;
-            for (const id in stepResults) {
-              if (stepResults[id] === bailed) stepResults[id] = succeeded;
+            if (journal) {
+              // Replace rather than mutate: the bailed result is also this entry's stepResults
+              // value, and storage v2 only rewrites step results whose reference changed.
+              const bailed = lastOutput.result;
+              const succeeded = { ...bailed, status: 'success' } as typeof bailed;
+              for (const id in stepResults) {
+                if (stepResults[id] === bailed) stepResults[id] = succeeded;
+              }
+              lastOutput.result = succeeded;
+            } else {
+              lastOutput.result.status = 'success';
             }
-            lastOutput.result = succeeded;
           }
 
           await journal?.hydrate(stepResults);
@@ -1286,6 +1305,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           }
 
           await this.persistStepUpdate({
+            journal,
             workflowId,
             runId,
             resourceId,
@@ -1422,6 +1442,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepExecutionPath,
       )) as any;
       await this.persistStepUpdate({
+        journal,
         workflowId,
         runId,
         resourceId,
@@ -1484,7 +1505,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return { ...result, runId };
     } finally {
       journal?.close();
-      this.#journals.delete(runId);
     }
   }
 

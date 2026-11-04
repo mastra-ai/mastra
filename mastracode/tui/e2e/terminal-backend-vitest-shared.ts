@@ -223,6 +223,7 @@ async function prepareTerminalRun(
   else if (scenario.projectFixture !== 'manual') createBasicProject(projectDir);
 
   const scenarioContext = {
+    ...(aimock ? { aimockUrl: aimock.url.replace(/\/+$/, '') } : {}),
     appDataDir: isolatedAppDataDir,
     dbPath,
     homeDir: isolatedHome,
@@ -317,7 +318,7 @@ export function defineTerminalBackendVitestTests(options: { shardIndex?: number;
     }
   });
 
-  describe.sequential(`mc-e2e terminal backend in Vitest (${shardIndex + 1}/${shardTotal})`, () => {
+  describe(`mc-e2e terminal backend in Vitest (${shardIndex + 1}/${shardTotal})`, { concurrent: false }, () => {
     if (scenarioNames.length === 0) {
       it.skip('has no scenarios assigned to this shard', () => undefined);
       return;

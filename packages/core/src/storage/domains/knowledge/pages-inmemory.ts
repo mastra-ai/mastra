@@ -1,4 +1,8 @@
-import { knowledgePageKeyProblem, knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import {
+  KNOWLEDGE_SEARCH_WEIGHTS,
+  knowledgePageKeyProblem,
+  knowledgeSearchWords,
+} from '@internal/core/knowledge-compat';
 import { KnowledgeConflictError, KnowledgeNotFoundError } from './base';
 import {
   assertKnowledgeNoteTextWithinBound,
@@ -8,10 +12,12 @@ import {
   KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
   KnowledgePageKeyConflictError,
+  knowledgePinDepth,
   knowledgePositionBetween,
   knowledgeScopeReadable,
   MAX_KNOWLEDGE_MOVE_PAGES,
   MAX_KNOWLEDGE_PAGE_DEPTH,
+  MAX_KNOWLEDGE_PAGE_LINKS,
   MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
 } from './pages';
 import type {
@@ -19,9 +25,14 @@ import type {
   KnowledgePage,
   KnowledgePageActivityAction,
   KnowledgePageActivityEvent,
+  KnowledgePageBodyLink,
+  KnowledgePageLinkCounts,
+  KnowledgePageLinkEdge,
+  KnowledgePageLinkKind,
   KnowledgePageSearchHit,
   KnowledgePageStore,
   KnowledgePin,
+  KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
 } from './pages';
@@ -45,6 +56,8 @@ function paginate<T>(items: T[], cursor: string | undefined, limit: number | und
   return { items: slice, nextCursor: start + size < items.length ? String(start + size) : undefined };
 }
 
+const compareCodeUnits = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 const byPosition = (a: KnowledgePage, b: KnowledgePage) =>
   a.position < b.position ? -1 : a.position > b.position ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const byName = (a: KnowledgePage, b: KnowledgePage) =>
@@ -54,6 +67,9 @@ const newestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) =>
 const oldestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) => newestFirst(b, a);
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+const PIN_KINDS: KnowledgePinKind[] = ['page', 'list'];
+const pinKey = (pageId: string, kind: KnowledgePinKind) => `${kind}:${pageId}`;
 
 /**
  * In-memory schema-4 page store: the reference implementation of {@link KnowledgePageStore} that the
@@ -66,13 +82,15 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #notes = new Map<string, KnowledgeNote>();
   #pins = new Map<string, KnowledgePin>();
   #activity: KnowledgePageActivityEvent[] = [];
+  #bodyLinks = new Map<string, KnowledgePageBodyLink[]>();
   #clock = 0;
 
-  /** Drops every page, note, pin and event. */
+  /** Drops every page, note, pin, body link and event. */
   clear(): void {
     this.#pages.clear();
     this.#notes.clear();
     this.#pins.clear();
+    this.#bodyLinks.clear();
     this.#activity = [];
   }
 
@@ -347,7 +365,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
 
   async listChildScopes(input: Parameters<Store['listChildScopes']>[0]) {
     const scopes = [...this.#pages.values()]
-      .filter(page => page.isScope && page.parentId === input.parentId)
+      .filter(
+        page =>
+          page.isScope && page.parentId === input.parentId && (!input.read || this.#pageReadable(page, input.read)),
+      )
       .sort(byPosition);
     const { items, nextCursor } = paginate(scopes, input.cursor, input.limit);
     return { pages: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
@@ -399,6 +420,107 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       .sort(byPosition);
     const { items, nextCursor } = paginate(pages, input.cursor, input.limit);
     return { pages: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
+  }
+
+  async countChildScopes(input: Parameters<Store['countChildScopes']>[0]) {
+    const counts = new Map(input.parentIds.map(id => [id, 0]));
+    for (const page of this.#pages.values()) {
+      if (!page.isScope || page.parentId === null || !counts.has(page.parentId)) continue;
+      if (!this.#pageReadable(page, input.read)) continue;
+      counts.set(page.parentId, counts.get(page.parentId)! + 1);
+    }
+    return Object.fromEntries(counts);
+  }
+
+  async countChildPages(input: Parameters<Store['countChildPages']>[0]) {
+    const counts: Record<string, number> = Object.fromEntries(input.parentIds.map(id => [id, 0]));
+    for (const page of this.#pages.values()) {
+      if (page.parentId === null || !(page.parentId in counts)) continue;
+      if (page.isScope || page.deletedAt || !this.#pageReadable(page, input.read)) continue;
+      counts[page.parentId]! += 1;
+    }
+    return counts;
+  }
+
+  async replacePageBodyLinks(input: Parameters<Store['replacePageBodyLinks']>[0]) {
+    if (input.links.length === 0) this.#bodyLinks.delete(input.pageId);
+    else
+      this.#bodyLinks.set(
+        input.pageId,
+        input.links.map(link => ({ ...link })),
+      );
+  }
+
+  async listPageBodyLinkSources(input: Parameters<Store['listPageBodyLinkSources']>[0]) {
+    const refs = new Set(input.refs ?? []);
+    const targets = new Set(input.toPageIds ?? []);
+    const sources: string[] = [];
+    for (const [pageId, links] of this.#bodyLinks) {
+      const matches = links.some(link => (link.toPageId === null ? refs.has(link.ref) : targets.has(link.toPageId)));
+      if (matches) sources.push(pageId);
+    }
+    return sources;
+  }
+
+  /** Every resolved link both of whose ends are live and readable, and not a self-link. */
+  #visibleLinks(read: KnowledgeReadScope, kinds: KnowledgePageLinkKind[] | undefined): KnowledgePageLinkEdge[] {
+    const wanted = new Set(kinds ?? ['body', 'note']);
+    const live = (id: string) => {
+      const page = this.#pages.get(id);
+      return !!page && !page.deletedAt && this.#pageReadable(page, read);
+    };
+    const edges = new Map<string, KnowledgePageLinkEdge>();
+    const add = (fromPageId: string, toPageId: string, kind: KnowledgePageLinkKind, count: number) => {
+      if (fromPageId === toPageId || !live(fromPageId) || !live(toPageId)) return;
+      const key = `${fromPageId}\u0000${toPageId}\u0000${kind}`;
+      const edge = edges.get(key);
+      if (edge) edge.count += count;
+      else edges.set(key, { fromPageId, toPageId, kind, count });
+    };
+    if (wanted.has('body')) {
+      for (const [pageId, links] of this.#bodyLinks) {
+        for (const link of links) if (link.toPageId !== null) add(pageId, link.toPageId, 'body', link.count);
+      }
+    }
+    if (wanted.has('note')) {
+      for (const note of this.#notes.values()) {
+        if (note.deletedAt || !this.#noteVisible(note, read)) continue;
+        for (const pageId of new Set(note.mentions)) add(note.pageId, pageId, 'note', 1);
+      }
+    }
+    return [...edges.values()];
+  }
+
+  async countPageLinks(input: Parameters<Store['countPageLinks']>[0]) {
+    const linked = new Map<string, { in: Set<string>; out: Set<string> }>(
+      input.pageIds.map(id => [id, { in: new Set<string>(), out: new Set<string>() }]),
+    );
+    for (const edge of this.#visibleLinks(input.read, input.kinds)) {
+      linked.get(edge.fromPageId)?.out.add(edge.toPageId);
+      linked.get(edge.toPageId)?.in.add(edge.fromPageId);
+    }
+    return Object.fromEntries(
+      [...linked].map(([id, sets]) => [id, { in: sets.in.size, out: sets.out.size }]),
+    ) as Record<string, KnowledgePageLinkCounts>;
+  }
+
+  async listPageLinks(input: Parameters<Store['listPageLinks']>[0]) {
+    const ids = new Set(input.pageIds);
+    const direction = input.direction ?? 'both';
+    const limit = input.limit ?? 1_000;
+    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const kindOrder = (kind: KnowledgePageLinkKind) => (kind === 'body' ? 0 : 1);
+    return this.#visibleLinks(input.read, input.kinds)
+      .filter(
+        edge => (direction !== 'in' && ids.has(edge.fromPageId)) || (direction !== 'out' && ids.has(edge.toPageId)),
+      )
+      .sort(
+        (a, b) =>
+          compareCodeUnits(a.fromPageId, b.fromPageId) ||
+          compareCodeUnits(a.toPageId, b.toPageId) ||
+          kindOrder(a.kind) - kindOrder(b.kind),
+      )
+      .slice(0, Math.min(limit, MAX_KNOWLEDGE_PAGE_LINKS));
   }
 
   async listPages(input: Parameters<Store['listPages']>[0]) {
@@ -517,15 +639,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
         note.mentions = [...new Set(note.mentions.map(id => (id === source.id ? target.id : id)))];
       }
     }
-    const sourcePin = this.#pins.get(source.id);
-    if (sourcePin) {
-      this.#pins.delete(source.id);
-      const targetPin = this.#pins.get(target.id);
+    for (const kind of PIN_KINDS) {
+      const sourcePin = this.#pins.get(pinKey(source.id, kind));
+      if (!sourcePin) continue;
+      this.#pins.delete(pinKey(source.id, kind));
+      const targetPin = this.#pins.get(pinKey(target.id, kind));
       if (targetPin) {
         targetPin.audience = [...new Set([...targetPin.audience, ...sourcePin.audience])];
         targetPin.updatedAt = this.#now();
       } else {
-        this.#pins.set(target.id, { ...sourcePin, pageId: target.id, updatedAt: this.#now() });
+        this.#pins.set(pinKey(target.id, kind), { ...sourcePin, pageId: target.id, updatedAt: this.#now() });
       }
     }
     const now = this.#now();
@@ -550,7 +673,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     page.deletedBy = input.deletedBy;
     page.version++;
     page.updatedAt = now;
-    this.#pins.delete(page.id);
+    for (const kind of PIN_KINDS) this.#pins.delete(pinKey(page.id, kind));
     this.#log('page-deleted', page, { author: input.deletedBy });
     return clone(page);
   }
@@ -681,40 +804,56 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const phrase = input.query.trim().toLowerCase().replace(/\s+/g, ' ');
     const limit = input.limit === undefined ? DEFAULT_SEARCH_LIMIT : pageSize(input.limit);
     const inScope = (page: KnowledgePage) => !input.scopeIds || input.scopeIds.includes(page.scopeId);
-    const hasAll = (...texts: Array<string | undefined>) => {
-      const haystack = texts.filter(Boolean).join('\n').toLowerCase();
-      return words.every(word => haystack.includes(word));
+    const lower = (text: string | undefined) => (text ?? '').toLowerCase();
+    const pageScore = (page: KnowledgePage) => {
+      const name = lower(page.name);
+      const description = lower(page.description);
+      const body = lower(page.body);
+      let matched = 0;
+      let score = 0;
+      for (const word of words) {
+        if (name.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.name;
+        else if (description.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.description;
+        else if (body.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.body;
+        else continue;
+        matched++;
+      }
+      return { matched, score };
     };
-    const tier = (page: KnowledgePage) =>
-      canonicalKnowledgeName(page.name).includes(phrase) ? 0 : hasAll(page.name) ? 1 : 2;
+    const noteScore = (note: KnowledgeNote) => {
+      const text = lower(note.text);
+      return words.filter(word => text.includes(word)).length;
+    };
     const pageHits = [...this.#pages.values()]
-      .filter(
-        page =>
-          !page.isScope &&
-          !page.deletedAt &&
-          inScope(page) &&
-          hasAll(page.name, page.description, page.body) &&
-          this.#pageReadable(page, input.read),
-      )
-      .map(page => ({ page, tier: tier(page) }))
+      .filter(page => !page.isScope && !page.deletedAt && inScope(page) && this.#pageReadable(page, input.read))
+      .map(page => ({
+        page,
+        phrase: canonicalKnowledgeName(page.name).includes(phrase) ? 0 : 1,
+        ...pageScore(page),
+      }))
+      .filter(hit => hit.matched > 0)
       .sort(
         (a, b) =>
-          a.tier - b.tier ||
+          a.phrase - b.phrase ||
+          b.matched - a.matched ||
+          b.score - a.score ||
           b.page.updatedAt.getTime() - a.page.updatedAt.getTime() ||
           (a.page.id < b.page.id ? -1 : 1),
       );
     const noteHits = [...this.#notes.values()]
       .filter(note => {
         const page = this.#pages.get(note.pageId)!;
-        return (
-          !note.deletedAt &&
-          !page.deletedAt &&
-          inScope(page) &&
-          hasAll(note.text) &&
-          this.#noteVisible(note, input.read)
-        );
+        return !note.deletedAt && !page.deletedAt && inScope(page) && this.#noteVisible(note, input.read);
       })
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+      .map(note => ({ note, score: noteScore(note) }))
+      .filter(hit => hit.score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.note.updatedAt.getTime() - a.note.updatedAt.getTime() ||
+          (a.note.id < b.note.id ? 1 : a.note.id > b.note.id ? -1 : 0),
+      )
+      .map(hit => hit.note);
     return [
       ...pageHits.map(({ page }) => ({ type: 'page' as const, page: clone(page) })),
       ...noteHits.map(note => ({
@@ -748,37 +887,47 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   async addPinAudience(input: Parameters<Store['addPinAudience']>[0]) {
     const page = this.#livePage(input.pageId);
     if (!input.audience.length) throw new Error('A Knowledge pin needs at least one audience scope');
+    const kind = input.kind ?? 'page';
+    const depth = knowledgePinDepth(kind, input.depth);
     const now = this.#now();
-    const existing = this.#pins.get(page.id);
+    const existing = this.#pins.get(pinKey(page.id, kind));
     const pin: KnowledgePin = existing
-      ? { ...existing, audience: [...new Set([...existing.audience, ...input.audience])], updatedAt: now }
+      ? {
+          ...existing,
+          ...(depth === undefined ? {} : { depth }),
+          audience: [...new Set([...existing.audience, ...input.audience])],
+          updatedAt: now,
+        }
       : {
           id: crypto.randomUUID(),
           pageId: page.id,
+          kind,
+          ...(depth === undefined ? {} : { depth }),
           audience: [...new Set(input.audience)],
           createdBy: input.createdBy,
           createdAt: now,
           updatedAt: now,
         };
-    this.#pins.set(page.id, pin);
+    this.#pins.set(pinKey(page.id, kind), pin);
     this.#log('pin-added', page, { author: input.createdBy });
     return clone(pin);
   }
 
   async removePinAudience(input: Parameters<Store['removePinAudience']>[0]) {
     const page = this.#page(input.pageId);
-    const existing = this.#pins.get(page.id);
+    const key = pinKey(page.id, input.kind ?? 'page');
+    const existing = this.#pins.get(key);
     if (!existing) return null;
     const removed = new Set(input.audience);
     const audience = existing.audience.filter(entry => !removed.has(entry));
     if (audience.length === existing.audience.length) return clone(existing);
     this.#log('pin-removed', page, { author: input.removedBy });
     if (!audience.length) {
-      this.#pins.delete(page.id);
+      this.#pins.delete(key);
       return null;
     }
     const pin = { ...existing, audience, updatedAt: this.#now() };
-    this.#pins.set(page.id, pin);
+    this.#pins.set(key, pin);
     return clone(pin);
   }
 
@@ -788,9 +937,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       .filter(pin => {
         const page = this.#pages.get(pin.pageId);
         if (!page || page.deletedAt || !this.#pageReadable(page, input.read)) return false;
+        if (input.kind && pin.kind !== input.kind) return false;
         if (input.pageIds && !input.pageIds.includes(pin.pageId)) return false;
-        if (input.excludePageIds?.includes(pin.pageId)) return false;
-        if (input.withBody && !/\S/.test(page.body ?? '')) return false;
+        if (pin.kind === 'page' && input.excludePageIds?.includes(pin.pageId)) return false;
+        if (pin.kind === 'page' && input.withBody && !/\S/.test(page.body ?? '')) return false;
         return !audience || pin.audience.some(entry => audience.has(entry));
       })
       .sort(newestFirst);
