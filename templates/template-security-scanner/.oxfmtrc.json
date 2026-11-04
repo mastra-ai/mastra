@@ -11,6 +11,7 @@
   "sortPackageJson": false,
   "sortTailwindcss": true,
   "ignorePatterns": [
+    "references/**",
     "node_modules/**",
     ".mastra/**",
     "dist/**",

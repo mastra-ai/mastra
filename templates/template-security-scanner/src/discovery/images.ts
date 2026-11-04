@@ -82,7 +82,8 @@ async function download(path: string, input: z.infer<typeof artifactSchema>, sig
 }
 function certutil(apk: Buffer) {
   const archive = gunzipSync(apk, { maxOutputLength: 4 * 1024 * 1024 });
-  for (let offset = 0; offset + 512 <= archive.length; ) {
+  let offset = 0;
+  while (offset + 512 <= archive.length) {
     const header = archive.subarray(offset, offset + 512);
     const name = header.subarray(0, 100).toString().replace(/\0.*$/, '');
     const size = parseInt(header.subarray(124, 136).toString().replace(/\0.*$/, '').trim() || '0', 8);
