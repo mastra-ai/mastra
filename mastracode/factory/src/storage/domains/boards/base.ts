@@ -439,13 +439,14 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const next = [...new Set([...seeded, ...boards.map(board => board.key)])];
       const unchanged = marker.seeded_boards !== null && next.length === marker.seeded_boards.length;
       if (inserted.length === 0 && unchanged) return inserted;
-      // Compare-and-set on the version, so two replicas recording different keys can't lose one.
+      // Compare-and-set on the version, and every marker write takes a new one: two replicas
+      // recording different keys can't both match the version they read, so neither key is lost.
       const updated = await ops.updateMany(
         VERSIONS,
         { ...scopeWhere(scope), version: marker.version },
         {
           seeded_boards: next,
-          version: inserted.length > 0 ? randomUUID() : marker.version,
+          version: randomUUID(),
           updated_at: new Date(),
         },
       );

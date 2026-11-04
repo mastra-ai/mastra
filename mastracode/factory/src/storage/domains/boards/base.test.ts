@@ -454,6 +454,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       expect(await boards.readVersion(scope)).not.toBe(version);
     });
 
+    it('records every key when two replicas only record boards the projects already have, at once', async () => {
+      const { boards, scope, secondClient } = await setup();
+      const other = await secondClient();
+      const projects = Array.from({ length: 6 }, (_, index) => ({ ...scope, factoryProjectId: `project-${index}` }));
+      for (const project of projects) {
+        await boards.seedBoards(project, [board('work')]);
+        // The project made these itself, before either release seeded them.
+        await boards.create(project, board('release'), 'admin');
+        await boards.create(project, board('bugs'), 'admin');
+      }
+
+      await Promise.all(
+        projects.flatMap(project => [
+          boards.seedBoards(project, [board('work'), board('release')]),
+          other.seedBoards(project, [board('work'), board('bugs')]),
+        ]),
+      );
+
+      for (const project of projects) {
+        await boards.delete(project, 'bugs', { expectedRevision: 1 });
+        await boards.delete(project, 'release', { expectedRevision: 1 });
+        await boards.seedBoards(project, [board('work'), board('release'), board('bugs')]);
+        expect((await boards.list(project)).map(row => row.key)).toEqual(['work']);
+      }
+    });
+
     it('reads a board stored before Factory stored its boards, and stores the missing ones in a project from then', async () => {
       const { scope } = await setup();
       const { url, drop } = await emptyDatabase();
