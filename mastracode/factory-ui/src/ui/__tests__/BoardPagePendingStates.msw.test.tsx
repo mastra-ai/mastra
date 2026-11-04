@@ -5,6 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { GithubIssue } from '../domains/factory/services/factory';
@@ -152,22 +153,12 @@ function stubBoardEndpoints() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -304,6 +295,12 @@ function stubIncidentioCandidate() {
       HttpResponse.json({ issues: [incidentioIssue], nextCursor: null }),
     ),
   );
+}
+
+async function expectTooltipParts(parts: string[]) {
+  const tooltip = await screen.findByRole('tooltip');
+  for (const part of parts) expect(within(tooltip).getByText(part)).toBeVisible();
+  expect(tooltip.querySelectorAll('[data-slot="metadata-item"]')).toHaveLength(parts.length);
 }
 
 describe('Board card pending states', () => {
@@ -494,7 +491,7 @@ describe('Board card pending states', () => {
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
 
     const relatedLink = within(card).getByRole('link', {
-      name: 'Open in GitHub: Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open in GitHub: Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveTextContent('PR #21565');
     expect(relatedLink).not.toHaveTextContent('Review:');
@@ -503,14 +500,12 @@ describe('Board card pending states', () => {
     expect(relatedLink).not.toHaveAttribute('title');
 
     await user.hover(relatedLink);
-    expect(await screen.findByText('Review: PR #21565 · Review login fix · Open pull request')).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
 
     await user.unhover(relatedLink);
     await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
     relatedLink.focus();
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Review: PR #21565 · Review login fix · Open pull request',
-    );
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request']);
   });
 
   it('names an internal related item without repeating its title', async () => {
@@ -552,7 +547,7 @@ describe('Board card pending states', () => {
     renderWorkBoard();
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
     const relatedLink = await within(card).findByRole('link', {
-      name: 'Open live session for Review: PR #21565 — Review login fix, Open pull request',
+      name: 'Open live session for Review: PR #21565: Review login fix, Open pull request',
     });
     expect(relatedLink).toHaveAttribute(
       'href',
@@ -562,9 +557,7 @@ describe('Board card pending states', () => {
     expect(relatedLink.querySelector('[data-live-session-indicator]')).toBeInTheDocument();
 
     await user.hover(relatedLink);
-    expect(
-      await screen.findByText('Review: PR #21565 · Review login fix · Open pull request · Live session'),
-    ).toBeVisible();
+    await expectTooltipParts(['Review: PR #21565', 'Review login fix', 'Open pull request', 'Live session']);
   });
 
   it('marks only the cards whose bound session still exists as live', async () => {
@@ -694,15 +687,15 @@ describe('Board card pending states', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],
@@ -1400,15 +1393,15 @@ describe('Board card pending states', () => {
     const { transitionGate, transitionRequests } = stubBoardEndpoints();
     const configGate = deferred();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: FACTORY_ID,
+              name: 'Acme Factory',
               repositories: [
-                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
-                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+                listedRepository(REPO_ID, 'acme/app', { branch: 'main' }),
+                listedRepository('repo-2', 'acme/other', { branch: 'main' }),
               ],
             },
           ],
@@ -1516,7 +1509,8 @@ describe('Board card pending states', () => {
     const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
     expect(planningColumn).toHaveAccessibleName('Planning');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(within(composer).getByText('Manual · new')).toBeInTheDocument();
+    expect(within(composer).getByText('Manual')).toBeInTheDocument();
+    expect(within(composer).getByText('new')).toBeInTheDocument();
     expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
 
     await user.keyboard('{Escape}');

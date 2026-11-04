@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ActivityCallStatus } from '../activity-members';
-import { callsOutcome, liveWords, outcomeText, settledWords, wordsName } from '../activity-words';
+import { callsOutcome, liveWords, outcomeText, settledWords, stretchPose, wordsName } from '../activity-words';
 import { agentGlyph } from '@/ds/components/AgentIndicator';
 
 const call = (toolName: string, args: unknown, status: ActivityCallStatus = 'done') => ({ toolName, args, status });
@@ -26,6 +26,29 @@ describe('liveWords', () => {
     expect(wordsName(liveWords([view('a.ts', 'running'), run('pnpm test', 'running')]))).toBe('Running pnpm test');
   });
 
+  it('changes shape as a Knowledge search is read and updated', () => {
+    const search = call('knowledge_search', { query: 'Refund policy' });
+    const read = call('knowledge_read', { page: 'Refund policy' });
+    const page = call('knowledge_page', { page: 'Refund policy', op: 'write' });
+
+    expect(stretchPose([{ ...search, status: 'running' }], true)).toBe('searching');
+    expect(stretchPose([search, { ...read, status: 'running' }], true)).toBe('reading');
+    expect(stretchPose([search, read, { ...page, status: 'running' }], true)).toBe('knowledge');
+  });
+
+  it('uses Knowledge operation arguments for the live morph and settled summary', () => {
+    const write = call('knowledge_page', { op: 'write', page: 'Refunds' });
+    const remove = call('knowledge_page', { op: 'delete', page: 'Outdated refunds' }, 'running');
+
+    expect(stretchPose([write, remove], true)).toBe('deleting');
+    expect(liveWords([write, remove])).toMatchObject({ label: 'Deleting page', icon: agentGlyph('deleting') });
+    expect(settledWords([{ ...remove, status: 'done' }])).toMatchObject({
+      label: 'Deleted page',
+      icon: agentGlyph('deleting'),
+    });
+    expect(settledWords([write, { ...remove, status: 'done' }]).icon).toBe(agentGlyph('tool'));
+  });
+
   it('reads Thinking between calls', () => {
     expect(liveWords([view('a.ts')]).label).toBe('Thinking');
   });
@@ -39,6 +62,18 @@ describe('settledWords', () => {
   it("wears one kind's own glyph, and the tool glyph once kinds mix rather than whichever came first", () => {
     expect(settledWords([view('a.ts'), view('b.ts')]).icon).toBe(agentGlyph('reading'));
     expect(settledWords([view('a.ts'), run('ls')]).icon).toBe(agentGlyph('tool'));
+  });
+
+  it('distinguishes file edits, Knowledge pages, and notes in collapsed groups', () => {
+    const edit = call('edit_file', { path: 'src/agent.ts' });
+    const page = call('knowledge_page', { page: 'Refunds', op: 'write' });
+    const note = call('knowledge_note', { page: 'Refunds', op: 'add' });
+
+    expect(settledWords([page]).icon).not.toBe(settledWords([edit]).icon);
+    expect(settledWords([note]).icon).not.toBe(settledWords([page]).icon);
+    expect(settledWords([page, note]).icon).toBe(agentGlyph('tool'));
+    expect(settledWords([edit, page]).icon).toBe(agentGlyph('tool'));
+    expect(liveWords([{ ...page, status: 'running' }]).icon).toBe(settledWords([page]).icon);
   });
 
   it('names a single call in the past tense', () => {
@@ -81,7 +116,7 @@ describe('settledWords', () => {
 describe('outcomeText', () => {
   it('counts failed and unfinished calls among several', () => {
     const calls = [view('a.ts'), view('b.ts', 'error'), view('c.ts', 'running')];
-    expect(outcomeText(callsOutcome(calls), calls.length)).toBe('1 failed · 1 incomplete');
+    expect(outcomeText(callsOutcome(calls), calls.length)).toBe('1 failed and 1 incomplete');
   });
 
   it('only says a lone call never finished', () => {
