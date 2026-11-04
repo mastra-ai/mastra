@@ -91,6 +91,41 @@ const fullChain = {
 };
 
 describe('storage v2 result steps loader', () => {
+  it.each(['resume', 'delete', 'recreate'] as const)(
+    'rejects stale suspended results without successful steps after %s',
+    async change => {
+      const workflow = createWorkflow({
+        id: `gate-only-${change}`,
+        inputSchema: num,
+        outputSchema: num,
+        options: { storageVersion: 2 },
+      })
+        .then(approve('gate'))
+        .commit();
+      const storage = host(workflow);
+      const { reads } = recordStepReads(storage);
+      const run = await workflow.createRun();
+      const suspended = await run.start({ inputData: { n: 0 } });
+      expect(suspended.status).toBe('suspended');
+      expect(reads).toEqual([]);
+      expect(Object.values(residentStepResults(suspended.steps)!).some(isStepResultStub)).toBe(false);
+
+      if (change === 'resume') {
+        const resumed = await run.resume({ step: 'gate', resumeData: true });
+        expect(resumed.status).toBe('success');
+      } else {
+        await workflow.deleteWorkflowRunById(run.runId);
+        if (change === 'recreate') {
+          const replacement = await workflow.createRun({ runId: run.runId });
+          const current = await replacement.start({ inputData: { n: 9 } });
+          expect(await current.steps()).toMatchObject({ input: { n: 9 }, gate: { status: 'suspended' } });
+        }
+      }
+
+      await expect(suspended.steps()).rejects.toMatchObject({ id: 'WORKFLOW_STORAGE_V2_STEPS_STALE' });
+    },
+  );
+
   it('keeps a v1 result’s steps a record', async () => {
     const workflow = chain(1);
     host(workflow);

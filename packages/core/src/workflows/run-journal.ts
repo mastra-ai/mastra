@@ -814,7 +814,7 @@ function storedStepResults(
     const expectedLastSeq = await lastSeq;
     const expectedRunToken = await runToken;
     const stubbed = Object.keys(results).filter(stepId => isStepResultStub(results[stepId]));
-    if (!stubbed.length) return format(results);
+    if (!stubbed.length && expectedLastSeq === undefined) return format(results);
 
     const stored = await store.loadWorkflowRunSteps({
       workflowName,
