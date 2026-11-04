@@ -2,12 +2,25 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { execa, existsSync } = vi.hoisted(() => ({ execa: vi.fn(), existsSync: vi.fn((_path: string) => false) }));
-vi.mock('./execa', () => ({ getExeca: async () => execa }));
-vi.mock('node:fs', async importOriginal => ({
-  ...(await importOriginal<typeof import('node:fs')>()),
-  existsSync: (p: string) => existsSync(p),
+const { execa, existsSync, ownOomScoreAdj } = vi.hoisted(() => ({
+  execa: vi.fn(),
+  existsSync: vi.fn((_path: string) => false),
+  // The agent's own /proc/self/oom_score_adj. Undefined: the file does not exist.
+  ownOomScoreAdj: { value: undefined as string | undefined },
 }));
+vi.mock('./execa', () => ({ getExeca: async () => execa }));
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    existsSync: (p: string) => existsSync(p),
+    readFileSync: ((file: any, ...rest: any[]) => {
+      if (file !== '/proc/self/oom_score_adj') return (actual.readFileSync as any)(file, ...rest);
+      if (ownOomScoreAdj.value === undefined) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      return ownOomScoreAdj.value;
+    }) as typeof actual.readFileSync,
+  };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -16,6 +29,7 @@ afterEach(() => {
   execa.mockReset();
   existsSync.mockReset();
   existsSync.mockReturnValue(false);
+  ownOomScoreAdj.value = undefined;
 });
 
 describe('LocalProcessManager Windows argv boundary', () => {
@@ -321,5 +335,74 @@ describe('LocalProcessManager stdin wiring', () => {
     lastSubprocess().emit('close', 0, null);
     await handle.wait();
     sandbox.processes.release(handle.pid);
+  });
+});
+
+describe('LocalProcessManager OOM score for spawned commands', () => {
+  const raise = (value: number) => `{ echo ${value} >/proc/self/oom_score_adj; } 2>/dev/null; `;
+
+  async function spawnOn(platform: NodeJS.Platform, isolation: 'none' | 'bwrap' = 'none') {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform);
+    const nativeSandbox = await import('./native-sandbox');
+    vi.spyOn(nativeSandbox, 'isIsolationAvailable').mockReturnValue(true);
+    const { LocalSandbox } = await import('./local-sandbox');
+    const sandbox = new LocalSandbox({ workingDirectory: process.cwd(), isolation });
+    vi.spyOn(sandbox, 'ensureRunning').mockResolvedValue();
+    const wrap = vi.spyOn(sandbox, 'wrapCommandForIsolation');
+    if (isolation !== 'none') wrap.mockImplementation(command => ({ command: 'bwrap', args: ['sh', '-c', command] }));
+    const subprocess = Object.assign(new EventEmitter(), {
+      pid: 12345,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      catch: vi.fn(),
+    });
+    execa.mockReturnValue(subprocess);
+    const handle = await sandbox.processes.spawn('python3 train.py | tail -5');
+    subprocess.emit('close', 0, null);
+    await handle.wait();
+    sandbox.processes.release(handle.pid);
+    return { handle, wrap, execaCall: execa.mock.calls[0]! };
+  }
+
+  it('raises the shell oom_score_adj before the command on Linux', async () => {
+    ownOomScoreAdj.value = '0\n';
+    const { handle, execaCall } = await spawnOn('linux');
+    expect(execaCall[0]).toBe(`${raise(500)}python3 train.py | tail -5`);
+    expect(execaCall[2]).toMatchObject({ shell: true });
+    // Process listings keep the command as the caller wrote it.
+    expect(handle.command).toBe('python3 train.py | tail -5');
+  });
+
+  it('raises it inside the isolation wrapper', async () => {
+    ownOomScoreAdj.value = '0\n';
+    const { wrap, execaCall } = await spawnOn('linux', 'bwrap');
+    expect(wrap).toHaveBeenCalledWith(`${raise(500)}python3 train.py | tail -5`);
+    expect(execaCall[1]).toEqual(['sh', '-c', `${raise(500)}python3 train.py | tail -5`]);
+  });
+
+  it.each([
+    ['800', 800],
+    ['1500', 1000],
+    ['not-a-number', 500],
+  ])('takes the value from MASTRA_COMMAND_OOM_SCORE_ADJ=%s', async (configured, expected) => {
+    vi.stubEnv('MASTRA_COMMAND_OOM_SCORE_ADJ', configured);
+    ownOomScoreAdj.value = '0\n';
+    const { execaCall } = await spawnOn('linux');
+    expect(execaCall[0]).toBe(`${raise(expected)}python3 train.py | tail -5`);
+  });
+
+  it.each([
+    { name: 'turned off with 0', platform: 'linux', own: '0\n', configured: '0' },
+    { name: 'turned off with off', platform: 'linux', own: '0\n', configured: 'off' },
+    { name: 'the agent is already at the target', platform: 'linux', own: '500\n', configured: undefined },
+    { name: 'the agent is above the target', platform: 'linux', own: '900\n', configured: undefined },
+    { name: 'there is no /proc/self/oom_score_adj', platform: 'linux', own: undefined, configured: undefined },
+    { name: 'on macOS', platform: 'darwin', own: '0\n', configured: undefined },
+    { name: 'on Windows', platform: 'win32', own: '0\n', configured: undefined },
+  ] as const)('leaves the command unchanged when $name', async ({ platform, own, configured }) => {
+    if (configured !== undefined) vi.stubEnv('MASTRA_COMMAND_OOM_SCORE_ADJ', configured);
+    ownOomScoreAdj.value = own;
+    const { execaCall } = await spawnOn(platform);
+    expect(execaCall[0]).toBe('python3 train.py | tail -5');
   });
 });
