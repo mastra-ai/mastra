@@ -7,6 +7,7 @@ import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSc
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
@@ -65,12 +66,116 @@ const storedBoardResponseSchema = z.object({
     problems: z.array(z.string()),
   }),
 });
+const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
+const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
+const intakeRouteTargetSchema = z
+  .object({
+    boardKey: intakeRouteIdentifierSchema,
+    /** Unset lands the card in the board's first phase. */
+    phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
+  })
+  .strict();
+const intakeRouteFields = {
+  name: nonEmptyTrimmed(120),
+  enabled: z.boolean(),
+  /** Which new cards the route applies to; null matches every card. */
+  when: cardRuleGroupSchema.nullable(),
+  /** Where matching new cards land. */
+  target: intakeRouteTargetSchema,
+};
+export const intakeRouteInputSchema = z
+  .object({
+    name: intakeRouteFields.name,
+    enabled: intakeRouteFields.enabled.default(true),
+    when: intakeRouteFields.when.default(null),
+    target: intakeRouteFields.target,
+  })
+  .strict();
+/** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
+export const intakeRoutePatchSchema = z
+  .object({
+    name: intakeRouteFields.name.optional(),
+    enabled: intakeRouteFields.enabled.optional(),
+    when: intakeRouteFields.when.optional(),
+    target: intakeRouteFields.target.optional(),
+    expectedRevision: boardRevisionSchema,
+  })
+  .strict()
+  .refine(({ expectedRevision: _revision, ...fields }) => Object.values(fields).some(value => value !== undefined), {
+    message: 'Change at least one field.',
+  });
+export const intakeRouteReorderBodySchema = z
+  .object({
+    /** Every route of the project, once each, in the new order. */
+    ids: z
+      .array(uuidSchema)
+      .min(1)
+      .max(MAX_INTAKE_ROUTES)
+      .refine(ids => new Set(ids).size === ids.length, { message: 'Each route may appear only once.' }),
+  })
+  .strict();
+const intakeRouteSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+  /** 0 is evaluated first. */
+  position: z.number().int(),
+  when: cardRuleGroupSchema.nullable(),
+  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }),
+  /** Send it back as `expectedRevision` when editing or deleting. */
+  revision: z.number().int(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  updatedBy: z.string(),
+  updatedAt: z.string(),
+  /** Why the route's target can't take cards right now, such as a deleted board; such a route is skipped. */
+  problems: z.array(z.string()),
+});
+const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
+const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
-const workItemResponseSchema = z.object({ workItem: entitySchema });
+
+/**
+ * A repository linked to a project, as the project list returns it: fields of the link and of the repository
+ * only, never the installation behind the connection.
+ */
+export const projectListRepositorySchema = z.object({
+  projectRepositoryId: z.string(),
+  connectionId: z.string(),
+  integrationId: z.string(),
+  repositoryId: z.string(),
+  // These three are null when the repository row behind the link is missing.
+  externalId: z.string().nullable(),
+  slug: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
+  /** The branch set on the link; null means the repository's default branch. */
+  branch: z.string().nullable(),
+  sandboxWorkdir: z.string(),
+});
+export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
+
+const projectListItemSchema = projectSchema.and(z.object({ repositories: z.array(projectListRepositorySchema) }));
+const cardSchema = z
+  .object({
+    workItem: z
+      .object({
+        provider: z.string(),
+        key: z.string().nullable(),
+        url: z.string().nullable(),
+        title: z.string(),
+        state: z.string().nullable(),
+        labels: z.array(z.string()),
+        author: z.string().nullable(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
 export const createProjectBodySchema = z.object({
@@ -87,6 +192,7 @@ export const updateProjectBodySchema = z
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
@@ -299,7 +405,6 @@ export const updateWorkItemBodySchema = z
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
-    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 
@@ -525,8 +630,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
     path: '/web/factory/projects',
-    description: 'List Factory projects for the current organization',
-    responseSchema: z.object({ projects: z.array(projectSchema) }),
+    description: 'List Factory projects for the current organization, each with its linked repositories',
+    responseSchema: z.object({ projects: z.array(projectListItemSchema) }),
   },
   projectCreate: {
     method: 'POST',
@@ -719,13 +824,59 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: boardDeleteQuerySchema,
     responseSchema: z.null(),
   },
+  intakeRouteList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes',
+    description: "List a Factory project's intake routes in evaluation order",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRouteListResponseSchema,
+  },
+  intakeRouteGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes/:routeId',
+    description: 'Get a Factory intake route',
+    pathSchema: intakeRoutePathSchema,
+    responseSchema: intakeRouteResponseSchema,
+  },
+  intakeRouteCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes',
+    description: 'Add an intake route at the end of a Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: intakeRouteInputSchema,
+    responseSchema: intakeRouteResponseSchema,
+  },
+  intakeRouteUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/intake-routes/:routeId',
+    description: 'Change a Factory intake route',
+    pathSchema: intakeRoutePathSchema,
+    bodySchema: intakeRoutePatchSchema,
+    responseSchema: intakeRouteResponseSchema,
+  },
+  intakeRouteDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/intake-routes/:routeId',
+    description: 'Delete a Factory intake route',
+    pathSchema: intakeRoutePathSchema,
+    querySchema: boardDeleteQuerySchema,
+    responseSchema: z.null(),
+  },
+  intakeRouteReorder: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes/reorder',
+    description: "Reorder a Factory project's intake routes",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeRouteReorderBodySchema,
+    responseSchema: intakeRouteListResponseSchema,
+  },
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
     responseSchema: z.object({
-      workItems: z.array(entitySchema),
+      workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
     }),

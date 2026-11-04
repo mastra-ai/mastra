@@ -12,6 +12,11 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm5.2-fast": [
       {
         "type": "toggle"
@@ -22,11 +27,6 @@
       }
     ],
     "GLM-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Kimi-K2.6": [
       {
         "type": "toggle"
       }

@@ -28,6 +28,18 @@
         "type": "toggle"
       }
     ],
+    "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
     "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
@@ -46,18 +58,6 @@
     "qwen/qwen3.6-27b": [
       {
         "type": "toggle"
-      }
-    ],
-    "z-ai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ]
   }

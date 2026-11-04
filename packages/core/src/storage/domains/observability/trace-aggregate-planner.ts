@@ -67,7 +67,7 @@ export type TrustedTraceAggregateMeasureName = TrustedTraceAggregateMeasure['nam
  * (always available); when `count` is not in `measures`, backends compute it for
  * filtering without projecting it into the response.
  *
- * Token and cost measures can be null, so `having` uses SQL three-valued logic: a comparison or
+ * Token, cost and time-to-first measures can be null, so `having` uses SQL three-valued logic: a comparison or
  * membership test against null is UNKNOWN, `not` of UNKNOWN is UNKNOWN, `and` / `or` follow
  * Kleene logic, and a group whose predicate is not TRUE is removed.
  */
@@ -123,6 +123,14 @@ export type TrustedTraceAggregateOrderBy<
  *   backends trust the plan and do not re-check them.
  * - Null measure values (see below) sort last in both directions; a `having` predicate over a
  *   null measure is UNKNOWN and removes the group (see `TrustedTraceAggregateHavingPredicate`).
+ *
+ * Time to first token/chunk semantics:
+ *
+ * - `timeToFirstToken.*` and `timeToFirstChunk.*` read the nullable `timeToFirstTokenMs` /
+ *   `timeToFirstChunkMs` of the root span (`aggregateTraces`) or of each span (`aggregateSpans`).
+ *   Rows without a value are skipped, never read as 0. `avg`, `min`, `max` and the percentiles are
+ *   null when no row in the group has a value; `.count` is the number of rows that have one (0 when
+ *   none does).
  *
  * Token and cost semantics:
  *

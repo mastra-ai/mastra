@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import type { KnowledgeReadScope } from '../../storage';
+import { KnowledgeUnsupportedCapabilityError } from '../../storage';
 import { InMemoryKnowledgePageStore } from '../../storage/domains/knowledge/pages-inmemory';
 import {
   listKnowledgeTreeChildren,
+  MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN,
   readKnowledgePage,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
+  readKnowledgePageLinkCounts,
+  readKnowledgePageLinks,
   searchKnowledgeExplorerPages,
 } from '../explorer-pages';
 
@@ -105,6 +109,80 @@ describe('listKnowledgeTreeChildren', () => {
     ]);
   });
 
+  describe('child counts', () => {
+    const counts = (pages: Array<{ name: string; childCount?: number }>) =>
+      Object.fromEntries(pages.map(page => [page.name, page.childCount]));
+
+    it('counts the pages, and for a scope the child scopes, directly under each listed page', async () => {
+      const { store, acme, support } = await seed();
+      expect(counts((await listKnowledgeTreeChildren(store, { parentId: null, read: 'all' })).pages).Acme).toBe(2);
+      expect(counts((await listKnowledgeTreeChildren(store, { parentId: acme.id, read: 'all' })).pages)).toEqual({
+        Support: 2,
+        Engineering: 1,
+      });
+      expect(counts((await listKnowledgeTreeChildren(store, { parentId: support.id, read: 'all' })).pages)).toEqual({
+        Refunds: 1,
+        Billing: 0,
+      });
+    });
+
+    it('counts only what the caller can read', async () => {
+      const { store } = await seed();
+      const roots = await listKnowledgeTreeChildren(store, { parentId: null, read: supportOnly });
+      expect(counts(roots.pages)).toEqual({ Support: 2 });
+    });
+
+    describe('when a scope has more child scopes than one walk looks at', () => {
+      async function wideScopes(sizes: number[]) {
+        const store = new InMemoryKnowledgePageStore();
+        const roots = [];
+        for (const [index, size] of sizes.entries()) {
+          const root = (
+            await store.materializeScope({
+              address: `org:o${index}`,
+              declaration: 'org:$orgId',
+              name: `Org ${index}`,
+              provenance: host,
+            })
+          ).scope;
+          for (let team = 0; team < size; team++) {
+            await store.materializeScope({
+              address: `team:o${index}:t${team}`,
+              declaration: 'team:$orgId:$teamId',
+              name: `Team ${team}`,
+              parentId: root.id,
+              provenance: host,
+            });
+          }
+          roots.push(root);
+        }
+        return store;
+      }
+
+      it('marks the count as a lower bound', async () => {
+        const store = await wideScopes([MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN + 5]);
+        const [root] = (await listKnowledgeTreeChildren(store, { parentId: null, read: 'all' })).pages;
+        expect(root?.childCountCapped).toBe(true);
+        expect(root?.childCount).toBe(MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN);
+      });
+
+      it('leaves an exact count unmarked', async () => {
+        const store = await wideScopes([3]);
+        const [root] = (await listKnowledgeTreeChildren(store, { parentId: null, read: 'all' })).pages;
+        expect(root?.childCount).toBe(3);
+        expect(root && 'childCountCapped' in root).toBe(false);
+      });
+    });
+
+    it('leaves counts out when the store cannot count children', async () => {
+      const { store, support } = await seed();
+      // An adapter built before countChildPages existed.
+      Object.assign(store, { countChildPages: undefined });
+      const level = await listKnowledgeTreeChildren(store, { parentId: support.id, read: 'all' });
+      expect(level.pages.map(page => 'childCount' in page)).toEqual([false, false]);
+    });
+  });
+
   it('pages ordinary child pages with a cursor and lists scopes only on the first page', async () => {
     const { store, support } = await seed();
     const first = await listKnowledgeTreeChildren(store, { parentId: support.id, read: 'all', limit: 1 });
@@ -147,6 +225,49 @@ describe('readKnowledgePage', () => {
     expect(owner?.notes).toHaveLength(2);
     expect(bound?.notes.map(note => note.text)).toEqual(['Refund disputes go through [[Refunds]]']);
     expect(names(bound?.related ?? [])).not.toContain('Roadmap');
+  });
+});
+
+describe('readKnowledgePage by reference', () => {
+  // Tool results (knowledge_list) name pages by scope address and key path, not id.
+  async function keyed() {
+    const seeded = await seed();
+    const { store, support, eng } = seeded;
+    const policies = await store.createPage({
+      parentId: support.id,
+      key: 'policies',
+      name: 'Policies',
+      provenance: host,
+    });
+    const guides = await store.createPage({ parentId: policies.id, key: 'guides', name: 'Guides', provenance: host });
+    const disputes = await store.createPage({
+      parentId: guides.id,
+      key: 'disputes',
+      name: 'Disputes',
+      provenance: host,
+    });
+    const plans = await store.createPage({ parentId: eng.id, key: 'plans', name: 'Plans', provenance: host });
+    return { ...seeded, disputes, plans };
+  }
+
+  it('opens a scope by its address', async () => {
+    const { store, support } = await keyed();
+    expect((await readKnowledgePage(store, { pageId: 'team:acme:support', read: 'all' }))?.page.id).toBe(support.id);
+  });
+
+  it('opens a page by scope#key/path at any depth', async () => {
+    const { store, disputes } = await keyed();
+    const view = await readKnowledgePage(store, { pageId: 'team:acme:support#policies/guides/disputes', read: 'all' });
+    expect(view?.page.id).toBe(disputes.id);
+    expect(names(view?.ancestors ?? [])).toEqual(['Acme', 'Support', 'Policies', 'Guides']);
+  });
+
+  it('finds nothing the caller cannot read, nor a ref that names no page', async () => {
+    const { store } = await keyed();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:eng', read: supportOnly })).toBeNull();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:eng#plans', read: supportOnly })).toBeNull();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:support#nowhere', read: 'all' })).toBeNull();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:nobody', read: 'all' })).toBeNull();
   });
 });
 
@@ -223,6 +344,56 @@ describe('readKnowledgePageGraph', () => {
     expect(graph?.truncated).toBe(true);
     expect(await readKnowledgePageGraph(store, { read: supportOnly, rootId: roadmap.id })).toBeNull();
   });
+
+  it('reads a 300-page tree in a bounded number of store calls, batched by level', async () => {
+    const store = new InMemoryKnowledgePageStore();
+    const docs = (
+      await store.materializeScope({ address: 'docs:acme', declaration: 'docs:$orgId', name: 'Docs', provenance: host })
+    ).scope;
+    const outside = (
+      await store.materializeScope({ address: 'org:acme', declaration: 'org:$orgId', name: 'Acme', provenance: host })
+    ).scope;
+    const faq = await store.createPage({ parentId: outside.id, name: 'FAQ', provenance: host });
+    const sections = [];
+    for (let s = 0; s < 10; s++) {
+      const section = await store.createPage({ parentId: docs.id, name: `Section ${s}`, provenance: host });
+      sections.push(section);
+      for (let p = 0; p < 29; p++) {
+        const page = await store.createPage({ parentId: section.id, name: `Page ${s}.${p}`, provenance: host });
+        if (p === 0) {
+          await store.addNote({
+            pageId: page.id,
+            text: 'See the [[FAQ]]',
+            stampScopeIds: [docs.id],
+            mentions: [faq.id],
+            provenance: host,
+          });
+        }
+      }
+    }
+
+    const calls: Record<string, number> = {};
+    const target = store as unknown as Record<string, (...args: unknown[]) => unknown>;
+    for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(store))) {
+      const fn = target[name];
+      if (name === 'constructor' || typeof fn !== 'function') continue;
+      target[name] = (...args: unknown[]) => {
+        calls[name] = (calls[name] ?? 0) + 1;
+        return fn.apply(store, args);
+      };
+    }
+    const graph = await readKnowledgePageGraph(store, { read: 'all', rootId: docs.id, limits: { maxPages: 400 } });
+    const total = Object.values(calls).reduce((sum, count) => sum + count, 0);
+
+    expect(graph?.pages).toHaveLength(1 + 10 + 290 + 1);
+    expect(names(graph!.pages.slice(0, 11))).toEqual(['Docs', ...sections.map(section => section.name)]);
+    expect(graph?.outsideIds).toEqual([faq.id]);
+    expect(graph?.edges.filter(edge => edge.kind === 'mention')).toHaveLength(10);
+    expect(graph?.truncated).toBe(false);
+    // Was 1,221 sequential calls (a parent check, child scopes, child pages and child counts per walked page,
+    // then one listNotes per page); now 37: a level is one count plus a list per parent that has children.
+    expect(total, JSON.stringify(calls)).toBeLessThan(60);
+  });
 });
 
 describe('search and activity', () => {
@@ -242,5 +413,70 @@ describe('search and activity', () => {
     const firstPage = await readKnowledgePageActivity(store, { read: 'all', limit: 2 });
     expect(firstPage.events).toHaveLength(2);
     expect(firstPage.nextCursor).toBeDefined();
+  });
+});
+
+describe('page link readers', () => {
+  async function linked() {
+    const world = await seed();
+    const { store } = world;
+    const a = await store.createPage({ parentId: world.support.id, name: 'Authors', provenance: host });
+    const posts = await Promise.all(
+      ['p1', 'p2', 'p3'].map(name => store.createPage({ parentId: world.support.id, name, provenance: host })),
+    );
+    // Abhi's page links out to three posts the UI never loaded; one post links back.
+    await store.replacePageBodyLinks({
+      pageId: a.id,
+      links: posts.map((post, index) => ({ ref: `p${index + 1}`, toPageId: post.id, count: 1 })),
+    });
+    await store.replacePageBodyLinks({ pageId: posts[0]!.id, links: [{ ref: 'Authors', toPageId: a.id, count: 1 }] });
+    return { ...world, a, posts };
+  }
+
+  it('counts the links in and out of pages whatever has been loaded', async () => {
+    const { store, a, posts } = await linked();
+    const counts = await readKnowledgePageLinkCounts(store, { pageIds: [a.id, posts[1]!.id], read: 'all' });
+    expect(counts?.[a.id]).toEqual({ in: 1, out: 3 });
+    expect(counts?.[posts[1]!.id]).toEqual({ in: 1, out: 0 });
+  });
+
+  it('counts a page the caller cannot read as no links, like a page that is not there', async () => {
+    const { store, a } = await linked();
+    const read: KnowledgeReadScope = { addresses: ['team:acme:eng'], prefixes: [], children: [] };
+    const counts = await readKnowledgePageLinkCounts(store, { pageIds: [a.id, 'missing'], read });
+    expect(counts).toEqual({ [a.id]: { in: 0, out: 0 }, missing: { in: 0, out: 0 } });
+  });
+
+  it("lists a page's links with the pages at their other ends", async () => {
+    const { store, a, posts } = await linked();
+    const links = await readKnowledgePageLinks(store, { pageId: a.id, read: 'all' });
+    expect(links?.edges.map(edge => `${edge.fromPageId === a.id ? 'out' : 'in'}:${edge.kind}`).sort()).toEqual([
+      'in:body',
+      'out:body',
+      'out:body',
+      'out:body',
+    ]);
+    expect(links?.pages.map(page => page.id).sort()).toEqual(posts.map(post => post.id).sort());
+    expect(links?.truncated).toBe(false);
+  });
+
+  it('lists nothing for a page the caller cannot read', async () => {
+    const { store, a } = await linked();
+    const read: KnowledgeReadScope = { addresses: ['team:acme:eng'], prefixes: [], children: [] };
+    expect(await readKnowledgePageLinks(store, { pageId: a.id, read })).toEqual({
+      edges: [],
+      pages: [],
+      truncated: false,
+    });
+  });
+
+  it('answers null when the store has no link index', async () => {
+    const { store, a } = await linked();
+    const unsupported = Object.assign(store, {
+      countPageLinks: () => Promise.reject(new KnowledgeUnsupportedCapabilityError('links')),
+      listPageLinks: () => Promise.reject(new KnowledgeUnsupportedCapabilityError('links')),
+    });
+    expect(await readKnowledgePageLinkCounts(unsupported, { pageIds: [a.id], read: 'all' })).toBeNull();
+    expect(await readKnowledgePageLinks(unsupported, { pageId: a.id, read: 'all' })).toBeNull();
   });
 });

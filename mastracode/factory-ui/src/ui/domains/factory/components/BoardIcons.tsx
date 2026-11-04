@@ -166,6 +166,7 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
     case 'working':
       return <ProgressPieIcon progress={0.5} className={className} />;
     case 'review':
+    case 'pr-review':
       return <MaskedArt source="/factory-stage-icons/review.svg" className={className} />;
     case 'done':
     case 'terminal':

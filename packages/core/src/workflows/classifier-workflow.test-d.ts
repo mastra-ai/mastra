@@ -1,5 +1,5 @@
 import type { Experimental_EvaluationModelV4 as EvaluationModelV4 } from '@ai-sdk/provider-v7';
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf, test } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Classifier } from '../classifier';
@@ -55,3 +55,6 @@ createWorkflow({ id: 'invalid', inputSchema: z.string(), outputSchema: z.any() }
 createWorkflow({ id: 'registered', inputSchema: z.string(), outputSchema: z.any() }).classifier<typeof questions>(
   'ticket-router',
 );
+
+// Vitest 5 fails typecheck files without a test; the assertions above are still checked file-wide.
+test('classifier-workflow types', () => {});
