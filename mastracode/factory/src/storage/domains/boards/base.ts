@@ -421,6 +421,25 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return (await this.get(scope, key))!;
   }
 
+  /**
+   * Rewrites a copy of a code board to `definition`, the code board's current one, at the next
+   * revision, and records `seedHash` as the definition it was copied from.
+   */
+  async resetTo(
+    scope: StoredBoardScope,
+    key: string,
+    definition: StoredBoardInput,
+    options: { expectedRevision: number; actor: string; seedHash: string },
+  ): Promise<StoredBoardRecord> {
+    await this.#write(scope, async ops => {
+      const row = await findBoard(ops, scope, key);
+      checkRevision(row, key, options.expectedRevision);
+      await writeBoard(ops, scope, row, { ...definition, key }, options.actor, { seed_hash: options.seedHash });
+      return { result: undefined, changed: true };
+    });
+    return (await this.get(scope, key))!;
+  }
+
   /** Deletes a board and its phases. */
   async delete(scope: StoredBoardScope, key: string, options: { expectedRevision: number }): Promise<void> {
     await this.#write(scope, async ops => {

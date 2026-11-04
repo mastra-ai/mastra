@@ -4,7 +4,8 @@
  * Reads need project membership; writes need an organization admin in tenant mode. The built-in
  * Work board and app boards are edited under their own key: a project's first edit stores its
  * copy, and reads never write. Their code behaviour stays attached, so an edit it can't honour is
- * refused (`code_behaviour`), and reset deletes the copy so the code definition serves again. They can't be created over or
+ * refused (`code_behaviour`), and reset rewrites the copy to the code definition at the next revision, so revisions never
+ * go back and a client holding an older one is refused. They can't be created over or
  * deleted. The legacy Review board stays read-only. Every write is checked against the rules
  * `defineBoard()` enforces and the cards sitting on the board, then invalidates the project's
  * board cache.
@@ -430,7 +431,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         }
         const { expectedRevision } = parsed.data;
         const row = await storage.get(scope, key);
-        // Resetting removes the project's copy, so the board serves its code definition again.
+        // A board the project never edited is already its code definition.
         if (!row) {
           if (expectedRevision === 0) return this.#respond(c, scope, key);
           throw new Refusal(409, {
@@ -439,7 +440,13 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
           });
         }
         await this.#checkPhasesFree(scope, row, seed.definition.phases);
-        await storage.delete(scope, key, { expectedRevision });
+        // The copy stays and moves to the next revision, so an editor holding an older revision is
+        // refused rather than writing over the reset.
+        await storage.resetTo(scope, key, seed.definition, {
+          expectedRevision,
+          actor: scope.userId,
+          seedHash: seed.hash,
+        });
         boards.invalidate(scope);
         await this.#audit(c, scope, 'reset', row);
         return this.#respond(c, scope, key);

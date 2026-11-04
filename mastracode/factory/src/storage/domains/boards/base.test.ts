@@ -320,7 +320,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       ]);
     });
 
-    it('keeps the seed hash when a copy is replaced, and deletes the copy on reset', async () => {
+    it('keeps the seed hash when a copy is replaced, and rewrites the copy at the next revision on reset', async () => {
       const { boards, scope } = await setup();
       await boards.create(scope, board('work'), 'user-1', { seedHash: 'v1' });
 
@@ -332,8 +332,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       );
       expect(replaced).toMatchObject({ name: 'Edited', revision: 2, seedHash: 'v1' });
 
-      await boards.delete(scope, 'work', { expectedRevision: 2 });
-      expect(await boards.get(scope, 'work')).toBeNull();
+      // Reset rewrites the copy to the new definition, refusing a stale revision.
+      await expect(
+        boards.resetTo(scope, 'work', board('work'), { expectedRevision: 1, actor: 'user-1', seedHash: 'v2' }),
+      ).rejects.toMatchObject({ code: 'revision_mismatch' });
+      const reset = await boards.resetTo(scope, 'work', board('work'), {
+        expectedRevision: 2,
+        actor: 'user-1',
+        seedHash: 'v2',
+      });
+      expect(reset).toMatchObject({ name: board('work').name, revision: 3, seedHash: 'v2' });
     });
 
     it('reads a board stored before code boards could be edited as not a copy', async () => {
