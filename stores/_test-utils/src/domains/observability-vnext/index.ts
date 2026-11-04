@@ -28,9 +28,11 @@ import type {
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
-import { createOutcomeFieldTests } from './outcome-fields';
-import { TIMING_FIELDS, timingValue } from './timing-fields';
-import type { TraceAggregateFixtureData } from './trace-aggregate';
+import {
+  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
+  TRACE_QUERY_DISCOVERY_TIME_RANGE,
+  TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
+} from './trace-query-discovery';
 import {
   collectTraceQueryPages,
   normalizeTraceQueryResponse,
@@ -43,12 +45,10 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
+import type { TraceAggregateFixtureData } from './trace-aggregate';
 import type { ThreadQueryConformanceCase, TraceQueryConformanceCase, TraceQueryFixtureData } from './trace-query';
-import {
-  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
-  TRACE_QUERY_DISCOVERY_TIME_RANGE,
-  TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
-} from './trace-query-discovery';
+import { createOutcomeFieldTests } from './outcome-fields';
+import { TIMING_FIELDS, timingValue } from './timing-fields';
 
 export interface ObservabilityVNextCapabilities {
   /**
