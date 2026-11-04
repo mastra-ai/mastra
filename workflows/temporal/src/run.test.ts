@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
+import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -497,6 +498,32 @@ describe('TemporalRun', () => {
       expect(result.status).toBe('failed');
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });
+
+    it.each(['start', 'startAsync'] as const)(
+      '%s does not run terminal hooks when Temporal rejects a duplicate workflow id',
+      async method => {
+        const failure = new WorkflowExecutionAlreadyStartedError(
+          'Workflow execution already started',
+          'run-1',
+          'hooked-workflow',
+        );
+        const onFinish = vi.fn();
+        const onError = vi.fn();
+        const start = vi.fn().mockRejectedValue(failure);
+        const { workflow } = createHookedWorkflow({ onFinish, onError }, async () => ({}), start);
+        const run = await workflow.createRun({ runId: 'run-1' });
+
+        if (method === 'start') {
+          const result = await run.start({ inputData: { value: 1 } });
+          expect(result.status).toBe('failed');
+        } else {
+          await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toBe(failure);
+        }
+
+        expect(onFinish).not.toHaveBeenCalled();
+        expect(onError).not.toHaveBeenCalled();
+      },
+    );
 
     it('runs terminal hooks when a resumed Temporal workflow fails', async () => {
       const failure = new Error('activity failed after resume');
