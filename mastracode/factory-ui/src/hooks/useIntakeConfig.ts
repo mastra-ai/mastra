@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -14,13 +14,13 @@ import {
 import type { IntakeConfig } from '../ui/domains/factory/services/intake';
 
 /** The org's intake source configuration (Settings › Intake). */
+export function intakeConfigQuery(baseUrl: string) {
+  return queryOptions({ queryKey: queryKeys.intakeConfig(), queryFn: () => fetchIntakeConfig(baseUrl) });
+}
+
 export function useIntakeConfigQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.intakeConfig(),
-    queryFn: () => fetchIntakeConfig(baseUrl),
-    enabled,
-  });
+  return useQuery({ ...intakeConfigQuery(baseUrl), enabled });
 }
 
 /**
@@ -42,13 +42,13 @@ export function useSaveIntakeConfigMutation() {
 }
 
 /** Which Factory project each intake source routes into (org-wide). */
+export function intakeBindingsQuery(baseUrl: string) {
+  return queryOptions({ queryKey: queryKeys.intakeBindings(), queryFn: () => fetchIntakeBindings(baseUrl) });
+}
+
 export function useIntakeBindingsQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.intakeBindings(),
-    queryFn: () => fetchIntakeBindings(baseUrl),
-    enabled,
-  });
+  return useQuery({ ...intakeBindingsQuery(baseUrl), enabled });
 }
 
 /**

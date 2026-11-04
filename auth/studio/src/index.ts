@@ -147,6 +147,29 @@ const VERIFY_FETCH_TIMEOUT_MS = 15_000;
  */
 const VERIFY_CACHE_TTL_MS = 30_000;
 
+/** The shared API's `GET /auth/me` body for a valid session cookie. */
+interface SharedApiMeBody {
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    profilePictureUrl?: string;
+  };
+  organizationId: string;
+  role?: string;
+  permissions?: string[];
+  memberOrgIds?: string[];
+}
+
+/** One `GET /auth/me` answer, shareable between concurrent callers. `data` is set when the response was OK. */
+interface SharedApiMeAnswer {
+  status: number;
+  statusText: string;
+  setCookies: string[];
+  data?: SharedApiMeBody;
+}
+
 /**
  * Auth provider for Mastra Studio deployed instances.
  *
@@ -201,6 +224,16 @@ export class MastraAuthStudio
    * caller's promise is reused by every follower until it settles.
    */
   private organizationBootstrapInFlight = new Map<string, Promise<string | undefined>>();
+
+  /**
+   * In-flight `GET /auth/me` verifications keyed by the credential's cache key.
+   * A page load sends several requests carrying the same cookie at once; until
+   * the first verification is cached, each would otherwise ask the shared API
+   * again, and with an expired access token each would try to refresh it with
+   * the same refresh token. Followers reuse the first caller's answer; each
+   * request still gets its own rotated `Set-Cookie` and session bookkeeping.
+   */
+  private sessionVerificationsInFlight = new Map<string, Promise<SharedApiMeAnswer>>();
 
   /**
    * Per-request response headers to forward to the browser — specifically a
@@ -814,12 +847,11 @@ export class MastraAuthStudio
    * rotated sealed value, or null when the cookie was not rotated.
    */
   private captureRotatedCookie(
-    res: Response,
+    setCookies: string[],
     oldSessionCookie: string,
     oldCacheKey: string,
     request: MastraAuthRequest | undefined,
   ): string | null {
-    const setCookies = this.readSetCookieHeaders(res);
     if (setCookies.length === 0) return null;
 
     const rotatedCookieHeader = setCookies.find(h => parseCookieFromHeader(h, COOKIE_NAME) !== null);
@@ -899,6 +931,33 @@ export class MastraAuthStudio
   }
 
   /**
+   * Ask the shared API's `/auth/me` about a sealed session cookie, sharing one
+   * call among concurrent callers with the same cookie (see
+   * `sessionVerificationsInFlight`).
+   */
+  private askSharedApiMe(cacheKey: string, sessionCookie: string): Promise<SharedApiMeAnswer> {
+    const inFlight = this.sessionVerificationsInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
+
+    const answer = (async (): Promise<SharedApiMeAnswer> => {
+      const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
+        headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
+      });
+      return {
+        status: res.status,
+        statusText: res.statusText,
+        setCookies: this.readSetCookieHeaders(res),
+        data: res.ok ? ((await res.json()) as SharedApiMeBody) : undefined,
+      };
+    })().finally(() => {
+      this.sessionVerificationsInFlight.delete(cacheKey);
+    });
+    this.sessionVerificationsInFlight.set(cacheKey, answer);
+    return answer;
+  }
+
+  /**
    * Forward a sealed session cookie to the shared API's /auth/me endpoint
    * to validate it and get user info.
    */
@@ -912,42 +971,25 @@ export class MastraAuthStudio
     }
 
     try {
-      const res = await fetch(`${this.sharedApiUrl}/auth/me`, {
-        headers: {
-          Cookie: `${COOKIE_NAME}=${sessionCookie}`,
-        },
-        signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
-      });
+      const answer = await this.askSharedApiMe(cacheKey, sessionCookie);
 
       // The shared API's `sessionAuth` middleware may have transparently
       // refreshed the sealed cookie — forward the rotated `Set-Cookie` to
       // the browser so its session actually rotates. Without this the
       // sealed cookie would stay frozen at its original value, and the
       // next refresh would hit `invalid_grant`.
-      const rotated = this.captureRotatedCookie(res, sessionCookie, cacheKey, request);
+      const rotated = this.captureRotatedCookie(answer.setCookies, sessionCookie, cacheKey, request);
 
-      if (!res.ok) {
+      if (!answer.data) {
         this.logger.warn('verifySessionCookie: shared API returned non-OK status', {
-          status: res.status,
-          statusText: res.statusText,
+          status: answer.status,
+          statusText: answer.statusText,
           url: `${this.sharedApiUrl}/auth/me`,
         });
         return null;
       }
 
-      const data = (await res.json()) as {
-        user: {
-          id: string;
-          email: string;
-          firstName: string;
-          lastName: string;
-          profilePictureUrl?: string;
-        };
-        organizationId: string;
-        role?: string;
-        permissions?: string[];
-        memberOrgIds?: string[];
-      };
+      const data = answer.data;
 
       // Remember the sealed cookie for this user so IOrganizationsProvider
       // methods (invoked with only a userId) can act on the user's behalf.

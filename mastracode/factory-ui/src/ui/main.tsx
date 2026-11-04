@@ -22,8 +22,8 @@ import './tailwind.css';
 // entry mounts the same providers with its own absolute base URL and fetch
 // implementation.
 const queryClient = createQueryClient();
-// Same config as the provider below, for the route loaders that start each page's requests.
-const router = createAppRouter({ queryClient, api: createApiConfig({ baseUrl: '' }) });
+const api = createApiConfig({ baseUrl: '' });
+const router = createAppRouter({ queryClient, api });
 
 if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
   void import('react-grab');
@@ -34,7 +34,7 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
-          <ApiConfigProvider baseUrl="">
+          <ApiConfigProvider config={api}>
             <RouterProvider router={router} />
             <PwaInstallBanner />
             <Toaster position="bottom-right" />

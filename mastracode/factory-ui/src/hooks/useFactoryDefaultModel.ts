@@ -1,4 +1,11 @@
-import { queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  queryOptions,
+  skipToken,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -19,8 +26,7 @@ import type { FactoryModelScope } from '../ui/domains/workspaces/services/github
 export function factoryProjectQuery(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.factoryProject(factoryProjectId),
-    queryFn: () => fetchFactoryProject(baseUrl, factoryProjectId!),
-    enabled: !!factoryProjectId,
+    queryFn: factoryProjectId ? () => fetchFactoryProject(baseUrl, factoryProjectId) : skipToken,
   });
 }
 

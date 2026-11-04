@@ -1,6 +1,7 @@
 import {
   infiniteQueryOptions,
   queryOptions,
+  skipToken,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -23,8 +24,9 @@ export function factoryDecisionStatusQuery(
 ) {
   return queryOptions({
     queryKey: queryKeys.factoryDecisions(githubProjectId, statuses.join(',')),
-    queryFn: () => fetchFactoryDecisions(baseUrl, githubProjectId!, { statuses, limit: 50 }),
-    enabled: Boolean(githubProjectId),
+    queryFn: githubProjectId
+      ? () => fetchFactoryDecisions(baseUrl, githubProjectId, { statuses, limit: 50 })
+      : skipToken,
     refetchInterval: 2_000,
     staleTime: 1_000,
   });
@@ -50,6 +52,10 @@ export function useFactoryDecisionAction(githubProjectId: string | undefined, ac
   });
 }
 
+/** A page of decision history starts before this cursor; the first page has none. */
+type DecisionCursor = string | undefined;
+const FIRST_DECISION_PAGE: DecisionCursor = undefined;
+
 export function factoryDecisionHistoryQuery(
   baseUrl: string,
   githubProjectId: string | undefined,
@@ -58,11 +64,12 @@ export function factoryDecisionHistoryQuery(
 ) {
   return infiniteQueryOptions({
     queryKey: queryKeys.factoryDecisions(githubProjectId, statusKey),
-    queryFn: ({ pageParam }) =>
-      fetchFactoryDecisions(baseUrl, githubProjectId!, { statuses, before: pageParam, limit: 25 }),
-    initialPageParam: undefined as string | undefined,
+    queryFn: githubProjectId
+      ? ({ pageParam }: { pageParam: DecisionCursor }) =>
+          fetchFactoryDecisions(baseUrl, githubProjectId, { statuses, before: pageParam, limit: 25 })
+      : skipToken,
+    initialPageParam: FIRST_DECISION_PAGE,
     getNextPageParam: (lastPage: FactoryDecisionPage) => lastPage.nextCursor,
-    enabled: Boolean(githubProjectId),
     refetchInterval: 5_000,
     staleTime: 2_000,
   });
