@@ -72,6 +72,13 @@ export const knowledge = new Knowledge({
     isOptional: true,
   },
   {
+    name: 'importers',
+    type: 'KnowledgeImporter[]',
+    description:
+      'Importers to register, as with [`registerImporter()`](#registerimporter). See [Sync with an importer](/docs/knowledge/load-your-content#sync-with-an-importer).',
+    isOptional: true,
+  },
+  {
     name: 'tools',
     type: 'boolean | { read?: boolean | { maxTokens?: number }; write?: boolean }',
     description:
@@ -305,6 +312,55 @@ removeNote(input: { id: string; author?: string }): Promise<KnowledgeNote | null
 ```
 
 Removes a note and resolves to it, or to `null` when it's already gone.
+
+### Importers
+
+An importer brings content from another system into Knowledge with host writes recorded as `importer:<id>`. Running importers needs storage with importer support: LibSQL, PostgreSQL or in-memory. Other storage throws when a run starts. See [Sync with an importer](/docs/knowledge/load-your-content#sync-with-an-importer).
+
+```typescript oxfmt:false
+interface KnowledgeImporter<TOptions = unknown> {
+  id: string
+  description?: string
+  run(ctx: KnowledgeImporterContext<TOptions>): Promise<void>
+}
+```
+
+`run()` gets `ctx` with `runId`, `importerId`, `options`, `dryRun`, `incremental` and a `signal` that aborts when the run is canceled. `ctx.pages` has `upsert()`, `remove()`, `addNote()`, `updateNote()` and `removeNote()`, which take the same input as the host writes without `author`, plus `keep({ scope, path })` to keep a page from an earlier run without rewriting it. `ctx.state.get(key)` and `ctx.state.set(key, value)` save JSON values, such as a cursor, for the next run. Setting `undefined` deletes the value. `ctx.log()` writes to the Knowledge logger.
+
+#### `registerImporter()`
+
+```typescript oxfmt:false
+registerImporter(importer: KnowledgeImporter): void
+```
+
+Adds an importer. `id` may only use letters, digits, `-`, `_`, `.` and `:`. Throws `Knowledge importer "<id>" is already registered.` for a duplicate. `getImporter(id)` and `listImporters()` return registered importers.
+
+#### `runImporter()`
+
+```typescript oxfmt:false
+runImporter(id: string, input?: {
+  options?: TOptions
+  dryRun?: boolean
+  incremental?: boolean
+  signal?: AbortSignal
+}): Promise<KnowledgeImportRun>
+```
+
+Runs the importer and resolves to its run: `{ id, importerId, status, dryRun, incremental, counts, error?, startedAt, completedAt? }`. `status` is `succeeded`, `failed` or `canceled`. A failing importer doesn't make this throw; the run records the error. `counts` has `created`, `updated`, `unchanged`, `removed` and `notes`. After a successful run that isn't `incremental` or `dryRun`, pages the importer wrote before and neither wrote nor kept this run are removed, children first; a page that still has children stays. A `dryRun` writes nothing and drops state saves. Throws `KnowledgeImporterBusyError` while the same importer is already running in this process. Runs aren't locked across processes.
+
+#### `getImportRun()`
+
+```typescript oxfmt:false
+getImportRun(runId: string): Promise<KnowledgeImportRun | null>
+```
+
+#### `listImportRuns()`
+
+```typescript oxfmt:false
+listImportRuns(input?: { importerId?: string; limit?: number }): Promise<KnowledgeImportRun[]>
+```
+
+Lists runs newest first, 20 by default.
 
 ### Storage and maintenance
 

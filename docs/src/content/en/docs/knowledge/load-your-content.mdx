@@ -10,7 +10,7 @@ packages:
 
 Agents write to Knowledge as they work, but you often want content in place before they start, such as your product docs or company policies. Seed it from your own server code with [`upsertPage()`](/reference/knowledge/knowledge-class#upsertpage) and [`addNote()`](/reference/knowledge/knowledge-class#addnote).
 
-Knowledge has no importers yet. Planned importers will keep it in sync with your other systems. Until then, seed content from server code as shown here.
+To keep Knowledge in step with another system, such as an issue tracker or a wiki, wrap the same writes in an [importer](#sync-with-an-importer).
 
 :::alpha
 
@@ -88,6 +88,57 @@ Run the seed again when your source changes. `upsertPage()` updates changed page
 `addNote()` adds a new note on every call. Running the seed twice leaves duplicate notes. Add notes once, or change an existing note with [`updateNote()`](/reference/knowledge/knowledge-class#updatenote).
 
 A document you delete from your source stays in Knowledge. Remove it with [`removePage()`](/reference/knowledge/knowledge-class#removepage). A page with child pages can't be removed until its children are.
+
+## Sync with an importer
+
+An importer is a seed that Knowledge runs for you. It records each run, keeps a cursor between runs, and removes the pages its source no longer has. Write one with `id` and `run()`, and write pages through `ctx.pages`:
+
+```typescript title="src/mastra/docs-importer.ts"
+import type { KnowledgeImporter } from '@mastra/core/knowledge'
+
+type Doc = { slug: string; title: string; markdown: string }
+
+export const docsImporter: KnowledgeImporter<{ orgId: string }> = {
+  id: 'docs',
+  async run(ctx) {
+    const docs: Doc[] = await fetch('https://docs.example.com/export.json', { signal: ctx.signal }).then(res =>
+      res.json(),
+    )
+    for (const doc of docs) {
+      await ctx.pages.upsert({
+        scope: `docs:${ctx.options.orgId}`,
+        path: doc.slug,
+        name: doc.title,
+        body: doc.markdown,
+      })
+    }
+  },
+}
+```
+
+Register it on Knowledge, then run it from a job or an admin route:
+
+```typescript title="src/mastra/knowledge.ts"
+export const knowledge = new Knowledge({
+  // ...
+  importers: [docsImporter],
+})
+
+const run = await knowledge.runImporter('docs', { options: { orgId: 'acme' } })
+console.log(run.status, run.counts) // succeeded { created: 12, updated: 0, unchanged: 0, removed: 0, notes: 0 }
+```
+
+Every write is recorded with the author `importer:docs`. After a run succeeds, Knowledge removes pages this importer wrote in earlier runs and didn't write this time, so a doc you delete from the source leaves Knowledge on the next run. A run that throws or is aborted is recorded as `failed` or `canceled` and removes nothing.
+
+An importer that fetches only what changed since its last run should run with `incremental: true`, which removes nothing, and save its cursor with `ctx.state`:
+
+```typescript title="src/mastra/docs-importer.ts"
+const since = await ctx.state.get<string>('since')
+// fetch docs changed after `since`, upsert them, and ctx.pages.remove() the deleted ones
+await ctx.state.set('since', new Date().toISOString())
+```
+
+Pass `dryRun: true` to see what a run would change. It writes no pages and saves no state, and its counts say what it would have done. Importers need LibSQL, PostgreSQL or in-memory storage. Only one run of an importer happens at a time in a process. A second call throws `KnowledgeImporterBusyError`, so schedule each importer on one worker.
 
 ## Next steps
 
