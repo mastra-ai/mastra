@@ -37,7 +37,7 @@ import { useSpeechRecognition } from '@mastra/react';
 import { useReadAloud } from '@mastra/react/hooks/voice';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 import { AttachFilePopover } from './attachments/attach-file-popover';
@@ -530,12 +530,7 @@ const AgentComposer = ({
 
 const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
   const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
-  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
-
-  useEffect(() => {
-    if (!transcript) return;
-    startTransition(() => onTranscript(transcript));
-  }, [onTranscript, transcript]);
+  const { start, stop, isListening } = useSpeechRecognition({ agentId, requestContext });
 
   return (
     <Button
@@ -543,7 +538,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       size="icon-md"
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      onClick={() => (isListening ? stop() : start())}
+      onClick={() => (isListening ? stop() : start(onTranscript))}
     >
       {isListening ? <CircleStopIcon /> : <Mic />}
     </Button>

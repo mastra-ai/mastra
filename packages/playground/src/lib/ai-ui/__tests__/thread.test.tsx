@@ -273,6 +273,35 @@ describe('Thread', () => {
     });
   });
 
+  describe('when the user edits the composer after dictating', () => {
+    beforeEach(() => installFakeSpeechRecognition());
+    afterEach(() => uninstallFakeSpeechRecognition());
+
+    it('keeps the edit', async () => {
+      server.use(...baseHandlers());
+      await act(async () => {
+        renderThread([]);
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
+      await screen.findByRole('button', { name: 'Stop dictation' });
+      act(() => {
+        lastRecognition?.onresult?.({
+          resultIndex: 0,
+          results: [{ 0: { transcript: 'Accept the newer address.' }, isFinal: true }],
+        });
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+      const composer = screen.getByRole<HTMLTextAreaElement>('textbox');
+      await waitFor(() => expect(composer.value).toBe('Accept the newer address. '));
+
+      await act(async () => {
+        fireEvent.change(composer, { target: { value: 'Accept the newer address. Thanks' } });
+      });
+
+      expect(composer.value).toBe('Accept the newer address. Thanks');
+    });
+  });
+
   describe('when no suggested prompts are provided for an empty thread', () => {
     it('renders the default welcome state', async () => {
       server.use(...baseHandlers());
