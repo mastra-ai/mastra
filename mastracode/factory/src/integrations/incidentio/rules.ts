@@ -8,7 +8,7 @@ import {
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { selectEventRule, routeEventDecision } from '../../rules/event-rules.js';
 import type { FactoryIncidentioRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -167,7 +167,7 @@ export class IncidentioRules {
       boardEventHandlers(this.options.boards, eventBoardId(context), 'incidentio'),
       context.event,
     );
-    let decision: FactoryRuleDecision | void;
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -195,6 +195,10 @@ export class IncidentioRules {
             ? error.message.slice(0, 2_000)
             : 'Factory incident.io rule failed.',
       };
+    }
+    if (!decision && outcome.status === 'accepted') {
+      const routed = routeEventDecision(context);
+      if (routed) decisions = [{ ...routed }];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

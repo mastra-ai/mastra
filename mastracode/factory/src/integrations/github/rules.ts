@@ -14,7 +14,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { selectEventRule, routeEventDecision } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -857,7 +857,7 @@ export class GithubRules {
         boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
         event,
       );
-      let decision: FactoryRuleDecision | void;
+      let decision: FactoryRuleDecision | void = undefined;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
       try {
@@ -881,6 +881,10 @@ export class GithubRules {
               ? error.message.slice(0, 2_000)
               : 'Factory GitHub rule failed.',
         };
+      }
+      if (!decision && outcome.status === 'accepted') {
+        const routed = routeEventDecision(context);
+        if (routed) decisions = [{ ...routed }];
       }
 
       const committed = await this.options.storage.commitRuleEvaluation({

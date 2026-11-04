@@ -19,6 +19,7 @@ import {
   INTAKE_ROUTE_METADATA_KEY,
   landingPhase,
   placedByIntakeRoute,
+  resolveEventRoute,
   resolveIntakePlacement,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
@@ -1304,6 +1305,10 @@ export class FactoryDecisionDispatcher {
         }
         return;
       }
+      case 'routeEvent': {
+        await this.#routeEvent(record, decision, nextChain);
+        return;
+      }
       case 'upsertLinkedWorkItem': {
         await this.#upsertLinkedItem(record, decision, nextChain);
         return;
@@ -1361,39 +1366,7 @@ export class FactoryDecisionDispatcher {
             (await this.#decisionOvertaken(record, decision.role));
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
-          // Only a *live* run on this binding can be duplicated by a second
-          // kickoff, so that is the only thing worth waiting on. The open-run
-          // ledger is shared by every replica, but the run registry is local, so
-          // an entry with nothing live here is one of two things:
-          //  - live on another replica (fresh heartbeat from another owner):
-          //    hand the decision back to retry, since that owner will clear the
-          //    entry and only it can observe the run end;
-          //  - an orphan (stale or missing heartbeat): the run died with its
-          //    process and no `agent_end` will ever clear it. Waiting would
-          //    wedge the binding for good; the next observed run end sweeps it.
-          while (true) {
-            const openRun = watchRun(session, {
-              timeoutMs: this.#skillCompletionObservationTimeoutMs,
-              approvePlans: false,
-              label: 'Factory skill run',
-              runStillActive,
-            });
-            try {
-              const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
-              if (open.length === 0) break;
-              if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
-                throw new FactoryDispatchError(
-                  'session_unavailable',
-                  `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
-                );
-              }
-              if (!runStillActive()) break;
-              if (!(await openRun.wait())) break;
-            } finally {
-              openRun.close();
-            }
-            await waitForSessionRunAudit(session);
-          }
+          await this.#waitForOpenRun(session, binding, 'Factory skill run');
           if (await this.#roleSuperseded(record, decision.role)) throw new FactoryDecisionSuperseded();
           const activeBinding = await this.#requireBinding(record, decision.role);
           if (activeBinding.id !== binding.id) {
@@ -1919,6 +1892,57 @@ export class FactoryDecisionDispatcher {
     if (!board || board.id === decision.board) return decision;
     return { ...decision, board: board.id, stage: board.initialPhase };
   }
+  /**
+   * Moves a card where the project's intake routes send it on a status event, after the run in
+   * flight on the card ends. No matching route leaves the card where it is. The move is a system
+   * move by the route: recorded in the card's history and audit, keyed so a replayed delivery
+   * moves nothing twice.
+   */
+  async #routeEvent(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'routeEvent' }>,
+    causalChain: FactoryRuleCausalEntry[],
+  ): Promise<void> {
+    if (!this.#intakeRoutes) return;
+    const identity = `event-route:${record.idempotencyKey}`;
+    if (await this.#storage.getTransitionResultByIngress(record.orgId, record.factoryProjectId, identity)) return;
+    const resolve = async () => {
+      const item = await this.#requireItem(record);
+      const board = (await this.#boards.load(record)).get(boardForWorkItem(item));
+      if (!board) return undefined;
+      const routes = await this.#intakeRoutes!.listIntakeRoutes({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+      });
+      const route = resolveEventRoute(routes, decision.event, cardRuleFacts(item), board);
+      if (!route || (item.stages.length === 1 && item.stages[0] === route.phase)) return undefined;
+      return { item, board, route };
+    };
+    if (!(await resolve())) return;
+    const binding = await this.#findBinding(record);
+    const session = binding ? await this.#findSession(binding) : undefined;
+    if (binding && session) await this.#waitForOpenRun(session, binding, 'Factory run before an intake route move');
+    // The card may have moved, or the routes changed, while the run finished.
+    const target = await resolve();
+    if (!target) return;
+    const { item, board, route } = target;
+    const result = await this.#transitionService.transition({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: item.id,
+      board: board.id,
+      stage: route.phase,
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: `intake-route:${route.routeId}` },
+      ingress: { type: 'rule', identity },
+      cause: 'event_route',
+      causalChain,
+      eventRoute: { routeId: route.routeId, allowWorkingPhase: route.allowWorkingPhase },
+    });
+    // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
+    if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
+  }
+
   async #requireItem(record: FactoryDeferredDecisionRecord) {
     if (!record.workItemId) throw new Error('Factory decision is not linked to a work item.');
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
@@ -2057,6 +2081,48 @@ export class FactoryDecisionDispatcher {
       item !== null &&
       autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan'
     );
+  }
+
+  /**
+   * Waits for the run in flight on `binding` to end, so what follows (a kickoff, a route's move)
+   * never overlaps it.
+   */
+  async #waitForOpenRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, label: string) {
+    const runStillActive = () =>
+      this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
+    // Only a *live* run on this binding can be duplicated by a second
+    // kickoff, so that is the only thing worth waiting on. The open-run
+    // ledger is shared by every replica, but the run registry is local, so
+    // an entry with nothing live here is one of two things:
+    //  - live on another replica (fresh heartbeat from another owner):
+    //    hand the decision back to retry, since that owner will clear the
+    //    entry and only it can observe the run end;
+    //  - an orphan (stale or missing heartbeat): the run died with its
+    //    process and no `agent_end` will ever clear it. Waiting would
+    //    wedge the binding for good; the next observed run end sweeps it.
+    while (true) {
+      const openRun = watchRun(session, {
+        timeoutMs: this.#skillCompletionObservationTimeoutMs,
+        approvePlans: false,
+        label,
+        runStillActive,
+      });
+      try {
+        const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
+        if (open.length === 0) break;
+        if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
+          throw new FactoryDispatchError(
+            'session_unavailable',
+            `Factory binding ${binding.id} has a run in flight on another dispatcher.`,
+          );
+        }
+        if (!runStillActive()) break;
+        if (!(await openRun.wait())) break;
+      } finally {
+        openRun.close();
+      }
+      await waitForSessionRunAudit(session);
+    }
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {

@@ -1,4 +1,5 @@
-import type { FactoryRuleHandler } from './types.js';
+import type { BoardEventFacts } from '../boards/board-events.js';
+import type { FactoryRouteEventDecision, FactoryRuleHandler } from './types.js';
 
 type EventRuleTable<E extends string, TContext> = Readonly<Record<E, FactoryRuleHandler<TContext> | null>>;
 type BoardEventRuleMap<E extends string, TContext> = Readonly<Partial<Record<E, FactoryRuleHandler<TContext> | null>>>;
@@ -60,4 +61,17 @@ export function hasExplicitRuleOverride(rules: object, event: string): boolean {
 
 function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
   return typeof (value as { then?: unknown } | null | undefined)?.then === 'function';
+}
+
+/**
+ * The decision that hands a delivery's status event to the project's intake routes, when no rule
+ * decided anything for it. Only an existing card is moved; new cards are placed when filed.
+ */
+export function routeEventDecision(context: {
+  item?: unknown;
+  boardEvent?: BoardEventFacts;
+  ingress: { id: string };
+}): FactoryRouteEventDecision | undefined {
+  if (!context.item || !context.boardEvent || context.boardEvent.type === 'work_item.created') return undefined;
+  return { type: 'routeEvent', idempotencyKey: `${context.ingress.id}:event-route`, event: context.boardEvent };
 }

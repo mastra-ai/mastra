@@ -1,3 +1,4 @@
+import { CLOSE_REASONS, STATUS_EVENTS } from '../boards/board-events.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type {
   FactoryCommitDecision,
@@ -231,6 +232,22 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         stage: boardIdentifier(value.stage, 'Factory transition stage'),
         ...(message ? { message } : {}),
         ...(value.reenter === true ? { reenter: true } : {}),
+      };
+    }
+    case 'routeEvent': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'event'], 'Factory routeEvent decision');
+      if (!isPlainObject(value.event))
+        throw new FactoryRuleValidationError('Factory routeEvent event must be an object.');
+      assertExactKeys(value.event, ['type', 'reason'], 'Factory routeEvent event');
+      const eventType = enumValue(value.event.type, STATUS_EVENTS, 'Factory routeEvent event type');
+      const reason =
+        value.event.reason === undefined
+          ? undefined
+          : enumValue(value.event.reason, CLOSE_REASONS, 'Factory routeEvent event reason');
+      return {
+        type,
+        ...commonCommitFields(value),
+        event: { type: eventType, ...(reason ? { reason } : {}) },
       };
     }
     case 'upsertLinkedWorkItem': {

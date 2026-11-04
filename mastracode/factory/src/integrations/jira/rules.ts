@@ -8,7 +8,7 @@ import {
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { selectEventRule, routeEventDecision } from '../../rules/event-rules.js';
 import type { FactoryJiraRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -169,7 +169,7 @@ export class JiraRules {
       boardEventHandlers(this.options.boards, eventBoardId(context), 'jira'),
       context.event,
     );
-    let decision: FactoryRuleDecision | void;
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -197,6 +197,10 @@ export class JiraRules {
             ? error.message.slice(0, 2_000)
             : 'Factory Jira rule failed.',
       };
+    }
+    if (!decision && outcome.status === 'accepted') {
+      const routed = routeEventDecision(context);
+      if (routed) decisions = [{ ...routed }];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

@@ -2,12 +2,14 @@ import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import type { BoardEventFacts } from './board-events.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 
 /** Reads a project's intake routes, in order. */
 export type IntakeRoutesReader = Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
 
 type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
+type EventRoute = IntakeRoute & Pick<StoredIntakeRouteRecord, 'allowWorkingPhase'>;
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
 export function placesNewCards(route: Pick<StoredIntakeRouteRecord, 'on'>): boolean {
@@ -106,4 +108,31 @@ export function landingPhase(board: InstalledBoard, phase: string | null | undef
     !board.isTerminal(phase) &&
     board.allowsTransition(board.initialPhase, phase);
   return usable ? phase : board.initialPhase;
+}
+
+/**
+ * Where a status event moves an existing card: the first enabled route whose `on` names the
+ * event, whose `when` matches the card and the event, and whose board is the card's own and can
+ * hold it there. A route without a phase moves the card to its board's first phase. Undefined
+ * leaves the card where it is.
+ */
+export function resolveEventRoute(
+  routes: readonly EventRoute[],
+  event: BoardEventFacts,
+  cardFacts: RuleFacts,
+  board: InstalledBoard,
+): { phase: string; routeId: string; allowWorkingPhase: boolean } | undefined {
+  const facts: RuleFacts = {
+    ...cardFacts,
+    'event.type': event.type,
+    ...(event.reason ? { 'event.reason': event.reason } : {}),
+  };
+  for (const route of routes) {
+    if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
+    if (!evaluateRuleGroup(route.when, facts)) continue;
+    const phase = route.target.phaseKey ?? board.initialPhase;
+    if (board.phaseKind(phase) === undefined || !placementTakesCard(board.id, phase, facts)) continue;
+    return { phase, routeId: route.id, allowWorkingPhase: route.allowWorkingPhase };
+  }
+  return undefined;
 }

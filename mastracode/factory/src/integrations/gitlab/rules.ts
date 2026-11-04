@@ -8,7 +8,7 @@ import {
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
+import { hasExplicitRuleOverride, selectEventRule, routeEventDecision } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -708,7 +708,7 @@ export class GitLabRules {
     // Without a board handler the authoring card has nothing to answer; skip
     // recording an empty evaluation for it.
     if (input.mergeRequestOpenedScope === 'board' && !rule) return { status: 'ignored' };
-    let decision: FactoryRuleDecision | void;
+    let decision: FactoryRuleDecision | void = undefined;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
     try {
@@ -736,6 +736,10 @@ export class GitLabRules {
             ? error.message.slice(0, 2_000)
             : 'Factory GitLab rule failed.',
       };
+    }
+    if (!decision && outcome.status === 'accepted') {
+      const routed = routeEventDecision(context);
+      if (routed) decisions = [{ ...routed }];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

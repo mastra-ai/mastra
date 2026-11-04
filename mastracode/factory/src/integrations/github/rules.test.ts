@@ -5624,7 +5624,30 @@ describe('GithubRules board events', () => {
     ]);
   });
 
-  it('records a reopened issue without changing its card, as before reopens had an event', async () => {
+  it('leaves a status event to routes only when no rule decided anything for it', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', {
+      issueClosed: () => ({ type: 'transition', idempotencyKey: 'override-close', board: 'work', stage: 'canceled' }),
+    });
+    await createLinkedIssue(workItems, project.id, ['planning']);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    await service.ingest(issueClosed('override-closed', 'completed'));
+    await service.ingest(issueReopened('override-reopened'));
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'transition', stage: 'canceled' }),
+      expect.objectContaining({ type: 'routeEvent', event: { type: 'work_item.reopened' } }),
+    ]);
+  });
+
+  it('hands a reopened issue on an existing card to intake routes, once per delivery', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const card = await createLinkedIssue(workItems, project.id, ['done']);
     const service = new GithubRules({
@@ -5638,7 +5661,10 @@ describe('GithubRules board events', () => {
     });
     await expect(service.ingest(issueReopened('reopen-default'))).resolves.toEqual({ status: 'committed' });
     await expect(service.ingest(issueReopened('reopen-default'))).resolves.toEqual({ status: 'replayed' });
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'routeEvent', event: { type: 'work_item.reopened' } }),
+    ]);
     expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'], revision: card.revision });
   });
 });

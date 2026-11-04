@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { BoardEventFacts } from '../boards/board-events.js';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
@@ -66,7 +67,7 @@ async function setup(
   const workItems = seeded.workItems;
   const dispatcher = new FactoryDecisionDispatcher({
     controller: {} as never,
-    transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
+    transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards, audit: seeded.audit }),
     storage: workItems,
     boards,
     ...(options.withRoutesReader === false ? {} : { intakeRoutes: seeded.boards }),
@@ -121,7 +122,62 @@ async function setup(
   };
   /** Gives the dispatcher another turn, a day later, so a decision waiting to retry runs again. */
   const retry = () => dispatcher.runOnce(new Date('2030-01-02T00:00:00Z'));
-  return { ...seeded, scope, project, defaultRoute: defaultRoute!, route, deliver, runs, retry };
+  /** Commits a status event on an existing card, as an integration does when no rule decided anything, and dispatches it. */
+  const deliverEvent = async (cardId: string, event: BoardEventFacts, identity = `event-${(deliveries += 1)}`) => {
+    const card = await workItems.get({ orgId: 'org-1', id: cardId });
+    const committed = await workItems.commitRuleEvaluation({
+      ...scope,
+      workItemId: cardId,
+      ingress: { identity, triggerType: 'github.issueClosed' },
+      configVersion,
+      expectedRevision: card!.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'routeEvent', idempotencyKey: `${identity}:event-route`, event }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+    return { committed, card: await workItems.get({ orgId: 'org-1', id: cardId }) };
+  };
+  /** Puts a card in a phase directly, the way a person's move would leave it. */
+  const putAt = async (cardId: string, stage: string) => {
+    const card = await workItems.get({ orgId: 'org-1', id: cardId });
+    await workItems.commitTransition({
+      ...scope,
+      workItemId: cardId,
+      expectedRevision: card!.revision,
+      destinationStage: stage,
+      actorId: 'user-1',
+      ingress: { identity: `put-${cardId}-${stage}`, triggerType: 'human', transitionId: `put-${cardId}-${stage}` },
+      configVersion,
+      causalChain: [],
+      evaluation: { outcome: 'accepted', decisions: [] },
+    });
+  };
+  /** The route decisions dispatched for a card, with their outcome. */
+  const routeDecisions = async (cardId: string) =>
+    (await workItems.listDeferredDecisions('org-1', project.id))
+      .filter(decision => decision.workItemId === cardId && decision.decision.type === 'routeEvent')
+      .map(decision => decision.status);
+  const stageAudits = async (cardId: string) =>
+    (await seeded.audit.list({ orgId: 'org-1' })).events
+      .filter(event => event.targets.some(target => target.id === cardId))
+      .map(event => ({ action: event.action, metadata: event.metadata }));
+  return {
+    ...seeded,
+    scope,
+    project,
+    defaultRoute: defaultRoute!,
+    route,
+    deliver,
+    deliverEvent,
+    putAt,
+    routeDecisions,
+    stageAudits,
+    runs,
+    retry,
+  };
 }
 
 function placed(card: { board?: string | null; stages: string[] } | undefined) {
@@ -511,6 +567,149 @@ describe('intake routes placing linked cards', () => {
 
     expect(placed(await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: true } }))).toEqual({
       board: 'work',
+      stages: ['intake'],
+    });
+  });
+});
+
+const CLOSED_AS = (reason: 'completed' | 'canceled') =>
+  ({ operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: reason }] }) as const;
+
+describe('intake routes moving existing cards on status events', () => {
+  it("moves a closed issue to the phase its route names for the close reason, recorded as the route's move", async () => {
+    const { route, deliver, deliverEvent, stageAudits } = await setup();
+    const done = await route({
+      name: 'Closed as completed',
+      on: ['work_item.closed'],
+      when: CLOSED_AS('completed'),
+      target: { boardKey: 'work', phaseKey: 'done' },
+    });
+    const canceled = await route({
+      name: 'Closed as not planned',
+      on: ['work_item.closed'],
+      when: CLOSED_AS('canceled'),
+      target: { boardKey: 'work', phaseKey: 'canceled' },
+    });
+    const first = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    const second = (await deliver({ sourceKey: 'github-issue:2' }))!;
+
+    const completedMove = await deliverEvent(first.id, { type: 'work_item.closed', reason: 'completed' });
+    const canceledMove = await deliverEvent(second.id, { type: 'work_item.closed', reason: 'canceled' });
+
+    expect(completedMove.card).toMatchObject({ stages: ['done'] });
+    expect(completedMove.card!.stageHistory.at(-1)).toMatchObject({ stage: 'done', by: `intake-route:${done.id}` });
+    expect(canceledMove.card).toMatchObject({ stages: ['canceled'] });
+    expect(canceledMove.card!.stageHistory.at(-1)).toMatchObject({
+      stage: 'canceled',
+      by: `intake-route:${canceled.id}`,
+    });
+    expect(await stageAudits(second.id)).toContainEqual({
+      action: 'factory.work_item.stage_moved',
+      metadata: expect.objectContaining({
+        cause: 'event_route',
+        intakeRouteId: canceled.id,
+        from: 'intake',
+        to: 'canceled',
+      }),
+    });
+  });
+
+  it('leaves the card where it is when no route handles the event or matches it', async () => {
+    const { route, deliver, deliverEvent, routeDecisions } = await setup();
+    await route({ name: 'Places new cards', target: { boardKey: 'work', phaseKey: 'triage' }, when: DOCS });
+    await route({
+      name: 'Closed as not planned',
+      on: ['work_item.closed'],
+      when: CLOSED_AS('canceled'),
+      target: { boardKey: 'work', phaseKey: 'canceled' },
+    });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+
+    expect((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card).toMatchObject({
+      stages: ['intake'],
+    });
+    expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['intake'] });
+    expect(await routeDecisions(card.id)).toEqual(['succeeded', 'succeeded']);
+  });
+
+  it("moves a reopened issue out of Done to Intake, which the board's own next phases don't allow", async () => {
+    const { route, deliver, deliverEvent, putAt } = await setup();
+    await route({ name: 'Reopened', on: ['work_item.reopened'], target: { boardKey: 'work', phaseKey: 'intake' } });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    await putAt(card.id, 'done');
+
+    expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['intake'] });
+    // The bypass is the route's, not the board's: Work still only lets Done go to PR review.
+    expect(createBoardRegistry().get('work')!.allowsTransition('done', 'intake')).toBe(false);
+  });
+
+  it('moves a card into a working phase such as Triage only when the route allows it', async () => {
+    const { route, deliver, deliverEvent, putAt, routeDecisions, stageAudits, boards, scope } = await setup();
+    const reopened = await route({
+      name: 'Reopened back to Triage',
+      on: ['work_item.reopened'],
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    await putAt(card.id, 'done');
+
+    expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['done'] });
+    // Refused for good, not retried: the route has to change first.
+    expect(await routeDecisions(card.id)).toEqual(['succeeded']);
+    expect(await stageAudits(card.id)).toContainEqual({
+      action: 'factory.work_item.transition_rejected',
+      metadata: expect.objectContaining({ cause: 'event_route', code: 'approval_required', to: 'triage' }),
+    });
+
+    await boards.updateIntakeRoute(scope, reopened.id, {
+      expectedRevision: reopened.revision,
+      allowWorkingPhase: true,
+    });
+    expect((await deliverEvent(card.id, { type: 'work_item.reopened' })).card).toMatchObject({ stages: ['triage'] });
+  });
+
+  it("ignores a route that names another board, or is disabled, and takes the next match on the card's board", async () => {
+    const { boards, scope, route, deliver, deliverEvent } = await setup();
+    await boards.create(scope, docsBoard, 'admin');
+    await route({ name: 'Docs', on: ['work_item.closed'], target: { boardKey: 'docs', phaseKey: 'published' } });
+    await route({
+      name: 'Off',
+      enabled: false,
+      on: ['work_item.closed'],
+      target: { boardKey: 'work', phaseKey: 'canceled' },
+    });
+    await route({ name: 'Done', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: 'done' } });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+
+    expect(placed((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card)).toEqual({
+      board: 'work',
+      stages: ['done'],
+    });
+  });
+
+  it('moves a card once for a delivery, however often it is replayed or retried', async () => {
+    const { route, deliver, deliverEvent, putAt, retry, workItems } = await setup();
+    await route({ name: 'Reopened', on: ['work_item.reopened'], target: { boardKey: 'work', phaseKey: 'intake' } });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    await putAt(card.id, 'done');
+
+    const first = await deliverEvent(card.id, { type: 'work_item.reopened' }, 'reopen-delivery');
+    expect(first.card).toMatchObject({ stages: ['intake'] });
+    // A person closes it again; the same delivery replayed (a reconcile pass) must not reopen it.
+    await putAt(card.id, 'canceled');
+    const replay = await deliverEvent(card.id, { type: 'work_item.reopened' }, 'reopen-delivery');
+    expect(replay.committed.status).toBe('replayed');
+    await retry();
+    const after = await workItems.get({ orgId: 'org-1', id: card.id });
+    expect(after).toMatchObject({ stages: ['canceled'] });
+    expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(1);
+  });
+
+  it('moves nothing without a routes reader', async () => {
+    const { route, deliver, deliverEvent } = await setup({ withRoutesReader: false });
+    await route({ name: 'Done', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: 'done' } });
+    const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+    expect((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card).toMatchObject({
       stages: ['intake'],
     });
   });

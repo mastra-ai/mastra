@@ -2192,6 +2192,83 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
+  it("waits for the card's run in flight before an intake route moves the card", async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const binding = await bindWorkRun(storage, item.id);
+    const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
+    await seed.boards.createIntakeRoute(
+      scope,
+      { name: 'Closed', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: 'done' } },
+      'admin',
+    );
+    const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+      streamActive: true,
+    });
+    await session.thread.setSetting({
+      key: FACTORY_OPEN_RUNS_SETTING,
+      value: [
+        {
+          kickoffId: 'running-kickoff',
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+        },
+      ],
+    });
+    controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+    observeSessionRunEnd(session, { audit: seed.audit });
+    const running = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+    await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: item.id,
+      ingress: { identity: 'closed-while-running', triggerType: 'github.issueClosed' },
+      configVersion: 'rules-v1',
+      expectedRevision: running.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'routeEvent',
+          idempotencyKey: 'closed-while-running:event-route',
+          event: { type: 'work_item.closed', reason: 'completed' },
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService: new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards: createBoardRegistry(),
+      }),
+      storage,
+      intakeRoutes: seed.boards,
+      ownerId: 'worker-1',
+    });
+
+    const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: running.stages });
+
+    controller.listActiveThreadRuns.mockReturnValue([]);
+    emitAgentEnd('complete');
+    await dispatch;
+
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ stages: ['done'] });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
   describe('open-run ledger across dispatchers', () => {
     async function setUpOpenBinding(entry: Record<string, unknown>) {
       const seed = await createFactoryStorageForTests();

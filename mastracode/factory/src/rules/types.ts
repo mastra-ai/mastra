@@ -614,6 +614,17 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
   reenter?: boolean;
 }
 
+/**
+ * Hands a status event on an existing card to the project's intake routes: the first enabled
+ * route on the card's board whose `on` names the event and whose `when` matches moves the card.
+ * Integrations add it when no rule decided anything for the delivery; nothing moves when no
+ * route matches.
+ */
+export interface FactoryRouteEventDecision extends FactoryCommitDecisionBase {
+  type: 'routeEvent';
+  event: BoardEventFacts;
+}
+
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {
   type: 'upsertLinkedWorkItem';
   board: FactoryRuleBoard;
@@ -708,6 +719,7 @@ export interface FactoryDismissStaleReviewsDecision extends FactoryCommitDecisio
 
 export type FactoryCommitDecision =
   | FactoryTransitionDecision
+  | FactoryRouteEventDecision
   | FactoryDismissStaleReviewsDecision
   | FactoryUpsertLinkedWorkItemDecision
   | FactoryInvokeSkillDecision

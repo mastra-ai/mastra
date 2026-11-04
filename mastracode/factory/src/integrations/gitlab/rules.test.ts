@@ -1287,21 +1287,24 @@ describe('GitLab board events', () => {
     ]);
   });
 
-  it('answers a reopened issue with the same intake an open got, keeping its one card', async () => {
+  it('files a card for a reopened issue that has none, and hands a reopen of an existing card to intake routes', async () => {
     const { deliver, cards, seeded, project } = await harness();
-    await deliver(issueHook('reopen-flow-open', 'open'));
-    const [opened] = await cards();
+    await deliver(issueHook('reopen-flow-first', 'reopen'));
+    const [filed] = await cards();
+    expect(filed).toBeDefined();
     await deliver(issueHook('reopen-flow-close', 'close'));
     expect((await cards()).map(card => card.stages)).toEqual([['done']]);
     await deliver(issueHook('reopen-flow-reopen', 'reopen'));
-    expect((await cards()).map(card => card.id)).toEqual([opened!.id]);
+    // One card per issue; with no route for reopens the card stays where the close put it.
+    expect((await cards()).map(card => [card.id, card.stages])).toEqual([[filed!.id, ['done']]]);
     const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.map(entry => [entry.decision.type, entry.status])).toEqual([
       ['upsertLinkedWorkItem', 'succeeded'],
       ['transition', 'succeeded'],
       ['sendMessage', 'succeeded'],
-      ['upsertLinkedWorkItem', 'succeeded'],
+      ['routeEvent', 'succeeded'],
     ]);
+    expect(decisions.at(-1)?.decision).toMatchObject({ event: { type: 'work_item.reopened' } });
   });
 
   it('lets an override of issueReopened apply without changing how opens are handled', async () => {
