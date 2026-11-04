@@ -87,6 +87,14 @@ describe('formatAnnotatedMessage', () => {
     });
   });
 
+  describe('when the typed message starts with a numbered item holding bracketed slashes', () => {
+    it('keeps the brackets as typed text instead of a link', () => {
+      const message = formatAnnotatedMessage('2. Read [//] and [ /// ] first', [{ text: 'Open rows' }]);
+
+      expect(renderMarkdown(message).querySelector('a')).toBeNull();
+    });
+  });
+
   describe('when the typed message starts indented', () => {
     it('keeps it out of the last annotation', () => {
       const message = formatAnnotatedMessage('    indented note', [{ text: 'Open rows' }]);

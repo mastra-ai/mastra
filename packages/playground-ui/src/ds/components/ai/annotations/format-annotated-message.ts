@@ -26,7 +26,15 @@ function formatListItem({ text, comment }: AnnotatedPassage, number: number): st
 
 // CommonMark keeps a numbered or indented line that follows the list inside it; an empty link definition ends the list and renders nothing.
 const JOINS_LIST = /^(?:\s|\d{1,9}[.)](?:\s|$))/;
-const LIST_END = '\n\n[//]: #\n\n';
+
+/** Labelled with more slashes than any run in the message, so no `[//]` the person wrote turns into a link. */
+function listEnd(message: string): string {
+  const longestSlashRun = Array.from(message.matchAll(/\/+/g)).reduce(
+    (longest, match) => Math.max(longest, match[0].length),
+    1,
+  );
+  return `\n\n[${'/'.repeat(longestSlashRun + 1)}]: #\n\n`;
+}
 
 /**
  * The message the agent receives: the annotations as a numbered Markdown list, each holding its passage
@@ -40,6 +48,6 @@ export function formatAnnotatedMessage(text: string, annotations: readonly Annot
   if (passages.length === 0) return text;
   const list = passages.map((passage, index) => formatListItem(passage, index + 1)).join('\n\n');
   if (!text.trim()) return list;
-  const separator = JOINS_LIST.test(text.replace(/^\s*\n/, '')) ? LIST_END : '\n\n';
-  return `${list}${separator}${text}`;
+  if (!JOINS_LIST.test(text.replace(/^\s*\n/, ''))) return `${list}\n\n${text}`;
+  return `${list}${listEnd(list + text)}${text}`;
 }
