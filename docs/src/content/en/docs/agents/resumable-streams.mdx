@@ -72,7 +72,7 @@ To keep live observation but skip the replay cache, pass `streams: { cache: fals
 
 ### How long runs stay available
 
-A run's events and its ownership record are cleared `cleanupTimeoutMs` after it finishes. A run parked on a tool approval or suspension isn't cleared by that timer, because resuming it continues on the same topic.
+After a run finishes, the executing process schedules cleanup of its events and ownership record after `cleanupTimeoutMs`. The timer allows the process to exit before cleanup. Shared data then remains until cache expiry or eviction. A run parked on a tool approval or suspension isn't cleared by that timer, because resuming it continues on the same topic.
 
 The cache bounds everything else:
 
@@ -103,6 +103,10 @@ export async function followRun(runId: string, request: Request) {
 
 The [`observe()` reference](/reference/agents/durable-agent#observerunid-options) covers offsets and replay limits.
 
+### Until-idle streams
+
+`streamUntilIdle()` and `resumeStreamUntilIdle()` combine the initial run and background-task continuations in their `fullStream`. Without an offset, `observe(returnedRunId)` replays only the initial segment and closes at its finish event. It doesn't reconnect to the combined until-idle stream or replay later background-task answers. Supplying an explicit run ID doesn't change this limit. The same limit applies to durable agents.
+
 ## Stop a run
 
 With streams on, a closed reader doesn't stop the run. When a client disconnects from the server's stream route, the server detaches that reader and the run keeps going: it keeps generating tokens, calling tools and running `onFinish`, so the client can reconnect. Stop it explicitly, or set `streams: false` on a non-durable agent whose runs should end with the request. A durable agent's run always continues after a disconnect.
@@ -110,7 +114,7 @@ With streams on, a closed reader doesn't stop the run. When a client disconnects
 Stop a run explicitly with one of these:
 
 - `observe(runId)` returns an `abort()` function that asks a running run to stop wherever it executes. The request is best effort. It doesn't wait for confirmation, and a failed publish is only logged. Use the abort route below when you need confirmation. A run parked on an approval no longer listens for it, so stop a parked run with `agent.abortRunStream(runId)` in the process that holds it, or with `POST /agents/:agentId/threads/abort` for a run in a memory thread.
-- `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it. It returns `true` for a running run stopped in this process. A run parked on an approval outside a memory thread is cancelled here too, so a later approval fails, but the call returns `false`. For a run elsewhere the request is best effort.
+- `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it. It returns `true` for a running run stopped in this process. A run parked on an approval outside a memory thread is cancelled here too, but the call returns `false`. A later approval fails. For a run elsewhere the request is best effort.
 - The server's `POST /agents/:agentId/runs/:runId/abort` route stops a run on any server that shares the PubSub and cache, after checking the caller owns it. It returns `{ aborted: true }` only once the process executing the run confirms it stopped. It returns `{ aborted: false }` for a finished run, for a run parked on an approval (nothing is executing it), and when no process answers in time. Runs in a memory thread can also be stopped with `POST /agents/:agentId/threads/abort`.
 
 With `streams: false` on a non-durable agent, closing the HTTP request aborts the run, as before.
