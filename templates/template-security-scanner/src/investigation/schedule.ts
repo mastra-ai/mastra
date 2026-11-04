@@ -20,7 +20,13 @@ export function parseCron(cron: string): (number | null)[] | null {
     const number = Number(part);
     return number >= (index === 2 || index === 3 ? 1 : 0) && number <= ranges[index]! ? number : NaN;
   });
-  return values.some(value => Number.isNaN(value)) ? null : values;
+  if (values.some(value => Number.isNaN(value))) return null;
+  const [, , day, month, weekday] = values;
+  const monthLengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  // Leap-day-only schedules can fall outside the bounded occurrence search.
+  // A fixed weekday remains a valid alternative under the existing OR semantics.
+  if (weekday === null && day != null && month != null && day > monthLengths[month - 1]!) return null;
+  return values;
 }
 
 function localFields(date: Date, formatter: Intl.DateTimeFormat) {

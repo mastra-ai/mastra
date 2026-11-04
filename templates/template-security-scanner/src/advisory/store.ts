@@ -343,9 +343,21 @@ export class AdvisoryStore {
   }
   async importPage(kind: CursorKind, details: AdvisoryDetail[], nextCursor: string | null, refreshedId?: string) {
     const now = new Date().toISOString();
-    if (refreshedId && (details.length !== 1 || details[0]?.id.toUpperCase() !== refreshedId))
-      throw new ControlPlaneError('ADVISORY_REFRESH_QUEUE_INVALID', 503);
-    return this.write(async tx => {
+    if (refreshedId && details.length !== 1) throw new ControlPlaneError('ADVISORY_REFRESH_QUEUE_INVALID', 503);
+    const result = await this.write(async tx => {
+      if (refreshedId) {
+        const removed = await tx.execute({
+          sql: 'DELETE FROM scanner_advisory_refresh_queue WHERE advisory_id = ?',
+          args: [refreshedId],
+        });
+        if (removed.rowsAffected !== 1) throw new ControlPlaneError('ADVISORY_REFRESH_QUEUE_INVALID', 503);
+        await tx.execute({
+          sql: 'INSERT INTO scanner_advisory_refresh_queue(advisory_id) VALUES (?)',
+          args: [refreshedId],
+        });
+        // Preserve the old record and rotate only its existing queue entry before rejecting an identity change.
+        if (details[0]!.id.toUpperCase() !== refreshedId) return { canonicalChanged: true };
+      }
       let revisions = 0;
       for (const detail of details) {
         const id = detail.id.toUpperCase();
@@ -359,12 +371,17 @@ export class AdvisoryStore {
             throw new ControlPlaneError('ADVISORY_ALIAS_CONFLICT', 503);
         }
         const current = await tx.execute({
-          sql: 'SELECT revision,material_hash FROM scanner_advisories WHERE id = ?',
+          sql: 'SELECT revision,material_hash,detail FROM scanner_advisories WHERE id = ?',
           args: [id],
         });
         const hash = materialHash(detail);
         const prior = current.rows[0];
-        const revision = prior ? Number(prior.revision) + (String(prior.material_hash) === hash ? 0 : 1) : 1;
+        // Normalize legacy locale-dependent hashes without publishing a spurious material revision.
+        const changed =
+          prior &&
+          String(prior.material_hash) !== hash &&
+          materialHash(detailSchema.parse(JSON.parse(String(prior.detail)))) !== hash;
+        const revision = prior ? Number(prior.revision) + (changed ? 1 : 0) : 1;
         if (!prior) {
           await tx.execute({
             sql: 'INSERT INTO scanner_advisories(id,revision,record_revision,material_hash,provider_modified_at,retrieved_at,upstream_status,triage_status,detail) VALUES (?,?,?,?,?,?,?,?,?)',
@@ -410,17 +427,6 @@ export class AdvisoryStore {
         for (const alias of aliases)
           await tx.execute({ sql: 'INSERT INTO scanner_advisory_aliases(alias,id) VALUES (?,?)', args: [alias, id] });
       }
-      if (refreshedId) {
-        const removed = await tx.execute({
-          sql: 'DELETE FROM scanner_advisory_refresh_queue WHERE advisory_id = ?',
-          args: [refreshedId],
-        });
-        if (removed.rowsAffected !== 1) throw new ControlPlaneError('ADVISORY_REFRESH_QUEUE_INVALID', 503);
-        await tx.execute({
-          sql: 'INSERT INTO scanner_advisory_refresh_queue(advisory_id) VALUES (?)',
-          args: [refreshedId],
-        });
-      }
       const field = kind === 'head' ? 'head_cursor' : 'rotation_cursor';
       // Bounded polling never claims complete upstream coverage, even when one cursor ends.
       await tx.execute({
@@ -429,6 +435,8 @@ export class AdvisoryStore {
       });
       return { imported: details.length, materialRevisions: revisions, nextCursor };
     });
+    if ('canonicalChanged' in result) throw new ControlPlaneError('ADVISORY_CANONICAL_CHANGED', 503);
+    return result;
   }
   async markFailure(code: string, sourceId?: string) {
     const now = new Date().toISOString();

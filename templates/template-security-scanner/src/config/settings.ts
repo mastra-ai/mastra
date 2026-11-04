@@ -67,7 +67,7 @@ const environmentSchema = z
       .min(1)
       .max(100)
       .refine(value => {
-        if (value !== 'UTC' && !/^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(value)) return false;
+        if (value !== 'UTC' && !/^[A-Za-z0-9_+-]+\/[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)?$/.test(value)) return false;
         try {
           new Intl.DateTimeFormat('en', { timeZone: value });
           return true;

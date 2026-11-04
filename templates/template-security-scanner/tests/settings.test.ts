@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { diagnostic, loadSettings, morphModelConfiguration, morphModelDescriptor } from '../src/config/settings.js';
+import { scheduleSchema } from '../src/investigation/contracts.js';
+import { nextOccurrence } from '../src/investigation/schedule.js';
 import { parseBrowserSandboxStatus } from '../src/runtime/browser.js';
 import {
   inspectAppliedPolicy,
@@ -40,6 +42,72 @@ describe('local runtime configuration', () => {
     expect(configured.explorer.apiKey).toBe(syntheticKey);
     expect(configured.judge.apiKey).toBe(syntheticKey);
     expect(JSON.stringify(morphModelDescriptor(settings))).not.toContain(syntheticKey);
+  });
+
+  it.each(['America/Port-au-Prince', 'Etc/GMT+5', 'Etc/GMT-3', 'UTC', 'America/Argentina/Buenos_Aires'])(
+    'accepts supported IANA timezone %s for advisory and recurrence schedules',
+    timezone => {
+      expect(loadSettings({ SCANNER_ADVISORY_SYNC_TIMEZONE: timezone }).SCANNER_ADVISORY_SYNC_TIMEZONE).toBe(timezone);
+      expect(
+        scheduleSchema.parse({
+          targetId: '00000000-0000-4000-8000-000000000001',
+          cron: '0 0 * * *',
+          timezone,
+          enabled: true,
+        }).timezone,
+      ).toBe(timezone);
+    },
+  );
+
+  it.each(['Unknown/Timezone', 'Etc/GMT+25', 'America/Port au Prince', '+05:00'])(
+    'rejects unsupported advisory timezone %s',
+    timezone => {
+      expect(() => loadSettings({ SCANNER_ADVISORY_SYNC_TIMEZONE: timezone })).toThrow('Check supported values');
+    },
+  );
+
+  it.each(['0 0 30 2 *', '0 0 31 4 *', '0 0 29 2 *'])(
+    'rejects unreachable fixed calendar schedule %s before scheduler startup',
+    cron => {
+      expect(() => loadSettings({ SCANNER_ADVISORY_SYNC_CRON: cron })).toThrow('Check supported values');
+    },
+  );
+
+  it.each(['0 0 30 2 *', '0 0 31 4 *', '0 0 29 2 *'])(
+    'rejects unreachable recurrence schedule %s before persistence',
+    cron => {
+      expect(
+        scheduleSchema.safeParse({
+          targetId: '00000000-0000-4000-8000-000000000001',
+          cron,
+          timezone: 'UTC',
+          enabled: true,
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it('preserves neighboring dates and day/weekday OR fallback within the search horizon', () => {
+    for (const cron of ['0 0 28 2 *', '0 0 30 4 *', '0 0 31 3 *', '0 0 30 2 1', '0 0 29 2 1']) {
+      expect(loadSettings({ SCANNER_ADVISORY_SYNC_CRON: cron }).SCANNER_ADVISORY_SYNC_CRON).toBe(cron);
+      expect(
+        scheduleSchema.safeParse({
+          targetId: '00000000-0000-4000-8000-000000000001',
+          cron,
+          timezone: 'UTC',
+          enabled: true,
+        }).success,
+      ).toBe(true);
+    }
+    expect(nextOccurrence('0 0 30 2 1', 'UTC', new Date('2026-02-01T00:00:00Z')).toISOString()).toBe(
+      '2026-02-02T00:00:00.000Z',
+    );
+    expect(nextOccurrence('0 0 29 2 1', 'UTC', new Date('2026-02-01T00:00:00Z')).toISOString()).toBe(
+      '2026-02-02T00:00:00.000Z',
+    );
+    expect(nextOccurrence('0 0 28 2 *', 'UTC', new Date('2026-02-27T23:59:00Z')).toISOString()).toBe(
+      '2026-02-28T00:00:00.000Z',
+    );
   });
 
   it('rejects_operational_fence_aliases_before_creating_files_and_keeps_adjacent_names_valid', () => {

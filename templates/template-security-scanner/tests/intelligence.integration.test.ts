@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadSettings } from '../src/config/settings.js';
+import { AdvisoryStore } from '../src/advisory/store.js';
 import { AdvisorySource } from '../src/advisory/source.js';
 import type { AdvisoryModels } from '../src/advisory/triage.js';
 import { detailSchema, materialHash, versionApplicability } from '../src/advisory/contracts.js';
@@ -49,14 +50,21 @@ function detail(id: string, description = 'Owned fixture vulnerability', aliases
     modifiedAt: '2026-10-29T12:00:00.000Z',
   };
 }
-type Wire = { status?: number; body?: unknown; contentType?: string; location?: string; truncatedBody?: boolean };
+type Wire = {
+  status?: number;
+  body?: unknown;
+  contentType?: string;
+  location?: string;
+  truncatedBody?: boolean;
+  beforeSend?: () => Promise<void>;
+};
 async function startAdvisoryFixture() {
   const pages = new Map<string, Wire>();
   const details = new Map<string, Wire>();
   const requests: string[] = [];
   const statusWire: Wire = { body: { polling: {}, history: {}, backfill: {}, storage: {} } };
   let callbackCount = 0;
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
     const path = request.url ?? '/';
     requests.push(path);
     if (path === '/owned-callback') {
@@ -76,6 +84,7 @@ async function startAdvisoryFixture() {
       response.writeHead(404).end();
       return;
     }
+    await selected.beforeSend?.();
     if (selected.truncatedBody) {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.write('{"partial":');
@@ -362,6 +371,259 @@ const scope = {
 };
 
 describe('F4 offline intelligence through protected HTTP and file libSQL', () => {
+  it('hashes mixed-case and non-ASCII material keys in locale-independent order', () => {
+    const original = detailSchema.parse({ ...detail('CVE-2026-24001'), severity: { é: 4, a: 3, Z: 2, A: 1 } });
+    const reordered = detailSchema.parse({ ...original, severity: { A: 1, Z: 2, a: 3, é: 4 } });
+    const expected = '17872f99e858b94127dd6c219187154141cc4f6a37d19c2214ed6f8d49d7b64e';
+    expect(materialHash(original)).toBe(expected);
+    expect(materialHash(reordered)).toBe(expected);
+  });
+
+  it('preserves persisted legacy material revisions and ETags while normalizing hash ordering', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entry = { ...detail('CVE-2026-24001'), severity: { é: 4, a: 3, Z: 2, A: 1 } };
+    fixture.details.set(entry.id, { body: entry });
+    fixture.page(null, [entry.id], null);
+    const app = await startHarness(fixture);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    expect((await app.request(`/api/advisories/${entry.id}/triage`, 'PUT', { status: 'triaged' }, 1)).status).toBe(200);
+    // Persist the actual pre-correction localeCompare hash to model an existing installation.
+    await app.query(
+      "UPDATE scanner_advisories SET material_hash='1e9ee643462dd7ad5cfbfc77c526f31379a79ce71d4ffbc8bfe8eba9b6ba1615'",
+    );
+    const sources = await app.query('SELECT * FROM scanner_advisory_reassessment_sources ORDER BY id,revision');
+    await app.restart();
+    fixture.details.set(entry.id, { body: { ...entry, severity: { A: 1, Z: 2, a: 3, é: 4 } } });
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    expect(await app.request(`/api/advisories/${entry.id}`)).toMatchObject({
+      etag: '"2"',
+      body: { revision: 1, recordRevision: 2, triageStatus: 'triaged' },
+    });
+    expect((await app.request(`/api/advisories/${entry.id}/events`)).body.items).toEqual([]);
+    expect(await app.query('SELECT * FROM scanner_advisory_reassessment_sources ORDER BY id,revision')).toEqual(
+      sources,
+    );
+    expect(await app.query('SELECT material_hash FROM scanner_advisories')).toEqual([
+      { material_hash: '17872f99e858b94127dd6c219187154141cc4f6a37d19c2214ed6f8d49d7b64e' },
+    ]);
+    fixture.details.set(entry.id, { body: { ...entry, severity: { A: 1, Z: 2, a: 3, é: 5 } } });
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    expect(await app.request(`/api/advisories/${entry.id}`)).toMatchObject({
+      etag: '"3"',
+      body: { revision: 2, recordRevision: 3, triageStatus: 'triaged' },
+    });
+    expect((await app.request(`/api/advisories/${entry.id}/events`)).body.items).toMatchObject([{ revision: 2 }]);
+    expect(await app.query('SELECT revision FROM scanner_advisory_reassessment_sources ORDER BY revision')).toEqual([
+      { revision: 1 },
+      { revision: 2 },
+    ]);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    expect((await app.request(`/api/advisories/${entry.id}`)).etag).toBe('"3"');
+  }, 60000);
+
+  it('accepts alias triage using its GET ETag and still rejects stale writes', async () => {
+    const fixture = await startAdvisoryFixture();
+    const alias = 'GHSA-AAAA-BBBB-CCCC';
+    const entry = detail('CVE-2026-24002', undefined, [alias]);
+    fixture.setDetail(entry);
+    fixture.page(null, [entry.id], null);
+    const app = await startHarness(fixture);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    const read = await app.request(`/api/advisories/${alias}`);
+    expect(read.etag).toBe('"1"');
+    expect(
+      await app.request(
+        `/api/advisories/${alias}/triage`,
+        'PUT',
+        { status: 'triaged' },
+        Number(read.etag!.slice(1, -1)),
+      ),
+    ).toMatchObject({ status: 200, etag: '"2"', body: { id: entry.id, triageStatus: 'triaged' } });
+    expect(await app.request(`/api/advisories/${entry.id}`)).toMatchObject({
+      etag: '"2"',
+      body: { triageStatus: 'triaged' },
+    });
+    expect(await app.request(`/api/advisories/${alias}/triage`, 'PUT', { status: 'closed' }, 1)).toMatchObject({
+      status: 409,
+      body: { code: 'REVISION_CONFLICT' },
+    });
+    expect((await app.request(`/api/advisories/${entry.id}`)).body.triageStatus).toBe('triaged');
+  }, 60000);
+
+  it('returns the same nonempty revision events through an advisory alias', async () => {
+    const fixture = await startAdvisoryFixture();
+    const alias = 'GHSA-AAAA-BBBB-CCCC';
+    const entry = detail('CVE-2026-24003', undefined, [alias]);
+    fixture.setDetail(entry);
+    fixture.page(null, [entry.id], null);
+    const app = await startHarness(fixture);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    fixture.setDetail({ ...entry, originalDescription: 'Changed advisory evidence' });
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    const canonical = await app.request(`/api/advisories/${entry.id}/events`);
+    expect(canonical.body.items).toMatchObject([{ revision: 2 }]);
+    expect(await app.request(`/api/advisories/${alias}/events`)).toEqual(canonical);
+  }, 60000);
+
+  it('skips and quarantines changed canonical refreshes without starving healthy queued entries', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entries = [24010, 24011, 24012, 24013].map(number => detail(`CVE-2026-${number}`));
+    entries.forEach(entry => fixture.setDetail(entry));
+    fixture.page(
+      null,
+      entries.map(entry => entry.id),
+      null,
+    );
+    const app = await startHarness(fixture);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    // Seed order is rotated by the successful refresh phase; the oldest queued record changes identity upstream.
+    const queued = await app.query('SELECT advisory_id FROM scanner_advisory_refresh_queue ORDER BY position');
+    const oldId = String(queued[0]!.advisory_id);
+    const healthyId = String(queued[1]!.advisory_id);
+    expect((await app.request(`/api/advisories/${oldId}/triage`, 'PUT', { status: 'closed' }, 1)).status).toBe(200);
+    const previous = await app.request(`/api/advisories/${oldId}`);
+    const aliases = await app.query('SELECT * FROM scanner_advisory_aliases ORDER BY alias');
+    const cursors = await app.query('SELECT head_cursor,rotation_cursor FROM scanner_advisory_checkpoint');
+    const replacement = detail('CVE-2026-24999', 'Changed upstream canonical identity', [oldId]);
+    fixture.details.set(oldId, { body: replacement });
+    fixture.page(null, [], null);
+    const skipped = await app.request('/api/advisories/sync', 'POST', {});
+    expect(skipped).toMatchObject({
+      status: 200,
+      body: {
+        outcome: 'SKIPPED',
+        phase: 'refresh',
+        reasonCode: 'ADVISORY_CANONICAL_CHANGED',
+        checkpoint: { stale: true, incomplete: true, failureCount: 1 },
+      },
+    });
+    expect(skipped.body).not.toHaveProperty('hypotheses');
+    expect(await app.request(`/api/advisories/${oldId}`)).toEqual(previous);
+    expect((await app.request(`/api/advisories/${replacement.id}`)).status).toBe(404);
+    expect(await app.query('SELECT * FROM scanner_advisory_aliases ORDER BY alias')).toEqual(aliases);
+    expect(await app.query('SELECT head_cursor,rotation_cursor FROM scanner_advisory_checkpoint')).toEqual(cursors);
+    expect((await app.request('/api/advisories/quarantine')).body.items).toMatchObject([
+      { sourceId: oldId, reason: 'ADVISORY_CANONICAL_CHANGED' },
+    ]);
+    expect(
+      (await app.query('SELECT advisory_id FROM scanner_advisory_refresh_queue ORDER BY position')).map(
+        row => row.advisory_id,
+      ),
+    ).toEqual([...queued.slice(1).map(row => row.advisory_id), oldId]);
+    const count = fixture.requests.length;
+    expect(await app.request('/api/advisories/sync', 'POST', {})).toMatchObject({
+      status: 503,
+      body: { code: 'ADVISORY_RETRY_NOT_DUE' },
+    });
+    expect(fixture.requests).toHaveLength(count);
+    await app.restart();
+    await waitForAdvisoryRetry(app);
+    fixture.setDetail(detail(healthyId, 'Healthy refreshed evidence'));
+    const recovered = await app.request('/api/advisories/sync', 'POST', {});
+    expect(recovered.body.outcome).toBe('COMPLETED');
+    expect((await app.request(`/api/advisories/${healthyId}`)).body).toMatchObject({ revision: 2 });
+    expect(await app.request(`/api/advisories/${oldId}`)).toEqual(previous);
+    expect((await app.request('/api/advisories')).body.items).toHaveLength(4);
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({ stale: false, failureCount: 0 });
+  }, 60000);
+
+  it('skips a missing queued refresh as quarantined upstream inconsistency without fabricating an entry', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entries = [24030, 24031, 24032].map(number => detail(`CVE-2026-${number}`));
+    entries.forEach(entry => fixture.setDetail(entry));
+    fixture.page(
+      null,
+      entries.map(entry => entry.id),
+      null,
+    );
+    const app = await startHarness(fixture);
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    const queued = await app.query('SELECT advisory_id FROM scanner_advisory_refresh_queue ORDER BY position');
+    const missingId = String(queued[0]!.advisory_id);
+    const before = await app.request(`/api/advisories/${missingId}`);
+    fixture.page(null, [], null);
+    const wire: Wire = {
+      body: detail(missingId, 'Must not replace the persisted advisory'),
+      async beforeSend() {
+        wire.beforeSend = undefined;
+        await app.query(`DELETE FROM scanner_advisory_refresh_queue WHERE advisory_id='${missingId}'`);
+      },
+    };
+    // The real HTTP response is held until the selected queue row disappears, avoiding a timing race.
+    fixture.details.set(missingId, wire);
+    expect(await app.request('/api/advisories/sync', 'POST', {})).toMatchObject({
+      status: 200,
+      body: {
+        outcome: 'SKIPPED',
+        reasonCode: 'ADVISORY_REFRESH_QUEUE_INVALID',
+        phase: 'refresh',
+        checkpoint: { stale: true, failureCount: 1 },
+      },
+    });
+    expect(await app.request(`/api/advisories/${missingId}`)).toEqual(before);
+    expect(await app.query(`SELECT * FROM scanner_advisory_refresh_queue WHERE advisory_id='${missingId}'`)).toEqual(
+      [],
+    );
+    expect((await app.request('/api/advisories/quarantine')).body.items).toMatchObject([
+      { sourceId: missingId, reason: 'ADVISORY_REFRESH_QUEUE_INVALID' },
+    ]);
+    expect(await app.request('/api/advisories/sync', 'POST', {})).toMatchObject({
+      status: 503,
+      body: { code: 'ADVISORY_RETRY_NOT_DUE' },
+    });
+    await waitForAdvisoryRetry(app);
+    const healthyId = String(queued[1]!.advisory_id);
+    fixture.setDetail(detail(healthyId, 'Healthy queued update'));
+    expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+    expect((await app.request(`/api/advisories/${healthyId}`)).body.revision).toBe(2);
+    expect((await app.request(`/api/advisories/${missingId}`)).body.revision).toBe(1);
+    expect((await app.request('/api/advisories')).body.items).toHaveLength(3);
+  }, 60000);
+
+  it('rejects invalid refresh lengths and missing queue entries without creating or merging records', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'scanner-refresh-invariant-'));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    const url = `file:${join(root, 'advisories.db')}`;
+    const store = new AdvisoryStore(url);
+    cleanup.push(async () => store.close());
+    await store.initialize();
+    const entry = detailSchema.parse(detail('CVE-2026-24020'));
+    await store.importPage('head', [entry], 'old-cursor');
+    const before = await store.get(entry.id);
+    for (const details of [[], [entry, entry]]) {
+      await expect(store.importPage('rotation', details, 'uncommitted', entry.id)).rejects.toMatchObject({
+        code: 'ADVISORY_REFRESH_QUEUE_INVALID',
+      });
+      expect(await store.knownIdsForRefresh(10)).toEqual([entry.id]);
+    }
+    await store.importPage('rotation', [], 'saved-rotation-cursor');
+    await expect(
+      store.importPage(
+        'rotation',
+        [detailSchema.parse(detail('CVE-2026-24998', undefined, [entry.id]))],
+        'uncommitted',
+        entry.id,
+      ),
+    ).rejects.toMatchObject({ code: 'ADVISORY_CANONICAL_CHANGED' });
+    expect(await store.get(entry.id)).toEqual(before);
+    expect(await store.resolveAlias('CVE-2026-24998')).toBeNull();
+    expect((await store.checkpoint()).rotationCursor).toBe('saved-rotation-cursor');
+    const db = createClient({ url });
+    try {
+      await db.execute('DELETE FROM scanner_advisory_refresh_queue');
+    } finally {
+      db.close();
+    }
+    for (const refreshed of [entry, detailSchema.parse(detail('CVE-2026-24998', undefined, [entry.id]))]) {
+      await expect(store.importPage('rotation', [refreshed], 'uncommitted', entry.id)).rejects.toMatchObject({
+        code: 'ADVISORY_REFRESH_QUEUE_INVALID',
+      });
+      expect(await store.knownIdsForRefresh(10)).toEqual([]);
+      expect(await store.list(10, 0)).toEqual([before]);
+      expect((await store.checkpoint()).rotationCursor).toBe('saved-rotation-cursor');
+    }
+  });
+
   it('accepts only pinned single-hop GHSA and CVE detail redirects with matching identity', async () => {
     const cdn = 'f9gkulwameaj0boi.public.blob.vercel-storage.com';
     const ghsa = 'GHSA-2345-CFGH-JMPQ';

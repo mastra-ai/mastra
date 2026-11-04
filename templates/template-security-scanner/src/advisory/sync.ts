@@ -31,7 +31,10 @@ export class AdvisorySync {
     try {
       return await this.store.importPage(...args);
     } catch (error) {
-      if (error instanceof ControlPlaneError && error.code === 'ADVISORY_ALIAS_CONFLICT')
+      if (
+        error instanceof ControlPlaneError &&
+        ['ADVISORY_ALIAS_CONFLICT', 'ADVISORY_CANONICAL_CHANGED', 'ADVISORY_REFRESH_QUEUE_INVALID'].includes(error.code)
+      )
         throw new UpstreamCycleFailure(error.code);
       throw error;
     }
@@ -98,6 +101,8 @@ export class AdvisorySync {
         'ADVISORY_REDIRECT_DENIED',
         'ADVISORY_CURSOR_STALLED',
         'ADVISORY_ALIAS_CONFLICT',
+        'ADVISORY_CANONICAL_CHANGED',
+        'ADVISORY_REFRESH_QUEUE_INVALID',
         'ADVISORY_PAGE_DUPLICATE',
         'ADVISORY_PAGE_TOO_LARGE',
         'ADVISORY_ALIAS_MISMATCH',

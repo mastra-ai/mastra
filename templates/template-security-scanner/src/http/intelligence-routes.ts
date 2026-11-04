@@ -89,14 +89,17 @@ export function registerIntelligenceRoutes(
     context.header('ETag', `"${item.recordRevision}"`);
     return context.json(item);
   });
-  app.get('/api/advisories/:id/events', async context =>
-    context.json({ items: await advisory.store.events(parse(advisoryId, context.req.param('id'))) }),
-  );
+  app.get('/api/advisories/:id/events', async context => {
+    const id = parse(advisoryId, context.req.param('id'));
+    const canonical = await advisory.store.resolveAlias(id);
+    return context.json({ items: await advisory.store.events(canonical ?? id) });
+  });
   app.put('/api/advisories/:id/triage', async context => {
     const id = parse(advisoryId, context.req.param('id'));
     const expected = parse(revision, context.req.header('if-match'));
     const { status } = parse(triageSchema, await readJson(context.req));
-    const item = await advisory.store.setTriage(id, expected, status);
+    const canonical = await advisory.store.resolveAlias(id);
+    const item = await advisory.store.setTriage(canonical ?? id, expected, status);
     context.header('ETag', `"${item.recordRevision}"`);
     return context.json(item);
   });
