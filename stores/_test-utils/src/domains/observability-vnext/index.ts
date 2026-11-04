@@ -5363,6 +5363,35 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.scores[0]!.scoreId).toBe('score-retry-1');
       });
 
+      it.each(['single', 'batch'])('keeps span user separate from feedback author in %s writes', async method => {
+        for (const feedbackUserId of ['reviewer', null]) {
+          const feedback = {
+            feedbackId: `identity-${feedbackUserId}`,
+            traceId: 'identity-trace',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            feedbackType: 'thumbs',
+            value: 1,
+            userId: 'span-user',
+            feedbackUserId,
+            metadata: { userId: 'metadata-user' },
+          };
+          if (method === 'single') await storage.createFeedback({ feedback });
+          else await storage.batchCreateFeedback({ feedbacks: [feedback] });
+        }
+        const { feedback } = await storage.listFeedback({ filters: { traceId: 'identity-trace' } });
+        expect(feedback).toHaveLength(2);
+        expect(feedback).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              feedbackId: 'identity-reviewer',
+              userId: 'span-user',
+              feedbackUserId: 'reviewer',
+            }),
+            expect.objectContaining({ feedbackId: 'identity-null', userId: 'span-user', feedbackUserId: null }),
+          ]),
+        );
+      });
+
       it('re-inserting the same feedbackId does not throw or duplicate', async () => {
         const feedback = {
           feedbackId: 'feedback-retry-1',

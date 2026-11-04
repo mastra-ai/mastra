@@ -923,7 +923,17 @@ export type AgentControllerEvent =
         }
       | { type: 'tool_input_end'; toolCallId: string; messageId?: string }
       | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
-      | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
+      | {
+          /** Also sent by `kill_process` and `get_process_output`, for the process they stopped or waited on. */
+          type: 'command_exit';
+          toolCallId: string;
+          exitCode: number;
+          success: boolean;
+          killed?: boolean;
+          timedOut?: boolean;
+          /** Why the command could not run or be observed; its `exitCode` is then -1. */
+          error?: string;
+        }
     ))
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }

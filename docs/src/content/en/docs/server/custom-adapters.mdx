@@ -349,6 +349,10 @@ constructor(options: {
   bodyLimitOptions?: BodyLimitOptions;
   streamOptions?: StreamOptions;
   customRouteAuthConfig?: Map<string, boolean>;
+  tools?: ToolsInput;
+  taskStore?: InMemoryTaskStore;
+  customApiRoutes?: ApiRoute[];
+  mcpOptions?: MCPOptions;
 }) {
   super(options);
 }
