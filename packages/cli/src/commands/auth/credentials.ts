@@ -159,11 +159,17 @@ export async function tryRefreshToken(creds: Credentials, signal?: AbortSignal):
   }
 }
 
-function callbackPage({ success }: { success: boolean }): string {
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, char => `&#${char.charCodeAt(0)};`);
+}
+
+function callbackPage({ success, error }: { success: boolean; error?: string }): string {
   const title = success ? 'Logged in!' : 'Login failed';
   const message = success
     ? 'You can close this tab and return to the terminal.'
-    : 'Missing parameters. Close this tab and try again.';
+    : error
+      ? `${escapeHtml(error)}. Close this tab and return to the terminal.`
+      : 'Missing parameters. Close this tab and try again.';
 
   return `<!doctype html>
 <html lang="en">
@@ -218,8 +224,17 @@ interface CallbackResult {
   organizationId: string;
 }
 
-function parseCallback(url: URL, state: string): CallbackResult | null {
+/** Platform's error redirect after a rejected sign-in, e.g. `email_domain_not_allowed` or `sso_required`. */
+interface CallbackError {
+  error: string;
+}
+
+function parseCallback(url: URL, state: string): CallbackResult | CallbackError | null {
   if (url.pathname !== '/callback') return null;
+  const error = url.searchParams.get('error');
+  if (error && url.searchParams.get('state') === state) {
+    return { error: url.searchParams.get('error_description') || error };
+  }
   const token = url.searchParams.get('token');
   const userParam = url.searchParams.get('user');
   const organizationId = url.searchParams.get('org');
@@ -265,9 +280,10 @@ function listenForInput({ onSkip, onPaste }: { onSkip?: () => void; onPaste: (te
       return;
     }
 
-    // A paste arrives as chunks starting with the full scheme; a single keypress never does.
+    // A paste starts with the scheme. With a skip key, anything else (even a lone `h`) is a keypress;
+    // without one, also keep a partial `http`, since some terminals split a paste into tiny chunks.
     buffer += data;
-    if (!buffer.startsWith('http')) {
+    if (!buffer.startsWith('http') && (onSkip || !'http'.startsWith(buffer))) {
       buffer = '';
       if (onSkip) {
         cleanup();
@@ -356,6 +372,11 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
       handleAbort();
       return;
     }
+    const settle = (result: CallbackResult | CallbackError) => {
+      if ('error' in result) finish(() => reject(new Error(`Sign-in failed: ${result.error}.`)));
+      else finish(() => resolve(result));
+    };
+
     stopListeningForInput = listenForInput({
       onSkip: options.skipOnInput ? () => finish(() => reject(new LoginCancelledError())) : undefined,
       onPaste: text => {
@@ -366,7 +387,7 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
           );
           return;
         }
-        finish(() => resolve(result));
+        settle(result);
       },
     });
 
@@ -375,16 +396,17 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
       if (url.pathname !== '/callback') return;
 
       const result = parseCallback(url, state);
-      if (!result) {
-        res.writeHead(400, { 'Content-Type': 'text/html' });
-        res.end(callbackPage({ success: false }));
+      if (!result || 'error' in result) {
+        res.writeHead(400, { 'Content-Type': 'text/html', Connection: 'close' });
+        res.end(callbackPage({ success: false, error: result?.error }));
+        if (result) settle(result);
         return;
       }
 
       res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
       res.end(callbackPage({ success: true }));
 
-      finish(() => resolve(result));
+      settle(result);
     });
   });
 

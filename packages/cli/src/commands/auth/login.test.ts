@@ -277,6 +277,77 @@ describe('login() server lifecycle', () => {
     },
   );
 
+  it('keeps a paste split before the full scheme when there is no skip key', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login();
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      const qs = new URLSearchParams({ ...validParams, state: extractState() }).toString();
+      const callbackUrl = `http://localhost:${extractPort()}/callback?${qs}`;
+      process.stdin.emit('data', Buffer.from(callbackUrl.slice(0, 2)));
+      process.stdin.emit('data', Buffer.from(`${callbackUrl.slice(2)}\r`));
+
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('fails with the Platform error when the pasted callback carries one', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login(undefined, { skipOnInput: true });
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      // Platform's redirect when the account's email domain is rejected.
+      const qs = new URLSearchParams({
+        error: 'email_domain_not_allowed',
+        error_description: 'Email domain not allowed',
+        state: extractState(),
+      }).toString();
+      process.stdin.emit('data', Buffer.from(`http://localhost:${extractPort()}/callback?${qs}\r`));
+
+      await expect(loginPromise).rejects.toThrow('Sign-in failed: Email domain not allowed.');
+    } finally {
+      terminal.restore();
+    }
+  });
+
+  it('fails with the Platform error when the callback server receives one', async () => {
+    const { login } = await import('./credentials.js');
+    const loginPromise = login();
+    const rejection = expect(loginPromise).rejects.toThrow('Sign-in failed: Single sign-on is required.');
+
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
+    const response = await sendCallback(extractPort(), {
+      error: 'sso_required',
+      error_description: 'Single sign-on is required',
+      state: extractState(),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toContain('Single sign-on is required. Close this tab and return to the terminal.');
+    await rejection;
+  });
+
   it('keeps waiting when the pasted URL is not a valid callback', async () => {
     const terminal = mockTerminal();
     try {
