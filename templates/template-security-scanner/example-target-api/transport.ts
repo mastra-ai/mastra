@@ -489,8 +489,12 @@ async function startLockedExampleTransport(
         })()),
     };
   } catch (error) {
-    await rm(join(home(settings), 'build'), { recursive: true, force: true });
-    await cleanupExampleTransport(settings, receipt);
+    const cleanupErrors: unknown[] = [];
+    await rm(join(home(settings), 'build'), { recursive: true, force: true }).catch(cleanupError =>
+      cleanupErrors.push(cleanupError),
+    );
+    await cleanupExampleTransport(settings, receipt).catch(cleanupError => cleanupErrors.push(cleanupError));
+    if (cleanupErrors.length) throw new AggregateError([error, ...cleanupErrors], 'EXAMPLE_START_FAILED');
     throw error;
   }
 }
