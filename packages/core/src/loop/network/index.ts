@@ -1325,6 +1325,18 @@ export async function createNetworkLoop({
       let runSuccess = true;
 
       const runResult = await stream.result;
+      // Aborted runs do not need their step history or a result saved to memory.
+      if (workflowCancelled && abortSignal?.aborted) {
+        return handleAbort({
+          writer,
+          eventType: 'workflow-execution-abort',
+          primitiveType: 'workflow',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+          task: inputData.task,
+        });
+      }
+
       // The whole run result goes to memory and the stream, so a storage v2 result's steps are loaded back.
       const workflowState = runResult && { ...runResult, steps: await loadStepResults(runResult.steps) };
 
@@ -1376,18 +1388,6 @@ export async function createNetworkLoop({
 
       const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
-
-      // When the workflow was cancelled due to abort, skip saving results to memory
-      if (workflowCancelled && abortSignal?.aborted) {
-        return handleAbort({
-          writer,
-          eventType: 'workflow-execution-abort',
-          primitiveType: 'workflow',
-          primitiveId: inputData.primitiveId,
-          iteration: inputData.iteration,
-          task: inputData.task,
-        });
-      }
 
       await saveMessagesWithProcessors(
         memory,
