@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { RequestContext } from '@mastra/core/di';
 import { Run } from '@mastra/core/workflows';
 import type { Step, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
+import { CancelledFailure, WorkflowExecutionAlreadyStartedError, WorkflowFailedError } from '@temporalio/client';
 import type { Client, WorkflowHandle } from '@temporalio/client';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
@@ -67,7 +68,9 @@ export class TemporalRun<
       handle = await this.dispatch(args, input, initialState, requestContext);
     } catch (error) {
       const result = this.failedResult(input, initialState, error);
-      await this.invokeLifecycleCallbacks(result, requestContext);
+      if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+        await this.invokeLifecycleCallbacks(result, requestContext);
+      }
       return result;
     }
 
@@ -93,6 +96,7 @@ export class TemporalRun<
           outputOptions: args.outputOptions,
           tracingOptions: args.tracingOptions,
           perStep: args.perStep,
+          validateInputs: this.validateInputs,
         },
       ],
     });
@@ -173,6 +177,15 @@ export class TemporalRun<
         steps: normalizeStepResults(output.steps),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
+      if (error instanceof WorkflowFailedError && error.cause instanceof CancelledFailure) {
+        return {
+          status: 'canceled',
+          input: input as TInput,
+          state: initialState,
+          steps: {},
+        } as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      }
+
       return this.failedResult(input, initialState, error);
     }
   }
@@ -359,7 +372,9 @@ export class TemporalRun<
     try {
       handle = await this.dispatch(args, input, initialState, requestContext);
     } catch (error) {
-      await this.invokeLifecycleCallbacks(this.failedResult(input, initialState, error), requestContext);
+      if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+        await this.invokeLifecycleCallbacks(this.failedResult(input, initialState, error), requestContext);
+      }
       throw error;
     }
 
