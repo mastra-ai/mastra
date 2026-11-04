@@ -1,12 +1,20 @@
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, expectTypeOf, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { MockMemory } from '../memory/mock';
 import { SpanType } from '../observability';
 import { StreamErrorRetryProcessor } from '../processors';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '../request-context';
 import { createMockModel } from '../test-utils/llm-mock';
+import { createTool } from '../tools';
 import { createScorer, ScorerRunError } from './base';
 import type { ScorerJudgeExecutionFailure, ScorerJudgeExecutionSuccess } from './base';
 import {
@@ -1243,6 +1251,419 @@ describe('createScorer', () => {
       } finally {
         streamSpy.mockRestore();
       }
+    });
+  });
+
+  describe('Judge instructions and the run request context', () => {
+    const SCORE = '{"score":0.5}';
+    const CACHE = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
+    const reportInstructions = ({ requestContext }: { requestContext: RequestContext<any> }) => [
+      { role: 'system' as const, content: 'Score the report.' },
+      { role: 'system' as const, content: `REPORT: ${requestContext.get('report')}`, providerOptions: CACHE },
+    ];
+    const systemText = (prompt: unknown) =>
+      (prompt as { role: string; content: unknown }[])
+        .filter(message => message.role === 'system')
+        .map(message => message.content)
+        .join('\n');
+
+    it('sends system messages to the model with their cache settings', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          instructions: [
+            { role: 'system', content: 'Score the report.' },
+            { role: 'system', content: 'REPORT: shared', providerOptions: CACHE },
+          ],
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a' });
+
+      const prompt = getPrompts()[0] as { role: string }[];
+      expect(prompt.filter(message => message.role === 'system')).toEqual([
+        expect.objectContaining({ content: 'Score the report.' }),
+        expect.objectContaining({ content: 'REPORT: shared', providerOptions: CACHE }),
+      ]);
+    });
+
+    it.each([
+      ['a plain object', { report: 'report-A' }],
+      ['a RequestContext', new RequestContext([['report', 'report-A']])],
+    ])('gives the report from the run to dynamic judge instructions when the run passes %s', async (_, context) => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: context });
+
+      expect(getPrompts()[0]).toEqual(
+        expect.arrayContaining([expect.objectContaining({ content: 'REPORT: report-A', providerOptions: CACHE })]),
+      );
+    });
+
+    it('gives the report to the judge when the context comes from a second copy of @mastra/core', async () => {
+      class SecondCopyRequestContext {
+        registry = new Map([['report', 'report-A']]);
+        entries() {
+          return this.registry.entries();
+        }
+      }
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: new SecondCopyRequestContext() });
+
+      expect(systemText(getPrompts()[0])).toContain('REPORT: report-A');
+    });
+
+    it('gives the report from the run to every prompt step', async () => {
+      const { model, getPrompts } = createJudgeModel(['{"facts":1}', '{"facts":2}', SCORE, 'Because it is accurate.']);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      })
+        .preprocess({
+          description: 'Find facts',
+          outputSchema: z.object({ facts: z.number() }),
+          createPrompt: () => 'Find facts.',
+        })
+        .analyze({
+          description: 'Check facts',
+          outputSchema: z.object({ facts: z.number() }),
+          createPrompt: () => 'Check facts.',
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' })
+        .generateReason({ description: 'Why', createPrompt: () => 'Why this score?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { report: 'report-A' } });
+
+      expect(getPrompts().map(systemText)).toEqual(Array(4).fill('Score the report.\nREPORT: report-A'));
+    });
+
+    it('gives the report from the run to dynamic instructions on a step-level judge', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({ id: 'report-judge', description: 'Scores a report' }).generateScore({
+        description: 'Accuracy',
+        judge: { model, instructions: reportInstructions },
+        createPrompt: () => 'How accurate is it?',
+      });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { report: 'report-A' } });
+
+      expect(systemText(getPrompts()[0])).toContain('REPORT: report-A');
+    });
+
+    it('gives the report from the run to a V1 judge', async () => {
+      const prompts: unknown[] = [];
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async ({ prompt }) => {
+          prompts.push(prompt);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 1, completionTokens: 1 },
+            text: SCORE,
+          };
+        },
+      });
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: ({ requestContext }) => `REPORT: ${requestContext.get('report')}` },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { report: 'report-A' } });
+
+      expect(systemText(prompts[0])).toContain('REPORT: report-A');
+    });
+
+    it('lets run values override judge.requestContext and leaves the scorer context unchanged', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorerContext = new RequestContext<any>([
+        ['shared', 'from-scorer'],
+        ['scorerOnly', 'kept'],
+      ]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          requestContext: scorerContext,
+          instructions: ({ requestContext }) =>
+            ['shared', 'scorerOnly', 'runOnly'].map(key => `${key}=${requestContext.get(key)}`).join(' '),
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { shared: 'from-run', runOnly: 'added' } });
+
+      expect(systemText(getPrompts()[0])).toBe('shared=from-run scorerOnly=kept runOnly=added');
+      expect(scorerContext.get('shared')).toBe('from-scorer');
+      expect(scorerContext.has('runOnly')).toBe(false);
+    });
+
+    it('keeps parallel runs of one scorer on their own reports', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await Promise.all(
+        ['report-A', 'report-B', 'report-C'].map(report =>
+          scorer.run({ input: 'q', output: 'a', requestContext: { report } }),
+        ),
+      );
+
+      expect(getPrompts().map(systemText).sort()).toEqual(
+        ['report-A', 'report-B', 'report-C'].map(report => `Score the report.\nREPORT: ${report}`),
+      );
+    });
+
+    it('gives the judge a report that a preprocess step loads into the run context', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      })
+        .preprocess(({ run }) => {
+          (run.requestContext as RequestContext).set('report', 'loaded-report');
+          return {};
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: new RequestContext<any>([['report', 'stale-report']]),
+      });
+
+      expect(systemText(getPrompts()[0])).toContain('REPORT: loaded-report');
+    });
+
+    it('gives the judge a report that createPrompt loads into an empty run context', async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: { model, instructions: reportInstructions },
+      }).generateScore({
+        description: 'Accuracy',
+        createPrompt: ({ run }) => {
+          (run.requestContext as Record<string, unknown>).report = 'loaded-report';
+          return 'How accurate is it?';
+        },
+      });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: {} });
+
+      expect(systemText(getPrompts()[0])).toContain('REPORT: loaded-report');
+    });
+
+    it('keeps values a judge tool writes for the later steps of the same run', async () => {
+      const streamOf = (...parts: unknown[]) => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'judge-response', modelId: 'judge-model', timestamp: new Date(0) },
+          ...parts,
+        ]) as any,
+      });
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      const textStream = (text: string) =>
+        streamOf(
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage },
+        );
+      const responses = [
+        streamOf(
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'verifyReport', input: '{}' },
+          { type: 'finish', finishReason: 'tool-calls', usage },
+        ),
+        textStream('{"facts":1}'),
+        textStream(SCORE),
+      ];
+      const prompts: unknown[] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          return responses[prompts.length - 1]!;
+        },
+      });
+      const verifyReport = createTool({
+        id: 'verifyReport',
+        description: 'Verify the report',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          context.requestContext?.set('verified', 'yes');
+          return { verified: true };
+        },
+      });
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          tools: { verifyReport },
+          requestContext: new RequestContext<any>([['verified', 'no']]),
+          instructions: ({ requestContext }) => `verified=${requestContext.get('verified')}`,
+        },
+      })
+        .analyze({
+          description: 'Check facts',
+          outputSchema: z.object({ facts: z.number() }),
+          createPrompt: () => 'Check facts.',
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { report: 'report-A' } });
+
+      expect(systemText(prompts.at(-1))).toBe('verified=yes');
+    });
+
+    it("keeps one step's memory binding away from the next step", async () => {
+      const memory = new MockMemory();
+      const { model, getPrompts } = createJudgeModel(['{"facts":1}', SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          memory,
+          instructions: ({ requestContext }) => {
+            const binding = requestContext.get('MastraMemory') as { thread?: { id: string } } | undefined;
+            return `binding=${binding?.thread?.id}`;
+          },
+        },
+      })
+        .analyze({
+          description: 'Check facts',
+          judge: {
+            model,
+            instructions: 'Check the report.',
+            memory: { thread: 'analyze-thread', resource: 'judge-user' },
+          },
+          outputSchema: z.object({ facts: z.number() }),
+          createPrompt: () => 'Check facts.',
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({ input: 'q', output: 'a', requestContext: { report: 'report-A' } });
+
+      expect(systemText(getPrompts()[1])).toBe('binding=undefined');
+    });
+
+    it("keeps one step's memory binding away from the next step after a step clears the run context", async () => {
+      const memory = new MockMemory();
+      const { model, getPrompts } = createJudgeModel(['{"facts":1}', SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          memory,
+          instructions: ({ requestContext }) => {
+            const binding = requestContext.get('MastraMemory') as { thread?: { id: string } } | undefined;
+            return `binding=${binding?.thread?.id}`;
+          },
+        },
+      })
+        .preprocess({
+          description: 'Find facts',
+          judge: {
+            model,
+            instructions: 'Find facts.',
+            memory: { thread: 'preprocess-thread', resource: 'judge-user' },
+          },
+          outputSchema: z.object({ facts: z.number() }),
+          createPrompt: () => 'Find facts.',
+        })
+        .analyze(({ run }) => {
+          (run.requestContext as RequestContext).delete('report');
+          return {};
+        })
+        .generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: new RequestContext<any>([['report', 'report-A']]),
+      });
+
+      expect(systemText(getPrompts()[1])).toBe('binding=undefined');
+    });
+
+    it('keeps a judge with memory on its own thread when the run names the caller thread', async () => {
+      const memory = new MockMemory();
+      const { model } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          memory,
+          defaultMemoryOptions: { thread: 'judge-thread', resource: 'judge-user' },
+          instructions: reportInstructions,
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: new RequestContext<any>([
+          [MASTRA_THREAD_ID_KEY, 'caller-thread'],
+          [MASTRA_RESOURCE_ID_KEY, 'caller-user'],
+          ['report', 'report-A'],
+        ]),
+      });
+
+      const judgeThread = await memory.recall({ threadId: 'judge-thread', resourceId: 'judge-user' });
+      const callerThread = await memory.recall({ threadId: 'caller-thread', resourceId: 'caller-user' });
+      expect(judgeThread.messages.length).toBeGreaterThan(0);
+      expect(callerThread.messages).toEqual([]);
+    });
+
+    it("leaves the run's memory binding and reserved keys out of the judge", async () => {
+      const { model, getPrompts } = createJudgeModel([SCORE]);
+      const scorer = createScorer({
+        id: 'report-judge',
+        description: 'Scores a report',
+        judge: {
+          model,
+          instructions: ({ requestContext }) =>
+            ['MastraMemory', MASTRA_THREAD_ID_KEY, MASTRA_AUTH_TOKEN_KEY, 'report']
+              .map(key => `${requestContext.get(key)}`)
+              .join(' '),
+        },
+      }).generateScore({ description: 'Accuracy', createPrompt: () => 'How accurate is it?' });
+
+      await scorer.run({
+        input: 'q',
+        output: 'a',
+        requestContext: {
+          MastraMemory: { thread: { id: 'caller-thread' } },
+          [MASTRA_THREAD_ID_KEY]: 'caller-thread',
+          [MASTRA_AUTH_TOKEN_KEY]: 'caller-token',
+          report: 'report-A',
+        },
+      });
+
+      expect(systemText(getPrompts()[0])).toBe('undefined undefined undefined report-A');
     });
   });
 
