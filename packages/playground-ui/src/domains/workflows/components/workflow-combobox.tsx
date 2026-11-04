@@ -16,6 +16,7 @@ export interface WorkflowComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -30,6 +31,7 @@ export function WorkflowCombobox({
   disabled = false,
   variant,
   size,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
   requestContext,
@@ -69,6 +71,7 @@ export function WorkflowCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />
