@@ -1994,9 +1994,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           : undefined;
 
         await inngest.send({
-          // A send can fail after Inngest accepted the event, and the claim is then handed back. The
-          // id names this resume of this suspension, so Inngest drops a retry of an accepted event.
-          ...(snapshot?.timestamp ? { id: `${runId}:resume:${snapshot.timestamp}:${toolCallId ?? ''}` } : {}),
+          // A send can fail after Inngest accepted the event, and the claim is then handed back. The id
+          // names the suspension, so Inngest accepts one resume of it: a retry, or another tool call
+          // claiming the same snapshot meanwhile, is dropped instead of running from it again.
+          ...(snapshot?.timestamp ? { id: `${runId}:resume:${snapshot.timestamp}` } : {}),
           name: eventName,
           data: buildDurableResumeEventData({
             inputData: resumeData,
