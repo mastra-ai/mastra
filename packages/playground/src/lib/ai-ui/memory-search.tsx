@@ -278,7 +278,7 @@ export const MemorySearch = ({
                                 )}
                                 title={result.threadTitle}
                               >
-                                • {result.threadTitle}
+                                {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
                                 <ExternalLink className="h-3 w-3 text-info-indicator" />

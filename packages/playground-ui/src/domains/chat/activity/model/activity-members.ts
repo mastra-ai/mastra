@@ -11,13 +11,12 @@ export interface ActivityCall {
   toolName: string;
   args: unknown;
   status: ActivityCallStatus;
-  startedAt?: number;
   row: ReactNode;
   /** What opening the call alone shows; absent when it has nothing to show. */
   body?: ReactNode;
 }
 
-export type ActivityCallState = Pick<ActivityCall, 'toolName' | 'args' | 'status' | 'startedAt'>;
+export type ActivityCallState = Pick<ActivityCall, 'toolName' | 'args' | 'status'>;
 
 export interface ActivityThought {
   kind: 'thought';
