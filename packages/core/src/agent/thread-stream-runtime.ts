@@ -5713,6 +5713,8 @@ export class AgentThreadStreamRuntime {
       // Only user messages have an admission the owner announces (their pending presentation), so only
       // they can be held until admitted without risking a second delivery. Known limit: if the owner admits it
       // but that presentation is lost before its run ends, the held copy is queued again and the message runs twice.
+      // A forward to a run this runtime registered and then lost to a takeover is kept by the lost-segment guard in
+      // the control subscription's terminal handler; that narrow window has no in-process test.
       if (owns.owner && ownerRunId && this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {
         const forwarded = state.forwardedIdleSignalsByThread.get(key) ?? new Map();
         // The owner presents it under the run ID it resolves the address to, which drops a legacy retake marker.
