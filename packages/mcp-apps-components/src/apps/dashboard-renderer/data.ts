@@ -3,9 +3,10 @@ import { z } from 'zod';
 /**
  * The app-only tool the dashboard reads its data through. The app runs in a sandboxed iframe that
  * hosts may forbid from reaching the server, so each read travels as a call to this tool over the
- * host's existing MCP connection. The server registering the app answers it however it likes.
+ * host's existing MCP connection. An MCP server names a tool by the key it's registered under, so
+ * this matches the export: `tools: { dashboardDataTool }`.
  */
-export const DASHBOARD_DATA_TOOL_NAME = 'mastraDashboardData';
+export const DASHBOARD_DATA_TOOL_NAME = 'dashboardDataTool';
 
 /** Every read the dashboard makes, named after the `MastraClient` method that makes it. */
 export const DASHBOARD_DATA_OPERATIONS = [

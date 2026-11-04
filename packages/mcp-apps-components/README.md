@@ -2,7 +2,7 @@
 
 Prebuilt [MCP Apps](https://mastra.ai/docs/connections/mcp) that render Mastra UI components inside any MCP App host, such as Mastra Studio. Each app ships as a self-contained HTML resource you register on an `MCPServer`, plus a server-side helper to link it to your tools.
 
-The apps never reach the network from their iframe. Each read they make travels as a call to one app-only data tool that you register on the same server. The package ships the contract for that tool, not the tool itself.
+The apps never reach the network from their iframe. Each read they make travels as a call to one app-only data tool that you register on the same server.
 
 ## Installation
 
@@ -18,9 +18,12 @@ Register the dashboard renderer on an `MCPServer`, then return a dashboard defin
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
-import { dashboardRendererApp, dashboardRendererInputSchema } from '@mastra/mcp-apps-components/dashboard-renderer';
+import {
+  dashboardDataTool,
+  dashboardRendererApp,
+  dashboardRendererInputSchema,
+} from '@mastra/mcp-apps-components/dashboard-renderer';
 import { z } from 'zod';
-import { dashboardDataTool } from './dashboard-data-tool';
 
 const DASHBOARD_APP_URI = 'ui://mastra/dashboard';
 
@@ -68,20 +71,17 @@ export const dashboardServer = new MCPServer({
   name: 'Dashboard Server',
   version: '1.0.0',
   appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
-  tools: { showAgentRuns, [dashboardDataTool.id]: dashboardDataTool },
+  tools: { showAgentRuns, dashboardDataTool },
 });
 ```
 
 ### Data tool
 
-The dashboard app sends each read its `MastraClient` makes, such as `getMetricAggregate`, to one tool named `DASHBOARD_DATA_TOOL_NAME`, exported from `@mastra/mcp-apps-components/dashboard-renderer`. Define that tool on the server that serves the app:
+Register `dashboardDataTool` under that exact key, next to the app. The app calls it by name for every read its dashboard makes, such as `getMetricAggregate`. Without it, each widget fails with a message telling you to register it.
 
-- Take `dashboardDataInputSchema` as input: an `operation` from `DASHBOARD_DATA_OPERATIONS`, named after the `MastraClient` method, with its arguments. `listScores` carries them as `query` parameters; every other operation carries them as a JSON `body`.
-- Answer with a status and body, matching `dashboardDataOutputSchema`.
-- Mark it app-only with `mcp: { _meta: { ui: { visibility: ['app'] } } }`, so hosts keep it away from the model.
-- Type any handler map as `Record<DashboardDataOperation, ...>`, so TypeScript flags an operation you don't answer.
+The tool runs the observability route behind each read in-process as the caller, with `invokeRoute()` from `@mastra/server`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. It only answers the reads in `DASHBOARD_DATA_OPERATIONS`, and it's app-only, so hosts keep it away from the model.
 
-For example, answer each operation with the observability route `DASHBOARD_DATA_REQUESTS` maps it to, run in-process as the caller with `invokeRoute()` from `@mastra/server/server-adapter`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. The [MCP Apps docs](https://mastra.ai/docs/connections/mcp) show a full implementation.
+Your server needs `@mastra/server`, which any Mastra server already has. When the server has authentication configured, reads made over an MCP transport that carries no signed-in user, such as stdio, answer with `401`.
 
 ### Pinning widgets
 

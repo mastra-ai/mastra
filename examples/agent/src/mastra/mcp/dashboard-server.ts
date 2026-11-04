@@ -1,9 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { MCPClient, MCPServer } from '@mastra/mcp';
 import { Memory } from '@mastra/memory';
-import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
+import { dashboardDataTool, dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { DASHBOARD_APP_URI, showObservabilityDashboard } from './dashboard-tools';
-import { dashboardDataTool } from './dashboard-data-tool';
 
 const DASHBOARD_SERVER_ID = 'dashboard-mcp-server';
 // This Mastra server, which the agent reaches over HTTP like any MCP client. `mastra dev` falls back to
@@ -19,7 +18,7 @@ export const dashboardMcpServer = new MCPServer({
   appResources: {
     [DASHBOARD_APP_URI]: dashboardRendererApp(),
   },
-  tools: { showObservabilityDashboard, [dashboardDataTool.id]: dashboardDataTool },
+  tools: { showObservabilityDashboard, dashboardDataTool },
 });
 
 // Consumes the server above over HTTP, as any MCP client would. The server key matches the

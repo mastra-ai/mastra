@@ -38,7 +38,7 @@ async function clientBehindHost(answer: DashboardDataOutput) {
     retries: 0,
     fetch: createDashboardDataFetch(app),
   });
-  return { client, calls };
+  return { client, calls, app };
 }
 
 describe('createDashboardDataFetch', () => {
@@ -94,6 +94,20 @@ describe('createDashboardDataFetch', () => {
       const { client, calls } = await clientBehindHost({ status: 200, body: {} });
 
       await expect(client.listAgents()).rejects.toThrow(/404/);
+      expect(calls).toEqual([]);
+    });
+  });
+
+  describe('when a read is posted without a JSON object body', () => {
+    it('fails it with 400 without calling the server', async () => {
+      const { calls, app } = await clientBehindHost({ status: 200, body: {} });
+
+      const response = await createDashboardDataFetch(app)('http://mastra.test/observability/metrics/aggregate', {
+        method: 'POST',
+        body: 'not json',
+      });
+
+      expect(response.status).toBe(400);
       expect(calls).toEqual([]);
     });
   });
