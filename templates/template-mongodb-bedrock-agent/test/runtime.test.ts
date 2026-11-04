@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer, request } from 'node:http';
-import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { MongoClient } from 'mongodb';
 import { afterAll, beforeAll, expect, test } from 'vitest';
