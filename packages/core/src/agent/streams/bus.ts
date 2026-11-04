@@ -29,7 +29,9 @@ export function scheduleStreamCleanup(
   cleanup: () => void,
 ): ReturnType<typeof setTimeout> | undefined {
   if (timeoutMs === 0) return undefined;
-  return setTimeout(cleanup, timeoutMs);
+  const timer = setTimeout(cleanup, timeoutMs);
+  timer.unref?.();
+  return timer;
 }
 
 /**
