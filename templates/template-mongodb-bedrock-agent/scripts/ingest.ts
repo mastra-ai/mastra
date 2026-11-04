@@ -67,7 +67,9 @@ async function main() {
       const md = await fetch(link.url).then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))));
       const doc = MDocument.fromMarkdown(md);
       const chunks = await doc.chunk({ strategy: 'recursive', maxSize: 1024, overlap: 100 });
-      if (chunks.length === 0) continue;
+      if (chunks.length === 0) {
+        throw new Error(`No chunks found for ${link.url}; aborting before reconciliation.`);
+      }
 
       // Embed in batches to stay within provider limits.
       const texts = chunks.map(c => c.text);

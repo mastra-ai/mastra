@@ -162,6 +162,15 @@ test.skipIf(!process.env.TEST_MONGODB_URI)(
       expect(empty.code, empty.output).toBe(1);
       expect(await collection.find().toArray()).toEqual(current);
 
+      const previousIntroduction = introduction;
+      introduction = '';
+      const emptyPage = await runWithHttp(handler, { ...env, DOCS_LIMIT: '1' });
+      expect(emptyPage.code, emptyPage.output).toBe(1);
+      expect(emptyPage.output).toContain('No chunks found for https://mastra.ai/docs/introduction.md');
+      expect(emptyPage.output).not.toContain('Done.');
+      expect(await collection.find().toArray()).toEqual(current);
+      introduction = previousIntroduction;
+
       pageStatus = 503;
       const failed = await runWithHttp(handler, env);
       expect(failed.code, failed.output).toBe(1);

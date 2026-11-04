@@ -30,7 +30,7 @@ One Atlas cluster handles vector search and conversation storage, while Bedrock 
 2. **Add your credentials**
    - Run `cp .env.example .env` and fill in the values described under Prerequisites.
 3. **Load the documentation**
-   - Run `npm run ingest` to embed the example documentation corpus and store it in Atlas. Check that the command finishes successfully and reports inserted chunks. A failed fetch or embedding stops the run; retry after fixing the reported error.
+   - Run `npm run ingest` to embed the example documentation corpus and store it in Atlas. Check that the command finishes successfully and reports inserted chunks. A failed fetch, empty page, or embedding error stops the run before cleanup; retry after fixing the reported error.
 4. **Start the dev server**
    - Run `npm run dev`.
    - Open [Mastra Studio](http://localhost:4111), select **Mastra Docs Agent**, and ask “How do I give a Mastra agent memory?” Look for an answer based on the retrieved documentation with a **Sources** list linking the pages used.
