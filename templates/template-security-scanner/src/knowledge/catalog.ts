@@ -50,7 +50,7 @@ export type Reference = z.infer<typeof reference>;
 type Manifest = z.infer<typeof manifestSchema>;
 
 const checksum = (data: Uint8Array) => createHash('sha256').update(data).digest('hex');
-const MANIFEST_SHA256 = '344b48ceb237aafedcd1723044d29d212463994a6a403ae8f18a4f4bc5fb03a6';
+const MANIFEST_SHA256 = 'a9c22ba3537c56fb444b69a4b8f2d72d7f4f31f8531cc3172c45f1698fafe89b';
 const catalogError = () => new ControlPlaneError('CATALOG_INTEGRITY_FAILED', 503);
 
 export class ReferenceCatalog {
