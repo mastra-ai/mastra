@@ -107,9 +107,9 @@ export function ModelCombobox({
       placeholder={
         fallbackModelId
           ? `${formatModelName(fallbackModelId)} · ${DEFAULT_SOURCE_LABELS['built-in']}`
-          : (placeholder ?? 'Select model…')
+          : (placeholder ?? 'Select model')
       }
-      searchPlaceholder="Search models…"
+      searchPlaceholder="Search models"
       emptyText="No matching model."
       allowCustomValue
       disabled={disabled}

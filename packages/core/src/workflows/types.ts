@@ -619,6 +619,15 @@ export interface WorkflowOptions {
   isForeignExecution?: (eventRequestContext: unknown, requestContext: RequestContext) => boolean;
 
   /**
+   * Call `onLost` if the execution `requestContext` claims loses the run before its caller receives a result,
+   * so a caller waiting on the evented engine stops waiting for a finish that will never be its own.
+   * Returns a function that stops watching.
+   *
+   * @internal Set by durable agent workflows.
+   */
+  watchExecutionLoss?: (requestContext: RequestContext, runId: string, onLost: (error: Error) => void) => () => void;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Called at every snapshot persist site (both engines). Must be a pure
    * function returning JSON-safe data — the snapshot may cross a pubsub
@@ -1415,6 +1424,11 @@ export type ExecutionContext = {
  */
 export type MutableContext = {
   state: Record<string, any>;
+  /**
+   * @internal Set when `state` is a nested run's state: the JSON state its changes are relative
+   * to. Applying it applies those changes to the state then, not `state` itself.
+   */
+  stateBase?: Record<string, unknown>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

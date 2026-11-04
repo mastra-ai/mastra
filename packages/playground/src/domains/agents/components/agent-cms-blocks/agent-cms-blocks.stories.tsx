@@ -71,7 +71,7 @@ const InteractiveExample = () => {
   return (
     <div className="w-[800px]">
       <TooltipProvider>
-        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
+        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content" schema={complexSchema} />
       </TooltipProvider>
 
       <div className="mt-4 rounded-lg bg-background p-3">
@@ -95,7 +95,7 @@ const EmptyExample = () => {
         <AgentCMSBlocks
           items={items}
           onChange={setItems}
-          placeholder="Add your first content block..."
+          placeholder="Add your first content block"
           schema={complexSchema}
         />
       </TooltipProvider>
@@ -115,7 +115,7 @@ const SingleBlockExample = () => {
   return (
     <div className="w-[500px]">
       <TooltipProvider>
-        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
+        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content" schema={complexSchema} />
       </TooltipProvider>
     </div>
   );

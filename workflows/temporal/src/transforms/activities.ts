@@ -356,6 +356,16 @@ function createTemporalActivitiesHelperStatements(
   hasMastraBinding: boolean,
   requestContextClassName: string,
 ): t.Statement[] {
+  const executeBody = mastraImportPath
+    ? `
+      const { mastra } = await import(${JSON.stringify(mastraImportPath)});
+      return args.execute({ ...withRequestContext(params), mastra });
+    `
+    : hasMastraBinding
+      ? 'return args.execute({ ...withRequestContext(params), mastra });'
+      : 'return args.execute(withRequestContext(params));';
+
+  // MastraPlugin checks the input against the schemas before it calls execute.
   const helperSource = `
     function withRequestContext(params) {
       const { requestContext, initData, ...rest } = params;
@@ -366,31 +376,14 @@ function createTemporalActivitiesHelperStatements(
       };
     }
 
-    ${
-      mastraImportPath
-        ? `
-          function createStep(args) {
-            return async (params) => {
-              const { mastra } = await import(${JSON.stringify(mastraImportPath)});
-              return args.execute({ ...withRequestContext(params), mastra });
-            };
-          }
-        `
-        : hasMastraBinding
-          ? `
-            function createStep(args) {
-              return async (params) => {
-                return args.execute({ ...withRequestContext(params), mastra });
-              };
-            }
-          `
-          : `
-            function createStep(args) {
-              return async (params) => {
-                return args.execute(withRequestContext(params));
-              };
-            }
-          `
+    function createStep(args) {
+      return {
+        inputSchema: args.inputSchema,
+        requestContextSchema: args.requestContextSchema,
+        execute: async (params) => {
+          ${executeBody}
+        },
+      };
     }
   `;
 

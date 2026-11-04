@@ -168,7 +168,7 @@ export async function executeTarget(
         );
         break;
       case 'workflow':
-        executionPromise = executeWorkflow(target as Workflow, item, options?.requestContext);
+        executionPromise = executeWorkflow(target as Workflow, item, options?.requestContext, options?.experimentId);
         break;
       case 'scorer':
         executionPromise = executeScorer(target as MastraScorer<any, any, any, any>, item);
@@ -555,17 +555,22 @@ async function executeWorkflow(
     resumeData?: unknown;
   },
   requestContext?: Record<string, unknown>,
+  experimentId?: string,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
   const observabilityContext = resolveObservabilityContext({});
+  // Root workflow span metadata is inherited by child spans and metrics, so
+  // tagging start and every resume ties the whole run to the experiment.
+  const tracingOptions = experimentId ? { tracingOptions: { metadata: { experimentId } } } : {};
 
   const run = await workflow.createRun({ disableScorers: true });
   let result = await run.start({
     inputData: item.input,
     ...(reqCtx ? { requestContext: reqCtx } : {}),
     ...observabilityContext,
+    ...tracingOptions,
   });
 
   // Auto-resume loop: if the workflow suspends and resume data is provided,
@@ -605,6 +610,7 @@ async function executeWorkflow(
         step: stepToResume,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...observabilityContext,
+        ...tracingOptions,
       });
     }
   }

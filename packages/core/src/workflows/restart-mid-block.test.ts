@@ -15,7 +15,9 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
+import { cloneRunData } from '../storage/domains/workflows/inmemory';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import type { WorkflowRunState } from './types';
@@ -438,6 +440,29 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     expect(restarted.result).toEqual(original.result);
   });
 
+  it('restarts a foreach over a nested workflow whose item was running at the crash', async () => {
+    const build = (crash?: Crash): Built => {
+      const work = step('work', async ({ inputData }) => {
+        if (crash && inputData === 1) await crash();
+        return inputData * 10;
+      });
+      const inner = createWorkflow({ id: 'foreach-nested-inner', inputSchema: anySchema, outputSchema: anySchema })
+        .then(work.step)
+        .commit();
+      const workflow = createWorkflow({ id: 'foreach-nested', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(inner, { concurrency: 1 })
+        .commit();
+      return { workflow, fns: { work: work.fn } };
+    };
+
+    const { original, restarted, fns } = await crashAndRestart(build, [0, 1, 2]);
+
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual(original.result);
+    // The finished item is skipped; the one running at the crash starts over.
+    expect(fns.work.mock.calls.map(call => call[0].inputData)).toEqual([1, 2]);
+  });
+
   it('writes at most one progress checkpoint per finished item, plus one running write', async () => {
     // Items no longer write their own start snapshot, and progress writes are coalesced
     // on one in-flight chain, so the foreach writes at most once per finished item plus
@@ -469,5 +494,152 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     const stored = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
     expect(JSON.stringify(stored)).not.toContain('foreachProgress');
     expect((stored!.context.item as any).output).toEqual(items.map(index => ({ index, payload })));
+  });
+});
+
+const WRITE_METHODS = [
+  'persistWorkflowSnapshot',
+  'updateWorkflowResults',
+  'updateWorkflowState',
+  'deleteWorkflowRunById',
+] as const;
+
+type RunTables = { workflows: Map<string, any> };
+
+async function runTablesOf(storage: InstanceType<typeof MockStore>): Promise<RunTables> {
+  return ((await storage.getStore('workflows')) as any).db;
+}
+
+function seeded(seed: number) {
+  return () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Publishes foreach progress events only once storage has been asked for another write (or
+ * after a while), like a pubsub slower than storage. Checkpoints then get taken while items
+ * that already finished wait on their progress event.
+ */
+class SlowProgressPubSub extends EventEmitterPubSub {
+  constructor(private readonly nextWrite: () => Promise<void>) {
+    super();
+  }
+
+  override async publish(...args: Parameters<EventEmitterPubSub['publish']>) {
+    if ((args[1] as any).data?.type === 'workflow-step-progress') await this.nextWrite();
+    return super.publish(...args);
+  }
+}
+
+/**
+ * Runs the workflow to the end against a store whose writes are copied when called and land
+ * after a random delay. When write number `crashAt` is called, keeps a copy of what storage
+ * holds: what a process that died right then leaves behind. Then restores that copy into fresh
+ * storage and restarts the run there with a freshly built workflow. Returns undefined when
+ * the run made fewer writes, or none had landed yet.
+ */
+async function crashAtWrite(
+  build: () => Built,
+  {
+    inputData,
+    initialState,
+    crashAt,
+    seed,
+  }: { inputData: unknown; initialState?: unknown; crashAt: number; seed: number },
+) {
+  const random = seeded(seed);
+  let writeWaiters: Array<() => void> = [];
+  const nextWrite = () =>
+    new Promise<void>(resolve => {
+      writeWaiters.push(resolve);
+      setTimeout(resolve, 20);
+    });
+  const storage = new MockStore();
+  const first = build();
+  new Mastra({ logger: false, storage, workflows: { wf: first.workflow } });
+  const tables = await runTablesOf(storage);
+  const store: any = await storage.getStore('workflows');
+  let writes = 0;
+  let crashRuns: Map<string, any> | undefined;
+  for (const method of WRITE_METHODS) {
+    const write = store[method].bind(store);
+    vi.spyOn(store, method).mockImplementation(async (args: any) => {
+      if (writes++ === crashAt) crashRuns = cloneRunData(tables.workflows);
+      const copy = cloneRunData(args);
+      const waiters = writeWaiters;
+      writeWaiters = [];
+      waiters.forEach(release => release());
+      await sleep(Math.floor(random() * 4));
+      return write(copy);
+    });
+  }
+
+  const run = await first.workflow.createRun({ pubsub: new SlowProgressPubSub(nextWrite) });
+  const original = await run.start({ inputData, initialState });
+  expect(original.status).toBe('success');
+  if (!crashRuns) return undefined;
+
+  const second = build();
+  const freshStorage = new MockStore();
+  new Mastra({ logger: false, storage: freshStorage, workflows: { wf: second.workflow } });
+  const freshTables = await runTablesOf(freshStorage);
+  for (const [key, value] of crashRuns) freshTables.workflows.set(key, value);
+  const freshStore = (await freshStorage.getStore('workflows'))!;
+  const stored = await freshStore.loadWorkflowSnapshot({ workflowName: second.workflow.id, runId: run.runId });
+  if (stored?.status !== 'running') return undefined;
+
+  const restarted = await (await second.workflow.createRun({ runId: run.runId })).restart();
+  return { original, restarted, fns: second.fns };
+}
+
+describe('restart after a crash at any write inside a foreach', () => {
+  it("applies every item's state changes once, wherever the crash lands", async () => {
+    // Items finish while progress checkpoints are in flight. A checkpoint that recorded an
+    // item's state changes without recording the item as finished would make the restart run
+    // it again on top of its own changes.
+    const items = Array.from({ length: 12 }, (_, i) => i);
+    const stateSchema = z.record(z.string(), z.number());
+    const build = (): Built => {
+      const random = seeded(7);
+      const execute = vi.fn(async ({ inputData, state, setState }: any) => {
+        await sleep(Math.floor(random() * 4));
+        await setState({ ...state, [`n${inputData}`]: (state[`n${inputData}`] ?? 0) + 1 });
+        return inputData;
+      });
+      const item = createStep({ id: 'item', inputSchema: z.number(), outputSchema: z.number(), stateSchema, execute });
+      const report = createStep({
+        id: 'report',
+        inputSchema: anySchema,
+        outputSchema: anySchema,
+        stateSchema,
+        execute: async ({ state }) => state,
+      });
+      const workflow = createWorkflow({
+        id: 'foreach-state-once',
+        inputSchema: z.array(z.number()),
+        outputSchema: anySchema,
+        stateSchema,
+      })
+        .foreach(item, { concurrency: 4 })
+        .then(report)
+        .commit();
+      return { workflow, fns: { item: execute } };
+    };
+    const expected = Object.fromEntries(items.map(i => [`n${i}`, 1]));
+
+    let restarts = 0;
+    for (let crashAt = 0; crashAt < 200; crashAt++) {
+      const outcome = await crashAtWrite(build, { inputData: items, initialState: {}, crashAt, seed: crashAt });
+      if (!outcome) {
+        if (restarts > 0) break;
+        continue;
+      }
+      restarts++;
+      expect(outcome.original.result).toEqual(expected);
+      expect(outcome.restarted.status, `crash at write ${crashAt}`).toBe('success');
+      expect(outcome.restarted.result, `crash at write ${crashAt}`).toEqual(expected);
+    }
+    expect(restarts).toBeGreaterThan(3);
   });
 });

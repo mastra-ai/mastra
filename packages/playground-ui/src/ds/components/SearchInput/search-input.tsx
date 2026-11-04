@@ -42,7 +42,9 @@ export function SearchInput({
     <Field className={className}>
       <FieldLabel className="sr-only">{label}</FieldLabel>
       <InputGroup size={size} className="min-w-0">
-        <InputGroupAddon>
+        {/* Spaced like a Button's leading icon (the group's `--control-px` and `--control-gap`) so
+            a search field sits in a toolbar row with the same insets as the pills next to it. */}
+        <InputGroupAddon className="pr-(--control-gap) pl-[calc(var(--control-px)-2px)]">
           <SearchIcon />
         </InputGroupAddon>
         <InputGroupInput

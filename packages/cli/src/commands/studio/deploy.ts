@@ -337,7 +337,7 @@ async function resolveProject(
     }
 
     const CREATE_NEW = '__create_new__';
-    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : projects[0]!.id;
+    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : CREATE_NEW;
     const selected = await p.select({
       message: 'Select a project to deploy to',
       initialValue,

@@ -111,7 +111,7 @@ export function ExperimentsFilterBar({
       className="min-w-64 flex-1"
     >
       <FilterBar.Chips />
-      <FilterBar.Input placeholder="Filter experiments…" />
+      <FilterBar.Input placeholder="Filter experiments" />
     </FilterBar>
   );
 }

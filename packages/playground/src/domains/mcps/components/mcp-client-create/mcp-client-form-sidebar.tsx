@@ -100,8 +100,8 @@ export function MCPClientFormSidebar({
               <div className="flex flex-col gap-1.5">
                 <MCPServerCombobox
                   onValueChange={onPreFillFromServer}
-                  placeholder="Select a server..."
-                  searchPlaceholder="Search servers..."
+                  placeholder="Select a server"
+                  searchPlaceholder="Search servers"
                   emptyText="No servers found"
                   container={containerRef}
                 />

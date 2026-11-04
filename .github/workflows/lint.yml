@@ -72,6 +72,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -182,6 +183,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -206,6 +208,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -245,6 +248,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -272,6 +276,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -294,6 +299,7 @@ jobs:
     if: needs.changes.outputs.has_readme_inputs == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -320,6 +326,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
