@@ -5,6 +5,7 @@ import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
@@ -12,6 +13,7 @@ import { getUserSessionLabel } from '../../workspaces/services/sessionPresentati
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { linearIdentifierForItem } from '../boardItems';
+import { itemBoard } from '../boardStages';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
@@ -67,6 +69,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(factoryId);
+  const boards = useBoardCatalog(factoryId);
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
@@ -74,12 +77,16 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
+  const board = currentItem ? itemBoard(currentItem) : undefined;
+  const boardTitle =
+    boards.data?.find(entry => entry.id === board)?.title ??
+    (board ? board.charAt(0).toUpperCase() + board.slice(1) : '');
 
   const crumbs =
-    currentItem && factoryId ? (
+    currentItem && factoryId && board ? (
       <>
-        <Crumb as={Link} to={rememberedBoardPath(factoryId, 'work')}>
-          Work
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, board)}>
+          {boardTitle}
         </Crumb>
         <Crumb as="span" isCurrent>
           {sessionTitle(currentItem)}
