@@ -1,0 +1,8 @@
+/* `--info-indicator`, not `--color-info-indicator`: the theme declares `--color-*` inline, so those never exist at runtime. */
+::highlight(chat-annotation) {
+  background-color: color-mix(in oklab, var(--info-indicator) 20%, transparent);
+}
+
+::highlight(chat-annotation-active) {
+  background-color: color-mix(in oklab, var(--info-indicator) 42%, transparent);
+}

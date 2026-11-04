@@ -1,4 +1,5 @@
 import type { BoardCandidate } from './boardCandidates';
+import { sourceMetadata } from './boardItems';
 import type { BoardFilterState } from './boardFilters';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 
@@ -9,7 +10,7 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
   { value: 'manual', label: 'Manual' },
-];
+] as const;
 
 type BoardSourceFilters = Pick<BoardFilterState, 'source' | 'linearProject'>;
 
@@ -31,13 +32,13 @@ export function hasBoardSourceFilters(filters: BoardSourceFilters): boolean {
 
 /** Live metadata wins, including an issue moved out of a project; stored metadata covers older pages. */
 export function cardMatchesSourceFilters(
-  card: Pick<WorkItem, 'source' | 'metadata'>,
+  card: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
   filters: BoardSourceFilters,
   liveCandidate?: BoardCandidate,
 ): boolean {
   const sources = pickedBoardSources(filters);
   if (sources.size > 0 && !sources.has(boardSource(card.source))) return false;
   if (card.source !== 'linear-issue' || filters.linearProject.size === 0) return true;
-  const projectId = (liveCandidate ?? card).metadata.linearProjectId;
+  const projectId = sourceMetadata(liveCandidate ?? card).linearProjectId;
   return typeof projectId === 'string' && filters.linearProject.has(projectId);
 }

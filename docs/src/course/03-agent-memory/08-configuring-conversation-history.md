@@ -10,7 +10,7 @@ import { LibSQLStore } from '@mastra/libsql'
 // Create a memory instance with custom conversation history settings
 const memory = new Memory({
   storage: new LibSQLStore({
-    url: 'file:../../memory.db',
+    url: process.env.MASTRA_DB_URL!,
   }),
   options: {
     lastMessages: 20, // Include the last 20 messages in the context instead of the default 10

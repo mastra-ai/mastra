@@ -1,6 +1,5 @@
 import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -8,6 +7,7 @@ import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
 } from '../routes/tenant-credentials.js';
+import { SessionBranchHeldError } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   createSourceControlSessionLookup,
@@ -250,7 +250,7 @@ describe('ensureFactorySourceSession', () => {
         baseBranch: 'main',
         visibility: 'org',
       }),
-    ).rejects.toBeInstanceOf(UniqueViolationError);
+    ).rejects.toBeInstanceOf(SessionBranchHeldError);
   });
 
   it('files the session under the position-1 environment link', async () => {

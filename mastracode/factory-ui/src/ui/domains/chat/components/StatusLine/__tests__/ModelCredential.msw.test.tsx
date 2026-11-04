@@ -79,6 +79,7 @@ function renderModelCredential({
   const models: ChatModelsApi = {
     activeModelId: modelId,
     defaultModelId: undefined,
+    pendingModelId: undefined,
     isLoading: false,
     error: undefined,
     setModel: async () => {},
@@ -113,7 +114,7 @@ describe('ModelCredential', () => {
 
     expect(
       await findCredential(
-        'Claude Pro/Max. Shane Thomas · session owner. Your messages use Shane Thomas’s Claude Pro/Max',
+        'Claude Pro/Max. Shane Thomas (session owner). Your messages use Shane Thomas’s Claude Pro/Max',
       ),
     ).toBeInTheDocument();
   });
@@ -121,13 +122,13 @@ describe('ModelCredential', () => {
   it('tells the session owner the credential is their own, without the teammate warning', async () => {
     renderModelCredential({ viewer: SHANE, owner: SHANE });
 
-    expect(await findCredential('Claude Pro/Max. Shane Thomas · session owner (you)')).toBeInTheDocument();
+    expect(await findCredential('Claude Pro/Max. Shane Thomas (you, session owner)')).toBeInTheDocument();
   });
 
   it('names your credential on a new chat, where you become the owner', async () => {
     renderModelCredential({ draft: true });
 
-    expect(await findCredential('Claude Pro/Max. Damien Schneider · session owner (you)')).toBeInTheDocument();
+    expect(await findCredential('Claude Pro/Max. Damien Schneider (you, session owner)')).toBeInTheDocument();
   });
 
   it('names you without claiming ownership on a thread no session row backs, such as a Slack channel thread', async () => {
@@ -162,7 +163,7 @@ describe('ModelCredential', () => {
   it('does not send the draft when someone clicks the credential icon inside the composer form', async () => {
     const { submitComposer } = renderModelCredential({ viewer: SHANE, owner: SHANE });
 
-    await userEvent.click(await findCredential('Claude Pro/Max. Shane Thomas · session owner (you)'));
+    await userEvent.click(await findCredential('Claude Pro/Max. Shane Thomas (you, session owner)'));
 
     expect(submitComposer).not.toHaveBeenCalled();
   });

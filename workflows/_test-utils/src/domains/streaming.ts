@@ -6,16 +6,18 @@
  * enabling proper test isolation via resetMocks().
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
-// @ts-ignore - module resolution for test utilities
+import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1, MockLanguageModelV2 } from '@internal/ai-sdk-v4/test';
 import { Mastra } from '@mastra/core/mastra';
+// @ts-ignore - module resolution for test utilities
 import type { StreamEvent } from '@mastra/core/workflows';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
+import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import { MockRegistry } from '../mock-registry';
+import { stepsOf } from '../steps';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for streaming tests.
@@ -553,12 +555,12 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
   if (Agent) {
     // Track what options were received
     let receivedOptions: any = null;
-    const doStreamSpy = vi.fn(async ({ prompt, temperature }: any) => {
+    const doStreamSpy = vi.fn<LanguageModelV1['doStream']>(async ({ prompt, temperature }) => {
       // Capture options that were passed
       receivedOptions = { temperature };
 
       // Check if instructions were overridden in the messages
-      const systemMessage = prompt?.find((m: any) => m.role === 'system');
+      const systemMessage = prompt.find(m => m.role === 'system');
       if (systemMessage?.content) {
         receivedOptions.instructionsOverridden = systemMessage.content.includes('overridden instructions');
       }
@@ -985,7 +987,8 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
           const resumeResult = await getWorkflowState();
 
-          expect(resumeResult.steps).toMatchObject({
+          const resumeSteps = await stepsOf(resumeResult);
+          expect(resumeSteps).toMatchObject({
             input: { input: 'test' },
             getUserInput: {
               status: 'success',
@@ -1008,7 +1011,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
               endedAt: expect.any(Number),
             },
           });
-          expect(resumeResult.steps.promptAgent).not.toHaveProperty('suspendedAt');
+          expect(resumeSteps.promptAgent).not.toHaveProperty('suspendedAt');
         },
       );
 
@@ -1516,8 +1519,8 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         const onChunkSpy = vi.fn();
         const maxSteps = 5;
 
-        const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }: { prompt: any; temperature: any }) => {
-          const systemMessage = prompt?.find((m: any) => m.role === 'system');
+        const doStreamSpy = vi.fn<LanguageModelV1['doStream']>(async ({ prompt, temperature }) => {
+          const systemMessage = prompt.find(m => m.role === 'system');
           expect(systemMessage?.content).toContain('overridden instructions');
           expect(systemMessage?.content).not.toContain('original instructions');
           expect(temperature).toBe(0.7);

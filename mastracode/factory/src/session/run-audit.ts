@@ -27,6 +27,8 @@ const factoryOpenRunSchema = z.object({
    */
   ownerId: z.string().optional(),
   heartbeatAt: z.number().optional(),
+  /** When the kickoff was accepted (epoch ms), so the run's end record spans the whole run. Absent on older entries. */
+  startedAt: z.number().optional(),
 });
 
 export type FactoryOpenRun = z.infer<typeof factoryOpenRunSchema>;
@@ -252,7 +254,10 @@ export function recordSessionRunStart(
   return serializeRunAudit(session, async () => {
     const runs = await listSessionOpenRuns(session);
     if (!runs.some(existing => existing.kickoffId === run.kickoffId)) {
-      await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [...runs, run] });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [...runs, { startedAt: Date.now(), ...run }],
+      });
     }
     await audit.record({
       ...runAuditInput(run),

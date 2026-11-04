@@ -5,12 +5,24 @@ export type WorkflowRuntimeOptions = {
   retry?: ActivityOptions['retry'];
 };
 
-export interface WorkflowExecutionResult {
+export type StepExecutionResult = {
   status: 'success';
+  payload: unknown;
+  output: unknown;
+  startedAt: number;
+  endedAt: number;
+  suspendPayload?: unknown;
+  resumeData?: unknown;
+};
+
+export interface WorkflowExecutionResult {
+  status: 'success' | 'running' | 'suspended';
   input: unknown;
-  result: unknown;
+  result?: unknown;
   state: unknown;
-  steps: Record<string, unknown>;
+  steps: Record<string, StepExecutionResult | unknown>;
+  suspended?: string[][];
+  suspendPayload?: Record<string, unknown>;
 }
 
 export type StepEntry = {
@@ -28,11 +40,13 @@ export type ParallelEntry = StepEntry | ChildWorkflowEntry;
 export type WorkflowRuntime = ((startArgs?: {
   runId?: string;
   resourceId?: string;
+  requestContext?: unknown;
+  validateInputs?: boolean;
   inputData?: unknown;
   initialState?: unknown;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
-  thenWorkflow(workflowType: string): WorkflowRuntime;
+  thenWorkflow(workflowType: string, id: string): WorkflowRuntime;
   map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
@@ -53,6 +67,8 @@ export class TemporalExecutionEngine {
     workflowId: string;
     runId?: string;
     resourceId?: string;
+    requestContext?: unknown;
+    validateInputs?: boolean;
     graph: { id: string; steps: unknown[] };
     input?: unknown;
     initialState?: unknown;

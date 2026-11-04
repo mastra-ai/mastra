@@ -3,12 +3,14 @@ import { MCPClient } from '@mastra/mcp';
 
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import {
+  getProjectIntegrationSettings,
   listIntegrations,
   listProjectConnections,
   platformMcpTransport,
   resolveClient,
   validateResourceId,
 } from './client.js';
+import { buildConnectPromptTool, CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import {
   buildMcpMultiConnectionTools,
@@ -129,6 +131,17 @@ export interface ToolsOptions {
    * resolves global-only.
    */
   resourceId?: string | ((ctx?: ToolsResolverContext) => string | undefined | Promise<string | undefined>);
+  /**
+   * Whether resource-scoped resolutions include the built-in
+   * `request_connection` tool, which lets the agent prompt the end user to
+   * connect a provider account mid-conversation (chat UIs render its
+   * structured output as a connect card). The connectable set follows the
+   * `providers` allowlist when one was given. Otherwise it uses the project's
+   * provider configuration in Mastra Platform, with the full catalog only when
+   * that configuration is unset. Default `true`; global-only resolutions never
+   * include it (there is no end user to scope a new connection to).
+   */
+  connectPrompt?: boolean;
 }
 
 // Keep the public resolver type structural so linked/local package builds do not
@@ -218,8 +231,34 @@ interface SnapshotScope {
   resourceId: string | undefined;
   /** Resolved client for this scope; asserts `x-mastra-resource-id` when resource-scoped. */
   client: ResolvedClient;
-  cache?: { snapshot: ResolvedToolsRecord; fetchedAt: number; mcpKeys: Set<string> };
+  cache?: {
+    snapshot: ResolvedToolsRecord;
+    fetchedAt: number;
+    mcpKeys: Set<string>;
+    /** Active connections the snapshot was built from. */
+    activeConnectionIds: Set<string>;
+    /** {@link SnapshotScope.generation} when the fetch behind this snapshot started. */
+    generation: number;
+  };
+  /**
+   * Bumped when a connection change makes the snapshot wrong before its TTL
+   * (see {@link invalidateConnection}). A cache from an older
+   * generation is never served fresh.
+   */
+  generation: number;
   inflight?: Promise<ResolvedToolsRecord>;
+  /** Generation the in-flight fetch started under. */
+  inflightGeneration?: number;
+  /** Fetches started for this scope so far; numbers each fetch. */
+  fetches: number;
+  /** Number of the in-flight fetch. */
+  inflightFetch?: number;
+  /**
+   * Last state reported per connection that invalidated this scope, with the
+   * number of fetches started before it. A fetch numbered higher started
+   * after the report, so it already reflects that state.
+   */
+  reported: Map<string, { active: boolean; afterFetch: number }>;
   lastFailureAt?: number;
   /** LRU clock for resource-scope eviction. The global scope is never evicted. */
   lastUsedAt: number;
@@ -301,6 +340,7 @@ function sharedStateKey(projectId: string, ttlMs: number, options: ToolsOptions)
     allowTools: options.allowTools,
     disallowTools: options.disallowTools,
     requireApproval: options.requireApproval,
+    connectPrompt: options.connectPrompt,
     client: {
       baseUrl: options.client?.baseUrl,
       orgId: options.client?.orgId,
@@ -372,6 +412,46 @@ function scopeKey(resourceId: string | undefined): string {
   return resourceId === undefined ? GLOBAL_SCOPE_KEY : `resource:${resourceId}`;
 }
 
+/**
+ * Tells the resolvers in `projectId` that a connection changed (activated, or
+ * stopped being active or was removed), so the next resolution fetches fresh
+ * instead of serving a snapshot that is wrong until its TTL runs out. A
+ * change to `resourceId`'s own connection reaches that resource's scope; a
+ * global connection (no `resourceId`) appears in every scope, so it reaches
+ * all of them. The end-user connect routes call this when they observe the
+ * change. A settled snapshot that already agrees is left alone, and so is a
+ * fetch that started after the same change was reported, so repeated status
+ * polls cost nothing.
+ */
+export function invalidateConnection({
+  projectId,
+  resourceId,
+  connectionId,
+  active,
+}: {
+  projectId: string;
+  resourceId?: string;
+  connectionId: string;
+  active: boolean;
+}): void {
+  for (const state of sharedStates.values()) {
+    if (state.projectId !== projectId) continue;
+    const scopes =
+      resourceId === undefined ? Array.from(state.scopes.values()) : [state.scopes.get(scopeKey(resourceId))];
+    for (const scope of scopes) {
+      if (!scope) continue;
+      if (scope.inflight) {
+        const reported = scope.reported.get(connectionId);
+        if (reported?.active === active && (scope.inflightFetch ?? 0) > reported.afterFetch) continue;
+      } else if (scope.cache?.activeConnectionIds.has(connectionId) === active) {
+        continue;
+      }
+      scope.generation += 1;
+      scope.reported.set(connectionId, { active, afterFetch: scope.fetches });
+    }
+  }
+}
+
 /** Gets or creates the scope for a resource key, touching its LRU clock. */
 function acquireScope(state: SharedToolsState, resourceId: string | undefined): SnapshotScope {
   const key = scopeKey(resourceId);
@@ -384,6 +464,9 @@ function acquireScope(state: SharedToolsState, resourceId: string | undefined): 
         projectId: state.projectId,
         ...(resourceId === undefined ? {} : { resourceId }),
       }),
+      generation: 0,
+      fetches: 0,
+      reported: new Map(),
       lastUsedAt: Date.now(),
     };
     state.scopes.set(key, scope);
@@ -480,6 +563,20 @@ async function loadSnapshotInputs(
   return { connections, catalog: [], catalogAvailable: false };
 }
 
+/** Loads fresh prompt inputs and resolves project policy only when code did not provide an allowlist. */
+async function loadConnectPromptInputs(state: SharedToolsState, client: ResolvedClient) {
+  const codeAllowlist = state.normalizedProviders.only;
+  const [inputs, settings] = await Promise.all([
+    loadSnapshotInputs(state, client),
+    codeAllowlist === undefined ? getProjectIntegrationSettings(client, state.projectId) : Promise.resolve(undefined),
+  ]);
+  const projectProviders = settings?.endUserProviders;
+  const allowlist =
+    codeAllowlist ??
+    (projectProviders === null || projectProviders === undefined ? undefined : new Set(projectProviders));
+  return { catalog: inputs.catalog, connections: inputs.connections, allowlist };
+}
+
 /**
  * Fetches a fresh snapshot for one scope, deduplicating concurrent calls per
  * scope. Rejects on failure. A refresh requested while the state is closing
@@ -491,6 +588,10 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
     return state.closing.then(() => refreshScope(state, acquireScope(state, scope.resourceId)));
   }
   if (!scope.inflight) {
+    const generation = scope.generation;
+    scope.inflightGeneration = generation;
+    scope.fetches += 1;
+    scope.inflightFetch = scope.fetches;
     scope.inflight = (async () => {
       try {
         const { connections, catalog, catalogAvailable } = await loadSnapshotInputs(state, scope.client);
@@ -509,7 +610,31 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
           state.mcpClients,
           state.resolverId,
         );
-        scope.cache = { snapshot: record, fetchedAt: Date.now(), mcpKeys };
+        // Resource-scoped resolutions carry the built-in connect-prompt tool
+        // so the agent can ask this user to connect a provider account. The
+        // tool re-fetches catalog + connections per invocation: connection
+        // state must read fresh right after the user completes the flow.
+        if (scope.resourceId !== undefined && state.options.connectPrompt !== false) {
+          if (record[CONNECT_PROMPT_TOOL_KEY]) {
+            throw new MastraConnectConfigError(
+              `Tool key '${CONNECT_PROMPT_TOOL_KEY}' is reserved for the built-in connect-prompt tool; a provider resolved a tool with the same key. Disable it with connectPrompt: false or exclude the conflicting provider tool.`,
+            );
+          }
+          const client = scope.client;
+          record[CONNECT_PROMPT_TOOL_KEY] = buildConnectPromptTool({
+            loadInputs: () => loadConnectPromptInputs(state, client),
+            resourceId: scope.resourceId,
+          }) as ResolvedToolsRecord[string];
+        }
+        scope.cache = {
+          snapshot: record,
+          fetchedAt: Date.now(),
+          mcpKeys,
+          activeConnectionIds: new Set(
+            connections.filter(connection => connection.status === 'active').map(connection => connection.id),
+          ),
+          generation,
+        };
         scope.lastFailureAt = undefined;
         await pruneStaleMcpClients(state);
         return record;
@@ -518,15 +643,43 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
         throw error;
       } finally {
         scope.inflight = undefined;
+        scope.inflightGeneration = undefined;
+        scope.inflightFetch = undefined;
       }
     })();
   }
   return scope.inflight;
 }
 
+/**
+ * Refreshes a scope under its current generation: a fetch already in flight
+ * from before an invalidation may have read the old connection list, so it
+ * settles first and a new fetch starts.
+ */
+async function refreshCurrentGeneration(state: SharedToolsState, scope: SnapshotScope): Promise<ResolvedToolsRecord> {
+  if (scope.inflight && scope.inflightGeneration !== scope.generation) {
+    await scope.inflight.catch(() => {});
+  }
+  return refreshScope(state, scope);
+}
+
 /** Serves a scope's snapshot: fresh from cache, stale with background revalidation, or a blocking first fetch. */
 async function resolveScope(state: SharedToolsState, resourceId: string | undefined): Promise<ResolvedToolsRecord> {
   const scope = acquireScope(state, resourceId);
+  if (scope.cache && scope.cache.generation !== scope.generation) {
+    // A connection changed since this snapshot was built: it is known to be
+    // wrong, so wait for a fresh one. If the platform is down, the old
+    // snapshot is still better than failing the agent call.
+    const staleSnapshot = scope.cache.snapshot;
+    return refreshCurrentGeneration(state, scope).catch((error: unknown) => {
+      console.warn(
+        `[@mastra/connect] Keeping cached tools after a connection change; platform refresh failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return staleSnapshot;
+    });
+  }
   if (scope.cache && Date.now() - scope.cache.fetchedAt < state.ttlMs) {
     return scope.cache.snapshot;
   }
@@ -662,6 +815,12 @@ export function tools(options: ToolsOptionsInput = {}): ToolsResolver {
     throw new MastraConnectError(
       'invalid_options',
       'Top-level requireApproval must be a boolean or an array of tool keys.',
+    );
+  }
+  if (options.connectPrompt !== undefined && typeof options.connectPrompt !== 'boolean') {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid connectPrompt: expected a boolean, got ${typeof options.connectPrompt}.`,
     );
   }
 
@@ -1121,35 +1280,34 @@ async function mapTools(
           } as Parameters<typeof request.registration.createTools>[0]);
           applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval);
         }
-      } else {
+      } else if (request.registration.transport === 'mcp') {
         // kind === 'multi'
-        if (request.registration.transport === 'mcp') {
-          for (const connection of resolution.connections) {
-            activeMcpKeys.add(`${integrationId}::${connection.id}`);
-          }
-          providerTools = await buildMcpMultiConnectionTools({
-            registration: request.registration,
-            connections: resolution.connections,
-            allowTools: request.options.allowTools,
-            disallowTools: request.options.disallowTools,
-            requireApproval: request.options.requireApproval,
-            client,
-            globalClient,
-            mcpClients,
-            resolverId,
-          });
-        } else {
-          providerTools = buildProxyMultiConnectionTools({
-            registration: request.registration as ProxyProviderRegistration,
-            connections: resolution.connections,
-            allowTools: request.options.allowTools,
-            disallowTools: request.options.disallowTools,
-            client: clientOptions,
-          });
-          applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
-            listConnectionsToolKey(integrationId),
-          ]);
+
+        for (const connection of resolution.connections) {
+          activeMcpKeys.add(`${integrationId}::${connection.id}`);
         }
+        providerTools = await buildMcpMultiConnectionTools({
+          registration: request.registration,
+          connections: resolution.connections,
+          allowTools: request.options.allowTools,
+          disallowTools: request.options.disallowTools,
+          requireApproval: request.options.requireApproval,
+          client,
+          globalClient,
+          mcpClients,
+          resolverId,
+        });
+      } else {
+        providerTools = buildProxyMultiConnectionTools({
+          registration: request.registration as ProxyProviderRegistration,
+          connections: resolution.connections,
+          allowTools: request.options.allowTools,
+          disallowTools: request.options.disallowTools,
+          client: clientOptions,
+        });
+        applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
+          listConnectionsToolKey(integrationId),
+        ]);
       }
     } catch (error) {
       // Warn-and-skip exists so one unreachable provider never takes down the

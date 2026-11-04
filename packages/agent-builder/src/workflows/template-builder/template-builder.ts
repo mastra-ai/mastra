@@ -1250,14 +1250,13 @@ Start by listing your tasks and work through them systematically!
               `Completed: ${conflict.unit.kind} ${conflict.unit.id}`,
             actualWork: true,
           };
-        } else {
-          return {
-            unit: conflict.unit,
-            issue: conflict.issue,
-            resolution: `No specific resolution found for ${conflict.unit.kind} ${conflict.unit.id}`,
-            actualWork: false,
-          };
         }
+        return {
+          unit: conflict.unit,
+          issue: conflict.issue,
+          resolution: `No specific resolution found for ${conflict.unit.kind} ${conflict.unit.id}`,
+          actualWork: false,
+        };
       });
 
       await gitAddAndCommit(targetPath, `feat(template): apply intelligent merge for ${slug}`, undefined, {
@@ -1581,226 +1580,233 @@ Previous iterations may have fixed some issues, so start by re-running validateC
   },
 });
 
-// Create the complete workflow
-export const agentBuilderTemplateWorkflow = createWorkflow({
-  id: 'agent-builder-template',
-  description:
-    'Merges a Mastra template repository into the current project using intelligent AgentBuilder-powered merging',
-  inputSchema: AgentBuilderInputSchema,
-  outputSchema: ApplyResultSchema,
-  steps: [
-    cloneTemplateStep,
-    analyzePackageStep,
-    discoverUnitsStep,
-    orderUnitsStep,
-    packageMergeStep,
-    installStep,
-    programmaticFileCopyStep,
-    intelligentMergeStep,
-    validationAndFixStep,
-  ],
-})
-  .then(cloneTemplateStep)
-  .map(async ({ getStepResult }) => {
-    const cloneResult = getStepResult(cloneTemplateStep);
-
-    // Check for failure in clone step
-    if (shouldAbortWorkflow(cloneResult)) {
-      throw new Error(`Critical failure in clone step: ${cloneResult.error}`);
-    }
-
-    return cloneResult;
+/**
+ * Builds a new template-merge workflow on every call. See `createAgentBuilderWorkflows` for when to use a factory
+ * instead of the shared `agentBuilderTemplateWorkflow`.
+ */
+export function createAgentBuilderTemplateWorkflow() {
+  return createWorkflow({
+    id: 'agent-builder-template',
+    description:
+      'Merges a Mastra template repository into the current project using intelligent AgentBuilder-powered merging',
+    inputSchema: AgentBuilderInputSchema,
+    outputSchema: ApplyResultSchema,
+    steps: [
+      cloneTemplateStep,
+      analyzePackageStep,
+      discoverUnitsStep,
+      orderUnitsStep,
+      packageMergeStep,
+      installStep,
+      programmaticFileCopyStep,
+      intelligentMergeStep,
+      validationAndFixStep,
+    ],
   })
-  .parallel([analyzePackageStep, discoverUnitsStep])
-  .map(async ({ getStepResult }) => {
-    const analyzeResult = getStepResult(analyzePackageStep);
-    const discoverResult = getStepResult(discoverUnitsStep);
+    .then(cloneTemplateStep)
+    .map(async ({ getStepResult }) => {
+      const cloneResult = getStepResult(cloneTemplateStep);
 
-    // Check for failures in parallel steps
-    if (shouldAbortWorkflow(analyzeResult)) {
-      throw new Error(`Failure in analyze package step: ${analyzeResult.error || 'Package analysis failed'}`);
-    }
+      // Check for failure in clone step
+      if (shouldAbortWorkflow(cloneResult)) {
+        throw new Error(`Critical failure in clone step: ${cloneResult.error}`);
+      }
 
-    if (shouldAbortWorkflow(discoverResult)) {
-      throw new Error(`Failure in discover units step: ${discoverResult.error || 'Unit discovery failed'}`);
-    }
+      return cloneResult;
+    })
+    .parallel([analyzePackageStep, discoverUnitsStep])
+    .map(async ({ getStepResult }) => {
+      const analyzeResult = getStepResult(analyzePackageStep);
+      const discoverResult = getStepResult(discoverUnitsStep);
 
-    return discoverResult;
-  })
-  .then(orderUnitsStep)
-  .map(async ({ getStepResult, getInitData }) => {
-    const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData<AgentBuilderInputSchemaType>();
-    return {
-      commitSha: cloneResult.commitSha,
-      slug: cloneResult.slug,
-      targetPath: initData.targetPath,
-    };
-  })
-  .then(prepareBranchStep)
-  .map(async ({ getStepResult, getInitData }) => {
-    const cloneResult = getStepResult(cloneTemplateStep);
-    const packageResult = getStepResult(analyzePackageStep);
-    const initData = getInitData<AgentBuilderInputSchemaType>();
-    return {
-      commitSha: cloneResult.commitSha,
-      slug: cloneResult.slug,
-      targetPath: initData.targetPath,
-      packageInfo: packageResult,
-    };
-  })
-  .then(packageMergeStep)
-  .map(async ({ getInitData }) => {
-    const initData = getInitData<AgentBuilderInputSchemaType>();
-    return {
-      targetPath: initData.targetPath,
-    };
-  })
-  .then(installStep)
-  .map(async ({ getStepResult, getInitData }) => {
-    const cloneResult = getStepResult(cloneTemplateStep);
-    const orderResult = getStepResult(orderUnitsStep);
-    const installResult = getStepResult(installStep);
-    const initData = getInitData<AgentBuilderInputSchemaType>();
+      // Check for failures in parallel steps
+      if (shouldAbortWorkflow(analyzeResult)) {
+        throw new Error(`Failure in analyze package step: ${analyzeResult.error || 'Package analysis failed'}`);
+      }
 
-    if (shouldAbortWorkflow(installResult)) {
-      throw new Error(`Failure in install step: ${installResult.error || 'Install failed'}`);
-    }
-    return {
-      orderedUnits: orderResult.orderedUnits,
-      templateDir: cloneResult.templateDir,
-      commitSha: cloneResult.commitSha,
-      slug: cloneResult.slug,
-      targetPath: initData.targetPath,
-      variables: initData.variables,
-    };
-  })
-  .then(programmaticFileCopyStep)
-  .map(async ({ getStepResult, getInitData }) => {
-    const copyResult = getStepResult(programmaticFileCopyStep);
-    const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData<AgentBuilderInputSchemaType>();
+      if (shouldAbortWorkflow(discoverResult)) {
+        throw new Error(`Failure in discover units step: ${discoverResult.error || 'Unit discovery failed'}`);
+      }
 
-    return {
-      conflicts: copyResult.conflicts,
-      copiedFiles: copyResult.copiedFiles,
-      commitSha: cloneResult.commitSha,
-      slug: cloneResult.slug,
-      targetPath: initData.targetPath,
-      templateDir: cloneResult.templateDir,
-    };
-  })
-  .then(intelligentMergeStep)
-  .map(async ({ getStepResult, getInitData }) => {
-    const cloneResult = getStepResult(cloneTemplateStep);
-    const orderResult = getStepResult(orderUnitsStep);
-    const copyResult = getStepResult(programmaticFileCopyStep);
-    const mergeResult = getStepResult(intelligentMergeStep);
-    const initData = getInitData<AgentBuilderInputSchemaType>();
+      return discoverResult;
+    })
+    .then(orderUnitsStep)
+    .map(async ({ getStepResult, getInitData }) => {
+      const cloneResult = getStepResult(cloneTemplateStep);
+      const initData = getInitData<AgentBuilderInputSchemaType>();
+      return {
+        commitSha: cloneResult.commitSha,
+        slug: cloneResult.slug,
+        targetPath: initData.targetPath,
+      };
+    })
+    .then(prepareBranchStep)
+    .map(async ({ getStepResult, getInitData }) => {
+      const cloneResult = getStepResult(cloneTemplateStep);
+      const packageResult = getStepResult(analyzePackageStep);
+      const initData = getInitData<AgentBuilderInputSchemaType>();
+      return {
+        commitSha: cloneResult.commitSha,
+        slug: cloneResult.slug,
+        targetPath: initData.targetPath,
+        packageInfo: packageResult,
+      };
+    })
+    .then(packageMergeStep)
+    .map(async ({ getInitData }) => {
+      const initData = getInitData<AgentBuilderInputSchemaType>();
+      return {
+        targetPath: initData.targetPath,
+      };
+    })
+    .then(installStep)
+    .map(async ({ getStepResult, getInitData }) => {
+      const cloneResult = getStepResult(cloneTemplateStep);
+      const orderResult = getStepResult(orderUnitsStep);
+      const installResult = getStepResult(installStep);
+      const initData = getInitData<AgentBuilderInputSchemaType>();
 
-    return {
-      commitSha: cloneResult.commitSha,
-      slug: cloneResult.slug,
-      targetPath: initData.targetPath,
-      templateDir: cloneResult.templateDir,
-      orderedUnits: orderResult.orderedUnits,
-      copiedFiles: copyResult.copiedFiles,
-      conflictsResolved: mergeResult.conflictsResolved,
-    };
-  })
-  .then(validationAndFixStep)
-  .map(async ({ getStepResult }) => {
-    const cloneResult = getStepResult(cloneTemplateStep);
-    const analyzeResult = getStepResult(analyzePackageStep);
-    const discoverResult = getStepResult(discoverUnitsStep);
-    const orderResult = getStepResult(orderUnitsStep);
-    const prepareBranchResult = getStepResult(prepareBranchStep);
-    const packageMergeResult = getStepResult(packageMergeStep);
-    const installResult = getStepResult(installStep);
-    const copyResult = getStepResult(programmaticFileCopyStep);
-    const intelligentMergeResult = getStepResult(intelligentMergeStep);
-    const validationResult = getStepResult(validationAndFixStep);
+      if (shouldAbortWorkflow(installResult)) {
+        throw new Error(`Failure in install step: ${installResult.error || 'Install failed'}`);
+      }
+      return {
+        orderedUnits: orderResult.orderedUnits,
+        templateDir: cloneResult.templateDir,
+        commitSha: cloneResult.commitSha,
+        slug: cloneResult.slug,
+        targetPath: initData.targetPath,
+        variables: initData.variables,
+      };
+    })
+    .then(programmaticFileCopyStep)
+    .map(async ({ getStepResult, getInitData }) => {
+      const copyResult = getStepResult(programmaticFileCopyStep);
+      const cloneResult = getStepResult(cloneTemplateStep);
+      const initData = getInitData<AgentBuilderInputSchemaType>();
 
-    const branchName = prepareBranchResult.branchName;
+      return {
+        conflicts: copyResult.conflicts,
+        copiedFiles: copyResult.copiedFiles,
+        commitSha: cloneResult.commitSha,
+        slug: cloneResult.slug,
+        targetPath: initData.targetPath,
+        templateDir: cloneResult.templateDir,
+      };
+    })
+    .then(intelligentMergeStep)
+    .map(async ({ getStepResult, getInitData }) => {
+      const cloneResult = getStepResult(cloneTemplateStep);
+      const orderResult = getStepResult(orderUnitsStep);
+      const copyResult = getStepResult(programmaticFileCopyStep);
+      const mergeResult = getStepResult(intelligentMergeStep);
+      const initData = getInitData<AgentBuilderInputSchemaType>();
 
-    // Aggregate errors from all steps
-    const allErrors = [
-      cloneResult.error,
-      analyzeResult.error,
-      discoverResult.error,
-      orderResult.error,
-      prepareBranchResult.error,
-      packageMergeResult.error,
-      installResult.error,
-      copyResult.error,
-      intelligentMergeResult.error,
-      validationResult.error,
-    ].filter(Boolean);
+      return {
+        commitSha: cloneResult.commitSha,
+        slug: cloneResult.slug,
+        targetPath: initData.targetPath,
+        templateDir: cloneResult.templateDir,
+        orderedUnits: orderResult.orderedUnits,
+        copiedFiles: copyResult.copiedFiles,
+        conflictsResolved: mergeResult.conflictsResolved,
+      };
+    })
+    .then(validationAndFixStep)
+    .map(async ({ getStepResult }) => {
+      const cloneResult = getStepResult(cloneTemplateStep);
+      const analyzeResult = getStepResult(analyzePackageStep);
+      const discoverResult = getStepResult(discoverUnitsStep);
+      const orderResult = getStepResult(orderUnitsStep);
+      const prepareBranchResult = getStepResult(prepareBranchStep);
+      const packageMergeResult = getStepResult(packageMergeStep);
+      const installResult = getStepResult(installStep);
+      const copyResult = getStepResult(programmaticFileCopyStep);
+      const intelligentMergeResult = getStepResult(intelligentMergeStep);
+      const validationResult = getStepResult(validationAndFixStep);
 
-    // Determine overall success based on all step results
-    const overallSuccess =
-      cloneResult.success !== false &&
-      analyzeResult.success !== false &&
-      discoverResult.success !== false &&
-      orderResult.success !== false &&
-      prepareBranchResult.success !== false &&
-      packageMergeResult.success !== false &&
-      installResult.success !== false &&
-      copyResult.success !== false &&
-      intelligentMergeResult.success !== false &&
-      validationResult.success !== false;
+      const branchName = prepareBranchResult.branchName;
 
-    // Create comprehensive message
-    const messages = [];
-    if (copyResult.copiedFiles?.length > 0) {
-      messages.push(`${copyResult.copiedFiles.length} files copied`);
-    }
-    if (copyResult.conflicts?.length > 0) {
-      messages.push(`${copyResult.conflicts.length} conflicts skipped`);
-    }
-    if (intelligentMergeResult.conflictsResolved?.length > 0) {
-      messages.push(`${intelligentMergeResult.conflictsResolved.length} conflicts resolved`);
-    }
-    if (validationResult.validationResults?.errorsFixed > 0) {
-      messages.push(`${validationResult.validationResults.errorsFixed} validation errors fixed`);
-    }
+      // Aggregate errors from all steps
+      const allErrors = [
+        cloneResult.error,
+        analyzeResult.error,
+        discoverResult.error,
+        orderResult.error,
+        prepareBranchResult.error,
+        packageMergeResult.error,
+        installResult.error,
+        copyResult.error,
+        intelligentMergeResult.error,
+        validationResult.error,
+      ].filter(Boolean);
 
-    if (validationResult.validationResults?.remainingErrors > 0) {
-      messages.push(`${validationResult.validationResults.remainingErrors} validation issues remain`);
-    }
+      // Determine overall success based on all step results
+      const overallSuccess =
+        cloneResult.success !== false &&
+        analyzeResult.success !== false &&
+        discoverResult.success !== false &&
+        orderResult.success !== false &&
+        prepareBranchResult.success !== false &&
+        packageMergeResult.success !== false &&
+        installResult.success !== false &&
+        copyResult.success !== false &&
+        intelligentMergeResult.success !== false &&
+        validationResult.success !== false;
 
-    const comprehensiveMessage =
-      messages.length > 0
-        ? `Template merge completed: ${messages.join(', ')}`
-        : validationResult.message || 'Template merge completed';
+      // Create comprehensive message
+      const messages = [];
+      if (copyResult.copiedFiles?.length > 0) {
+        messages.push(`${copyResult.copiedFiles.length} files copied`);
+      }
+      if (copyResult.conflicts?.length > 0) {
+        messages.push(`${copyResult.conflicts.length} conflicts skipped`);
+      }
+      if (intelligentMergeResult.conflictsResolved?.length > 0) {
+        messages.push(`${intelligentMergeResult.conflictsResolved.length} conflicts resolved`);
+      }
+      if (validationResult.validationResults?.errorsFixed > 0) {
+        messages.push(`${validationResult.validationResults.errorsFixed} validation errors fixed`);
+      }
 
-    return {
-      success: overallSuccess,
-      applied: validationResult.applied || copyResult.copiedFiles?.length > 0 || false,
-      message: comprehensiveMessage,
-      validationResults: validationResult.validationResults,
-      error: allErrors.length > 0 ? allErrors.join('; ') : undefined,
-      errors: allErrors.length > 0 ? allErrors : undefined,
-      branchName,
-      // Additional debugging info
-      stepResults: {
-        cloneSuccess: cloneResult.success,
-        analyzeSuccess: analyzeResult.success,
-        discoverSuccess: discoverResult.success,
-        orderSuccess: orderResult.success,
-        prepareBranchSuccess: prepareBranchResult.success,
-        packageMergeSuccess: packageMergeResult.success,
-        installSuccess: installResult.success,
-        copySuccess: copyResult.success,
-        mergeSuccess: intelligentMergeResult.success,
-        validationSuccess: validationResult.success,
-        filesCopied: copyResult.copiedFiles?.length || 0,
-        conflictsSkipped: copyResult.conflicts?.length || 0,
-        conflictsResolved: intelligentMergeResult.conflictsResolved?.length || 0,
-      },
-    };
-  })
-  .commit();
+      if (validationResult.validationResults?.remainingErrors > 0) {
+        messages.push(`${validationResult.validationResults.remainingErrors} validation issues remain`);
+      }
+
+      const comprehensiveMessage =
+        messages.length > 0
+          ? `Template merge completed: ${messages.join(', ')}`
+          : validationResult.message || 'Template merge completed';
+
+      return {
+        success: overallSuccess,
+        applied: validationResult.applied || copyResult.copiedFiles?.length > 0 || false,
+        message: comprehensiveMessage,
+        validationResults: validationResult.validationResults,
+        error: allErrors.length > 0 ? allErrors.join('; ') : undefined,
+        errors: allErrors.length > 0 ? allErrors : undefined,
+        branchName,
+        // Additional debugging info
+        stepResults: {
+          cloneSuccess: cloneResult.success,
+          analyzeSuccess: analyzeResult.success,
+          discoverSuccess: discoverResult.success,
+          orderSuccess: orderResult.success,
+          prepareBranchSuccess: prepareBranchResult.success,
+          packageMergeSuccess: packageMergeResult.success,
+          installSuccess: installResult.success,
+          copySuccess: copyResult.success,
+          mergeSuccess: intelligentMergeResult.success,
+          validationSuccess: validationResult.success,
+          filesCopied: copyResult.copiedFiles?.length || 0,
+          conflictsSkipped: copyResult.conflicts?.length || 0,
+          conflictsResolved: intelligentMergeResult.conflictsResolved?.length || 0,
+        },
+      };
+    })
+    .commit();
+}
+
+export const agentBuilderTemplateWorkflow = createAgentBuilderTemplateWorkflow();
 
 // Helper to merge a template by slug
 export async function mergeTemplateBySlug(slug: string, targetPath?: string) {

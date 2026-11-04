@@ -7,7 +7,7 @@ description: "Browse Melious model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/melious.svg" alt="Melious logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Melious
 
-Access 13 Melious models through Mastra's model router. Authentication is handled automatically using the `MELIOUS_API_KEY` environment variable.
+Access 8 Melious models through Mastra's model router. Authentication is handled automatically using the `MELIOUS_API_KEY` environment variable.
 
 Learn more in the [Melious documentation](https://melious.ai/docs/reference/models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "melious/deepseek-r1-0528"
+  model: "melious/deepseek-v4-flash-0731"
 });
 
 // Generate a response
@@ -46,30 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "melious/deepseek-r1-0528",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 164000,
-    "maxOutput": 32768,
-    "inputCost": 0.69552,
-    "outputCost": 2.78208
-  },
-  {
-    "model": "melious/deepseek-v3.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 164000,
-    "maxOutput": 64000,
-    "inputCost": 0.34776,
-    "outputCost": 0.5796
-  },
-  {
     "model": "melious/deepseek-v4-flash-0731",
     "imageInput": false,
     "audioInput": false,
@@ -78,8 +54,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.11592,
-    "outputCost": 0.2898
+    "inputCost": 0.1115,
+    "outputCost": 0.27875
   },
   {
     "model": "melious/deepseek-v4.1-flash",
@@ -90,8 +66,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.23184,
-    "outputCost": 1.1592
+    "inputCost": 0.223,
+    "outputCost": 1.115
   },
   {
     "model": "melious/deepseek-v4.1-flash-1017",
@@ -102,32 +78,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.33675,
-    "outputCost": 1.347
-  },
-  {
-    "model": "melious/glm-5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 203000,
-    "maxOutput": 131072,
-    "inputCost": 1.10124,
-    "outputCost": 3.36168
-  },
-  {
-    "model": "melious/glm-5.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 203000,
-    "maxOutput": 131072,
-    "inputCost": 1.50696,
-    "outputCost": 4.6368
+    "inputCost": 0.3345,
+    "outputCost": 1.338
   },
   {
     "model": "melious/glm-5.3",
@@ -138,8 +90,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 1.1592,
-    "outputCost": 3.4776
+    "inputCost": 1.115,
+    "outputCost": 3.345
   },
   {
     "model": "melious/glm-5.3-flash",
@@ -150,20 +102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.11592,
-    "outputCost": 0.46368
-  },
-  {
-    "model": "melious/kimi-k2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 262000,
-    "inputCost": 0.5796,
-    "outputCost": 2.95596
+    "inputCost": 0.1115,
+    "outputCost": 0.446
   },
   {
     "model": "melious/kimi-k2.6",
@@ -174,8 +114,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.81144,
-    "outputCost": 4.0572
+    "inputCost": 0.669,
+    "outputCost": 4.014
   },
   {
     "model": "melious/kimi-k2.7-code",
@@ -186,8 +126,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.81144,
-    "outputCost": 3.4776
+    "inputCost": 0.61325,
+    "outputCost": 3.28925
   },
   {
     "model": "melious/kimi-k3",
@@ -198,8 +138,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 3.1878,
-    "outputCost": 15.939
+    "inputCost": 3.17775,
+    "outputCost": 15.88875
   }
 ]}
 />
@@ -211,12 +151,14 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.melious.ai/v1",
-    id: "melious/deepseek-r1-0528",
+    id: "melious/deepseek-v4-flash-0731",
     apiKey: process.env.MELIOUS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -228,6 +170,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
@@ -235,7 +179,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "melious/kimi-k3"
-      : "melious/deepseek-r1-0528";
+      : "melious/deepseek-v4-flash-0731";
   }
 });
 ```

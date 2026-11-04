@@ -47,13 +47,16 @@ import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types'
  * Providers that support public port exposure (Vercel Sandbox, E2B, Daytona,
  * Modal, Blaxel, etc.) implement this to surface public URLs through the
  * abstraction. Enables preview URLs and sandbox deploys.
+ *
+ * Some providers keep ports private by default, so the URL may ask for
+ * sign-in before it serves anything, depending on the provider.
  */
 export interface SandboxNetworking {
   /**
    * Get the public URL for an exposed port.
    *
    * @param port - The port number inside the sandbox
-   * @returns The public URL for the port, or null if the port is not exposed
+   * @returns The URL for the port, or null if the port is not exposed
    *   or the sandbox is not running
    */
   getPortUrl(port: number): Promise<string | null>;
@@ -548,6 +551,8 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    *
    * const procs = await sandbox.processes.list();
    * const proc = await sandbox.processes.get(handle.pid);
+   * // Read without releasing an exited process, so other readers still find it
+   * const peek = await sandbox.processes.get(handle.pid, { release: false });
    * await proc?.sendStdin('hello\n');
    * await proc?.kill();
    * ```

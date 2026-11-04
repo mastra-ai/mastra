@@ -170,6 +170,29 @@ describe('useSpeechRecognition (browser path)', () => {
       });
       await waitFor(() => expect(result.current.transcript).toBe('again. again. '));
     });
+
+    it('passes the session transcript to the callback given to start after each phrase', async () => {
+      installSpeechRecognition();
+      const onTranscript = vi.fn();
+      const { result } = renderHook(() => useSpeechRecognition({}), { wrapper });
+      act(() => result.current.start(onTranscript));
+
+      const first = { 0: { transcript: 'Accept the newer address.' }, isFinal: true };
+      act(() => {
+        lastRecognition.onresult?.({ resultIndex: 0, results: [first] });
+      });
+      act(() => {
+        lastRecognition.onresult?.({
+          resultIndex: 1,
+          results: [first, { 0: { transcript: 'And note that Sentinel confirmed it.' }, isFinal: true }],
+        });
+      });
+
+      expect(onTranscript.mock.calls).toEqual([
+        ['Accept the newer address. '],
+        ['Accept the newer address. And note that Sentinel confirmed it. '],
+      ]);
+    });
   });
 
   describe('when a new dictation session starts', () => {
@@ -218,7 +241,8 @@ describe('useSpeechRecognition (browser path)', () => {
 
   it('stops recognition and clears handlers on unmount', async () => {
     installSpeechRecognition();
-    const { unmount } = renderHook(() => useSpeechRecognition({}), { wrapper });
+    const { result, unmount } = renderHook(() => useSpeechRecognition({}), { wrapper });
+    act(() => result.current.start());
 
     const recognition = lastRecognition;
     expect(recognition.onresult).not.toBeNull();
@@ -234,10 +258,11 @@ describe('useSpeechRecognition (browser path)', () => {
 
   it('stops the previous recognition when language changes', async () => {
     installSpeechRecognition();
-    const { rerender } = renderHook(({ language }) => useSpeechRecognition({ language }), {
+    const { result, rerender } = renderHook(({ language }) => useSpeechRecognition({ language }), {
       initialProps: { language: 'en-US' },
       wrapper,
     });
+    act(() => result.current.start());
 
     const first = lastRecognition;
     rerender({ language: 'fr-FR' });
@@ -317,6 +342,27 @@ describe('useSpeechRecognition (mastra path)', () => {
     act(() => result.current.start());
     expect(lastRecognition.start).toHaveBeenCalled();
     expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  describe('when agentId switches to an agent whose voice is still being checked', () => {
+    it('dictates through the browser instead of the previous agent', async () => {
+      installSpeechRecognition();
+      const { result, rerender } = renderHook(({ agentId }) => useSpeechRecognition({ agentId }), {
+        initialProps: { agentId: 'agent-1' },
+        wrapper,
+      });
+      await waitFor(() => {
+        act(() => result.current.start());
+        expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+      });
+      lastRecognition.start.mockClear();
+      getSpeakersMock.mockImplementationOnce(() => new Promise(() => {}));
+
+      rerender({ agentId: 'agent-2' });
+      act(() => result.current.start());
+
+      expect(lastRecognition.start).toHaveBeenCalled();
+    });
   });
 
   it('surfaces Mastra listen errors and clears listening state', async () => {
@@ -490,5 +536,64 @@ describe('useSpeechRecognition (mastra path)', () => {
       resolveListen?.({ text: 'mastra transcript' });
     });
     await waitFor(() => expect(result.current.transcript).toBe('mastra transcript'));
+  });
+
+  describe('when a callback is passed to start', () => {
+    it('receives the transcription text', async () => {
+      installSpeechRecognition();
+      const onTranscript = vi.fn();
+      const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1' }), { wrapper });
+
+      await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+      await waitFor(() => {
+        act(() => result.current.start(onTranscript));
+        expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => expect(result.current.isListening).toBe(true));
+
+      act(() => result.current.stop());
+      await act(async () => {
+        onFinishCapture?.(new File(['audio'], 'rec.webm', { type: 'audio/webm' }));
+      });
+
+      await waitFor(() => expect(onTranscript).toHaveBeenCalledWith('mastra transcript'));
+    });
+
+    it('delivers only the newer session transcript when a new start supersedes an in-flight transcription', async () => {
+      installSpeechRecognition();
+      const firstListen = Promise.withResolvers<{ text: string }>();
+      listenMock.mockImplementationOnce(() => firstListen.promise);
+      listenMock.mockResolvedValueOnce({ text: 'newer transcript' });
+      const delivered: string[][] = [];
+      const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1' }), { wrapper });
+
+      await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+      await waitFor(() => {
+        act(() => result.current.start(text => delivered.push(['older', text])));
+        expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => expect(result.current.isListening).toBe(true));
+      act(() => result.current.stop());
+      await act(async () => {
+        onFinishCapture?.(new File(['audio'], 'older.webm', { type: 'audio/webm' }));
+      });
+      await waitFor(() => expect(listenMock).toHaveBeenCalledTimes(1));
+
+      act(() => result.current.start(text => delivered.push(['newer', text])));
+      await waitFor(() => expect(result.current.isListening).toBe(true));
+      act(() => result.current.stop());
+      await act(async () => {
+        onFinishCapture?.(new File(['audio'], 'newer.webm', { type: 'audio/webm' }));
+      });
+      await waitFor(() => expect(listenMock).toHaveBeenCalledTimes(2));
+
+      await act(async () => {
+        firstListen.resolve({ text: 'older transcript' });
+      });
+
+      expect(delivered).toEqual([['newer', 'newer transcript']]);
+    });
   });
 });

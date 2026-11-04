@@ -133,6 +133,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'knowledge-browser'
+  | 'knowledge-settings'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
@@ -185,7 +186,6 @@ export type ScenarioName =
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
-  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
@@ -229,6 +229,7 @@ export type ScenarioName =
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'
+  | 'gateway-web-search'
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
@@ -268,6 +269,8 @@ export type McE2eScenarioRuntime = {
 };
 
 export type McE2ePrepareContext = {
+  /** AIMock server origin, set when the scenario uses `useOpenAIModel`. */
+  aimockUrl?: string;
   appDataDir: string;
   dbPath: string;
   homeDir: string;

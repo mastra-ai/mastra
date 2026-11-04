@@ -18,15 +18,16 @@ test.describe('Tool detail page', () => {
       await page.getByRole('button', { name: 'Run' }).click();
 
       await expect(page.getByText('Success')).toBeVisible();
-      await expect(page.locator('pre')).toContainText('"hello": "world"');
-      await expect(page.locator('pre')).toContainText('"thisIsA": "fixture"');
+      const response = page.getByRole('textbox', { name: 'Tool response' });
+      await expect(response).toContainText('"hello": "world"');
+      await expect(response).toContainText('"thisIsA": "fixture"');
     });
   });
 
   test.describe('when the drawer is closed', () => {
     test('leaves the Tools list', async ({ page }) => {
       await page.goto('/tools?tool=simpleMcpTool');
-      await page.getByRole('button', { name: 'Close Panel' }).click();
+      await page.getByRole('button', { name: 'Close panel' }).click();
 
       await expect(page).toHaveURL(/\/tools$/);
       await expect(page.getByRole('heading', { name: 'simpleMcpTool' })).toBeHidden();

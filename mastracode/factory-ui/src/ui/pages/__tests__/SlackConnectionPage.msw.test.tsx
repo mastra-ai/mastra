@@ -30,8 +30,8 @@ function mockFactories() {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: 'fp-1', name: 'Primary Factory' },
-          { id: 'fp-2', name: 'Secondary Factory' },
+          { id: 'fp-1', name: 'Primary Factory', repositories: [] },
+          { id: 'fp-2', name: 'Secondary Factory', repositories: [] },
         ],
       }),
     ),
@@ -63,8 +63,7 @@ describe('SlackConnectionPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
@@ -78,8 +77,7 @@ describe('SlackConnectionPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/SLACK_APP_SIGNING_SECRET/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
@@ -90,6 +88,7 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await screen.findByText('Example Workspace');
     const connectionSection = (await screen.findByRole('heading', { level: 2, name: 'Connection' })).closest('section');
     if (!connectionSection) throw new Error('Connection section not found');
 

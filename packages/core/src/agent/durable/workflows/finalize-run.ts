@@ -10,6 +10,7 @@ import { StructuredOutputProcessor } from '../../../processors/processors/struct
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
+import { persistProcessorDataChunk, resolveOutputMessageSkippingCompletionChecks } from '../../../stream/base/output';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
 import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
@@ -19,6 +20,7 @@ import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
 import type { StructuredOutputOptions } from '../../types';
+import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
@@ -37,6 +39,11 @@ export interface DurableFinishSideEffectsOptions {
   tracingContext?: TracingContext;
   logger?: IMastraLogger;
   outputResult?: OutputResult;
+  /**
+   * The current response message id. Signals, goals and isTaskComplete rotate it during
+   * the run, so `initData.messageId` can name an earlier reply. Defaults to that id.
+   */
+  messageId?: string;
 }
 
 export interface DurableFinishSideEffectsResult {
@@ -51,6 +58,12 @@ export interface DurableFinishSideEffectsResult {
   titleForStream?: Promise<string | undefined>;
   /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
   structuredOutputChunks?: ChunkType[];
+  /**
+   * Chunks output processors wrote with `writer.custom()` in processOutputResult. Publish them
+   * marked output-processed, after `structuredOutputChunks` and before the tripwire or FINISH,
+   * matching the in-process loop.
+   */
+  outputResultChunks?: ChunkType[];
   /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
   tripwire?: {
     reason: string;
@@ -106,6 +119,7 @@ export async function runDurableFinishSideEffects({
   tracingContext,
   logger,
   outputResult,
+  messageId = initData.messageId,
 }: DurableFinishSideEffectsOptions): Promise<DurableFinishSideEffectsResult> {
   const effectiveLogger = logger ?? mastra?.getLogger?.() ?? noopLogger;
   const durableState = initData.state;
@@ -238,20 +252,41 @@ export async function runDurableFinishSideEffects({
   // Output processors persist messages too (MessageHistory saves the response
   // in processOutputResult), so a superseded execution must stop here, before
   // either memory write path, and never reach the finish event (#23734). This
-  // check sits outside the processor try/catch, which swallows errors. It uses
-  // the live `requestContext`: the snapshot entries never carry the
+  // check uses the live `requestContext`: the snapshot entries never carry the
   // execution id.
   const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
   await assertOwned();
+
+  // A signal drained on the last allowed step rotates the id, then the loop stops before any
+  // reply uses it. Attach data to the final reply instead of saving it as its own message.
+  // Resolved before processors run so their own writes can't become the fallback.
+  const responses = messageList.get.response.db();
+  const replyMessageId = responses.some(message => message.id === messageId)
+    ? messageId
+    : (resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? messageId);
+
+  // This step has no pubsub (remote engines call it too), so chunks are buffered for the
+  // caller. Non-transient ones go into the MessageList now so the flush below saves them.
+  const outputResultChunks: ChunkType[] = [];
+  const outputResultWriter = {
+    custom: async (
+      data: { type: string; data?: unknown; transient?: boolean },
+      writerOptions?: { messageId?: string },
+    ) => {
+      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? replyMessageId, data);
+      outputResultChunks.push(data as ChunkType);
+    },
+  };
 
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
     try {
-      let agent: AnyAgent | undefined;
-      if (mastra) {
+      let agent: AnyAgent | undefined = registryEntry.agent;
+      if (!agent && mastra) {
         try {
-          agent = mastra.getAgentById(initData.agentId);
+          const registered = mastra.getAgentById(initData.agentId);
+          agent = isDurableAgentLike(registered) && registered.agent !== registered ? registered.agent : registered;
         } catch {
           agent = undefined;
         }
@@ -271,7 +306,7 @@ export async function runDurableFinishSideEffects({
         createObservabilityContext(tracingContext),
         effectiveRequestContext,
         0,
-        undefined,
+        outputResultWriter,
         outputResult,
       );
     } catch (error) {
@@ -290,6 +325,7 @@ export async function runDurableFinishSideEffects({
         return {
           messageListState: messageList.serialize(),
           outputText: resolveOutputText(messageList),
+          outputResultChunks,
           tripwire: {
             reason: error.message,
             processorId: error.processorId,
@@ -299,6 +335,9 @@ export async function runDurableFinishSideEffects({
         };
       }
       effectiveLogger.warn('[DurableAgent] Error running output processors', { runId, error });
+      // Ordinary history can retry through the strict queue flush below. OM owns
+      // its final write and skips that flush, so its failure must propagate here.
+      if (durableState?.observationalMemory) throw error;
     }
   }
 
@@ -344,6 +383,7 @@ export async function runDurableFinishSideEffects({
 
       await saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
         beforePersist: assertOwned,
+        throwOnError: true,
       });
     } catch (error) {
       if (isExecutionFenceError(error)) throw error;
@@ -352,6 +392,7 @@ export async function runDurableFinishSideEffects({
         threadId: durableState.threadId,
         error,
       });
+      throw error;
     }
   }
 
@@ -413,6 +454,7 @@ export async function runDurableFinishSideEffects({
     titleGeneration,
     titleForStream,
     structuredOutputChunks,
+    outputResultChunks,
   };
 }
 

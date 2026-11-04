@@ -8,9 +8,14 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -33,7 +38,7 @@ const wardSession = {
   materializedAt: '2026-10-01T00:00:00.000Z',
   createdAt: '2026-10-01T00:00:00.000Z',
   updatedAt: '2026-10-01T00:00:00.000Z',
-  capabilities: { recreateSandbox: false, takeOwnership: true },
+  capabilities: { recreateSandbox: false, takeOwnership: true, switchModel: false },
 };
 
 const wardSessionWithoutProfile = { ...wardSession, owner: undefined };
@@ -102,21 +107,13 @@ function openWardSessionAs(
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: viewerUserId } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
+            id: FACTORY_ID,
+            name: 'Acme Factory',
             repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/local/acme/app',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
+              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/local/acme/app' }),
             ],
           },
         ],
@@ -198,12 +195,68 @@ describe("a teammate's Factory session", () => {
         session: {
           ...wardSession,
           branch: 'slack/C123-1700000000.000100',
-          capabilities: { recreateSandbox: false, takeOwnership: false },
+          capabilities: { recreateSandbox: false, takeOwnership: false, switchModel: false },
         },
       });
 
       expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when a teammate tries to change its model', () => {
+    const lockedReason = 'Only Ward Peeters can change this session’s model or thinking level.';
+
+    it('shows the model and thinking level disabled, with who can change them', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien');
+      const user = userEvent.setup();
+
+      const model = await screen.findByRole('button', { name: `Session model: GPT-4o Mini. ${lockedReason}` });
+      expect(model).toHaveAttribute('aria-disabled', 'true');
+      const thinking = await screen.findByRole('button', { name: `Thinking: Medium. ${lockedReason}` });
+      expect(thinking).toHaveAttribute('aria-disabled', 'true');
+
+      await user.hover(model);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(lockedReason);
+    });
+
+    it('refuses /model and /think without changing the session', async () => {
+      const modelSwitches: unknown[] = [];
+      const stateWrites: unknown[] = [];
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien');
+      server.use(
+        http.post(`${AC}/sessions/:resourceId/model`, async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        }),
+        http.put(`${AC}/sessions/:resourceId/state`, async ({ request }) => {
+          stateWrites.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+
+      const input = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(input).toBeEnabled());
+      await user.type(input, '/model openai/gpt-5-mini');
+      await user.keyboard('{Enter}');
+      await user.type(input, '/think high');
+      await user.keyboard('{Enter}');
+
+      await waitFor(() => expect(screen.getAllByText(lockedReason)).toHaveLength(2));
+      expect(modelSwitches).toEqual([]);
+      expect(stateWrites).not.toContainEqual({ state: { thinkingLevel: 'high' } });
+    });
+
+    it('keeps the picker for the owner', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-ward', {
+        session: { ...wardSession, capabilities: { recreateSandbox: false, takeOwnership: false, switchModel: true } },
+      });
+
+      expect(await screen.findByRole('button', { name: 'Session model' })).toBeInTheDocument();
     });
   });
 
@@ -305,9 +358,9 @@ describe("a teammate's Factory session", () => {
       expect(
         await within(dialog).findByText(/You have no OpenAI connection, so GPT-4o Mini can’t run for you\./),
       ).toBeInTheDocument();
-      expect(within(dialog).getByRole('link', { name: 'Your models' })).toHaveAttribute(
+      expect(within(dialog).getByRole('link', { name: 'Models' })).toHaveAttribute(
         'href',
-        `/factories/${FACTORY_ID}/settings/personal-models`,
+        `/factories/${FACTORY_ID}/settings/models#personal-defaults`,
       );
       expect(within(dialog).getByRole('button', { name: 'Take ownership' })).toBeEnabled();
     });

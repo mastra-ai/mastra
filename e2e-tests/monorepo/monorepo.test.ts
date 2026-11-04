@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import getPort from 'get-port';
@@ -209,7 +209,7 @@ process.once('SIGTERM', async () => {
   process.exit(143);
 });
 
-describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
   let fixturePath: string;
 
   let buildQueue: Promise<unknown> = Promise.resolve();
@@ -277,6 +277,26 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         force: true,
       });
     } catch {}
+  });
+
+  it('preserves project names and missing-manifest errors in the installed deployer', async () => {
+    const appDir = join(fixturePath, 'apps', 'custom');
+    const missingProject = join(fixturePath, 'missing-project');
+    await execa(
+      'node',
+      [
+        '--input-type=module',
+        '-e',
+        `import assert from 'node:assert/strict';
+import { DepsService } from '@mastra/deployer/services';
+assert.equal(await new DepsService(${JSON.stringify(appDir)}).getProjectName(), '@inner/app');
+await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProjectName(), {
+  code: 'ENOENT',
+  path: ${JSON.stringify(join(missingProject, 'package.json'))},
+});`,
+      ],
+      { cwd: appDir },
+    );
   });
 
   function runApiTests(port: number) {
@@ -393,7 +413,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     });
   }
 
-  describe.sequential('dev', async () => {
+  describe('dev', { concurrent: false }, async () => {
     const buildReservation = reserveBuildQueue();
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
@@ -415,7 +435,8 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           .replace(
             /apiRoutes: \[\s*testRoute,/,
             'apiRoutes: [testRoute, environmentRoute, versionlessRoute, rawTsRoute,',
-          );
+          )
+          .replace('bundler: {', 'bundler: {\n    sourcemap: true,');
         await Promise.all([
           writeFile(mastraIndexPath, mastraIndex),
           writeFile(
@@ -534,6 +555,12 @@ export const environmentRoute = registerApiRoute('/environment', {
       const res = await fetch(`http://localhost:${port}/raw-ts`);
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'hello workspace c' });
+    });
+
+    it('points server stack traces at the source file (#29048)', async () => {
+      const res = await fetch(`http://localhost:${port}/stack`);
+      const { stack } = await res.json();
+      expect(stack).toContain(join('src', 'mastra', 'api', 'route', 'stack.ts'));
     });
 
     it('layers development dotenv files without overriding the shell environment', async () => {
@@ -678,7 +705,7 @@ export const environmentRoute = registerApiRoute('/environment', {
   });
 
   // Runs after the `dev` suite's server has stopped, since two dev servers can't share the app directory.
-  describe.sequential('dev Ctrl-C', () => {
+  describe('dev Ctrl-C', { concurrent: false }, () => {
     it(
       'reports the model tokens when `mastra dev` is stopped with Ctrl-C',
       async () => {
@@ -722,7 +749,46 @@ export const environmentRoute = registerApiRoute('/environment', {
     );
   });
 
-  describe.sequential('build', async () => {
+  describe('dev --root', { concurrent: false }, () => {
+    it(
+      'writes dev pre-bundle output under <root>/.mastra/.build instead of the cwd (#29140)',
+      async () => {
+        const appDir = join(fixturePath, 'apps', 'custom');
+        const altRoot = join(appDir, '.mastra-alt');
+        // A clean checkout has no `<cwd>/.mastra`; the watcher used to write there and fail with ENOENT.
+        await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+        await rm(altRoot, { recursive: true, force: true });
+
+        const devPort = await getPort();
+        const devController = new AbortController();
+        const cli = execa('mastra', ['dev', '--root', altRoot], {
+          cwd: appDir,
+          preferLocal: true,
+          reject: false,
+          cancelSignal: devController.signal,
+          gracefulCancel: true,
+          env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY, MASTRA_PORT: devPort.toString() },
+        });
+        activeProcesses.push({ controller: devController, proc: cli });
+
+        try {
+          await waitForServer(devPort);
+
+          const altBuildFiles = await readdir(join(altRoot, '.mastra', '.build'));
+          expect(altBuildFiles).toContain('entry-0.mjs');
+          await expect(readdir(join(appDir, '.mastra', '.build'))).rejects.toMatchObject({ code: 'ENOENT' });
+        } finally {
+          devController.abort();
+          await Promise.race([cli.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(altRoot);
+          await rm(altRoot, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe('build', { concurrent: false }, async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -777,6 +843,28 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
 `,
         );
         await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+import { camelCase } from 'lodash';
+import { getDaysInMonth, isLeapYear } from 'date-fns';
+import { greet } from '@inner/raw-ts';
+import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { toPath } from 'unicorn-magic';
+
+export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependencies', {
+  method: 'GET',
+  handler: async c => c.json({
+    label: camelCase('virtual dependency entries'),
+    days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
+    externalFile: basename(toPath(pathToFileURL(join(process.cwd(), 'optimized-entry.txt')))),
+    leapYear: isLeapYear(new Date('2028-02-10T12:00:00Z')),
+    workspaceGreeting: greet('workspace'),
+  }),
+});
+`,
+        );
+        await writeFile(
           mastraConfigPath,
           originalMastraConfig
             .replace(
@@ -785,9 +873,12 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
             )
             .replace(
               "import { testRoute } from '@/api/route/test';",
-              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';",
             )
-            .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute,'),
+            .replace(
+              /apiRoutes: \[\s*testRoute,/,
+              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute,',
+            ),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
@@ -862,6 +953,66 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
       expect(content).not.toContain('@/agents');
     });
 
+    it('type-checks a @mastra/deployer Deployer subclass as the Mastra deployer', async () => {
+      // @mastra/deployer bundles its own copy of the base class declarations, so this guards
+      // assignability of its Deployer to Mastra's `deployer` option across the installed packages.
+      const appDir = join(fixturePath, 'apps', 'custom');
+      const sourceFile = join(appDir, 'deployer-typecheck.ts');
+      const tsconfigFile = join(appDir, 'tsconfig.deployer-typecheck.json');
+
+      // skipLibCheck would hide an unresolved bundled `@internal/*` specifier (the base class would
+      // silently become `any`), so assert the installed declarations have none.
+      for (const pkg of ['core', 'deployer']) {
+        const packageDir = join(appDir, 'node_modules', '@mastra', pkg);
+        const declarations = await glob('**/*.d.ts', {
+          cwd: packageDir,
+          absolute: true,
+          ignore: ['node_modules/**'],
+        });
+        expect(declarations.length).toBeGreaterThan(0);
+        for (const file of declarations) {
+          expect(await readFile(file, 'utf-8'), file).not.toMatch(/['"]@internal\//);
+        }
+      }
+
+      try {
+        await writeFile(
+          sourceFile,
+          [
+            "import { Mastra } from '@mastra/core/mastra';",
+            "import { Deployer } from '@mastra/deployer';",
+            '',
+            'class TestDeployer extends Deployer {',
+            '  async bundle() {}',
+            '  async deploy() {}',
+            '}',
+            '',
+            "new Mastra({ deployer: new TestDeployer({ name: 'test' }) });",
+            '',
+          ].join('\n'),
+        );
+        await writeFile(
+          tsconfigFile,
+          JSON.stringify({
+            extends: './tsconfig.json',
+            compilerOptions: { noEmit: true, skipLibCheck: true, types: [] },
+            include: ['deployer-typecheck.ts'],
+          }),
+        );
+
+        const result = await execa('pnpm', ['exec', 'tsc', '-p', 'tsconfig.deployer-typecheck.json'], {
+          cwd: appDir,
+          reject: false,
+        });
+
+        expect(result.stdout + result.stderr).not.toContain('error TS');
+        expect(result.exitCode).toBe(0);
+      } finally {
+        await rm(sourceFile, { force: true });
+        await rm(tsconfigFile, { force: true });
+      }
+    });
+
     it('should resolve workspace package tsconfig paths', async () => {
       const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
       const content = await readFile(inputFile, 'utf-8');
@@ -870,6 +1021,25 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
       const hasWorkspaceMappedPath = content.includes('~/utils');
 
       expect(hasWorkspaceMappedPath).toBeFalsy();
+    });
+
+    it('should resolve tsconfig paths to files with dots in their names', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      expect(content).not.toContain('@/api/route/test.response');
+    });
+
+    it('should preserve exports from multiple optimized dependency entries', async () => {
+      const response = await fetch(`http://localhost:${port}/optimized-dependencies`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        label: 'virtualDependencyEntries',
+        days: 28,
+        externalFile: 'optimized-entry.txt',
+        leapYear: true,
+        workspaceGreeting: 'hello workspace c',
+      });
     });
 
     it('should keep deprecated externals out of optimized dependency bundles', async () => {
@@ -881,10 +1051,11 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
         )
       ).join('\n');
       const packageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+      const appPackageJson = JSON.parse(await readFile(join(fixturePath, 'apps', 'custom', 'package.json'), 'utf-8'));
 
       expect(outputFiles).not.toContain('nodemailer.mjs');
       expect(output).not.toContain('nodemailer/lib');
-      expect(packageJson.dependencies?.nodemailer).toBe('^10.1.1');
+      expect(packageJson.dependencies?.nodemailer).toBe(appPackageJson.dependencies.nodemailer);
     });
 
     it('should keep configured workspace externals out of bundles without inlining default externals', async () => {
@@ -913,6 +1084,8 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
 
       // An ordinary workspace package still gets bundled and remains usable by the built server.
       expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
+      // Bundled workspace packages must not also be packed and installed with their dependencies (#28303).
+      expect(await readdir(join(outputDir, 'workspace-module'))).toEqual(['inner-subpath-only-1.0.0.tgz']);
       const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
       expect(agentResponse.status).toBe(200);
       expect((await agentResponse.json()).name).toBe('My Agent');
@@ -1058,14 +1231,24 @@ export const mastra = new Mastra({
     });
   });
 
-  describe.sequential('start', async () => {
+  describe('start', { concurrent: false }, async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
-      await runBuild(fixturePath);
+      const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+      const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+      try {
+        await writeFile(
+          mastraConfigPath,
+          originalMastraConfig.replace('bundler: {', 'bundler: {\n    sourcemap: true,'),
+        );
+        await runBuild(fixturePath);
+      } finally {
+        await writeFile(mastraConfigPath, originalMastraConfig);
+      }
 
       const inputFile = join(fixturePath, 'apps', 'custom');
 
@@ -1119,6 +1302,13 @@ export const mastra = new Mastra({
     }, timeout);
 
     runApiTests(port);
+
+    // The build above enables `bundler.sourcemap`; `mastra start` must turn on Node's source map support.
+    it('points server stack traces at the source file (#29048)', async () => {
+      const res = await fetch(`http://localhost:${port}/stack`);
+      const { stack } = await res.json();
+      expect(stack).toContain(join('src', 'mastra', 'api', 'route', 'stack.ts'));
+    });
 
     it(
       'drains an in-flight response before the generated server exits on SIGTERM',
@@ -1319,7 +1509,7 @@ export const mastra = new Mastra({
     );
   });
 
-  describe.sequential('build without externals', async () => {
+  describe('build without externals', { concurrent: false }, async () => {
     let originalConfig: string;
     let port = await getPort();
     let proc: ReturnType<typeof execaNode> | undefined;
@@ -1415,10 +1605,13 @@ export const mastra = new Mastra({
       // Automatic version resolution must read the copy installed for the app (0.4.0),
       // not the older copy installed at the workspace root (0.2.0) (#18849).
       expect(dependencies['unicorn-magic']).toBe('0.4.0');
+
+      // read-excel-file/node/package.json is named "read-excel-file/node" at 1.0.0 (#28828).
+      expect(dependencies['read-excel-file']).toBe('9.3.12');
     });
   });
 
-  describe.sequential('deployer module aliases', () => {
+  describe('deployer module aliases', { concurrent: false }, () => {
     it(
       'should replace aliased dependencies in every bundling pass',
       async () => {
@@ -1524,7 +1717,155 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('workspace subpath externals', () => {
+  describe('bundler options with file-based agents', { concurrent: false }, () => {
+    // `mastra build` reads options from a generated wrapper when file-based agents exist; the
+    // wrapper has no `new Mastra({...})`, so the `bundler` block was dropped for defaults (#29048).
+    it(
+      'applies bundler options from index.ts when the project has file-based agents (#29048)',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-fs-agents-bundler-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const agentDir = join(appDir, 'src', 'mastra', 'agents', 'fs-helper');
+          await mkdir(agentDir, { recursive: true });
+          await Promise.all([
+            writeFile(join(agentDir, 'config.ts'), `export default { model: 'openai/gpt-5-mini' };\n`),
+            writeFile(join(agentDir, 'instructions.md'), 'You are a helper.\n'),
+          ]);
+
+          const mastraConfigPath = join(appDir, 'src', 'mastra', 'index.ts');
+          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          await writeFile(mastraConfigPath, mastraConfig.replace('bundler: {', 'bundler: {\n    sourcemap: true,'));
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputFiles = await readdir(join(appDir, '.mastra', 'output'));
+          expect(outputFiles).toContain('index.mjs.map');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe('app without "type": "module" running under tsx (#28491)', { concurrent: false }, () => {
+    // `mastra dev` and `mastra build` import options extracted from the Mastra config. Chunks split from them were
+    // written as `.js`, which an app without "type": "module" treats as CommonJS, and tsx 4.21 then loads them
+    // without their named exports. Newer tsx releases load them on Node 24, so the app pins tsx 4.21.0.
+    const tsxEnv = { NODE_OPTIONS: '--import tsx', LOAD_OPTIONAL: 'true' };
+    const getAppDir = () => join(fixturePath, 'apps', 'typeless');
+
+    it(
+      'applies the bundler options during `mastra build`',
+      async () => {
+        const buildResult = await execa('mastra', ['build'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          env: { ...tsxEnv, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+        });
+        expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+        const outputFiles = await readdir(join(getAppDir(), '.mastra', 'output'));
+        expect(outputFiles, buildResult.stdout).toContain('index.mjs.map');
+      },
+      timeout,
+    );
+
+    it(
+      'serves api routes from `mastra dev`',
+      async () => {
+        const port = await getPort();
+        const controller = new AbortController();
+        const proc = execa('mastra', ['dev'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          cancelSignal: controller.signal,
+          gracefulCancel: true,
+          env: { ...tsxEnv, PORT: port.toString() },
+        });
+        activeProcesses.push({ controller, proc });
+
+        let output = '';
+        proc.stderr?.on('data', data => {
+          output += data.toString();
+        });
+        const started = new Promise<void>(resolve => {
+          proc.stdout?.on('data', data => {
+            output += data.toString();
+            if (output.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
+        });
+
+        try {
+          const outcome = await Promise.race([started.then(() => 'started'), proc.then(() => 'exited')]);
+          expect(outcome, output).toBe('started');
+
+          const res = await fetch(`http://localhost:${port}/typeless`);
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toEqual({ message: 'typeless app (optional)' });
+        } finally {
+          controller.abort();
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(getAppDir());
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe('workspace subpath externals', { concurrent: false }, () => {
+    it(
+      'should copy the pnpm lockfile unchanged when packing workspace packages for an app outside the workspace root',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-lockfile-copy-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Skip only the output install, so the lockfile copy stays as the deployer wrote it.
+          // pnpm rewrites it on install and drops the importers outside the output directory.
+          const binDir = join(isolatedFixturePath, 'stub-bin');
+          await mkdir(binDir);
+          const realPackageManager = (await execa('which', [pkgManager])).stdout;
+          await writeFile(
+            join(binDir, pkgManager),
+            `#!/bin/sh\nif [ "$1" = install ]; then exit 0; fi\nexec "${realPackageManager}" "$@"\n`,
+          );
+          await chmod(join(binDir, pkgManager), 0o755);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const buildResult = await execa(join(appDir, 'node_modules', '.bin', 'mastra'), ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          expect(await readdir(join(outputDir, 'workspace-module'))).toContain('inner-subpath-only-1.0.0.tgz');
+          // An edited lockfile makes pnpm 11 recheck every entry against the registry, which fails
+          // without credentials for private registries (#29279).
+          expect(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).toBe(
+            await readFile(join(isolatedFixturePath, 'pnpm-lock.yaml'), 'utf-8'),
+          );
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
     it(
       'should package an external workspace dependency without an optimized workspace parent',
       async () => {
@@ -1550,10 +1891,19 @@ class AliasDeployer extends Deployer {
           );
           expect(await readFile(join(outputDir, 'workspace-module', 'inner-subpath-only-1.0.0.tgz'))).toBeTruthy();
 
-          const importResult = await execa('node', ['--input-type=module', '-e', "import('@inner/subpath-only')"], {
-            cwd: outputDir,
-            reject: false,
-          });
+          const importResult = await execa(
+            'node',
+            [
+              '--input-type=module',
+              '-e',
+              `import assert from 'node:assert/strict';
+import { rootValue } from '@inner/subpath-only';
+import { subpathOnlyValue } from '@inner/subpath-only/value';
+assert.equal(rootValue, 'external-workspace-root-implementation-marker');
+assert.equal(subpathOnlyValue, 'c');`,
+            ],
+            { cwd: outputDir, reject: false },
+          );
           expect(importResult.exitCode, `${importResult.stdout}\n${importResult.stderr}`).toBe(0);
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
@@ -1749,7 +2099,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('Studio control route authentication', () => {
+  describe('Studio control route authentication', { concurrent: false }, () => {
     it(
       'keeps Studio control routes public during development when server auth is configured',
       async () => {
@@ -1838,7 +2188,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('Browser stream route authentication', () => {
+  describe('Browser stream route authentication', { concurrent: false }, () => {
     /**
      * Browser stream routes are registered outside the route-registration pipeline,
      * and a browser cannot set an Authorization header on a WebSocket handshake, so
@@ -2016,7 +2366,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('pnpm build approvals', () => {
+  describe('pnpm build approvals', { concurrent: false }, () => {
     it(
       'reports blocked native build scripts as a user configuration error',
       async () => {
@@ -2047,7 +2397,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('reproducible bundles', () => {
+  describe('reproducible bundles', { concurrent: false }, () => {
     it(
       'produces identical bundles when invoked from the app and monorepo roots',
       async () => {
@@ -2089,7 +2439,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('MASTRA_BUILD_SKIP_INSTALL', () => {
+  describe('MASTRA_BUILD_SKIP_INSTALL', { concurrent: false }, () => {
     it(
       'skips dependency installation in the build output when the env var is set',
       async () => {
@@ -2101,6 +2451,7 @@ class AliasDeployer extends Deployer {
           const outputRoot = join(appDir, '.mastra', 'output');
 
           await removeOutputDir(isolatedFixturePath);
+          await expect(readFile(join(appDir, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           const skipBuild = await execa(pkgManager, ['build'], {
             cwd: appDir,
             env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -2110,6 +2461,7 @@ class AliasDeployer extends Deployer {
 
           expect(skipBuild.exitCode).toBe(0);
           expect(skipOutput).toContain('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
+          await expect(readFile(join(outputRoot, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           // No dependencies installed and no lockfile generated anywhere in the build output.
           expect(await findInDir(outputRoot, 'node_modules')).toBe(false);
           expect(await findInDir(outputRoot, 'package-lock.json')).toBe(false);
@@ -2132,9 +2484,9 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('pnpm patched dependencies', () => {
+  describe('pnpm patched dependencies', { concurrent: false }, () => {
     it(
-      'keeps source workspace patches applied in the built output',
+      'keeps source workspace patches and overrides applied in the built output',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-patch-test-${pkgManager}-`));
         try {
@@ -2159,9 +2511,12 @@ class AliasDeployer extends Deployer {
           const workspace = await readFile(workspacePath, 'utf8');
           await writeFile(
             workspacePath,
-            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
+            // read-excel-file asks for fflate ^0.8.3, so only the override can install 0.8.2 (#29192).
+            // The output package has another name, so the app-scoped nodemailer override must be retargeted
+            // to keep winning over the repo-wide one (#29348).
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n\noverrides:\n  fflate: 0.8.2\n  nodemailer: 10.0.0\n  '@inner/app>nodemailer': 10.2.1\n`,
           );
-          // The new patch entry changes the lockfile config, which CI's default frozen install rejects.
+          // The new patch and override entries change the lockfile config, which CI's default frozen install rejects.
           await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
             cwd: isolatedFixturePath,
             env: process.env,
@@ -2184,6 +2539,15 @@ class AliasDeployer extends Deployer {
           expect(
             await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
           ).toContain('patched-by-mastra-e2e');
+
+          const readExcelFileDir = await realpath(join(outputDir, 'node_modules', 'read-excel-file'));
+          const fflate = JSON.parse(await readFile(join(readExcelFileDir, '..', 'fflate', 'package.json'), 'utf8'));
+          expect(fflate.version).toBe('0.8.2');
+
+          const nodemailer = JSON.parse(
+            await readFile(join(outputDir, 'node_modules', 'nodemailer', 'package.json'), 'utf8'),
+          );
+          expect(nodemailer.version).toBe('10.2.1');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
@@ -2192,7 +2556,7 @@ class AliasDeployer extends Deployer {
     );
   });
 
-  describe.sequential('patches applied in node_modules', () => {
+  describe('patches applied in node_modules', { concurrent: false }, () => {
     it(
       'applies patches to node_modules during install from the workspace config',
       async () => {

@@ -5,6 +5,7 @@ import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 
 interface PlanPromptContext {
   state?: Record<string, unknown>;
+  plansDir?: string;
   /** False when the host disabled or denied `submit_plan`; defaults to available. */
   submitPlanAvailable?: boolean;
   /** False when the host does not start a goal on plan approval (Factory); defaults to true. */
@@ -13,7 +14,7 @@ interface PlanPromptContext {
 
 export function planModePrompt(ctx: PlanPromptContext): string {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
-  const plansDir = getLocalPlansRelativeDir({ factoryProjectId });
+  const plansDir = getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir });
   const examplePath = `${plansDir}/add-dark-mode.md`;
   const submitPlanAvailable = ctx.submitPlanAvailable !== false;
   const planApprovalStartsGoal = ctx.planApprovalStartsGoal !== false;

@@ -65,6 +65,12 @@ export const mastra = new Mastra({
 
 ### Auth with RBAC
 
+:::note
+
+RBAC requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license). [Contact sales](https://mastra.ai/contact) for more information.
+
+:::
+
 Add `MastraRBACOkta` to map Okta groups to Mastra permissions:
 
 ```typescript title="src/mastra/index.ts"
@@ -151,6 +157,8 @@ When auth is enabled, requests to Mastra routes require authentication. `MastraA
 For cross-origin requests (e.g. a frontend on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   server: {
     auth: new MastraAuthOkta(),

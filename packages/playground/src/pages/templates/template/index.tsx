@@ -256,12 +256,12 @@ export default function Template() {
   };
 
   const handleInstallTemplate = async () => {
-    const errors = Object.entries(variables).reduce((acc, [key, value]) => {
+    const errors = Object.entries(variables).reduce<string[]>((acc, [key, value]) => {
       if (value === '') {
         acc.push(key);
       }
       return acc;
-    }, [] as string[]);
+    }, []);
 
     if (errors.length > 0) {
       setErrors(errors);

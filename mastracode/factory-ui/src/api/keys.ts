@@ -1,3 +1,5 @@
+import type { WorkspaceChangesScope } from './types';
+
 /**
  * Stable, scoped React Query keys for the settings API.
  *
@@ -51,8 +53,6 @@ export const queryKeys = {
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>
     ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
-  githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
-    ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
@@ -108,32 +108,23 @@ export const queryKeys = {
     [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
   factoryMembers: (factoryProjectId: string | undefined) =>
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
-  knowledgeScopes: (factoryProjectId: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-scopes', factoryProjectId ?? null, threadId ?? null] as const,
-  knowledgeSearch: (factoryProjectId: string | undefined, query: string, threadId?: string) =>
-    ['factory', 'knowledge-search', factoryProjectId ?? null, query, threadId ?? null] as const,
-  knowledgeGraph: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
-  knowledgeActivity: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
-  knowledgeNode: (
-    factoryProjectId: string | undefined,
-    nodeId: string | undefined,
-    scopeLevel: string | undefined,
-    threadId?: string,
-  ) => ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, scopeLevel, threadId ?? null] as const,
+  knowledgeGraph: (factoryProjectId: string | undefined) =>
+    ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
+  knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
+    ['factory', 'knowledge-page', factoryProjectId ?? null, pageId, noteCursor ?? null] as const,
+  knowledgeTreeLevel: (factoryProjectId: string | undefined, parentId: string | null, cursor?: string) =>
+    ['factory', 'knowledge-tree', factoryProjectId ?? null, parentId, cursor ?? null] as const,
+  knowledgeActivity: (factoryProjectId: string | undefined, pageId: string) =>
+    ['factory', 'knowledge-activity', factoryProjectId ?? null, pageId] as const,
+  knowledgeSearch: (factoryProjectId: string | undefined, query: string) =>
+    ['factory', 'knowledge-search', factoryProjectId ?? null, query] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
   factoryDecisionsRoot: (githubProjectId: string | undefined) =>
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
-  factoryAttentionRoot: (factoryProjectId: string | undefined) =>
-    ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
-  factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
@@ -141,8 +132,9 @@ export const queryKeys = {
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
-  om: (sessionId: string | undefined, factoryId?: string) => ['om', sessionId ?? null, factoryId ?? null] as const,
-  factorySkills: () => ['factory', 'skills'] as const,
+  om: (sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) =>
+    ['om', sessionId ?? null, factoryId ?? null, threadId ?? null, resourceId ?? null] as const,
+  factorySkills: (factoryProjectId?: string) => ['factory', 'skills', factoryProjectId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
@@ -158,11 +150,8 @@ export const queryKeys = {
   planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
     ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
-  workspaceDiff: (
-    workspacePath: string | undefined,
-    filePath: string | undefined,
-    previousFilePath: string | undefined,
-  ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
+  workspacePatches: (workspacePath: string | undefined, scope: WorkspaceChangesScope) =>
+    ['workspace-changes', workspacePath ?? null, 'patches', scope] as const,
   // Session-derived keys are addressed by the session id: sessions that share a
   // memory resource (a Factory's runs, a user's sessions) keep independent state.
   agentControllerSession: (agentControllerId: string | undefined, sessionId: string | undefined) =>

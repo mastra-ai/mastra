@@ -4,6 +4,7 @@
  * which resolves its source-control provider; individual-session routes resolve
  * the provider from the durable session row.
  */
+import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/';
@@ -37,7 +38,7 @@ export interface FactoryUserSession {
   createdAt: string;
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
-  capabilities?: { recreateSandbox: boolean; takeOwnership: boolean };
+  capabilities?: { recreateSandbox: boolean; takeOwnership: boolean; switchModel?: boolean };
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
@@ -68,6 +69,23 @@ export type CreateUserSessionOptions = (
   /** Defaults to `org`. A session someone opens for themselves with New session is created `private`. */
   visibility?: 'private' | 'org';
 };
+
+/**
+ * A draft's session failed to start after its thread opened. The thread route
+ * sends the person back to the draft with what they had picked; the draft's
+ * images stay stashed under its id.
+ */
+export class DraftSessionCreateError extends Error {
+  constructor(
+    message: string,
+    readonly draft: FailedDraft,
+    readonly draftPath: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'DraftSessionCreateError';
+  }
+}
 
 export async function createUserSession(
   baseUrl: string,

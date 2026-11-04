@@ -7,6 +7,7 @@
  */
 
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
+import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
 import { requestJson } from './request';
 
@@ -42,6 +43,8 @@ export interface WorkItemStageEntry {
 }
 
 export interface WorkItem {
+  /** Optional during the one-release legacy wire migration. */
+  workItem?: Pick<WorkItemRow, 'provider' | 'key' | 'url' | 'title' | 'state' | 'labels' | 'author' | 'metadata'>;
   id: string;
   orgId: string;
   createdBy: string;
@@ -61,8 +64,6 @@ export interface WorkItem {
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
   commentCount: number;
-  /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
-  feedActivityAt: string | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -91,26 +92,18 @@ interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
   externalId: string;
+  workspaceId?: string;
   url?: string;
 }
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  | 'githubProjectId'
-  | 'source'
-  | 'sourceKey'
-  | 'url'
-  | 'metadata'
-  | 'commentCount'
-  | 'feedActivityAt'
-  | 'triageType'
-  | 'acceptedAt'
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'commentCount' | 'triageType' | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
   commentCount?: number;
-  feedActivityAt?: string | null;
   triageType?: WorkItem['triageType'];
   acceptedAt?: string | null;
 }
@@ -171,18 +164,35 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
   return { ...rest, ...(externalSource ? { externalSource } : {}) };
 }
 
+function slackThreadUrl({ workspaceId, externalId }: ExternalWorkItemSource): string | null {
+  if (!workspaceId) return null;
+  const [, channelId, threadTs] = /^slack:([^:]+):(\d+\.\d+)?$/.exec(externalId) ?? [];
+  if (!channelId) return null;
+  const channelUrl = `https://app.slack.com/client/${encodeURIComponent(workspaceId)}/${encodeURIComponent(channelId)}`;
+  return threadTs ? `${channelUrl}/thread/${encodeURIComponent(`${channelId}-${threadTs}`)}` : channelUrl;
+}
+
+function externalSourceUrl(source: ExternalWorkItemSource | null): string | null {
+  if (!source) return null;
+  // A Slack card's saved `url` is the Factory session it started, never the Slack thread.
+  if (sourceFromExternalSource(source) === 'slack-thread') return slackThreadUrl(source);
+  return source.url ?? null;
+}
+
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
-    item;
+  const { factoryProjectId, externalSource, metadata, commentCount, triageType, acceptedAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
-    url: externalSource?.url ?? null,
+    title: item.workItem?.title ?? item.title,
+    url:
+      sourceFromExternalSource(externalSource) === 'slack-thread'
+        ? externalSourceUrl(externalSource)
+        : (item.workItem?.url ?? externalSourceUrl(externalSource)),
     metadata: metadata ?? {},
     commentCount: commentCount ?? 0,
-    feedActivityAt: feedActivityAt ?? null,
     triageType: triageType ?? null,
     acceptedAt: acceptedAt ?? null,
   };
@@ -206,8 +216,6 @@ export interface UpdateWorkItemInput {
   title?: string;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
-  /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
-  plansPreapproved?: true;
 }
 
 /**

@@ -22,7 +22,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  MASTRA_E2E_REGISTRY_TAG: experiment-worker-ci-${{ github.run_id }}-${{ github.run_attempt }}
   MASTRA_E2E_REGISTRY_PORT: '4873'
 
 jobs:
@@ -105,7 +104,6 @@ jobs:
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
           MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
@@ -159,7 +157,6 @@ jobs:
           SELECTED_SCENARIO: ${{ inputs.scenario }}
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
           MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}
@@ -208,7 +205,6 @@ jobs:
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/validated-experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/validated-experiment-worker-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: ${{ env.MASTRA_E2E_REGISTRY_TAG }}
           MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/experiment-worker-registry/registry-snapshot.tar
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-experiment-worker-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: ${{ env.MASTRA_E2E_REGISTRY_PORT }}

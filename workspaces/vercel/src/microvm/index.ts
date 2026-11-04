@@ -454,7 +454,7 @@ export class VercelSandbox extends MastraSandbox {
         ? [`- Exposed ports: ${this._ports.join(', ')} (reachable via public HTTPS domains).`]
         : []),
       '- Background/long-running processes are supported via the process tools.',
-      '- Filesystem mounting (FUSE) is not supported.',
+      '- Workspace filesystem mounting tools are not available through this Mastra adapter; the underlying Vercel Sandbox supports FUSE mounts.',
     ].join('\n');
   }
 }

@@ -84,6 +84,7 @@ vi.mock('./DevBundler', () => {
   // Use a class for constructor (Vitest v4 requirement)
   class MockDevBundler {
     __setLogger = vi.fn();
+    setConfigEntryFile = vi.fn();
     loadEnvVars = vi.fn().mockImplementation(async () => new Map(loadedEnvVars));
     prepare = vi.fn().mockResolvedValue(undefined);
     getAllToolPaths = vi.fn().mockReturnValue([]);

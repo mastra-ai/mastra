@@ -39,6 +39,7 @@ import {
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
+  getMimeType,
   IsDirectoryError,
   NotDirectoryError,
   UnsupportedGrepPatternError,
@@ -1056,16 +1057,21 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (native) {
       await this.verifyNative('target', abs, path);
       const info = await native.stat(abs);
-      return { ...info, name: posixPath.basename(abs), path: `/${posixPath.relative(this.basePath, abs)}` };
+      return {
+        ...info,
+        name: posixPath.basename(abs),
+        path: `/${posixPath.relative(this.basePath, abs)}`,
+        mimeType: info.type === 'file' ? (info.mimeType ?? getMimeType(abs)) : info.mimeType,
+      };
     }
     await this.assertContainedRealpath(abs, path);
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
     // `-f` format with the same field order (%HT=type, %z=size, %m=mtime,
     // %B=birth). Delimit with `|` — neither stat interprets `\t` escapes in
-    // its format string.
+    // its format string. `-L` reports the symlink target, like LocalFilesystem.
     const result = await this.exec(
-      `stat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
+      `stat -L -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -L -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
     );
     if (result.exitCode !== 0) {
       throw new FileNotFoundError(path);
@@ -1082,6 +1088,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       size: type === 'directory' ? 0 : size,
       modifiedAt: new Date(mtime * 1000),
       createdAt: new Date((ctime > 0 ? ctime : mtime) * 1000),
+      mimeType: type === 'file' ? getMimeType(abs) : undefined,
     };
   }
 

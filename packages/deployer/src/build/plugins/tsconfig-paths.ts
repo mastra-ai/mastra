@@ -49,12 +49,10 @@ export function tsConfigPaths({
     const candidates =
       parsed.ext === '.js'
         ? JS_IMPORT_SOURCE_EXTENSIONS.map(extension => path.join(parsed.dir, `${parsed.name}${extension}`))
-        : parsed.ext
-          ? []
-          : [
-              ...JS_IMPORT_SOURCE_EXTENSIONS.map(extension => `${moduleName}${extension}`),
-              ...JS_IMPORT_SOURCE_EXTENSIONS.map(extension => path.join(moduleName, `index${extension}`)),
-            ];
+        : [
+            ...JS_IMPORT_SOURCE_EXTENSIONS.map(extension => `${moduleName}${extension}`),
+            ...JS_IMPORT_SOURCE_EXTENSIONS.map(extension => path.join(moduleName, `index${extension}`)),
+          ];
 
     return candidates.find(candidate => fs.existsSync(candidate)) ?? moduleName;
   }

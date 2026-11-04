@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
@@ -43,28 +44,23 @@ function renderSection() {
 }
 
 describe('User sessions deletion', () => {
-  it('deletes the selected session and removes it from the sidebar', async () => {
+  it.each(['dropdown', 'context'])('deletes the selected session from the %s menu', async entry => {
     let sessions = [session];
     const deletedSessions: string[] = [];
     const threadRequests: string[] = [];
 
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-7',
+              id: 'fp-1',
+              name: 'Mastra',
               repositories: [
-                {
-                  id: projectRepositoryId,
+                listedRepository(projectRepositoryId, 'octo/hello', {
                   branch: 'main',
                   sandboxWorkdir: '/workspace/hello',
-                  repository: { slug: 'octo/hello', defaultBranch: 'main' },
-                },
+                }),
               ],
             },
           ],
@@ -96,14 +92,18 @@ describe('User sessions deletion', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await user.click(await screen.findByRole('button', { name: 'Session actions for my-feature' }));
+    if (entry === 'context') {
+      await user.pointer({ target: await screen.findByRole('link', { name: 'my-feature' }), keys: '[MouseRight]' });
+    } else {
+      await user.click(await screen.findByRole('button', { name: 'Session actions for my-feature' }));
+    }
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitForMutationsIdle(client);
     expect(deletedSessions).toEqual([sessionId]);
     expect(threadRequests).toEqual([]);
-    expect(screen.queryByRole('button', { name: 'my-feature' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'my-feature' })).not.toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
   });
 });

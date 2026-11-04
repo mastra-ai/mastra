@@ -2,8 +2,14 @@ import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from './on
 
 export const SETUP_LABELS: Record<OnboardingModelScope, string> = {
   factory: 'Company account',
-  hybrid: 'Company work · personal sessions',
+  hybrid: 'Company work and personal sessions',
   user: 'Personal accounts',
+};
+
+export const SETUP_DETAILS: Record<OnboardingModelScope, string> = {
+  factory: 'A shared account and model for Factory work and sessions.',
+  hybrid: 'Factory work uses the company account. Each person uses their own account for sessions.',
+  user: 'Each person uses their own account and default model, for Factory work and sessions.',
 };
 
 export function onboardingSteps(scope?: OnboardingModelScope, local = false): OnboardingStep[] {
@@ -66,14 +72,14 @@ export function onboardingStepMeta(step: OnboardingStep, scope?: OnboardingModel
       title: scope === 'hybrid' ? 'Set up your sessions.' : 'Choose your model.',
       description:
         scope === 'hybrid'
-          ? 'Your account · your default model for sessions.'
-          : 'Your account · your default model for Factory work and sessions.',
+          ? 'Set the default model for sessions using your account.'
+          : 'Set the default model for Factory work and sessions using your account.',
     };
   return STEP_META[step];
 }
 
 function companyModelDescription(scope: OnboardingModelScope | undefined, local: boolean) {
   if (local) return 'Connect a provider and choose the model for your Factory.';
-  if (scope === 'hybrid') return 'Company account · model for Factory work.';
-  return 'Company account · model for Factory work and sessions.';
+  if (scope === 'hybrid') return 'Choose a model for Factory work using the company account.';
+  return 'Choose a model for Factory work and sessions using the company account.';
 }

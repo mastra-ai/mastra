@@ -9,7 +9,7 @@ import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 export const SESSION_GROUP_BYS = ['board', 'status', 'owner', 'none'] as const;
 export type SessionGroupBy = (typeof SESSION_GROUP_BYS)[number];
 
-export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'board';
+export const DEFAULT_SESSION_GROUP_BY: SessionGroupBy = 'none';
 
 export const SESSION_GROUP_BY_LABELS: Record<SessionGroupBy, string> = {
   board: 'Board',

@@ -221,7 +221,6 @@ export function ItemDetailDialog({
         <TextAndIcon>
           <HashIcon /> {getShortId(item.id)}
         </TextAndIcon>
-        |
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
@@ -232,7 +231,7 @@ export function ItemDetailDialog({
               Delete
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>
-              Purge Data
+              Purge data
             </Button>
           </div>
         )}
@@ -271,7 +270,7 @@ export function ItemDetailDialog({
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Yes, Delete'}
+              {deleteItem.isPending ? 'Deleting...' : 'Yes, delete'}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -299,7 +298,7 @@ export function ItemDetailDialog({
               onClick={() => void handlePurgeConfirm()}
               disabled={purgeItem.isPending}
             >
-              {purgeItem.isPending ? 'Purging...' : 'Purge Data'}
+              {purgeItem.isPending ? 'Purging...' : 'Purge data'}
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>
@@ -464,7 +463,7 @@ function EditModeContent({
             Cancel
           </Button>
           <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </div>

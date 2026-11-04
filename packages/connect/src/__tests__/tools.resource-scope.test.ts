@@ -94,7 +94,8 @@ describe('resource-scoped resolution', () => {
     const tools = connect({ ...platform.options, resourceId: 'end-user-42' });
 
     const result = await tools();
-    expect(Object.keys(result).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
+    // Resource-scoped records also carry the built-in connect-prompt tool.
+    expect(Object.keys(result).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool', 'request_connection']);
 
     const [list] = platform.connectionLists();
     expect(list!.url.searchParams.get('resourceId')).toBe('end-user-42');
@@ -122,9 +123,11 @@ describe('resource-scoped resolution', () => {
     expect(Object.keys(await resolver({ requestContext: { userId: 'user-a' } })).sort()).toEqual([
       'linear_fake_tool',
       'notion_fake_tool',
+      'request_connection',
     ]);
     expect(Object.keys(await resolver({ requestContext: { userId: 'user-b' } })).sort()).toEqual([
       'linear_fake_tool',
+      'request_connection',
       'slack_fake_tool',
     ]);
 
@@ -186,8 +189,9 @@ describe('resource-scoped resolution', () => {
     const forUserB = await connect({ ...platform.options, resourceId: 'user-b' })();
     const globalOnly = await connect(platform.options)();
 
-    expect(Object.keys(forUserA).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
-    expect(Object.keys(forUserB).sort()).toEqual(['linear_fake_tool', 'slack_fake_tool']);
+    expect(Object.keys(forUserA).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool', 'request_connection']);
+    expect(Object.keys(forUserB).sort()).toEqual(['linear_fake_tool', 'request_connection', 'slack_fake_tool']);
+    // Global-only resolutions never include the connect-prompt tool.
     expect(Object.keys(globalOnly)).toEqual(['linear_fake_tool']);
   });
 
@@ -238,7 +242,7 @@ describe('resource-scoped resolution', () => {
     });
 
     const scoped = await tools({ requestContext: { userId: 'user-a' } });
-    expect(Object.keys(scoped).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
+    expect(Object.keys(scoped).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool', 'request_connection']);
 
     // Callback returning undefined resolves global-only.
     const globalOnly = await tools({ requestContext: {} });
@@ -250,7 +254,7 @@ describe('resource-scoped resolution', () => {
     const platform = scopedPlatform(() => [makeConnection()]);
 
     const record = await connect({ ...platform.options, resourceId: 'user-a' });
-    expect(Object.keys(record)).toEqual(['linear_fake_tool']);
+    expect(Object.keys(record).sort()).toEqual(['linear_fake_tool', 'request_connection']);
 
     // `.with()` resolvers unwrap the same way.
     const merged = await connect(platform.options).with({ extra_tool: { id: 'extra_tool' } });
@@ -287,10 +291,10 @@ describe('resource-scoped resolution', () => {
     const platform = scopedPlatform(() => rows);
     const tools = connect({ ...platform.options, resourceId: 'user-a' });
 
-    expect(Object.keys(await tools())).toEqual(['linear_fake_tool']);
+    expect(Object.keys(await tools()).sort()).toEqual(['linear_fake_tool', 'request_connection']);
     rows = [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion', resourceId: 'user-a' })];
     const refreshed = await tools.refresh();
-    expect(Object.keys(refreshed).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool']);
+    expect(Object.keys(refreshed).sort()).toEqual(['linear_fake_tool', 'notion_fake_tool', 'request_connection']);
 
     // Every connection list went out under the user's scope.
     for (const list of platform.connectionLists()) {
@@ -314,5 +318,157 @@ describe('resource-scoped resolution', () => {
     await tools.disconnect();
     await tools();
     expect(platform.fetchMock.mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+});
+
+/**
+ * Platform fetch fixture with a real catalog, for connect-prompt behavior.
+ * Connection scoping matches {@link scopedPlatform}.
+ */
+function catalogPlatform(
+  connections: () => Array<Record<string, unknown>>,
+  endUserProviders: () => string[] | null = () => null,
+) {
+  const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/v2/integrations') {
+      return Response.json({
+        integrations: [
+          { id: 'linear', capabilities: {}, displayName: 'Linear', logoUrl: 'https://logos.test/linear.svg' },
+          {
+            id: 'notion',
+            capabilities: {},
+            displayName: 'Notion',
+            authType: 'OAUTH2',
+            authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
+          },
+        ],
+      });
+    }
+    if (url.pathname === '/v2/projects/proj_1/integration-settings') {
+      return Response.json({ endUserProviders: endUserProviders() });
+    }
+    const resourceId = url.searchParams.get('resourceId');
+    const rows = connections().filter(connection =>
+      resourceId === null
+        ? connection.resourceId === null
+        : connection.resourceId === null || connection.resourceId === resourceId,
+    );
+    return Response.json({ connections: rows });
+  });
+  const options = {
+    projectId: 'proj_1',
+    client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
+  } satisfies ConnectOptions;
+  return { fetchMock, options };
+}
+
+type PromptTool = {
+  execute: (input: { provider?: string }) => Promise<{
+    type: string;
+    requestedProvider?: string;
+    providers: Array<{
+      id: string;
+      authFields: Array<{ name: string; target?: 'credentials' | 'params' | null; required?: boolean | null }> | null;
+      connected: boolean;
+      scope: string | null;
+    }>;
+  }>;
+};
+
+describe('built-in connect-prompt tool', () => {
+  it('reports connectable providers with fresh connection state', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    let rows: Array<Record<string, unknown>> = [makeConnection()];
+    const platform = catalogPlatform(() => rows);
+    const record = await connect({ ...platform.options, resourceId: 'end-user-42' })();
+
+    const prompt = record.request_connection as unknown as PromptTool;
+    const first = await prompt.execute({});
+    expect(first.type).toBe('connect-prompt');
+    expect(first.providers).toEqual([
+      expect.objectContaining({ id: 'linear', connected: true, scope: 'global' }),
+      expect.objectContaining({ id: 'notion', connected: false, scope: null }),
+    ]);
+
+    // The tool re-fetches per call: a connection completed after the snapshot
+    // was cached reads as connected without waiting out the TTL.
+    rows = [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion', resourceId: 'end-user-42' })];
+    const second = await prompt.execute({ provider: 'notion' });
+    expect(second.requestedProvider).toBe('notion');
+    expect(second.providers).toEqual([
+      expect.objectContaining({
+        id: 'notion',
+        authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
+        connected: true,
+        scope: 'user',
+      }),
+    ]);
+  });
+
+  it('uses fresh project provider configuration when code omits providers', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    let configured: string[] | null = ['notion'];
+    const platform = catalogPlatform(
+      () => [makeConnection()],
+      () => configured,
+    );
+    const record = await connect({ ...platform.options, resourceId: 'end-user-42' })();
+
+    const prompt = record.request_connection as unknown as PromptTool;
+    expect((await prompt.execute({})).providers.map(provider => provider.id)).toEqual(['notion']);
+
+    configured = [];
+    expect((await prompt.execute({})).providers).toEqual([]);
+  });
+
+  it('lets the code providers allowlist override project provider configuration', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const platform = catalogPlatform(
+      () => [makeConnection()],
+      () => ['notion'],
+    );
+    const record = await connect({ ...platform.options, providers: ['linear'], resourceId: 'end-user-42' })();
+
+    const prompt = record.request_connection as unknown as PromptTool;
+    const all = await prompt.execute({});
+    expect(all.providers.map(provider => provider.id)).toEqual(['linear']);
+
+    // An unknown (or disallowed) requested provider returns the connectable
+    // set instead of failing, so the agent can correct itself.
+    const unknown = await prompt.execute({ provider: 'notion' });
+    expect(unknown.requestedProvider).toBeUndefined();
+    expect(unknown.providers.map(provider => provider.id)).toEqual(['linear']);
+  });
+
+  it('matches a requested provider id case-insensitively', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const platform = catalogPlatform(() => [makeConnection()]);
+    const record = await connect({ ...platform.options, providers: ['linear'], resourceId: 'end-user-42' })();
+
+    // Agents routinely capitalize provider names; the lookup must not miss
+    // the catalog entry over casing.
+    const prompt = record.request_connection as unknown as PromptTool;
+    const requested = await prompt.execute({ provider: 'LINEAR' });
+    expect(requested.requestedProvider).toBe('linear');
+    expect(requested.providers).toEqual([expect.objectContaining({ id: 'linear', connected: true })]);
+  });
+
+  it('rejects a non-boolean connectPrompt option at startup', () => {
+    const platform = catalogPlatform(() => []);
+    expect(() =>
+      connect({ ...platform.options, resourceId: 'end-user-42', connectPrompt: 'false' as unknown as boolean }),
+    ).toThrowError(/connectPrompt/);
+  });
+
+  it('is omitted with connectPrompt: false and from global-only resolutions', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const platform = catalogPlatform(() => [makeConnection()]);
+
+    const disabled = await connect({ ...platform.options, resourceId: 'end-user-42', connectPrompt: false })();
+    expect(Object.keys(disabled)).toEqual(['linear_fake_tool']);
+
+    const globalOnly = await connect({ ...platform.options, connectPrompt: true })();
+    expect(Object.keys(globalOnly)).toEqual(['linear_fake_tool']);
   });
 });

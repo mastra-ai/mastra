@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
@@ -44,21 +45,16 @@ function makeSession(
 function stubProjectAndSessions(sessions: FactoryUserSession[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: factoryId, name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
+            id: factoryId,
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
                 sandboxWorkdir: '/workspace/hello',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -152,7 +148,7 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
 
     // The belt goes dark on an idle session, not back on (or stuck at) initializing.
-    const row = screen.getByRole('button', { name: 'feature-d' }).closest('li');
+    const row = screen.getByRole('link', { name: 'feature-d' }).closest('li');
     await waitFor(() => expect(row?.querySelector('[role="status"]')).toBeNull());
   });
 
@@ -163,7 +159,7 @@ describe('User sessions sidebar activity', () => {
     const { client } = renderSection();
     await waitForMutationsIdle(client);
 
-    const row = (await screen.findByRole('button', { name: 'feature-c' })).closest('li');
+    const row = (await screen.findByRole('link', { name: 'feature-c' })).closest('li');
     expect(row).not.toBeNull();
     expect(row?.querySelector('[role="status"]')).toBeNull();
   });

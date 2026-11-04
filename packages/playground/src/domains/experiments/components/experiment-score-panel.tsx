@@ -47,7 +47,7 @@ function ExperimentScorePanelBody({
   onShowTrace,
 }: Omit<ExperimentScorePanelProps, 'score'> & { score: ClientScoreRowData }) {
   const isCodeBased = isCodeBasedScorer(score);
-  const naText = isCodeBased ? 'N/A — code-based scorer' : 'N/A — step not configured';
+  const naText = isCodeBased ? 'Not applicable (code-based scorer)' : 'Step not configured';
 
   return (
     <>
@@ -59,7 +59,7 @@ function ExperimentScorePanelBody({
         </DataPanel.Heading>
         <DataPanel.HeaderActions>
           {onShowTrace && score.traceId && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}

@@ -20,7 +20,7 @@ import { createWorkflow, createStep } from '.';
 describe('processor step chaining', () => {
   it('type-checks the output guardrails workflow from the guardrails docs', () => {
     // Body copied from docs/src/content/en/docs/agents/guardrails.mdx, with the
-    // __GATEWAY_OPENAI_MODEL_NANO__ docs token resolved to its model id.
+    // __GATEWAY_OPENAI_MODEL_LUNA__ docs token resolved to its model id.
     const outputGuardrails = createWorkflow({
       id: 'output-guardrails',
       inputSchema: ProcessorStepSchema,
@@ -65,7 +65,7 @@ describe('processor step chaining', () => {
 
   it('type-checks the moderation workflow from the processors docs', () => {
     // Body copied from docs/src/content/en/docs/agents/processors.mdx, with the
-    // __GATEWAY_OPENAI_MODEL_NANO__ docs token resolved to its model id.
+    // __GATEWAY_OPENAI_MODEL_LUNA__ docs token resolved to its model id.
     const moderationWorkflow = createWorkflow({
       id: 'moderation-pipeline',
       inputSchema: ProcessorStepSchema,

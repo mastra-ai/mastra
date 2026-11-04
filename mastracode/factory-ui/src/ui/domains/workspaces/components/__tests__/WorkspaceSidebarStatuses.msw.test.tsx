@@ -286,7 +286,7 @@ describe('Workspace sidebar statuses', () => {
     const { client } = renderSection();
     await waitForMutationsIdle(client);
 
-    const row = (await screen.findByRole('button', { name: 'Implement loader' })).closest('li');
+    const row = (await screen.findByRole('link', { name: 'Implement loader' })).closest('li');
     expect(row).not.toBeNull();
     expect(row?.querySelector('[role="status"]')).toBeNull();
   });

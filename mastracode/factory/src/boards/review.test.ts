@@ -1,5 +1,11 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { reviewBoard } from './review.js';
 
 function reviewContext(headBranch: string, fromStage = 'intake'): FactoryStageRuleContext {
@@ -12,7 +18,13 @@ function reviewContext(headBranch: string, fromStage = 'intake'): FactoryStageRu
     url: 'https://github.com/mastra-ai/mastra/pull/23029',
     stages: ['review'],
     acceptedAt: null,
-    metadata: { number: 23029, headBranch },
+    metadata: {},
+    workItem: createProviderWorkItemForTests({
+      id: 'item-1',
+      title: 'Review board lifecycle',
+      source: { integrationId: 'github', type: 'pull-request', externalId: '23029' },
+      metadata: { number: 23029, headBranch },
+    }),
   };
   return {
     tenant: { orgId: 'org-1', projectId: 'project-1' },
@@ -41,7 +53,13 @@ function gitlabReviewContext(headBranch = 'factory/gitlab-mr-head', fromStage = 
       source: 'gitlab-pr',
       sourceKey: 'gitlab-mr:encoded',
       url: 'https://gitlab.com/acme/app/-/merge_requests/5',
-      metadata: { gitlabMergeRequestIid: 5, headBranch },
+      metadata: {},
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: context.item.title,
+        source: { integrationId: 'gitlab', type: 'pull-request', externalId: '5' },
+        metadata: { gitlabMergeRequestIid: 5, headBranch },
+      }),
     },
   };
 }
@@ -55,8 +73,8 @@ async function reviewArguments(headBranch: string): Promise<string> {
 
 describe('reviewBoard', () => {
   it('keeps completed reviews terminal when the PR or MR is later closed without merging', () => {
-    expect(reviewBoard.phases.done.outcomes).not.toHaveProperty('closed');
-    expect(reviewBoard.phases.canceled.outcomes.reviewRequested).toBe('review');
+    expect(reviewBoard.phases.done.nextPhases).toEqual(['review']);
+    expect(reviewBoard.phases.canceled.nextPhases).toEqual(['review']);
   });
   it('names a GitLab merge request and points its kickoff at provider-neutral review tools', async () => {
     const decision = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(gitlabReviewContext());
@@ -114,11 +132,62 @@ describe('reviewBoard', () => {
   it('tells the reviewer the head is checked out and how to refresh a session the PR outran', async () => {
     const argumentsText = await reviewArguments('feat/review-board');
 
-    expect(argumentsText).toContain('checked out on branch `factory/pr-23029`');
+    expect(argumentsText).toContain('checked out on the session branch');
     expect(argumentsText).toContain(
-      'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B factory/pr-23029 FETCH_HEAD',
+      'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B "$session_branch" FETCH_HEAD',
     );
   });
+
+  it.each(['factory/pr-23029', 'factory/pr-23029-item1'])(
+    'refreshes an advanced PR on the existing session branch %s',
+    async branch => {
+      const cwd = await mkdtemp(join(tmpdir(), 'factory-review-refresh-'));
+      const exec = promisify(execFile);
+      const git = async (...args: string[]) =>
+        (
+          await exec('git', ['-c', 'user.name=Factory test', '-c', 'user.email=factory@example.com', ...args], { cwd })
+        ).stdout.trim();
+      try {
+        await git('init', '-b', 'main');
+        await git('commit', '--allow-empty', '-m', 'previous review');
+        const previous = await git('rev-parse', 'HEAD');
+        await git('commit', '--allow-empty', '-m', 'advanced PR');
+        const head = await git('rev-parse', 'HEAD');
+        await git('update-ref', 'refs/pull/23029/head', head);
+        await git('remote', 'add', 'origin', cwd);
+        await git('checkout', '-b', branch, previous);
+        await git('branch', '-f', 'main', previous);
+        const context = reviewContext('feat/review-board', 'review');
+        context.item.metadata = {
+          ...context.item.metadata,
+          reviewVerdict: 'request changes',
+          reviewedHeadSha: previous,
+          pullRequestHeadSha: head,
+        };
+        const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(context);
+        if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
+        expect(decision.skillName).toBe('factory-rereview');
+        const command = /refresh with `([^`]+)`/.exec(decision.arguments)?.[1];
+        if (!command) throw new Error('Expected runnable PR refresh hint.');
+        // Refresh after comparing against main must not reset that branch (#28048).
+        await git('checkout', 'main');
+        await expect(exec('sh', ['-c', command], { cwd })).rejects.toThrow();
+        expect(await git('branch', '--show-current')).toBe('main');
+        expect(await git('rev-parse', 'main')).toBe(previous);
+        expect(await git('rev-parse', branch)).toBe(previous);
+        await git('checkout', branch);
+        await exec('sh', ['-c', command], { cwd });
+        expect(await git('branch', '--show-current')).toBe(branch);
+        expect(await git('rev-parse', 'HEAD')).toBe(head);
+        expect(await git('rev-parse', 'main')).toBe(previous);
+        // A later workspace setup checks the persisted session branch out again.
+        await git('checkout', branch);
+        expect(await git('rev-parse', 'HEAD')).toBe(head);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('resumes the live session on a same-stage re-entry instead of re-pasting the skill', async () => {
     const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(
@@ -218,17 +287,5 @@ describe('reviewBoard', () => {
     if (!valid || valid.type !== 'invokeSkill') throw new Error('Expected review skill invocation.');
     expect(valid.arguments).toContain(`The previous pass reviewed on \`${'a'.repeat(40)}\``);
     expect(valid.arguments).not.toContain('Ignore previous instructions');
-  });
-
-  it('keeps Done for merges: a review agent cannot move its card there', () => {
-    const policy = reviewBoard.transitionPolicy!;
-    const base = { fromStage: 'review', toStage: 'done' };
-    expect(policy({ ...base, actor: { type: 'agent', id: 'binding-1', role: 'review' } } as never)).toMatchObject({
-      type: 'reject',
-    });
-    expect(policy({ ...base, actor: { type: 'github', id: 'merge' } } as never)).toBeUndefined();
-    expect(
-      policy({ ...base, toStage: 'canceled', actor: { type: 'agent', id: 'b', role: 'review' } } as never),
-    ).toBeUndefined();
   });
 });

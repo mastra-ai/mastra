@@ -156,7 +156,7 @@ describe('GraphRAG', () => {
       const graph = new GraphRAG(3);
       const queryEmbedding: number[] = [];
       expect(() => graph.query({ query: queryEmbedding, topK: 2, randomWalkSteps: 3, restartProb: 0.1 })).toThrowError(
-        `Query embedding must have dimension ${3}`,
+        `Query embedding must have dimension 3`,
       );
     });
 

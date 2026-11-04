@@ -25,7 +25,7 @@ export function EnvironmentVariablesEditorAddButton({
         onClick={() => editor.appendRow()}
         icon={<PlusIcon />}
       >
-        {children ?? 'Add Variable'}
+        {children ?? 'Add variable'}
       </Button>
       <span aria-hidden="true" className="h-px flex-1 bg-border" />
     </div>

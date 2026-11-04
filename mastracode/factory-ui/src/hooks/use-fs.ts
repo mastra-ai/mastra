@@ -5,8 +5,9 @@ import { queryKeys } from '../api/keys';
 import type {
   ArtifactListing,
   DirectoryListing,
+  WorkspaceChangePatches,
   WorkspaceChanges,
-  WorkspaceDiff,
+  WorkspaceChangesScope,
   WorkspaceFile,
   WorkspaceTreeListing,
   WorkspaceRenderedListing,
@@ -76,15 +77,9 @@ function workspaceChangesUrl(workspacePath: string | undefined) {
   return `/web/workspace/changes?${new URLSearchParams({ workspacePath })}`;
 }
 
-function workspaceDiffUrl(
-  workspacePath: string | undefined,
-  path: string | undefined,
-  previousPath: string | undefined,
-) {
-  if (!workspacePath || !path) return undefined;
-  const params = new URLSearchParams({ workspacePath, path });
-  if (previousPath) params.set('previousPath', previousPath);
-  return `/web/workspace/changes/diff?${params}`;
+function workspacePatchesUrl(workspacePath: string | undefined, scope: WorkspaceChangesScope) {
+  if (!workspacePath) return undefined;
+  return `/web/workspace/changes/patches?${new URLSearchParams({ workspacePath, scope })}`;
 }
 
 /**
@@ -191,17 +186,16 @@ export function useWorkspaceChanges(workspacePath: string | undefined, { enabled
   });
 }
 
-export function useWorkspaceDiff(
+export function useWorkspacePatches(
   workspacePath: string | undefined,
-  filePath: string | undefined,
-  previousFilePath?: string,
+  scope: WorkspaceChangesScope,
   { enabled = true }: { enabled?: boolean } = {},
 ) {
   const { client } = useApiConfig();
-  const url = workspaceDiffUrl(workspacePath, filePath, previousFilePath);
-  return useQuery<WorkspaceDiff>({
-    queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
+  const url = workspacePatchesUrl(workspacePath, scope);
+  return useQuery<WorkspaceChangePatches>({
+    queryKey: queryKeys.workspacePatches(workspacePath, scope),
     enabled,
-    queryFn: url ? () => client.get<WorkspaceDiff>(url) : skipToken,
+    queryFn: url ? () => client.get<WorkspaceChangePatches>(url) : skipToken,
   });
 }

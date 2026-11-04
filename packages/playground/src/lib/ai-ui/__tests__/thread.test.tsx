@@ -12,8 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
-import { emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { emptyChannelPlatforms, emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { attachmentMessages } from './fixtures/attachment-messages';
+import { abortedSignalRun, acceptedSignalMessage, signalRunStart } from './fixtures/signal-run';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -58,6 +59,7 @@ const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
 
 const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(emptyChannelPlatforms)),
   http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
@@ -132,9 +134,10 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
         <ChatProvider
           key={threadId}
           agentId="agent-1"
+          modelVersion={v2Agent.modelVersion}
           threadId={threadId}
           initialMessages={initialMessages}
-          supportsMemory={true}
+          supportsMemory
           settings={{ modelSettings: { chatWithLegacyStream: false, ...modelSettings } }}
         >
           <Thread
@@ -267,6 +270,35 @@ describe('Thread', () => {
           'Accept the newer address. And note that Sentinel confirmed it. ',
         ),
       );
+    });
+  });
+
+  describe('when the user edits the composer after dictating', () => {
+    beforeEach(() => installFakeSpeechRecognition());
+    afterEach(() => uninstallFakeSpeechRecognition());
+
+    it('keeps the edit', async () => {
+      server.use(...baseHandlers());
+      await act(async () => {
+        renderThread([]);
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
+      await screen.findByRole('button', { name: 'Stop dictation' });
+      act(() => {
+        lastRecognition?.onresult?.({
+          resultIndex: 0,
+          results: [{ 0: { transcript: 'Accept the newer address.' }, isFinal: true }],
+        });
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+      const composer = screen.getByRole<HTMLTextAreaElement>('textbox');
+      await waitFor(() => expect(composer.value).toBe('Accept the newer address. '));
+
+      await act(async () => {
+        fireEvent.change(composer, { target: { value: 'Accept the newer address. Thanks' } });
+      });
+
+      expect(composer.value).toBe('Accept the newer address. Thanks');
     });
   });
 
@@ -581,7 +613,7 @@ describe('Thread', () => {
       }
     });
 
-    it('shows a scroll-to-bottom control when the viewport is not at the bottom', async () => {
+    it('shows a scroll-to-bottom control when the reader scrolls back up', async () => {
       const scrollTo = vi.fn();
       const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
       Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
@@ -603,13 +635,23 @@ describe('Thread', () => {
         const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
         if (!viewport) throw new Error('missing message scroller viewport');
 
-        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 40 });
+        // The opening scroll lands two frames after mount. Let it settle before the
+        // reader moves, or it races the scroll below and decides the outcome instead.
+        await act(
+          () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+        );
+
+        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 220 });
         Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 100 });
         Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 320 });
+        await act(async () => {
+          fireEvent.scroll(viewport);
+        });
 
         const scrollToEnd = screen.getByRole('button', { name: 'Scroll to end' });
         expect(scrollToEnd.getAttribute('data-active')).toBe('false');
 
+        viewport.scrollTop = 40;
         await act(async () => {
           fireEvent.scroll(viewport);
         });
@@ -680,7 +722,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'hello from composer' } });
     });
@@ -704,7 +746,7 @@ describe('Thread', () => {
       rendered = render(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(firstThreadTextarea, { target: { value: 'first thread draft' } });
     });
@@ -714,7 +756,7 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     expect(secondThreadTextarea.value).toBe('');
 
     await act(async () => {
@@ -726,13 +768,13 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('first thread draft');
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('first thread draft');
 
     await act(async () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('second thread draft');
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('second thread draft');
   });
 
   it('does not send when the composer is empty', async () => {
@@ -749,7 +791,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.keyDown(textarea, { key: 'Enter' });
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -773,7 +815,7 @@ describe('Thread', () => {
         renderThread([]);
       });
 
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       await act(async () => {
         fireEvent.change(textarea, { target: { value: 'composing text' } });
         fireEvent.keyDown(textarea, { key: 'Enter', isComposing: true });
@@ -828,7 +870,7 @@ describe('Thread', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Remove discard.txt' }));
       expect(screen.queryByRole('button', { name: 'Preview discard.txt' })).toBeNull();
       await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
-      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Read both files' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), { target: { value: 'Read both files' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() =>
         expect(sentTexts).toEqual([
@@ -902,7 +944,7 @@ describe('Thread', () => {
         await act(async () => {
           renderThread([]);
         });
-        const textarea = screen.getByPlaceholderText('Enter your message...');
+        const textarea = screen.getByPlaceholderText('Enter your message');
         fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
         if (inspection === 'file classification') {
@@ -959,7 +1001,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([]);
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
       fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
@@ -993,7 +1035,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([]);
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() => expect(requests).toBe(1));
@@ -1016,7 +1058,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([], { modelSettings: { chatWithGenerate: true } });
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
 
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -1043,7 +1085,7 @@ describe('Thread', () => {
         await act(async () => {
           renderThread([], { modelSettings });
         });
-        const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+        const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
         fireEvent.change(textarea, { target: { value: 'Summarize my notes' } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -1075,7 +1117,7 @@ describe('Thread', () => {
       fireEvent.submit(form);
 
       const attachments = await screen.findByTestId('composer-attachments');
-      const draft = screen.getByPlaceholderText('Enter your message...');
+      const draft = screen.getByPlaceholderText('Enter your message');
       const composerBox = draft.closest('[data-slot="composer-box"]');
       expect(composerBox).not.toBeNull();
       expect(composerBox?.contains(attachments)).toBe(true);
@@ -1149,6 +1191,89 @@ describe('Thread', () => {
     expect(captured).toHaveLength(0);
   });
 
+  describe('when thread signals allow sending during a run', () => {
+    let subscription: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let sentMessages: string[];
+    let abortRequests: number;
+
+    beforeEach(async () => {
+      window.MASTRA_AGENT_SIGNALS = 'true';
+      subscription = undefined;
+      sentMessages = [];
+      abortRequests = 0;
+      server.use(...baseHandlers());
+      server.use(
+        http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
+        http.post(
+          `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  subscription = controller;
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+        http.post(`${BASE_URL}/api/agents/:agentId/send-message`, async ({ request }) => {
+          sentMessages.push(JSON.stringify(await request.json()));
+          return HttpResponse.json(acceptedSignalMessage);
+        }),
+        http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => {
+          abortRequests += 1;
+          return HttpResponse.json(abortedSignalRun);
+        }),
+      );
+
+      await act(async () => {
+        renderThread([]);
+      });
+      await waitFor(() => expect(subscription).toBeDefined());
+      await act(async () => subscription?.enqueue(new TextEncoder().encode(sseChunk(signalRunStart))));
+      await screen.findByRole('button', { name: 'Cancel' });
+    });
+
+    afterEach(async () => {
+      await act(async () => subscription?.close());
+    });
+
+    it('replaces cancel with send while drafting and restores cancel after clearing the draft', () => {
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+
+      const textarea = screen.getByPlaceholderText('Enter your message');
+      fireEvent.change(textarea, { target: { value: '   ' } });
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+
+      fireEvent.change(textarea, { target: { value: 'Continue with the new instructions' } });
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+
+      fireEvent.change(textarea, { target: { value: '' } });
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    });
+
+    it('does not cancel the run when Send is double-clicked', async () => {
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), {
+        target: { value: 'Continue with the new instructions' },
+      });
+      const primaryAction = screen.getByRole('button', { name: 'Send' });
+      fireEvent.click(primaryAction, { detail: 1 });
+      await waitFor(() => expect(sentMessages.join()).toContain('Continue with the new instructions'));
+      fireEvent.click(primaryAction, { detail: 2 });
+      await act(async () => new Promise(resolve => setTimeout(resolve, 100)));
+
+      expect(abortRequests).toBe(0);
+    });
+
+    it('cancels the run when Cancel is clicked', async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }), { detail: 1 });
+
+      await waitFor(() => expect(abortRequests).toBe(1));
+    });
+  });
+
   it('shows a cancel control while a run is in flight', async () => {
     let resolveStream: (() => void) | null = null;
     const blockedStream = () =>
@@ -1171,7 +1296,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'long running' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -1181,6 +1306,10 @@ describe('Thread', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy();
     });
+
+    fireEvent.change(textarea, { target: { value: 'Wait until this run finishes' } });
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
     await act(async () => {
       resolveStream?.();
@@ -1223,6 +1352,182 @@ const taskCook: TaskItem = {
   activeForm: 'Cooking meal',
 };
 
+describe('Thread annotations', () => {
+  const REPLY = 'Open rows drop the frame and keep a subtle rounded hover.';
+  const history = () => [userMessage('Which table style should we use?'), assistantMessage(REPLY)];
+
+  beforeEach(() => {
+    window.MASTRA_AGENT_SIGNALS = 'false';
+    server.resetHandlers();
+  });
+
+  afterEach(() => {
+    document.getSelection()?.removeAllRanges();
+  });
+
+  const selectFromReply = async (length: number) => {
+    const paragraph = await screen.findByText(REPLY);
+    const text = paragraph.firstChild;
+    if (!(text instanceof Text)) throw new Error('The reply has no text node');
+    fireEvent.pointerDown(paragraph);
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, length);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    fireEvent.pointerUp(paragraph);
+  };
+
+  const markers = () =>
+    Array.from(screen.getByTestId('thread-message-column').querySelectorAll('[data-slot="annotation-marker"]')).map(
+      marker => marker.textContent,
+    );
+
+  const renderCapturingThread = async () => {
+    const captured: Captured[] = [];
+    server.use(
+      ...baseHandlers(),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        captured.push({ url: request.url, body: await captureBody(request) });
+        return sseResponse();
+      }),
+    );
+    await act(async () => {
+      renderThread(history());
+    });
+    return captured;
+  };
+
+  const addToChat = async () => {
+    await selectFromReply('Open rows'.length);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+  };
+
+  const textarea = () => screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
+
+  describe('when part of a reply is added to the chat', () => {
+    let captured: Captured[];
+
+    beforeEach(async () => {
+      captured = await renderCapturingThread();
+      await addToChat();
+    });
+
+    it('numbers the passage in the transcript', () => {
+      expect(markers()).toEqual(['1']);
+    });
+
+    it('counts the annotation in the composer', () => {
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+    });
+
+    it('focuses the message box', () => {
+      expect(document.activeElement).toBe(textarea());
+    });
+
+    describe('when the person types a message and sends it', () => {
+      beforeEach(() => {
+        fireEvent.change(textarea(), { target: { value: 'Why this one?' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      });
+
+      it('reaches the agent as a blockquote ahead of the typed message', async () => {
+        await waitFor(() => expect(captured).toHaveLength(1));
+        expect(JSON.stringify(captured[0].body.messages)).toContain(
+          JSON.stringify('1. > Open rows\n\nWhy this one?').slice(1, -1),
+        );
+      });
+
+      it('clears the annotation from the composer', async () => {
+        await waitFor(() => expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull());
+      });
+
+      it('removes the number from the transcript', async () => {
+        await waitFor(() => expect(markers()).toEqual([]));
+      });
+    });
+  });
+
+  describe('when the person sends an annotation without typing', () => {
+    let captured: Captured[];
+
+    beforeEach(async () => {
+      captured = await renderCapturingThread();
+      await addToChat();
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    });
+
+    it('sends the quoted passage on its own', async () => {
+      await waitFor(() => expect(captured).toHaveLength(1));
+      expect(JSON.stringify(captured[0].body.messages)).toContain(JSON.stringify('1. > Open rows'));
+    });
+
+    it('clears the annotation from the composer', async () => {
+      await waitFor(() => expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull());
+    });
+  });
+
+  describe('when the server rejects the message with the annotation', () => {
+    beforeEach(async () => {
+      let requests = 0;
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+          requests++;
+          return HttpResponse.json({ error: 'Request body too large' }, { status: 413 });
+        }),
+      );
+      await act(async () => {
+        renderThread(history());
+      });
+      await addToChat();
+      fireEvent.change(textarea(), { target: { value: 'Why this one?' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(requests).toBeGreaterThan(0));
+    });
+
+    it('tells the person the message could not be sent', async () => {
+      expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
+    }, 10_000);
+
+    it('puts the typed text back in the composer', async () => {
+      await waitFor(() => expect(textarea().value).toBe('Why this one?'), { timeout: 5000 });
+    }, 10_000);
+
+    it('puts the annotation back in the composer', async () => {
+      expect(await screen.findByRole('button', { name: '1 annotation' }, { timeout: 5000 })).toBeTruthy();
+    }, 10_000);
+
+    it('puts the annotation back on the transcript', async () => {
+      await waitFor(() => expect(markers()).toEqual(['1']), { timeout: 5000 });
+    }, 10_000);
+  });
+
+  describe('when the person opens another thread before sending the annotation', () => {
+    beforeEach(async () => {
+      server.use(...baseHandlers());
+      let rendered: ReturnType<typeof render> | undefined;
+      await act(async () => {
+        rendered = render(renderThreadTree(history(), { threadId: 'thread-1' }));
+      });
+      await addToChat();
+      await screen.findByRole('button', { name: '1 annotation' });
+
+      await act(async () => {
+        rendered?.rerender(renderThreadTree(history(), { threadId: 'thread-2' }));
+      });
+    });
+
+    it('starts the other thread with an empty composer annotation list', () => {
+      expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
+    });
+
+    it('starts the other thread without annotation bubbles', () => {
+      expect(markers()).toEqual([]);
+    });
+  });
+});
+
 describe('TaskPanel', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'true';
@@ -1259,7 +1564,7 @@ describe('TaskPanel', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'track these tasks' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -1393,6 +1698,7 @@ describe('Thread signal-path user-message reconciliation', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'true';
     server.resetHandlers();
+    server.use(...baseHandlers());
   });
 
   it('keeps the same user-row DOM node when the data-user-message echo swaps the message id', async () => {
@@ -1446,7 +1752,7 @@ describe('Thread signal-path user-message reconciliation', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'echo reconciliation' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });

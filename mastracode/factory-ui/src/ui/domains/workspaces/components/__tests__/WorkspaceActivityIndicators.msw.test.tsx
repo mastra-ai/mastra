@@ -23,9 +23,6 @@ function stubWith(activeSessionIds: string[]) {
 
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
-      HttpResponse.json(fixtures.connectionsResponse),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json(fixtures.sessionsResponse),
     ),
@@ -90,7 +87,7 @@ describe('Workspace activity indicators', () => {
     renderSection();
 
     // The row must exist before the absence of its belt means anything.
-    const row = (await screen.findByRole('button', { name: workName })).closest('li');
+    const row = (await screen.findByRole('link', { name: workName })).closest('li');
     assert(row);
     expect(within(row).queryByRole('status', { name: `Agent working in ${workName}` })).not.toBeInTheDocument();
   });
@@ -108,7 +105,7 @@ describe('Workspace activity indicators', () => {
 
     renderSection();
 
-    expect(await screen.findByRole('button', { name: reviewName })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'factory/pr-99-authentication-refresh' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: reviewName })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'factory/pr-99-authentication-refresh' })).not.toBeInTheDocument();
   });
 });

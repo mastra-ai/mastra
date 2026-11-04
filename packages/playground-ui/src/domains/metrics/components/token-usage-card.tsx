@@ -2,9 +2,9 @@ import { useState } from 'react';
 import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
-import { BUCKET_AXIS } from '../lib/chart-axis';
+import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
-import { formatAxisCount, formatCount, formatUsd } from '../lib/chart-format';
+import { formatAxisCount, formatAxisUsd, formatCount, formatUsd } from '../lib/chart-format';
 import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
@@ -24,7 +24,15 @@ const TOKEN_SERIES: MetricsLineChartSeries[] = [
 ];
 const COST_SERIES: MetricsLineChartSeries[] = [{ dataKey: 'cost', label: 'Cost', color: CHART_COLORS.green }];
 
-const axisUsd = (value: number) => `$${value.toFixed(value < 10 ? 1 : 0)}`;
+const TITLE: Record<View, string> = {
+  tokens: 'Token usage',
+  cost: 'Model cost',
+};
+
+const VIEWS = [
+  { value: 'tokens', label: TITLE.tokens },
+  { value: 'cost', label: TITLE.cost },
+] as const;
 
 /** Tokens (input, cache reads, output) or model cost per bucket; a bar opens its traces. */
 export type TokenUsageCardProps = {
@@ -45,16 +53,12 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
   const series = isTokens ? TOKEN_SERIES : COST_SERIES;
 
   const layout = {
-    title: 'Token usage',
-    description: isTokens ? 'Input, cache reads and output.' : 'Estimated model spend.',
+    title: TITLE[view],
+    titleMenu: { value: view, onValueChange: setView, options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
     toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={series} />
-        <MetricsCard.Tabs<View> value={view} onValueChange={setView}>
-          <MetricsCard.Tab value="tokens">Tokens</MetricsCard.Tab>
-          <MetricsCard.Tab value="cost">Cost</MetricsCard.Tab>
-        </MetricsCard.Tabs>
       </MetricsCard.Toolbar>
     ),
   };
@@ -70,13 +74,8 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
   return (
     <ChartCard
       {...layout}
-      summary={
-        <MetricsCard.Summary
-          value={isTokens ? formatCount(tokens) : formatUsd(cost)}
-          label={isTokens ? 'tokens' : 'cost'}
-          isLoading={isLoading}
-        />
-      }
+      total={isTokens ? formatCount(tokens) : formatUsd(cost)}
+      isLoading={isLoading}
       isUpdating={isPlaceholderData}
     >
       <ChartArea isEmpty={!isLoading && tokens === 0 && cost === 0} emptyMessage="No model calls in this range.">
@@ -84,12 +83,13 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
           data={data}
           series={series}
           height="fill"
+          xLabels="edges"
           showLegend={false}
           valueFormatter={isTokens ? formatCount : formatUsd}
-          axisFormatter={isTokens ? formatAxisCount : axisUsd}
+          axisFormatter={isTokens ? formatAxisCount : formatAxisUsd}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}
           isLoading={isLoading}
-          {...BUCKET_AXIS}
+          {...EDGE_BUCKET_AXIS}
         />
       </ChartArea>
     </ChartCard>

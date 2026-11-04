@@ -14,7 +14,8 @@ import type {
 } from './types.js';
 
 export interface ResolvedProviderConfig {
-  endpoint: string;
+  endpoint?: string;
+  endpoints?: CustomConfig['endpoints'];
   headers: Record<string, string>;
   protocol: ExportProtocol;
 }
@@ -225,13 +226,25 @@ function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | n
 }
 
 function resolveCustomConfig(config: CustomConfig): ResolvedProviderConfig | null {
-  if (!config.endpoint) {
-    console.error('[OtelExporter] Custom configuration requires endpoint. Tracing will be disabled.');
+  if (config.endpoint !== undefined && config.endpoints !== undefined) {
+    console.error(
+      '[OtelExporter] Custom configuration accepts either endpoint or endpoints, never both. Export will be disabled.',
+    );
+    return null;
+  }
+  const hasEndpoint = config.endpoints
+    ? Boolean(config.endpoints.traces || config.endpoints.logs)
+    : Boolean(config.endpoint);
+  if (!hasEndpoint) {
+    console.error(
+      '[OtelExporter] Custom configuration requires endpoint or at least one signal in endpoints. Export will be disabled.',
+    );
     return null;
   }
 
   return {
     endpoint: config.endpoint,
+    ...(config.endpoints && { endpoints: config.endpoints }),
     headers: config.headers || {},
     protocol: config.protocol || 'http/json',
   };

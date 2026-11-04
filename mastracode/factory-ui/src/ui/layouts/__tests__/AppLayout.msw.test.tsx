@@ -3,8 +3,9 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { useSidebarHeaderSlots } from '../../domains/chat/components/useSidebarHeaderSlots';
@@ -18,7 +19,7 @@ function stubFactory() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory', repositories: [] }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory' } }),
@@ -32,6 +33,41 @@ function stubFactory() {
       HttpResponse.json({}),
     ),
   );
+}
+
+function stubRepository() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [
+              listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
+            ],
+          },
+        ],
+      }),
+    ),
+  );
+}
+
+function sidebarIsCollapsed() {
+  return screen.getByRole('separator', { name: /^Resize sidebar/ }).getAttribute('aria-valuetext') === 'collapsed';
+}
+
+function mockMobileViewport() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
 }
 
 function PageA() {
@@ -86,15 +122,19 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
     ],
     { initialEntries: [initialPath] },
   );
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
 describe('AppLayout', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders the sidebar once and swaps only the outlet between routes', async () => {
     stubFactory();
     renderApp();
 
-    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
+    const sidebarBeforeNavigation = await screen.findByRole('complementary', { name: 'Main sidebar' });
     expect(screen.getByRole('heading', { name: 'Page A' })).toBeInTheDocument();
     expect(screen.getAllByRole('complementary', { name: 'Main sidebar' })).toHaveLength(1);
 
@@ -102,37 +142,32 @@ describe('AppLayout', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
-    // Same DOM node: the sidebar was not remounted by the navigation.
-    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
+    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebarBeforeNavigation);
   });
 
-  it('links Activity from the sidebar and leaves retired Factory pages out of the Factory nav', async () => {
+  it('leaves retired Factory pages out of the sidebar', async () => {
     stubFactory();
     renderApp();
 
     const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
-    expect(await within(sidebar).findByRole('link', { name: /^Activity/ })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/activity`,
-    );
-    const nav = within(sidebar).getByRole('navigation', { name: 'Factory' });
-    for (const retired of ['Overview', 'Audit log', 'Supervisor']) {
-      expect(within(nav).queryByRole('link', { name: retired })).not.toBeInTheDocument();
+    await within(sidebar).findByRole('navigation', { name: 'Factory' });
+    for (const retired of ['Activity', 'Overview', 'Audit log', 'Supervisor']) {
+      expect(within(sidebar).queryByRole('link', { name: new RegExp(`^${retired}`) })).not.toBeInTheDocument();
     }
   });
 
-  it('shows one sidebar toggle: next to search while expanded, in the page header once collapsed', async () => {
+  it('shows one sidebar toggle: in the sidebar header while open, in the page header once collapsed', async () => {
     stubFactory();
     renderApp(`/factories/${FACTORY_ID}/slots`);
 
     const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
     await screen.findByRole('heading', { name: 'Slots page' });
-    const [expandedToggle, ...extraWhileExpanded] = screen.getAllByRole('button', { name: 'Toggle sidebar' });
-    expect(extraWhileExpanded).toHaveLength(0);
-    expect(sidebar).toContainElement(expandedToggle);
-    expect(expandedToggle).toHaveAttribute('aria-expanded', 'true');
+    const [openToggle, ...extraWhileOpen] = screen.getAllByRole('button', { name: 'Toggle sidebar' });
+    expect(extraWhileOpen).toHaveLength(0);
+    expect(sidebar).toContainElement(openToggle);
+    expect(openToggle).toHaveAttribute('aria-expanded', 'true');
 
-    await userEvent.click(expandedToggle);
+    await userEvent.click(openToggle);
 
     await waitFor(() => expect(within(sidebar).queryByRole('button', { name: 'Toggle sidebar' })).toBeNull());
     const [collapsedToggle, ...extraWhileCollapsed] = screen.getAllByRole('button', { name: 'Toggle sidebar' });
@@ -140,31 +175,80 @@ describe('AppLayout', () => {
     expect(collapsedToggle).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('opens a fresh draft from the sidebar New session button on every click', async () => {
+    stubFactory();
+    stubRepository();
+    const { router } = renderApp();
+    const draftPath = new RegExp(`^/factories/${FACTORY_ID}/user/new/[0-9a-f-]{36}$`);
+
+    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
+    await userEvent.click(await within(sidebar).findByRole('button', { name: 'New session' }));
+
+    await screen.findByRole('heading', { name: 'Draft' });
+    const firstDraftPath = router.state.location.pathname;
+    expect(firstDraftPath).toMatch(draftPath);
+
+    await userEvent.click(within(sidebar).getByRole('button', { name: 'New session' }));
+
+    await waitFor(() => expect(router.state.location.pathname).not.toBe(firstDraftPath));
+    expect(router.state.location.pathname).toMatch(draftPath);
+  });
+
+  it('closes the mobile drawer once New session opens a draft', async () => {
+    mockMobileViewport();
+    stubFactory();
+    stubRepository();
+    const { router } = renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open navigation menu' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+    await userEvent.click(await within(drawer).findByRole('button', { name: 'New session' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(`/factories/${FACTORY_ID}/user/new/`));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument());
+  });
+
   it('toggles the sidebar with [ but not on key repeat or while typing in a field', async () => {
     stubFactory();
     renderApp(`/factories/${FACTORY_ID}/slots`);
 
     await screen.findByRole('heading', { name: 'Slots page' });
-    // The toggle moves between the sidebar and the page header, so look it up each time.
-    const expanded = () => screen.getByRole('button', { name: 'Toggle sidebar' }).getAttribute('aria-expanded');
-    expect(expanded()).toBe('true');
+    expect(sidebarIsCollapsed()).toBe(false);
 
     await userEvent.keyboard('[[');
-    await waitFor(() => expect(expanded()).toBe('false'));
+    await waitFor(() => expect(sidebarIsCollapsed()).toBe(true));
 
-    // Holding the key must not flip it back on auto-repeat.
     fireEvent.keyDown(document.body, { key: '[', repeat: true });
-    expect(expanded()).toBe('false');
+    expect(sidebarIsCollapsed()).toBe(true);
 
     await userEvent.keyboard('[[');
-    await waitFor(() => expect(expanded()).toBe('true'));
+    await waitFor(() => expect(sidebarIsCollapsed()).toBe(false));
 
     const field = document.createElement('input');
     document.body.append(field);
     await userEvent.type(field, '[[');
     expect(field).toHaveValue('[');
-    expect(expanded()).toBe('true');
+    expect(sidebarIsCollapsed()).toBe(false);
     field.remove();
+  });
+
+  it('gives the page the whole window while the sidebar is collapsed', async () => {
+    stubFactory();
+    renderApp(`/factories/${FACTORY_ID}/slots`);
+    const mainCard = () => document.querySelector('[data-slot="main-card"]');
+    const shellBody = () => document.querySelector('[data-slot="app-shell-body"]');
+
+    await screen.findByRole('heading', { name: 'Slots page' });
+    expect(mainCard()).toHaveClass('lg:rounded-studio-frame');
+    expect(shellBody()).toHaveClass('lg:py-2');
+
+    await userEvent.keyboard('[[');
+    await waitFor(() => expect(mainCard()).not.toHaveClass('lg:rounded-studio-frame'));
+    expect(shellBody()).not.toHaveClass('lg:py-2');
+
+    await userEvent.keyboard('[[');
+    await waitFor(() => expect(mainCard()).toHaveClass('lg:rounded-studio-frame'));
+    expect(shellBody()).toHaveClass('lg:py-2');
   });
 
   it('keeps the shell mounted when switching between draft sessions', async () => {

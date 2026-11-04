@@ -1,10 +1,17 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import {
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
+import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   Composer as ComposerRoot,
   ComposerActions,
   ComposerBox,
+  ComposerHeader,
   ComposerInput,
   ComposerRing,
   ComposerSuggestions,
@@ -13,30 +20,34 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ImagePlus, Square } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
-import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatConnection } from '../context/useChatConnection';
-import { useChatModels } from '../context/useChatModels';
-import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
-import type { PendingImage } from '../context/ComposerImagesContext';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
-import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { useChatCommands } from '../context/ChatCommandsProvider';
+import type { PendingImage } from '../context/ComposerImagesContext';
+import { useChatConnection } from '../context/useChatConnection';
+import { useChatModels } from '../context/useChatModels';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
+import { useComposerConnectionNotice } from '../hooks/useComposerConnectionNotice';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
-import { commandRequiresReadySession } from '../services/commands';
+import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { StatusLine } from './StatusLine';
+import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
+import { ComposerPrimaryAction } from './ComposerPrimaryAction';
+import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
@@ -50,13 +61,16 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
+  const connectionNotice = useComposerConnectionNotice(status);
+  const connectionLost = connectionNotice !== undefined;
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
-  const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
+  const { isLoading: modelLoading, error: modelError } = useChatModels();
   const {
     commands,
     composerDraft: draft,
+    composerPreview: preview,
     composerInputRef: inputRef,
     setComposerDraft,
     runComposerCommand,
@@ -68,31 +82,39 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     baseUrl,
     enabled: sessionEnabled,
   };
+  const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
   const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
-  const liveRun = phase === 'working' && !preparingThreadId;
-  const createDraftSessionMutation = useCreateUserSessionFromDraft();
+  const liveRun = phase === 'working' && !preparingThreadId && sessionEnabled;
+  const createSessionFromDraft = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
-  const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
+  // A draft send waits for a model still loading, so only a model that failed to load holds it back.
+  const draftModelFailed = onUserDraft && modelError !== undefined;
+  const [heldDraftText, setHeldDraftText] = useState<string>();
+  const startingDraft = heldDraftText !== undefined;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    disabled: chatPreparing || planFeedback.pending,
+    disabled: chatPreparing || planFeedback.pending || startingDraft,
   });
-  const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
+  const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
+  const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
+  const shownText = preview?.text ?? draft;
+  const hasSubmittableDraft =
+    shownText.trim().length > 0 || annotations.length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
-    ? 'Give feedback on this plan…'
+    ? 'Give feedback on this plan'
     : liveRun
-      ? 'Steer the agent…'
-      : 'Ask Mastra Code…';
+      ? 'Steer the agent'
+      : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
+  const sendTitle = chatPreparing ? 'Initializing session…' : startingDraft ? 'Starting session…' : undefined;
 
   const updateDraft = setComposerDraft;
 
@@ -164,25 +186,39 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
+    if (onUserDraft && modelLoading && !isSlashCommand(text)) {
+      setHeldDraftText(text);
+      return;
+    }
+    const runsCommand = !planFeedback.pending && isSlashCommand(text);
+    const sentAnnotations = runsCommand ? [] : takeAnnotations();
     updateDraft('');
-    void handleInput(text).catch(error => {
+    void handleInput(text, sentAnnotations).catch(error => {
+      restoreAnnotations(sentAnnotations);
       if (planFeedback.pending) updateDraft(text);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
   };
 
+  const sendHeldDraft = useEffectEvent((text: string) => {
+    setHeldDraftText(undefined);
+    if (modelError) pushNotice(modelError.message, 'error');
+    else submitInput(text);
+  });
+  useEffect(() => {
+    if (heldDraftText !== undefined && !modelLoading) sendHeldDraft(heldDraftText);
+  }, [heldDraftText, modelLoading]);
+
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    if (sendDisabled) return;
-    const text = draft.trim();
-    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
-    submitInput(text);
+    if (sendDisabled || !hasSubmittableDraft) return;
+    submitInput(shownText.trim());
   };
 
   const commandMenu = useComposerCommands({
     commands,
-    value: draft,
+    value: shownText,
     onValueChange: updateDraft,
     inputRef,
     enabled: !planFeedback.pending,
@@ -200,13 +236,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   };
 
-  async function handleInput(text: string) {
+  async function handleInput(text: string, sentAnnotations: readonly ChatAnnotation[]) {
+    const message = formatAnnotatedMessage(text, sentAnnotations);
     if (planFeedback.pending) {
-      await planFeedback.submitFeedback(text);
+      await planFeedback.submitFeedback(message);
       setImages([]);
       return;
     }
-    if (onUserDraft && text.startsWith('/')) {
+    if (onUserDraft && isSlashCommand(text)) {
       if (commandRequiresReadySession(commands, text)) {
         updateDraft(text);
         pushNotice('This command needs a session. Send a prompt to create one first.');
@@ -217,31 +254,35 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await withPendingImages(files => createDraftSessionMutation.mutateAsync({ prompt: text, files }));
+        await withPendingImages(async files => createSessionFromDraft({ prompt: message, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
       }
       return;
     }
-    if (preparingThreadId && text.startsWith('/') && commandRequiresReadySession(commands, text)) {
+    if (preparingThreadId && isSlashCommand(text) && commandRequiresReadySession(commands, text)) {
       updateDraft(text);
       pushNotice('Commands run once the session is ready.');
       return;
     }
     if (await runComposerCommand(text)) return;
     if (liveRun) {
-      await steer(text);
+      await steer(message);
       return;
     }
-    await withPendingImages(files => send(text, files));
+    await withPendingImages(files => send(message, files));
   }
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing}>
+      <ComposerHeader open={connectionNotice !== undefined}>
+        {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
+      </ComposerHeader>
+      <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
+          <ComposerAnnotations />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             {...commandMenu.inputProps}
@@ -250,6 +291,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onPaste={onPaste}
             placeholder={placeholder}
             disabled={textareaDisabled}
+            readOnly={preview !== undefined}
+            style={preview ? { height: preview.height } : undefined}
             variant={variant}
             aria-label="Message"
           />
@@ -275,27 +318,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {liveRun && (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  onClick={() => void abortMutation.mutateAsync()}
-                  aria-label="Abort"
-                >
-                  <Square size={14} />
-                </Button>
-              )}
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={
-                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
-                }
-                aria-label="Send message"
-                title={sendTitle}
-              >
-                <ArrowUp size={16} />
-              </Button>
+              <ComposerPrimaryAction
+                showAbort={liveRun && !hasSubmittableDraft}
+                sendDisabled={sendDisabled || !hasSubmittableDraft}
+                sendTitle={sendTitle}
+                onAbort={() => void abortMutation.mutateAsync()}
+              />
             </ButtonsGroup>
           </ComposerActions>
         </ComposerBox>

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
@@ -36,21 +37,16 @@ const session: FactoryUserSession = {
 function useFactoryFixtures(sessions: () => FactoryUserSession[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
+            id: 'fp-1',
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
                 sandboxWorkdir: '/workspace/hello',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -84,30 +80,40 @@ async function openTitleAction(user: ReturnType<typeof userEvent.setup>, name: s
 }
 
 describe('Session title regeneration', () => {
-  it.each(['user/my-feature', 'slack/1791936483-798759'])(
-    'renames the owned %s row with the generated title',
-    async branch => {
-      let sessions = [{ ...session, branch }];
-      useFactoryFixtures(() => sessions);
-      server.use(
-        http.get(`${TEST_BASE_URL}/auth/me`, () =>
-          HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: session.userId } }),
-        ),
-        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () => {
-          sessions = [{ ...session, branch, title: 'Factory audit log review' }];
-          return HttpResponse.json({ title: 'Factory audit log review' });
-        }),
-      );
+  it.each([
+    ['user/my-feature', 'dropdown'],
+    ['user/my-feature', 'context'],
+    ['slack/1791936483-798759', 'dropdown'],
+    ['slack/1791936483-798759', 'context'],
+  ])('renames the owned %s row from the %s menu', async (branch, entry) => {
+    let sessions = [{ ...session, branch }];
+    useFactoryFixtures(() => sessions);
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: session.userId } }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () => {
+        sessions = [{ ...session, branch, title: 'Factory audit log review' }];
+        return HttpResponse.json({ title: 'Factory audit log review' });
+      }),
+    );
 
-      const user = userEvent.setup();
-      const { client } = renderSection();
+    const user = userEvent.setup();
+    const { client } = renderSection();
 
+    if (entry === 'context') {
+      await user.pointer({
+        target: await screen.findByRole('link', { name: session.title }),
+        keys: '[MouseRight]',
+      });
+      await user.click(await screen.findByRole('menuitem', { name: 'Regenerate title' }));
+    } else {
       await openTitleAction(user, 'Tell me what have been done in the factory since');
-      await waitForMutationsIdle(client);
+    }
+    await waitForMutationsIdle(client);
 
-      expect(await screen.findByRole('button', { name: 'Factory audit log review' })).toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByRole('link', { name: 'Factory audit log review' })).toBeInTheDocument();
+  });
 
   it('keeps a pending session disabled while another session finishes first', async () => {
     const other: FactoryUserSession = { ...session, id: 'row-2', sessionId: 'sess-2', title: 'Second session' };

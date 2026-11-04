@@ -6,9 +6,11 @@ import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemSubscription,
 } from '../storage/domains/work-items/base.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { splitCardMetadata, workItemProviderAdapter } from '../work-items/providers/index.js';
 import { MAX_ERROR, MAX_TEXT, createFactoryReadTools } from './read-tools.js';
 import type { FactoryReadToolDependencies } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
@@ -26,14 +28,13 @@ const scope: FactoryToolScope = {
 
 let clock = Date.parse('2026-10-01T00:00:00Z');
 
-function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
+function item(overrides: Partial<Card> & { id: string }): Card {
   clock += 60_000;
-  return {
+  const card = {
     orgId: 'org-1',
     factoryProjectId: 'project-1',
     board: null,
-    externalSource: null,
-    claimKey: null,
+    externalSource: { integrationId: 'github', type: 'issue', externalId: overrides.id },
     parentWorkItemId: null,
     title: `Item ${overrides.id}`,
     stages: ['intake'],
@@ -42,16 +43,27 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     metadata: null,
     triageType: null,
     autonomyArmedAt: null,
-    plansPreapprovedAt: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdBy: 'someone-else',
     createdAt: new Date(clock),
     updatedAt: new Date(clock),
     ...overrides,
-  } as WorkItemRow;
+  };
+  const workItem = createProviderWorkItemForTests({
+    id: card.id,
+    title: card.title,
+    source: card.externalSource,
+    metadata: card.metadata,
+  });
+  return {
+    ...card,
+    workItemId: workItem.id,
+    parentBoardItemId: card.parentWorkItemId,
+    metadata: splitCardMetadata(card.metadata, workItemProviderAdapter(card.externalSource).providerMetadataKeys).board,
+    workItem,
+  };
 }
 
 function binding(workItemId: string, role: string, status: 'active' | 'revoked' = 'active'): FactoryRunBindingRecord {
@@ -109,7 +121,7 @@ function setup({
   comments = [],
   subscriptions = [],
 }: {
-  items?: WorkItemRow[];
+  items?: Card[];
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
@@ -225,6 +237,22 @@ describe('factory_list_work_items', () => {
     const result = await run<ListResult>('factory_list_work_items', {});
     expect(result.items.find(row => row.id === 'b')?.activeWorker).toEqual({ role: 'work', sessionId: 'session-b' });
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
+  });
+
+  it('links each card on its board when a public URL is configured', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+    try {
+      const { run } = setup({ items: rows });
+      const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
+      expect(result.items.find(row => row.id === 'a')?.url).toBe(
+        'https://factory.example.com/factories/project-1/work?item=a',
+      );
+      expect(result.items.find(row => row.id === 'c')?.url).toBe(
+        'https://factory.example.com/factories/project-1/review?item=c',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('defaults to 25 rows, caps at 50 and flags truncation', async () => {
@@ -349,14 +377,37 @@ describe('factory_inspect_work_item', () => {
   });
 });
 
+const TRIAGED = { triage: { sessionId: 's', threadId: 't', branch: 'factory/item', startedBy: 'factory' } };
+
 describe('factory_list_attention', () => {
   it('groups failed decisions by failure, lists proposals and held items', async () => {
     const items = [
       item({ id: 'x', metadata: { number: 1 } }),
       item({ id: 'y' }),
-      item({ id: 'held', stages: ['triage'], triageType: 'feature' }),
-      item({ id: 'bug', stages: ['triage'], triageType: 'bug' }),
-      item({ id: 'accepted', stages: ['triage'], triageType: 'feature', acceptedAt: new Date() }),
+      item({ id: 'held', stages: ['intake'], sessions: TRIAGED }),
+      item({ id: 'labeled', stages: ['intake'], metadata: { labels: ['Status: Needs Approval'] } }),
+      item({ id: 'untriaged', stages: ['intake'] }),
+      item({ id: 'triaging', stages: ['triage'], sessions: TRIAGED }),
+      item({ id: 'moved-on', stages: ['planning'], sessions: TRIAGED }),
+      // Self-review parked this card after it was built: it resumes, it is not waiting on triage.
+      item({
+        id: 'parked',
+        stages: ['intake'],
+        sessions: TRIAGED,
+        stageHistory: ['intake', 'triage', 'planning', 'execute', 'review', 'intake'].map(stage => ({
+          stage,
+          enteredAt: '2026-10-01T00:00:00Z',
+          by: 'agent:binding-1',
+        })),
+      }),
+      item({
+        id: 'review-board',
+        board: 'review',
+        stages: ['intake'],
+        sessions: TRIAGED,
+      }),
+      // A classification and acceptance stamped under the old model no longer decide anything.
+      item({ id: 'legacy', stages: ['triage'], triageType: 'feature request' }),
     ];
     const { run } = setup({
       items,
@@ -381,7 +432,8 @@ describe('factory_list_attention', () => {
     expect(result.incidents[0]!.decisions.map(row => row.canRetry)).toEqual([true, true]);
     expect(result.incidents[1]!.decisions[0]!.canRetry).toBe(false);
     expect(result.proposals).toMatchObject([{ id: 'p1', number: 1 }]);
-    expect(result.held.map(row => row.workItemId)).toEqual(['held']);
+    expect(result.held.map(row => row.workItemId)).toEqual(['held', 'labeled']);
+    expect(result.held[0]).not.toHaveProperty('triageType');
     expect(result.truncated).toBe(false);
   });
 

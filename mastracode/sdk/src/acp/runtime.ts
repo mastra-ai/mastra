@@ -1,5 +1,6 @@
 import { RequestError } from '@agentclientprotocol/sdk';
 import type { NewSessionRequest } from '@agentclientprotocol/sdk';
+import { resolveSubagentsSetting } from '../agents/subagents/index.js';
 import { createMastraCode } from '../index.js';
 import type { MastraCodeConfig } from '../index.js';
 import type { McpServerConfig } from '../mcp/types.js';
@@ -29,6 +30,7 @@ export async function createAcpSession(
         : { url: server.url, headers: Object.fromEntries(server.headers.map(item => [item.name, item.value])) };
     return [server.name, config] as const;
   });
+  const settings = loadSettings();
   const result = await createMastraCode({
     coAuthor: options.coAuthor,
     cwd: request.cwd,
@@ -40,13 +42,15 @@ export async function createAcpSession(
     mcpServers: Object.fromEntries(servers),
     // ACP clients can answer permission requests, but have no free-text tool response method.
     disabledTools: ['ask_user'],
+    // ACP approves submit_plan without starting a goal.
+    planApprovalStartsGoal: false,
     unixSocketPubSub: false,
     disableMcp: false,
     disableHooks: false,
     // Project environment files must not mutate other ACP sessions.
     disableEnvFile: true,
+    subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
   });
-  const settings = loadSettings();
   let cleanupPromise: Promise<void> | undefined;
   const runtime: AcpSessionRuntime = {
     controller: result.controller,

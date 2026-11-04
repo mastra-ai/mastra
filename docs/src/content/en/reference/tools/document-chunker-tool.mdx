@@ -58,7 +58,7 @@ const { chunks } = await chunker.execute()
   content={[
   {
     name: 'strategy',
-    type: "'recursive'",
+    type: "'character' | 'recursive' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence' | 'semantic-markdown'",
     description: 'The chunking strategy to use',
     isOptional: true,
     defaultValue: "'recursive'",

@@ -3,7 +3,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -11,7 +11,7 @@ import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { stubSessionsFactory, testChatSession } from './fixtures/sessionsSection';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
-import { pickSessionProperty } from './fixtures/sessionProperties';
+import { groupSessionsByBoard, pickSessionProperty } from './fixtures/sessionProperties';
 
 const factoryProjectId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
@@ -109,11 +109,13 @@ function renderSection(openSessionId?: string) {
 async function reviewRowLabels(client: QueryClient): Promise<(string | null)[]> {
   await waitForMutationsIdle(client);
   const group = await screen.findByRole('region', { name: 'Review sessions' });
-  const rows = await within(group).findAllByRole('button', { name: /^factory\/pr-\d+$/ });
+  const rows = await within(group).findAllByRole('link', { name: /^factory\/pr-\d+$/ });
   return rows.map(row => row.getAttribute('aria-label'));
 }
 
 describe('Sessions sidebar order', () => {
+  beforeEach(groupSessionsByBoard);
+
   it('sinks a merged session below the open ones and keeps the rest newest-first', async () => {
     const oldestOpen = reviewSession(101, '2026-07-23T09:00:00.000Z');
     const newestOpen = reviewSession(102, '2026-07-23T11:00:00.000Z');
@@ -247,6 +249,9 @@ describe('Sessions sidebar order', () => {
 
     const remounted = renderSection();
     expect(await reviewRowLabels(remounted.client)).toEqual(byLastUpdate);
-    expect(JSON.parse(localStorage.getItem('mastracode.sessionListView') ?? '{}')).toEqual({ sort: 'updated' });
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionListView') ?? '{}')).toEqual({
+      groupBy: 'board',
+      sort: 'updated',
+    });
   });
 });

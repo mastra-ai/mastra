@@ -125,6 +125,7 @@ for (const engine of ['durable', 'evented'] as const) {
           STORAGE_URL: storage.storageUrl,
           LLM_URL: llm.url.replace(/\/+$/, ''),
           ENGINE: engine,
+          PREWRAPPED_PUBSUB: engine === 'evented' ? '1' : '0',
         };
         const start = (nodeId: string) =>
           new Node(
@@ -158,6 +159,8 @@ for (const engine of ['durable', 'evented'] as const) {
         const types = await observer.observeToClose('finished', runId);
 
         expect(observer.textOf('finished')).toBe('Finished elsewhere.');
+        expect(types.filter(type => type === 'text-delta')).toHaveLength(1);
+        expect(types.filter(type => type === 'finish')).toHaveLength(1);
         expect(types.at(-1)).toBe('finish');
       });
 

@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
-import { screen, waitFor } from '@testing-library/react';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -13,6 +13,7 @@ import { ChatTranscriptContext } from '../../ui/domains/chat/context/ChatTranscr
 import type { ChatTranscriptApi } from '../../ui/domains/chat/context/ChatTranscriptContext';
 import { initialTranscript } from '../../ui/domains/chat/services/transcript';
 import { useRouteThreadSync } from '../useRouteThreadSync';
+import { useAgentControllerConnection } from '../../ui/domains/chat/hooks/useAgentControllerConnection';
 
 const ROUTE_THREAD_ID = 'route-thread';
 const LATEST_THREAD_ID = 'latest-thread';
@@ -139,5 +140,77 @@ describe('useRouteThreadSync', () => {
     );
     expect(onSwitchThread).toHaveBeenCalledWith(LATEST_THREAD_ID);
     expect(transcript.pushNotice).not.toHaveBeenCalled();
+  });
+
+  it('switches the session back when returning to its primary thread', async () => {
+    const PRIMARY = 'session-1';
+    const SECONDARY = 'secondary-thread';
+    let activeThreadId = PRIMARY;
+    const switches: string[] = [];
+    server.use(
+      http.post(`${API}/sessions`, () =>
+        HttpResponse.json({ controllerId: 'code', resourceId: 'factory-1', threadId: PRIMARY }),
+      ),
+      http.get(`${API}/sessions/:sessionId/threads`, () =>
+        HttpResponse.json({ threads: [{ id: PRIMARY }, { id: SECONDARY }] }),
+      ),
+      http.get(`${API}/sessions/:sessionId`, ({ request }) =>
+        HttpResponse.json({
+          controllerId: 'code',
+          resourceId: 'factory-1',
+          threadId: new URL(request.url).searchParams.get('threadId') ?? activeThreadId,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.post(`${API}/sessions/:sessionId/thread`, async ({ request }) => {
+        activeThreadId = ((await request.json()) as { threadId: string }).threadId;
+        switches.push(activeThreadId);
+        return HttpResponse.json({ ok: true });
+      }),
+      http.get(
+        `${API}/sessions/:sessionId/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    function LiveConnection({ children }: { children: ReactNode }) {
+      const connection = useAgentControllerConnection({
+        agentControllerId: 'code',
+        sessionId: PRIMARY,
+        resourceId: 'factory-1',
+        sessionThreadId: PRIMARY,
+        baseUrl: TEST_BASE_URL,
+        onEvent: () => {},
+      });
+      return <ChatConnectionContext.Provider value={connection}>{children}</ChatConnectionContext.Provider>;
+    }
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/factory-1/workspaces/${PRIMARY}/threads/${SECONDARY}`]}>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+            element={
+              <ChatSessionContext.Provider value={sessionValue(PRIMARY, true)}>
+                <LiveConnection>
+                  <ChatTranscriptContext.Provider value={transcript}>
+                    <RouteSync />
+                    <Link to={`/factories/factory-1/workspaces/${PRIMARY}/threads/${PRIMARY}`}>Primary thread</Link>
+                  </ChatTranscriptContext.Provider>
+                </LiveConnection>
+              </ChatSessionContext.Provider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(switches).toEqual([SECONDARY]), { timeout: 3000 });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Primary thread' }));
+
+    await waitFor(() => expect(switches).toEqual([SECONDARY, PRIMARY]), { timeout: 3000 });
   });
 });

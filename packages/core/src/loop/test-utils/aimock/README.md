@@ -182,7 +182,7 @@ pnpm --dir workflows/inngest test:aimock
 
 `test:aimock` selects the `e2e:workflows/inngest:aimock` Vitest project. It starts its own local app and dev servers; no cloud credentials are needed. `AIMOCK_SCENARIOS` accepts scenario filename stems or a brace glob. Without it, the project runs all shared scenarios. `AIMOCK_INNGEST_WORKERS` defaults to four; use one for serial regression runs.
 
-The approval and resume scenarios include expected-failure pins for duplicate approval output (#27925) and missing resumed tool-call history (#27926). Vitest fails if a pinned test unexpectedly passes, so an upstream fix requires updating the pin.
+The approval scenarios include an expected-failure pin for duplicate approval output (#27925). Vitest fails if a pinned test unexpectedly passes, so an upstream fix requires updating the pin.
 
 ### Parity mode (`describeParity` / `expectParity`)
 

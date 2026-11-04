@@ -148,10 +148,10 @@ const useHeaderGatedHandler = (authorization: string) => {
 };
 
 const saveAuthorizationHeader = (value: string) => {
-  fireEvent.click(screen.getByRole('button', { name: 'Add Header' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
   fireEvent.change(screen.getByPlaceholderText('e.g. Authorization'), { target: { value: 'Authorization' } });
   fireEvent.change(screen.getByPlaceholderText('e.g. Bearer <token>'), { target: { value } });
-  fireEvent.submit(screen.getByRole('button', { name: 'Save Headers' }).closest('form')!);
+  fireEvent.submit(screen.getByRole('button', { name: 'Save headers' }).closest('form')!);
 };
 
 afterEach(() => {
@@ -187,7 +187,7 @@ describe('AuthRequired', () => {
 
       await renderAuthRequiredAt('/agents');
 
-      expect(screen.getByRole('button', { name: 'Add Header' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Add header' })).toBeDefined();
     });
 
     // The header form has no platform carve-out: a header-only auth provider
@@ -199,7 +199,7 @@ describe('AuthRequired', () => {
 
         await renderAuthRequiredAt('/agents');
 
-        expect(screen.getByRole('button', { name: 'Add Header' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Add header' })).toBeDefined();
       });
     });
 

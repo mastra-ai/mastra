@@ -1,3 +1,4 @@
+import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annotations';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode, RefObject } from 'react';
@@ -58,15 +59,16 @@ export function SessionChatSurface({
           <div ref={contentRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
             {contentOverlay}
             <ChatShell.Content className="gap-0 pt-6">
-              <ChatShell.Column className="flex-1">
+              <ChatShell.Transcript className="flex-1">
+                <TranscriptAnnotations />
                 <ChatMessageBoundary showPreparation={false}>
                   <TranscriptHistoryLoader />
                   {transcript.entries.length === 0 && emptyState}
-                  <Transcript tail={<ActivityLine />} />
+                  <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
                 </ChatMessageBoundary>
-              </ChatShell.Column>
+              </ChatShell.Transcript>
             </ChatShell.Content>
-            <ChatShell.Dock>
+            <ChatShell.Dock className="pb-[calc(var(--chat-gutter)+env(safe-area-inset-bottom))]">
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />

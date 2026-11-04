@@ -263,6 +263,13 @@ const connectionListSchema = z.object({
  */
 export const catalogAuthFieldSchema = z.object({
   name: z.string(),
+  /**
+   * Where the value goes in a headless auth call: `credentials` are
+   * exchanged with the provider (API keys, passwords), `params` configure
+   * the flow (e.g. an MCP server URL). Absent on older platforms; clients
+   * treat missing as `credentials`.
+   */
+  target: z.enum(['credentials', 'params']).nullish(),
   label: z.string().nullish(),
   description: z.string().nullish(),
   placeholder: z.string().nullish(),
@@ -291,6 +298,13 @@ export type IntegrationCatalogEntry = z.infer<typeof integrationCatalogEntrySche
 const integrationCatalogResponseSchema = z.object({
   integrations: z.array(integrationCatalogEntrySchema),
 });
+
+const projectIntegrationSettingsResponseSchema = z.object({
+  /** Null inherits the full public catalog; an empty array explicitly disables end-user connections. */
+  endUserProviders: z.array(z.string()).nullable(),
+});
+
+export type ProjectIntegrationSettings = z.infer<typeof projectIntegrationSettingsResponseSchema>;
 
 /**
  * Secondary access token minted by the vendor alongside the primary oauth2
@@ -367,6 +381,31 @@ export async function listIntegrations(client: ResolvedClient): Promise<Integrat
     throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
   }
   return parsed.data.integrations;
+}
+
+export async function getProjectIntegrationSettings(
+  client: ResolvedClient,
+  projectId: string,
+): Promise<ProjectIntegrationSettings> {
+  const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/integration-settings`);
+  if (response.status === 404) {
+    throw new MastraConnectError('platform_error', `Integration settings were not found for project ${projectId}.`, {
+      status: 404,
+    });
+  }
+  if (!response.ok) {
+    await throwPlatformError(response, `retrieving integration settings for project ${projectId}`);
+  }
+  const parsed = projectIntegrationSettingsResponseSchema.safeParse(
+    await parsePlatformJson(response, `retrieving integration settings for project ${projectId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected integration settings shape for project ${projectId}.`,
+    );
+  }
+  return parsed.data;
 }
 
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
@@ -494,13 +533,28 @@ export async function proxyRequest(
   return (await proxyRequestWithResponse(client, connectionId, options)).data;
 }
 
+/** Decoded key of one raw `key=value` query pair. */
+function queryKey(pair: string): string {
+  const raw = pair.split('=', 1)[0]!.replace(/\+/g, ' ');
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 /** Preserves HTTP metadata for tools with status-dependent provider contracts. */
 export async function proxyRequestWithResponse(
   client: ResolvedClient,
   connectionId: string,
   options: ProxyRequestOptions,
 ): Promise<ProxyResponse> {
-  const cleanPath = options.path.replace(/^\/+/, '');
+  // A path may carry its own query string (e.g. a provider next-page link).
+  // Its pairs are kept byte-for-byte (signed or oddly encoded links still
+  // work); a pair is dropped only when `options.query` sets the same key, so
+  // a parameter is never sent twice and the URL never gets a second `?`.
+  const [rawPath = '', ...rawQueryParts] = options.path.split('#', 1)[0]!.split('?');
+  const cleanPath = rawPath.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
       'invalid_options',
@@ -516,7 +570,12 @@ export async function proxyRequestWithResponse(
       search.set(key, String(value));
     }
   }
-  const queryString = search.size > 0 ? `?${search.toString()}` : '';
+  const pathPairs = rawQueryParts
+    .join('?')
+    .split('&')
+    .filter(pair => pair !== '' && !search.has(queryKey(pair)));
+  const queryParts = [...pathPairs, ...(search.size > 0 ? [search.toString()] : [])];
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
   // The platform authenticates proxy requests with the project token and
@@ -535,13 +594,21 @@ export async function proxyRequestWithResponse(
     headers['base-url-override'] = options.baseUrlOverride;
   }
   const init: RequestInit = { method: options.method, headers };
+  const hasContentType = () => Object.keys(headers).some(name => name.toLowerCase() === 'content-type');
   if (typeof options.body === 'string') {
     // Pre-encoded payloads (multipart, form-encoded) go out unchanged with
     // the caller's content type; only JSON encoding is applied automatically.
-    if (!Object.keys(headers).some(name => name.toLowerCase() === 'content-type')) {
+    if (!hasContentType()) {
       headers['content-type'] = 'text/plain';
     }
     init.body = options.body;
+  } else if (options.body instanceof ArrayBuffer || options.body instanceof Uint8Array) {
+    // Buffer extends Uint8Array, so provider file uploads reach the proxy as
+    // raw bytes instead of being JSON-encoded into an object of numeric keys.
+    if (!hasContentType()) {
+      headers['content-type'] = 'application/octet-stream';
+    }
+    init.body = options.body as RequestInit['body'];
   } else if (options.body !== undefined) {
     headers['content-type'] = 'application/json';
     init.body = JSON.stringify(options.body);
@@ -601,8 +668,19 @@ export async function proxyRequestWithResponse(
 export const connectSessionSchema = z.object({
   connectionId: z.string(),
   integrationId: z.string(),
-  connectUrl: z.string(),
-  sessionToken: z.string(),
+  /**
+   * Vendor connect link. The platform nulls this for resource-scoped
+   * sessions: their link is a bearer capability served only by the launch
+   * gate (`getConnectUrl`) under a matching resource assertion, so it never
+   * appears in a creation response that could reach a browser.
+   */
+  connectUrl: z.string().nullish(),
+  /**
+   * Nango connect session token. Nulled by the platform for resource-scoped
+   * sessions for the same reason as `connectUrl`: the token alone can open
+   * the vendor Connect UI, so it is an equivalent launch capability.
+   */
+  sessionToken: z.string().nullish(),
   expiresAt: z.string(),
 });
 
@@ -637,6 +715,44 @@ export async function createProjectConnectSession(
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected connect-session shape for ${integrationId}.`,
+    );
+  }
+  return parsed.data;
+}
+
+export const connectUrlSchema = z.object({
+  connectUrl: z.string(),
+  expiresAt: z.string(),
+});
+
+export type ConnectUrl = z.infer<typeof connectUrlSchema>;
+
+/**
+ * Fetches the vendor connect link for a pending resource-scoped connection
+ * from the platform's launch gate. The platform serves it only while the
+ * session is pending and unexpired, and only when the client's
+ * `x-mastra-resource-id` assertion matches the row — any mismatch is a 404,
+ * which surfaces here as `connection_not_found`. This is how the browser's
+ * popup enters OAuth: the link itself never reaches browser-visible state.
+ */
+export async function getConnectUrl(client: ResolvedClient, connectionId: string): Promise<ConnectUrl> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/connect-url`);
+  if (response.status === 404) {
+    throw new MastraConnectError(
+      'connection_not_found',
+      `No launchable connect session found for connection ${connectionId}.`,
+    );
+  }
+  if (!response.ok) {
+    await throwPlatformError(response, `fetching the connect URL for ${connectionId}`);
+  }
+  const parsed = connectUrlSchema.safeParse(
+    await parsePlatformJson(response, `fetching the connect URL for ${connectionId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected connect-url shape for ${connectionId}.`,
     );
   }
   return parsed.data;

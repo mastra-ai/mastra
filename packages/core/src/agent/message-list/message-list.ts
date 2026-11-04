@@ -121,21 +121,27 @@ function mergeBackgroundTasks(
 /**
  * Returns `live` with every tool part that would not move its stored counterpart forward turned
  * into a bare call. The merger then uses it only to anchor surrounding parts: a stored outcome
- * stays canonical, and a stale or edited echo can't overwrite it. Live state may only fill in a
- * call the stored copy still has pending.
+ * stays canonical, and a stale or edited echo can't overwrite it. Live state may fill in a
+ * pending call or advance a background result from running to completed or failed.
  */
 function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
-  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  const storedParts = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
-    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+    if (part.type === 'tool-invocation') storedParts.set(part.toolInvocation.toolCallId, part);
   }
-  if (storedStates.size === 0) return live;
+  if (storedParts.size === 0) return live;
 
   let changed = false;
   const parts = live.content.parts.map(part => {
     if (part.type !== 'tool-invocation') return part;
-    const storedState = storedStates.get(part.toolInvocation.toolCallId);
-    if (!storedState || advancesToolInvocationState(storedState, part.toolInvocation.state)) return part;
+    const storedPart = storedParts.get(part.toolInvocation.toolCallId);
+    if (!storedPart || advancesToolInvocationState(storedPart.toolInvocation.state, part.toolInvocation.state))
+      return part;
+    const storedTask = storedPart.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+    const liveTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+    if (storedTask?.status === 'running' && (liveTask?.status === 'completed' || liveTask?.status === 'failed')) {
+      return part;
+    }
     changed = true;
     const { toolCallId, toolName, args } = part.toolInvocation;
     return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
@@ -1479,13 +1485,14 @@ export class MessageList {
           this.toAIV5UIMessages(this.response.db(), { transformToolPayloads: false }),
           this.messages,
         ).filter(m => m.role === `tool` || m.role === `assistant`),
-      modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
+      modelContent: (stepNumber?: number, stepToolCallIds?: string[]): AIV5Type.StepResult<any>['content'] => {
         if (typeof stepNumber === 'number') {
           // Delegate to StepContentExtractor for step-specific content extraction
           return StepContentExtractor.extractStepContent(
             this.response.aiV5.ui(),
             stepNumber,
             this.response.aiV5.stepContent,
+            stepToolCallIds,
           );
         }
 

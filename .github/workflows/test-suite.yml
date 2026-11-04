@@ -9,10 +9,10 @@ on:
       has_code:
         required: true
         type: string
-      unit_test_files:
+      has_unit_tests:
         required: false
         type: string
-        default: ''
+        default: 'false'
       e2e_test_files:
         required: false
         type: string
@@ -21,6 +21,10 @@ on:
         required: false
         type: string
         default: 'true'
+      durable_streams_changed:
+        required: false
+        type: string
+        default: 'false'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -46,6 +50,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -92,9 +97,9 @@ jobs:
 
   affected-unit-test:
     name: Affected UNIT Test
-    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.unit_test_files != ''
+    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -103,6 +108,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -133,15 +139,18 @@ jobs:
           path: /tmp/affected-outputs
 
       - name: Run affected tests
+        # One vitest run for the whole list. xargs would split a long list into several runs
+        # that overwrite each other's blob report.
         run: |
-          tr '\n' '\0' < /tmp/affected-outputs/unit_test_files.txt \
-            | xargs -0 pnpm vitest run \
-                --project 'unit:*' --project 'typecheck:*' \
-                --reporter=blob \
-                --reporter=verbose \
-                --reporter=github-actions \
-                --outputFile.blob=.vitest-reports/blob-unit-affected.json \
-                --passWithNoTests
+          mapfile -t test_files < /tmp/affected-outputs/unit_test_files.txt
+          pnpm vitest run \
+            --project 'unit:*' --project 'typecheck:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+            --passWithNoTests \
+            "${test_files[@]}"
 
       - name: Upload test results
         if: always()
@@ -168,6 +177,7 @@ jobs:
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout PR code
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -227,6 +237,21 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+  # Durable takeover runs against real Redis and Postgres. It reports as its own check and is
+  # deliberately kept out of merge-reports: it is a multi-process SIGTERM/SIGKILL suite whose
+  # flake rate has not been measured, so a red run must not block a merge.
+  durable-streams:
+    name: Durable Stream Tests
+    if: inputs.has_code == 'true' && inputs.durable_streams_changed == 'true'
+    uses: ./.github/workflows/test-durable-streams.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ inputs.head_sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
   merge-reports:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
@@ -235,14 +260,15 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
 
     steps:
       - name: Skip tests when no test selection is needed
-        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.unit_test_files == '' && inputs.e2e_test_files == '')
+        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.has_unit_tests != 'true' && inputs.e2e_test_files == '')
         run: echo "No unit or E2E tests selected; skipping report merge."
 
       - name: Checkout repo
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
@@ -250,11 +276,11 @@ jobs:
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download test results
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: vitest-blob-*
@@ -262,5 +288,25 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
+
+      # A test job that failed or was cancelled before uploading its blob would otherwise
+      # be missing from the merged report, and this required check would pass without it.
+      - name: Require every test job to finish
+        if: always()
+        env:
+          UNIT: ${{ needs.unit-test.result }}
+          AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
+          E2E: ${{ needs.e2e-test.result }}
+        run: |
+          status=0
+          for job in UNIT AFFECTED_UNIT E2E; do
+            result="${!job}"
+            echo "$job: $result"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "::error::$job test job ended with '$result'; its tests did not all run."
+              status=1
+            fi
+          done
+          exit $status

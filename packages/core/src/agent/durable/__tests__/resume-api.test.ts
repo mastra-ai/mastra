@@ -1335,7 +1335,7 @@ describe('Observe API', () => {
         try {
           expect(subscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
           const fullOutput = ownerResult.output.getFullOutput();
-          await emitFinishEvent(cachingPubsub, runId, {
+          await emitFinishEvent(producer.pubsub, runId, {
             output: {
               text: 'Private producer answer',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -1395,13 +1395,13 @@ describe('Observe API', () => {
         const fullOutput = result.output.getFullOutput();
 
         try {
-          await emitChunkEvent(cachingPubsub, runId, {
+          await emitChunkEvent(producer.pubsub, runId, {
             type: 'text-delta',
             runId,
             from: 'AGENT',
             payload: { id: 'observed-text', text: 'Live observer answer' },
           });
-          await emitFinishEvent(cachingPubsub, runId, {
+          await emitFinishEvent(producer.pubsub, runId, {
             output: {
               text: 'Live observer answer',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -1474,7 +1474,7 @@ describe('Observe API', () => {
         });
         result = await owner.observe(runId);
         const fullOutput = result.output.getFullOutput();
-        await emitFinishEvent(cachingPubsub, runId, {
+        await emitFinishEvent(owner.pubsub, runId, {
           output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
           stepResult: { reason: 'stop', warnings: [], isContinued: false },
         });

@@ -2,10 +2,12 @@
  * Peer for om-resume-prompt.test.ts (#27614). One process of a durable agent with
  * Observational Memory on a shared LibSQL file, driven over IPC by the test.
  *
- * argv: <dbUrl> <engine: durable|evented> <mode: hang|normal>
- * In `hang` mode the final model call never resolves, so the test can SIGKILL
- * the process while the turn is in flight.
+ * argv: <dbUrl> <engine: normal|durable|evented|fs> <mode: hang|normal> [aimockUrl]
+ * When aimockUrl is provided, the actor uses AIMock over HTTP. In `hang` mode
+ * the scripted actor blocks on the final call; the AIMock test holds its final
+ * response long enough to SIGKILL the worker while the turn is in flight.
  */
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -38,6 +40,7 @@ export type PeerEvent =
   | { type: 'lapsed' }
   | { type: 'recovered'; data: { succeeded: number; failed: number } }
   | { type: 'dump'; data: StoredState }
+  | { type: 'merged' }
   | { type: 'error'; data: { message: string } };
 
 export type PeerCommand =
@@ -45,13 +48,17 @@ export type PeerCommand =
   | { type: 'runs' }
   | { type: 'lapse'; runId: string }
   | { type: 'recover' }
+  | { type: 'release' }
   | { type: 'dump' };
 
 const isMain = process.argv[1]?.endsWith('om-resume-peer.ts');
 
 if (isMain) {
-  const [dbUrl, engine, mode] = process.argv.slice(2);
+  const [dbUrl, engine, mode, aimockUrl, scenario] = process.argv.slice(2);
+  const backgroundMerge = scenario === 'background-merge';
   const send = (event: PeerEvent) => process.send!(event);
+  let releaseResearch!: () => void;
+  const researchGate = new Promise<void>(resolve => (releaseResearch = resolve));
 
   const filler = Array.from({ length: 400 }, (_, i) => `line ${i}: shipment scan event recorded at depot`).join('\n');
   const OBSERVATIONS =
@@ -123,6 +130,20 @@ if (isMain) {
     },
   });
 
+  const research = createTool({
+    id: 'research',
+    description: 'Research the delivery window',
+    inputSchema: {
+      type: 'object',
+      properties: { topic: { type: 'string' } },
+      additionalProperties: false,
+    },
+    background: { enabled: true, timeoutMs: 30_000 },
+    execute: async () => {
+      await researchGate;
+      return { finding: 'BACKGROUND_RESULT_MARKER: delivery window confirmed' };
+    },
+  });
   const lookup = createTool({
     id: 'lookup',
     description: 'Look up an order',
@@ -150,25 +171,38 @@ if (isMain) {
     id: 'om-resume-agent',
     name: 'om-resume-agent',
     instructions: 'Use tools.',
-    model: actor,
-    tools: { lookup },
+    model: aimockUrl
+      ? createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${aimockUrl}/v1` })('aimock-scenario')
+      : actor,
+    tools: backgroundMerge ? { lookup, research } : { lookup },
+    ...(backgroundMerge ? { backgroundTasks: { tools: { research: true } } } : {}),
     memory,
   });
   // A plain durable agent persists `running` snapshots only when asked to (see run-recovery.md).
-  const durable =
+  const registrable =
     engine === 'evented'
       ? createEventedAgent({ agent })
-      : createDurableAgent({ agent, shouldPersistSnapshot: () => true });
-  const mastra = new Mastra({ logger: false, storage, agents: { [durable.id]: durable } });
+      : engine === 'durable'
+        ? createDurableAgent({ agent, shouldPersistSnapshot: () => true })
+        : agent;
+  const mastra = new Mastra({
+    logger: false,
+    storage,
+    agents: engine === 'fs' ? {} : { [registrable.id]: registrable },
+    ...(backgroundMerge ? { backgroundTasks: { enabled: true } } : {}),
+  });
+  if (engine === 'fs') mastra.__registerFsAgents({ [agent.id]: agent });
+  const runningAgent = mastra.getAgent(agent.id);
 
   process.on('message', async (cmd: PeerCommand) => {
     try {
       const workflows = (await storage.getStore('workflows'))!;
       if (cmd.type === 'stream') {
-        const { output } = await durable.stream(USER_REQUEST, {
+        const result = await runningAgent.stream(USER_REQUEST, {
           memory: { thread: 't1', resource: 'r1' },
           maxSteps: 6,
         });
+        const output = (result as { output?: typeof result }).output ?? result;
         if (mode !== 'hang') send({ type: 'done', data: { text: await output.text } });
       } else if (cmd.type === 'runs') {
         const { runs } = await workflows.listWorkflowRuns({});
@@ -187,8 +221,15 @@ if (isMain) {
         }
         send({ type: 'lapsed' });
       } else if (cmd.type === 'recover') {
-        const r = await durable.recoverActiveRuns();
+        if (engine !== 'durable' && engine !== 'evented') throw new Error('Recovery requires a durable engine');
+        const r = await (
+          runningAgent as typeof registrable & {
+            recoverActiveRuns: () => Promise<{ succeeded: number; failed: number }>;
+          }
+        ).recoverActiveRuns();
         send({ type: 'recovered', data: { succeeded: r.succeeded, failed: r.failed } });
+      } else if (cmd.type === 'release') {
+        releaseResearch();
       } else if (cmd.type === 'dump') {
         const mem = (await storage.getStore('memory'))!;
         const { messages } = await mem.listMessages({ threadId: 't1', perPage: false });
@@ -205,7 +246,7 @@ if (isMain) {
                   p.type === 'text'
                     ? `text:${p.text}`
                     : p.type === 'tool-invocation'
-                      ? `tool:${p.toolInvocation.toolCallId}:${p.toolInvocation.state}`
+                      ? `tool:${p.toolInvocation.toolCallId}:${p.toolInvocation.state}${p.toolInvocation.result !== undefined && JSON.stringify(p.toolInvocation.result).includes('BACKGROUND_RESULT_MARKER') ? ':BACKGROUND_RESULT_MARKER' : ''}`
                       : p.type,
                 ),
             })),
@@ -221,6 +262,17 @@ if (isMain) {
   // No top-level await: this workspace isn't "type": "module", so tsx runs the peer as CJS.
   void storage
     .init()
+    .then(async () => {
+      if (backgroundMerge) {
+        const memoryStore = (await storage.getStore('memory'))!;
+        const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+        memoryStore.saveMessages = async args => {
+          const result = await saveMessages(args);
+          if (JSON.stringify(args.messages).includes('BACKGROUND_RESULT_MARKER')) send({ type: 'merged' });
+          return result;
+        };
+      }
+    })
     .then(() => mastra.startWorkers?.().catch(() => {}))
     .then(() => send({ type: 'ready' }));
 }

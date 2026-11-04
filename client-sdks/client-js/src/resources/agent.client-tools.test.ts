@@ -137,12 +137,17 @@ describe('Agent client-side tools', () => {
     const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
 
     let lastChunk: any = null;
+    let clientToolResultChunk: any = null;
     await resp.processDataStream({
       onChunk: async chunk => {
         lastChunk = chunk;
+        if (chunk.type === 'tool-result' && chunk.payload?.toolCallId === toolCallId) {
+          clientToolResultChunk = chunk;
+        }
       },
     });
 
+    expect(clientToolResultChunk?.payload?.args).toEqual({ location: 'NYC' });
     expect(lastChunk?.type).toBe('finish');
     expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
     // Client tool executed
@@ -153,6 +158,17 @@ describe('Agent client-side tools', () => {
     );
 
     const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const recursiveToolResult = secondCallBody.messages
+      .flatMap((message: any) => (Array.isArray(message.content) ? message.content : []))
+      .find((part: any) => part.type === 'tool-result' && part.toolCallId === toolCallId);
+    expect(recursiveToolResult).toMatchObject({
+      type: 'tool-result',
+      toolCallId,
+      toolName: 'weatherTool',
+      input: { location: 'NYC' },
+      output: { type: 'json', value: { ok: true } },
+    });
+    expect(recursiveToolResult).not.toHaveProperty('result');
     const recursiveMessagesJson = JSON.stringify(secondCallBody.messages);
     expect(recursiveMessagesJson).toContain('__mastraObservability');
     expect(recursiveMessagesJson).toContain(traceparent);
@@ -585,7 +601,10 @@ describe('Agent client-side tools', () => {
 
     expect(toolResultPart).toBeDefined();
     expect(toolResultPart.input).toEqual({ url: 'https://example.com' });
-    expect(toolResultPart.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+    expect(toolResultPart.output).toEqual({
+      type: 'json',
+      value: { ok: true, _b64: 'base64imagedata' },
+    });
     // Transformed output travels via providerOptions on the tool-result.
     expect(toolResultPart.providerOptions).toEqual({
       mastra: {
@@ -1117,14 +1136,14 @@ describe('Agent client-side tools', () => {
           toolCallId: 'call_weather',
           toolName: 'weatherTool',
           input: { location: 'NYC' },
-          result: { temperature: 72 },
+          output: { type: 'json', value: { temperature: 72 } },
         }),
         expect.objectContaining({
           type: 'tool-result',
           toolCallId: 'call_news',
           toolName: 'newsTool',
           input: { topic: 'tech' },
-          result: { headline: 'AI advances' },
+          output: { type: 'json', value: { headline: 'AI advances' } },
         }),
       ]),
     );
@@ -2182,7 +2201,7 @@ describe('Agent client-side tools', () => {
           )) ||
         (msg.role === 'tool' &&
           Array.isArray(msg.content) &&
-          msg.content.some((p: any) => p.type === 'tool-result' && p.result !== undefined)),
+          msg.content.some((p: any) => p.type === 'tool-result' && p.output !== undefined)),
     );
     expect(hasToolResult).toBe(true);
 
@@ -2328,6 +2347,7 @@ describe('Agent stream cancellation', () => {
       return captured.response;
     });
 
+    (global.fetch as any).mockResolvedValueOnce(Response.json({ aborted: true }));
     const ac = new AbortController();
     const resp = await agent.stream('hi', { abortSignal: ac.signal });
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
@@ -2468,6 +2488,7 @@ describe('Agent stream cancellation', () => {
       });
     });
 
+    (global.fetch as any).mockResolvedValueOnce(Response.json({ aborted: true }));
     const resp = await agent.stream('go', { clientTools: { toolA, toolB }, abortSignal: abortDuringFirst.signal });
     const reader = resp.body!.getReader();
     try {
@@ -2481,7 +2502,8 @@ describe('Agent stream cancellation', () => {
 
     expect(firstSpy).toHaveBeenCalledTimes(1);
     expect(secondSpy).not.toHaveBeenCalled();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(global.fetch).mock.calls[1]![0]).toContain('/abort');
   });
 
   it('streamLegacy: body.cancel() aborts the request and suppresses client-tool continuations', async () => {

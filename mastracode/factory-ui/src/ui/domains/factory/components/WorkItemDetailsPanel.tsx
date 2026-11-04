@@ -1,4 +1,4 @@
-import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -7,18 +7,16 @@ import { useParams, useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardState';
-import { externalLinkLabel } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
-import { workItemIdentifier } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { timelineEvents, workItemActivity } from '../workItemActivity';
-import { SourceIcon } from './BoardIcons';
 import { CardDetailsPanel } from './CardDetailsPanel';
 import { WorkItemCardRows } from './WorkItemCardRows';
+import { WorkItemExternalLink } from './WorkItemExternalLink';
 import { WorkItemTray } from './WorkItemTray';
 
 export function WorkItemDetailsPanel({
@@ -54,7 +52,6 @@ export function WorkItemDetailsPanel({
   const activity = workItemActivity(item, activityPage);
   const events = timelineEvents(activity);
   const actors = { ...activityPage?.actors, ...activity.extraActors };
-  const identifier = workItemIdentifier(item);
 
   return (
     <CardDetailsPanel
@@ -75,18 +72,7 @@ export function WorkItemDetailsPanel({
           open
           controls={
             <>
-              {item.url !== null && (
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={identifier === undefined ? undefined : `${externalLinkLabel(item.source)}: ${identifier}`}
-                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                >
-                  <SourceIcon source={item.source} />
-                  {identifier ?? externalLinkLabel(item.source)}
-                </a>
-              )}
+              <WorkItemExternalLink item={item} />
               <Button
                 type="button"
                 variant="ghost"

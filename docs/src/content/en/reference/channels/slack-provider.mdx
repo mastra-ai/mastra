@@ -1,8 +1,8 @@
 ---
-title: "Reference: SlackProvider | Channel Providers"
-description: "SlackProvider is the managed path for connecting agents to Slack. Register it on Mastra.channels and it provisions Slack apps through the Manifest API and runs the OAuth install flow."
+title: 'Reference: SlackProvider | Channel Providers'
+description: 'SlackProvider is the managed path for connecting agents to Slack. Register it on Mastra.channels and it provisions Slack apps through the Manifest API and runs the OAuth install flow.'
 packages:
-  - "@mastra/slack"
+  - '@mastra/slack'
 ---
 
 # SlackProvider
@@ -109,12 +109,28 @@ await slack.configure({
       "Dialect for the agent's final reply text, forwarded to the Slack adapter. `'markdown'` (the default) posts replies as markdown so Slack renders bold text, links, and tables natively. `'plain'` posts literal plain text, the escape hatch for agents prompted to emit Slack mrkdwn. Applies to buffered replies (`streaming: false`) and the streaming fallback; native streaming is always markdown.",
   },
   {
+    name: 'textDisplay',
+    type: "'show' | 'hidden'",
+    isOptional: true,
+    defaultValue: "'show'",
+    description:
+      "Whether the agent's reply text is posted to Slack. `'hidden'` never posts it, so the agent's own messages reach Slack only through tools you give it. Tool display, approval prompts, errors, and typing status are unaffected.",
+  },
+  {
     name: 'toolDisplay',
     type: 'ToolDisplay',
     isOptional: true,
     defaultValue: "'grouped'",
     description:
       "How tool calls are rendered in Slack: `'cards'`, `'text'`, `'timeline'`, `'grouped'`, `'hidden'`, or a function. `'hidden'` suppresses tool call/result rendering entirely. `'timeline'` and `'grouped'` require streaming. With `streaming: false`, only static modes are available and the default is `'cards'`.",
+  },
+  {
+    name: 'toolApprovers',
+    type: "'requester' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'requester'",
+    description:
+      "Who can approve or deny tool calls. By default, only the user whose message triggered the call can respond when their identity was recorded; without a recorded requester, another channel member may respond. Set `'anyone'` to allow another member of the shared Slack channel to approve or deny even when a requester was recorded. This bypasses only the requester check; the action still requires a pending approval in the same thread.",
   },
   {
     name: 'typingStatus',
@@ -343,6 +359,7 @@ When `connect()` builds a Slack app, the generated manifest requests a default s
 | `users:read` | |
 | `reactions:write` | |
 | `files:read` | |
+| `files:write` | |
 | `assistant:write` | |
 
 ## Accessing the provider

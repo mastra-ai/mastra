@@ -56,7 +56,6 @@ function card(id: string, title: string, source: WorkItem['source'], stage: stri
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: now,
     updatedAt: now,

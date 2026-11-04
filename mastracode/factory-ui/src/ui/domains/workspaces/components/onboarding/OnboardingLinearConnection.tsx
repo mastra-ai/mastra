@@ -2,12 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { useLinearStatusQuery } from '../../../../../hooks/useLinearData';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { OnboardingConnectionSkeleton } from './OnboardingConnectionSkeleton';
 import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 
 export function OnboardingLinearConnection({ onConnect }: { onConnect: () => void }) {
   const query = useLinearStatusQuery();
-  if (query.isPending) return <SkeletonRows label="Loading Linear status" rows={1} rowClassName="h-22 w-full" />;
+  if (query.isPending) return <OnboardingConnectionSkeleton label="Loading Linear status" />;
   const status = query.data;
   if (status?.connected)
     return (

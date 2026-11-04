@@ -9,15 +9,11 @@ import type {
 import type { SpanRecord } from '../../types';
 import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
-import {
-  SpanPayloadCollapsible,
-  SpanPayloadField,
-  SpanPayloadMarkdown,
-  SpanPayloadToolCalls,
-} from './span-payload-primitives';
+import { SpanPayloadCollapsible, SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives';
 import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
+import { SpanToolNameValue } from './span-payload-tool';
 import { ReasoningActivity } from '@/ds/components/ai/activity';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { InlineCode } from '@/ds/components/InlineCode/inline-code';
@@ -41,7 +37,7 @@ function SpanInterruptedRenderer({ value }: { value: InterruptedSpanOutput }) {
           {value.toolName !== undefined && (
             <>
               <DataKeysAndValues.Key>Tool</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{value.toolName}</DataKeysAndValues.Value>
+              <SpanToolNameValue toolName={value.toolName} />
             </>
           )}
           {value.toolCallId !== undefined && (
@@ -107,11 +103,6 @@ function SpanModelGenerationResultRenderer({ value }: { value: ModelGenerationRe
           <SpanPayloadJson value={value.object} />
         </SpanPayloadField>
       )}
-      {hasItems(value.toolCalls) && (
-        <SpanPayloadField label={`Tool calls (${value.toolCalls.length})`}>
-          <SpanPayloadToolCalls toolCalls={value.toolCalls} />
-        </SpanPayloadField>
-      )}
       {hasItems(value.sources) && (
         <SpanPayloadCollapsible label={`Sources (${value.sources.length})`}>
           <SpanPayloadJson value={value.sources} />
@@ -138,11 +129,6 @@ function SpanModelStepResultRenderer({ value }: { value: ModelStepResult }) {
     <div data-slot="span-model-step-result" className="flex flex-col gap-3">
       {typeof value.text === 'string' && value.text.length > 0 && (
         <SpanPayloadMarkdown>{value.text}</SpanPayloadMarkdown>
-      )}
-      {hasItems(value.toolCalls) && (
-        <SpanPayloadField label={`Tool calls (${value.toolCalls.length})`}>
-          <SpanPayloadToolCalls toolCalls={value.toolCalls} />
-        </SpanPayloadField>
       )}
       {value.object !== undefined && (
         <SpanPayloadField label="Object">

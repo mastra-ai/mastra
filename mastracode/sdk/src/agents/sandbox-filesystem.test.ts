@@ -236,9 +236,9 @@ describe('SandboxFilesystem', () => {
   it('falls back to BSD stat when GNU stat is unavailable', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/dir`);
-      // Simulate macOS: the `stat -c || stat -f` compound runs BSD output.
-      if (script.includes('stat -c')) {
-        expect(script).toContain('stat -f');
+      // Simulate macOS: the `stat -L -c || stat -L -f` compound runs BSD output.
+      if (script.includes('stat -L -c')) {
+        expect(script).toContain('stat -L -f');
         return { exitCode: 0, stdout: 'Directory|128|1700000000|1690000000\n', stderr: '' };
       }
       return { exitCode: 0, stdout: '', stderr: '' };
@@ -975,6 +975,22 @@ describe('with a native sandbox filesystem', () => {
   it('reports stat paths relative to the workspace', async () => {
     const { fs } = makeNativeFs();
     expect(await fs.stat(`${WORKDIR}/src/a.ts`)).toMatchObject({ name: 'a.ts', path: '/src/a.ts', size: 5 });
+  });
+
+  it('infers a missing file MIME type and keeps one the provider supplies', async () => {
+    const { native } = makeNative();
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR, verifySymlinks: false });
+    const base = { name: 'x', path: '/x', size: 5, createdAt: new Date(0), modifiedAt: new Date(0) };
+
+    native.stat = async () => ({ ...base, type: 'file' });
+    expect((await fs.stat('/page.png')).mimeType).toBe('image/png');
+
+    native.stat = async () => ({ ...base, type: 'file', mimeType: 'image/x-custom' });
+    expect((await fs.stat('/page.png')).mimeType).toBe('image/x-custom');
+
+    native.stat = async () => ({ ...base, type: 'directory' });
+    expect((await fs.stat('/assets.png')).mimeType).toBeUndefined();
   });
 
   it('passes typed errors through', async () => {

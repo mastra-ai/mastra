@@ -8,6 +8,7 @@ const BOARD_STAGE_LABELS = {
   planning: 'Planning',
   execute: 'Building',
   review: 'Review',
+  'pr-review': 'PR review',
   done: 'Done',
   canceled: 'Canceled',
 } satisfies Record<FactoryRuleStage, string>;
@@ -25,20 +26,6 @@ export const BOARD_STAGES: ReadonlyArray<BoardStage> = FACTORY_RULE_STAGES.map(i
   id,
   label: BOARD_STAGE_LABELS[id],
 }));
-
-/**
- * Stages that hold work in the pipeline, in column order — the board minus its
- * terminal columns and minus `intake`.
- *
- * Intake is left out because the Board's Intake column merges persisted cards
- * with live GitHub/Linear candidates that have no `work_items` row yet, so any
- * aggregation over persisted rows undercounts it. Charting it means merging the
- * live candidates in first, which needs its own age semantics (upstream open
- * date vs. time in stage).
- */
-export const PIPELINE_STAGES: BoardStageId[] = FACTORY_RULE_STAGES.filter(
-  id => id !== 'intake' && !isTerminalStage(id),
-);
 
 /** Stages where the work has stopped for good. */
 export function isTerminalStage(stage: string): boolean {
@@ -67,6 +54,7 @@ const STAGE_TONES = {
   planning: 'cyan',
   execute: 'info',
   review: 'green',
+  'pr-review': 'green',
   done: 'purple',
   canceled: 'destructive',
 } as const satisfies Record<BuiltinStageId, BadgeVariant>;

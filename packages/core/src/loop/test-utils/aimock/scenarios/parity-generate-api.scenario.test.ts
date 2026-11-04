@@ -37,7 +37,6 @@ import { Agent } from '../../../../agent';
 import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
 import type { DurableAgent } from '../../../../agent/durable/durable-agent';
-import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InMemoryStore } from '../../../../storage';
@@ -316,10 +315,8 @@ async function runSuspendOnEngine(engine: ParityEngine): Promise<EngineRun> {
   const agent = t16Agent(model, { confirm: createConfirmTool(toolLog) });
 
   let wrapper: DurableAgent<string, any, any> | undefined;
-  let pubsub: EventEmitterPubSub | undefined;
   if (engine === 'durable') {
-    pubsub = new EventEmitterPubSub();
-    wrapper = createDurableAgent({ agent, pubsub });
+    wrapper = createDurableAgent({ agent });
   } else if (engine === 'evented') {
     wrapper = createEventedAgent({ agent });
   }
@@ -358,7 +355,6 @@ async function runSuspendOnEngine(engine: ParityEngine): Promise<EngineRun> {
     return run;
   } finally {
     await host.shutdown();
-    await pubsub?.close();
   }
 }
 
