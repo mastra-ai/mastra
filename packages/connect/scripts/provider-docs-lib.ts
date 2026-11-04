@@ -96,6 +96,14 @@ export function headingSlug(name: string): string {
     .replace(/ /g, '-');
 }
 
+function mcpProviderLinks(meta: DocsMetadata): string {
+  const links = Object.values(meta.mcpProviders)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(docs => `[${docs.name}](/integrations/${docs.canonicalPage.replace(/\.mdx$/, '')})`);
+  if (links.length < 3) return links.join(' and ');
+  return `${links.slice(0, -1).join(', ')}, and ${links.at(-1)}`;
+}
+
 export function renderReference(
   providers: string[],
   toolsByProvider: Record<string, Tool[]>,
@@ -137,7 +145,7 @@ This page documents generated toolsets for ${providers.length} providers (${tota
 
 Tool keys are stable identifiers of the form \`<provider>_<action>\` and are the values accepted by \`allowTools\` and \`disallowTools\`. Toolsets are versioned with the package: the exact list depends on the installed \`@mastra/connect\` version, and this page reflects the version it was generated from.
 
-MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](/docs/mastra-platform/connect/providers#mcp-providers) for the list and links to each provider's MCP documentation.
+MCP providers (${mcpProviderLinks(meta)}) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](${TOOLS_REFERENCE}#mcp-providers) for how \`tools()\` discovers them.
 
 | Provider | Provider ID | Tools |
 | - | - | - |

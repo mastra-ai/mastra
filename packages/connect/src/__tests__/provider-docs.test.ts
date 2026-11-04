@@ -164,6 +164,9 @@ describe('Connect provider docs generation', () => {
     expect(page).toContain('[Remote MCP](https://remote.example/mcp)');
     expect(page).toContain('Tool keys start with `remote-mcp_`');
     expect(page).not.toMatch(/gets \d+ /);
+    expect(read(REFERENCE_OUTPUT)).toContain(
+      'MCP providers ([Idle](/integrations/providers/idle) and [Remote](/integrations/providers/remote))',
+    );
   });
 
   it('emits only providers explicitly opted in', () => {
