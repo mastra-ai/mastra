@@ -27,8 +27,8 @@ beforeEach(() => {
 // Agents expose each workflow they own as a tool named `workflow-<key>` and each
 // sub-agent as `agent-<key>`; the workflow and agent pages resolve that key.
 const KINDS = [
-  { kind: 'workflow', label: 'Workflow', key: 'myWorkflow', page: '/workflows/myWorkflow' },
-  { kind: 'agent', label: 'Agent', key: 'balanceAgent', page: '/agents/balanceAgent' },
+  { kind: 'workflow', label: 'Run workflow', key: 'myWorkflow', page: '/workflows/myWorkflow' },
+  { kind: 'agent', label: 'Delegate', key: 'balanceAgent', page: '/agents/balanceAgent' },
 ] as const;
 
 const LAYOUTS = [
@@ -131,9 +131,10 @@ describe.each(KINDS)('$kind tools', ({ kind, label, key, page }) => {
       open('input');
 
       expect(screen.queryAllByRole('link')).toHaveLength(0);
-      for (const button of screen.getAllByRole('button', { name: new RegExp(`^(${label} ${key}|CookingTool)$`) })) {
-        fireEvent.click(button);
-      }
+      fireEvent.click(screen.getByRole('button', { name: 'CookingTool', exact: true }));
+      expect(screen.queryAllByRole('link')).toHaveLength(0);
+
+      fireEvent.click(screen.getByRole('button', { name: label, exact: true }));
       expect(screen.getAllByRole('link').map(link => [link.textContent, link.getAttribute('href')])).toEqual([
         [key, page],
       ]);
