@@ -4,7 +4,7 @@ import {
   ActivityHeadline,
   ActivityTrigger,
 } from '@mastra/playground-ui/components/ai/activity';
-import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+import { presentTool, ToolCallExitStatus } from '@mastra/playground-ui/components/ai/tool-call';
 
 import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
@@ -37,9 +37,12 @@ export function ToolCard({
       open={open && foldable}
       onOpenChange={onOpenChange}
     >
-      <ActivityTrigger>
-        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
-      </ActivityTrigger>
+      <div className="flex w-full min-w-0 items-center">
+        <ActivityTrigger className="min-w-0 flex-1">
+          <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
+        </ActivityTrigger>
+        {tool.exit && <ToolCallExitStatus exit={tool.exit} />}
+      </div>
       <ActivityContent>
         <ToolBody tool={tool} command={command} />
       </ActivityContent>

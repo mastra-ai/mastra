@@ -122,6 +122,7 @@ import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
+import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
@@ -1162,10 +1163,11 @@ export class DurableAgent<
         : persisted.snapshot;
     const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
     if (llmStep?.status !== 'success') return { toolCalls: [] };
-    // The nested input holds completed iterations; the LLM output holds the
+    // The step records hold completed iterations (in workflow state, or in the
+    // nested input on runs that never seeded them); the LLM output holds the
     // current iteration, which has not reached the accumulator yet.
     const accumulatedSteps: Array<{ text?: string; toolCalls?: DurableToolCallInput[]; finishReason?: string }> =
-      snapshot.context.input?.accumulatedSteps ?? [];
+      readAccumulatedSteps(snapshot.value, snapshot.context.input);
     const toolCalls: DurableToolCallInput[] = [
       ...accumulatedSteps.flatMap(step => step.toolCalls ?? []),
       ...(llmStep.output.toolCalls ?? []),
@@ -2223,6 +2225,19 @@ export class DurableAgent<
   }
 
   /**
+   * Whether new runs of this agent's loop are stored as workflow storage
+   * version 2 where the engine and store support it (see the workflow's
+   * `autoStorageVersion` option). A resumed run stays in its stored version.
+   * Off until crash recovery and resume claims are tested on version 2: the
+   * restart harness and resume-claim-loser.test.ts still store runs in v1.
+   * EventedAgent overrides this to `false`.
+   * @internal
+   */
+  protected get storesRunsInJournal(): boolean {
+    return false;
+  }
+
+  /**
    * Resolve the engine this agent's workflow instance actually runs on.
    *
    * An evented agent without a Mastra host cannot execute evented runs — the
@@ -2417,6 +2432,7 @@ export class DurableAgent<
       // in-process engine (see resolveWorkflowEngine).
       engine: this.resolveWorkflowEngine(),
       shouldPersistSnapshot: this.resolveShouldPersistSnapshot(),
+      autoStorageVersion: this.storesRunsInJournal,
     });
   }
 
@@ -2968,11 +2984,12 @@ export class DurableAgent<
   protected async deleteRunSnapshots(runId: string): Promise<void> {
     try {
       const workflow = this.getWorkflow();
-      await workflow.deleteWorkflowRunById(runId);
+      await workflow.deleteWorkflowRunById(runId, { storageVersion: 1 });
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.deleteWorkflowRunById({
         runId,
         workflowName: DurableStepIds.AGENTIC_EXECUTION,
+        storageVersion: 1,
       });
     } catch (error) {
       this.#mastra
