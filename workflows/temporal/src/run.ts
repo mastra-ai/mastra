@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { RequestContext } from '@mastra/core/di';
 import { Run } from '@mastra/core/workflows';
 import type { Step, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
+import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 import type { Client, WorkflowHandle } from '@temporalio/client';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
@@ -67,7 +68,9 @@ export class TemporalRun<
       handle = await this.dispatch(args, input, initialState, requestContext);
     } catch (error) {
       const result = this.failedResult(input, initialState, error);
-      await this.invokeLifecycleCallbacks(result, requestContext);
+      if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+        await this.invokeLifecycleCallbacks(result, requestContext);
+      }
       return result;
     }
 
@@ -359,7 +362,9 @@ export class TemporalRun<
     try {
       handle = await this.dispatch(args, input, initialState, requestContext);
     } catch (error) {
-      await this.invokeLifecycleCallbacks(this.failedResult(input, initialState, error), requestContext);
+      if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+        await this.invokeLifecycleCallbacks(this.failedResult(input, initialState, error), requestContext);
+      }
       throw error;
     }
 
