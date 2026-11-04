@@ -74,6 +74,11 @@ export async function renderWithHost<Input>(
     modelContexts.push(params);
     return {};
   };
+  // Notifications outside the MCP Apps spec, e.g. the dashboard's pin requests.
+  const notifications: Array<{ method: string; params?: unknown }> = [];
+  bridge.fallbackNotificationHandler = async ({ method, params }) => {
+    notifications.push({ method, params });
+  };
   bridge.onmessage = async ({ content }) => {
     chat.push('message');
     messages.push(content.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('\n'));
@@ -97,6 +102,7 @@ export async function renderWithHost<Input>(
     messages,
     modelContexts,
     chat,
+    notifications,
     sendToolResult: (params: Parameters<AppBridge['sendToolResult']>[0]) => act(() => bridge.sendToolResult(params)),
     sendToolCancelled: () => act(() => bridge.sendToolCancelled({})),
     setHostContext: (context: McpUiHostContext) =>
