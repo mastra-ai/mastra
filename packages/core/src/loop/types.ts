@@ -13,6 +13,7 @@ import { z } from 'zod/v4';
 import type { Agent } from '../agent';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
+import type { SaveAcceptedUserSignals } from '../agent/save-accepted-user-signals';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { PendingSignalListener, AgentSignalType, CreatedAgentSignal } from '../agent/signals';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
@@ -179,6 +180,10 @@ export type StreamInternal = {
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */
   initialSignalEchoes?: CreatedAgentSignal[];
+  // Saves `user` signals to the thread before the model request that reads them. Unset when
+  // memory does not save the turn to its own storage.
+  /** @deprecated Use `runScope.get(SAVE_ACCEPTED_USER_SIGNALS_KEY)` from `loop/run-scope-keys`. */
+  saveAcceptedUserSignals?: SaveAcceptedUserSignals;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

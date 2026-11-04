@@ -12,6 +12,7 @@ import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
+import type { SaveAcceptedUserSignals } from '../../save-accepted-user-signals';
 import type { SaveQueueManager } from '../../save-queue';
 import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
@@ -98,6 +99,7 @@ export function createStreamStep<OUTPUT = undefined>({
       // JSON round-trip in step inputs. map-results-step parked it on runScope.
       const loopOptions = runScope.getOrThrow(LOOP_OPTIONS_KEY) as ModelLoopStreamArgs<any, OUTPUT> & {
         initialSignalEchoes?: CreatedAgentSignal[];
+        saveAcceptedUserSignals?: SaveAcceptedUserSignals;
       };
 
       const processors =
@@ -139,6 +141,7 @@ export function createStreamStep<OUTPUT = undefined>({
           drainPendingSignals,
           subscribePendingSignals,
           initialSignalEchoes: loopOptions.initialSignalEchoes,
+          saveAcceptedUserSignals: loopOptions.saveAcceptedUserSignals,
         },
         agentId,
         agentVersionId,

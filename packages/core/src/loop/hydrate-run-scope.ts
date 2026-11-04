@@ -24,6 +24,7 @@ import {
   MEMORY_KEY,
   NOW_KEY,
   RESOURCE_ID_KEY,
+  SAVE_ACCEPTED_USER_SIGNALS_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   SKIP_BG_TASK_WAIT_KEY,
   SUBSCRIBE_PENDING_SIGNALS_KEY,
@@ -66,5 +67,6 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
   if (internal.drainPendingSignals) scope.set(DRAIN_PENDING_SIGNALS_KEY, internal.drainPendingSignals);
   if (internal.subscribePendingSignals) scope.set(SUBSCRIBE_PENDING_SIGNALS_KEY, internal.subscribePendingSignals);
   if (internal.initialSignalEchoes) scope.set(INITIAL_SIGNAL_ECHOES_KEY, internal.initialSignalEchoes);
+  if (internal.saveAcceptedUserSignals) scope.set(SAVE_ACCEPTED_USER_SIGNALS_KEY, internal.saveAcceptedUserSignals);
   if (internal.toolPayloadTransform) scope.set(TOOL_PAYLOAD_TRANSFORM_KEY, internal.toolPayloadTransform);
 }

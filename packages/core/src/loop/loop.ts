@@ -88,6 +88,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     drainPendingSignals: _internal?.drainPendingSignals,
     subscribePendingSignals: _internal?.subscribePendingSignals,
     initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
+    saveAcceptedUserSignals: _internal?.saveAcceptedUserSignals,
     // Forward the tool payload transform policy. Every other consumed field is
     // rebuilt here and this bag is what hydrates the run scope, so omitting it
     // silently drops the policy for the whole run (the scope slot stays unset

@@ -24,6 +24,8 @@ import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
 import type { MastraDBMessage, MessageList } from '../../message-list';
+import { createAcceptedUserSignalSaver } from '../../save-accepted-user-signals';
+import type { SaveAcceptedUserSignals } from '../../save-accepted-user-signals';
 import type { SaveQueueManager } from '../../save-queue';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
@@ -287,13 +289,24 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const latestMessage = messageList.get.all.db().at(-1);
     earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
 
-    // The total-timeout save needs the configured processors. Resolve them once
+    // Saves before the finish need the configured processors. Resolve them once
     // and pass them on as overrides so a function-form resolver runs only once.
     let outputProcessorOverrides = options.outputProcessors;
-    if (memory && memoryData.thread?.id && options.modelSettings?.timeout?.totalMs) {
+    let saveAcceptedUserSignals: SaveAcceptedUserSignals | undefined;
+    const threadId = memoryData.thread?.id;
+    if (memory && threadId) {
       configuredOutputProcessors =
         options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
       outputProcessorOverrides = configuredOutputProcessors;
+      saveAcceptedUserSignals = createAcceptedUserSignalSaver({
+        memory,
+        memoryConfig,
+        configuredOutputProcessors,
+        messageList,
+        authorizeWrite: () => authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId),
+        logger: capabilities.logger,
+        runId,
+      });
     }
 
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
@@ -606,6 +619,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       },
       messageList,
       initialSignalEchoes: runScope.get(INITIAL_SIGNAL_ECHOES_KEY),
+      saveAcceptedUserSignals,
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
