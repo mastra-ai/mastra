@@ -11636,8 +11636,8 @@ export type PostObservabilityScores_Body = {
   score: {
     /** Unique id for this score event */
     scoreId?: (string | null) | undefined;
-    /** Trace that anchors the scored target when available */
-    traceId?: (string | null) | undefined;
+    /** Unique trace identifier */
+    traceId: string;
     /** Span ID this score applies to */
     spanId?: (string | null) | undefined;
     /** Identifier of the scorer (e.g., relevance, accuracy) */
@@ -12105,8 +12105,8 @@ export type PostObservabilityFeedback_Body = {
   feedback: {
     /** Unique id for this feedback event */
     feedbackId?: (string | null) | undefined;
-    /** Trace that anchors the feedback target when available */
-    traceId?: (string | null) | undefined;
+    /** Unique trace identifier */
+    traceId: string;
     /** Span ID this feedback applies to */
     spanId?: (string | null) | undefined;
     feedbackSource?: (string | null) | undefined;
