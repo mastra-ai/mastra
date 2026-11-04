@@ -31,7 +31,8 @@ export function describeRunError(error: RunErrorIdentity): RunErrorDescription {
 }
 
 function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'model'> {
-  if (factoryOutOfMemory(error)) {
+  // A gateway in front of the model can relay the same Redis reply as a provider error.
+  if (!PROVIDER_CALL_ERROR_NAME.test(error.name) && factoryOutOfMemory(error)) {
     return {
       title: 'Factory is unavailable',
       message:

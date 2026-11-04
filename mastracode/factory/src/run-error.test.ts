@@ -145,6 +145,19 @@ describe('describeRunError', () => {
     expect(description.message).not.toContain('maxmemory');
   });
 
+  // A gateway in front of the model can relay its own Redis reply; that outage is the provider's, not Factory's.
+  it("keeps a gateway's own Redis reply a provider outage, with another model offered", () => {
+    const gatewayError = Object.assign(new Error("OOM command not allowed when used memory > 'maxmemory'."), {
+      name: 'AI_APICallError',
+      statusCode: 503,
+    });
+
+    expect(describeRunError(gatewayError)).toMatchObject({
+      title: 'Model provider temporarily unavailable',
+      recoveries: ['continue', 'model'],
+    });
+  });
+
   it('leaves an unrelated error unclassified', () => {
     expect(describeRunError({ name: 'Error', message: 'Something unexpected happened' })).toEqual({
       title: 'Run stopped',
