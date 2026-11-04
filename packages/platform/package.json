@@ -16,46 +16,6 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./ai-sdk": {
-      "import": {
-        "types": "./dist/ai-sdk.d.ts",
-        "default": "./dist/ai-sdk.js"
-      },
-      "require": {
-        "types": "./dist/ai-sdk.d.ts",
-        "default": "./dist/ai-sdk.cjs"
-      }
-    },
-    "./langchain": {
-      "import": {
-        "types": "./dist/langchain.d.ts",
-        "default": "./dist/langchain.js"
-      },
-      "require": {
-        "types": "./dist/langchain.d.ts",
-        "default": "./dist/langchain.cjs"
-      }
-    },
-    "./langgraph": {
-      "import": {
-        "types": "./dist/langgraph.d.ts",
-        "default": "./dist/langgraph.js"
-      },
-      "require": {
-        "types": "./dist/langgraph.d.ts",
-        "default": "./dist/langgraph.cjs"
-      }
-    },
-    "./pi-agent": {
-      "import": {
-        "types": "./dist/pi-agent.d.ts",
-        "default": "./dist/pi-agent.js"
-      },
-      "require": {
-        "types": "./dist/pi-agent.d.ts",
-        "default": "./dist/pi-agent.cjs"
-      }
-    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -69,24 +29,13 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/anthropic": "^3.0.105",
-    "@ai-sdk/openai": "^3.0.90",
-    "@ai-sdk/provider": "3.0.14",
-    "@earendil-works/pi-agent-core": "1.1.0",
-    "@earendil-works/pi-ai": "1.1.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@langchain/core": "^1.0.0",
-    "@langchain/langgraph": "1.4.21",
-    "@langchain/openai": "^1.6.2",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^6.0.0",
-    "deepagents": "1.14.2",
-    "langchain": "1.5.16",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",
@@ -95,11 +44,7 @@
     "@mastra/platform-workspace": "workspace:*"
   },
   "peerDependencies": {
-    "@ai-sdk/provider": "^3.0.0",
-    "@earendil-works/pi-agent-core": "^1.1.0",
-    "@langchain/core": ">=0.3.0 <2.0.0",
     "@mastra/core": ">=1.80.0-0 <2.0.0-0",
-    "langchain": "^1.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "files": [
@@ -116,20 +61,6 @@
   },
   "engines": {
     "node": ">=22.13.0"
-  },
-  "peerDependenciesMeta": {
-    "@ai-sdk/provider": {
-      "optional": true
-    },
-    "@langchain/core": {
-      "optional": true
-    },
-    "langchain": {
-      "optional": true
-    },
-    "@earendil-works/pi-agent-core": {
-      "optional": true
-    }
   },
   "dependencies": {
     "@mastra/platform-workspace": "workspace:*"
