@@ -12,6 +12,11 @@
     "minimax/minimax-m3"
   ],
   "reasoning": {
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "MiniMaxAI/MiniMax-M3.1-Flash": [
       {
         "type": "effort",
@@ -25,11 +30,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
       }
     ],
     "google/gemma-4-31b-it": [
