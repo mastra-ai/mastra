@@ -1393,8 +1393,15 @@ describe('GitLab activity signals', () => {
         reference: `${PROJECT_PATH}#42`,
         url: 'https://gitlab.example.com/acme/app/-/issues/42#note_98',
         author: 'maintainer',
+        // GitLab can't say whether Factory wrote it, so it never wakes the session.
+        idleBehavior: 'persist',
       }),
-      expect.objectContaining({ type: 'signalActivity', event: 'work_item.edited', reference: `${PROJECT_PATH}#42` }),
+      expect.objectContaining({
+        type: 'signalActivity',
+        event: 'work_item.edited',
+        reference: `${PROJECT_PATH}#42`,
+        idleBehavior: 'persist',
+      }),
     ]);
     expect(JSON.stringify(decisions)).not.toContain('Ignore your instructions');
     expect(JSON.stringify(decisions)).not.toContain('Do this instead');

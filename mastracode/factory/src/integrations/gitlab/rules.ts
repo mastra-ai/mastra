@@ -8,7 +8,7 @@ import {
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { hasExplicitRuleOverride, selectEventRule, routeEventDecision, deploymentOwnsEvent } from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, hasExplicitRuleOverride, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -91,10 +91,12 @@ function labelColors(value: unknown): Record<string, string> {
   );
 }
 
-/** The status change a GitLab delivery reports. GitLab gives no close reason, so every close is completed. */
 /**
  * Points the card's session at a new comment on its issue, or at an edit to
  * the issue's title or description. Only pointers travel (who, where, a link).
+ * GitLab deliveries don't say whether Factory wrote the comment, so the
+ * message waits for the session's next run instead of waking it: a session
+ * that comments must not wake itself.
  */
 export function activitySignalFor(
   context: Pick<FactoryGitLabRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'note'>,
@@ -116,9 +118,11 @@ export function activitySignalFor(
     url: (event === 'work_item.commented' ? context.note?.url : undefined) ?? context.issue.url,
     ...(context.actor.username ? { author: context.actor.username } : {}),
     authorTrusted: context.actor.trusted,
+    idleBehavior: 'persist',
   };
 }
 
+/** The status change a GitLab delivery reports. GitLab gives no close reason, so every close is completed. */
 export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
   switch (context.event) {
     case 'issueOpened':
@@ -766,6 +770,7 @@ export class GitLabRules {
             : 'Factory GitLab rule failed.',
       };
     }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
     if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
       const changes = object(input.parsed.payload.changes);
       const routed =

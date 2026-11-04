@@ -167,11 +167,6 @@ export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
   target: { boardKey: 'work', phaseKey: 'pr-review' },
 };
 
-/**
- * The routes Factory adds to a project, in order, each under a key that never changes. A project
- * gets each one once: a new project gets them all, a project set up earlier gets a route added
- * since at the end of its list, and a route an admin deleted stays deleted.
- */
 /** A Work card whose issue was closed as done goes to Done. */
 export const CLOSED_COMPLETED_ROUTE: StoredIntakeRouteInput = {
   name: 'Closed issues go to Done',
@@ -195,6 +190,11 @@ export const REOPENED_ROUTE: StoredIntakeRouteInput = {
   target: { boardKey: 'work', phaseKey: 'intake' },
 };
 
+/**
+ * The routes Factory adds to a project, in order, each under a key that never changes. A project
+ * gets each one once: a new project gets them all, a project set up earlier gets a route added
+ * since at the end of its list, and a route an admin deleted stays deleted.
+ */
 export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput }[] = [
   { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
   { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },

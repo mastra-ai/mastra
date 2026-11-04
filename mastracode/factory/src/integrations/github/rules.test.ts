@@ -5700,10 +5700,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
     };
   }
 
-  async function harness(input: { board?: string; stages: string[] }) {
+  async function harness(input: { board?: string; stages: string[]; rules?: GithubRuleOverrides }) {
     const seeded = await setup(
       'write',
-      undefined,
+      input.rules,
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
         : new LibSQLFactoryStorage({ id: 'github-close-routes', url: ':memory:' }),
@@ -5790,6 +5790,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('GitHub close an
       { expectedRevision: done.revision, actor: 'admin' },
     );
     expect((await deliver(issueClosed('edited-route', 'completed'))).stages).toEqual(['canceled']);
+  });
+
+  it('keeps the move of an override that reuses the stock close handler, whatever the routes say', async () => {
+    const { deliver, route, storedBoards, scope } = await harness({
+      stages: ['planning'],
+      rules: { issueClosed: context => defaultGithubRules.issueClosed!(context) },
+    });
+    const done = await route('Closed issues go to Done');
+    await storedBoards.updateIntakeRoute(
+      scope,
+      done.id,
+      { target: { boardKey: 'work', phaseKey: 'canceled' } },
+      { expectedRevision: done.revision, actor: 'admin' },
+    );
+    // The override answered with the board's own close move (Done); the edited route is not asked.
+    const closed = await deliver(issueClosed('wrapped-default', 'completed'));
+    expect(closed.stages).toEqual(['done']);
+    expect(closed.stageHistory.at(-1)?.by).not.toMatch(/^intake-route:/);
   });
 
   it("leaves a closed card where it is when the close routes are disabled, without the board's own close move", async () => {

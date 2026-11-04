@@ -9,7 +9,7 @@ import {
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
-import { selectEventRule, routeEventDecision, deploymentOwnsEvent } from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -209,6 +209,7 @@ export class LinearRules {
             : 'Factory Linear rule failed.',
       };
     }
+    if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
     if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
       const routed = routeEventDecision(context);
       if (routed) decisions = [{ ...routed }];

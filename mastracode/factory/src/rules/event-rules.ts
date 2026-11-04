@@ -104,3 +104,13 @@ export function closedByRoutes<T extends Omit<FactoryTransitionDecision, 'type' 
 ): FactoryTransitionDecision {
   return { type: 'transition', ...move, event: { type: 'work_item.closed', reason: closeReason(canceled) } };
 }
+
+/**
+ * A decision the deployment's own handler returned stays its answer: a stock close move it
+ * wrapped or reused loses the event tag that would hand it to the project's intake routes.
+ */
+export function withoutRouteEvent(entry: Record<string, unknown>): Record<string, unknown> {
+  if (entry.type !== 'transition' || entry.event === undefined) return entry;
+  const { event: _event, ...move } = entry;
+  return move;
+}

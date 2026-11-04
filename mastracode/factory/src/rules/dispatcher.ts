@@ -96,12 +96,17 @@ const SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS = 6 * 60 * 60_000;
 // also runs detached from the poll loop under this concurrency cap.
 const MAX_IN_FLIGHT = 25;
 /**
- * Decisions that may start or wake an agent run and so hold a run slot. A
- * transition's message is queued as a separate sendMessage, so the transition
- * itself stays bookkeeping.
+ * Decisions that may start or wake an agent run, or wait for one to end, and so
+ * hold a run slot. A transition's message is queued as a separate sendMessage,
+ * so a plain transition stays bookkeeping; one a status event hands to intake
+ * routes can wait for the card's run, so it does not.
  */
 const isRunBearingDecision = (decision: Record<string, unknown>): boolean =>
-  decision.type === 'invokeSkill' || decision.type === 'sendMessage';
+  decision.type === 'invokeSkill' ||
+  decision.type === 'sendMessage' ||
+  decision.type === 'signalActivity' ||
+  decision.type === 'routeEvent' ||
+  (decision.type === 'transition' && decision.event !== undefined);
 const isBookkeepingDecision = (decision: Record<string, unknown>): boolean => !isRunBearingDecision(decision);
 const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // Staleness sweep: legacy/leaked active bindings (item deleted, transition
@@ -1909,11 +1914,14 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Moves a card where the project's intake routes send it on a status event, after the run in
-   * flight on the card ends. A close moves only an unfinished card and a reopen only a finished
-   * one. When no route on the card's board handles the event at all, the rule's own move (a
-   * board's `sourceClosed` phase) applies instead; when one does but none matches, the card stays. A route's move is a system move by the route: recorded in the card's
-   * history and audit, keyed so a replayed delivery moves nothing twice.
+   * Moves a card where the project's intake routes send it on a status event. A move into a
+   * working or resting phase waits for the run in flight on the card to end; a move into a
+   * terminal phase does not, so terminal cleanup stops that run at once, as a close always has.
+   * A close moves only an unfinished card and a reopen only a finished one. When no route on the
+   * card's board handles the event at all, the rule's own move (a board's `sourceClosed` phase)
+   * applies instead; when one does but none matches, the card stays. A route's move is a system
+   * move by the route: recorded in the card's history and audit, keyed so a replayed delivery
+   * moves nothing twice.
    */
   async #routeEvent(
     record: FactoryDeferredDecisionRecord,
@@ -1944,12 +1952,21 @@ export class FactoryDecisionDispatcher {
       if (fallback) await this.#applyTransition(record, fallback, causalChain);
       return;
     }
-    const binding = await this.#findBinding(record);
-    const session = binding ? await this.#findSession(binding) : undefined;
-    if (binding && session) await this.#waitForOpenRun(session, binding, 'Factory run before an intake route move');
-    // The card may have moved, or the routes changed, while the run finished.
-    const target = await resolve();
-    if (!target || 'fallback' in target) return;
+    let target: Awaited<ReturnType<typeof resolve>> = first;
+    if (!first.board.isTerminal(first.route.phase)) {
+      const binding = await this.#findBinding(record);
+      const session = binding ? await this.#findSession(binding) : undefined;
+      if (binding && session) {
+        await this.#waitForOpenRun(session, binding, 'Factory run before an intake route move');
+        // The card may have moved, or the routes changed, while the run finished.
+        target = await resolve();
+      }
+    }
+    if (!target) return;
+    if ('fallback' in target) {
+      if (fallback) await this.#applyTransition(record, fallback, causalChain);
+      return;
+    }
     const { item, board, route } = target;
     const result = await this.#transitionService.transition({
       orgId: record.orgId,
@@ -2006,7 +2023,8 @@ export class FactoryDecisionDispatcher {
    * is written here from the decision's pointers, never from provider text.
    * Activity while the session is busy waits as one pending notification per
    * card and kind of activity, counting how many arrived; an idle session is
-   * woken. A card nobody is working has nobody to tell, so it is dropped.
+   * woken unless the decision asks to only persist. A card nobody is working
+   * has nobody to tell, so it is dropped.
    */
   async #signalActivity(
     record: FactoryDeferredDecisionRecord,
@@ -2038,11 +2056,12 @@ export class FactoryDecisionDispatcher {
           priority: 'medium',
           payload: { message, event: decision.event, reference: decision.reference, url: decision.url },
           sourceId: record.id,
+          dedupeKey: record.idempotencyKey,
           coalesceKey: `${record.workItemId}:${decision.event}`,
         },
         {
           ifActive: { behavior: 'persist' },
-          ifIdle: { behavior: 'wake' },
+          ifIdle: { behavior: decision.idleBehavior ?? 'wake' },
           requestContext: factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId }),
         },
       ),

@@ -645,6 +645,12 @@ export interface FactorySignalActivityDecision extends FactoryCommitDecisionBase
   url: string;
   author?: string;
   authorTrusted: boolean;
+  /**
+   * What an idle session does with it. Defaults to `wake`; `persist` keeps it
+   * for the session's next run, for sources whose own comments Factory cannot
+   * tell apart from other people's.
+   */
+  idleBehavior?: 'wake' | 'persist';
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {

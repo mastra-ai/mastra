@@ -786,8 +786,8 @@ When one of these arrives for a card that already exists, the first enabled rout
 - The move is a system move made by the route, recorded in the card's history (`by: intake-route:<routeId>`) and in the audit log (`factory.work_item.stage_moved` with `cause: event_route` and the route's `intakeRouteId`).
 - It skips the board's `nextPhases`, so a reopened card can leave Done. It still checks that the phase exists and that the board's card lanes take the card (an issue never lands in PR review).
 - It is refused with `approval_required` when the target is a working phase and the route doesn't set `allowWorkingPhase`.
-- It waits for a run in flight on the card to end, then moves the card.
-- A move into a terminal phase runs terminal cleanup like any other: a session still running on the card is aborted.
+- A move into a working or resting phase waits for a run in flight on the card to end, then moves the card.
+- A move into a terminal phase doesn't wait: it runs terminal cleanup like any other, so a session still running on the card is aborted at once, as a close always has.
 - A close moves only an unfinished card, and a reopen only a finished one. Redelivered or reconciled webhooks move the card once.
 
 Only routes targeting the card's own board apply; a route naming another board is skipped. A route on the card's board that names the event owns it even when it is disabled or its `when` doesn't match: the card stays put. Only on a board where no route names the event does the board's `sourceClosed` mapping apply, so custom boards keep closing as before. To stop closes from moving Work cards, disable both close routes: deleting them hands closes back to Work's `sourceClosed` mapping, which moves the card to Done or Canceled.
@@ -803,7 +803,7 @@ New comment by @alice on acme/repo#42: https://github.com/acme/repo/issues/42#is
 acme/repo#42 was edited by @bob (untrusted author): https://github.com/acme/repo/issues/42
 ```
 
-The message never carries the comment's body or the issue's title: the session follows the link to read it. Authors without write access are marked `(untrusted author)`. Factory's own GitHub comments are skipped. An idle session is woken; activity while it is busy waits as one notification per card and kind of activity, counting how many arrived. A card nobody is working drops the message. Nothing starts: Triage still runs once. The card's feed shows the comment either way.
+The message never carries the comment's body or the issue's title: the session follows the link to read it. Authors without write access are marked `(untrusted author)`. Factory's own GitHub comments are skipped. An idle session is woken by GitHub activity. GitLab deliveries don't say whether Factory wrote a comment, so GitLab activity never wakes the session: it waits for the session's next run, so a session can't wake itself with its own comments. Otherwise, activity while it is busy waits as one notification per card and kind of activity, counting how many arrived. A card nobody is working drops the message. Nothing starts: Triage still runs once. The card's feed shows the comment either way.
 
 **Routes.** Reading needs a signed-in user of the project's organization. Changes need an organization admin when auth is enabled. Deleting or reordering routes renumbers the routes after it and bumps their `revision`, so an update sent with an older `expectedRevision` is refused with 409 and must be retried with the current one. Changes are recorded in the audit log as `factory.intake_route.created`, `updated`, `deleted` and `reordered`.
 
@@ -835,7 +835,9 @@ curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes/$CLOSED_
   "expectedRevision": 1
 }'
 
-# Send reopened bugs back to Triage to run again.
+# Send reopened bugs back to Triage to run again. A new route is added at the end, after the
+# default reopen route that matches every reopen, so then move it ahead of that one with
+# POST .../intake-routes/reorder.
 curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/intake-routes" -H 'content-type: application/json' -d '{
   "name": "Reopened bugs re-run Triage",
   "on": ["work_item.reopened"],

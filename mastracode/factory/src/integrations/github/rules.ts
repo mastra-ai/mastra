@@ -14,7 +14,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { selectEventRule, routeEventDecision, deploymentOwnsEvent } from '../../rules/event-rules.js';
+import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -122,7 +122,6 @@ function parseFactoryReviewCommand(
   return undefined;
 }
 
-/** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
 /**
  * Points the card's session at a new comment or an edit on its issue. Only
  * pointers travel (who, where, a link); Factory's own comments are skipped so
@@ -150,6 +149,7 @@ export function activitySignalFor(
   };
 }
 
+/** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
 export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 'issue'>): BoardEventFacts | undefined {
   switch (context.event) {
     case 'issueOpened':
@@ -885,7 +885,7 @@ export class GithubRules {
         boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
         event,
       );
-const rule = selectEventRule(
+      const rule = selectEventRule(
         this.options.github.rules,
         boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
         event,
@@ -915,6 +915,7 @@ const rule = selectEventRule(
               : 'Factory GitHub rule failed.',
         };
       }
+      if (ownedByDeployment) decisions = decisions.map(withoutRouteEvent);
       if (!decision && !ownedByDeployment && outcome.status === 'accepted') {
         const routed = routeEventDecision(context) ?? activitySignalFor(context);
         if (routed) decisions = [{ ...routed }];
