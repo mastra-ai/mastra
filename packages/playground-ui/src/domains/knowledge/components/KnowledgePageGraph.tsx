@@ -3,8 +3,6 @@ import {
   Background,
   BaseEdge,
   BackgroundVariant,
-  ControlButton,
-  Controls,
   getViewportForBounds,
   Handle,
   MarkerType,
@@ -15,12 +13,13 @@ import {
   useStore,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowUpToLine, Layers, Maximize, Pin } from 'lucide-react';
+import { ArrowUpToLine, Info, Layers, Maximize, Minus, Pin, Plus } from 'lucide-react';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import { fitWords } from '../lib/circleText';
 import { fitAllViewport, fitDuration, fitViewport, INITIAL_SETTLE_MS, nudgeAxis } from '../lib/fitViewport';
+import type { PaneInsets } from '../lib/fitViewport';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -48,10 +47,14 @@ import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 import { KnowledgePageCard } from './KnowledgePageCard';
 
+import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 
 import './knowledge.css';
+
+const NO_PANE_INSETS: PaneInsets = { left: 0, right: 0 };
 
 // knowledge.css draws the border and the selection ring from this colour.
 type CircleStyle = CSSProperties & { '--knowledge-color': string };
@@ -253,7 +256,7 @@ function DotNode({ data }: { data: PageNodeData }) {
     const obstacles = [
       ...graph.querySelectorAll('[data-testid="knowledge-page-node"], [data-testid="knowledge-page-dot"]'),
       ...(graph.parentElement ?? graph).querySelectorAll(
-        '[aria-label="Legend"], [data-testid="knowledge-graph-back"], .react-flow__controls',
+        '[aria-label="Legend"], [data-testid="knowledge-graph-back"], [data-knowledge-graph-zoom]',
       ),
     ]
       .map(boxOf)
@@ -596,7 +599,11 @@ function GraphLegend({
   focused,
   levels,
   branches,
+  left,
+  collapsible,
 }: {
+  left: number;
+  collapsible?: boolean;
   /** The line styles on screen right now; the legend explains those and only those. */
   drawn: ReadonlySet<EdgeStyleKey>;
   /** Some circle carries an in/out link badge. */
@@ -611,209 +618,227 @@ function GraphLegend({
   /** The branches dots are coloured by, each named for the circle it hangs under. */
   branches: LegendBranch[];
 }) {
+  const [open, setOpen] = useState(!collapsible);
   return (
-    <ul
-      aria-label="Legend"
-      className="pointer-events-none absolute top-2 left-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/90 px-2 py-1.5 shadow-raised"
+    <div
+      style={{ left: left + 12 }}
+      className="absolute top-3 z-10 flex flex-col items-start gap-1.5 transition-[left] duration-slow ease-out-custom motion-reduce:transition-none"
     >
-      <li className="flex items-center gap-2">
-        <span className={LEGEND_SWATCH} style={{ ...SCOPE_STYLE }} aria-hidden />
-        <Txt as="span" variant="meta" tone="muted">
-          Scope
-        </Txt>
-      </li>
-      {levels.includes('scope') ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-level-scope">
-          <Layers aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-          <Txt as="span" variant="meta" tone="muted">
-            Scope, above its pages
-          </Txt>
-        </li>
-      ) : null}
-      {levels.includes('ancestor') ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-level-ancestor">
-          <ArrowUpToLine aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-          <Txt as="span" variant="meta" tone="muted">
-            Page above the focus
-          </Txt>
-        </li>
-      ) : null}
-      <li className="flex items-center gap-2">
-        <span className={LEGEND_SWATCH} style={{ ...PAGE_STYLE }} aria-hidden />
-        <Txt as="span" variant="meta" tone="muted">
-          Page
-        </Txt>
-      </li>
-      {focused ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-focused">
-          <span
-            className={LEGEND_SWATCH}
-            style={{ ...PAGE_STYLE, outline: '2px solid var(--knowledge-color)', outlineOffset: 2, borderWidth: 3 }}
-            aria-hidden
-          />
-          <Txt as="span" variant="meta" tone="muted">
-            Focused page
-          </Txt>
-        </li>
-      ) : null}
-      {dots || linkEnds ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
-          <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
-          <Txt as="span" variant="meta" tone="muted">
-            Page in another branch
-          </Txt>
-        </li>
-      ) : null}
-      {/* One parent group reads generically; several would look identical, so each row names its parent. */}
-      {branches.slice(0, LEGEND_BRANCH_CAP).map(branch => (
-        <li key={branch.id} className="flex items-center gap-2 pl-0.5" data-testid="knowledge-legend-branch">
-          <span
-            className="inline-block size-2 shrink-0 rounded-full"
-            style={{ background: branch.color }}
-            aria-hidden
-          />
-          <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate" title={branch.name}>
-            {branches.length > 1 ? `Under ${branch.name}` : branch.scope ? 'Under parent scope' : 'Under parent page'}
-          </Txt>
-        </li>
-      ))}
-      {branches.length > LEGEND_BRANCH_CAP ? (
-        <li className="pl-0.5">
-          <Txt as="span" variant="meta" tone="muted">
-            +{branches.length - LEGEND_BRANCH_CAP} more branches
-          </Txt>
-        </li>
-      ) : null}
-      {drawn.has('out') || drawn.has('in') ? (
-        <>
-          {drawn.has('out') ? (
-            <li className="flex items-center gap-2" data-testid="knowledge-legend-out">
-              <svg width="16" height="8" aria-hidden className="shrink-0">
-                <line x1="0" y1="4" x2="12" y2="4" stroke={LINK_EDGE_COLOR} strokeWidth="1.5" />
-                <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
-              </svg>
-              <Txt as="span" variant="meta" tone="muted">
-                Links out of the selected page
-              </Txt>
-            </li>
-          ) : null}
-          {drawn.has('in') ? (
-            <li className="flex items-center gap-2" data-testid="knowledge-legend-in">
-              <svg width="16" height="8" aria-hidden className="shrink-0">
-                <line
-                  x1="0"
-                  y1="4"
-                  x2="12"
-                  y2="4"
-                  stroke="var(--chart-orange)"
-                  strokeWidth="1.5"
-                  strokeDasharray="3 2"
-                />
-                <polygon points="11,1 16,4 11,7" fill="var(--chart-orange)" />
-              </svg>
-              <Txt as="span" variant="meta" tone="muted">
-                Links into it
-              </Txt>
-            </li>
-          ) : null}
-        </>
-      ) : null}
-      {drawn.has('mention') ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-mention">
-          <svg width="12" height="4" aria-hidden className="shrink-0">
-            <line x1="0" y1="2" x2="12" y2="2" stroke={MENTION_EDGE_COLOR} strokeWidth="2" />
-          </svg>
-          <Txt as="span" variant="meta" tone="muted">
-            Mentioned in notes
-          </Txt>
-        </li>
-      ) : null}
-      {drawn.has('link') ? (
-        <li className="flex items-center gap-2">
-          <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-link">
-            <line x1="0" y1="4" x2="12" y2="4" {...LINK_EDGE_STYLE} />
-            <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
-          </svg>
-          <Txt as="span" variant="meta" tone="muted">
-            Linked in page body
-          </Txt>
-        </li>
-      ) : null}
-      {drawn.has('dot-parent') ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-dot-parent">
-          <svg width="16" height="4" aria-hidden className="shrink-0">
-            <line x1="0" y1="2" x2="16" y2="2" {...DOT_PARENT_EDGE_STYLE} strokeOpacity={0.5} />
-          </svg>
-          <Txt as="span" variant="meta" tone="muted">
-            Child page (dot)
-          </Txt>
-        </li>
-      ) : null}
-      {drawn.has('up') ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-up">
-          <svg width="16" height="8" aria-hidden className="shrink-0">
-            <line x1="0" y1="4" x2="12" y2="4" {...UP_EDGE_STYLE} />
-            <polygon points="9,1 15,4 9,7" fill={UP_EDGE_COLOR} />
-          </svg>
-          <Txt as="span" variant="meta" tone="muted">
-            Parent of the focused page
-          </Txt>
-        </li>
-      ) : null}
-      {drawn.has('parent') ? (
-        <li className="flex items-center gap-2">
-          <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-parent-arrow">
-            <line x1="0" y1="4" x2="14" y2="4" {...PARENT_EDGE_STYLE} strokeDasharray="3 2" />
-            <polyline
-              points="10,1 14,4 10,7"
-              fill="none"
-              stroke={PARENT_ARROW_COLOR}
-              strokeWidth="1.25"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <Txt as="span" variant="meta" tone="muted">
-            Parent → child
-          </Txt>
-        </li>
-      ) : null}
-      {counts ? (
-        <li className="flex items-center gap-2" data-testid="knowledge-legend-link-counts">
-          <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
-            →4
-          </Txt>
-          <Txt as="span" variant="meta" style={{ color: LINK_EDGE_COLOR }}>
-            14→
-          </Txt>
-          <Txt as="span" variant="meta" tone="muted">
-            Links in, links out (not drawn)
-          </Txt>
-        </li>
-      ) : null}
-      {drawn.has('grant') ? (
-        <li className="flex items-center gap-2">
-          <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-grant">
-            <line x1="0" y1="4" x2="12" y2="4" {...GRANT_EDGE_STYLE} strokeDasharray="4 2 1 2" strokeWidth="1.5" />
-            <polygon points="11,1 16,4 11,7" fill={GRANT_EDGE_COLOR} />
-          </svg>
-          <Txt as="span" variant="meta" tone="muted">
-            Grants access (hover for role)
-          </Txt>
-        </li>
-      ) : null}
-      <li className="flex items-center gap-2">
-        <span
-          className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground"
-          aria-hidden
+      {collapsible ? (
+        <Button
+          size="sm"
+          icon={<Info />}
+          aria-expanded={open}
+          className="shadow-overlay"
+          onClick={() => setOpen(current => !current)}
         >
-          <Pin size={8} />
-        </span>
-        <Txt as="span" variant="meta" tone="muted">
-          Pinned
-        </Txt>
-      </li>
-    </ul>
+          Legend
+        </Button>
+      ) : null}
+      <ul
+        aria-label="Legend"
+        hidden={!open}
+        className={`pointer-events-none flex flex-col gap-1 rounded-lg px-2.5 py-2 ${collapsible ? 'bg-card shadow-overlay' : 'rounded-md border border-border bg-card/90 shadow-raised'}`}
+      >
+        <li className="flex items-center gap-2">
+          <span className={LEGEND_SWATCH} style={{ ...SCOPE_STYLE }} aria-hidden />
+          <Txt as="span" variant="meta" tone="muted">
+            Scope
+          </Txt>
+        </li>
+        {levels.includes('scope') ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-level-scope">
+            <Layers aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+            <Txt as="span" variant="meta" tone="muted">
+              Scope, above its pages
+            </Txt>
+          </li>
+        ) : null}
+        {levels.includes('ancestor') ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-level-ancestor">
+            <ArrowUpToLine aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+            <Txt as="span" variant="meta" tone="muted">
+              Page above the focus
+            </Txt>
+          </li>
+        ) : null}
+        <li className="flex items-center gap-2">
+          <span className={LEGEND_SWATCH} style={{ ...PAGE_STYLE }} aria-hidden />
+          <Txt as="span" variant="meta" tone="muted">
+            Page
+          </Txt>
+        </li>
+        {focused ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-focused">
+            <span
+              className={LEGEND_SWATCH}
+              style={{ ...PAGE_STYLE, outline: '2px solid var(--knowledge-color)', outlineOffset: 2, borderWidth: 3 }}
+              aria-hidden
+            />
+            <Txt as="span" variant="meta" tone="muted">
+              Focused page
+            </Txt>
+          </li>
+        ) : null}
+        {dots || linkEnds ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
+            <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
+            <Txt as="span" variant="meta" tone="muted">
+              Page in another branch
+            </Txt>
+          </li>
+        ) : null}
+        {/* One parent group reads generically; several would look identical, so each row names its parent. */}
+        {branches.slice(0, LEGEND_BRANCH_CAP).map(branch => (
+          <li key={branch.id} className="flex items-center gap-2 pl-0.5" data-testid="knowledge-legend-branch">
+            <span
+              className="inline-block size-2 shrink-0 rounded-full"
+              style={{ background: branch.color }}
+              aria-hidden
+            />
+            <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate" title={branch.name}>
+              {branches.length > 1 ? `Under ${branch.name}` : branch.scope ? 'Under parent scope' : 'Under parent page'}
+            </Txt>
+          </li>
+        ))}
+        {branches.length > LEGEND_BRANCH_CAP ? (
+          <li className="pl-0.5">
+            <Txt as="span" variant="meta" tone="muted">
+              +{branches.length - LEGEND_BRANCH_CAP} more branches
+            </Txt>
+          </li>
+        ) : null}
+        {drawn.has('out') || drawn.has('in') ? (
+          <>
+            {drawn.has('out') ? (
+              <li className="flex items-center gap-2" data-testid="knowledge-legend-out">
+                <svg width="16" height="8" aria-hidden className="shrink-0">
+                  <line x1="0" y1="4" x2="12" y2="4" stroke={LINK_EDGE_COLOR} strokeWidth="1.5" />
+                  <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
+                </svg>
+                <Txt as="span" variant="meta" tone="muted">
+                  Links out of the selected page
+                </Txt>
+              </li>
+            ) : null}
+            {drawn.has('in') ? (
+              <li className="flex items-center gap-2" data-testid="knowledge-legend-in">
+                <svg width="16" height="8" aria-hidden className="shrink-0">
+                  <line
+                    x1="0"
+                    y1="4"
+                    x2="12"
+                    y2="4"
+                    stroke="var(--chart-orange)"
+                    strokeWidth="1.5"
+                    strokeDasharray="3 2"
+                  />
+                  <polygon points="11,1 16,4 11,7" fill="var(--chart-orange)" />
+                </svg>
+                <Txt as="span" variant="meta" tone="muted">
+                  Links into it
+                </Txt>
+              </li>
+            ) : null}
+          </>
+        ) : null}
+        {drawn.has('mention') ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-mention">
+            <svg width="12" height="4" aria-hidden className="shrink-0">
+              <line x1="0" y1="2" x2="12" y2="2" stroke={MENTION_EDGE_COLOR} strokeWidth="2" />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Mentioned in notes
+            </Txt>
+          </li>
+        ) : null}
+        {drawn.has('link') ? (
+          <li className="flex items-center gap-2">
+            <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-link">
+              <line x1="0" y1="4" x2="12" y2="4" {...LINK_EDGE_STYLE} />
+              <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Linked in page body
+            </Txt>
+          </li>
+        ) : null}
+        {drawn.has('dot-parent') ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-dot-parent">
+            <svg width="16" height="4" aria-hidden className="shrink-0">
+              <line x1="0" y1="2" x2="16" y2="2" {...DOT_PARENT_EDGE_STYLE} strokeOpacity={0.5} />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Child page (dot)
+            </Txt>
+          </li>
+        ) : null}
+        {drawn.has('up') ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-up">
+            <svg width="16" height="8" aria-hidden className="shrink-0">
+              <line x1="0" y1="4" x2="12" y2="4" {...UP_EDGE_STYLE} />
+              <polygon points="9,1 15,4 9,7" fill={UP_EDGE_COLOR} />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Parent of the focused page
+            </Txt>
+          </li>
+        ) : null}
+        {drawn.has('parent') ? (
+          <li className="flex items-center gap-2">
+            <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-parent-arrow">
+              <line x1="0" y1="4" x2="14" y2="4" {...PARENT_EDGE_STYLE} strokeDasharray="3 2" />
+              <polyline
+                points="10,1 14,4 10,7"
+                fill="none"
+                stroke={PARENT_ARROW_COLOR}
+                strokeWidth="1.25"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Parent → child
+            </Txt>
+          </li>
+        ) : null}
+        {counts ? (
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-link-counts">
+            <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
+              →4
+            </Txt>
+            <Txt as="span" variant="meta" style={{ color: LINK_EDGE_COLOR }}>
+              14→
+            </Txt>
+            <Txt as="span" variant="meta" tone="muted">
+              Links in, links out (not drawn)
+            </Txt>
+          </li>
+        ) : null}
+        {drawn.has('grant') ? (
+          <li className="flex items-center gap-2">
+            <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-grant">
+              <line x1="0" y1="4" x2="12" y2="4" {...GRANT_EDGE_STYLE} strokeDasharray="4 2 1 2" strokeWidth="1.5" />
+              <polygon points="11,1 16,4 11,7" fill={GRANT_EDGE_COLOR} />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Grants access (hover for role)
+            </Txt>
+          </li>
+        ) : null}
+        <li className="flex items-center gap-2">
+          <span
+            className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground"
+            aria-hidden
+          >
+            <Pin size={8} />
+          </span>
+          <Txt as="span" variant="meta" tone="muted">
+            Pinned
+          </Txt>
+        </li>
+      </ul>
+    </div>
   );
 }
 
@@ -869,6 +894,8 @@ export interface KnowledgePageGraphProps {
   nearIds?: ReadonlySet<string>;
   /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
   settled?: boolean;
+  insets?: PaneInsets;
+  collapsibleLegend?: boolean;
   /** Exact links into and out of pages, from the store; they replace the counts taken from `knownLinks`. */
   exactLinkCounts?: ReadonlyMap<string, { in: number; out: number }>;
   /** Links fetched for the page under the pointer: drawn on hover, never counted or laid out. */
@@ -972,6 +999,8 @@ function KnowledgePageGraphInner({
   onOpen,
   onClearSelection,
   onMentionSelect,
+  insets = NO_PANE_INSETS,
+  collapsibleLegend,
 }: KnowledgePageGraphProps) {
   // Grants add placeholder circles for declared principals with no scope page yet, and their own lines.
   const { graphPages, allEdges } = useMemo(() => {
@@ -1291,8 +1320,8 @@ function KnowledgePageGraphInner({
   // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
   const drawnNodes = useLeavingNodes(emphasisedNodes, prefersMotion());
   const linkedIds = laidOut.shape.linked;
-  const fitState = useRef({ nodes, selectedPageId, centerId, reactFlow, linkedIds });
-  fitState.current = { nodes, selectedPageId, centerId, reactFlow, linkedIds };
+  const fitState = useRef({ nodes, selectedPageId, centerId, reactFlow, linkedIds, insets });
+  fitState.current = { nodes, selectedPageId, centerId, reactFlow, linkedIds, insets };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
   const fitPending = useRef(false);
   // The pane and what is drawn, or null while the pane has no size (the next non-zero size fits).
@@ -1313,10 +1342,17 @@ function KnowledgePageGraphInner({
   const fit = useCallback((duration?: number) => {
     const view = paneAndNodes();
     if (!view) return;
-    const { selectedPageId: selected, centerId: centre, linkedIds: linked } = fitState.current;
+    const { selectedPageId: selected, centerId: centre, linkedIds: linked, insets: covered } = fitState.current;
     const anchor = view.current.find(node => node.id === (selected ?? centre));
     const ring = !!selected && view.current.some(node => linked.has(node.id));
-    const viewport = fitViewport({ bounds: view.bounds, width: view.width, height: view.height, ring, anchor });
+    const viewport = fitViewport({
+      bounds: view.bounds,
+      width: view.width,
+      height: view.height,
+      ring,
+      anchor,
+      insets: covered,
+    });
     void view.flow.setViewport(viewport, duration ? { duration } : undefined);
   }, []);
   // The first view, once the graph has a size: everything drawn, with a margin, clear of the legend.
@@ -1336,6 +1372,7 @@ function KnowledgePageGraphInner({
       width: view.width,
       height: view.height,
       legend: box && legend ? { right: legend.right - box.left + 8, bottom: legend.bottom - box.top + 8 } : undefined,
+      insets: fitState.current.insets,
     });
     void view.flow.setViewport(viewport);
   }, []);
@@ -1348,11 +1385,21 @@ function KnowledgePageGraphInner({
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
     const height = container?.clientHeight ?? 0;
-    const { nodes: current, selectedPageId: selected, centerId: centre, reactFlow: flow } = fitState.current;
+    const {
+      nodes: current,
+      selectedPageId: selected,
+      centerId: centre,
+      reactFlow: flow,
+      insets: covered,
+    } = fitState.current;
     const anchor = current.find(node => node.id === (selected ?? centre));
     if (!anchor || width === 0 || height === 0) return;
     const view = flow.getViewport();
-    const dx = nudgeAxis(anchor.position.x * view.zoom + view.x, (anchor.width ?? 0) * view.zoom, width);
+    const dx = nudgeAxis(
+      anchor.position.x * view.zoom + view.x - covered.left,
+      (anchor.width ?? 0) * view.zoom,
+      width - covered.left - covered.right,
+    );
     const dy = nudgeAxis(anchor.position.y * view.zoom + view.y, (anchor.height ?? 0) * view.zoom, height);
     if (dx === 0 && dy === 0) return;
     void flow.setViewport({ zoom: view.zoom, x: view.x + dx, y: view.y + dy }, duration ? { duration } : undefined);
@@ -1398,6 +1445,10 @@ function KnowledgePageGraphInner({
   const selectedHere = useRef<string | null>(null);
   const selectedIsLoaded = !!selectedPageId && pagesById.has(selectedPageId);
   const initialized = useRef(false);
+  useEffect(() => {
+    if (initialized.current) nudgeToSelection(fitDuration(prefersMotion()));
+  }, [insets.left, insets.right, nudgeToSelection]);
+
   // The first view is refitted while the graph is still filling in (ring pages, children, links arrive over the
   // first moments), until the user does anything or the window closes. After that the view is theirs.
   const settleUntil = useRef(0);
@@ -1502,6 +1553,8 @@ function KnowledgePageGraphInner({
       }}
     >
       <GraphLegend
+        left={insets.left}
+        collapsible={collapsibleLegend}
         branches={dotBranches}
         levels={drawnLevels}
         focused={!!selectedPageId && laidOut.positions.has(selectedPageId)}
@@ -1537,12 +1590,39 @@ function KnowledgePageGraphInner({
         onEdgeClick={onEdgeClick}
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
-        <Controls showInteractive={false} showFitView={false}>
-          <ControlButton onClick={() => fit(fitDuration(prefersMotion()))} title="Fit view" aria-label="Fit view">
-            <Maximize aria-hidden />
-          </ControlButton>
-        </Controls>
       </ReactFlow>
+      <ButtonsGroup
+        size="sm"
+        aria-label="Zoom"
+        data-knowledge-graph-zoom
+        style={{ left: insets.left + 12 }}
+        className="absolute bottom-3 z-10 shadow-overlay transition-[left] duration-slow ease-out-custom motion-reduce:transition-none"
+      >
+        <Button
+          size="icon-sm"
+          tooltip="Zoom out"
+          aria-label="Zoom out"
+          onClick={() => void reactFlow.zoomOut({ duration: fitDuration(prefersMotion()) })}
+        >
+          <Minus />
+        </Button>
+        <Button
+          size="icon-sm"
+          tooltip="Zoom in"
+          aria-label="Zoom in"
+          onClick={() => void reactFlow.zoomIn({ duration: fitDuration(prefersMotion()) })}
+        >
+          <Plus />
+        </Button>
+        <Button
+          size="icon-sm"
+          tooltip="Fit view"
+          aria-label="Fit view"
+          onClick={() => fit(fitDuration(prefersMotion()))}
+        >
+          <Maximize />
+        </Button>
+      </ButtonsGroup>
     </div>
   );
 }

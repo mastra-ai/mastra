@@ -131,12 +131,12 @@ describe('KnowledgePageExplorer', () => {
     expect(
       screen.getByText('The graph shows the first 2 pages. Open the tree or search to reach the rest.'),
     ).toBeTruthy();
-    const graphButton = screen.getByRole('button', { name: 'Graph' });
+    const graphButton = screen.getByRole('tab', { name: 'Graph' });
     const container = screen.getByTestId('knowledge-graph-container');
-    expect(graphButton.getAttribute('aria-pressed')).toBe('false');
+    expect(graphButton.getAttribute('aria-selected')).toBe('false');
     expect(container.classList.contains('hidden')).toBe(true);
     fireEvent.click(graphButton);
-    expect(graphButton.getAttribute('aria-pressed')).toBe('true');
+    expect(graphButton.getAttribute('aria-selected')).toBe('true');
     expect(container.classList.contains('block')).toBe(true);
     expect(container.classList.contains('hidden')).toBe(false);
   });
