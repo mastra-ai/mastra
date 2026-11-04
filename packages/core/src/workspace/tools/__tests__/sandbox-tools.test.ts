@@ -280,23 +280,16 @@ describe('execute_command tool', () => {
       expect(result).toBe('Started background process (PID: 42)');
     });
 
-    it('runs foreground when background is not set', async () => {
+    it('runs foreground through the process manager when background is not set', async () => {
+      const handle = createMockHandle({ pid: '7', stdout: 'foreground result\n' });
       const sandbox = createMockSandbox({
-        executeCommand: vi.fn().mockResolvedValue({
-          success: true,
-          exitCode: 0,
-          stdout: 'foreground result\n',
-          stderr: '',
-          executionTimeMs: 5,
-        }),
-        processes: {
-          spawn: vi.fn(),
-        },
+        executeCommand: vi.fn(),
+        processes: { spawn: vi.fn().mockResolvedValue(handle) },
       });
       const ctx = createContext(sandbox);
       const result = await executeCommandWithBackgroundTool.execute({ command: 'echo hi' }, ctx);
       expect(result).toBe('foreground result\n');
-      expect(sandbox.processes.spawn).not.toHaveBeenCalled();
+      expect(sandbox.executeCommand).not.toHaveBeenCalled();
     });
 
     it('passes truncation metadata to background onExit callbacks', async () => {
