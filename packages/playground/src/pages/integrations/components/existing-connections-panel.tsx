@@ -57,7 +57,7 @@ function ConnectionRow({
                     Author
                   </Txt>
                 </dt>
-                <dd className="min-w-0 truncate">
+                <dd className="min-w-0 wrap-anywhere">
                   <Txt as="span" variant="caption" tone="muted">
                     {authorId}
                   </Txt>
