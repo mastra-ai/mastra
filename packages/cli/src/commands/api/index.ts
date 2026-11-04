@@ -425,7 +425,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     examples: [
       {
         description: 'Create an observability score',
-        command: `mastra api score create '{"score":{"scoreId":"score_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}'`,
+        command: `mastra api score create '{"score":{"scoreId":"score_123","traceId":"trace_123","scorerId":"quality","score":0.95,"runId":"run_123","entityType":"agent","entityId":"weather-agent"}}'`,
       },
     ],
   });

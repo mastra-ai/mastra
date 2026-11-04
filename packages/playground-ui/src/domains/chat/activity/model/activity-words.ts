@@ -84,7 +84,7 @@ export function callsOutcome(calls: readonly WordedCall[]): CallsOutcome {
   };
 }
 
-/** "1 failed · 2 incomplete" for several calls; a lone call only says it never finished. */
+/** "1 failed and 2 incomplete" for several calls; a lone call only says it never finished. */
 export function outcomeText({ failed, incomplete }: CallsOutcome, callCount: number): string {
   if (callCount <= 1) return incomplete > 0 ? 'incomplete' : '';
   const counts = [
@@ -94,5 +94,5 @@ export function outcomeText({ failed, incomplete }: CallsOutcome, callCount: num
   return counts
     .filter(({ count }) => count > 0)
     .map(({ count, word }) => `${count} ${word}`)
-    .join(' · ');
+    .join(' and ');
 }

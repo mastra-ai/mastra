@@ -15,7 +15,7 @@ export function TableWidget(props: WidgetKindProps<TableOptions>) {
       queries={props.views.flatMap(v => v.queries)}
       partial
       pending={() => (
-        <ChartCard title={props.widget.title ?? ''} bodyHeight="fit">
+        <ChartCard title={props.widget.title ?? ''} dragHandle={props.dragHandle} bodyHeight="fit">
           <MetricsCard.Loading />
         </ChartCard>
       )}

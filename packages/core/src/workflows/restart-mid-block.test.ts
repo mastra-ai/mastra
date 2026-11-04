@@ -82,9 +82,13 @@ async function editStoredStep(
     await store.persistWorkflowSnapshot({ workflowName, runId, snapshot });
     return;
   }
-  const steps = await store.loadWorkflowRunSteps({ workflowName, runId, stepIds: [stepId] });
+  const steps = (await store.loadWorkflowRunSteps({ workflowName, runId, stepIds: [stepId] }))!;
   edit(steps[stepId]);
   await store.appendWorkflowRunEntries({ workflowName, runId, header: stored.header, steps });
+}
+
+async function withLoadedSteps(result: any) {
+  return { ...result, steps: typeof result.steps === 'function' ? await result.steps() : result.steps };
 }
 
 /**
@@ -124,7 +128,14 @@ async function crashAndRestart(
 
   const restarted = await (await second.workflow.createRun({ runId: run.runId })).restart();
   const stored = await storedSnapshot(freshStore, workflowName, run.runId);
-  return { original, restarted, stored, tables: await runTablesOf(freshStorage), fns: second.fns };
+  return {
+    // A storage v2 result's `steps` is a loader.
+    original: await withLoadedSteps(original),
+    restarted: await withLoadedSteps(restarted),
+    stored,
+    tables: await runTablesOf(freshStorage),
+    fns: second.fns,
+  };
 }
 
 describe.each([1, 2] as const)(

@@ -17,6 +17,7 @@ import type {
 
 import { Badge } from '@/ds/components/Badge';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 
 const ACTIVITY_LABELS: Record<KnowledgeActivityAction, string> = {
@@ -404,7 +405,12 @@ export function KnowledgePageDetail({
             <dt className="sr-only">Version</dt>
             <dd>
               <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
-                Version {page.version} · updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
+                <Metadata>
+                  <Metadata.Item>Version {page.version}</Metadata.Item>
+                  <Metadata.Item>
+                    Updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
+                  </Metadata.Item>
+                </Metadata>
               </Txt>
             </dd>
           </div>
@@ -494,7 +500,12 @@ export function KnowledgePageDetail({
                       {ACTIVITY_LABELS[event.action] ?? event.action}
                     </Txt>
                     <Txt as="span" variant="caption" tone="muted">
-                      {event.provenance.author} · <When iso={event.createdAt} />
+                      <Metadata>
+                        <Metadata.Item>{event.provenance.author}</Metadata.Item>
+                        <Metadata.Item>
+                          <When iso={event.createdAt} />
+                        </Metadata.Item>
+                      </Metadata>
                     </Txt>
                   </li>
                 ))}
