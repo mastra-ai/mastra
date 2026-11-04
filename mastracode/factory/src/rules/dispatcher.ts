@@ -348,6 +348,8 @@ interface ThreadSwitchSession {
 }
 
 interface FactoryNotificationResult {
+  /** Core keeps a failed delivery's reason here instead of rejecting `accepted`. */
+  record?: { lastDeliveryError?: string };
   persisted?: Promise<unknown>;
   accepted?: Promise<{
     action?: string;
@@ -586,9 +588,11 @@ async function awaitNotification(
     const [, accepted] = await Promise.all([notification.persisted, notification.accepted]);
     if (!accepted) {
       if (requireDelivery) {
-        throw new FactoryDispatchError(
-          'notification_delivery_failed',
-          'Factory notification was persisted without agent delivery.',
+        const reason = notification.record?.lastDeliveryError;
+        throw notificationDeliveryFailed(
+          reason
+            ? `Factory notification was not delivered: ${reason}`
+            : 'Factory notification was persisted without agent delivery.',
         );
       }
       return undefined;
@@ -610,12 +614,16 @@ async function awaitNotification(
     return accepted;
   } catch (error) {
     if (error instanceof FactoryDispatchError) throw error;
-    throw new FactoryDispatchError(
-      'notification_delivery_failed',
-      `Factory notification delivery failed: ${sanitizeDispatchError(error)}`,
-      { cause: error },
-    );
+    throw notificationDeliveryFailed(`Factory notification delivery failed: ${sanitizeDispatchError(error)}`, {
+      cause: error,
+    });
   }
+}
+
+/** A start refused for its user fails the same way on every redelivery, so it keeps that refusal's code. */
+function notificationDeliveryFailed(message: string, options?: ErrorOptions): FactoryDispatchError {
+  const code = credentialTenantFailureCode(options?.cause ?? new Error(message)) ?? 'notification_delivery_failed';
+  return new FactoryDispatchError(code, message, options);
 }
 
 export class FactoryDecisionDispatcher {

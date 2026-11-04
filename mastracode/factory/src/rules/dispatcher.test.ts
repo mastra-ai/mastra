@@ -31,6 +31,24 @@ const PROVIDER_RATE_LIMIT = Object.assign(new Error("This request would exceed y
   statusCode: 429,
 });
 
+/** The error the real credential resolver throws for a start it cannot bill to this user. */
+async function credentialTenantFailure(user: unknown): Promise<Error> {
+  setCredentialLogger({ error: () => {} });
+  setCredentialStoreProvider(
+    () => undefined,
+    async requestContext => resolveAuthenticatedCredentialTenant(requestContext),
+  );
+  try {
+    await prepareCredentialTenant(new RequestContext(user ? [['user', user]] : []));
+  } catch (error) {
+    if (error instanceof Error) return error;
+  } finally {
+    setCredentialStoreProvider(undefined);
+    setCredentialLogger(undefined);
+  }
+  throw new Error('expected the credential resolver to refuse this user');
+}
+
 async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1') {
   return (
     await storage.upsert({
@@ -6074,6 +6092,38 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  // A kickoff wakes its session through a notification. Core keeps a refused wake's reason on the notification
+  // record rather than rejecting, so the start used to fail as a delivery failure and be retried.
+  it.each([
+    ['recorded on the notification', (failure: Error) => ({ record: { lastDeliveryError: failure.message } })],
+    ['thrown', (failure: Error) => ({ persisted: Promise.resolve(), accepted: Promise.reject(failure) })],
+  ])('fails a kickoff whose wake was refused for no user, %s, once and says why (#28697)', async (_case, refusal) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const failure = await credentialTenantFailure(undefined);
+    const { controller, sendNotificationSignal } = createSession();
+    sendNotificationSignal.mockImplementation(async () => refusal(failure) as never);
+    const { transitionService } = await preparePromptKickoff(storage);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+
+    await dispatcher.runOnce(new Date(start));
+    await dispatcher.runOnce(new Date(start + 2 * 60 * 60_000));
+
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      failureCode: 'run_user_unauthenticated',
+      lastError: expect.stringContaining('the request has no authenticated user'),
+    });
+  });
+
   it('schedules the next kickoff attempt a backoff after a long run failed, not after it started', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, consumeStream, emitAgentEnd } = createSession(undefined, {
@@ -7212,22 +7262,6 @@ describe('run-end backstop report', () => {
 });
 
 describe('a skill run that ends in error (#27740)', () => {
-  async function credentialTenantFailure(user: unknown): Promise<Error> {
-    setCredentialLogger({ error: () => {} });
-    setCredentialStoreProvider(
-      () => undefined,
-      async requestContext => resolveAuthenticatedCredentialTenant(requestContext),
-    );
-    try {
-      await prepareCredentialTenant(new RequestContext(user ? [['user', user]] : []));
-    } catch (error) {
-      if (error instanceof Error) return error;
-    } finally {
-      setCredentialStoreProvider(undefined);
-      setCredentialLogger(undefined);
-    }
-    throw new Error('expected the credential resolver to refuse this user');
-  }
   const PROVIDER_401 = Object.assign(new Error('Provider rejected the request'), { statusCode: 401 });
 
   it('records the run error as its cause, clears it for the next attempt, and leaves a retryable failure for a person', async () => {
