@@ -392,6 +392,23 @@ describe('AccountRotationProcessor.processAPIError', () => {
     expect(emitEvent.mock.calls.map(([event]) => event.message).join('\n')).not.toMatch(/persistent outage/i);
   });
 
+  it('gives each model step its own stream-cut budget', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 64 });
+    const args = makeArgs({ error: Object.assign(streamCutError(), { url: ANTHROPIC_URL }) });
+    const cut = (stepNumber: number, retryCount: number) =>
+      processor.processAPIError({ ...args, stepNumber, retryCount } as any);
+
+    // Step 0 spends its whole budget and then succeeds on the last retry.
+    expect([await cut(0, 0), await cut(0, 1)]).toEqual([{ retry: true }, { retry: true }]);
+    // A later step's cut shares the request's processor state but still gets its retries.
+    expect([await cut(1, 0), await cut(1, 1), await cut(1, 2)]).toEqual([
+      { retry: true },
+      { retry: true },
+      { retry: false },
+    ]);
+  });
+
   it.each([429, 402])(
     'rotates to the next account on %d, persists the switch part, swaps the slot',
     async statusCode => {

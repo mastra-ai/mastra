@@ -646,12 +646,15 @@ export class AccountRotationProcessor implements Processor {
     // account a few times, and when that runs out surface the error itself
     // rather than marking every account unavailable as a persistent outage.
     if (classification.kind === 'stream-cut') {
-      const cuts = typeof state.streamCutRetries === 'number' ? state.streamCutRetries : 0;
+      // The budget belongs to one model step: `state` lives for the whole request, and a
+      // step's retries keep its step number, while the next step starts with a fresh budget.
+      const budget = state.streamCutRetries as { step: number; count: number } | undefined;
+      const cuts = budget?.step === args.stepNumber ? budget.count : 0;
       if (cuts >= MAX_STREAM_CUT_RETRIES) {
         await this.gateChainHop(args, error);
         return { retry: false };
       }
-      state.streamCutRetries = cuts + 1;
+      state.streamCutRetries = { step: args.stepNumber, count: cuts + 1 };
       // The retry replays the request from scratch (Q10), as a rotation does.
       args.rotateResponseMessageId?.();
       const controller = args.requestContext?.get('controller') as
