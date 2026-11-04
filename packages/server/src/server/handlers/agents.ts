@@ -2858,7 +2858,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+    'Reconnect to an existing agent stream to receive missed events. Pass offset as the number of frames already received to resume without duplicates.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal }) => {
@@ -2876,14 +2876,15 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // those from an older @mastra/core, are observed through the topic directly.
       const subscribe = (onEvent: (event: any) => void, onComplete: () => void): Promise<() => Promise<void>> => {
         if (typeof durableAgent?.__subscribeToRunStream === 'function') {
-          return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
+          return durableAgent.__subscribeToRunStream(runId, { onComplete }, onEvent);
         }
-        const subscribed =
-          offset !== undefined
-            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
-            : pubsub.subscribeWithReplay(topic, onEvent);
-        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+        return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));
       };
+
+      // `offset` counts the frames a client has already received, not log entries: the log also holds
+      // lifecycle records that never reach the wire, and one record can become several frames. Replaying
+      // from the start and skipping that many frames keeps the count identical to what /stream sent.
+      let framesToSkip = offset ?? 0;
 
       let closed = false;
       let pendingRejection: Error | undefined;
@@ -2960,7 +2961,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                     return;
                   }
                   for (const chunk of toAgentStreamChunks(event)) {
-                    controller.enqueue(chunk);
+                    if (framesToSkip > 0) framesToSkip--;
+                    else controller.enqueue(chunk);
                   }
                   if (type === 'finish' || event.type === 'error' || type === 'abort') {
                     cleanup(controller);

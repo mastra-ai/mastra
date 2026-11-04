@@ -3414,15 +3414,17 @@ export class Agent extends BaseResource {
    * Use this to resume receiving events after a disconnection.
    *
    * @param params.runId - The run ID to observe
-   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
+   * @param params.offset - Number of chunks already received for this run, counting from the first chunk of
+   * `stream()` or of an `observe()` without an offset. The response skips that many chunks and sends the rest.
+   * If omitted, replays all chunks.
    * @returns Promise containing a streaming Response
    *
    * @example
    * ```typescript
-   * // Reconnect to a stream from a specific position
+   * // Reconnect after receiving 42 chunks
    * const response = await client.agents('my-agent').observe({
    *   runId: 'run-123',
-   *   offset: 42, // Resume from event 42
+   *   offset: 42, // Skip the 42 chunks already received
    * });
    *
    * await response.processDataStream({
