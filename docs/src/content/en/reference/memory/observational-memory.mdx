@@ -996,6 +996,13 @@ Emitted when observation or reflection fails. The system falls back to synchrono
   { name: 'tokensAttempted', type: 'number', description: 'Message tokens (input) that were attempted.' },
   { name: 'error', type: 'string', description: 'Error message.' },
   {
+    name: 'providerError',
+    type: '{ statusCode?: number; codes?: string[] }',
+    description:
+      'HTTP status and error codes the model provider returned when the Observer or Reflector call failed. Use it to tell a rate limit or an exhausted quota from other failures.',
+    isOptional: true,
+  },
+  {
     name: 'retrying',
     type: 'true',
     description:
@@ -1080,6 +1087,13 @@ Emitted when async buffering fails. The system falls back to synchronous process
   { name: 'durationMs', type: 'number', description: 'Duration until failure in milliseconds.' },
   { name: 'tokensAttempted', type: 'number', description: 'Message tokens (input) that were attempted to buffer.' },
   { name: 'error', type: 'string', description: 'Error message.' },
+  {
+    name: 'providerError',
+    type: '{ statusCode?: number; codes?: string[] }',
+    description:
+      'HTTP status and error codes the model provider returned when the Observer or Reflector call failed. Use it to tell a rate limit or an exhausted quota from other failures.',
+    isOptional: true,
+  },
   { name: 'observations', type: 'string', description: 'Any partial content.', isOptional: true },
   { name: 'recordId', type: 'string', description: 'The OM record ID.' },
   { name: 'threadId', type: 'string', description: "This thread's ID." },
