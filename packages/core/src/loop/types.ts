@@ -180,8 +180,6 @@ export type StreamInternal = {
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */
   initialSignalEchoes?: CreatedAgentSignal[];
-  // Saves `user` signals to the thread before the model request that reads them. Unset when
-  // memory does not save the turn to its own storage.
   /** @deprecated Use `runScope.get(SAVE_ACCEPTED_USER_SIGNALS_KEY)` from `loop/run-scope-keys`. */
   saveAcceptedUserSignals?: SaveAcceptedUserSignals;
 };
