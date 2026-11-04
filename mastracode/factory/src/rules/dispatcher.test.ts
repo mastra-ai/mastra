@@ -6072,6 +6072,206 @@ describe('FactoryDecisionDispatcher', () => {
       vi.useRealTimers();
     }
   });
+
+  describe('while idle', () => {
+    // An idle Factory must leave its database alone so serverless Postgres
+    // (e.g. Neon) can suspend; work arrives through wakes, not polling.
+    async function startIdle(options?: { reconcileToolResults?: () => Promise<void> }) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const claims = {
+        deferred: vi.spyOn(storage, 'claimDeferredDecisions'),
+        pending: vi.spyOn(storage, 'claimPendingStarts'),
+        nextClaimableAt: vi.spyOn(storage, 'nextClaimableAt'),
+      };
+      const { controller, delivered } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+        storage,
+        ownerId: 'worker-1',
+        reconcileToolResults: options?.reconcileToolResults,
+      });
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      return { storage, claims, delivered, dispatcher };
+    }
+
+    function storageCalls(claims: Awaited<ReturnType<typeof startIdle>>['claims']) {
+      return (
+        claims.deferred.mock.calls.length + claims.pending.mock.calls.length + claims.nextClaimableAt.mock.calls.length
+      );
+    }
+
+    it('makes no storage calls once the startup cycle finds nothing to do', async () => {
+      vi.useFakeTimers();
+      try {
+        const reconcileToolResults = vi.fn(async () => {});
+        const { claims, dispatcher } = await startIdle({ reconcileToolResults });
+        const afterStartup = storageCalls(claims);
+
+        await vi.advanceTimersByTimeAsync(15 * 60_000);
+
+        expect(storageCalls(claims)).toBe(afterStartup);
+        // Startup reconciles once; idle time never re-polls bound threads.
+        expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reconciles tool results after an interactive run on a bound thread ends', async () => {
+      vi.useFakeTimers();
+      try {
+        const reconcileToolResults = vi.fn(async () => {});
+        const { dispatcher } = await startIdle({ reconcileToolResults });
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+
+        // An interactive chat queues no work; its steps are the only signal.
+        for (let step = 0; step < 5; step++) {
+          dispatcher.noteBoundThreadRun();
+          await vi.advanceTimersByTimeAsync(10_000);
+        }
+        const duringRun = reconcileToolResults.mock.calls.length;
+        expect(duringRun).toBeGreaterThan(1);
+
+        // The run ends: one trailing pass within an interval, then quiet again.
+        await vi.advanceTimersByTimeAsync(2 * 30_000);
+        expect(reconcileToolResults.mock.calls.length).toBeGreaterThan(duringRun);
+        const afterRun = reconcileToolResults.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(30 * 60_000);
+        expect(reconcileToolResults).toHaveBeenCalledTimes(afterRun);
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('rechecks storage once an hour in case a wake was lost', async () => {
+      vi.useFakeTimers();
+      try {
+        const { storage, claims, delivered, dispatcher } = await startIdle();
+        const afterStartup = claims.pending.mock.calls.length;
+
+        // Drop the wake the write sends, as if it was lost in transit.
+        dispatcher.wake = () => {};
+        await preparePromptKickoff(storage);
+        await vi.advanceTimersByTimeAsync(59 * 60_000);
+        expect(claims.pending.mock.calls.length).toBe(afterStartup);
+        expect(delivered).not.toContain('factory-kickoff:kickoff-1');
+
+        Reflect.deleteProperty(dispatcher, 'wake');
+        await vi.advanceTimersByTimeAsync(2 * 60_000);
+        expect(claims.pending.mock.calls.length).toBeGreaterThan(afterStartup);
+        await vi.waitFor(() => expect(delivered).toContain('factory-kickoff:kickoff-1'));
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('dispatches a run start queued while it sleeps', async () => {
+      vi.useFakeTimers();
+      try {
+        const { storage, claims, delivered, dispatcher } = await startIdle();
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        const asleep = claims.pending.mock.calls.length;
+
+        await preparePromptKickoff(storage);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(claims.pending.mock.calls.length).toBeGreaterThan(asleep);
+        await vi.waitFor(() => expect(delivered).toContain('factory-kickoff:kickoff-1'));
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('sleeps until a delayed retry is due, then claims it', async () => {
+      vi.useFakeTimers();
+      try {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        await queueDecision(storage, {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Continue.',
+          idempotencyKey: 'delayed-retry',
+        });
+        const now = new Date();
+        const [claimed] = await storage.claimDeferredDecisions({
+          ownerId: 'other-worker',
+          now,
+          leaseExpiresAt: new Date(now.getTime() + 30_000),
+          limit: 1,
+        });
+        if (!claimed) throw new Error('Expected the queued decision');
+        const dueAt = new Date(now.getTime() + 5 * 60_000);
+        await storage.failDeferredDecision({
+          id: claimed.id,
+          orgId: claimed.orgId,
+          factoryProjectId: claimed.factoryProjectId,
+          ownerId: 'other-worker',
+          now,
+          availableAt: dueAt,
+          lastError: 'not yet',
+          failureCode: 'session_unavailable',
+          terminal: false,
+        });
+        const deferred = vi.spyOn(storage, 'claimDeferredDecisions');
+        const { controller } = createSession();
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          isAutoRunEnabled: async () => true,
+          transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+          storage,
+          ownerId: 'worker-1',
+        });
+
+        dispatcher.start();
+        await vi.advanceTimersByTimeAsync(0);
+        const startup = deferred.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(dueAt.getTime() - Date.now() - 1_000);
+        expect(deferred.mock.calls.length).toBe(startup);
+
+        await vi.advanceTimersByTimeAsync(2_000);
+        expect(deferred.mock.calls.length).toBeGreaterThan(startup);
+        await vi.waitFor(async () => expect((await decisionByKey(storage, 'delayed-retry'))?.attempts).toBe(2));
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('serializes a burst of wakes into a single cycle at a time', async () => {
+      vi.useFakeTimers();
+      try {
+        const { claims, dispatcher } = await startIdle();
+        const before = claims.pending.mock.calls.length;
+        let concurrent = 0;
+        let peak = 0;
+        claims.pending.mockImplementation(async () => {
+          concurrent += 1;
+          peak = Math.max(peak, concurrent);
+          await Promise.resolve();
+          concurrent -= 1;
+          return [];
+        });
+
+        for (let index = 0; index < 20; index += 1) dispatcher.wake();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(peak).toBe(1);
+        // The burst coalesces: the running cycle plus at most one re-run.
+        expect(claims.pending.mock.calls.length - before).toBeLessThanOrEqual(2);
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });
 
 describe('custom-board deferred targets', () => {
