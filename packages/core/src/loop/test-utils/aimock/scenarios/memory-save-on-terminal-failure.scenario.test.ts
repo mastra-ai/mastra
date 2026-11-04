@@ -297,6 +297,52 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // A failed completion check moves the answer to a new message. The deadline save must put the
+  // processor's data part on the answer still streaming, not on the rejected one, as a finish does.
+  itDeadline(
+    'total-timeout saves the data part with the answer after a failed completion check',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-data-part-check-${engine}`;
+      const summary: Processor = {
+        id: 'turn-summary',
+        processOutputResult: async ({ messages, writer }) => {
+          await writer?.custom({ type: 'data-turn-summary', data: { status: 'timed-out' } });
+          return messages;
+        },
+      };
+      const answerCheck = { id: 'answer-check', name: 'Answer Check', run: async () => ({ score: 0, reason: 'No' }) };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'When does my order ship?',
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        maxSteps: 4,
+        isTaskComplete: { scorers: [answerCheck as any] },
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        expectStreamError: true,
+        outputProcessors: [summary],
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Let me check.' });
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 1 },
+            { content: 'PARTIAL '.repeat(200) },
+            { chunkSize: 8, latency: 50 },
+          );
+        },
+      });
+
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      const withPart = messages.filter(message => message.content.parts.some(p => p.type === 'data-turn-summary'));
+      expect(withPart).toHaveLength(1);
+      expect(JSON.stringify(withPart[0]!.content.parts)).toContain('PARTIAL');
+      expect(JSON.stringify(withPart[0]!.content.parts)).not.toContain('Let me check.');
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // No step finishes in time. History is append-only, so the failed turn is still kept: the user
   // message and the text the model streamed before the deadline.
   it(

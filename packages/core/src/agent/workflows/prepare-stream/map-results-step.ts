@@ -343,10 +343,11 @@ export function createMapResultsStep<OUTPUT = undefined>({
       hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
-        // The deadline pass saves the turn through MessageHistory, so it needs write access.
+        // The deadline pass saves the turn through MessageHistory, so it needs write access. Like the
+        // finish path, check it for any thread: MessageHistory can save without a Memory instance.
         beforeDeadlineSave: async () => {
-          const threadId = memoryData.thread?.id;
-          if (memory && threadId && !memoryConfig?.readOnly) {
+          const threadId = memoryData.thread?.id ?? result.threadId;
+          if (threadId && !memoryConfig?.readOnly) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
           }
         },

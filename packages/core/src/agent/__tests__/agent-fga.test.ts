@@ -11,6 +11,7 @@ import { EventEmitterPubSub } from '../../events';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { MessageHistory } from '../../processors/memory/message-history';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -349,6 +350,61 @@ describe('Agent FGA checks', () => {
         message: 'Memory write denied at the total deadline, the turn is not saved',
       });
       expect(logs.map(log => log.message)).not.toContain('Output processors failed at the total deadline');
+    });
+
+    it('does not save the turn at the total deadline without write access when history has no Memory', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      vi.mocked(fgaProvider.require).mockImplementation(async (_user, input) => {
+        if (input.permission === 'memory:write') {
+          throw new FGADeniedError({ id: 'user-1' }, input.resource, input.permission);
+        }
+      });
+      const store = new InMemoryStore();
+      const storage = (await store.getStore('memory'))!;
+      const hang = createTool({
+        id: 'hang',
+        description: 'never finishes',
+        inputSchema: z.object({}),
+        execute: (_input, { abortSignal }) =>
+          new Promise(resolve => abortSignal?.addEventListener('abort', () => resolve({ done: true }))),
+      });
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [
+            { type: 'tool-call', toolCallType: 'function', toolCallId: 'call_hang', toolName: 'hang', input: '{}' },
+          ],
+        }),
+      });
+      // No Memory instance: the turn is saved only by the MessageHistory output processor.
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        tools: { hang },
+        outputProcessors: [new MessageHistory({ storage })],
+      });
+      new Mastra({ agents: { testAgent: agent }, logger: false, storage: store, server: { fga: fgaProvider } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(
+        agent.generate('test', {
+          memory: { thread: 'thread-1', resource: 'resource-1' },
+          requestContext: requestContext as any,
+          modelSettings: { timeout: { totalMs: 300 } },
+        } as any),
+      ).rejects.toThrow();
+
+      // Give a save that slipped through time to land.
+      await new Promise(resolve => setTimeout(resolve, 1_500));
+      const { messages } = await storage.listMessages({ threadId: 'thread-1', perPage: false });
+      expect(messages).toEqual([]);
+      expect(vi.mocked(fgaProvider.require).mock.calls.map(([, input]) => input.permission)).toContain('memory:write');
     });
   });
 

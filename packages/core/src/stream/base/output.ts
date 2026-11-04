@@ -2157,7 +2157,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                           data: { type: string; data?: unknown; transient?: boolean },
                           writerOptions?: { messageId?: string },
                         ) => {
-                          persistProcessorDataChunk(turn, writerOptions?.messageId ?? self.messageId, data);
+                          persistProcessorDataChunk(
+                            turn,
+                            resolveProcessorWriterMessageId(turn, self.messageId, writerOptions?.messageId),
+                            data,
+                          );
                           if (!streamOpen) return;
                           self.#emitChunk(data as ChunkType<OUTPUT>);
                           controller.enqueue(data as ChunkType<OUTPUT>);
