@@ -1,7 +1,8 @@
 import { FACTORY_ROLE_STAGES, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
-import { itemSessionSpec, metadataLabels, pullRequestStatusForItem } from './boardItems';
+import { itemSessionSpec, metadataLabels, pullRequestStatusForItem, pullRequestStatusForSource } from './boardItems';
+import { attachedPullRequestSource, cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
@@ -51,7 +52,9 @@ const RE_REVIEW_MOVE: CardMove = { label: 'Re-review', role: 'review', stage: 'p
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (item.board != null && item.board !== 'work') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW_MOVE] : [];
-  if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
+  // A card carrying a pull request, its own or one attached to its issue, sends it to PR review.
+  if ((columnStage === 'pr-review' || columnStage === 'review') && cardHasPullRequest(item)) return [REVIEW_MOVE];
+  if (columnStage === 'review') return [];
   if (item.source === 'github-issue') {
     return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
       ? [PREPARE_APPROVAL]
@@ -65,15 +68,17 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   ) {
     return issueMoves(columnStage);
   }
-  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW_MOVE] : [];
+  return isPullRequestSource(item.source) ? [REVIEW_MOVE] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
-  return (
-    columnStage === 'done' &&
-    (item.source === 'github-pr' || item.source === 'gitlab-pr') &&
-    ['open', 'draft'].includes(pullRequestStatusForItem({ ...item, stages: item.stages ?? [] }))
-  );
+  if (columnStage !== 'done' || !cardHasPullRequest(item)) return false;
+  // An issue card's pull request state lives on the pull request's source, not the issue's.
+  const attached = attachedPullRequestSource(item);
+  const status = attached
+    ? pullRequestStatusForSource(attached)
+    : pullRequestStatusForItem({ ...item, stages: item.stages ?? [] });
+  return status === 'open' || status === 'draft';
 }
 
 // PR review carries a pull request card's reviewer, after the builder's lanes.
