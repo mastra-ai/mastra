@@ -136,7 +136,7 @@ export class TemporalExecutionEngine {
   }
 
   // Record steps in the core StepResult shape ({ status, payload, output, startedAt, endedAt }).
-  async recordStep(stepResults, id, payload, run) {
+  async recordStep(stepResults, id, payload, run, group) {
     const startedAt = Date.now();
     const attempt = async resumeData => {
       try {
@@ -176,7 +176,11 @@ export class TemporalExecutionEngine {
 
       this.suspendedSteps.add(id);
       try {
-        await condition(() => this.resumePayloads.has(id));
+        await condition(() => this.resumePayloads.has(id) || group?.failed === true);
+        // A failed sibling branch ends the run, so the step stays suspended in the records.
+        if (!this.resumePayloads.has(id)) {
+          return output;
+        }
         resumeData = this.resumePayloads.get(id)?.resumeData;
         this.resumePayloads.delete(id);
       } finally {
@@ -219,17 +223,22 @@ export class TemporalExecutionEngine {
     return { inputData, ...extra, ...this.executionContext };
   }
 
-  async executeEntry(entry, inputData, stepResults) {
+  async executeEntry(entry, inputData, stepResults, group) {
     switch (entry.type) {
       case 'step': {
         log.info('step', { stepId: entry.step.id });
-        return this.recordStep(stepResults, entry.step.id, inputData, resumeData =>
-          this.activityHandle[entry.step.id](
-            this.activityParams(inputData, {
-              initData: this.initData,
-              ...(resumeData !== undefined && { resumeData }),
-            }),
-          ),
+        return this.recordStep(
+          stepResults,
+          entry.step.id,
+          inputData,
+          resumeData =>
+            this.activityHandle[entry.step.id](
+              this.activityParams(inputData, {
+                initData: this.initData,
+                ...(resumeData !== undefined && { resumeData }),
+              }),
+            ),
+          group,
         );
       }
 
@@ -276,8 +285,16 @@ export class TemporalExecutionEngine {
           parallelEntry.type === 'childWorkflow' ? parallelEntry.workflowType : parallelEntry.step.id;
         log.info('parallel', { steps: entry.steps.map(entryId) });
         // Waits for every branch, as a local run does, so a failed run keeps the others' records.
+        // A failed branch also ends the wait of a suspended one, which would otherwise keep the run
+        // open until a resume. The flag is per group so a later parallel starts clean.
+        const group = { failed: false };
         const settled = await Promise.allSettled(
-          entry.steps.map(step => this.executeEntry(step, inputData, stepResults)),
+          entry.steps.map(step =>
+            this.executeEntry(step, inputData, stepResults, group).catch(error => {
+              group.failed = true;
+              throw error;
+            }),
+          ),
         );
         const failures = settled.filter(outcome => outcome.status === 'rejected');
         // Same order as in execute(), whatever the branch order: a cancelled run ends Canceled, and
