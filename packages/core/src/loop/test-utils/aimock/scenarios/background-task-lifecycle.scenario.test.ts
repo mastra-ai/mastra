@@ -982,7 +982,7 @@ describeForAllEngines(
     // Technical: a newer untilIdle stream on the thread closed the waiting one as `replaced`, which
     // marked its running task as caller-stopped; when the newer stream couldn't adopt the task,
     // the task's finish never woke the agent. (#29032)
-    it('reports a deferred task when a newer untilIdle stream that replaced the one waiting for it cannot track it (#29032)', async () => {
+    it('reports a deferred task when the newer untilIdle stream that replaced the one waiting for it stops waiting first (#29032)', async () => {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));
       const memory = new MockMemory();
@@ -993,7 +993,8 @@ describeForAllEngines(
       const shared = await createSharedAgent(llm, {
         tools: { research: makeResearchTool(gate) },
         agentBackgroundTasks: { tools: { research: true } },
-        backgroundTasks: BG_CONFIG,
+        // Short enough that the newer stream gives up waiting before the task finishes.
+        backgroundTasks: { ...BG_CONFIG, untilIdleMaxIdleMs: 2_000 },
         memory,
         engine,
       });
@@ -1038,10 +1039,6 @@ describeForAllEngines(
       await waitFor(storedText(memory, thread), s => s.includes('Working on it.'));
       const taskId = firstChunks.find(c => c.type === 'background-task-started')!.payload.taskId as string;
 
-      // The newer stream can't look up the thread's running tasks, so it doesn't wait for this one.
-      vi.spyOn(shared.mastra.backgroundTaskManager!, 'listTasks').mockRejectedValueOnce(
-        new Error('Storage unavailable'),
-      );
       const later = await runLoopScenario({
         engine,
         llm,
@@ -1063,6 +1060,89 @@ describeForAllEngines(
         (t: any) => t?.status === 'completed',
       );
       await waitFor(storedText(memory, thread), s => s.includes('The coral research is finished.'));
+    }, 30_000);
+
+    it("doesn't wake the agent for a deferred task when the caller stops the newer untilIdle stream that replaced the one waiting for it", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const llm = getMock();
+      const thread = { threadId: 'bg-replaced-stop-thread', resourceId: 'bg-replaced-stop-user' };
+      const prompt = 'Research coral reefs';
+      const laterPrompt = 'Say hello meanwhile';
+      const shared = await createSharedAgent(llm, {
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        engine,
+      });
+
+      const lastUserMessage = (req: unknown) =>
+        ((req as any)?.messages ?? []).filter((m: any) => m.role === 'user').at(-1)?.content;
+      const isLater = (req: unknown) => lastUserMessage(req) === laterPrompt;
+      llm.on({ endpoint: 'chat', predicate: (req: unknown) => isLater(req) }, { content: 'Hello.' });
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && JSON.stringify(req).includes(FINISH_SIGNAL) },
+        { content: 'The coral research is finished.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && !hasToolResult(req) },
+        { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'coral reefs' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => !isLater(req) && hasToolResult(req) },
+        { content: 'Working on it.' },
+      );
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        prompt,
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+      });
+      const firstChunks: Chunk[] = [];
+      const firstDone = (async () => {
+        for await (const chunk of first.output.fullStream as AsyncIterable<unknown>) firstChunks.push(chunk as Chunk);
+      })();
+      await vi.waitFor(() => expect(firstChunks.some(c => c.type === 'background-task-started')).toBe(true), {
+        timeout: 10_000,
+      });
+      await waitFor(storedText(memory, thread), s => s.includes('Working on it.'));
+      const taskId = firstChunks.find(c => c.type === 'background-task-started')!.payload.taskId as string;
+
+      // The newer stream's lookup of the thread's running tasks hasn't answered when its caller stops it.
+      vi.spyOn(shared.mastra.backgroundTaskManager!, 'listTasks').mockReturnValueOnce(new Promise(() => {}));
+      const later = await runLoopScenario({
+        engine,
+        llm,
+        prompt: laterPrompt,
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        streamUntilIdle: true,
+        manualStreamConsumption: true,
+      });
+      for await (const chunk of later.output.fullStream as AsyncIterable<unknown>) {
+        if ((chunk as Chunk).type === 'finish') break;
+      }
+      await firstDone;
+
+      release();
+      await waitFor(
+        () => shared.mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(JSON.stringify(llm.getRequests().map(r => r.body))).not.toContain(FINISH_SIGNAL);
     }, 30_000);
 
     it("doesn't wake the agent for a deferred task when the caller stops the untilIdle stream waiting for it", async () => {
