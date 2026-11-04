@@ -274,6 +274,22 @@ function buildJsonOverrideSchema(
   } as StandardSchemaWithJSON;
 }
 
+/**
+ * A remote MCP tool's error text is written by the server and can echo the submitted arguments
+ * (Issue #29318). The model still receives it; the tracked exception records only its id.
+ */
+function trackableToolError(mastraError: MastraError, err: unknown, model: string): MastraError {
+  const id = (err as { id?: unknown } | null)?.id;
+  if (id !== 'MCP_CLIENT_TOOL_EXECUTION_FAILED') return mastraError;
+  return new MastraError({
+    id: mastraError.id,
+    domain: mastraError.domain as ErrorDomain,
+    category: mastraError.category as ErrorCategory,
+    text: `Remote tool failed (${id})`,
+    details: { errorMessage: id, model },
+  });
+}
+
 export class CoreToolBuilder extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
@@ -1081,7 +1097,11 @@ export class CoreToolBuilder extends MastraBase {
           ...executionFailureTermination(mastraError),
           attributes: { success: false },
         });
-        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
+        logger.trackException(trackableToolError(mastraError, err, model?.modelId ?? ''), {
+          ...logData,
+          ...rest,
+          model: logModelObject,
+        });
         throw mastraError;
       }
     };

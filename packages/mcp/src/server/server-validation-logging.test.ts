@@ -4,6 +4,7 @@
  */
 import { ConsoleLogger } from '@mastra/core/logger';
 import { createTool } from '@mastra/core/tools';
+import { makeCoreTool } from '@mastra/core/utils';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Client } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -32,6 +33,12 @@ describe('MCPServer validation failure logging (Issue #29318)', () => {
           id: 'contact',
           description: 'Contacts a person',
           inputSchema: z.object({ email: z.email(), age: z.number() }),
+          execute: async () => ({ ok: true }),
+        }),
+        refined: createTool({
+          id: 'refined',
+          description: 'Only accepts emails without spaces',
+          inputSchema: z.object({ email: z.string().refine(value => !value.includes(' '), 'no spaces') }),
           execute: async () => ({ ok: true }),
         }),
         explode: createTool({
@@ -141,6 +148,35 @@ describe('MCPServer validation failure logging (Issue #29318)', () => {
       const clientLogs = JSON.stringify(clientSpies.flatMap(spy => spy.mock.calls));
       expect(clientLogs).toContain('explode');
       expect(clientLogs).not.toContain(SECRET);
+    } finally {
+      await mcpClient.disconnect();
+    }
+  });
+
+  it('keeps the server error text out of the exception an agent tracks for an MCPClient tool', async () => {
+    const mcpClient = new InternalMastraMCPClient({ name: 'tracked-failure', server: { url: served.url } });
+    mcpClient.__setLogger(new ConsoleLogger({ level: 'silent' }));
+    const agentLogger = new ConsoleLogger({ level: 'silent' });
+    const trackException = vi.spyOn(agentLogger, 'trackException');
+    const badEmail = `bad ${SECRET}`;
+    try {
+      await mcpClient.connect();
+      const tools = await mcpClient.tools();
+      const coreTool = makeCoreTool(tools.refined!, { name: 'refined', logger: agentLogger });
+
+      const failure = await coreTool.execute!({ email: badEmail }, { toolCallId: 'call-1', messages: [] }).catch(
+        (error: unknown) => error,
+      );
+
+      // The model still sees what the server said so it can correct the call.
+      expect(String(failure)).toContain(SECRET);
+      expect(trackException).toHaveBeenCalledTimes(1);
+      const tracked = trackException.mock.calls[0]!;
+      expect(JSON.stringify(tracked)).toContain('MCP_CLIENT_TOOL_EXECUTION_FAILED');
+      expect(JSON.stringify({ ...(tracked[0] as object), message: (tracked[0] as Error).message })).not.toContain(
+        SECRET,
+      );
+      expect(JSON.stringify(tracked[1])).not.toContain(SECRET);
     } finally {
       await mcpClient.disconnect();
     }
