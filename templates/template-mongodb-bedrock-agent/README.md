@@ -51,7 +51,7 @@ For related memory concepts, see the [Mastra semantic recall documentation](http
 
 ## Deploy to Amazon Bedrock AgentCore
 
-`agent.ts` implements the AgentCore HTTP contract (`POST /invocations`, `GET /ping`) and maps each AgentCore session id to a Mastra memory thread. `agentcore/agentcore.json` declares the runtime; the `Dockerfile` builds the required ARM64 image.
+`agent.ts` implements the AgentCore HTTP contract (`POST /invocations`, `GET /ping`) and maps each user and session pair to a Mastra memory thread. `agentcore/agentcore.json` declares the runtime; the `Dockerfile` builds the required ARM64 image.
 
 1. Copy `agentcore/aws-targets.example.json` to `agentcore/aws-targets.json` and set your AWS account id and region.
 2. In [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/create_secret.html), create an **Other type of secret** in that region. Use the **Plaintext** editor and store only your MongoDB connection URI, without JSON or surrounding quotes. Use the default `aws/secretsmanager` encryption key.
@@ -60,12 +60,17 @@ For related memory concepts, see the [Mastra semantic recall documentation](http
 
 ```bash
 npx @aws/agentcore@0.31.1 deploy
-npx @aws/agentcore@0.31.1 invoke --prompt "How do I define a tool in Mastra?"
+export AGENTCORE_USER_ID="your-own-operator-id"
+npx @aws/agentcore@0.31.1 invoke --user-id "$AGENTCORE_USER_ID" --prompt "How do I define a tool in Mastra?"
 ```
 
 `scripts/ask.sh "your question"` wraps that invoke call and renders the answer as markdown in your terminal.
 
-To put it in front of users, call the deployed `/invocations` endpoint from your app and pass a stable session id per user, so each person keeps their own thread in MongoDB.
+This deployment uses IAM authentication. Restrict `bedrock-agentcore:InvokeAgentRuntime` and `bedrock-agentcore:InvokeAgentRuntimeForUser` to trusted operators or your backend and the specific runtime ARN. The CLI example is an operator demo, not end-user authentication.
+
+For an app with multiple users, authenticate each user in your backend, derive `runtimeUserId` from that verified identity, and generate and store a separate `runtimeSessionId` for each conversation. Check ownership before reusing a session. Call `InvokeAgentRuntime` with those server-owned values; never forward user or session IDs supplied by a browser. Both AgentCore headers are required by this server, and identity fields in the JSON body are rejected. The memory key includes both IDs, so two users with the same session ID have separate histories.
+
+The [AgentCore user-id header does not verify end-user identity](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-oauth.html). A principal allowed to invoke for users must therefore be trusted to supply the correct identity. Do not expose the container's HTTP port directly or grant these IAM permissions to untrusted end users. Local Studio is for development and should remain private.
 
 The runtime uses its IAM execution role for Bedrock and calls Secrets Manager's `GetSecretValue` at startup to load the MongoDB URI. The URI stays out of the image and the deployment configuration. If you use a customer-managed KMS key instead of the default encryption key, grant the runtime role `kms:Decrypt` on that key and allow the role in the key policy.
 
