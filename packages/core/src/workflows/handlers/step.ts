@@ -429,12 +429,7 @@ export async function executeStep(
           : wrapMastra(engine.mastra, { currentSpan: stepSpan })
         : undefined;
 
-      let completedNestedOutput: {
-        found: boolean;
-        value?: unknown;
-        state?: unknown;
-        base?: Record<string, unknown>;
-      } = { found: false };
+      let completedNestedOutput: { found: boolean; value?: unknown; state?: unknown } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
         // The nested workflow's own option: it can differ from this run's.
@@ -445,18 +440,7 @@ export async function executeStep(
           if (stored?.header.status === 'success') {
             // The header alone has no state; read it only once the run is known to be finished.
             const run = await workflowsStore?.loadWorkflowRun({ ...nestedRun, successfulSteps: 'summary' });
-            // Hand back only the changes since the drive started, as a live hand-back does: the
-            // parent took in the earlier ones, and a sibling may have changed its state since.
-            const base =
-              stored.startStateSeq === undefined
-                ? undefined
-                : await workflowsStore?.loadWorkflowRunState({ ...nestedRun, seq: stored.startStateSeq });
-            completedNestedOutput = {
-              found: true,
-              value: stored.header.result,
-              state: run?.state,
-              base: base ?? undefined,
-            };
+            completedNestedOutput = { found: true, value: stored.header.result, state: run?.state };
           }
         } else {
           const snapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -481,7 +465,14 @@ export async function executeStep(
           throw stateValidationError;
         }
         contextMutations.stateUpdate = stateData;
-        contextMutations.stateBase = completedNestedOutput.base;
+        // The state this nested run started from, recorded when the parent parked on it. Merging
+        // against it replays only the nested run's own changes, so keys another step changed while
+        // it ran keep their newer value instead of reverting to the nested run's copy.
+        contextMutations.stateBase =
+          executionContext.foreachIndex !== undefined
+            ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]
+                ?.suspendPayload?.__workflow_meta?.startState
+            : stepResults[step.id]?.suspendPayload?.__workflow_meta?.startState;
         if (engine.requiresDurableContextSerialization()) {
           contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
         }

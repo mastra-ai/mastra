@@ -30,6 +30,8 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   requestContext?: RequestContextReader;
   /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
   disabledBuiltinTools?: readonly string[];
+  /** Host-configured workspace-relative plans directory (see `MastraCodeConfig.plansDir`). */
+  plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); treated as denied. */
   disabledTools?: readonly string[];
   /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
@@ -118,7 +120,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     hasWebExtract,
     hasSubagents: ctx.hasSubagents,
     deniedTools,
-    plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
+    plansDir: getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir }),
   });
 
   // Map new context to base context

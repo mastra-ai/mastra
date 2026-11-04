@@ -10,8 +10,8 @@ import { createStep } from './workflow';
 
 const num = z.object({ n: z.number() });
 
-/** A run mid-step, whose lease has lapsed, then marked `success` as if it finished during the sweep. */
-async function finishedRun() {
+/** A run mid-step, then with its ownership lease lapsed so nothing is driving it. */
+async function midStepRun() {
   const storage = new MockStore();
   const store = storage.stores.workflows!;
   const hang = createStep({
@@ -26,20 +26,70 @@ async function finishedRun() {
   await new Promise(resolve => setTimeout(resolve, 20));
   expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'r1' })).toBe('running');
 
-  await store.updateWorkflowState({ workflowName: 'wf', runId: 'r1', opts: { status: 'success' } });
   for (const runId of [...(store as any).db.runOwners.keys()]) {
     await store.claimRunOwnership({ runId, ownerId: 'lapsed', leaseMs: -1, force: true });
   }
   return store;
 }
 
-describe('canceling a nested run its parent left behind', () => {
-  it('keeps a run that finished since the sweep listed it', async () => {
-    const store = await finishedRun();
+/** The same run, marked `success` as if it finished during the sweep. */
+async function finishedRun() {
+  const store = await midStepRun();
+  await store.updateWorkflowState({ workflowName: 'wf', runId: 'r1', opts: { status: 'success' } });
+  return store;
+}
 
-    await cancelNestedRun({ store, workflowName: 'wf', runId: 'r1', expectedStatus: 'running' });
+function debugLogs() {
+  const logs: Array<{ message: string; context: any }> = [];
+  const logger = { debug: (message: string, context: any) => logs.push({ message, context }) } as any;
+  return { logs, logger };
+}
+
+describe('canceling a nested run its parent left behind', () => {
+  it('keeps a run that finished since the sweep listed it and says why', async () => {
+    const store = await finishedRun();
+    const { logs, logger } = debugLogs();
+
+    await cancelNestedRun({ store, workflowName: 'wf', runId: 'r1', expectedStatus: 'running', logger });
 
     expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'r1' })).toBe('success');
+    expect(logs).toEqual([
+      {
+        message: 'Left a nested workflow run as it is: it changed status since the sweep listed it',
+        context: { workflowName: 'wf', runId: 'r1' },
+      },
+    ]);
+  });
+
+  it('leaves a run another process is driving and says why', async () => {
+    const store = await midStepRun();
+    const { logs, logger } = debugLogs();
+    await store.claimRunOwnership({ runId: 'r1', ownerId: 'other', leaseMs: 60_000, force: true });
+
+    await cancelNestedRun({ store, workflowName: 'wf', runId: 'r1', expectedStatus: 'running', logger });
+
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'r1' })).toBe('running');
+    expect(logs).toEqual([
+      {
+        message: 'Left a nested workflow run whose parent finished, because another process is driving it',
+        context: { workflowName: 'wf', runId: 'r1' },
+      },
+    ]);
+  });
+
+  it('cancels a run nothing else is driving and says so', async () => {
+    const store = await midStepRun();
+    const { logs, logger } = debugLogs();
+
+    await cancelNestedRun({ store, workflowName: 'wf', runId: 'r1', expectedStatus: 'running', logger });
+
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'r1' })).toBe('canceled');
+    expect(logs).toEqual([
+      {
+        message: 'Canceled a nested workflow run whose parent finished without it',
+        context: { workflowName: 'wf', runId: 'r1' },
+      },
+    ]);
   });
 });
 
