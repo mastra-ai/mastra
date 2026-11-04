@@ -221,8 +221,8 @@ describe('intake routes placing linked cards', () => {
 
       const own = await seeded.deliver(pullRequest(issue.id, false));
 
-      expect(own).toBeDefined();
       expect(own!.id).not.toBe(issue.id);
+      expect(placed(own)).toEqual({ board: 'work', stages: ['intake'] });
       expect(await sourceTypes(seeded, issue.id)).toEqual(['issue']);
     });
 
