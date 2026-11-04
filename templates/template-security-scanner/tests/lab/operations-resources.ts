@@ -101,6 +101,7 @@ export async function legacySharedImageLifecycle() {
     .digest('hex');
   const created: string[] = [];
   let consumer: ReturnType<typeof client.getContainer> | undefined;
+  let primaryFailure: { error: unknown } | undefined;
   try {
     // Exercise the supported classic builder, independently of the operator's
     // buildx plugin/cache configuration. All build inputs and labels are owned.
@@ -174,21 +175,35 @@ export async function legacySharedImageLifecycle() {
     console.log(
       `OPERATIONS_LEGACY_IMAGE_RECORD ${JSON.stringify({ owner, input, finalImageId: receipt.imageId, ownedImageIds: created, unownedBoundaryId: parent.Parent, remainingOwnedImages: 0 })}`,
     );
-  } finally {
-    if (consumer) await consumer.remove({ force: true, v: true });
-    // This exact root and its image IDs were allocated by this test. Preserve
-    // the original counterexample while cleaning only its explicit resources.
-    for (const id of created) {
-      try {
-        const image = await client.getImage(id).inspect();
-        expect(image.Config.Labels?.[OWNER_LABEL]).toBe(owner);
-        expect(image.Config.Labels?.[INPUT_LABEL]).toBe(input);
-        if (!(await client.listContainers({ all: true, filters: { ancestor: [id] } })).length)
-          await client.getImage(id).remove({ force: false, noprune: true });
-      } catch (error) {
-        if ((error as { statusCode?: number }).statusCode !== 404) throw error;
-      }
-    }
-    await rm(root, { recursive: true, force: true });
+  } catch (error) {
+    primaryFailure = { error };
   }
+  const failures: unknown[] = [];
+  const cleanup = async (operation: () => Promise<unknown>) => {
+    try {
+      await operation();
+    } catch (error) {
+      if ((error as { statusCode?: number } | null)?.statusCode !== 404) failures.push(error);
+    }
+  };
+  if (consumer) await cleanup(() => consumer!.remove({ force: true, v: true }));
+  // Attempt every exact owned resource even if an earlier cleanup fails.
+  for (const id of created) {
+    await cleanup(async () => {
+      const image = await client.getImage(id).inspect();
+      if (image.Config.Labels?.[OWNER_LABEL] !== owner || image.Config.Labels?.[INPUT_LABEL] !== input)
+        throw new Error('LEGACY_IMAGE_OWNERSHIP_MISMATCH');
+      if (!(await client.listContainers({ all: true, filters: { ancestor: [id] } })).length)
+        await client.getImage(id).remove({ force: false, noprune: true });
+    });
+  }
+  await cleanup(() => rm(root, { recursive: true, force: true }));
+  if (primaryFailure) {
+    if (failures.length)
+      throw new AggregateError([primaryFailure.error, ...failures], 'LEGACY_IMAGE_LIFECYCLE_FAILED', {
+        cause: primaryFailure.error,
+      });
+    throw primaryFailure.error;
+  }
+  if (failures.length) throw new AggregateError(failures, 'LEGACY_IMAGE_CLEANUP_FAILED');
 }
