@@ -698,6 +698,39 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect((await readSplit(storage)).boardItems.get(id)?.autonomy_armed_at).toEqual(later);
   });
 
+  // Production: rows an old replica rewrote during the first rollout. Edited on the board too, they
+  // skip; untouched there, they recopy once. Later passes must not repeat the recopies.
+  it("recopies an old replica's rewrites once and then reports the same skips on every pass", async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    await migrateWorkItemSplit(storage);
+    const recopy = cards.get('github issue')!;
+    const skip = cards.get('jira issue')!;
+    const copied = (await readSplit(storage)).boardItems.get(skip)!;
+    const edited = new Date(copied.updated_at.getTime() + 1_000);
+    await storage.ops.updateMany(
+      FACTORY_BOARD_ITEMS_SCHEMA.name,
+      { id: skip },
+      { stages: ['review'], updated_at: edited, revision: copied.revision + 1 },
+    );
+    for (const id of [recopy, skip]) {
+      await storage.ops.updateMany(
+        'work_items',
+        { id },
+        { title: 'Changed by an old replica', updated_at: new Date(edited.getTime() + 1_000) },
+      );
+    }
+
+    const second = await migrateWorkItemSplit(storage);
+    expect(second).toMatchObject({ recopied: 1, workItems: 1, skipped: [{ id: skip }] });
+
+    for (const pass of [await migrateWorkItemSplit(storage), await migrateWorkItemSplit(storage)]) {
+      expect(pass).toMatchObject({ recopied: 0, workItems: 0, unchanged: FIXTURES.length - 1 });
+      expect(pass.skipped).toEqual(second.skipped);
+    }
+  });
+
   it('reports conflicting legacy recopies without reverting newer board state', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);

@@ -1484,21 +1484,25 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return report;
   }
 
-  /** Copy the legacy cards for these external records, so a list-based lookup finds them. */
+  /**
+   * Copy the legacy cards filed for these external records, so a lookup that matches on `list()`
+   * finds them. A no-op once the split finished.
+   */
   async copyLegacyCards({
     orgId,
     factoryProjectId,
-    sourceKeys,
+    sources,
   }: {
     orgId: string;
     factoryProjectId: string;
-    sourceKeys: readonly string[];
+    sources: readonly ExternalWorkItemSource[];
   }): Promise<void> {
-    if (this.#legacyMode || !this.#split.pending || !sourceKeys.length) return;
+    if (this.#legacyMode || !this.#split.pending || !sources.length) return;
+    const sourceKeys = new Set(sources.map(source => externalSourceKey(source)!));
     await this.#cards(this.#db, { transaction: false }).findMany({
       org_id: orgId,
       factory_project_id: factoryProjectId,
-      source_key: { in: [...new Set(sourceKeys)] },
+      source_key: { in: [...sourceKeys] },
     });
   }
 
