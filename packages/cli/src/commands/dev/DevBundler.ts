@@ -133,9 +133,8 @@ export class DevBundler extends Bundler {
     );
 
     const outputDir = join(outputDirectory, this.outputDir);
-    const outputDependencies = await this.getOutputDependencies(entryFile);
 
-    await this.writePackageJson(outputDir, outputDependencies, {});
+    await this.writePackageJson(outputDir, new Map(), {});
 
     let lastFsAgentsModuleSource = fsRoutingWatchOptions?.preparedEntry.moduleSource;
 

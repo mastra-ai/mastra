@@ -52,14 +52,95 @@ describe('Workers-compatible JSON Schema validation runtime', () => {
     expect(validate({ format: 42 })).toBe(false);
   });
 
-  it('ignores formats nested under additionalItems', () => {
-    const validate = compileDefault({
-      type: 'array',
-      items: [{ type: 'string' }],
-      additionalItems: { type: 'string', format: 'email' },
-    });
-
-    expect(validate(['first', 'not-an-email'])).toBe(true);
+  it.each([
+    {
+      keyword: 'additionalItems',
+      schema: {
+        type: 'array',
+        items: [{ type: 'string' }],
+        additionalItems: { type: 'string', format: 'email' },
+      },
+      value: ['first', 'not-an-email'],
+      valid: true,
+    },
+    {
+      keyword: 'additionalProperties',
+      schema: {
+        type: 'object',
+        properties: { known: { type: 'string' } },
+        additionalProperties: { type: 'string', format: 'email' },
+      },
+      value: { known: 'value', extra: 'not-an-email' },
+      valid: true,
+    },
+    {
+      keyword: 'patternProperties',
+      schema: {
+        type: 'object',
+        patternProperties: { '^x-': { type: 'string', format: 'email' } },
+      },
+      value: { 'x-value': 'not-an-email' },
+      valid: true,
+    },
+    {
+      keyword: 'dependencies',
+      schema: {
+        type: 'object',
+        dependencies: {
+          trigger: {
+            properties: { value: { type: 'string', format: 'email' } },
+          },
+        },
+      },
+      value: { trigger: true, value: 'not-an-email' },
+      valid: true,
+    },
+    {
+      keyword: 'if/then',
+      schema: {
+        type: 'object',
+        if: { properties: { branch: { const: 'then' } } },
+        then: { properties: { value: { type: 'string', format: 'email' } } },
+      },
+      value: { branch: 'then', value: 'not-an-email' },
+      valid: true,
+    },
+    {
+      keyword: 'if/else',
+      schema: {
+        type: 'object',
+        if: { properties: { branch: { const: 'then' } } },
+        else: { properties: { value: { type: 'string', format: 'email' } } },
+      },
+      value: { branch: 'else', value: 'not-an-email' },
+      valid: true,
+    },
+    {
+      keyword: 'not',
+      schema: { not: { type: 'string', format: 'email' } },
+      value: 'not-an-email',
+      valid: false,
+    },
+    {
+      keyword: 'contains',
+      schema: {
+        type: 'array',
+        contains: { type: 'string', format: 'email' },
+      },
+      value: ['not-an-email'],
+      valid: true,
+    },
+    {
+      keyword: 'definitions',
+      schema: {
+        $ref: '#/definitions/email',
+        definitions: { email: { type: 'string', format: 'email' } },
+      },
+      value: 'not-an-email',
+      valid: true,
+    },
+  ])('matches default AJV format behavior under $keyword', ({ schema, value, valid }) => {
+    expect(compileDefault(schema)(value)).toBe(valid);
   });
 
   it('rejects asynchronous schemas', () => {
