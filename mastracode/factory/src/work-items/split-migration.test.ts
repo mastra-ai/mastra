@@ -12,7 +12,6 @@ import {
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
   FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
-  WORK_ITEMS_SCHEMA,
 } from '../storage/domains/work-items/work-item-schema.js';
 import type {
   BoardItemDbRecord,
@@ -292,8 +291,6 @@ async function createStorage(backend: string): Promise<{ storage: FactoryStorage
       ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
       : new LibSQLFactoryStorage({ id: 'split-test', url: ':memory:' });
   const { workItems } = await createFactoryStorageForTests(storage);
-  // Phase-one engine tests: the domain does not register these yet.
-  await storage.ensureCollections([WORK_ITEMS_SCHEMA, FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA]);
   // The Postgres database is shared between runs; start every test from empty tables.
   await storage.ops.deleteMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, {});
   await storage.ops.deleteMany('work_items', {});
@@ -955,6 +952,86 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect(await readSplit(storage)).toEqual(before);
   });
 
+  it('summarizes skipped cards on one line with at most ten sample ids', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const ids: string[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      const { item } = await workItems.upsert({
+        orgId: ORG,
+        userId: USER,
+        factoryProjectId: PROJECT,
+        input: { title: `Native ${index}`, stages: ['planning'], sessions: {}, metadata: {} },
+      });
+      ids.push(item.id);
+    }
+    await seedLegacy(storage);
+    await migrateWorkItemSplit(storage);
+    const later = new Date(Date.now() + 60_000);
+    for (const id of ids) {
+      await workItems.update({ orgId: ORG, id, userId: USER, patch: { stages: ['review'] } });
+      await storage.ops.updateMany('work_items', { id }, { stages: ['done'], updated_at: later });
+    }
+    const logged: string[] = [];
+
+    const report = await migrateWorkItemSplit(storage, { label: 'background pass', log: line => logged.push(line) });
+
+    expect(report.skipped).toHaveLength(12);
+    expect(logged).toHaveLength(1);
+    const [line] = logged as [string];
+    expect(line).not.toContain('\n');
+    expect(line).toMatch(
+      /^work item split \(background pass\): 12 cards checked, 0 copied, 0 recopied, 0 unchanged, 0 deferred, 12 skipped — /,
+    );
+    for (const skip of report.skipped.slice(0, 10)) expect(line).toContain(`${skip.id} (${skip.reason})`);
+    for (const skip of report.skipped.slice(10)) expect(line).not.toContain(skip.id);
+    expect(line).toMatch(/; and 2 more$/);
+  });
+
+  it('logs progress only once a pass outlasts the progress interval', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    await seed(workItems);
+    await seedLegacy(storage);
+    const fast: string[] = [];
+    await migrateWorkItemSplit(storage, { pageSize: 2, label: 'boot pass', log: line => fast.push(line) });
+    // A fast pass: only the summary.
+    expect(fast).toHaveLength(1);
+    expect(fast[0]).toMatch(/^work item split \(boot pass\): \d+ cards checked, /);
+
+    await storage.ops.updateMany('work_items', {}, { updated_at: new Date(Date.now() + 60_000), stages: ['review'] });
+    const slow: string[] = [];
+    let clock = 0;
+    await migrateWorkItemSplit(storage, {
+      pageSize: 2,
+      label: 'boot pass',
+      log: line => slow.push(line),
+      progressIntervalMs: 10_000,
+      now: () => (clock += 4_000),
+    });
+    const progress = slow.slice(0, -1);
+    expect(progress.length).toBeGreaterThan(0);
+    // Throttled: fewer lines than cards, each a single progress line naming the pass and total.
+    expect(progress.length).toBeLessThan(FIXTURES.length);
+    for (const line of progress)
+      expect(line).toMatch(
+        new RegExp(
+          `^work item split \\(boot pass\\): \\d+/${FIXTURES.length} cards checked, \\d+ copied, \\d+ skipped$`,
+        ),
+      );
+    expect(slow.at(-1)).toMatch(/cards checked, .* recopied, /);
+  });
+
+  it('issues only the page query for a page whose rows are all deferred', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    await seed(workItems);
+    await seedLegacy(storage);
+    const counted = countingOps(storage.ops);
+
+    const report = await migrateWorkItemSplit(storage, { ops: counted.ops, include: () => false });
+
+    expect(report).toMatchObject({ deferred: FIXTURES.length, workItems: 0 });
+    expect(counted.queries()).toBe(1);
+  });
+
   it('stops before copying anything when the pass is aborted', async () => {
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);
@@ -1007,17 +1084,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
 
 function countingOps(ops: FactoryStorageOps) {
   let legacy = 0;
+  let all = 0;
   const counted = new Proxy(ops, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver);
-      if (property !== 'findMany' || typeof value !== 'function') {
-        return typeof value === 'function' ? value.bind(target) : value;
-      }
+      if (typeof value !== 'function') return value;
+      if (property !== 'findMany' && property !== 'findOne') return value.bind(target);
       return (collection: string, ...rest: unknown[]) => {
+        all += 1;
         if (collection === 'work_items') legacy += 1;
         return value.call(target, collection, ...rest);
       };
     },
   });
-  return { ops: counted, legacyQueries: () => legacy };
+  return { ops: counted, legacyQueries: () => legacy, queries: () => all };
 }

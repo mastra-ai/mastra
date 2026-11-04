@@ -28,6 +28,32 @@ const WORK_ITEMS = FACTORY_WORK_ITEMS_SCHEMA.name;
 const SOURCES = FACTORY_WORK_ITEM_SOURCES_SCHEMA.name;
 const BOARD_ITEMS = FACTORY_BOARD_ITEMS_SCHEMA.name;
 const PAGE_SIZE = 200;
+const LOGGED_SKIPS = 10;
+const PROGRESS_LOG_INTERVAL_MS = 10_000;
+
+const fmt = (value: number) => value.toLocaleString('en-US');
+
+/** One line: skips repeat while an older replica keeps writing, so only a sample is named. */
+function summaryLine(title: string, report: WorkItemSplitReport): string {
+  const counts = [
+    `${fmt(report.cards)} cards checked`,
+    `${fmt(report.workItems)} copied`,
+    `${fmt(report.recopied)} recopied`,
+    `${fmt(report.unchanged)} unchanged`,
+    `${fmt(report.deferred)} deferred`,
+    `${fmt(report.skipped.length)} skipped`,
+  ];
+  if (report.aborted) counts.push('stopped early');
+  let line = `${title}: ${counts.join(', ')}`;
+  if (report.skipped.length) {
+    const sample = report.skipped
+      .slice(0, LOGGED_SKIPS)
+      .map(skip => `${skip.id} (${skip.reason.replace(/\s+/g, ' ')})`);
+    const more = report.skipped.length - sample.length;
+    line += ` — ${sample.join('; ')}${more ? `; and ${fmt(more)} more` : ''}`;
+  }
+  return line;
+}
 
 export interface MigratedBoardItem {
   workItemId: string;
@@ -392,7 +418,13 @@ export async function copyLegacyRows(ops: FactoryStorageOps, rows: readonly Work
 export interface MigrateWorkItemSplitOptions {
   dryRun?: boolean;
   ops?: FactoryStorageOps;
-  log?: (message: string, details?: Record<string, unknown>) => void;
+  /** Receives single-line progress and summary messages. */
+  log?: (line: string) => void;
+  /** Names the pass in log lines, e.g. `boot pass`. */
+  label?: string;
+  /** Minimum time between progress lines; a pass shorter than this logs none. */
+  progressIntervalMs?: number;
+  now?: () => number;
   /** Rows this returns false for are counted as deferred and not looked up. */
   include?: (row: WorkItemDbRow) => boolean | Promise<boolean>;
   /** Scan only legacy rows written after this watermark, in `(updated_at, id)` order. */
@@ -413,6 +445,9 @@ export async function migrateWorkItemSplit(
     since,
     pageSize = PAGE_SIZE,
     signal,
+    label,
+    progressIntervalMs = PROGRESS_LOG_INTERVAL_MS,
+    now = Date.now,
   }: MigrateWorkItemSplitOptions = {},
 ): Promise<WorkItemSplitReport> {
   const report: WorkItemSplitReport = {
@@ -441,6 +476,17 @@ export async function migrateWorkItemSplit(
         ['id', 'asc'],
       ];
   let cursor: CollectionValue[] | undefined = since ? [since.updatedAt, since.id] : undefined;
+  const title = `work item split${dryRun ? ' (dry run)' : ''}${label ? ` (${label})` : ''}`;
+  let lastProgressAt = now();
+  // Counted only once a progress line is due, so a fast pass pays nothing; unknown for a `since` scan.
+  let total: number | null | undefined = since ? null : undefined;
+  const progress = async () => {
+    if (!log || now() - lastProgressAt < progressIntervalMs) return;
+    if (total === undefined) total = (await ops.count?.(LEGACY, {})) ?? null;
+    lastProgressAt = now();
+    const checked = total === null ? fmt(report.cards) : `${fmt(report.cards)}/${fmt(total)}`;
+    log(`${title}: ${checked} cards checked, ${fmt(report.workItems)} copied, ${fmt(report.skipped.length)} skipped`);
+  };
   while (!signal?.aborted) {
     const page = await ops.findMany<WorkItemDbRow>(
       LEGACY,
@@ -500,6 +546,7 @@ export async function migrateWorkItemSplit(
             continue;
           }
         }
+        await progress();
         report.workItems += 1;
         report.sources += card.source ? 1 : 0;
         report.boardItems += 1;
@@ -513,11 +560,10 @@ export async function migrateWorkItemSplit(
     // Per page, so cached boards pick up a long pass's cards as they land.
     if (!dryRun && written.size) await bumpBoardVersions(ops, [...written.values()]);
     if (page.length < pageSize) break;
+    await progress();
   }
   report.aborted = signal?.aborted ?? false;
   report.projects = projects.size;
-  if (report.workItems || report.skipped.length || dryRun) {
-    log?.(dryRun ? 'Factory work item split (dry run)' : 'Factory work item split', { ...report });
-  }
+  if (log && (report.workItems || report.skipped.length || dryRun)) log(summaryLine(title, report));
   return report;
 }
