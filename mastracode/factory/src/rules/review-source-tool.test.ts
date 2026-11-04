@@ -151,6 +151,27 @@ describe('factory_review_source', () => {
     expect(output.triggeredBy).toBeNull();
   });
 
+  it("never names the issue's author as the author of a pull request attached to its card", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareReviewItem(storage, { type: 'issue', externalId: 'github-issue:12', author: 'reporter' });
+    const [card] = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    await storage.update({ orgId: 'org-1', id: card!.id, userId: 'user-1', patch: { stages: ['pr-review'] } });
+    await storage.attachSource({
+      orgId: 'org-1',
+      id: card!.id,
+      source: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:34' },
+      metadata: { state: 'open', number: 34 },
+    });
+    const context = requestContext();
+    const tools = await createReviewSourceTool({ requestContext: context, storage, uiOrigin: PUBLIC_ORIGIN });
+    const output = (await (tools.factory_review_source as ExecutableTool).execute(
+      {},
+      { requestContext: context, agent: { toolCallId: 'tc-1' } },
+    )) as { triggeredBy: string | null; reviewTarget: { type: string; externalId: string } };
+    expect(output.reviewTarget).toMatchObject({ type: 'pull-request', externalId: 'github-pr:34' });
+    expect(output.triggeredBy).toBeNull();
+  });
+
   it('is not offered on non-review sessions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareReviewItem(storage, { role: 'work', externalId: 'github-issue:99' });
