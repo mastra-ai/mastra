@@ -7,4 +7,4 @@ Tool validation failures no longer write submitted values to logs. Logs now reco
 
 `@mastra/core/tools` now exports `getValidationIssuePaths`, which returns the failing field paths of a validation error and masks dynamic keys such as record keys as `*`.
 
-`@mastra/mcp` now requires `@mastra/core` 1.82.0 or later.
+`@mastra/mcp` now requires `@mastra/core` 1.83.0 or later.
