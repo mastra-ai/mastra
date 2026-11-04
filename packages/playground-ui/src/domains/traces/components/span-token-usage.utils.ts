@@ -6,7 +6,7 @@ import { formatDuration } from '@/utils/duration';
 export type TokenUsageRow = {
   label: 'Input' | 'Output';
   total: number;
-  /** Non-zero breakdown, e.g. `5,632 cached · 974 text`. */
+  /** Non-zero breakdown, e.g. `5,632 cached, 974 text`. */
   breakdown: string | undefined;
 };
 

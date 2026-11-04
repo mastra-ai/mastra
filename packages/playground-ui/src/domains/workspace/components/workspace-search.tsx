@@ -6,6 +6,7 @@ import { WorkspaceError } from './workspace-error';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Input } from '@/ds/components/Input';
+import { Metadata } from '@/ds/components/Metadata';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { FileIcon, Icon, SearchIcon, SkillIcon } from '@/ds/icons';
@@ -40,9 +41,11 @@ const countLabel = (count: number, noun: string) => `${count} ${noun}${count ===
 function AsideTitle() {
   const { fileCount, skillCount } = useWorkspaceContext();
   return (
-    <Txt as="span" variant="label" tone="muted" className="flex min-w-0 flex-wrap items-center gap-2">
-      <span>{fileCount === undefined ? 'Files' : countLabel(fileCount, 'File')}</span>
-      {skillCount === undefined ? null : <span>{countLabel(skillCount, 'Skill')}</span>}
+    <Txt as="span" variant="label" tone="muted" className="block min-w-0">
+      <Metadata singleLine>
+        <Metadata.Item>{fileCount === undefined ? 'Files' : countLabel(fileCount, 'File')}</Metadata.Item>
+        {skillCount === undefined ? null : <Metadata.Item>{countLabel(skillCount, 'Skill')}</Metadata.Item>}
+      </Metadata>
     </Txt>
   );
 }

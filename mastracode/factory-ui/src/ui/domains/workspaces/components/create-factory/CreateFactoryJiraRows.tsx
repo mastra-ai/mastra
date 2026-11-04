@@ -103,7 +103,7 @@ export function CreateFactoryJiraRows({ query, onSelectProject }: CreateFactoryJ
           title={project.name}
           subtitle={
             project.key || project.site ? (
-              <Metadata>
+              <Metadata singleLine>
                 {project.key && <Metadata.Item>{project.key}</Metadata.Item>}
                 {project.site && <Metadata.Item>{project.site}</Metadata.Item>}
               </Metadata>

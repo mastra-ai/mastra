@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ConnectionItem, GroupedConnections } from '../types';
 
@@ -13,50 +14,58 @@ function ConnectionRow({
   disconnectPending: boolean;
   onDisconnect: () => void;
 }) {
+  const authorId = isAdmin ? connection.authorId : undefined;
+
   return (
     <li className="flex items-center justify-between gap-4 border-b py-2">
       <div className="flex min-w-0 flex-col gap-2">
         <Txt as="p" variant="caption" font="mono">
           {connection.connectionId}
         </Txt>
-        <div className="flex flex-wrap items-center gap-2">
-          <Txt as="span" variant="caption">
-            {connection.label ?? '(no label)'}
-          </Txt>
-          <Badge size="xs" emphasis="subtle">
-            {connection.status}
-          </Badge>
-        </div>
-        <dl className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          {connection.scope && (
-            <div className="flex min-w-0 items-baseline gap-1">
-              <dt>
-                <Txt as="span" variant="caption" tone="faint">
-                  Scope
-                </Txt>
-              </dt>
-              <dd className="min-w-0">
-                <Txt as="span" variant="caption" tone="muted">
-                  {connection.scope}
-                </Txt>
-              </dd>
-            </div>
-          )}
-          {isAdmin && connection.authorId && (
-            <div className="flex min-w-0 items-baseline gap-1">
-              <dt>
-                <Txt as="span" variant="caption" tone="faint">
-                  Author
-                </Txt>
-              </dt>
-              <dd className="min-w-0 truncate">
-                <Txt as="span" variant="caption" tone="muted">
-                  {connection.authorId}
-                </Txt>
-              </dd>
-            </div>
-          )}
-        </dl>
+        <Metadata>
+          <Metadata.Item>
+            <Txt as="span" variant="caption">
+              {connection.label ?? '(no label)'}
+            </Txt>
+          </Metadata.Item>
+          <Metadata.Item>
+            <Badge size="xs" emphasis="subtle">
+              {connection.status}
+            </Badge>
+          </Metadata.Item>
+        </Metadata>
+        {(connection.scope || authorId) && (
+          <dl className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            {connection.scope && (
+              <div className="flex min-w-0 items-baseline gap-1">
+                <dt>
+                  <Txt as="span" variant="caption" tone="faint">
+                    Scope
+                  </Txt>
+                </dt>
+                <dd className="min-w-0">
+                  <Txt as="span" variant="caption" tone="muted">
+                    {connection.scope}
+                  </Txt>
+                </dd>
+              </div>
+            )}
+            {authorId && (
+              <div className="flex min-w-0 items-baseline gap-1">
+                <dt>
+                  <Txt as="span" variant="caption" tone="faint">
+                    Author
+                  </Txt>
+                </dt>
+                <dd className="min-w-0 truncate">
+                  <Txt as="span" variant="caption" tone="muted">
+                    {authorId}
+                  </Txt>
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
       </div>
       <button
         type="button"

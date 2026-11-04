@@ -307,9 +307,9 @@ function stubIncidentioCandidate() {
 }
 
 async function expectTooltipParts(parts: string[]) {
-  const tooltip = within(await screen.findByRole('tooltip'));
-  for (const part of parts) expect(tooltip.getByText(part)).toBeVisible();
-  expect(tooltip.getAllByRole('listitem')).toHaveLength(parts.length);
+  const tooltip = await screen.findByRole('tooltip');
+  for (const part of parts) expect(within(tooltip).getByText(part)).toBeVisible();
+  expect(tooltip.querySelectorAll('[data-slot="metadata-item"]')).toHaveLength(parts.length);
 }
 
 describe('Board card pending states', () => {

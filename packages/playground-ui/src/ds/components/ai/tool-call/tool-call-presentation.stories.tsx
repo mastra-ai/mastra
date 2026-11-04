@@ -214,7 +214,9 @@ export const MixedOutcomes: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const group = canvas.getByRole('group', { name: 'Tool group: 3 steps' });
-    await expect(within(group).getByText('1 OK · 1 failed · 1 incomplete')).toBeVisible();
+    for (const outcome of ['1 OK', '1 failed', '1 incomplete']) {
+      await expect(within(group).getByText(outcome)).toBeVisible();
+    }
     await userEvent.click(within(group).getByRole('button'));
     const failed = canvas.getByRole('group', { name: 'Tool: search_content' });
     await userEvent.click(within(failed).getByRole('button'));

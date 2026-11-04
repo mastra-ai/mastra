@@ -107,7 +107,7 @@ export function SnapshotTimeline({
   const statusParts = [
     `Snapshot ${snapshot.ordinal}/${totalCount}`,
     ...(snapshot.cutoffAt
-      ? [`as of ${selectedDate}`, `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
+      ? [`As of ${selectedDate}`, `Window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
       : [selectedDate]),
     traceLabel(snapshot.traceCount),
   ];

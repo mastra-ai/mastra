@@ -191,8 +191,8 @@ describe('SankeySignals compare mode', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
 
       const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
-      const earlier = await within(comparison).findByRole('list', { name: 'Earlier snapshot' });
-      const later = within(comparison).getByRole('list', { name: 'Later snapshot' });
+      const earlier = await within(comparison).findByRole('group', { name: 'Earlier snapshot' });
+      const later = within(comparison).getByRole('group', { name: 'Later snapshot' });
       expect(within(earlier).getByText('Jun 24 – Jul 1, 2026')).not.toBeNull();
       expect(within(earlier).getByText('50 traces')).not.toBeNull();
       expect(within(earlier).getByText('10 themes')).not.toBeNull();
@@ -249,7 +249,7 @@ describe('SankeySignals compare mode', () => {
       expect(within(track).queryByText('A')).toBeNull();
       expect(within(track).queryByText('B')).toBeNull();
       // Snapshot summaries stay visible as plain text, not buttons.
-      const summary = await within(comparison).findByRole('list', { name: 'Earlier snapshot' });
+      const summary = await within(comparison).findByRole('group', { name: 'Earlier snapshot' });
       expect(summary.closest('button')).toBeNull();
     });
 

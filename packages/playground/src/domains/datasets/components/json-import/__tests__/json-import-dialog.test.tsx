@@ -1,6 +1,6 @@
 import type { RouteResponse } from '@mastra/client-js';
 import type { CodeEditorProps } from '@mastra/playground-ui/components/CodeEditor';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,8 +92,8 @@ describe('JSONImportDialog', () => {
     renderDialog();
 
     pasteJSON(VALID_ITEMS);
-    expect(screen.getByRole('status').textContent).toContain('3 items ready');
-    expect(screen.getByText('1 without groundTruth')).not.toBeNull();
+    expect(screen.getByRole('status').textContent).toMatch(/^3 items ready/);
+    expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
     expect((screen.getByRole('button', { name: 'Import 3 items' }) as HTMLButtonElement).disabled).toBe(false);
 
     pasteJSON('{}');
@@ -159,15 +159,15 @@ describe('JSONImportDialog', () => {
 
       vi.stubGlobal('FileReader', OriginalFileReader);
       await uploadFile('fast.json', '[{"input":"only"}]');
-      expect(screen.getByRole('status').textContent).toContain('1 item ready');
-      expect(screen.getByText('1 without groundTruth')).not.toBeNull();
+      expect(screen.getByRole('status').textContent).toMatch(/^1 item ready/);
+      expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
 
       releaseRead!();
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(screen.getByText('fast.json')).not.toBeNull();
       expect(screen.queryByText('slow.json')).toBeNull();
-      expect(screen.getByRole('status').textContent).toContain('1 item ready');
-      expect(screen.getByText('1 without groundTruth')).not.toBeNull();
+      expect(screen.getByRole('status').textContent).toMatch(/^1 item ready/);
+      expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
     } finally {
       vi.unstubAllGlobals();
     }
@@ -177,15 +177,15 @@ describe('JSONImportDialog', () => {
     renderDialog();
 
     await uploadFile('items.json', VALID_ITEMS);
-    expect(screen.getByRole('status').textContent).toContain('3 items ready');
-    expect(screen.getByText('1 without groundTruth')).not.toBeNull();
+    expect(screen.getByRole('status').textContent).toMatch(/^3 items ready/);
+    expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Paste JSON' }));
     expect(screen.getByRole('status').textContent).toBe('No items yet');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Upload file' }));
-    expect(screen.getByRole('status').textContent).toContain('3 items ready');
-    expect(screen.getByText('1 without groundTruth')).not.toBeNull();
+    expect(screen.getByRole('status').textContent).toMatch(/^3 items ready/);
+    expect(within(screen.getByRole('status')).getByText('1 without groundTruth')).not.toBeNull();
   });
 
   it('imports the validated items and closes the dialog', async () => {

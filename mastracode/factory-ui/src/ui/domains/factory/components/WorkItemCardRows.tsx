@@ -62,7 +62,7 @@ export function WorkItemCardRows({
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
           <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
-            <Metadata>
+            <Metadata singleLine>
               {workItemMeta(item).map((part, index) => (
                 <Metadata.Item key={index}>{part}</Metadata.Item>
               ))}

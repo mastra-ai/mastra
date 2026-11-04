@@ -31,7 +31,7 @@ export function CandidateCardRows({
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <Txt as="span" variant="meta" tone="faint" className="truncate pr-16">
-          <Metadata>
+          <Metadata singleLine>
             {candidate.meta.map((part, index) => (
               <Metadata.Item key={index}>{part}</Metadata.Item>
             ))}

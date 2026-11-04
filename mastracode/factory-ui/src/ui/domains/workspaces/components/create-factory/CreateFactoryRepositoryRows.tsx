@@ -164,7 +164,7 @@ function GithubRepositoryResults({
           icon={<GithubIcon />}
           title={repo.fullName}
           subtitle={
-            <Metadata>
+            <Metadata singleLine>
               <Metadata.Item>{repo.private ? 'Private' : 'Public'}</Metadata.Item>
               <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
             </Metadata>
@@ -207,7 +207,7 @@ function GitLabRepositoryResults({
             icon={<GitLabIcon />}
             title={repo.fullName}
             subtitle={
-              <Metadata>
+              <Metadata singleLine>
                 <Metadata.Item>GitLab</Metadata.Item>
                 <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
               </Metadata>

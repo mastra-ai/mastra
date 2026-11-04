@@ -408,9 +408,8 @@ export function KnowledgePageDetail({
                 <Metadata>
                   <Metadata.Item>Version {page.version}</Metadata.Item>
                   <Metadata.Item>
-                    Updated <When iso={page.updatedAt} />
+                    Updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
                   </Metadata.Item>
-                  <Metadata.Item>by {page.updatedBy.author}</Metadata.Item>
                 </Metadata>
               </Txt>
             </dd>

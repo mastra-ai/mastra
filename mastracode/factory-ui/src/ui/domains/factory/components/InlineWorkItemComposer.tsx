@@ -58,7 +58,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       onSubmit={event => void submit(event)}
     >
       <Txt as="span" variant="meta" tone="faint" className="truncate pr-14">
-        <Metadata>
+        <Metadata singleLine>
           <Metadata.Item>Manual</Metadata.Item>
           <Metadata.Item>new</Metadata.Item>
         </Metadata>

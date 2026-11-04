@@ -37,7 +37,7 @@ export function GlobalSearchSessionResults({
           icon={sessionResultIcon(result.kind)}
           title={result.title}
           subtitle={
-            <Metadata>
+            <Metadata singleLine>
               {result.context.map((part, index) => (
                 <Metadata.Item key={index}>{part}</Metadata.Item>
               ))}

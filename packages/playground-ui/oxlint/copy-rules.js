@@ -5,7 +5,7 @@ export const noTextSeparators = {
   create(context) {
     return copySources(context, (node, { text, separator }) => {
       if (text.trim() === '—' && !separator) return;
-      if (!/[·—]|(?:^|\s)\|(?=\s|$)|(?:^|\s)--(?=\s|$)/.test(text)) return;
+      if (!/[·—]|(?:^|\s)(?:[|•∙]|--)(?=\s|$)|(?:^|\s)-\s/.test(text)) return;
       context.report({
         node,
         message: 'Use separate elements and a layout gap for metadata; use normal sentence punctuation for prose.',

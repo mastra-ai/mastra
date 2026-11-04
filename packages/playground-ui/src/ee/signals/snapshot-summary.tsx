@@ -14,7 +14,7 @@ export function SnapshotSummary({
   label?: string;
 }) {
   return (
-    <Metadata aria-label={label}>
+    <Metadata role={label ? 'group' : undefined} aria-label={label}>
       {prefix && <Metadata.Item>{prefix}</Metadata.Item>}
       {snapshotSummaryParts(snapshot, flow).map(part => (
         <Metadata.Item key={part}>{part}</Metadata.Item>

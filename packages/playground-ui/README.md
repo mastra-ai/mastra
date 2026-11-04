@@ -31,13 +31,15 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 
 ### Metadata
 
-Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows, and the list semantics keep them distinct for assistive technology.
+Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows.
+
+Rows that must keep one line, such as cards, menu options, and truncated titles, pass `singleLine`: fields stay on one line and each shrinks with an ellipsis. Give a short field `className="shrink-0"` to keep it whole while a longer one truncates.
 
 ```tsx
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-<Metadata aria-label="Dataset version">
+<Metadata>
   <Metadata.Item>
     <Txt as="span" variant="label">
       v8
@@ -56,7 +58,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 </Metadata>;
 ```
 
-Use normal sentences in tooltips, accessible names, and other plain-text APIs. Parentheses such as `(current)` and missing-value placeholders remain useful; avoid decorative separators or repeated spaces as a substitute for layout.
+Use normal sentences in tooltips, accessible names, and other plain-text APIs. Parentheses such as `(current)` and missing-value placeholders remain useful; avoid decorative separators or repeated spaces as a substitute for layout. Browser tab titles set through `document.title` keep the `Page | Product` convention.
 
 ### Data sizes
 

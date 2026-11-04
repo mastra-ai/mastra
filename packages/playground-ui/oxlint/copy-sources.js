@@ -68,6 +68,10 @@ function isRenderGuard(identifier) {
   return false;
 }
 
+function isDocumentTitle(node) {
+  return node.type === 'MemberExpression' && nameOf(node.object) === 'document' && nameOf(node.property) === 'title';
+}
+
 export function copySources(context, check) {
   const roots = new Map();
   const visited = new Map();
@@ -152,7 +156,7 @@ export function copySources(context, check) {
       visit(node.alternate, separator);
     } else if (node.type === 'LogicalExpression') {
       if (node.operator !== '&&') visit(node.left, separator);
-      visit(node.right, node.operator === '??' ? false : separator);
+      visit(node.right, node.operator === '&&' ? separator : false);
     } else if (node.type === 'BinaryExpression' && node.operator === '+') {
       visit(node.left, true);
       visit(node.right, true);
@@ -199,6 +203,7 @@ export function copySources(context, check) {
       if (copyName.test(nameOf(node.left))) addRoot(node.right);
     },
     AssignmentExpression(node) {
+      if (isDocumentTitle(node.left)) return;
       const target = node.left.type === 'MemberExpression' ? node.left.property : node.left;
       if (copyName.test(nameOf(target))) addRoot(node.right);
     },

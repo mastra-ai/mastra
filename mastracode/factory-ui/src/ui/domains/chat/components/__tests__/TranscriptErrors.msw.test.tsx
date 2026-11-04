@@ -408,7 +408,7 @@ describe('chat run errors', () => {
 describe('chat run errors on an account limit', () => {
   async function expectCredentialHolder(holder: string) {
     const credential = await screen.findByText('Runs on Claude Pro/Max');
-    const metadata = credential.closest<HTMLElement>('[role="list"]');
+    const metadata = credential.closest<HTMLElement>('[data-slot="metadata"]');
     if (!metadata) throw new Error('Credential metadata is missing');
     expect(credential).toBeVisible();
     expect(within(metadata).getByText(holder)).toBeVisible();

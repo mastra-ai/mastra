@@ -16,7 +16,7 @@ type Story = StoryObj<typeof Metadata>;
 export const Issue: Story = {
   render: () => (
     <Txt as="span" variant="caption" tone="muted">
-      <Metadata aria-label="Issue details">
+      <Metadata>
         <Metadata.Item>#42</Metadata.Item>
         <Metadata.Item>
           <UserRound size={12} aria-hidden /> damien
@@ -31,7 +31,7 @@ export const Issue: Story = {
 
 export const Version: Story = {
   render: () => (
-    <Metadata aria-label="Dataset version">
+    <Metadata>
       <Metadata.Item>
         <Txt as="span" variant="label">
           v8
@@ -54,7 +54,7 @@ export const Version: Story = {
 export const Narrow: Story = {
   render: () => (
     <div className="max-w-60">
-      <Metadata aria-label="Connection details">
+      <Metadata>
         <Metadata.Item>
           <Txt as="span" variant="label">
             Production
@@ -75,14 +75,14 @@ export const Narrow: Story = {
   ),
 };
 
-export const TruncatedParent: Story = {
+export const SingleLine: Story = {
   render: () => (
     <div className="flex w-72 max-w-full min-w-0 flex-col">
-      <Txt as="span" variant="meta" tone="muted" className="truncate pr-16">
-        <Metadata aria-label="Candidate details">
-          <Metadata.Item>#42</Metadata.Item>
+      <Txt as="span" variant="meta" tone="muted">
+        <Metadata singleLine>
+          <Metadata.Item className="shrink-0">#42</Metadata.Item>
           <Metadata.Item>CustomerSupportSubscriptionRefundPolicyV2026InternationalEnterprise</Metadata.Item>
-          <Metadata.Item>3 hours ago</Metadata.Item>
+          <Metadata.Item className="shrink-0">3 hours ago</Metadata.Item>
         </Metadata>
       </Txt>
     </div>

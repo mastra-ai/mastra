@@ -43,12 +43,9 @@ describe('ToolCallGroup', () => {
         </ToolCallGroup>,
       );
       const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
-      const summary = within(group).getByRole('list');
-      expect(
-        within(summary)
-          .getAllByRole('listitem')
-          .map(item => item.textContent),
-      ).toEqual(outcomes);
+      expect(Array.from(group.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual(
+        outcomes,
+      );
       expect(within(group).queryByRole('img', { name: 'Failed' }) !== null).toBe(
         outcomes.some(outcome => outcome.includes('failed')),
       );
@@ -108,12 +105,11 @@ describe('ToolCallGroup', () => {
         </ToolCallGroup>,
       );
       const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
-      const summary = within(group).getByRole('list');
-      expect(
-        within(summary)
-          .getAllByRole('listitem')
-          .map(item => item.textContent),
-      ).toEqual(['1 OK', '1 failed', '1 incomplete']);
+      expect(Array.from(group.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
+        '1 OK',
+        '1 failed',
+        '1 incomplete',
+      ]);
       expect(screen.queryByText('1/3')).toBeNull();
     });
   });

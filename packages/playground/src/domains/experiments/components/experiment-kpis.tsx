@@ -60,7 +60,7 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
     usage?.inputTokens === undefined && usage?.outputTokens === undefined ? (
       'input + output'
     ) : (
-      <Metadata>
+      <Metadata singleLine>
         <Metadata.Item>{formatTokenCount(usage.inputTokens ?? 0)} in</Metadata.Item>
         <Metadata.Item>{formatTokenCount(usage.outputTokens ?? 0)} out</Metadata.Item>
       </Metadata>

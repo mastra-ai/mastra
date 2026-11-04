@@ -76,7 +76,7 @@ export function ActivityEvent({
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <Txt as="span" variant="meta" tone="ink" className="truncate">
-          <Metadata>
+          <Metadata singleLine>
             <Metadata.Item>{actor.name}</Metadata.Item>
             {modelId && (
               <Metadata.Item>

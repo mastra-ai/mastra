@@ -256,7 +256,7 @@ describe('message meta', () => {
       },
     };
 
-    renderWithProviders(
+    const { container } = renderWithProviders(
       <TranscriptEntries
         entries={[reply]}
         viewerId={viewerId}
@@ -266,7 +266,7 @@ describe('message meta', () => {
       />,
     );
 
-    const fields = within(screen.getByRole('list')).getAllByRole('listitem');
+    const fields = Array.from(container.querySelectorAll<HTMLElement>('[data-slot="metadata-item"]'));
     expect(fields.map(field => field.textContent)).toEqual(parts);
     for (const field of fields) expect(field).toBeVisible();
   });

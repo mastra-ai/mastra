@@ -35,7 +35,7 @@ const formatElapsed = (ms: number) => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 };
 
-/** `task · working · 0:42` for a tool call that continued as an MCP task, with its task id to copy. */
+/** A `task working` badge and `0:42` elapsed for a tool call that continued as an MCP task, with its task id to copy. */
 export function McpTaskChip({ task }: { task: McpTaskView }) {
   const { label, variant, indicator } = STATUS[task.status];
   const terminal = isTerminalMcpTaskStatus(task.status);

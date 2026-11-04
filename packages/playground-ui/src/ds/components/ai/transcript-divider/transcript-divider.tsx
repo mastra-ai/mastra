@@ -4,9 +4,9 @@ import { Txt } from '@/ds/components/Txt';
 export interface TranscriptDividerProps {
   label: string;
   title?: string;
-  /** Trailing content (e.g. tabs or actions), shown after the label behind a `·` separator. */
+  /** Trailing content (e.g. tabs or actions), shown after the label. */
   children?: ReactNode;
-  /** Hides the visible label (and its separator); it stays the accessible name. */
+  /** Hides the visible label; it stays the accessible name. */
   hideLabel?: boolean;
 }
 

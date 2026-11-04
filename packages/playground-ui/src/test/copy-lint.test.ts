@@ -30,6 +30,18 @@ tester.run('no-text-separators', noTextSeparators, {
       name: 'allows a missing-value fallback between other values',
       code: '<span>{name}{value ?? "—"}{status}</span>;',
     },
+    {
+      name: 'allows a falsy fallback between other values',
+      code: '<span>{name}{value || "—"}{status}</span>;',
+    },
+    { name: 'allows a hyphen placeholder', code: '<span>{value ?? "-"}</span>;' },
+    { name: 'allows a minus sign before a number', code: 'const label = `${delta < 0 ? "-" : "+"}${value}`;' },
+    { name: 'allows masked secrets', code: '<span>{`••••${key.slice(-4)}`}</span>;' },
+    { name: 'allows hyphenated words and CLI flags', code: '<p>Pre-release builds use --tag next.</p>;' },
+    {
+      name: 'allows a separator in the browser tab title',
+      code: 'useEffect(() => { document.title = `${title} | Mastra`; }, [title]);',
+    },
     { name: 'allows a conditional placeholder', code: 'const label = present ? value : "—";' },
     { name: 'ignores CSS strings', code: '<div className="before:content-[\'·\']" />;' },
     { name: 'ignores CSS content assignments', code: 'style.content = "·";' },
@@ -124,11 +136,9 @@ tester.run('no-text-separators', noTextSeparators, {
     },
     { name: 'reports double-hyphen prose separators', code: '<p>Refresh failed -- try again.</p>;', errors: 1 },
     { name: 'reports copy props', code: '<Button aria-label="Name — details" />;', errors: 1 },
-    {
-      name: 'reports an authored browser title inside an effect',
-      code: 'useEffect(() => { document.title = `${title} | Mastra`; }, [title]);',
-      errors: 1,
-    },
+    { name: 'reports a spaced bullet before a value', code: '<p>• {threadTitle}</p>;', errors: 1 },
+    { name: 'reports a spaced hyphen between values', code: 'const label = `v${n} - ${date}`;', errors: 1 },
+    { name: 'reports a spaced hyphen between rendered values', code: '<p>{name} - {status}</p>;', errors: 1 },
     {
       name: 'reports visible attachment type labels',
       code: '<AttachmentCard typeLabel="PNG · unavailable" />;',

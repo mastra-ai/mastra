@@ -210,9 +210,9 @@ function MessageRow({ sign, message, tag }: { sign: Sign; message: SpanInputMess
       sign={sign}
       title={
         tag ? (
-          <Metadata>
+          <Metadata singleLine>
             <Metadata.Item>{title}</Metadata.Item>
-            <Metadata.Item>{tag}</Metadata.Item>
+            <Metadata.Item className="shrink-0">{tag}</Metadata.Item>
           </Metadata>
         ) : (
           title

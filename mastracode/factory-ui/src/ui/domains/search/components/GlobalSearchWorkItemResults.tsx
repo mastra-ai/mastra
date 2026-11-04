@@ -22,7 +22,7 @@ export function GlobalSearchWorkItemResults({
           icon={<Ticket />}
           title={result.title}
           subtitle={
-            <Metadata>
+            <Metadata singleLine>
               {result.context.map((part, index) => (
                 <Metadata.Item key={index}>{part}</Metadata.Item>
               ))}

@@ -260,14 +260,10 @@ export function ModelPicker() {
         triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
         triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
       >
-        <span className="max-w-48 truncate">
-          <Metadata className="flex-nowrap">
-            <Metadata.Item>
-              <span className="truncate">{label}</span>
-            </Metadata.Item>
-            {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
-          </Metadata>
-        </span>
+        <Metadata singleLine className="max-w-48">
+          <Metadata.Item>{label}</Metadata.Item>
+          {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
+        </Metadata>
       </ModelMenu>
     </ModelThinkingGroup>
   );

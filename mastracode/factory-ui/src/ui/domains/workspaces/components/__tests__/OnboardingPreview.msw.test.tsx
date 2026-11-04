@@ -46,16 +46,20 @@ describe('contextual onboarding previews', () => {
         }),
       ),
     );
-    const { rerender } = renderWithProviders(<OnboardingPreview step="project-management" source="linear" />);
-    expect(screen.getByText('ENG-124', { selector: '[role="listitem"]' })).toBeInTheDocument();
+    const { container, rerender } = renderWithProviders(
+      <OnboardingPreview step="project-management" source="linear" />,
+    );
+    const intakeFields = () =>
+      Array.from(container.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent);
+    expect(intakeFields()).toEqual(['ENG-124', 'Issue']);
     expect(screen.getByText('Example')).toBeInTheDocument();
     expect(screen.getByText('Choose what to bring in after setup.')).toBeInTheDocument();
 
     rerender(<OnboardingPreview step="project-management" source="incident-io" />);
     expect(await screen.findByText('Connected')).toBeInTheDocument();
-    expect(screen.getByText('INC-124', { selector: '[role="listitem"]' })).toBeInTheDocument();
+    expect(intakeFields()).toEqual(['INC-124', 'Follow-up']);
     expect(screen.getAllByText('Add a health check')).toHaveLength(2);
-    expect(screen.queryByText('ENG-124', { selector: '[role="listitem"]' })).not.toBeInTheDocument();
+    expect(screen.queryByText('ENG-124')).not.toBeInTheDocument();
   });
 
   it('keeps the shared model while personal access changes from a proposed connection to a saved credential', async () => {
