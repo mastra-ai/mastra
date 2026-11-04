@@ -3046,6 +3046,7 @@ export class AgentThreadStreamRuntime {
     if (state.forwardedIdleLeaseChecks.has(key)) return;
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return;
+    let checking = false;
     const checkLease = async () => {
       const forwarded = state.forwardedIdleSignalsByThread.get(key);
       if (!forwarded) return;
@@ -3063,7 +3064,16 @@ export class AgentThreadStreamRuntime {
         }
       }
     };
-    const check = setInterval(() => void checkLease().catch(() => {}), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
+    // A slow lease read must not overlap the next tick: two overlapping reads would count as two checks.
+    const check = setInterval(() => {
+      if (checking) return;
+      checking = true;
+      void checkLease()
+        .catch(() => {})
+        .finally(() => {
+          checking = false;
+        });
+    }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
     check.unref?.();
     state.forwardedIdleLeaseChecks.set(key, check);
   }
@@ -5497,26 +5507,28 @@ export class AgentThreadStreamRuntime {
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
-      this.#notifyThreadEvents(state);
       if (isRetakeLeaseOwner(owns.owner)) {
         // Keep the accepted input for the next natural drain trigger, rather
         // than forwarding to a token that no run can consume.
         const queue = state.pendingIdleSignalsByThread.get(key) ?? [];
         state.pendingIdleSignalsByThread.set(key, [pendingIdle, ...queue]);
+        this.#notifyThreadEvents(state);
         return true;
       }
-      if (owns.owner) {
-        const ownerRunId = threadLeaseRunId(owns.owner);
-        // Only user messages have an admission the owner announces (their pending presentation), so only
-        // they can be held until admitted without risking a second delivery.
-        if (this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {
-          const forwarded = state.forwardedIdleSignalsByThread.get(key) ?? new Map();
-          // The owner presents it under the run ID it resolves the address to, which drops a legacy retake marker.
-          forwarded.set(pendingIdle.signal.id, { pendingIdle, runId: forwardedSignalRunId(owns.owner) });
-          state.forwardedIdleSignalsByThread.set(key, forwarded);
-          this.#ensureThreadControlSubscription(state, pubsub, key);
-          this.#watchForwardedIdleLease(state, pubsub, key);
-        }
+      const ownerRunId = owns.owner ? threadLeaseRunId(owns.owner) : undefined;
+      // Only user messages have an admission the owner announces (their pending presentation), so only
+      // they can be held until admitted without risking a second delivery.
+      if (owns.owner && ownerRunId && this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {
+        const forwarded = state.forwardedIdleSignalsByThread.get(key) ?? new Map();
+        // The owner presents it under the run ID it resolves the address to, which drops a legacy retake marker.
+        forwarded.set(pendingIdle.signal.id, { pendingIdle, runId: forwardedSignalRunId(owns.owner) });
+        state.forwardedIdleSignalsByThread.set(key, forwarded);
+        this.#ensureThreadControlSubscription(state, pubsub, key);
+        this.#watchForwardedIdleLease(state, pubsub, key);
+      }
+      // Only now is a held forward tracked, so the count never dips while the message moves to it.
+      this.#notifyThreadEvents(state);
+      if (ownerRunId) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
           runId: ownerRunId,
@@ -6604,6 +6616,8 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-discarded') {
         discardStream(data.runId, data.streamId);
+        // The control-channel drain ran before discardStream released the run, so it found the thread busy.
+        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         return;
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
