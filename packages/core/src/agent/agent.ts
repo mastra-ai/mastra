@@ -1828,6 +1828,12 @@ export class Agent<
    * owner can still reuse it (a resume, or a retry after the run finished).
    * Runs without a resourceId own nothing to protect.
    *
+   * A resume is the one caller that may continue a `running` record, because it
+   * already validated and claimed the suspended run (`resumeContext.claim`).
+   * The record can still say `running` there: the suspension is written to the
+   * record after the snapshot, so a slow snapshot write leaves the previous
+   * `running` record in place for the whole resume handoff.
+   *
    * Reading the record and writing our own is not atomic, so two processes
    * starting the same id within one cache round-trip of each other can still
    * overlap. The cache has no compare-and-set to close that.
@@ -1835,17 +1841,26 @@ export class Agent<
    * Returns the record it accepted, so the caller can tell a fresh id from a
    * reused one.
    */
-  async #assertRunIdAvailable(runId: string, resourceId: string | undefined): Promise<AgentRunRecord | undefined> {
+  async #assertRunIdAvailable(
+    runId: string,
+    resourceId: string | undefined,
+    { resuming }: { resuming: boolean },
+  ): Promise<AgentRunRecord | undefined> {
     const bus = this.#ownStreamBus();
     if (!bus) return undefined;
 
-    if (this.#publishedRuns.has(runId)) {
+    // A resume may still find its own finishing publisher here: the suspension is
+    // persisted before the publisher ends, so the entry outlives the handoff.
+    if (!resuming && this.#publishedRuns.has(runId)) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
 
     const record = await readAgentRunRecord(bus.runRecordCache, this.id, runId);
     if (!record) return undefined;
-    if (record.status === 'running' || (record.resourceId && record.resourceId !== resourceId)) {
+    if (record.resourceId && record.resourceId !== resourceId) {
+      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+    }
+    if (record.status === 'running' && !resuming) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
     return record;
@@ -9369,7 +9384,9 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
-    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId);
+    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
+      resuming: Boolean(resumeContext?.claim),
+    });
 
     // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
     // starts the new run on top of the old frames: a reader replaying from the start would
