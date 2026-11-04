@@ -29,7 +29,7 @@ export function AnnotationSelectionToolbar({ containerRef, onAnnotate }: Annotat
     const onKeyDown = (event: KeyboardEvent) => {
       const add = addRef.current;
       const transcript = containerRef.current;
-      if (!add || !transcript || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (!add || !transcript || event.altKey || event.ctrlKey || event.metaKey) return;
       const focused = document.activeElement;
       // Without a trigger Base UI cannot route focus out of the toolbar, so it goes back to the scroller it came from.
       if (focused === add) {
