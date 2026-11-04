@@ -22,6 +22,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   ): ReturnType<KnowledgePageStore['listChildScopes']> {
     return this.#pageStore.listChildScopes(input);
   }
+  override countChildScopes(
+    input: Parameters<KnowledgePageStore['countChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['countChildScopes']> {
+    return this.#pageStore.countChildScopes(input);
+  }
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pageStore.getPage(input);
   }
@@ -89,6 +94,26 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['countChildPages']>[0],
   ): ReturnType<KnowledgePageStore['countChildPages']> {
     return this.#pageStore.countChildPages(input);
+  }
+  override replacePageBodyLinks(
+    input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return this.#pageStore.replacePageBodyLinks(input);
+  }
+  override listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return this.#pageStore.listPageBodyLinkSources(input);
+  }
+  override countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return this.#pageStore.countPageLinks(input);
+  }
+  override listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return this.#pageStore.listPageLinks(input);
   }
   override countNotes(
     input: Parameters<KnowledgePageStore['countNotes']>[0],
@@ -158,6 +183,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
+      supportsPinKinds: true,
     } as const;
   }
 

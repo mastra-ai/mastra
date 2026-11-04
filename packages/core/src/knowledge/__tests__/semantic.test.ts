@@ -1,6 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { estimateTokenCount } from 'tokenx';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
@@ -21,6 +21,7 @@ import type {
 } from '../../vector';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
+import { KnowledgeSemanticIndex } from '../semantic';
 
 /** A real exact-cosine vector store held in memory; records every topK it is asked for. */
 class MemoryVector extends MastraVector {
@@ -40,7 +41,15 @@ class MemoryVector extends MastraVector {
       .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
       .slice(0, topK);
   }
+  /** Upserts left to fail, like a cold scale-to-zero database timing out the connection; -1 fails them all. */
+  failUpserts = 0;
+  upserts = 0;
   async upsert({ indexName, ids, vectors }: UpsertVectorParams): Promise<string[]> {
+    this.upserts++;
+    if (this.failUpserts !== 0) {
+      if (this.failUpserts > 0) this.failUpserts--;
+      throw new Error('Connection terminated due to connection timeout');
+    }
     const index = this.indexes.get(indexName)!;
     ids!.forEach((id, i) => index.rows.set(id, vectors[i]!));
     return ids!;
@@ -141,6 +150,7 @@ function conceptEmbedder(state: EmbedderState): MastraEmbeddingModel<string> {
 }
 
 type Result = Record<string, any>;
+const RETRY_DELAYS = KnowledgeSemanticIndex.retryDelaysMs;
 
 describe('Knowledge semantic search', () => {
   let store: KnowledgeStorage;
@@ -179,6 +189,10 @@ describe('Knowledge semantic search', () => {
       embedder: conceptEmbedder(embedder),
     });
     (knowledge as any).logger = { warn: (m: string) => warnings.push(m), debug() {}, info() {}, error() {} };
+    KnowledgeSemanticIndex.retryDelaysMs = [1, 1, 1];
+  });
+  afterEach(() => {
+    KnowledgeSemanticIndex.retryDelaysMs = RETRY_DELAYS;
   });
 
   it('finds a page by meaning that keyword search misses', async () => {
@@ -283,7 +297,7 @@ describe('Knowledge semantic search', () => {
     expect(vector.ids()).not.toContain(`page:${other.id}`);
   });
 
-  it('a failed embed keeps the write, warns, and reindex() repairs it; a failed search falls back to keywords', async () => {
+  it('a failed embed keeps the write, warns, and the next change embeds it; a failed search falls back to keywords', async () => {
     embedder.fail = true;
     const created = await acme()('knowledge_page', {
       op: 'write',
@@ -292,7 +306,14 @@ describe('Knowledge semantic search', () => {
       body: 'Refunds within 30 days.',
     });
     expect(created.page.name).toBe('Refund policy');
-    expect(warnings.some(w => w.includes('run knowledge.reindex()'))).toBe(true);
+    expect(
+      warnings.some(w =>
+        w.includes(
+          `Knowledge couldn't embed page "${created.page.id}" after retrying; it is findable by keyword search only until it is rewritten`,
+        ),
+      ),
+    ).toBe(true);
+    expect(warnings.some(w => w.includes('reindex'))).toBe(false);
 
     expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toEqual(['Refund policy']);
     expect(warnings.some(w => w.includes('returning keyword results only'))).toBe(true);
@@ -300,26 +321,84 @@ describe('Knowledge semantic search', () => {
     embedder.fail = false;
     expect(vector.ids()).toEqual([]);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual([]);
-    // Scope pages are not embedded; the one ordinary page is.
-    expect(await knowledge.reindex()).toBe(1);
+
+    await acme()('knowledge_page', { op: 'write', page: created.page.id, body: 'Refunds within 60 days.' });
+    expect(vector.ids()).toEqual([`page:${created.page.id}`]);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
   });
 
-  it('reindex() repairs notes written on scope pages, which listPages leaves out', async () => {
-    embedder.fail = true;
-    await acme()('knowledge_note', {
-      op: 'add',
-      page: 'org:acme',
-      scope: ['org:acme'],
-      text: 'Vacation requests go to HR.',
+  it('a failed vector removal warns that old vectors may remain, and search skips the removed page', async () => {
+    const { page: mine } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-acme',
+      name: 'Mine',
+      body: 'x',
     });
-    expect(vector.ids()).toEqual([]);
+    const { page } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-acme',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    vector.failDeletes = true;
+    await acme()('knowledge_page', { op: 'merge', page: page.id, into: mine.id });
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'old', name: 'Old desk', body: 'x' });
+    await knowledge.removePage({ scope: 'org:acme', path: 'old' });
+
+    const removals = warnings.filter(w => w.includes('removal failed'));
+    expect(removals).toHaveLength(2);
+    expect(removals.every(w => w.includes('search skips content that no longer exists'))).toBe(true);
+    expect(warnings.some(w => w.includes("couldn't embed"))).toBe(false);
+    expect(vector.ids()).toContain(`page:${page.id}`);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).not.toContain('Refund policy');
+  });
+
+  it('a host upsertPage whose embed failed is embedded when the page next changes', async () => {
+    embedder.fail = true;
+    const first = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    expect(first.status).toBe('created');
+    expect(warnings.some(w => w.includes('page "org:acme#refunds"') && w.includes('keyword search only'))).toBe(true);
     embedder.fail = false;
 
-    expect(await knowledge.reindex()).toBe(1);
-    expect(titles(await acme()('knowledge_search', { query: 'holiday' }))).toEqual([
-      'note:Vacation requests go to HR.',
-    ]);
+    // Re-sending the same content writes nothing, so nothing is embedded either.
+    const same = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    expect(same.status).toBe('unchanged');
+    expect(vector.ids()).toEqual([]);
+
+    const changed = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 60 days.',
+    });
+    expect(changed.status).toBe('updated');
+    expect(vector.ids()).toEqual([`page:${first.page.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
+  });
+
+  it('a note whose embed failed is embedded when it is next changed', async () => {
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'ops', name: 'Ops', body: 'misc' });
+    const pages = vector.ids();
+    embedder.fail = true;
+    const note = await knowledge.addNote({ scope: 'org:acme', path: 'ops', text: 'Vacation requests go to HR.' });
+    expect(vector.ids()).toEqual(pages);
+    embedder.fail = false;
+
+    const updated = await knowledge.updateNote({ id: note.id, text: 'Vacation requests go to HR by Friday.' });
+    expect(vector.ids()).toEqual([...pages, `note:${updated.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'holiday' }))[0]).toBe(
+      'note:Vacation requests go to HR by Friday.',
+    );
   });
 
   it('embeds through the SDK: maxRetries retries transient failures, headers and providerOptions reach the model', async () => {
@@ -351,7 +430,7 @@ describe('Knowledge semantic search', () => {
     });
     await store.deletePage({ id: page.id, expectedVersion: page.version, deletedBy: 'host' });
     expect(vector.ids()).toContain(`page:${page.id}`);
-    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).not.toContain('Refund policy');
   });
 
   /** About 5,000 estimated tokens of filler, with `fact` as one paragraph near the end. */
@@ -439,8 +518,120 @@ describe('Knowledge semantic search', () => {
     expect(chunkIds(page.id).length).toBeLessThan(10);
   });
 
-  it('needs both vector and embedder; reindex without them throws', async () => {
-    expect(() => new Knowledge({ scopes: {}, vector })).toThrow(/needs both `vector` and `embedder`/);
-    await expect(new Knowledge({ scopes: {}, storage: new InMemoryStore() }).reindex()).rejects.toThrow(/no `vector`/);
+  it('a vector write that fails while the database wakes is retried, and the page is embedded', async () => {
+    vector.failUpserts = 2;
+    const { page } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    const { status } = await knowledge.upsertPage({ scope: 'org:acme', path: 'desk', name: 'Desk', body: 'Courier.' });
+    expect(status).toBe('created');
+    vector.failUpserts = 2;
+    const note = await knowledge.addNote({ scope: 'org:acme', path: 'desk', text: 'Vacation requests go to HR.' });
+
+    expect(warnings).toEqual([]);
+    expect(vector.ids()).toEqual(expect.arrayContaining([`page:${page.id}`, `note:${note.id}`]));
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))[0]).toBe('Refund policy');
   });
+
+  it('retries a chunked page until every chunk is in', async () => {
+    embedder.maxTokens = 3_000;
+    vector.failUpserts = 3;
+    const { page } = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'guides/handbook',
+      name: 'Handbook',
+      body: longBody('Reimbursement goes back to the original card.'),
+    });
+    expect(warnings).toEqual([]);
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+    expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toContain('Handbook');
+  });
+
+  it('when every try fails, the write stands and the warning names the page as keyword-only', async () => {
+    vector.failUpserts = -1;
+    const result = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'guides/cli',
+      name: 'CLI',
+      body: 'Refunds within 30 days.',
+    });
+    expect(result.status).toBe('created');
+    // Four tries for the page, after four for the guides parent it created.
+    expect(vector.upserts).toBe(8);
+    const failed = warnings.filter(w => w.includes("couldn't embed"));
+    expect(failed).toEqual([
+      expect.stringContaining('page "org:acme#guides" after retrying'),
+      expect.stringContaining(
+        'page "org:acme#guides/cli" after retrying; it is findable by keyword search only until it is rewritten: Error: Connection terminated',
+      ),
+    ]);
+    expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toEqual(['CLI']);
+  });
+
+  it('does not retry an embed the provider says cannot pass', async () => {
+    embedder.maxTokens = 1;
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'a', name: 'A', body: 'Refunds within 30 days.' });
+    expect(embedder.calls).toBe(1);
+    expect(warnings.filter(w => w.includes('page "org:acme#a"'))).toHaveLength(1);
+  });
+
+  it('needs both vector and embedder', () => {
+    expect(() => new Knowledge({ scopes: {}, vector })).toThrow(/needs both `vector` and `embedder`/);
+  });
+});
+
+describe('KnowledgeSemanticIndex bounds', () => {
+  it('looks at no more than 1,000 distinct candidates in one search', async () => {
+    const vector = new MemoryVector();
+    const index = new KnowledgeSemanticIndex(vector, conceptEmbedder({ fail: false, calls: 0 }));
+    // 3,000 notes, none the run can read: every one is a candidate that takes no slot.
+    await index.indexNote({ id: 'n0', text: 'refund' } as never);
+    const [indexName] = await vector.listIndexes();
+    const rows = vector.indexes.get(indexName!)!.rows;
+    for (let i = 1; i < 3_000; i++) rows.set(`note:n${i}`, [1, 0.01, 0.01, 0.01 + i / 1e6]);
+
+    let looked = 0;
+    const found = await index.search('refund', 10, async () => {
+      looked++;
+      return null;
+    });
+    expect(found).toEqual([]);
+    expect(looked).toBe(1_000);
+  });
+
+  it.each([
+    { parallel: true, atLeast: 2, atMost: 4 },
+    { parallel: false, atLeast: 1, atMost: 1 },
+  ])(
+    "embeds a long page's chunks a few at a time, one at a time when parallel calls is $parallel",
+    async ({ parallel, atLeast, atMost }) => {
+      let inFlight = 0;
+      let most = 0;
+      const embedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'slow',
+        maxEmbeddingsPerCall: 1,
+        supportsParallelCalls: parallel,
+        doEmbed: async ({ values }: { values: string[] }) => {
+          most = Math.max(most, ++inFlight);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          inFlight--;
+          return { embeddings: values.map(() => [1, 0, 0, 0]) };
+        },
+      } as unknown as MastraEmbeddingModel<string>;
+      const index = new KnowledgeSemanticIndex(new MemoryVector(), embedder);
+      const body = Array.from(
+        { length: 12 },
+        (_, i) => `## Part ${i}\n\n${'Lorem ipsum dolor sit amet. '.repeat(200)}`,
+      ).join('\n\n');
+      await index.indexPage({ id: 'p1', name: 'Long', body, isScope: false } as never);
+
+      expect(most).toBeGreaterThanOrEqual(atLeast);
+      expect(most).toBeLessThanOrEqual(atMost);
+    },
+  );
 });

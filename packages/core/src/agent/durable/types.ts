@@ -634,46 +634,7 @@ export interface DurableAgenticLoopOutput {
   state: SerializableDurableState;
 }
 
-/**
- * Event types emitted via pubsub for agent streaming
- */
-export type AgentStreamEventType =
-  | 'chunk'
-  | 'step-start'
-  | 'step-finish'
-  | 'finish'
-  | 'error'
-  | 'suspended'
-  | 'abort'
-  | 'iteration-complete'
-  | 'ownership-claimed';
-
-/**
- * Event emitted via pubsub for agent streaming
- */
-export interface AgentStreamEvent<T = unknown> {
-  /** Event type */
-  type: AgentStreamEventType;
-  /** Run identifier */
-  runId: string;
-  /** Event payload */
-  data: T;
-  /** Epoch ms at which a `chunk` event's chunk was produced. */
-  producedAt?: number;
-  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
-  generation?: number;
-  /**
-   * Position of this event in its run topic's log. Only present on events read
-   * back from the topic; it is stripped before an event reaches an `observe()`
-   * consumer.
-   */
-  index?: number;
-  /**
-   * The `chunk` or `step-start` event's chunk already ran through the run's output processors
-   * before it was published, so the stream consumer must not run them again.
-   */
-  outputProcessed?: boolean;
-}
+export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
 
 /**
  * Chunk event data
@@ -1068,6 +1029,8 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /** The evented engine may dispatch this execution to another process. */
+  eventedExecution?: boolean;
   /**
    * Tool call resumed by the `resume()` currently driving this run in this
    * process. Its in-flight marker is cleared when the segment suspends again.

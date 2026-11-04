@@ -6,17 +6,18 @@
  * enabling proper test isolation via resetMocks().
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
-// @ts-ignore - module resolution for test utilities
 import { MockLanguageModelV1, MockLanguageModelV2 } from '@internal/ai-sdk-v4/test';
 import { Mastra } from '@mastra/core/mastra';
+// @ts-ignore - module resolution for test utilities
 import type { StreamEvent } from '@mastra/core/workflows';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
+import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import { MockRegistry } from '../mock-registry';
+import { stepsOf } from '../steps';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for streaming tests.
@@ -986,7 +987,8 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
           const resumeResult = await getWorkflowState();
 
-          expect(resumeResult.steps).toMatchObject({
+          const resumeSteps = await stepsOf(resumeResult);
+          expect(resumeSteps).toMatchObject({
             input: { input: 'test' },
             getUserInput: {
               status: 'success',
@@ -1009,7 +1011,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
               endedAt: expect.any(Number),
             },
           });
-          expect(resumeResult.steps.promptAgent).not.toHaveProperty('suspendedAt');
+          expect(resumeSteps.promptAgent).not.toHaveProperty('suspendedAt');
         },
       );
 

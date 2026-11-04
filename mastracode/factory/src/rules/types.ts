@@ -1,4 +1,5 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+import type { WorkItemRow } from '../storage/domains/work-items/work-item-schema.js';
 
 export type WorkItemSource =
   | 'github-issue'
@@ -38,18 +39,13 @@ export function externalSourceForWorkItem(
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
 export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
 
-// The label only holds a card at rest: once a person accepted it, or it sits in a working
-// lane only a person could have moved it into, the label is stale until the source catches up.
-export function needsApproval(item: {
-  metadata: Record<string, unknown> | null;
-  stages?: readonly string[];
-  acceptedAt?: Date | string | null;
-}): boolean {
-  const labels = item.metadata?.labels;
+// The label only holds a card at rest: once a person moves it into a working lane, the
+// label is stale until the source catches up (Factory removes it on that move).
+export function needsApproval(item: { workItem: Pick<WorkItemRow, 'labels'>; stages?: readonly string[] }): boolean {
+  const labels = item.workItem.labels;
   if (!Array.isArray(labels)) return false;
   return (
     labels.some(label => typeof label === 'string' && label.toLowerCase() === NEEDS_APPROVAL_LABEL) &&
-    !item.acceptedAt &&
     (item.stages ?? ['intake']).every(stage => stage === 'intake' || stage === 'triage')
   );
 }
@@ -219,6 +215,7 @@ export type FactoryRuleJsonValue =
   | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
+  workItem: WorkItemRow;
   id: string;
   source: WorkItemSource;
   sourceKey: string | null;
@@ -226,8 +223,12 @@ export interface FactoryRuleItemContext {
   title: string;
   url: string | null;
   stages: readonly string[];
+  /**
+   * @deprecated Factory no longer records triage acceptance; this is the value stamped on older
+   * cards, and `null` for every card since. A person moving the card on is the approval.
+   */
   acceptedAt: Date | null;
-  /** Intake-stamped facts about the source — repository id, reporter login, labels. */
+  /** Factory-owned process state and trust stamps. */
   metadata: Record<string, unknown> | null;
 }
 
@@ -334,6 +335,7 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     assignees?: string[];
     labels?: string[];
     state?: 'open' | 'closed';
+    author?: string;
     /** GitHub close reason: `completed`, `not_planned`, or `duplicate`. */
     stateReason?: string;
   };

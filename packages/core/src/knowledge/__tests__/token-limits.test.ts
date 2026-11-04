@@ -55,9 +55,21 @@ describe('Knowledge limits are counted in tokens', () => {
     expect(estimateTokenCount(pins.map(pin => pin.text).join(''))).toBeLessThanOrEqual(100);
   });
 
-  it('accepts a pin budget up to 2000 tokens and refuses one over', () => {
-    expect(() => new Knowledge({ scopes, pinnedContext: { maxTokens: 2_000 } })).not.toThrow();
-    expect(() => new Knowledge({ scopes, pinnedContext: { maxTokens: 2_001 } })).toThrow(/at most 2000/);
+  it('accepts a pin budget above 2000 tokens and delivers up to it', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore(),
+      scopes,
+      tools: true,
+      pinnedContext: { maxTokens: 10_000 },
+    });
+    const { call, context } = run(knowledge);
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Style', body: 'word '.repeat(4_000) });
+    await call('knowledge_pin', { op: 'pin', page: 'Style', audience: ['org:acme'] });
+
+    const pins = await knowledge.__deliveredPins(context as never);
+    expect(pins).toHaveLength(1);
+    expect(pins[0]!.text).not.toContain(PIN_TRUNCATION_MARKER);
+    expect(estimateTokenCount(pins[0]!.text)).toBeGreaterThan(2_000);
   });
 });
 

@@ -53,6 +53,7 @@ import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
+import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -152,8 +153,8 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
-import { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
+import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
@@ -168,7 +169,7 @@ import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
-import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
+import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -499,6 +500,9 @@ export class MastraFactory {
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
+  /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
+  readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
+  #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -662,6 +666,17 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    // The dispatcher sleeps while idle. It wakes itself on this replica's writes
+    // that leave claimable work; the bus carries those wakes to other replicas.
+    workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
+    this.#unsubscribeDispatchWakes = subscribeDispatchWakes(eventBus, this.#dispatchWakeOrigin, () =>
+      this.#dispatcher?.wake(),
+    ).catch(error => {
+      console.warn(
+        `[factory] subscribing to dispatcher wakes failed; other replicas' work waits for this replica's own wakes: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    });
     workItemsStorage.useTerminalPhasePredicate(item =>
       isTerminalWorkItem(this.#projectBoards?.forProject(item) ?? this.#boards, item),
     );
@@ -756,6 +771,8 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+    const workItemsInitError = storage.domainInitError('work-items');
+    if (workItemsInitError instanceof WorkItemSplitModeError) throw workItemsInitError;
 
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.
@@ -778,6 +795,25 @@ export class MastraFactory {
       );
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
+
+    // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
+    // back to Intake. Move the cards the old rule left there, once.
+    if (storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.workItems.heldTriageCards', () =>
+        workItemsStorage
+          .returnHeldTriageCards()
+          .then(moved => {
+            if (moved.length > 0) {
+              console.info(`[factory] moved ${moved.length} card(s) held for triage acceptance back to Intake`);
+            }
+          })
+          .catch(error =>
+            console.warn(
+              `[factory] moving cards held for triage acceptance back to Intake failed: ${error instanceof Error ? error.message : error}`,
+            ),
+          ),
+      );
+    }
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -1044,11 +1080,6 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
-          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-            await factoryProjectsStorage.ensureReady();
-            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.autoApprovePlans ?? false;
-          },
           selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
@@ -1061,7 +1092,7 @@ export class MastraFactory {
           }),
           ...(githubIntegration
             ? {
-                onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
+                onAccepted: (args: { orgId: string; factoryProjectId: string; item: Card }) =>
                   reconcileGithubAcceptanceLabels(
                     githubIntegration,
                     sourceControlStorage.forIntegration(githubIntegration.id),
@@ -1278,6 +1309,7 @@ export class MastraFactory {
           boards: boards,
           loadMemorySettings,
           defaultThinkingLevel: resolveDefaultThinkingLevel,
+          onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1355,6 +1387,8 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // User sessions carry no `factoryProjectId` to select this per session.
+        plansDir: FACTORY_PLANS_DIR,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
@@ -1808,11 +1842,6 @@ export class MastraFactory {
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoRunEnabled ?? false;
                 },
-                autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.autoApprovePlans ?? false;
-                },
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
@@ -2184,6 +2213,15 @@ export class MastraFactory {
     const channelShutdowns = this.#channelShutdowns;
     this.#channelShutdowns = [];
     const shutdownPromise = (async () => {
+      const unsubscribeDispatchWakes = this.#unsubscribeDispatchWakes;
+      this.#unsubscribeDispatchWakes = undefined;
+      await unsubscribeDispatchWakes
+        ?.then(unsubscribe => unsubscribe?.())
+        .catch(error =>
+          console.warn(
+            `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
+          ),
+        );
       const results = await Promise.allSettled([
         this.#dispatcher?.stop() ?? Promise.resolve(),
         ...channelShutdowns.map(async shutdown => shutdown()),

@@ -27,6 +27,18 @@
     "trustedrouter/zdr"
   ],
   "reasoning": {
+    "trustedrouter/fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "trustedrouter/auto": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "trustedrouter/e2e": [
       {
         "type": "effort",
@@ -39,25 +51,13 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "trustedrouter/auto": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "trustedrouter/fast": [
+    "trustedrouter/synth": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
     "trustedrouter/zdr": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "trustedrouter/synth": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]

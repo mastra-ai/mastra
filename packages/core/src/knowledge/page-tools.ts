@@ -4,13 +4,19 @@ import type {
   KnowledgeNote,
   KnowledgePage,
   KnowledgePageSearchHit,
+  KnowledgePinKind,
   KnowledgeStorage,
 } from '../storage/domains/knowledge';
-import { KnowledgePageHasChildrenError, knowledgeScopeReadable } from '../storage/domains/knowledge';
+import {
+  KnowledgePageHasChildrenError,
+  knowledgeScopeReadable,
+  MAX_KNOWLEDGE_PIN_LIST_DEPTH,
+} from '../storage/domains/knowledge';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import {
   KNOWLEDGE_READ_BODY_TOKENS,
   KNOWLEDGE_READ_INLINE_TOKENS,
@@ -29,6 +35,7 @@ import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
+import { knowledgeEmbedFailedWarning } from './semantic';
 import type { KnowledgeSemanticIndex } from './semantic';
 
 /** What the page tools need from their Knowledge. @internal */
@@ -46,14 +53,30 @@ function maxTokensOf(host: KnowledgePageToolHost): number {
   return host.maxTokens ?? KNOWLEDGE_READ_BODY_TOKENS;
 }
 
+/** Search re-reads every vector hit, so a vector left behind by a removed page or note never surfaces. */
+const UNEMBED_FAILED =
+  'Knowledge semantic index removal failed; the removed content may keep its vectors, but search skips content that no longer exists';
+
 /** Embeds after a committed write. A failure only costs recall, so it warns instead of failing the write. */
-async function reindex(host: KnowledgePageToolHost, work: (index: KnowledgeSemanticIndex) => Promise<void>) {
+async function embed(
+  host: KnowledgePageToolHost,
+  work: (index: KnowledgeSemanticIndex) => Promise<void>,
+  failure: string | (() => Promise<string>),
+) {
   if (!host.semantic) return;
   try {
     await work(host.semantic);
   } catch (error) {
-    host.warn?.(`Knowledge semantic index update failed; run knowledge.reindex() to repair: ${String(error)}`);
+    host.warn?.(`${typeof failure === 'string' ? failure : await failure()}: ${String(error)}`);
   }
+}
+
+/** The embed-failure warning for `page`, naming its ref; only looked up when every try failed. */
+function pageEmbedFailed(storage: KnowledgeStorage, page: KnowledgePage): () => Promise<string> {
+  return async () => {
+    const { refs } = await knowledgePageRefs(storage, 'all', [page]).catch(() => ({ refs: new Map<string, string>() }));
+    return knowledgeEmbedFailedWarning(`page "${refs.get(page.id) ?? page.id}"`);
+  };
 }
 
 /** Reciprocal-rank constant: results ranked well by either list rise; neither list's scores need comparing. */
@@ -87,8 +110,11 @@ function limitOf(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
-async function start(host: KnowledgePageToolHost, context: unknown): Promise<KnowledgeRun> {
-  return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined);
+/** A read run creates no scope pages; a write run materializes (and late-links) the scopes it holds. */
+async function start(host: KnowledgePageToolHost, context: unknown, write = false): Promise<KnowledgeRun> {
+  return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined, {
+    write,
+  });
 }
 
 /** Full refs and scope addresses for pages a response shows. */
@@ -538,9 +564,13 @@ function readTool(host: KnowledgePageToolHost) {
         from: {
           ...linePositionSchema,
           description:
-            'Where to start reading: a line (counted from 1) and, inside a very long line, a column (counted from 0). In a section, reads on within it; with `match`, searches from there. `more` gives it when a read stops early.',
+            "Where to start reading: a line (counted from 1) and, inside a very long line, a column (counted from 0). The read runs from there to the page's end or the read's token cap, whichever comes first; there is no line count to set. In a section, reads on within it; with `match`, searches from there. `more` gives it when a read stops early.",
         },
-        limit: { ...limitSchema, description: 'Maximum notes, children and mentioning notes. Defaults to 10.' },
+        limit: {
+          ...limitSchema,
+          description:
+            'Maximum notes, children and mentioning notes. Defaults to 10. Not a line count: how much of the body comes back is set by the token cap.',
+        },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
@@ -748,7 +778,7 @@ const LIST_MAX_LIMIT = 100;
 const LIST_MAX_DEPTH = 3;
 
 /** One entry of a `knowledge_list` result. */
-interface ListEntry {
+export interface ListEntry {
   ref: string;
   name: string;
   description?: string;
@@ -764,6 +794,166 @@ function childRef(parent: KnowledgePage, parentRef: string, child: KnowledgePage
   if (child.isScope) return child.address ?? child.id;
   if (!child.key || (!parent.isScope && parentRef === parent.id)) return child.id;
   return parent.isScope ? `${parentRef}#${child.key}` : `${parentRef}/${child.key}`;
+}
+
+/** What {@link listKnowledgeTree} found: the entries in tree order, and where the listing stopped. */
+export interface KnowledgeTreeListing {
+  /** The starting point's ref; absent when listing the run's own scopes. */
+  originRef?: string;
+  entries: ListEntry[];
+  /** More entries at depth 1, for the next call's `cursor` (`s<n>` or `p<store cursor>`). */
+  nextCursor?: string;
+  /** Deeper levels stopped at `limit` entries. */
+  truncated: boolean;
+}
+
+/**
+ * The readable page tree under `origin` (or the run's own scopes without one), `depth` levels down
+ * and at most `limit` entries: each with its ref, name and readable child count. A scope's readable
+ * child scopes come before its child pages. Store calls grow with depth, not with entries.
+ */
+export async function listKnowledgeTree(
+  run: KnowledgeRun,
+  {
+    origin,
+    depth,
+    limit,
+    cursor,
+    descriptions,
+  }: { origin?: KnowledgePage; depth: number; limit: number; cursor?: string; descriptions?: boolean },
+): Promise<KnowledgeTreeListing> {
+  /**
+   * Readable scopes directly under a scope page, up to `max`. The store leaves out unreadable
+   * ones; core checks again so a custom store that ignores `read` can't list private scopes.
+   */
+  const childScopes = async (parentId: string, max = Infinity): Promise<KnowledgePage[]> => {
+    const out: KnowledgePage[] = [];
+    let next: string | undefined;
+    do {
+      const { pages, nextCursor } = await run.storage.listChildScopes({
+        parentId,
+        read: run.read,
+        cursor: next,
+        limit: Math.min(max - out.length, LIST_MAX_LIMIT),
+      });
+      out.push(...pages.filter(scope => knowledgeScopeReadable(scope, run.read)));
+      next = nextCursor;
+    } while (next && out.length < max);
+    return out;
+  };
+  /** Child pages of `parentId`, up to `max`, a store page at a time, with the cursor where they stopped. */
+  const childPages = async (parentId: string, max: number, cursor?: string) => {
+    const pages: KnowledgePage[] = [];
+    let next = cursor;
+    do {
+      const batch = await run.storage.listChildPages({
+        parentId,
+        read: run.read,
+        cursor: next,
+        limit: Math.min(max - pages.length, LIST_MAX_LIMIT),
+      });
+      pages.push(...batch.pages);
+      next = batch.nextCursor;
+      if (!batch.pages.length) break;
+    } while (next && pages.length < max);
+    return { pages, nextCursor: next };
+  };
+
+  // Cursors are ours: `s<n>` continues the scopes at this level from the n-th, `p<store cursor>`
+  // continues the child pages (`p` alone starts them).
+  if (cursor && !/^[sp]/.test(cursor)) throw new Error('knowledge_list: that cursor did not come from knowledge_list.');
+  const scopeOffset = cursor?.startsWith('s') ? Number(cursor.slice(1)) || 0 : 0;
+  const pageCursor = cursor?.startsWith('p') ? cursor.slice(1) || undefined : undefined;
+  let originRef: string | undefined;
+  let scopes: KnowledgePage[] = [];
+  if (!origin) {
+    if (cursor?.startsWith('p')) throw new Error('knowledge_list: a page cursor needs the `from` it came from.');
+    const held = await run.storage.getScopesByAddress(run.principals);
+    const order = (scope: KnowledgePage) => run.principals.indexOf(scope.address ?? '');
+    scopes = held.filter(scope => knowledgeScopeReadable(scope, run.read)).sort((a, b) => order(a) - order(b));
+  } else {
+    originRef = (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id;
+    if (origin.isScope && !cursor?.startsWith('p')) scopes = await childScopes(origin.id);
+  }
+  // A scope's readable child scopes come first, then its child pages; both count against `limit`.
+  const shownScopes = scopes.slice(scopeOffset, scopeOffset + limit);
+  let roots: KnowledgePage[] = shownScopes;
+  let nextCursor: string | undefined;
+  if (scopeOffset + shownScopes.length < scopes.length) {
+    nextCursor = `s${scopeOffset + shownScopes.length}`;
+  } else if (origin) {
+    const room = limit - shownScopes.length;
+    if (room > 0) {
+      const pages = await childPages(origin.id, room, pageCursor);
+      roots = [...shownScopes, ...pages.pages];
+      if (pages.nextCursor) nextCursor = `p${pages.nextCursor}`;
+    } else if ((await run.storage.countChildPages({ parentIds: [origin.id], read: run.read }))[origin.id]) {
+      nextCursor = 'p';
+    }
+  }
+
+  type Node = { page: KnowledgePage; ref: string; depth: number; children: number; below: Node[] };
+  const nodeOf = (page: KnowledgePage, ref: string, level: number): Node => ({
+    page,
+    ref,
+    depth: level,
+    children: 0,
+    below: [],
+  });
+  const top = roots.map(page =>
+    nodeOf(page, origin && originRef ? childRef(origin, originRef, page) : (page.address ?? page.id), 1),
+  );
+  let budget = Math.max(limit - top.length, 0);
+  let truncated = false;
+  let level = top;
+  for (let current = 1; current <= depth && level.length; current++) {
+    const parentIds = level.map(node => node.page.id);
+    const scopeParents = level.filter(node => node.page.isScope).map(node => node.page.id);
+    const [pageCounts, scopeCounts] = await Promise.all([
+      run.storage.countChildPages({ parentIds, read: run.read }),
+      scopeParents.length
+        ? run.storage.countChildScopes({ parentIds: scopeParents, read: run.read })
+        : Promise.resolve({} as Record<string, number>),
+    ]);
+    for (const node of level) {
+      node.children = (pageCounts[node.page.id] ?? 0) + (scopeCounts[node.page.id] ?? 0);
+    }
+    if (current === depth) break;
+    const nextLevel: Node[] = [];
+    for (const node of level) {
+      if (!node.children) continue;
+      if (budget <= 0) {
+        truncated = true;
+        break;
+      }
+      const scopes = scopeCounts[node.page.id] ? await childScopes(node.page.id, budget) : [];
+      budget -= scopes.length;
+      const pages = budget > 0 ? (await childPages(node.page.id, budget)).pages : [];
+      budget -= pages.length;
+      node.below = [...scopes, ...pages].map(child => nodeOf(child, childRef(node.page, node.ref, child), current + 1));
+      if (node.below.length < node.children) truncated = true;
+      nextLevel.push(...node.below);
+    }
+    level = nextLevel;
+  }
+
+  const entries: ListEntry[] = [];
+  const flatten = (nodes: Node[]) => {
+    for (const node of nodes) {
+      entries.push({
+        ref: node.ref,
+        name: node.page.name,
+        ...(descriptions && node.page.description ? { description: node.page.description } : {}),
+        depth: node.depth,
+        children: node.children,
+        ...(node.page.isScope ? { scope: true as const } : {}),
+      });
+      flatten(node.below);
+    }
+  };
+  flatten(top);
+
+  return { ...(originRef ? { originRef } : {}), entries, ...(nextCursor ? { nextCursor } : {}), truncated };
 }
 
 function listTool(host: KnowledgePageToolHost) {
@@ -833,117 +1023,14 @@ function listTool(host: KnowledgePageToolHost) {
         cursor = match[4] || undefined;
       }
       const run = await start(host, context);
-
-      /** Readable scopes directly under a scope page; unreadable ones are left out entirely. */
-      const childScopes = async (parentId: string): Promise<KnowledgePage[]> => {
-        const out: KnowledgePage[] = [];
-        let next: string | undefined;
-        do {
-          const { pages, nextCursor } = await run.storage.listChildScopes({
-            parentId,
-            cursor: next,
-            limit: LIST_MAX_LIMIT,
-          });
-          out.push(...pages.filter(scope => knowledgeScopeReadable(scope, run.read)));
-          next = nextCursor;
-        } while (next);
-        return out;
-      };
-
-      // Cursors are ours: `s<n>` continues the scopes at this level from the n-th, `p<store cursor>`
-      // continues the child pages (`p` alone starts them).
-      if (cursor && !/^[sp]/.test(cursor))
-        throw new Error('knowledge_list: that cursor did not come from knowledge_list.');
-      const scopeOffset = cursor?.startsWith('s') ? Number(cursor.slice(1)) || 0 : 0;
-      const pageCursor = cursor?.startsWith('p') ? cursor.slice(1) || undefined : undefined;
-      let origin: KnowledgePage | undefined;
-      let originRef: string | undefined;
-      let scopes: KnowledgePage[] = [];
-      if (!from) {
-        if (cursor?.startsWith('p')) throw new Error('knowledge_list: a page cursor needs the `from` it came from.');
-        const held = await run.storage.getScopesByAddress(run.principals);
-        const order = (scope: KnowledgePage) => run.principals.indexOf(scope.address ?? '');
-        scopes = held.filter(scope => knowledgeScopeReadable(scope, run.read)).sort((a, b) => order(a) - order(b));
-      } else {
-        origin = await run.pageOrCloseMatches(from);
-        originRef = (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id;
-        if (origin.isScope && !cursor?.startsWith('p')) scopes = await childScopes(origin.id);
-      }
-      // A scope's readable child scopes come first, then its child pages; both count against `limit`.
-      const shownScopes = scopes.slice(scopeOffset, scopeOffset + limit);
-      let roots: KnowledgePage[] = shownScopes;
-      let nextCursor: string | undefined;
-      if (scopeOffset + shownScopes.length < scopes.length) {
-        nextCursor = `s${scopeOffset + shownScopes.length}`;
-      } else if (origin) {
-        const room = limit - shownScopes.length;
-        if (room > 0) {
-          const pages = await run.storage.listChildPages({
-            parentId: origin.id,
-            read: run.read,
-            cursor: pageCursor,
-            limit: room,
-          });
-          roots = [...shownScopes, ...pages.pages];
-          if (pages.nextCursor) nextCursor = `p${pages.nextCursor}`;
-        } else if ((await run.storage.countChildPages({ parentIds: [origin.id], read: run.read }))[origin.id]) {
-          nextCursor = 'p';
-        }
-      }
-
-      type Node = { page: KnowledgePage; ref: string; depth: number; children: number; below: Node[] };
-      const nodeOf = (page: KnowledgePage, ref: string, level: number): Node => ({
-        page,
-        ref,
-        depth: level,
-        children: 0,
-        below: [],
+      const origin = from ? await run.pageOrCloseMatches(from) : undefined;
+      const { originRef, entries, nextCursor, truncated } = await listKnowledgeTree(run, {
+        origin,
+        depth,
+        limit,
+        cursor,
+        descriptions,
       });
-      const top = roots.map(page =>
-        nodeOf(page, origin && originRef ? childRef(origin, originRef, page) : (page.address ?? page.id), 1),
-      );
-      let budget = Math.max(limit - top.length, 0);
-      let truncated = false;
-      let level = top;
-      for (let current = 1; current <= depth && level.length; current++) {
-        const pageCounts = await run.storage.countChildPages({
-          parentIds: level.map(node => node.page.id),
-          read: run.read,
-        });
-        const scopeChildren = new Map<string, KnowledgePage[]>();
-        for (const node of level) {
-          if (node.page.isScope) scopeChildren.set(node.page.id, await childScopes(node.page.id));
-          node.children = (pageCounts[node.page.id] ?? 0) + (scopeChildren.get(node.page.id)?.length ?? 0);
-        }
-        if (current === depth) break;
-        const nextLevel: Node[] = [];
-        for (const node of level) {
-          if (!node.children) continue;
-          if (budget <= 0) {
-            truncated = true;
-            break;
-          }
-          const scopes = (scopeChildren.get(node.page.id) ?? []).slice(0, budget);
-          budget -= scopes.length;
-          const pages =
-            budget > 0
-              ? (
-                  await run.storage.listChildPages({
-                    parentId: node.page.id,
-                    read: run.read,
-                    limit: Math.min(budget, LIST_MAX_LIMIT),
-                  })
-                ).pages
-              : [];
-          budget -= pages.length;
-          node.below = [...scopes, ...pages].map(child =>
-            nodeOf(child, childRef(node.page, node.ref, child), current + 1),
-          );
-          if (node.below.length < node.children) truncated = true;
-          nextLevel.push(...node.below);
-        }
-        level = nextLevel;
-      }
 
       const more: string[] = [];
       if (nextCursor) {
@@ -956,21 +1043,6 @@ function listTool(host: KnowledgePageToolHost) {
           `entries: stopped listing deeper levels at ${limit} entries. List an entry by its ref to see the rest of its children.`,
         );
       }
-      const entries: ListEntry[] = [];
-      const flatten = (nodes: Node[]) => {
-        for (const node of nodes) {
-          entries.push({
-            ref: node.ref,
-            name: node.page.name,
-            ...(descriptions && node.page.description ? { description: node.page.description } : {}),
-            depth: node.depth,
-            children: node.children,
-            ...(node.page.isScope ? { scope: true as const } : {}),
-          });
-          flatten(node.below);
-        }
-      };
-      flatten(top);
 
       // Stop once the entries reach the token budget (always at least one), and hand back a cursor
       // to the rest of this same listing.
@@ -1125,7 +1197,7 @@ function pageTool(host: KnowledgePageToolHost) {
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const args = input as PageInput;
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const { storage, provenance } = run;
       const done = async (page: KnowledgePage) => ({
         page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version },
@@ -1154,7 +1226,12 @@ function pageTool(host: KnowledgePageToolHost) {
             body: writtenBody(args, page, maxTokensOf(host)),
             provenance,
           });
-          await reindex(host, index => index.indexPage(updated));
+          await embed(host, index => index.indexPage(updated), pageEmbedFailed(storage, updated));
+          await updateKnowledgeLinks(host.warn, async () => {
+            if (args.body !== undefined) await syncKnowledgePageBodyLinks(storage, updated);
+            // Only the name can change a page's ref keys here; its id, path and address stay.
+            if (updated.name !== page.name) await refreshKnowledgeLinksTo(storage, [updated]);
+          });
           return done(updated);
         }
         if (!args.scope || !args.name) throw new Error('Creating a page needs scope and name.');
@@ -1171,7 +1248,11 @@ function pageTool(host: KnowledgePageToolHost) {
           body: args.body,
           provenance,
         });
-        await reindex(host, index => index.indexPage(created));
+        await embed(host, index => index.indexPage(created), pageEmbedFailed(storage, created));
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, created);
+          await refreshKnowledgeLinksTo(storage, [created]);
+        });
         return done(created);
       }
 
@@ -1202,7 +1283,11 @@ function pageTool(host: KnowledgePageToolHost) {
           }
           throw error;
         }
-        await reindex(host, index => index.removePage(page.id));
+        await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, deleted);
+          await refreshKnowledgeLinksTo(storage, [deleted]);
+        });
         return done(deleted);
       }
 
@@ -1217,14 +1302,18 @@ function pageTool(host: KnowledgePageToolHost) {
         if (parent.id !== destination.id && parent.scopeId !== destination.id) {
           throw new Error(`Parent "${args.parent}" is not in scope "${args.scope}".`);
         }
-        return done(
-          await storage.movePage({
-            id: page.id,
-            expectedVersion: args.expectedVersion ?? page.version,
-            parentId: parent.id,
-            provenance,
-          }),
-        );
+        const moved = await storage.movePage({
+          id: page.id,
+          expectedVersion: args.expectedVersion ?? page.version,
+          parentId: parent.id,
+          provenance,
+        });
+        // The subtree's `scope#key/key` paths changed: links by old path stop resolving, new ones may.
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, moved);
+          await refreshKnowledgeLinksTo(storage, [moved], { withDescendants: true });
+        });
+        return done(moved);
       }
 
       if (!args.into) throw new Error('Merging needs into: the page that remains.');
@@ -1243,7 +1332,13 @@ function pageTool(host: KnowledgePageToolHost) {
         targetId: target.id,
         provenance,
       });
-      await reindex(host, index => index.removePage(page.id));
+      await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+      // The source is gone and its children now live under the target, at new paths.
+      await updateKnowledgeLinks(host.warn, async () => {
+        const source = { ...page, deletedAt: merged.updatedAt, mergedInto: merged.id };
+        await syncKnowledgePageBodyLinks(storage, source);
+        await refreshKnowledgeLinksTo(storage, [source, merged], { withDescendants: true });
+      });
       return done(merged);
     },
   });
@@ -1289,7 +1384,7 @@ function noteTool(host: KnowledgePageToolHost) {
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const args = input as NoteInput;
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const { storage, provenance } = run;
       const stamps = async (action: string) => {
         if (!args.scope?.length) throw new Error(`${action} needs scope: the stamp scopes.`);
@@ -1313,7 +1408,7 @@ function noteTool(host: KnowledgePageToolHost) {
           mentions: await resolveMentions(run, args.text),
           provenance,
         });
-        await reindex(host, index => index.indexNote(note));
+        await embed(host, index => index.indexNote(note), knowledgeEmbedFailedWarning(`note ${note.id}`));
         return { note: noteSummary(note, await noteMentions(run, note)), page: page.id };
       }
 
@@ -1334,7 +1429,7 @@ function noteTool(host: KnowledgePageToolHost) {
         return { note: noteSummary(restamped, await noteMentions(run, restamped)), page: page.id };
       }
       await storage.removeNote({ id: note.id, deletedBy: provenance.author, provenance });
-      await reindex(host, index => index.remove([`note:${note.id}`]));
+      await embed(host, index => index.remove([`note:${note.id}`]), UNEMBED_FAILED);
       return { removed: note.id };
     },
   });
@@ -1344,31 +1439,63 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
   return createTool({
     id: 'knowledge_pin',
     description:
-      'Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for. ' +
-      "Needs editor on the page's scope and, for each audience, holding it or editor on it. A pinned page is delivered only to runs that can read it.",
+      'Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. With kind "list", pin a listing of the pages under it instead (refs, names and child counts, like knowledge_list from it, `depth` levels down), kept current as pages are added, renamed or removed. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for, and listings agents need to find their way. ' +
+      "Needs editor on the page's scope and, for each audience, holding it or editor on it. A pinned page is delivered only to runs that can read it, and a listing shows only the pages they can read.",
     inputSchema: {
       type: 'object',
       properties: {
         op: { type: 'string', enum: ['pin', 'unpin'] },
         page: { type: 'string', minLength: 1, description: pageRefDescription },
         audience: { ...scopeListSchema, description: 'Scope addresses whose runs receive the pin.' },
+        kind: {
+          type: 'string',
+          enum: ['page', 'list'],
+          description:
+            '"page" (default) pins the page; "list" pins a listing of the pages under it. Each is pinned and unpinned on its own.',
+        },
+        depth: {
+          type: 'integer',
+          minimum: 1,
+          maximum: MAX_KNOWLEDGE_PIN_LIST_DEPTH,
+          description: `Levels a "list" pin shows below the page, 1 to ${MAX_KNOWLEDGE_PIN_LIST_DEPTH}. Default 1; pinning again sets a new depth.`,
+        },
       },
       required: ['op', 'page', 'audience'],
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const { op, page: ref, audience } = input as { op: 'pin' | 'unpin'; page: string; audience: string[] };
-      const run = await start(host, context);
+      const {
+        op,
+        page: ref,
+        audience,
+        kind = 'page',
+        depth,
+      } = input as { op: 'pin' | 'unpin'; page: string; audience: string[]; kind?: KnowledgePinKind; depth?: number };
+      if (depth !== undefined && (kind !== 'list' || op !== 'pin')) {
+        throw new Error('depth only goes with op "pin" and kind "list".');
+      }
+      if (op === 'pin' && kind === 'list' && !(await host.getStorage()).getCapabilities().supportsPinKinds) {
+        throw new Error(
+          'This Knowledge storage adapter predates listing pins. Upgrade the storage package to pin a page listing.',
+        );
+      }
+      const run = await start(host, context, true);
       const page = await run.page(ref, 'editor');
-      await run.require(await run.scopeOf(page), 'editor', op === 'pin' ? 'Pinning a page' : 'Unpinning a page');
+      const what = kind === 'list' ? 'a page listing' : 'a page';
+      await run.require(await run.scopeOf(page), 'editor', op === 'pin' ? `Pinning ${what}` : `Unpinning ${what}`);
       await requireAudienceAuthority(run, audience);
       const author = run.provenance.author;
       const pin =
         op === 'pin'
-          ? await run.storage.addPinAudience({ pageId: page.id, audience, createdBy: author })
-          : await run.storage.removePinAudience({ pageId: page.id, audience, removedBy: author });
+          ? await run.storage.addPinAudience({ pageId: page.id, kind, depth, audience, createdBy: author })
+          : await run.storage.removePinAudience({ pageId: page.id, kind, audience, removedBy: author });
       onChange?.(context);
-      return { page: page.id, audience: pin?.audience ?? [] };
+      return {
+        page: page.id,
+        kind,
+        ...(pin?.depth === undefined ? {} : { depth: pin.depth }),
+        audience: pin?.audience ?? [],
+      };
     },
   });
 }

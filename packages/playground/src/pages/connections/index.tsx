@@ -3,7 +3,6 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import {
   useConnectSurface,
   useDisconnectUserConnection,
@@ -74,13 +73,7 @@ export default function ConnectionsPage() {
 
   let content: React.ReactNode;
 
-  if (surface.isLoading) {
-    content = (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  } else if (surface.isError) {
+  if (surface.isError) {
     content = (
       <EmptyState
         tone="error"
@@ -107,7 +100,9 @@ export default function ConnectionsPage() {
         actionSlot={docsLink('Read the end-user connections docs')}
       />
     );
-  } else if (surface.data?.status === 'ready') {
+  } else {
+    // Probing the surface and fetching connections both render the skeleton
+    // table, so the page keeps one loading state from first paint to rows.
     content = (
       <div className="mt-6 flex flex-col gap-6 pb-16">
         {connectionsQuery.isError ? (
@@ -117,13 +112,17 @@ export default function ConnectionsPage() {
             globalConnections={globalConnections}
             userConnections={userConnections}
             providersById={providersById}
-            loading={connectionsQuery.isLoading}
+            // Pending, not loading: a query paused offline is pending without loading,
+            // and must not read as an empty list.
+            loading={surface.isPending || (surface.data?.status === 'ready' && connectionsQuery.isPending)}
             onDisconnect={handleDisconnect}
             disconnectPendingId={disconnect.isPending ? (disconnect.variables?.connectionId ?? null) : null}
           />
         )}
 
-        <AddConnectionDialog providers={providers} open={addOpen} onOpenChange={setAddOpen} />
+        {surface.data?.status === 'ready' ? (
+          <AddConnectionDialog providers={providers} open={addOpen} onOpenChange={setAddOpen} />
+        ) : null}
       </div>
     );
   }

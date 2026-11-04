@@ -72,12 +72,22 @@ export function useLinearProjectsQuery(enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.linearProjects(),
     queryFn: () => listLinearProjects(baseUrl),
+    select: data => data.projects,
     enabled,
   });
 }
 
-/** The connected workspace's teams (Settings intake-source picker). */
-export function useLinearTeamsQuery(enabled: boolean) {
+export function useLinearProjectListingQuery(enabled: boolean) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearProjects(),
+    queryFn: () => listLinearProjects(baseUrl),
+    enabled,
+  });
+}
+
+/** The connected workspaces' teams (Settings intake-source picker). */
+export function useLinearTeamListingQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearTeams(),

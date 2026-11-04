@@ -97,7 +97,7 @@ describe('IntakeSection jira', () => {
     await openSourcePicker('Jira projects');
 
     const projects = await screen.findByRole('group', { name: 'Jira projects' });
-    await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
+    await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG: Engineering' }));
 
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0].jira.sourceIds).toEqual(['10001']);
@@ -121,7 +121,7 @@ describe('IntakeSection jira', () => {
       }),
     );
     renderIntakeSection();
-    const remove = await screen.findByRole('button', { name: 'Remove ENG · Engineering' });
+    const remove = await screen.findByRole('button', { name: 'Remove ENG: Engineering' });
     const add = screen.getByRole('button', { name: 'Add project to Jira projects' });
     await userEvent.click(remove);
     try {
@@ -134,7 +134,7 @@ describe('IntakeSection jira', () => {
       releaseSave();
     }
     await waitFor(() => expect(add).toHaveFocus());
-    expect(screen.queryByRole('button', { name: 'Remove ENG · Engineering' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove ENG: Engineering' })).not.toBeInTheDocument();
   });
 
   it('waits for Jira projects before listing saved sources, so rows never show raw project IDs', async () => {
@@ -158,7 +158,7 @@ describe('IntakeSection jira', () => {
 
     releaseProjects();
 
-    expect(await within(section).findByLabelText('Factory to add for ENG · Engineering')).toBeInTheDocument();
+    expect(await within(section).findByLabelText('Factory to add for ENG: Engineering')).toBeInTheDocument();
   });
 
   const jiraBinding = (overrides: Partial<IntakeSourceBinding>): IntakeSourceBinding => ({
@@ -186,13 +186,13 @@ describe('IntakeSection jira', () => {
 
     renderIntakeSection();
 
-    expect(await screen.findByText(/Not routed — this project's issues won't be picked up\./)).toBeInTheDocument();
+    expect(await screen.findByText(/Not routed. This project's issues won't be picked up\./)).toBeInTheDocument();
 
-    await userEvent.click(await screen.findByLabelText('Factory to add for ENG · Engineering'));
+    await userEvent.click(await screen.findByLabelText('Factory to add for ENG: Engineering'));
     await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
     expect(screen.getByText('Leave labels empty to take all issues.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
-    await pickBoard('ENG · Engineering in Acme Web');
+    await pickBoard('ENG: Engineering in Acme Web');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     await waitFor(() => expect(savedBindings).toHaveLength(1));
@@ -203,7 +203,7 @@ describe('IntakeSection jira', () => {
       board: 'work',
       labels: null,
     });
-    expect(await screen.findByLabelText('Issues from ENG · Engineering for Acme Web')).toHaveTextContent('All issues');
+    expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent('All issues');
     expect(screen.queryByText(/Choose a board/)).toBeNull();
   });
 
@@ -216,12 +216,12 @@ describe('IntakeSection jira', () => {
 
     renderIntakeSection();
 
-    await userEvent.click(await screen.findByLabelText('Factory to add for ENG · Engineering'));
+    await userEvent.click(await screen.findByLabelText('Factory to add for ENG: Engineering'));
     await userEvent.click(await screen.findByRole('option', { name: 'Acme API' }));
     expect(
       screen.getByText('Another factory takes all issues, so name the labels this factory should take.'),
     ).toBeInTheDocument();
-    await pickBoard('ENG · Engineering in Acme API');
+    await pickBoard('ENG: Engineering in Acme API');
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
     await userEvent.type(screen.getByLabelText('Labels for Acme API'), 'payments, billing');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -232,11 +232,11 @@ describe('IntakeSection jira', () => {
       board: 'work',
       labels: ['payments', 'billing'],
     });
-    expect(await screen.findByLabelText('Issues from ENG · Engineering for Acme API')).toHaveTextContent(
+    expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme API')).toHaveTextContent(
       'Only issues labelled…',
     );
     expect(screen.getByText('payments')).toBeInTheDocument();
-    expect(screen.getByLabelText('Issues from ENG · Engineering for Acme Web')).toHaveTextContent('All other issues');
+    expect(screen.getByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent('All other issues');
     expect(
       screen.getByText('Labelled factories take matching issues first, in the order they were added.'),
     ).toBeInTheDocument();
@@ -264,7 +264,7 @@ describe('IntakeSection jira', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByLabelText('Issues from ENG · Engineering for Acme Web')).toHaveTextContent(allIssues);
+      expect(await screen.findByLabelText('Issues from ENG: Engineering for Acme Web')).toHaveTextContent(allIssues);
       expect(
         screen.queryByText('Labelled factories take matching issues first, in the order they were added.') !== null,
       ).toBe(precedenceExplained);
@@ -280,7 +280,7 @@ describe('IntakeSection jira', () => {
 
     renderIntakeSection();
 
-    await userEvent.click(await screen.findByLabelText('Issues from ENG · Engineering for Acme Web'));
+    await userEvent.click(await screen.findByLabelText('Issues from ENG: Engineering for Acme Web'));
     await userEvent.click(await screen.findByRole('option', { name: 'Only issues labelled…' }));
     expect(screen.getByText('Still takes all issues until you add a label.')).toBeInTheDocument();
 
@@ -358,9 +358,9 @@ describe('IntakeSection jira', () => {
 
     renderIntakeSection();
 
-    await userEvent.click(await screen.findByLabelText('Factory to add for ENG · Engineering'));
+    await userEvent.click(await screen.findByLabelText('Factory to add for ENG: Engineering'));
     await userEvent.click(await screen.findByRole('option', { name: 'Acme API' }));
-    await pickBoard('ENG · Engineering in Acme API');
+    await pickBoard('ENG: Engineering in Acme API');
     const labels = screen.getByLabelText('Labels for Acme API');
     await userEvent.type(labels, 'payments');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -385,16 +385,16 @@ describe('IntakeSection jira', () => {
 
     renderIntakeSection();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Remove Acme API from ENG · Engineering' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Acme API from ENG: Engineering' }));
 
     await waitFor(() => expect(deletedBindings).toHaveLength(1));
     expect(deletedBindings[0]).toEqual({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_B });
     expect(savedBindings).toEqual([]);
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Remove Acme API from ENG · Engineering' })).toBeNull(),
+      expect(screen.queryByRole('button', { name: 'Remove Acme API from ENG: Engineering' })).toBeNull(),
     );
-    expect(screen.getByRole('button', { name: 'Remove Acme Web from ENG · Engineering' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Remove ENG · Engineering' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove Acme Web from ENG: Engineering' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove ENG: Engineering' })).toBeInTheDocument();
   });
 
   it('surfaces rejected connections as reconnect guidance instead of an empty picker', async () => {

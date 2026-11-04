@@ -1,7 +1,7 @@
 import type { NotificationRecord, NotificationsStorage } from '@mastra/core/notifications';
 
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE, resolveSessionThread } from './deliver.js';
 import type { FactoryDeliveryController } from './deliver.js';
 import { workItemNumber } from './read-tools.js';
@@ -53,7 +53,7 @@ export function newestNotification(records: NotificationRecord[], match: (record
   return found;
 }
 
-export function itemLabel(item: WorkItemRow): string {
+export function itemLabel(item: Card): string {
   const number = workItemNumber(item);
   return number === null ? item.id : `#${number}`;
 }
