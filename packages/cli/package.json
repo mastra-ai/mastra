@@ -51,8 +51,8 @@
     "devtools"
   ],
   "dependencies": {
-    "@babel/parser": "^8.0.8",
-    "@babel/types": "^8.0.8",
+    "@babel/parser": "^8.0.10",
+    "@babel/types": "^8.0.10",
     "@clack/prompts": "^1.8.1",
     "@expo/devcert": "^1.2.2",
     "@mastra/deployer": "workspace:^",

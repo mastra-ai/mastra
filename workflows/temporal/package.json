@@ -51,9 +51,9 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/generator": "^8.0.6",
-    "@babel/parser": "^8.0.8",
-    "@babel/types": "^8.0.8",
+    "@babel/generator": "^8.0.10",
+    "@babel/parser": "^8.0.10",
+    "@babel/types": "^8.0.10",
     "@mastra/deployer": "workspace:*",
     "@temporalio/activity": "^1.24.0",
     "@temporalio/client": "^1.24.0",
