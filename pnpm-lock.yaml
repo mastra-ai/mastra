@@ -5641,32 +5641,81 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
-  packages/platform-knowledge:
+  packages/platform:
+    dependencies:
+      '@mastra/platform-workspace':
+        specifier: workspace:*
+        version: link:../../workspaces/platform-workspace
     devDependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^3.0.105
+        version: 3.0.138(zod@4.6.7)
+      '@ai-sdk/openai':
+        specifier: ^3.0.90
+        version: 3.0.136(zod@4.6.7)
+      '@ai-sdk/provider':
+        specifier: 3.0.18
+        version: 3.0.18
+      '@earendil-works/pi-agent-core':
+        specifier: 1.1.0
+        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.92)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      '@earendil-works/pi-ai':
+        specifier: 1.1.0
+        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.92)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../_vendored/ai_v5
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
+      '@langchain/core':
+        specifier: ^1.0.0
+        version: 1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
+      '@langchain/langgraph':
+        specifier: 1.4.21
+        version: 1.4.21(@langchain/core@1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
+      '@langchain/openai':
+        specifier: ^1.6.2
+        version: 1.8.0(@aws-sdk/credential-provider-node@3.972.92)(@langchain/core@1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)))(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 5.1.0(vitest@5.1.0)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 5.1.0(vitest@5.1.0)
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.322(zod@4.6.7)
+      deepagents:
+        specifier: 1.14.2
+        version: 1.14.2(8aa5b3605285e90a86dc9870133b78ff)
+      langchain:
+        specifier: 1.5.16
+        version: 1.5.16(@langchain/core@1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)))(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(ws@8.22.0(bufferutil@4.1.0))
       tsdown:
-        specifier: 0.23.1
-        version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
+        specifier: 0.22.9
+        version: 0.22.9(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   packages/playground:
     dependencies:
@@ -6425,81 +6474,6 @@ importers:
       zod-to-ts:
         specifier: ^2.1.0
         version: 2.1.0(patch_hash=4fd3930faeffe118339c6942a03d3eb69e27314979282e96314285c45a89099b)(typescript@6.0.3)(zod@4.6.7)
-
-  platform/memory:
-    devDependencies:
-      '@ai-sdk/anthropic':
-        specifier: ^3.0.105
-        version: 3.0.138(zod@4.6.7)
-      '@ai-sdk/openai':
-        specifier: ^3.0.90
-        version: 3.0.136(zod@4.6.7)
-      '@ai-sdk/provider':
-        specifier: 3.0.18
-        version: 3.0.18
-      '@earendil-works/pi-agent-core':
-        specifier: 1.1.0
-        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.92)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
-      '@earendil-works/pi-ai':
-        specifier: 1.1.0
-        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.92)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7))(@smithy/signature-v4@5.7.5)(bufferutil@4.1.0)(supports-color@10.2.2)(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
-      '@internal/ai-sdk-v5':
-        specifier: workspace:*
-        version: link:../../packages/_vendored/ai_v5
-      '@internal/lint':
-        specifier: workspace:*
-        version: link:../../packages/_config
-      '@internal/types-builder':
-        specifier: workspace:*
-        version: link:../../packages/_types-builder
-      '@langchain/core':
-        specifier: ^1.0.0
-        version: 1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
-      '@langchain/langgraph':
-        specifier: 1.4.21
-        version: 1.4.21(@langchain/core@1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
-      '@langchain/openai':
-        specifier: ^1.6.2
-        version: 1.8.0(@aws-sdk/credential-provider-node@3.972.92)(@langchain/core@1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)))(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@mastra/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
-      '@types/node':
-        specifier: 22.19.15
-        version: 22.19.15
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 5.1.0(vitest@5.1.0)
-      '@vitest/ui':
-        specifier: 'catalog:'
-        version: 5.1.0(vitest@5.1.0)
-      ai:
-        specifier: ^6.0.0
-        version: 6.0.322(zod@4.6.7)
-      deepagents:
-        specifier: 1.14.2
-        version: 1.14.2(8aa5b3605285e90a86dc9870133b78ff)
-      eslint:
-        specifier: ^10.4.1
-        version: 10.14.0(jiti@2.7.0)(supports-color@10.2.2)
-      langchain:
-        specifier: 1.5.16
-        version: 1.5.16(@langchain/core@1.3.4(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)))(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(ws@8.22.0(bufferutil@4.1.0))
-      tsdown:
-        specifier: 0.22.9
-        version: 0.22.9(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-      zod:
-        specifier: 'catalog:'
-        version: 4.6.7
 
   pubsub/google-cloud-pubsub:
     dependencies:
@@ -44420,7 +44394,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.6
       tslib: 2.8.1
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@supabase/auth-js@2.118.0':
     dependencies:

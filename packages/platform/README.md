@@ -1,4 +1,6 @@
-# PlatformKnowledge (experimental)
+# @mastra/platform (experimental)
+
+Import `PlatformMemory`, `PlatformKnowledge`, `PlatformSandbox`, and `PlatformFilesystem` from `@mastra/platform`. The sandbox and filesystem providers are supplied by the `@mastra/platform-workspace` dependency.
 
 `PlatformKnowledge` is the open-source client for a Platform-hosted Knowledge instance. The client extends core `Knowledge` and delegates schema-v4 page-store operations over an authenticated project-scoped API. The provider, connection string, importer and sync scheduler belong to Platform, never to the client.
 

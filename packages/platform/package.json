@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/platform-memory",
-  "version": "0.0.0",
-  "description": "Mastra Platform hosted Memory: API client and PlatformMemory for agents",
+  "name": "@mastra/platform",
+  "version": "0.1.0-alpha.0",
+  "description": "Mastra Platform hosted Memory, Knowledge, and workspace clients",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -64,8 +64,8 @@
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run",
     "test": "pnpm test:unit",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "devDependencies": {
@@ -75,7 +75,6 @@
     "@earendil-works/pi-agent-core": "1.1.0",
     "@earendil-works/pi-ai": "1.1.0",
     "@internal/ai-sdk-v5": "workspace:*",
-    "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@langchain/core": "^1.0.0",
     "@langchain/langgraph": "1.4.21",
@@ -87,18 +86,19 @@
     "@vitest/ui": "catalog:",
     "ai": "^6.0.0",
     "deepagents": "1.14.2",
-    "eslint": "^10.4.1",
     "langchain": "1.5.16",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@mastra/pg": "workspace:*",
+    "@mastra/platform-workspace": "workspace:*"
   },
   "peerDependencies": {
     "@ai-sdk/provider": "^3.0.0",
     "@earendil-works/pi-agent-core": "^1.1.0",
     "@langchain/core": ">=0.3.0 <2.0.0",
-    "@mastra/core": ">=1.62.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
     "langchain": "^1.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
@@ -109,7 +109,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "platform/memory"
+    "directory": "packages/platform"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
@@ -130,5 +130,8 @@
     "@earendil-works/pi-agent-core": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "@mastra/platform-workspace": "workspace:*"
   }
 }
