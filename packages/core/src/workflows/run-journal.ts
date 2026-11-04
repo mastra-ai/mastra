@@ -119,6 +119,19 @@ export class RunJournal {
   #inFlight = 0;
   #boundaryInFlight = false;
   #closed = false;
+  /** The highest `lastSeq` of the run known here: as loaded, or reported by a write or draft. */
+  #lastSeq: number | undefined;
+  #runToken: string | undefined;
+  /** Store calls (writes and drafts) sent and not yet settled. */
+  #pending = new Set<Promise<unknown>>();
+  #resolveSettledLastSeq!: (seq: number | undefined) => void;
+  /**
+   * The run's `lastSeq` once its execution has ended (`close`) and every write and draft sent has
+   * settled: the version a read of its stored steps must still find to see what the execution left.
+   * Undefined when the run wasn't loaded and nothing was stored.
+   */
+  readonly settledLastSeq: Promise<number | undefined>;
+  readonly settledRunToken: Promise<string | undefined>;
 
   /**
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
@@ -145,7 +158,7 @@ export class RunJournal {
     runId: string;
     seed?: Record<string, unknown>;
     state?: unknown;
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; runToken?: string };
     inherited?: StateBase;
     resumed?: boolean;
   }) {
@@ -164,6 +177,28 @@ export class RunJournal {
     }
     this.#patchBytes = storedState?.patchBytes ?? 0;
     if (resumed && seed) this.#startStateSeq = storedState?.seq;
+    this.#lastSeq = storedState?.seq;
+    this.#runToken = storedState?.runToken;
+    this.settledLastSeq = new Promise(resolve => {
+      this.#resolveSettledLastSeq = resolve;
+    });
+    this.settledRunToken = this.settledLastSeq.then(() => this.#runToken);
+  }
+
+  /**
+   * Sends a store call, keeping it in `#pending` until it settles and noting the run's `lastSeq` it
+   * reports, so `settledLastSeq` cannot resolve before a settled call's seq is noted.
+   */
+  #send<T>(call: Promise<T>, seqOf: (result: T) => number | undefined): Promise<T> {
+    const tracked = call.then(result => {
+      const seq = seqOf(result);
+      if (seq !== undefined && (this.#lastSeq === undefined || seq > this.#lastSeq)) this.#lastSeq = seq;
+      return result;
+    });
+    this.#pending.add(tracked);
+    const settle = () => this.#pending.delete(tracked);
+    tracked.then(settle, settle);
+    return tracked;
   }
 
   /**
@@ -201,11 +236,16 @@ export class RunJournal {
     const chained = own && this.#draftBytes + opsBytes <= next.bytes;
     let seq: number;
     try {
-      ({ seq } = await store.appendWorkflowRunStateDraft({
-        workflowName: this.workflowName,
-        runId: this.runId,
-        ...(chained ? { on: { seq: current!.ref.seq, draft: current!.ref.draft }, ops: ops! } : { state: next.state }),
-      }));
+      ({ seq } = await this.#send(
+        store.appendWorkflowRunStateDraft({
+          workflowName: this.workflowName,
+          runId: this.runId,
+          ...(chained
+            ? { on: { seq: current!.ref.seq, draft: current!.ref.draft }, ops: ops! }
+            : { state: next.state }),
+        }),
+        written => written.seq,
+      ));
     } catch {
       return undefined;
     }
@@ -219,7 +259,10 @@ export class RunJournal {
    * running then (the block's `Promise.all` rejects on the first failure), and its write is dropped.
    */
   close(): void {
+    if (this.#closed) return;
     this.#closed = true;
+    // Nothing is sent once closed, so these are the last calls.
+    void Promise.allSettled(this.#pending).then(() => this.#resolveSettledLastSeq(this.#lastSeq));
   }
 
   /**
@@ -373,9 +416,15 @@ export class RunJournal {
         statePatch,
         ...(expectedStatus ? { expectedStatus } : {}),
       };
-      const written = checkpoint
-        ? await store.writeWorkflowRunCheckpoint({ ...run, stateBase })
-        : await store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq });
+      const written = await this.#send(
+        checkpoint
+          ? store.writeWorkflowRunCheckpoint({ ...run, stateBase })
+          : store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq }),
+        written => {
+          this.#runToken ??= written?.runToken;
+          return written?.lastSeq;
+        },
+      );
       if (written === null) {
         if (checkpoint) this.#needsCheckpoint = true;
         return false;
@@ -499,6 +548,11 @@ export class RunJournal {
     }
   }
 
+  /** Whether `result` is what the store holds for `stepId`, as of the writes that have settled. */
+  isStored(stepId: string, result: unknown): boolean {
+    return this.#written.get(stepId) === result;
+  }
+
   /** Swap the stubs among `stepIds` back for their stored results, with one read. */
   async hydrate(stepResults: StepResults, stepIds: readonly string[] = Object.keys(stepResults)): Promise<void> {
     const store = this.store;
@@ -517,7 +571,7 @@ export class RunJournal {
       // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
       // is at least as new as the one read.
       if (stepResults[stepId] !== stub) continue;
-      const result = loaded[stepId];
+      const result = loaded?.[stepId];
       if (!result) {
         throw new MastraError({
           id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
@@ -663,4 +717,169 @@ function isPlainJson(value: unknown, ancestors: Set<object>): boolean {
     default:
       return false;
   }
+}
+
+/** The `steps` loader of a storage v2 result -> the step results it was built from (see `residentStepResults`). */
+const residentResults = new WeakMap<object, StepResults>();
+
+/**
+ * The `steps()` of a storage v2 run's result: its step results as the execution left them, formatted
+ * by `format`. The successful results the journal evicted are read from storage on the first call,
+ * with one read shared by concurrent calls; the read fails if the run was written to since its
+ * execution ended (e.g. resumed or restarted), since storage then no longer holds what the result
+ * describes. A failed read isn't cached, so a later call retries.
+ *
+ * Holds the stubs and the results that weren't evicted until the run's writes settle; then the
+ * stored successful results are evicted too, so it holds only stubs, `input` and the results a
+ * reader needs without loading (suspended, failed, running). Call it after the run's last write is
+ * sent, and close the journal before anything awaits the loader.
+ *
+ * @internal
+ */
+export function lazyStepResults(
+  journal: RunJournal,
+  stepResults: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  const results = { ...stepResults };
+  evictOnceStored(journal, results);
+  const { store, workflowName, runId, settledLastSeq, settledRunToken } = journal;
+  return storedStepResults(
+    { store: store!, workflowName, runId, lastSeq: settledLastSeq, runToken: settledRunToken },
+    results,
+    format,
+  );
+}
+
+// Kept apart from `lazyStepResults`, so the loader it returns doesn't hold on to the journal.
+function evictOnceStored(journal: RunJournal, results: StepResults): void {
+  void journal.settledLastSeq.then(() => {
+    for (const [stepId, result] of Object.entries(results)) {
+      if (
+        stepId !== 'input' &&
+        result?.status === 'success' &&
+        !isStepResultStub(result) &&
+        journal.isStored(stepId, result)
+      ) {
+        results[stepId] = stubStepResult(result);
+      }
+    }
+  });
+}
+
+/**
+ * The `steps()` of a storage v2 result reconstructed from stored state. Holds successful-step
+ * stubs and hydrates them on the first call while the stored run identity and `lastSeq` still match.
+ *
+ * @internal
+ */
+export function loadedStepResults(
+  {
+    store,
+    workflowName,
+    runId,
+    lastSeq,
+    runToken,
+  }: { store: WorkflowsStorage; workflowName: string; runId: string; lastSeq: number; runToken?: string },
+  stepResults: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  const results: StepResults = {};
+  for (const [stepId, result] of Object.entries(stepResults)) {
+    results[stepId] =
+      stepId !== 'input' && result?.status === 'success' && !isStepResultStub(result) ? stubStepResult(result) : result;
+  }
+  return storedStepResults(
+    { store, workflowName, runId, lastSeq: Promise.resolve(lastSeq), runToken: Promise.resolve(runToken) },
+    results,
+    format,
+  );
+}
+
+function storedStepResults(
+  {
+    store,
+    workflowName,
+    runId,
+    lastSeq,
+    runToken,
+  }: {
+    store: WorkflowsStorage;
+    workflowName: string;
+    runId: string;
+    lastSeq: Promise<number | undefined>;
+    runToken: Promise<string | undefined>;
+  },
+  results: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  let loaded: Promise<StepResults> | undefined;
+
+  const load = async (): Promise<StepResults> => {
+    const expectedLastSeq = await lastSeq;
+    const expectedRunToken = await runToken;
+    const stubbed = Object.keys(results).filter(stepId => isStepResultStub(results[stepId]));
+    if (!stubbed.length && expectedLastSeq === undefined) return format(results);
+
+    const stored = await store.loadWorkflowRunSteps({
+      workflowName,
+      runId,
+      stepIds: stubbed,
+      expectedLastSeq,
+      expectedRunToken,
+    });
+    if (!stored) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_STEPS_STALE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `The steps of run ${runId} can't be loaded for this result: the run was written to (e.g. resumed or restarted) or deleted since. Read the run again for its current steps.`,
+      });
+    }
+    const full = { ...results };
+    for (const stepId of stubbed) {
+      const result = stored[stepId];
+      if (!result) {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.SYSTEM,
+          text: `The stored result of step "${stepId}" in run ${runId} is missing.`,
+        });
+      }
+      full[stepId] = result;
+    }
+    return format(full);
+  };
+
+  const steps = () => {
+    loaded ??= load().catch(error => {
+      loaded = undefined;
+      throw error;
+    });
+    return loaded;
+  };
+  residentResults.set(steps, results);
+  return steps;
+}
+
+/**
+ * The step results a storage v2 result's `steps` loader holds without reading storage: every result
+ * but the successful ones that were evicted, which are stubs. Undefined for anything else (a v1
+ * result's `steps` record). For the engine's own reads of a nested run's suspended and failed steps.
+ *
+ * @internal
+ */
+export function residentStepResults(steps: unknown): StepResults | undefined {
+  return typeof steps === 'function' ? residentResults.get(steps) : undefined;
+}
+
+/**
+ * Every step result of a run's result: a storage v2 result's `steps` loader is called, a v1
+ * result's record returned as is. For the framework's readers that hand all of them on.
+ *
+ * @internal
+ */
+export async function loadStepResults(steps: unknown): Promise<StepResults> {
+  return typeof steps === 'function' ? steps() : (steps as StepResults);
 }

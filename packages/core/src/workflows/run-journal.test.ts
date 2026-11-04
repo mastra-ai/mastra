@@ -315,7 +315,7 @@ describe('RunJournal step patches', () => {
     const journal = new RunJournal({ store: memory, ...run });
     const sent = () =>
       append.mock.calls.map(([args]) => (args.stepPatches?.each ? 'patch' : args.steps.each ? 'full' : 'none'));
-    const storedEach = async () => (await memory.loadWorkflowRunSteps({ ...run, stepIds: ['each'] })).each;
+    const storedEach = async () => (await memory.loadWorkflowRunSteps({ ...run, stepIds: ['each'] }))!.each;
     return { memory, append, journal, sent, storedEach };
   }
 
@@ -578,6 +578,103 @@ describe('RunJournal.getStepResultAsync', () => {
     expect(await journal.getStepResultAsync(stepResults, { id: 'old' })).toBe('old');
     expect(await journal.getStepResultAsync(stepResults, 'old')).toBe('old');
     expect(loadWorkflowRunSteps).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('RunJournal.settledLastSeq', () => {
+  const run = { workflowName: 'wf', runId: 'r' };
+  const storedLastSeq = async (memory: WorkflowsInMemory) => (await memory.loadWorkflowRunHeader(run))!.lastSeq;
+  const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+  it("is the stored run's lastSeq once closed, a draft after the last write included", async () => {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const journal = new RunJournal({ store: memory, ...run });
+    let settled = false;
+    void journal.settledLastSeq.then(() => (settled = true));
+
+    await journal.write({ snapshot: snapshot({ input: {}, a: ok(1) }) });
+    const writtenSeq = await storedLastSeq(memory);
+    expect(await journal.baseFor({ x: 1 })).toBeDefined();
+    expect(await storedLastSeq(memory)).toBeGreaterThan(writtenSeq);
+    await tick();
+    expect(settled).toBe(false);
+
+    journal.close();
+    const seq = await journal.settledLastSeq;
+    expect(seq).toBe(await storedLastSeq(memory));
+    expect(await memory.loadWorkflowRunSteps({ ...run, stepIds: ['a'], expectedLastSeq: seq })).toEqual({ a: ok(1) });
+  });
+
+  it('waits for a write still in flight when the run is closed', async () => {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const journal = new RunJournal({ store: memory, ...run });
+    const context: Record<string, unknown> = { input: {}, a: ok(1) };
+    await journal.write({ snapshot: snapshot(context) });
+
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const append = memory.appendWorkflowRunEntries.bind(memory);
+    vi.spyOn(memory, 'appendWorkflowRunEntries').mockImplementation(async args => {
+      await gate;
+      return append(args);
+    });
+    context.b = { status: 'running', payload: {}, startedAt: 3 };
+    const inFlight = journal.write({ snapshot: snapshot(context), stepIds: ['b'] });
+    journal.close();
+    let settled = false;
+    void journal.settledLastSeq.then(() => (settled = true));
+    await tick();
+    expect(settled).toBe(false);
+
+    release();
+    await inFlight;
+    expect(await journal.settledLastSeq).toBe(await storedLastSeq(memory));
+  });
+
+  it('settles when a write in flight at close fails', async () => {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const journal = new RunJournal({ store: memory, ...run });
+    const context: Record<string, unknown> = { input: {}, a: ok(1) };
+    await journal.write({ snapshot: snapshot(context) });
+    const writtenSeq = await storedLastSeq(memory);
+
+    let fail!: () => void;
+    vi.spyOn(memory, 'appendWorkflowRunEntries').mockImplementationOnce(
+      () => new Promise((_, reject) => (fail = () => reject(new Error('down')))),
+    );
+    context.b = ok(2);
+    const inFlight = journal.write({ snapshot: snapshot(context) });
+    journal.close();
+    fail();
+    await expect(inFlight).rejects.toThrow('down');
+    expect(await journal.settledLastSeq).toBe(writtenSeq);
+  });
+
+  it("starts from the loaded run's lastSeq, for a resumed run that writes nothing", async () => {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const { lastSeq } = (await memory.writeWorkflowRunCheckpoint({
+      ...run,
+      header: { runId: 'r', status: 'suspended' } as any,
+      steps: { a: ok(1) },
+      state: {},
+    }))!;
+    const journal = new RunJournal({
+      store: memory,
+      ...run,
+      seed: { a: stubStepResult(ok(1)) },
+      state: {},
+      storedState: { seq: lastSeq, patchBytes: 0 },
+      resumed: true,
+    });
+    journal.close();
+    expect(await journal.settledLastSeq).toBe(lastSeq);
+  });
+
+  it('is undefined for a run without storage', async () => {
+    const journal = journalFor(undefined);
+    await journal.write({ snapshot: snapshot({ input: {}, a: ok(1) }) });
+    journal.close();
+    expect(await journal.settledLastSeq).toBeUndefined();
   });
 });
 
