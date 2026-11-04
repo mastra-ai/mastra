@@ -57,7 +57,11 @@ export async function writeSignal<T>(
       delay = Math.max(1, Math.min(delay * 2, resource.options.maxBackoffMs ?? 1000));
     }
   } catch (error) {
-    if (deadline.signal.aborted && !options.signal?.aborted && !resource.options.abortSignal?.aborted) {
+    const deadlineFired = deadline.signal.aborted && !options.signal?.aborted && !resource.options.abortSignal?.aborted;
+    if (
+      deadlineFired &&
+      (error === deadline.signal.reason || (error instanceof Error && error.name === 'AbortError'))
+    ) {
       throw lastAnchorError ?? error;
     }
     throw error;

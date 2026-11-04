@@ -126,6 +126,32 @@ describe('signal writes over HTTP', () => {
     },
   );
 
+  it.each([400, 401])('preserves HTTP %s from a custom transport after the anchor deadline', async status => {
+    replies = [404, status];
+    errorCode = 'TRACE_NOT_FOUND';
+    let attempts = 0;
+    const customClient = new MastraClient({
+      ...client.options,
+      retries: 0,
+      fetch: async (input, init) => {
+        // A custom transport may not cancel an in-flight request. Return its real
+        // HTTP response after the deadline, rather than synthesizing an abort.
+        if (++attempts > 1 && init?.signal && !init.signal.aborted) {
+          await new Promise<void>(resolve => init.signal?.addEventListener('abort', () => resolve(), { once: true }));
+        }
+        return fetch(input, { ...init, signal: undefined });
+      },
+    });
+
+    await expect(
+      customClient.createFeedback(
+        { feedback: { traceId: 'trace', feedbackType: 'thumbs', value: 1 } },
+        { anchorRetryTimeoutMs: 100 },
+      ),
+    ).rejects.toMatchObject({ status });
+    expect(received).toHaveLength(2);
+  });
+
   it('bounds anchor retries and supports per-operation cancellation', async () => {
     replies = Array(100).fill(404);
     errorCode = 'TRACE_NOT_FOUND';
