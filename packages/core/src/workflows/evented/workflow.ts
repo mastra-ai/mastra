@@ -2147,7 +2147,7 @@ export class EventedRun<
     if (result.status !== 'suspended') this.cleanup?.();
 
     result.traceId = workflowSpan?.externalTraceId;
-    result.spanId = workflowSpan?.id;
+    result.spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
     return result;
   }
 
@@ -2782,7 +2782,7 @@ export class EventedRun<
         }
 
         result.traceId = workflowSpan?.externalTraceId;
-        result.spanId = workflowSpan?.id;
+        result.spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
         return result;
       })
       .catch(async error => {

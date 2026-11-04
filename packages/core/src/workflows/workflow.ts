@@ -4293,7 +4293,7 @@ export class Run<
 
     this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
-    const spanId = workflowSpan?.id;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
 
     // execute() ends the span, so anything that rejects before we reach it has to end the
     // span itself or it stays open for the life of the trace. onStart makes that reachable
@@ -5405,7 +5405,7 @@ export class Run<
 
     this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
-    const spanId = workflowSpan?.id;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
 
     // Claim this suspension before entering the execution engine.
     //
@@ -5737,7 +5737,7 @@ export class Run<
 
     this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
-    const spanId = workflowSpan?.id;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
 
     let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
     try {
@@ -5887,7 +5887,7 @@ export class Run<
 
     this.workflowRunSpan = workflowSpan;
     const traceId = workflowSpan?.externalTraceId;
-    const spanId = workflowSpan?.id;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
 
     // Claim the run before entering the execution engine. The engine does not persist `running`
     // until the target step actually starts, so without an atomic claim two concurrent

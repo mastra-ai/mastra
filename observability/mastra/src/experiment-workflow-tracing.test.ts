@@ -1,6 +1,6 @@
 import { executeTarget } from '@mastra/core/datasets';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
+import { SamplingStrategyType, SpanType } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { createEventedWorkflow, createStep, createWorkflow } from '@mastra/core/workflows';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -20,7 +20,7 @@ type Engine = 'default' | 'evented';
 
 const empty = z.object({});
 
-function buildMastra(engine: Engine, exporter: TestExporter) {
+function buildMastra(engine: Engine, exporter: TestExporter, sampled = true) {
   const prepare = createStep({
     id: 'prepare',
     inputSchema: empty,
@@ -57,21 +57,32 @@ function buildMastra(engine: Engine, exporter: TestExporter) {
     storage: new MockStore(),
     workflows: { 'experiment-tracing-workflow': workflow },
     observability: new Observability({
-      configs: { default: { serviceName: 'experiment-workflow-tracing', exporters: [exporter] } },
+      configs: {
+        default: {
+          serviceName: 'experiment-workflow-tracing',
+          exporters: [exporter],
+          ...(sampled ? {} : { sampling: { type: SamplingStrategyType.NEVER } }),
+        },
+      },
     }),
   });
 
   return { mastra, workflow };
 }
 
-async function runItem(engine: Engine, exporter: TestExporter, experimentId?: string) {
-  const { mastra, workflow } = buildMastra(engine, exporter);
+async function runItem(
+  engine: Engine,
+  exporter: TestExporter,
+  experimentId?: string,
+  { sampled = true, resume = true }: { sampled?: boolean; resume?: boolean } = {},
+) {
+  const { mastra, workflow } = buildMastra(engine, exporter, sampled);
   try {
     if (engine === 'evented') await mastra.startWorkers();
     return await executeTarget(
       workflow,
       'workflow',
-      { input: {}, resumeData: { approved: true } },
+      { input: {}, ...(resume ? { resumeData: { approved: true } } : {}) },
       experimentId ? { experimentId } : undefined,
     );
   } finally {
@@ -111,6 +122,18 @@ describe.each(['default', 'evented'] as const)('workflow-target experiment traci
     expect(spans.length).toBeGreaterThan(0);
     expect(result.traceId).toBeTruthy();
     expect(new Set(spans.map(span => span.traceId))).toEqual(new Set([result.traceId]));
+  });
+
+  // A sampled-out run must not hand scorers the no-op span's placeholder id as a target span.
+  it.each([
+    ['started', false],
+    ['resumed', true],
+  ] as const)('returns no trace or span id from a sampled-out %s run', async (_label, resume) => {
+    const result = await runItem(engine, exporter, 'exp-wf-1', { sampled: false, resume });
+
+    expect(exporter.getAllSpans()).toHaveLength(0);
+    expect(result.traceId).toBeNull();
+    expect(result.spanId).toBeNull();
   });
 
   it('leaves experimentId unset when the run is not part of an experiment', async () => {
