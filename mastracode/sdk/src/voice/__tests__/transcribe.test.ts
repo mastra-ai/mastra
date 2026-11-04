@@ -115,4 +115,12 @@ describe('resolveSTTApiKey', () => {
     vi.stubEnv('MISTRAL_API_KEY', '');
     expect(resolveSTTApiKey('mistral', storedKeys({ mistral: 'stored-key' }))).toBe('stored-key');
   });
+
+  it.each([
+    { provider: 'nearai', envVar: 'NEARAI_API_KEY' },
+    { provider: 'deepgram', envVar: 'DEEPGRAM_API_KEY' },
+  ])('reads the $envVar env var for $provider', ({ provider, envVar }) => {
+    vi.stubEnv(envVar, 'env-key');
+    expect(resolveSTTApiKey(provider)).toBe('env-key');
+  });
 });
