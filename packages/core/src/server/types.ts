@@ -306,6 +306,10 @@ export type ServerConfig = {
   middleware?: Middleware | Middleware[];
   /**
    * CORS configuration for the server.
+   *
+   * Without auth the default origin is `'*'`. With `auth` set, the request origin is
+   * reflected instead. `credentials` defaults to `false` unless `auth` is set and
+   * `origin` lists the allowed origins explicitly.
    * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'A2A-Version', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
   cors?: CorsOptions | false;
