@@ -186,6 +186,23 @@ describe('generateSourceMap', () => {
     assert.equal(map.exports.Memory?.line, 2);
   });
 
+  it('leaves out bindings that reach the chunk through a star re-export from another package', () => {
+    const resolver = memoryResolver({
+      '/pkg/dist/index.js': 'export { MessageHistory, t as Memory } from "./src-abc.js";',
+      '/pkg/dist/index.d.ts':
+        'export declare class Memory {}\nexport { MessageHistory } from "@mastra/core/processors";',
+      '/pkg/dist/src-abc.js': [
+        'class Memory {}',
+        'export { Memory as t };',
+        'export * from "@mastra/core/processors";',
+      ].join('\n'),
+    });
+
+    const map = generateSourceMap('/pkg', { name: 'pkg', version: '1.0.0' }, [], resolver);
+
+    assert.deepEqual(Object.keys(map.exports), ['Memory']);
+  });
+
   const coreRoot = path.join(MONOREPO_ROOT, 'packages/core');
   const coreBuilt = fs.existsSync(path.join(coreRoot, 'dist/agent/index.js'));
 
