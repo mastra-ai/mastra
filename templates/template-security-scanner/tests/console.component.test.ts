@@ -851,6 +851,31 @@ describe('console component outcomes', () => {
     expect(view.textContent).not.toContain('No successful sync recorded');
   });
 
+  it('shows a skipped advisory cycle without calling it complete', async () => {
+    vi.stubGlobal('fetch', async (input: string) => {
+      if (input === '/api/advisories/status')
+        return Response.json({ lastSuccessAt: '2026-11-04T00:00:00Z', stale: true, incomplete: true });
+      if (input.startsWith('/api/advisories?')) return Response.json({ items: [], limit: 25, offset: 0 });
+      if (input === '/api/advisories/sync')
+        return Response.json({ outcome: 'SKIPPED', reasonCode: 'ADVISORY_DETAIL_PRIMARY_OTHER_4XX' });
+      throw new Error(`Unexpected ${input}`);
+    });
+    const view = render(createElement(VulnerabilitiesView));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    const sync = Array.from(view.querySelectorAll('button')).find(
+      button => button.textContent === 'Synchronize advisories',
+    );
+    await act(async () => {
+      sync?.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(view.querySelector('[role="status"]')?.textContent).toContain('Advisory synchronization skipped');
+    expect(view.querySelector('[role="status"]')?.textContent).toContain('ADVISORY_DETAIL_PRIMARY_OTHER_4XX');
+    expect(view.textContent).not.toContain('Advisory synchronization completed.');
+  });
+
   it('does not call a failed advisory status read an unsynced inbox', async () => {
     vi.stubGlobal('fetch', async () => Response.json({ code: 'CONTROL_PLANE_UNAVAILABLE' }, { status: 503 }));
     const view = render(createElement(VulnerabilitiesView));

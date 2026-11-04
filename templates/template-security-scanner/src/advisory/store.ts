@@ -215,7 +215,7 @@ export class AdvisoryStore {
       return created.rowsAffected === 1 ? id : null;
     });
   }
-  async finishScheduledEvent(id: string, state: 'COMPLETE' | 'FAILED', reason: string | null) {
+  async finishScheduledEvent(id: string, state: 'COMPLETE' | 'SKIPPED' | 'FAILED', reason: string | null) {
     await this.write(tx =>
       tx.execute({
         sql: "UPDATE scanner_advisory_schedule_events SET state=?,reason=? WHERE id=? AND state='RUNNING'",

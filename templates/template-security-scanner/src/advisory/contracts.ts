@@ -18,30 +18,7 @@ const sourceSchema = z
     /** Source license or attribution label. */
     license: short,
   })
-  .strict();
-function boundedPackageMetadata(value: unknown, depth = 0): boolean {
-  if (value === null || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (typeof value === 'string') return value.length <= 500;
-  if (depth >= 3) return false;
-  if (Array.isArray(value)) return value.length <= 16 && value.every(item => boundedPackageMetadata(item, depth + 1));
-  if (!value || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return false;
-  const entries = Object.entries(value);
-  return (
-    entries.length <= 16 &&
-    entries.every(([key, item]) => key.length > 0 && key.length <= 100 && boundedPackageMetadata(item, depth + 1))
-  );
-}
-function isBoundedDiscardedMetadata(value: unknown): boolean {
-  try {
-    return boundedPackageMetadata(value) && Buffer.byteLength(JSON.stringify(value)) <= 4096;
-  } catch {
-    return false;
-  }
-}
-const unclassifiedPackageMetadata = z.unknown().refine(isBoundedDiscardedMetadata);
-const boundedMetadataObject = z.record(z.string().min(1).max(100), z.unknown()).refine(isBoundedDiscardedMetadata);
-const boundedMetadataArray = z.array(z.unknown()).max(16).refine(isBoundedDiscardedMetadata);
+  .strip();
 const affectedSchema = z.union([
   z
     .object({
@@ -53,13 +30,8 @@ const affectedSchema = z.union([
       ranges: z.array(z.unknown()).max(50),
       /** Optional upstream version strings; no positive applicability is inferred. */
       versions: z.array(short).max(1000).optional(),
-      /** Observed extra key; its type and meaning are unproved, so discard bounded JSON metadata. */
-      package: unclassifiedPackageMetadata.optional(),
-      /** Optional package ecosystem on vendor records; bounded and discarded with package metadata. */
-      ecosystem: short.optional(),
     })
-    .strict()
-    .transform(({ package: _package, ecosystem: _ecosystem, ...affected }) => affected),
+    .strip(),
   z
     .object({
       /** Package ecosystem named by the upstream advisory. */
@@ -70,16 +42,26 @@ const affectedSchema = z.union([
       ranges: z.array(z.unknown()).max(50),
       /** Explicit affected-version strings supplied by the source. */
       versions: z.array(short).max(1000),
+      vendor: z.never().optional(),
+      product: z.never().optional(),
     })
-    .strict(),
+    .strip()
+    .transform(({ vendor: _vendor, product: _product, ...affected }) => affected),
   z
     .object({
       /** Unclassified upstream package name; no ecosystem or version is inferred. */
       package: short,
       /** Uninterpreted affected-version ranges; no positive applicability is inferred. */
       ranges: z.array(z.unknown()).max(50),
+      vendor: z.never().optional(),
+      product: z.never().optional(),
+      ecosystem: z.never().optional(),
+      versions: z.never().optional(),
     })
-    .strict(),
+    .strip()
+    .transform(
+      ({ vendor: _vendor, product: _product, ecosystem: _ecosystem, versions: _versions, ...affected }) => affected,
+    ),
 ]);
 /** Validated detail contract; bounds and cross-field rules are enforced before use. */
 export const detailSchema = z
@@ -105,13 +87,8 @@ export const detailSchema = z
         model: short,
         /** Upstream prompt version associated with the summary. */
         promptVersion: short,
-        /** Uninterpreted generation metadata; validated and discarded. */
-        generatedAt: short.optional(),
-        /** Uninterpreted summary basis; validated and discarded. */
-        basis: boundedMetadataObject.optional(),
       })
-      .strict()
-      .transform(({ generatedAt: _generatedAt, basis: _basis, ...summary }) => summary)
+      .strip()
       .nullable()
       .optional(),
     /** Bounded original advisory text; treated as untrusted data. */
@@ -134,18 +111,8 @@ export const detailSchema = z
     bundles: z.array(z.unknown()).max(100).optional(),
     /** Uninterpreted upstream early-warning metadata. */
     earlyWarning: z.unknown().optional(),
-    /** Bounded upstream context, discarded before storage or model use. */
-    context: z
-      .record(z.string().min(1).max(100), z.unknown())
-      .refine(value => Object.keys(value).length <= 32 && Buffer.byteLength(JSON.stringify(value)) <= 4096)
-      .nullable()
-      .optional(),
     /** Uninterpreted upstream reference metadata; never network authorization. */
     references: z.array(z.unknown()).max(100).optional(),
-    /** Uninterpreted record notes; validated and discarded. */
-    recordNotes: boundedMetadataArray.optional(),
-    /** Uninterpreted fix metadata; not version applicability evidence. */
-    fixedIn: boundedMetadataArray.optional(),
     /** Upstream source attribution and license records. */
     sources: z.array(sourceSchema).min(1).max(30),
     /** ISO 8601 timestamp when the source first observed the entry. */
@@ -155,8 +122,7 @@ export const detailSchema = z
     /** ISO 8601 upstream modification timestamp. */
     modifiedAt: instant,
   })
-  .strict()
-  .transform(({ context: _context, recordNotes: _recordNotes, fixedIn: _fixedIn, ...detail }) => detail);
+  .strip();
 /** Validated bounded upstream advisory; unknown metadata remains untrusted. */
 export type AdvisoryDetail = z.infer<typeof detailSchema>;
 /** Validated page contract; bounds and cross-field rules are enforced before use. */
@@ -170,13 +136,13 @@ export const pageSchema = z
             /** Stable identifier of this record. */
             id: advisoryId,
           })
-          .passthrough(),
+          .strip(),
       )
       .max(100),
     /** Opaque continuation cursor, or null at the end of a page. */
     nextCursor: z.string().min(1).max(1024).nullable(),
   })
-  .strict();
+  .strip();
 /** Validated triage contract; bounds and cross-field rules are enforced before use. */
 export const triageSchema = z
   .object({

@@ -38,7 +38,7 @@ API investigation admission accepts `maxRequests` 1–100, `maxDurationSeconds` 
 
 ## Advisory synchronization
 
-Use **Synchronize advisories** to contact cve.now manually. Local references and playbooks work offline. Imported advisory text is untrusted; version applicability remains unknown without verified version/range evidence. The inbox polls a bounded portion of the feed and displays stale status, incomplete coverage, and retry timing.
+Use **Synchronize advisories** to contact cve.now manually. Local references and playbooks work offline. Imported advisory text is untrusted; version applicability remains unknown without verified version/range evidence. The inbox polls a bounded portion of the feed and displays stale status, incomplete coverage, and retry timing. A failed or inconsistent cve.now cycle reports `SKIPPED`, retains successfully imported pages as partial data, and does not plan hypotheses. The next opt-in scheduled cycle or manual attempt can retry after the persisted backoff; skipped cycles are never marked complete.
 
 For scheduled sync, set all three values and restart:
 

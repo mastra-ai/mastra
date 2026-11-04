@@ -19,8 +19,12 @@ export class AdvisoryScheduler {
     if (!id) return;
     try {
       if (this.closed) throw new ControlPlaneError('ADVISORY_SCHEDULE_CLOSED', 503);
-      await this.sync.syncOnce();
+      const result = await this.sync.syncOnce();
       if (this.closed) throw new ControlPlaneError('ADVISORY_SCHEDULE_CLOSED', 503);
+      if (result.outcome === 'SKIPPED') {
+        await this.sync.store.finishScheduledEvent(id, 'SKIPPED', result.reasonCode);
+        return;
+      }
       await this.onImported();
       await this.sync.store.finishScheduledEvent(id, 'COMPLETE', null);
     } catch (error) {

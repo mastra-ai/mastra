@@ -123,6 +123,8 @@ it('lets a signed-in operator triage an unsupported CVE in Chrome without creati
   expect(((await findings.json()) as { items: unknown[] }).items).toHaveLength(0);
   rotationUnavailable = true;
   await page.getByRole('button', { name: 'Synchronize advisories' }).click();
+  await visible(page.getByText(/Advisory synchronization skipped/));
+  expect(await page.getByText('Advisory synchronization completed.', { exact: true }).count()).toBe(0);
   await visible(page.getByText('Stale', { exact: true }).first());
   await visible(page.getByText(/Last imported page/));
   expect(await page.locator('.inline-status').innerText()).toContain('Incomplete coverage');

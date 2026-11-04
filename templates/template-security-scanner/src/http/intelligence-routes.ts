@@ -40,6 +40,7 @@ export function registerIntelligenceRoutes(
   app.post('/api/advisories/sync', async context => {
     parse(z.object({}).strict(), await readJson(context.req));
     const result = await advisory.syncOnce();
+    if (result.outcome === 'SKIPPED') return context.json(result, 200);
     const hypotheses = await triage.planNew(OPERATOR_ID);
     await onAdvisorySync?.();
     return context.json({ ...result, hypotheses }, 200);

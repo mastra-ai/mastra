@@ -31,13 +31,38 @@ async function main() {
     throw new RuntimeDiagnostic(body.code ?? 'ADVISORY_SYNC_FAILED', 'The local advisory sync did not complete.');
   }
   const body = (await result.json()) as {
+    outcome?: 'COMPLETED' | 'SKIPPED';
+    reasonCode?: string;
+    phase?: string;
+    checkpoint?: { stale?: boolean; incomplete?: boolean; nextRetryAt?: string | null };
     head?: { imported?: number; materialRevisions?: number };
     rotation?: { imported?: number; materialRevisions?: number };
     refreshed?: number;
     hypotheses?: { ready?: number; pending?: number };
   };
+  if (body.outcome === 'SKIPPED') {
+    console.log(
+      JSON.stringify({
+        outcome: 'SKIPPED',
+        reasonCode: body.reasonCode,
+        phase: body.phase,
+        checkpoint: {
+          stale: body.checkpoint?.stale,
+          incomplete: body.checkpoint?.incomplete,
+          nextRetryAt: body.checkpoint?.nextRetryAt,
+        },
+      }),
+    );
+    return;
+  }
+  if (body.outcome !== 'COMPLETED')
+    throw new RuntimeDiagnostic(
+      'ADVISORY_SYNC_RESPONSE_INVALID',
+      'The local advisory sync returned an invalid outcome.',
+    );
   console.log(
     JSON.stringify({
+      outcome: 'COMPLETED',
       importedHeadEntries: body.head?.imported ?? 0,
       importedRotationEntries: body.rotation?.imported ?? 0,
       importedHeadRevisions: body.head?.materialRevisions ?? 0,

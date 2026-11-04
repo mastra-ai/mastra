@@ -13,6 +13,7 @@ import { detailSchema, materialHash, versionApplicability } from '../src/advisor
 import { startControlPlane } from '../src/http/server.js';
 import { ReferenceCatalog } from '../src/knowledge/catalog.js';
 import { PlaybookRegistry, categories, type Category } from '../src/knowledge/playbooks.js';
+import { periodicAdvisoryLifecycle } from './lab/advisory-schedule.js';
 
 const bootstrap = 'owned_local_intelligence_fixture_bootstrap_secret';
 const key = 'ab'.repeat(32);
@@ -48,7 +49,7 @@ function detail(id: string, description = 'Owned fixture vulnerability', aliases
     modifiedAt: '2026-10-29T12:00:00.000Z',
   };
 }
-type Wire = { status?: number; body?: unknown; contentType?: string; location?: string };
+type Wire = { status?: number; body?: unknown; contentType?: string; location?: string; truncatedBody?: boolean };
 async function startAdvisoryFixture() {
   const pages = new Map<string, Wire>();
   const details = new Map<string, Wire>();
@@ -73,6 +74,12 @@ async function startAdvisoryFixture() {
             : pages.get(path);
     if (!selected) {
       response.writeHead(404).end();
+      return;
+    }
+    if (selected.truncatedBody) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.write('{"partial":');
+      setImmediate(() => response.destroy());
       return;
     }
     response.writeHead(selected.status ?? 200, {
@@ -451,8 +458,11 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     fixture.page(null, [newest.id], 'rotation-page');
     fixture.page('rotation-page', [rotation.id], null);
     fixture.details.set(rotation.id, { status: 429, body: { privateMarker: 'PRIVATE_RESPONSE_MARKER' } });
-    const primary = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
-    expect(primary.body.code).toBe('ADVISORY_DETAIL_PRIMARY_429_ROTATION');
+    const primary = await app.request<{ outcome: string; reasonCode: string }>('/api/advisories/sync', 'POST', {});
+    expect(primary).toMatchObject({
+      status: 200,
+      body: { outcome: 'SKIPPED', reasonCode: 'ADVISORY_DETAIL_PRIMARY_429' },
+    });
     const partial = await app.request<{
       lastSuccessAt: string;
       failureCode: string;
@@ -473,8 +483,11 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       body: { privateMarker: 'PRIVATE_RESPONSE_MARKER' },
     });
     await waitForAdvisoryRetry(app);
-    const cdnFailure = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
-    expect(cdnFailure.body.code).toBe('ADVISORY_DETAIL_CDN_5XX_ROTATION');
+    const cdnFailure = await app.request<{ outcome: string; reasonCode: string }>('/api/advisories/sync', 'POST', {});
+    expect(cdnFailure).toMatchObject({
+      status: 200,
+      body: { outcome: 'SKIPPED', reasonCode: 'ADVISORY_DETAIL_CDN_5XX' },
+    });
     expect((await app.request('/api/advisories/status')).body).toMatchObject({
       stale: true,
       incomplete: true,
@@ -493,16 +506,83 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(3);
   }, 120000);
 
-  it('accepts documented exposure values and rejects unknown advisory fields', () => {
+  it('skips an inconsistent upstream cycle and retries without planning on the skipped attempt', async () => {
+    const fixture = await startAdvisoryFixture();
+    const head = detail('CVE-2026-23101');
+    const rotation = detail('CVE-2026-23102');
+    fixture.page(null, [head.id], 'rotation-page');
+    fixture.page('rotation-page', [rotation.id], null);
+    fixture.setDetail(head);
+    fixture.details.set(rotation.id, { status: 400, body: { marker: 'PRIVATE_UPSTREAM_BODY' } });
+    let modelCalls = 0;
+    const models: AdvisoryModels = {
+      async plan() {
+        modelCalls++;
+        return {
+          value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+          modelId: 'owned-local-model',
+        };
+      },
+    };
+    const app = await startHarness(fixture, models);
+
+    const skipped = await app.request<{
+      outcome: string;
+      reasonCode: string;
+      checkpoint: { stale: boolean; incomplete: boolean; failureCount: number; lastSuccessAt: string | null };
+      hypotheses?: unknown;
+    }>('/api/advisories/sync', 'POST', {});
+    expect(skipped.status).toBe(200);
+    expect(skipped.body).toMatchObject({
+      outcome: 'SKIPPED',
+      reasonCode: 'ADVISORY_DETAIL_PRIMARY_OTHER_4XX',
+      checkpoint: { stale: true, incomplete: true, failureCount: 1 },
+    });
+    expect(skipped.body.checkpoint.lastSuccessAt).toBeTruthy();
+    expect(skipped.body).not.toHaveProperty('hypotheses');
+    expect(skipped.body.checkpoint).not.toHaveProperty('headCursor');
+    expect(skipped.body.checkpoint).not.toHaveProperty('rotationCursor');
+    expect(modelCalls).toBe(0);
+    expect(JSON.stringify(skipped.body)).not.toContain('PRIVATE_UPSTREAM_BODY');
+    expect((await app.request<{ items: { id: string }[] }>('/api/advisories')).body.items.map(item => item.id)).toEqual(
+      [head.id],
+    );
+
+    await app.restart();
+    const beforeEarly = fixture.requests.length;
+    const early = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
+    expect(early.status).toBe(503);
+    expect(early.body.code).toBe('ADVISORY_RETRY_NOT_DUE');
+    expect(fixture.requests).toHaveLength(beforeEarly);
+    fixture.setDetail(rotation);
+    await waitForAdvisoryRetry(app);
+    const recovered = await app.request<{ outcome: string; hypotheses: { ready: number } }>(
+      '/api/advisories/sync',
+      'POST',
+      {},
+    );
+    expect(recovered.status).toBe(200);
+    expect(recovered.body.outcome).toBe('COMPLETED');
+    expect(recovered.body.hypotheses.ready).toBeGreaterThanOrEqual(1);
+    expect(modelCalls).toBeGreaterThanOrEqual(1);
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({
+      stale: false,
+      incomplete: true,
+      failureCount: 0,
+      failureCode: null,
+    });
+  }, 120000);
+
+  it('accepts documented exposure values and strips unrelated advisory fields', () => {
     const local = detail('CVE-2026-10001');
     for (const exposure of [null, 'Actively exploited', 'Default setups', 'Specific setups only', 'Unclear'] as const) {
       expect(detailSchema.safeParse({ ...local, exposure }).success).toBe(true);
     }
     expect(detailSchema.safeParse({ ...local, exposure: 'Unverified' }).success).toBe(false);
-    expect(detailSchema.safeParse({ ...local, unexpected: 'unreviewed field' }).success).toBe(false);
+    expect(detailSchema.parse({ ...local, unexpected: 'unreviewed field' })).not.toHaveProperty('unexpected');
   });
 
-  it('imports bounded current feed metadata without retaining it or weakening strict detail validation', async () => {
+  it('strips unused feed metadata before storage, hashing and model planning', async () => {
     const fixture = await startAdvisoryFixture();
     const original = detail('CVE-2026-12004');
     const enriched = {
@@ -514,10 +594,27 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
         generatedAt: '2026-11-04T00:00:00Z',
         basis: { note: 'PRIVATE_BASIS_MARKER' },
       },
-      recordNotes: [{ note: 'PRIVATE_NOTE_MARKER' }],
-      fixedIn: ['PRIVATE_FIX_MARKER'],
+      recordNotes: { custom: 'PRIVATE_NOTE_MARKER' },
+      fixedIn: { custom: 'PRIVATE_FIX_MARKER' },
+      extraDetail: 'PRIVATE_DETAIL_MARKER',
+      sources: [{ ...original.sources[0], extraSource: 'PRIVATE_SOURCE_MARKER' }],
+      affected: [{ ...original.affected[0], extraAffected: 'PRIVATE_AFFECTED_MARKER' }],
     };
     fixture.page(null, [original.id], null);
+    fixture.pages.set('/api/v1/entries', {
+      body: {
+        entries: [{ id: original.id, extraEntry: 'PRIVATE_ENTRY_MARKER' }],
+        nextCursor: null,
+        extraPage: 'PRIVATE_PAGE_MARKER',
+      },
+    });
+    fixture.statusWire.body = {
+      polling: {},
+      history: {},
+      backfill: {},
+      storage: {},
+      extraStatus: 'PRIVATE_STATUS_MARKER',
+    };
     fixture.details.set(original.id, { body: enriched });
     const modelInputs: unknown[] = [];
     const models: AdvisoryModels = {
@@ -541,7 +638,17 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect(saved.body.detail).not.toHaveProperty('fixedIn');
     const stored = await app.query('SELECT detail FROM scanner_advisories');
     const exported = JSON.stringify([saved.body, stored, modelInputs]);
-    for (const marker of ['PRIVATE_BASIS_MARKER', 'PRIVATE_NOTE_MARKER', 'PRIVATE_FIX_MARKER']) {
+    for (const marker of [
+      'PRIVATE_BASIS_MARKER',
+      'PRIVATE_NOTE_MARKER',
+      'PRIVATE_FIX_MARKER',
+      'PRIVATE_DETAIL_MARKER',
+      'PRIVATE_SOURCE_MARKER',
+      'PRIVATE_AFFECTED_MARKER',
+      'PRIVATE_ENTRY_MARKER',
+      'PRIVATE_PAGE_MARKER',
+      'PRIVATE_STATUS_MARKER',
+    ]) {
       expect(exported).not.toContain(marker);
     }
     expect(materialHash(detailSchema.parse(enriched))).toBe(
@@ -553,17 +660,23 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       failureCode: null,
     });
 
-    for (const malformed of [
+    for (const ignored of [
       { ...enriched, summary: { ...enriched.summary, basis: 'not-an-object' } },
       { ...enriched, summary: { ...enriched.summary, generatedAt: 'x'.repeat(501) } },
       { ...enriched, recordNotes: 'not-an-array' },
       { ...enriched, fixedIn: { version: '1.0' } },
-      { ...enriched, recordNotes: [{ note: 'x'.repeat(32769) }] },
+      { ...enriched, context: 'unrecognized-context' },
       { ...enriched, unexpected: true },
       { ...enriched, summary: { ...enriched.summary, unexpected: true } },
-    ]) {
+    ])
+      expect(detailSchema.safeParse(ignored).success).toBe(true);
+    for (const malformed of [
+      { ...enriched, title: 5 },
+      { ...enriched, summary: { ...enriched.summary, text: 5 } },
+      { ...enriched, sources: [{ name: 'Owned', url: 'not-a-url', license: 'fixture' }] },
+      { ...enriched, affected: [{ vendor: 'Owned', product: 'Portal' }] },
+    ])
       expect(detailSchema.safeParse(malformed).success).toBe(false);
-    }
   }, 120000);
 
   it('accepts bounded vendor product versions without weakening affected variants', () => {
@@ -575,7 +688,9 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     for (const versions of ['1.0', [1], ['x'.repeat(501)], Array(1001).fill('1.0')]) {
       expect(detailSchema.safeParse({ ...local, affected: [{ ...affected, versions }] }).success).toBe(false);
     }
-    expect(detailSchema.safeParse({ ...local, affected: [{ ...affected, unexpected: true }] }).success).toBe(false);
+    expect(detailSchema.parse({ ...local, affected: [{ ...affected, unexpected: true }] }).affected[0]).toEqual(
+      affected,
+    );
     expect(
       detailSchema.safeParse({ ...local, affected: [{ ecosystem: 'npm', package: 'owned', ranges: [] }] }).success,
     ).toBe(false);
@@ -600,10 +715,10 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       Number.POSITIVE_INFINITY,
       () => 'x',
     ]) {
-      expect(detailSchema.safeParse({ ...local, affected: [{ ...base, package: metadata }] }).success).toBe(false);
+      expect(detailSchema.parse({ ...local, affected: [{ ...base, package: metadata }] }).affected).toEqual([base]);
     }
-    expect(detailSchema.safeParse({ ...local, affected: [{ ...base, package: 'owned', unknown: true }] }).success).toBe(
-      false,
+    expect(detailSchema.parse({ ...local, affected: [{ ...base, package: 'owned', unknown: true }] }).affected).toEqual(
+      [base],
     );
     expect(
       detailSchema.safeParse({ ...local, affected: [{ ecosystem: 'npm', package: {}, ranges: [], versions: [] }] })
@@ -621,11 +736,11 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       expect(materialHash(parsed)).toBe(materialHash(base));
     }
     for (const ecosystem of [null, 1, {}, [], 'x'.repeat(501)]) {
-      expect(detailSchema.safeParse({ ...local, affected: [{ ...product, ecosystem }] }).success).toBe(false);
+      expect(detailSchema.parse({ ...local, affected: [{ ...product, ecosystem }] }).affected).toEqual([product]);
     }
     expect(
-      detailSchema.safeParse({ ...local, affected: [{ ...product, ecosystem: 'npm', unknown: true }] }).success,
-    ).toBe(false);
+      detailSchema.parse({ ...local, affected: [{ ...product, ecosystem: 'npm', unknown: true }] }).affected,
+    ).toEqual([product]);
     const packageOnly = { ecosystem: 'npm', package: 'owned', ranges: [], versions: ['1.0'] };
     expect(detailSchema.parse({ ...local, affected: [packageOnly] }).affected).toEqual([packageOnly]);
     expect(detailSchema.safeParse({ ...local, affected: [{ ...packageOnly, versions: undefined }] }).success).toBe(
@@ -651,7 +766,6 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       { ...affected, package: 'x'.repeat(501) },
       { ...affected, ranges: null },
       { ...affected, ranges: Array(51).fill('1.0') },
-      { ...affected, unknown: true },
       { ...affected, ecosystem: 'npm' },
       { ...affected, ecosystem: null },
       { ...affected, versions: ['1.0'] },
@@ -660,6 +774,9 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     ]) {
       expect(detailSchema.safeParse({ ...original, affected: [row] }).success).toBe(false);
     }
+    expect(detailSchema.parse({ ...original, affected: [{ ...affected, unknown: true }] }).affected).toEqual([
+      affected,
+    ]);
     const bounded = { package: 'x'.repeat(500), ranges: Array(50).fill('uninterpreted') };
     expect(detailSchema.parse({ ...original, affected: [bounded] }).affected).toEqual([bounded]);
   });
@@ -783,9 +900,8 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       expect(parsed).not.toHaveProperty('context');
     }
     expect(detailSchema.safeParse({ ...local, context: null }).success).toBe(true);
-    expect(detailSchema.safeParse({ ...local, context: 'PRIVATE_CONTEXT' }).success).toBe(false);
-    expect(detailSchema.safeParse({ ...local, context: { note: 'x'.repeat(4097) } }).success).toBe(false);
-    expect(detailSchema.safeParse({ ...local, context: { ['x'.repeat(101)]: 1 } }).success).toBe(false);
+    for (const context of ['PRIVATE_CONTEXT', { note: 'x'.repeat(4097) }, { ['x'.repeat(101)]: 1 }])
+      expect(detailSchema.parse({ ...local, context })).not.toHaveProperty('context');
     expect(detailSchema.safeParse({ ...local, status: 'unreviewed' }).success).toBe(false);
   });
 
@@ -1070,9 +1186,8 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     fixture.page(null, [newest.id], 'bad-page');
     fixture.page('bad-page', [bad.id], null);
     fixture.details.set(bad.id, { body: { id: bad.id, unexpected: 'unreviewed schema' } });
-    const failed = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
-    expect(failed.status).toBe(503);
-    expect(failed.body.code).toContain('ADVISORY_SCHEMA_UNKNOWN');
+    const failed = await app.request<{ outcome: string; reasonCode: string }>('/api/advisories/sync', 'POST', {});
+    expect(failed).toMatchObject({ status: 200, body: { outcome: 'SKIPPED', reasonCode: 'ADVISORY_SCHEMA_UNKNOWN' } });
     expect((await app.request('/api/advisories/status')).body).toMatchObject({
       stale: true,
       incomplete: true,
@@ -1086,20 +1201,21 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
 
     fixture.details.set(bad.id, { status: 302, location: 'http://127.0.0.1:9/not-owned' });
     await waitForAdvisoryRetry(app);
-    const denied = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
-    expect(denied.status).toBe(503);
-    expect(denied.body.code).toContain('ADVISORY_REDIRECT_DENIED');
+    const denied = await app.request<{ outcome: string; reasonCode: string }>('/api/advisories/sync', 'POST', {});
+    expect(denied).toMatchObject({ status: 200, body: { outcome: 'SKIPPED', reasonCode: 'ADVISORY_REDIRECT_DENIED' } });
     expect(fixture.requests.some(path => path.includes('not-owned'))).toBe(false);
     fixture.details.set(bad.id, { body: { ...bad, aliases: [old.id] } });
     await waitForAdvisoryRetry(app);
-    const collision = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
-    expect(collision.status).toBe(503);
-    expect(collision.body.code).toContain('ADVISORY_ALIAS_CONFLICT');
+    const collision = await app.request<{ outcome: string; reasonCode: string }>('/api/advisories/sync', 'POST', {});
+    expect(collision).toMatchObject({
+      status: 200,
+      body: { outcome: 'SKIPPED', reasonCode: 'ADVISORY_ALIAS_CONFLICT' },
+    });
     expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(2);
     fixture.details.set(bad.id, { body: bad });
     fixture.page('bad-page', [bad.id], 'bad-page');
     await waitForAdvisoryRetry(app);
-    expect((await app.request<{ code: string }>('/api/advisories/sync', 'POST', {})).body.code).toContain(
+    expect((await app.request<{ reasonCode: string }>('/api/advisories/sync', 'POST', {})).body.reasonCode).toBe(
       'ADVISORY_CURSOR_STALLED',
     );
     expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(2);
@@ -1150,7 +1266,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect((await app.request('/api/advisories/sync', 'POST', {})).status).toBe(200);
 
     fixture.statusWire.body = { unexpected: 'untrusted status' };
-    expect((await app.request<{ code: string }>('/api/advisories/sync', 'POST', {})).body.code).toContain(
+    expect((await app.request<{ reasonCode: string }>('/api/advisories/sync', 'POST', {})).body.reasonCode).toBe(
       'ADVISORY_SCHEMA_UNKNOWN',
     );
     fixture.statusWire.body = { polling: {}, history: {}, backfill: {}, storage: {} };
@@ -1298,9 +1414,9 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
         '/api/advisories/quarantine?limit=20',
       );
       scenario.corrupt();
-      const failed = await app.request<{ code: string }>('/api/advisories/sync', 'POST', {});
-      expect(failed.status).toBe(503);
-      if (scenario.responseReason) expect(failed.body.code).toContain(scenario.responseReason);
+      const failed = await app.request<{ outcome: string; reasonCode: string }>('/api/advisories/sync', 'POST', {});
+      expect(failed).toMatchObject({ status: 200, body: { outcome: 'SKIPPED', reasonCode: scenario.reason } });
+      if (scenario.responseReason) expect(failed.body.reasonCode).toContain(scenario.responseReason);
       expect(JSON.stringify(failed)).not.toContain(marker);
       const quarantine = await app.request<{ items: { sourceId: string; reason: string }[] }>(
         '/api/advisories/quarantine?limit=20',
@@ -1348,6 +1464,56 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect((await app.request('/api/advisories/status')).body).toMatchObject({ stale: false, failureCode: null });
   }, 120000);
 
+  it('does not classify an advisory storage failure as an upstream skip', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entry = detail('CVE-2026-654326');
+    fixture.page(null, [entry.id], null);
+    fixture.setDetail(entry);
+    let modelCalls = 0;
+    const app = await startHarness(fixture, {
+      async plan() {
+        modelCalls++;
+        return {
+          value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+          modelId: 'owned-local-model',
+        };
+      },
+    });
+    const before = (await app.request('/api/advisories/status')).body;
+    await app.query(
+      "CREATE TRIGGER owned_advisory_storage_failure BEFORE INSERT ON scanner_advisories BEGIN SELECT RAISE(ABORT, 'owned storage fault'); END",
+    );
+    const response = await app.request<{ outcome?: string; code?: string }>('/api/advisories/sync', 'POST', {});
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.body.outcome).not.toBe('SKIPPED');
+    expect(modelCalls).toBe(0);
+    expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(0);
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({
+      failureCount: before.failureCount,
+      stale: before.stale,
+      lastSuccessAt: before.lastSuccessAt,
+    });
+  });
+
+  it('skips a truncated upstream HTTP body with a typed checkpoint failure', async () => {
+    const fixture = await startAdvisoryFixture();
+    const entry = detail('CVE-2026-654327');
+    fixture.page(null, [entry.id], null);
+    fixture.details.set(entry.id, { truncatedBody: true });
+    const app = await startHarness(fixture);
+    const response = await app.request<{ outcome: string; reasonCode: string }>('/api/advisories/sync', 'POST', {});
+    expect(response).toMatchObject({ status: 200, body: { outcome: 'SKIPPED', reasonCode: 'ADVISORY_BODY_INVALID' } });
+    expect((await app.request('/api/advisories/status')).body).toMatchObject({
+      stale: true,
+      incomplete: true,
+      failureCode: 'ADVISORY_BODY_INVALID',
+    });
+  });
+
+  it('records a skipped native schedule event and recovers on a later cycle', async () => {
+    await periodicAdvisoryLifecycle();
+  }, 120000);
+
   it('reports imported entries and material revisions from the real sync CLI', async () => {
     const fixture = await startAdvisoryFixture();
     const head = detail('CVE-2026-654323');
@@ -1383,11 +1549,22 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect((await app.request(`/api/advisories/${head.id}`)).body).toMatchObject({ revision: 2 });
     expect((await app.request(`/api/advisories/${rotation.id}`)).body).toMatchObject({ revision: 2 });
     expect(await sync()).toMatchObject({
+      outcome: 'COMPLETED',
       importedHeadRevisions: 0,
       importedRotationRevisions: 0,
       importedHeadEntries: 1,
       importedRotationEntries: 1,
     });
+    fixture.details.set(rotation.id, { status: 400, body: { marker: 'PRIVATE_CLI_ERROR' } });
+    const skipped = await sync();
+    expect(skipped).toMatchObject({
+      outcome: 'SKIPPED',
+      reasonCode: 'ADVISORY_DETAIL_PRIMARY_OTHER_4XX',
+      checkpoint: { stale: true, incomplete: true },
+    });
+    expect(skipped).not.toHaveProperty('hypotheses');
+    expect(Object.keys(skipped.checkpoint).sort()).toEqual(['incomplete', 'nextRetryAt', 'stale']);
+    expect(JSON.stringify(skipped)).not.toContain('PRIVATE_CLI_ERROR');
   }, 60000);
 
   it('rejects overlapping manual hypothesis planning without a duplicate model call', async () => {

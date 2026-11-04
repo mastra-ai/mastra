@@ -12,15 +12,23 @@ const isRedirect = (status: number) => status >= 300 && status < 400;
 const redirectDenied = () => new ControlPlaneError('ADVISORY_REDIRECT_DENIED', 503);
 
 async function boundedJson(response: Response): Promise<unknown> {
-  if (!response.headers.get('content-type')?.toLowerCase().includes('application/json'))
+  if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+    void response.body?.cancel().catch(() => undefined);
     throw new ControlPlaneError('ADVISORY_CONTENT_TYPE_INVALID', 503);
+  }
   const reader = response.body?.getReader();
   if (!reader) throw new ControlPlaneError('ADVISORY_BODY_INVALID', 503);
   const parts: Uint8Array[] = [];
   let size = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch {
+        throw new ControlPlaneError('ADVISORY_BODY_INVALID', 503);
+      }
+      const { done, value } = chunk;
       if (done) break;
       size += value.byteLength;
       if (size > MAX_BODY) throw new ControlPlaneError('ADVISORY_BODY_TOO_LARGE', 503);
@@ -74,7 +82,10 @@ export class AdvisorySource {
   async status(signal?: AbortSignal) {
     const response = await this.request('/api/v1/status', signal);
     if (isRedirect(response.status)) throw redirectDenied();
-    if (response.status !== 200) throw new ControlPlaneError('ADVISORY_STATUS_UNAVAILABLE', 503);
+    if (response.status !== 200) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new ControlPlaneError('ADVISORY_STATUS_UNAVAILABLE', 503);
+    }
     const value = await boundedJson(response);
     return validated(
       z
@@ -84,7 +95,7 @@ export class AdvisorySource {
           backfill: z.record(z.string(), z.unknown()),
           storage: z.record(z.string(), z.unknown()),
         })
-        .strict(),
+        .strip(),
       value,
     );
   }
@@ -95,7 +106,10 @@ export class AdvisorySource {
       signal,
     );
     if (isRedirect(response.status)) throw redirectDenied();
-    if (response.status !== 200) throw new ControlPlaneError('ADVISORY_LIST_UNAVAILABLE', 503);
+    if (response.status !== 200) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new ControlPlaneError('ADVISORY_LIST_UNAVAILABLE', 503);
+    }
     return validated(pageSchema, await boundedJson(response));
   }
   async detail(id: string, signal?: AbortSignal): Promise<AdvisoryDetail> {

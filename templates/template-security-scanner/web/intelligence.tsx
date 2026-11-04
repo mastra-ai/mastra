@@ -649,6 +649,7 @@ export function VulnerabilitiesView() {
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [syncSkipped, setSyncSkipped] = useState(false);
   const [reason, setReason] = useState('');
   const [scope, setScope] = useState('all_targets');
   const [targetId, setTargetId] = useState('');
@@ -697,6 +698,7 @@ export function VulnerabilitiesView() {
     stale?: boolean;
     incomplete?: boolean;
     failureCode?: string | null;
+    nextRetryAt?: string | null;
   }>('/api/advisories/status');
   const events = useData<{ items: { event: string; occurredAt: string; revision: number }[] }>(
     selected ? `/api/advisories/${selected}/events` : '',
@@ -707,8 +709,17 @@ export function VulnerabilitiesView() {
     setError('');
     setSyncMessage('');
     try {
-      await send('/api/advisories/sync', 'POST', {});
-      setSyncMessage('Advisory synchronization completed.');
+      const result = await send<{ outcome: 'COMPLETED' | 'SKIPPED'; reasonCode?: string }>(
+        '/api/advisories/sync',
+        'POST',
+        {},
+      );
+      setSyncSkipped(result.outcome === 'SKIPPED');
+      setSyncMessage(
+        result.outcome === 'SKIPPED'
+          ? `Advisory synchronization skipped (${result.reasonCode ?? 'UPSTREAM_UNAVAILABLE'}). Retry after the displayed backoff.`
+          : 'Advisory synchronization completed.',
+      );
     } catch (reason) {
       setError(errorCode(reason));
     } finally {
@@ -797,13 +808,19 @@ export function VulnerabilitiesView() {
           · Last imported page{' '}
           {status.loading ? 'Loading…' : status.error ? 'Unavailable' : <Time value={status.data?.lastSuccessAt} />}
           {status.data?.incomplete ? ' · Incomplete coverage' : ''}
+          {status.data?.nextRetryAt && (
+            <>
+              {' '}
+              · Retry after <Time value={status.data.nextRetryAt} />
+            </>
+          )}
         </div>
         <p className="hint">
           Synchronization may make up to eight bounded Sherlock model calls when a model is configured. Advisory cards
           do not assert target impact or execute a checker.
         </p>
         {syncMessage && (
-          <p className="success" role="status">
+          <p className={syncSkipped ? 'hint' : 'success'} role="status">
             {syncMessage}
           </p>
         )}

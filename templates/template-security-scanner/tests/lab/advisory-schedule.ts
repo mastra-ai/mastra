@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import { randomBytes } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, type ServerResponse } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,14 +8,36 @@ import { expect } from 'vitest';
 import { loadSettings } from '../../src/config/settings.js';
 import { startControlPlane } from '../../src/http/server.js';
 import { AdvisorySource } from '../../src/advisory/source.js';
+import type { AdvisoryModels } from '../../src/advisory/triage.js';
 
 export async function periodicAdvisoryLifecycle() {
   const root = await mkdtemp(join(tmpdir(), 'scanner-schedule-'));
   const requests: string[] = [];
   let failing = false;
+  let holdStatus = false;
+  let heldStatusResponse: ServerResponse | undefined;
+  let statusEntered: (() => void) | undefined;
+  let modelCalls = 0;
+  const models: AdvisoryModels = {
+    async plan() {
+      modelCalls++;
+      if (modelCalls === 1) throw new Error('OWNED_MODEL_UNAVAILABLE');
+      return {
+        value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+        modelId: 'owned-local-model',
+      };
+    },
+  };
   const fixture = createServer((request, response) => {
     const path = request.url ?? '/';
     requests.push(path);
+    if (holdStatus && path === '/api/v1/status') {
+      heldStatusResponse = response;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.flushHeaders();
+      statusEntered?.();
+      return;
+    }
     const id = 'CVE-2026-42421';
     const value =
       path === '/api/v1/status'
@@ -57,7 +79,18 @@ export async function periodicAdvisoryLifecycle() {
   let cookie = '',
     csrf = '';
   const start = async (enabled: boolean) => {
-    server = await startControlPlane(settings(enabled), 0, undefined, undefined, source);
+    server = await startControlPlane(
+      settings(enabled),
+      0,
+      undefined,
+      undefined,
+      source,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      models,
+    );
     const response = await fetch(`${server.url}/api/session`, {
       method: 'POST',
       headers: { origin: server.url, 'content-type': 'application/json' },
@@ -124,6 +157,8 @@ export async function periodicAdvisoryLifecycle() {
     const first = await runWake();
     expect(first.events).toHaveLength(1);
     expect(first.events[0].state).toBe('COMPLETE');
+    expect(modelCalls).toBe(1);
+    expect((await request('/api/advisories/CVE-2026-42421/triage-state')).data.hypothesis.state).toBe('pending');
     expect(requests.length).toBeGreaterThan(0);
     expect(requests.length).toBeLessThanOrEqual(65);
     expect(new Date(first.schedule.nextAt).getTime()).toBeGreaterThan(Date.now());
@@ -147,8 +182,10 @@ export async function periodicAdvisoryLifecycle() {
     );
     failing = true;
     await forceDue();
-    const failed = await runWake();
-    expect(failed.events[0].state).toBe('FAILED');
+    const skipped = await runWake();
+    expect(skipped.events[0]).toMatchObject({ state: 'SKIPPED', reason: 'ADVISORY_STATUS_UNAVAILABLE' });
+    expect(modelCalls).toBe(1);
+    expect((await request('/api/advisories/CVE-2026-42421/triage-state')).data.hypothesis.state).toBe('pending');
     const checkpoint = await request('/api/advisories/status');
     expect(checkpoint.status).toBe(200);
     expect(checkpoint.data).toMatchObject({ stale: true, incomplete: true, failureCount: 1 });
@@ -158,6 +195,27 @@ export async function periodicAdvisoryLifecycle() {
     const backoff = await runWake();
     expect(backoff.events[0]).toMatchObject({ state: 'FAILED', reason: 'ADVISORY_RETRY_NOT_DUE' });
     expect(requests).toHaveLength(beforeBackoff);
+    await server!.close();
+    await start(true);
+    expect(
+      (await request('/api/advisory-schedule')).data.events.some(
+        (event: { state: string }) => event.state === 'SKIPPED',
+      ),
+    ).toBe(true);
+    failing = false;
+    const delay = Date.parse(checkpoint.data.nextRetryAt) - Date.now() + 25;
+    expect(delay).toBeLessThanOrEqual(15000);
+    if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+    await forceDue();
+    const recovered = await runWake();
+    expect(recovered.events[0].state).toBe('COMPLETE');
+    expect(modelCalls).toBe(2);
+    expect((await request('/api/advisories/CVE-2026-42421/triage-state')).data.hypothesis.state).toBe('ready');
+    expect((await request('/api/advisories/status')).data).toMatchObject({
+      stale: false,
+      failureCount: 0,
+      failureCode: null,
+    });
 
     const retained = await request('/api/advisories/CVE-2026-42421');
     expect(retained.status).toBe(200);
@@ -175,7 +233,50 @@ export async function periodicAdvisoryLifecycle() {
     expect(requests).toHaveLength(beforeDisabled);
     expect(await server!.mastra.schedules.get(oldScheduleId)).toBeNull();
     expect((await request('/api/advisory-schedule')).data.schedule.enabled).toBe(false);
+
+    // A native tick blocked in a real feed body must fail on close without poisoning retry state.
+    await server!.close();
+    await start(true);
+    await forceDue();
+    holdStatus = true;
+    const entered = new Promise<void>(resolve => {
+      statusEntered = resolve;
+    });
+    const closingSchedule = (await server!.mastra.schedules.list()).find(
+      item => item.workflowId === 'local-advisory-sync',
+    )!;
+    const wake = server!.mastra.schedules.run(closingSchedule.id).catch(() => undefined);
+    const within = async <T>(work: Promise<T>, code: string): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          work,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(code)), 5000);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    await within(entered, 'HELD_STATUS_NOT_ENTERED');
+    await within(server!.close(), 'SCHEDULE_CLOSE_TIMEOUT');
+    await wake;
+    const db = createClient({ url: settings(true).databaseUrl });
+    try {
+      const event = await db.execute(
+        'SELECT state,reason FROM scanner_advisory_schedule_events ORDER BY rowid DESC LIMIT 1',
+      );
+      const state = await db.execute('SELECT failure_count,stale FROM scanner_advisory_checkpoint WHERE singleton=1');
+      expect(event.rows[0]).toMatchObject({ state: 'FAILED', reason: 'ADVISORY_SYNC_CLOSED' });
+      expect(Number(state.rows[0]?.failure_count)).toBe(0);
+      expect(Number(state.rows[0]?.stale)).toBe(0);
+      expect(modelCalls).toBe(2);
+    } finally {
+      db.close();
+    }
   } finally {
+    heldStatusResponse?.destroy();
     await server?.close();
     await new Promise<void>((resolve, reject) => fixture.close(error => (error ? reject(error) : resolve())));
     await rm(root, { recursive: true, force: true });

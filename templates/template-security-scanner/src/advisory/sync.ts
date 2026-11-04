@@ -2,6 +2,12 @@ import { ControlPlaneError } from '../core/contracts.js';
 import { AdvisorySource } from './source.js';
 import { AdvisoryStore, type CursorKind } from './store.js';
 
+class UpstreamCycleFailure extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
 export class AdvisorySync {
   private active?: Promise<unknown>;
   private controller?: AbortController;
@@ -11,22 +17,42 @@ export class AdvisorySync {
     private readonly source: AdvisorySource,
   ) {}
 
+  private async fromSource<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (this.closed || this.controller?.signal.aborted) throw new ControlPlaneError('ADVISORY_SYNC_CLOSED', 503);
+      if (error instanceof ControlPlaneError) throw new UpstreamCycleFailure(error.code);
+      throw error;
+    }
+  }
+
+  private async importPage(...args: Parameters<AdvisoryStore['importPage']>) {
+    try {
+      return await this.store.importPage(...args);
+    } catch (error) {
+      if (error instanceof ControlPlaneError && error.code === 'ADVISORY_ALIAS_CONFLICT')
+        throw new UpstreamCycleFailure(error.code);
+      throw error;
+    }
+  }
+
   private async hydratePage(kind: CursorKind, signal: AbortSignal, onSourceId: (id?: string) => void, cursor?: string) {
     onSourceId();
-    const page = await this.source.list(cursor, signal);
-    if (page.entries.length > 30) throw new ControlPlaneError('ADVISORY_PAGE_TOO_LARGE', 503);
+    const page = await this.fromSource(() => this.source.list(cursor, signal));
+    if (page.entries.length > 30) throw new UpstreamCycleFailure('ADVISORY_PAGE_TOO_LARGE');
     const seen = new Set<string>();
     const details = [];
     for (const entry of page.entries) {
       const id = entry.id.toUpperCase();
-      if (seen.has(id)) throw new ControlPlaneError('ADVISORY_PAGE_DUPLICATE', 503);
+      if (seen.has(id)) throw new UpstreamCycleFailure('ADVISORY_PAGE_DUPLICATE');
       seen.add(id);
       onSourceId(id);
-      details.push(await this.source.detail(id, signal));
+      details.push(await this.fromSource(() => this.source.detail(id, signal)));
       onSourceId();
     }
-    if (page.nextCursor && page.nextCursor === cursor) throw new ControlPlaneError('ADVISORY_CURSOR_STALLED', 503);
-    return this.store.importPage(kind, details, page.nextCursor);
+    if (page.nextCursor && page.nextCursor === cursor) throw new UpstreamCycleFailure('ADVISORY_CURSOR_STALLED');
+    return this.importPage(kind, details, page.nextCursor);
   }
 
   private async run(signal: AbortSignal) {
@@ -36,7 +62,7 @@ export class AdvisorySync {
       sourceId = id;
     };
     try {
-      await this.source.status(signal);
+      await this.fromSource(() => this.source.status(signal));
       phase = 'head';
       const head = await this.hydratePage('head', signal, setSourceId);
       const checkpoint = await this.store.checkpoint();
@@ -51,14 +77,22 @@ export class AdvisorySync {
       const ids = await this.store.knownIdsForRefresh(2);
       for (const id of ids) {
         sourceId = id;
-        const detail = await this.source.detail(id, signal);
-        await this.store.importPage('rotation', [detail], rotation.nextCursor, id);
+        const detail = await this.fromSource(() => this.source.detail(id, signal));
+        await this.importPage('rotation', [detail], rotation.nextCursor, id);
         sourceId = undefined;
       }
       await this.store.markSuccess();
-      return { head, rotation, refreshed: ids.length, checkpoint: await this.store.checkpoint() };
+      return {
+        outcome: 'COMPLETED' as const,
+        head,
+        rotation,
+        refreshed: ids.length,
+        checkpoint: await this.store.checkpoint(),
+      };
     } catch (error) {
-      const code = error instanceof ControlPlaneError ? error.code : 'ADVISORY_SYNC_INVALID';
+      if (!(error instanceof UpstreamCycleFailure)) throw error;
+      if (this.closed || this.controller?.signal.aborted) throw new ControlPlaneError('ADVISORY_SYNC_CLOSED', 503);
+      const code = error.code;
       const quarantineCodes = new Set([
         'ADVISORY_SCHEMA_UNKNOWN',
         'ADVISORY_REDIRECT_DENIED',
@@ -73,7 +107,22 @@ export class AdvisorySync {
         'ADVISORY_BODY_TOO_LARGE',
       ]);
       await this.store.markFailure(code, quarantineCodes.has(code) ? (sourceId ?? phase) : undefined);
-      throw new ControlPlaneError(`${code}_${phase.toUpperCase()}`, 503);
+      if (this.closed || this.controller?.signal.aborted) throw new ControlPlaneError('ADVISORY_SYNC_CLOSED', 503);
+      const checkpoint = await this.store.checkpoint();
+      return {
+        outcome: 'SKIPPED' as const,
+        reasonCode: code,
+        phase,
+        checkpoint: {
+          lastSuccessAt: checkpoint.lastSuccessAt,
+          lastAttemptAt: checkpoint.lastAttemptAt,
+          nextRetryAt: checkpoint.nextRetryAt,
+          failureCount: checkpoint.failureCount,
+          stale: checkpoint.stale,
+          incomplete: checkpoint.incomplete,
+          failureCode: checkpoint.failureCode,
+        },
+      };
     }
   }
 
