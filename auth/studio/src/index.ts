@@ -702,16 +702,30 @@ export class MastraAuthStudio
   /**
    * Whether the user holds an admin-equivalent role in the organization.
    *
-   * Fast path: if the org matches the user's currently-active session org, we
-   * read the role directly from `/auth/me`. Cross-org path: we call
+   * Cached path: the request that remembered this user's cookie verified it
+   * against `/auth/me` within {@link VERIFY_CACHE_TTL_MS}, and that
+   * {@link StudioUser} already carries the role for its active org — reuse it
+   * when the target org is that same org, so an admin-gated route costs no
+   * extra shared-API round trip. The cached role is only ever trusted for the
+   * org it was issued for: a cross-org check always goes to the network.
+   *
+   * Network path: if the org matches the user's currently-active session org,
+   * we read the role directly from `/auth/me`. Cross-org path: we call
    * `/auth/orgs` (which returns per-membership roles) and look up the target
    * org. Any shared-API failure resolves to `false`.
+   *
+   * A role demotion is observed at most {@link VERIFY_CACHE_TTL_MS} late —
+   * the same bound the verification cache already places on sign-out.
    */
   async isOrganizationAdmin(organizationId: string, userId: string): Promise<boolean> {
     const sessionCookie = this.userSessionCookies.get(userId);
     if (!sessionCookie) return false;
 
     try {
+      const cached = this.getCachedVerification(await this.verificationKey('cookie', sessionCookie));
+      if (cached && cached.id === userId && cached.organizationId === organizationId) {
+        return isAdminRole(cached.role);
+      }
       return isAdminRole(await this.fetchOrganizationRole(sessionCookie, organizationId));
     } catch {
       return false;

@@ -1409,40 +1409,61 @@ describe('MastraAuthStudio IOrganizationsProvider', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns true when the active org matches and role is admin', async () => {
+    // The request that reached the admin-gated route verified the cookie
+    // against /auth/me moments ago; the role for the active org is already
+    // in hand, so the gate must not cost another shared-API round trip.
+    it('answers from the verified session for the active org without calling the shared API', async () => {
       await seedSessionCookie('sealed-6');
-      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
 
       const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
       expect(ok).toBe(true);
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns true when the active org matches and role is owner', async () => {
-      await seedSessionCookie('sealed-7');
-      fetchSpy.mockResolvedValueOnce(
-        new Response(JSON.stringify({ ...mockMeResponse, role: 'owner' }), { status: 200 }),
-      );
+    it('returns true for an owner of the active org', async () => {
+      await seedSessionCookie('sealed-7', { ...mockMeResponse, role: 'owner' });
 
       const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
       expect(ok).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns false when the active org matches but role is member', async () => {
-      await seedSessionCookie('sealed-8');
-      fetchSpy.mockResolvedValueOnce(
-        new Response(JSON.stringify({ ...mockMeResponse, role: 'member' }), { status: 200 }),
-      );
+    it('returns false for a member of the active org', async () => {
+      await seedSessionCookie('sealed-8', { ...mockMeResponse, role: 'member' });
 
       const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
       expect(ok).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    // A cached admin role belongs to the org it was issued for. Checking a
+    // different org must consult per-membership roles, never reuse it.
+    it('never reuses the active-org role for a different org', async () => {
+      await seedSessionCookie('sealed-9');
+      // /auth/me returns active org 'org-1' (admin)
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+      // /auth/orgs says the user is only a member of 'org-2'
+      fetchSpy.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            organizations: [
+              { id: 'org-1', name: 'One', role: 'admin', isCurrent: true },
+              { id: 'org-2', name: 'Two', role: 'member', isCurrent: false },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+
+      const ok = await auth.isOrganizationAdmin('org-2', 'user-1');
+      expect(ok).toBe(false);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fetchSpy.mock.calls[1]?.[0]).toBe(`${SHARED_API}/auth/orgs`);
     });
 
     it('falls back to /auth/orgs when checking a non-active org and finds admin role', async () => {
-      await seedSessionCookie('sealed-9');
-      // /auth/me returns active org 'org-1'
+      await seedSessionCookie('sealed-10');
       fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
-      // /auth/orgs lists both orgs with per-org roles
       fetchSpy.mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -1461,7 +1482,7 @@ describe('MastraAuthStudio IOrganizationsProvider', () => {
     });
 
     it('returns false when /auth/orgs is missing the target org', async () => {
-      await seedSessionCookie('sealed-10');
+      await seedSessionCookie('sealed-11');
       fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
       fetchSpy.mockResolvedValueOnce(
         new Response(JSON.stringify({ organizations: [{ id: 'org-1', role: 'admin', isCurrent: true }] }), {
@@ -1473,12 +1494,42 @@ describe('MastraAuthStudio IOrganizationsProvider', () => {
       expect(ok).toBe(false);
     });
 
-    it('returns false when the shared API throws', async () => {
-      await seedSessionCookie('sealed-11');
-      fetchSpy.mockRejectedValueOnce(new Error('network'));
+    // An admin demoted to member keeps admin for at most the verification
+    // TTL (the same bound the cache places on sign-out); after that the gate
+    // re-reads the role from /auth/me.
+    it('observes a demotion once the verification cache expires', async () => {
+      vi.useFakeTimers();
+      try {
+        await seedSessionCookie('sealed-12');
+        const demoted = new Response(JSON.stringify({ ...mockMeResponse, role: 'member' }), { status: 200 });
+        fetchSpy.mockResolvedValue(demoted.clone());
 
-      const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
-      expect(ok).toBe(false);
+        expect(await auth.isOrganizationAdmin('org-1', 'user-1')).toBe(true);
+        expect(fetchSpy).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(31_000);
+        fetchSpy.mockResolvedValue(demoted);
+
+        expect(await auth.isOrganizationAdmin('org-1', 'user-1')).toBe(false);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(fetchSpy.mock.calls[0]?.[0]).toBe(`${SHARED_API}/auth/me`);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('returns false when the shared API throws', async () => {
+      vi.useFakeTimers();
+      try {
+        await seedSessionCookie('sealed-13');
+        vi.advanceTimersByTime(31_000);
+        fetchSpy.mockRejectedValueOnce(new Error('network'));
+
+        const ok = await auth.isOrganizationAdmin('org-1', 'user-1');
+        expect(ok).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
