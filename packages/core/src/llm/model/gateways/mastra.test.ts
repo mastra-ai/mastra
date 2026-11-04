@@ -2,13 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraGateway } from './mastra.js';
 
+vi.mock('../provider-registry.js', () => ({
+  PROVIDER_REGISTRY: { openrouter: { models: ['openai/test-model'] } },
+}));
+
 describe('MastraGateway', () => {
   beforeEach(() => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_VERSION;
   });
 
   afterEach(() => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_VERSION;
     vi.restoreAllMocks();
   });
 
@@ -39,6 +45,44 @@ describe('MastraGateway', () => {
 
     expect(providers.mastra).toBeDefined();
     expect(providers.mastra?.apiKeyEnvVar).toBe('MASTRA_GATEWAY_API_KEY');
+  });
+
+  it('lists only chat models served by the selected v2 gateway', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const gatewayFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              { id: 'openai/chat-model', endpoints: ['chat', 'responses'] },
+              { id: 'openai/response-only', endpoints: ['responses'] },
+              { id: 'voyage/embedding-model', endpoints: ['embeddings'] },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    const gateway = new MastraGateway({
+      apiKey: 'deployment-key',
+      baseUrl: 'https://gateway.example/v1',
+      customFetch: gatewayFetch,
+    });
+
+    const providers = await gateway.fetchProviders();
+
+    expect(gatewayFetch).toHaveBeenCalledWith('https://gateway.example/v1/models', {
+      headers: { Authorization: 'Bearer deployment-key' },
+    });
+    expect(providers.mastra?.models).toEqual(['openai/chat-model']);
+  });
+
+  it('does not show a static v1 model list if v2 catalog loading fails', async () => {
+    process.env.MASTRA_GATEWAY_VERSION = 'v2';
+    const gateway = new MastraGateway({
+      apiKey: 'deployment-key',
+      customFetch: vi.fn(async () => new Response('unavailable', { status: 503 })),
+    });
+    await expect(gateway.fetchProviders()).rejects.toThrow('Gateway model catalog unavailable (503)');
   });
 
   describe('resolveLanguageModel gateway authorization header', () => {
