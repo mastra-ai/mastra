@@ -1063,14 +1063,18 @@ export class WorkflowsPG extends WorkflowsStorage {
       return await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'writeWorkflowRunCheckpoint');
         const base = state === undefined ? stateBase : undefined;
+        let baseLastSeq: number | undefined;
         if (base) {
           // Before this run's own rows, so a delete of the base run (which locks its header, then
           // rewrites this run's entries) waits on this run rather than the other way round, and a
           // prune skips it. KEY SHARE, so the base run's own writes and its other children don't wait.
-          await t.oneOrNone(
-            `SELECT 1 FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR KEY SHARE`,
+          // Its `lastSeq` as stored before this write bounds the version below: a run can only build
+          // on state that already exists, so state bases can't form a loop.
+          const row = await t.oneOrNone<{ lastSeq: number }>(
+            `SELECT "lastSeq" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR KEY SHARE`,
             [base.workflowName, base.runId],
           );
+          baseLastSeq = row?.lastSeq;
         }
         const header = await t.oneOrNone<{ lastSeq: number; stateShared: boolean; runToken: string }>(
           this.#upsertHeaderSql(true, expected.length ? '$13' : undefined),
@@ -1094,7 +1098,7 @@ export class WorkflowsPG extends WorkflowsStorage {
              ) AS stored`,
             [base.workflowName, base.runId, base.seq, base.draft === true],
           );
-          if (!stored) {
+          if (!stored || baseLastSeq === undefined || base.seq > baseLastSeq) {
             throw new Error(
               `Workflow run ${run.workflowName}/${run.runId} builds on state version ${base.seq} of ${base.workflowName}/${base.runId}, which is not stored`,
             );

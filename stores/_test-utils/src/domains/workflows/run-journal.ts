@@ -898,6 +898,51 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         ).rejects.toThrow(notStored);
       });
 
+      it("rejects a state version its run hasn't written yet, so runs can't build on each other in a loop", async () => {
+        const { parent, child, header, childOf } = family();
+        const { lastSeq } = (await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: {},
+          state: { x: 1 },
+        }))!;
+        // A version past the parent's `lastSeq`, though a full state below it is stored.
+        await expect(
+          store.writeWorkflowRunCheckpoint({
+            ...child,
+            header: childOf('parent'),
+            steps: {},
+            stateBase: { ...parent, seq: lastSeq + 1 },
+          }),
+        ).rejects.toThrow(/not stored/);
+        expect(await store.loadWorkflowRun({ ...child, successfulSteps: 'full' })).toBeNull();
+
+        const { lastSeq: childSeq } = (await store.writeWorkflowRunCheckpoint({
+          ...child,
+          header: childOf('parent'),
+          steps: {},
+          stateBase: { ...parent, seq: lastSeq },
+        }))!;
+        // The parent can't build on a version of the child's state that builds on it, nor on its own next version.
+        for (const stateBase of [
+          { ...child, seq: childSeq + 1 },
+          { ...parent, seq: lastSeq + 1 },
+        ]) {
+          await expect(store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, stateBase })).rejects.toThrow(
+            /not stored/,
+          );
+        }
+        // On the child's stored version it can: that version builds on an earlier one of the parent's.
+        await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: {},
+          stateBase: { ...child, seq: childSeq },
+        });
+        expect((await statesOf(parent)).state).toEqual({ x: 1 });
+        expect((await statesOf(child)).state).toEqual({ x: 1 });
+      });
+
       it('builds every run on a base run deleted or checkpointed while they checkpoint, or rejects them', async () => {
         for (let round = 0; round < 10; round++) {
           const { run, parent, header, childOf } = family();

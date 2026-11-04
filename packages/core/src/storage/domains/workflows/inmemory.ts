@@ -246,10 +246,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   /**
    * Whether a run's state version is still stored: its draft entry, or for a stored version a
    * full state or state base at or below it (a checkpoint drops the old ones unless `stateShared`).
+   * A version past the run's `lastSeq` isn't written yet, so a run can only build on state that
+   * existed before it, and state bases can't form a loop.
    */
   private hasStateVersion(ref: StateRef): boolean {
     const key = this.getWorkflowKey(ref.workflowName, ref.runId);
-    if (!this.db.workflowRunHeaders.has(key)) return false;
+    const header = this.db.workflowRunHeaders.get(key);
+    if (!header || ref.seq > header.lastSeq) return false;
     return (this.db.workflowRunEntries.get(key) ?? []).some(entry =>
       ref.draft
         ? entry.kind === 'state-draft' && entry.seq === ref.seq

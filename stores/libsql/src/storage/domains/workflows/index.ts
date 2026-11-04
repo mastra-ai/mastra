@@ -458,11 +458,23 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         if (rows[0] && !matchesExpectedWorkflowStatus(rows[0].status as WorkflowRunStatus, expectedStatus)) return null;
       }
       if (stateBase !== undefined) {
+        // Up to the base run's `lastSeq` as stored before this write: a run can only build on state
+        // that already exists, so state bases can't form a loop.
         const { rows } = await tx.execute({
           sql: `SELECT 1 FROM ${TABLE_WORKFLOW_RUN_ENTRIES} WHERE workflow_name = ? AND run_id = ?
             AND CASE WHEN ? THEN kind = 'state-draft' AND seq = ? ELSE kind IN ('state', 'state-base') AND seq <= ? END
+            AND ? <= (SELECT lastSeq FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?)
             LIMIT 1`,
-          args: [stateBase.workflowName, stateBase.runId, stateBase.draft ? 1 : 0, stateBase.seq, stateBase.seq],
+          args: [
+            stateBase.workflowName,
+            stateBase.runId,
+            stateBase.draft ? 1 : 0,
+            stateBase.seq,
+            stateBase.seq,
+            stateBase.seq,
+            stateBase.workflowName,
+            stateBase.runId,
+          ],
         });
         if (!rows[0]) {
           throw new Error(
