@@ -1608,6 +1608,9 @@ export const mastra = new Mastra({
 
       // read-excel-file/node/package.json is named "read-excel-file/node" at 1.0.0 (#28828).
       expect(dependencies['read-excel-file']).toBe('9.3.12');
+
+      // Only reachable through pino transport detection in the analyzed bundle.
+      expect(dependencies['pino-pretty']).toBe('13.2.0');
     });
   });
 

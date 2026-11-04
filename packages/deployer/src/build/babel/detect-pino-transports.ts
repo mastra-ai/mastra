@@ -156,6 +156,21 @@ function extractTransportsFromArg(arg: t.Node): string[] {
   return targets;
 }
 
+const TRANSPORT_CALL_RE = /\.\s*transport\s*[(<]/;
+const PINO_SOURCE_RE = /['"]pino['"]/;
+const GLOBAL_PINO_TRANSPORT_RE = /\bpino\s*\.\s*(?:default\s*\.\s*)?transport\b/;
+
+/**
+ * Cheap text pre-check so callers can skip a full Babel parse of large bundles.
+ * Must stay a superset of what `detectPinoTransports` matches: every match needs a
+ * `.transport(` call and either a `'pino'` import/require source or an unbound `pino` identifier.
+ */
+export function mayContainPinoTransport(code: string): boolean {
+  if (!code.includes('pino')) return false;
+  if (!TRANSPORT_CALL_RE.test(code)) return false;
+  return PINO_SOURCE_RE.test(code) || GLOBAL_PINO_TRANSPORT_RE.test(code);
+}
+
 /**
  * Babel plugin to detect pino transport targets in code.
  * Matches patterns like:
