@@ -15,12 +15,8 @@ import { Box } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
-import {
-  useConnectMastraGateway,
-  useMastraGatewayCreditsQuery,
-  useStartProviderOAuth,
-} from '../../../../../../hooks/use-providers';
-import { mastraGatewayBilling } from '../../../../workspaces/components/mastra-gateway-credits';
+import { useConnectMastraGateway, useStartProviderOAuth } from '../../../../../../hooks/use-providers';
+import { MastraGatewayBilling } from '../../../../workspaces/components/MastraGatewayBilling';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import {
   CREDENTIAL_LABEL,
@@ -86,18 +82,15 @@ export function AddProviderDrawer({
   const connectGatewayMutation = useConnectMastraGateway();
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
-  // The Mastra Gateway connects in one click, so it leads the default list.
   const sorted = providers.toSorted(
     (left, right) => Number(isGateway(right)) - Number(isGateway(left)) || left.provider.localeCompare(right.provider),
   );
   const signInProviders = sorted.filter(provider => isGateway(provider) || provider.oauth?.supported === true);
   const shown = query ? sorted.filter(provider => matchesSearch(provider, query)) : signInProviders;
   const keyOnlyCount = providers.filter(provider => provider.oauth?.supported !== true && takesApiKey(provider)).length;
-  const startingProvider = startOAuthMutation.isPending
-    ? startOAuthMutation.variables.provider
-    : connectGatewayMutation.isPending
-      ? providers.find(isGateway)?.provider
-      : undefined;
+  const connectingGateway = connectGatewayMutation.isPending ? providers.find(isGateway)?.provider : undefined;
+  const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : connectingGateway;
+  const startError = startOAuthMutation.error ?? connectGatewayMutation.error;
 
   const signIn = (provider: ProviderInfo) => {
     startOAuthMutation.mutate(signInRequest(provider, requestScope), {
@@ -169,9 +162,9 @@ export function AddProviderDrawer({
               {keyOnlyCount} more take an API key. Type to find one.
             </Txt>
           )}
-          {(startOAuthMutation.error ?? connectGatewayMutation.error) && (
+          {startError && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-              {(startOAuthMutation.error ?? connectGatewayMutation.error)?.message}
+              {startError.message}
             </Txt>
           )}
         </DrawerBody>
@@ -194,10 +187,8 @@ function AddProviderRow({
   onAddKey: () => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
-  const { data: gatewayCredits } = useMastraGatewayCreditsQuery({ enabled: isGateway(provider) });
   const label =
-    connectionLabel(provider, credentialScope) ??
-    (isGateway(provider) ? mastraGatewayBilling(gatewayCredits) : undefined);
+    connectionLabel(provider, credentialScope) ?? (isGateway(provider) ? <MastraGatewayBilling /> : undefined);
   const starting = startingProvider !== undefined;
   return (
     <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">

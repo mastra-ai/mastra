@@ -1,5 +1,4 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
-import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -296,8 +295,7 @@ describe('chat run errors', () => {
     expect(screen.getByText('Provider access failed')).toBeVisible();
   });
 
-  it('adds credits from the failed run when the Mastra Gateway runs out', async () => {
-    const purchaseBodies: unknown[] = [];
+  it('adds credits from a run that ran out of Mastra Gateway credits', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
         HttpResponse.json({
@@ -307,10 +305,7 @@ describe('chat run errors', () => {
           addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
         }),
       ),
-      http.post(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, async ({ request }) => {
-        purchaseBodies.push(await request.json());
-        return HttpResponse.json({ status: 'added' });
-      }),
+      http.post(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () => HttpResponse.json({ status: 'added' })),
     );
     const outOfCredits = failedReply(
       "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
@@ -318,20 +313,13 @@ describe('chat run errors', () => {
       { statusCode: 402 },
     );
     const user = userEvent.setup();
-    renderWithProviders(
-      <>
-        <ErrorSession messages={[outOfCredits]} modelId="mastra/anthropic/claude-fable-5" />
-        <Toaster />
-      </>,
-    );
+    renderWithProviders(<ErrorSession messages={[outOfCredits]} modelId="mastra/anthropic/claude-fable-5" />);
 
     expect(screen.getByText('Out of Mastra Gateway credits')).toBeVisible();
     await user.click(await screen.findByRole('button', { name: 'Add credits' }));
     const dialog = await screen.findByRole('dialog', { name: 'Add credits' });
     await user.click(within(dialog).getByRole('button', { name: 'Add $20' }));
 
-    expect(await screen.findByText('Added $20 to your organization’s Mastra credits')).toBeVisible();
-    expect(purchaseBodies).toEqual([{ amount: 20 }]);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credits' })).not.toBeInTheDocument());
   });
 

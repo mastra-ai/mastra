@@ -23,7 +23,6 @@ import { MAX_GATEWAY_CREDIT_PURCHASE, MIN_GATEWAY_CREDIT_PURCHASE } from '@mastr
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 
-import type { MastraGatewayCredits } from '../../../../api/types';
 import { useAddGatewayCredits } from '../../../../hooks/use-providers';
 import { formatWholeDollars } from './mastra-gateway-credits';
 
@@ -40,17 +39,9 @@ function amountProblem(draft: string): string | undefined {
   return undefined;
 }
 
-/** Buys Mastra Gateway credits without leaving Factory; only a card payment step opens another tab. */
-export function AddGatewayCreditsDialog({
-  credits,
-  trigger,
-}: {
-  credits: MastraGatewayCredits;
-  trigger: ReactElement;
-}) {
+export function AddGatewayCreditsDialog({ addCreditsUrl, trigger }: { addCreditsUrl: string; trigger: ReactElement }) {
   const purchase = useAddGatewayCredits();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(DEFAULT_AMOUNT);
 
   return (
     <Dialog
@@ -58,38 +49,20 @@ export function AddGatewayCreditsDialog({
       pending={purchase.isPending}
       onOpenChange={nextOpen => {
         setOpen(nextOpen);
-        if (!nextOpen) return;
-        purchase.reset();
-        setDraft(DEFAULT_AMOUNT);
+        if (nextOpen) purchase.reset();
       }}
     >
       <DialogTrigger render={trigger} />
       <DialogContent>
-        {purchase.data?.status === 'payment_required' ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Finish the payment</DialogTitle>
-              <DialogDescription>
-                Pay {formatWholeDollars(Number(draft))} on the page that opens in a new tab. Your balance here updates
-                when you come back.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogCancel>Cancel</DialogCancel>
-              <Button
-                variant="primary"
-                render={<a href={purchase.data.paymentUrl} target="_blank" rel="noreferrer" />}
-                onClick={() => setOpen(false)}
-              >
-                Continue to payment
-              </Button>
-            </DialogFooter>
-          </>
+        {purchase.isSuccess && purchase.data.status === 'payment_required' ? (
+          <PaymentStep
+            amount={purchase.variables}
+            paymentUrl={purchase.data.paymentUrl}
+            onContinue={() => setOpen(false)}
+          />
         ) : (
           <PurchaseForm
-            credits={credits}
-            draft={draft}
-            onDraftChange={setDraft}
+            addCreditsUrl={addCreditsUrl}
             pending={purchase.isPending}
             error={purchase.error?.message}
             onBuy={amount =>
@@ -106,24 +79,54 @@ export function AddGatewayCreditsDialog({
   );
 }
 
+function PaymentStep({
+  amount,
+  paymentUrl,
+  onContinue,
+}: {
+  amount: number;
+  paymentUrl: string;
+  onContinue: () => void;
+}) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>Finish the payment</DialogTitle>
+        <DialogDescription>
+          Pay {formatWholeDollars(amount)} on the page that opens in a new tab. Your balance here updates when you come
+          back.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <DialogCancel>Cancel</DialogCancel>
+        <Button
+          variant="primary"
+          render={<a href={paymentUrl} target="_blank" rel="noreferrer" />}
+          onClick={onContinue}
+        >
+          Continue to payment
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
 function PurchaseForm({
-  credits,
-  draft,
-  onDraftChange,
+  addCreditsUrl,
   pending,
   error,
   onBuy,
 }: {
-  credits: MastraGatewayCredits;
-  draft: string;
-  onDraftChange: (draft: string) => void;
+  addCreditsUrl: string;
   pending: boolean;
   error: string | undefined;
   onBuy: (amount: number) => void;
 }) {
+  const [draft, setDraft] = useState(DEFAULT_AMOUNT);
   const problem = amountProblem(draft);
+  const buyLabel = problem === undefined ? `Add ${formatWholeDollars(Number(draft))}` : 'Add credits';
   const buy = () => {
-    if (problem === undefined && !pending) onBuy(Number(draft));
+    if (problem === undefined) onBuy(Number(draft));
   };
   return (
     <>
@@ -144,7 +147,7 @@ function PurchaseForm({
               inputMode="numeric"
               value={draft}
               disabled={pending}
-              onChange={event => onDraftChange(event.target.value.replaceAll(',', '').trim())}
+              onChange={event => setDraft(event.target.value.replaceAll(',', '').trim())}
               onKeyDown={event => {
                 if (event.key === 'Enter') buy();
               }}
@@ -157,11 +160,7 @@ function PurchaseForm({
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {error}
             </Txt>
-            <Button
-              variant="link"
-              size="sm"
-              render={<a href={credits.addCreditsUrl} target="_blank" rel="noreferrer" />}
-            >
+            <Button variant="link" size="sm" render={<a href={addCreditsUrl} target="_blank" rel="noreferrer" />}>
               Open credits on Mastra
             </Button>
           </div>
@@ -170,7 +169,7 @@ function PurchaseForm({
       <DialogFooter>
         <DialogCancel>Cancel</DialogCancel>
         <DialogAction disabled={problem !== undefined} onConfirm={buy}>
-          {pending ? 'Adding…' : `Add ${problem === undefined ? formatWholeDollars(Number(draft)) : 'credits'}`}
+          {pending ? 'Adding…' : buyLabel}
         </DialogAction>
       </DialogFooter>
     </>

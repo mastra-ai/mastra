@@ -80,7 +80,6 @@ export function useSaveProviderKey() {
 
 const MASTRA_GATEWAY_CATALOG_PROVIDER = 'mastra';
 
-/** Create a Mastra Gateway key for the caller's Mastra organization and store it in the scope. */
 export function useConnectMastraGateway() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
@@ -94,20 +93,18 @@ export function useConnectMastraGateway() {
 }
 
 /** A payment finished in another tab lands in the balance when the user comes back. */
-export function useMastraGatewayCreditsQuery({ enabled = true }: { enabled?: boolean } = {}) {
+export function useMastraGatewayCreditsQuery() {
   const { client } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.mastraGatewayCredits(),
     queryFn: () => client.get<MastraGatewayCredits>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`),
-    enabled,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: 'always',
   });
 }
 
 /**
- * Buy gateway credits. A purchase Mastra settled on the saved card counts in the
- * balance at once, and its toast outlives the notice it hides. A failed purchase
- * may still have charged, so the balance is read again.
+ * The toast lives here because the notice holding the dialog unmounts once the balance is above zero.
+ * A failed purchase may still have charged, so the balance is read again.
  */
 export function useAddGatewayCredits() {
   const { client } = useApiConfig();

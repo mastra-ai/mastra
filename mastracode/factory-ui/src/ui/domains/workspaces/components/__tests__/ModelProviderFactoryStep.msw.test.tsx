@@ -91,7 +91,7 @@ describe('Model provider onboarding', () => {
       canAddCredits = true,
       purchase = { status: 'added' },
     }: {
-      remainingCredits: number | null;
+      remainingCredits?: number;
       canAddCredits?: boolean;
       purchase?: GatewayCreditPurchase;
     }) {
@@ -150,13 +150,14 @@ describe('Model provider onboarding', () => {
 
     it('connects the Mastra Gateway in one click and starts on its default model', async () => {
       registerAuthHandler();
-      const { connectBodies } = registerGatewayHandlers({ remainingCredits: 5 });
+      const { connectBodies } = registerGatewayHandlers({ remainingCredits: 12.4 });
       const onComplete = vi.fn();
       const user = userEvent.setup();
 
       renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
 
       const useGateway = await screen.findByRole('button', { name: 'Use Mastra Gateway' });
+      expect(await screen.findByText('Pay with your organization’s Mastra credits ($12.40 left)')).toBeVisible();
       expect(screen.queryByRole('button', { name: 'Mastra Gateway' })).not.toBeInTheDocument();
       await user.click(useGateway);
 
@@ -168,15 +169,6 @@ describe('Model provider onboarding', () => {
         modelId: 'mastra/anthropic/claude-fable-5',
       });
       expect(screen.queryByText('No gateway credits left')).not.toBeInTheDocument();
-    });
-
-    it('says the gateway bills the organization’s Mastra credits and shows the balance before connecting', async () => {
-      registerAuthHandler();
-      registerGatewayHandlers({ remainingCredits: 12.4 });
-
-      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
-
-      expect(await screen.findByText('Pay with your organization’s Mastra credits ($12.40 left)')).toBeVisible();
     });
 
     it('adds credits without leaving Factory when the organization has none left', async () => {
@@ -237,13 +229,13 @@ describe('Model provider onboarding', () => {
       renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
       await user.click(await screen.findByRole('button', { name: 'Use Mastra Gateway' }));
 
-      expect(await screen.findByText('Ask an admin of your Mastra organization to add some.')).toBeVisible();
+      expect(await screen.findByText('Ask an admin of your Mastra organization to add credits.')).toBeVisible();
       expect(screen.queryByRole('button', { name: 'Add credits' })).not.toBeInTheDocument();
     });
 
     it('does not warn about credits while the platform reports no balance', async () => {
       registerAuthHandler();
-      registerGatewayHandlers({ remainingCredits: null });
+      registerGatewayHandlers({});
       const user = userEvent.setup();
 
       renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);

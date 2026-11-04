@@ -34,13 +34,13 @@ export interface ProviderConnection {
   orgKeyAdmin: boolean;
   signInProviders: ProviderInfo[];
   keyProviders: ProviderInfo[];
-  /** The Mastra Gateway, offered when Factory is signed in with a Mastra account. */
   gatewayProvider?: ProviderInfo;
   provider?: ProviderInfo;
   connected: boolean;
   method?: ProviderConnectionMethod;
   hasConfiguredProvider: boolean;
   pending: boolean;
+  connectingGateway: boolean;
   error?: string;
   keyDialogProvider?: ProviderInfo;
   activeOAuth?: ActiveProviderOAuth;
@@ -51,7 +51,6 @@ export interface ProviderConnection {
   chooseSignInProvider: (provider: ProviderInfo) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
   chooseCustomProvider: (providerId: string) => void;
-  /** Connect the Mastra Gateway in one click (creates a key on the user's Mastra account), then select it. */
   chooseGateway: () => void;
   closeKeyDialog: () => void;
   closeOAuth: () => void;
@@ -193,6 +192,7 @@ export function useProviderConnection({
     hasConfiguredProvider: providers.some(candidate => isConfigured(candidate)),
     gatewayProvider,
     pending: startOAuthMutation.isPending || connectGatewayMutation.isPending,
+    connectingGateway: connectGatewayMutation.isPending,
     error,
     keyDialogProvider,
     activeOAuth,

@@ -2,8 +2,8 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 
 import { useMastraGatewayCreditsQuery } from '../../../../hooks/use-providers';
 import { AddGatewayCreditsDialog } from './AddGatewayCreditsDialog';
+import { ASK_ADMIN_FOR_CREDITS } from './mastra-gateway-credits';
 
-/** Warns when the organization has no Mastra Gateway credits left, and lets an admin add some in place. */
 export function MastraGatewayCreditsNotice() {
   const { data: credits } = useMastraGatewayCreditsQuery();
   if (!credits || credits.unlimited || credits.remaining !== 0) return null;
@@ -14,11 +14,14 @@ export function MastraGatewayCreditsNotice() {
       actionPlacement={credits.canAddCredits ? 'end' : 'below'}
       action={
         credits.canAddCredits && (
-          <AddGatewayCreditsDialog credits={credits} trigger={<Notice.Button>Add credits</Notice.Button>} />
+          <AddGatewayCreditsDialog
+            addCreditsUrl={credits.addCreditsUrl}
+            trigger={<Notice.Button>Add credits</Notice.Button>}
+          />
         )
       }
     >
-      {!credits.canAddCredits && 'Ask an admin of your Mastra organization to add some.'}
+      {!credits.canAddCredits && ASK_ADMIN_FOR_CREDITS}
     </Notice>
   );
 }

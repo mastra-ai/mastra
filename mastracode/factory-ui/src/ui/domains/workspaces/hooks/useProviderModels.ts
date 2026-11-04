@@ -18,7 +18,7 @@ function preferredFactoryModel(providerId: string): string | undefined {
     case 'anthropic':
       return 'anthropic/claude-fable-5';
     case 'mastra':
-      return 'mastra/anthropic/claude-fable-5';
+      return `mastra/${preferredFactoryModel('anthropic')}`;
     default:
       return undefined;
   }
