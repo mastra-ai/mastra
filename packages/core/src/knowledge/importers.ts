@@ -279,8 +279,8 @@ export async function runKnowledgeImporter<TOptions>(
     const stale = owned
       .filter(page => !touched.has(ownedKey(page)))
       .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
+    // Not abortable once started: a canceled run must not have removed anything.
     for (const page of stale) {
-      checkAbort();
       if (dryRun) {
         if (await pageExists(storage, page.scope, page.path)) counts.removed++;
         continue;

@@ -222,6 +222,25 @@ describe('Knowledge importers', () => {
     expect(await page('docs/c')).not.toBeNull();
   });
 
+  it('finishes a started removal when aborted mid-way and records success', async () => {
+    const source = items({ id: 'a', title: 'A', body: 'a' }, { id: 'b', title: 'B', body: 'b' });
+    const { knowledge, page } = setup([docsImporter(source)]);
+    await knowledge.runImporter('docs');
+    source.clear();
+    const controller = new AbortController();
+    const storage = await knowledge.getStorage();
+    const deletePage = storage.deletePage.bind(storage);
+    storage.deletePage = async input => {
+      controller.abort();
+      return deletePage(input);
+    };
+    const run = await knowledge.runImporter('docs', { signal: controller.signal });
+    expect(run.status).toBe('succeeded');
+    expect(run.counts.removed).toBe(2);
+    expect(await page('docs/a')).toBeNull();
+    expect(await page('docs/b')).toBeNull();
+  });
+
   it('adds, updates and removes notes', async () => {
     const importer: KnowledgeImporter = {
       id: 'notes',

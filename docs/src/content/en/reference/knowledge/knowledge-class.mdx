@@ -346,7 +346,7 @@ runImporter(id: string, input?: {
 }): Promise<KnowledgeImportRun>
 ```
 
-Runs the importer and resolves to its run: `{ id, importerId, status, dryRun, incremental, counts, error?, startedAt, completedAt? }`. `status` is `succeeded`, `failed` or `canceled`. A failing importer doesn't make this throw; the run records the error. `counts` has `created`, `updated`, `unchanged`, `removed` and `notes`. After a successful run that isn't `incremental` or `dryRun`, pages the importer wrote before and neither wrote nor kept this run are removed, children first; a page that still has children stays. A `dryRun` writes nothing and drops state saves. Throws `KnowledgeImporterBusyError` while the same importer is already running in this process. Runs aren't locked across processes.
+Runs the importer and resolves to its run: `{ id, importerId, status, dryRun, incremental, counts, error?, startedAt, completedAt? }`. `status` is `succeeded`, `failed` or `canceled`. A failing importer doesn't make this throw; the run records the error. `counts` has `created`, `updated`, `unchanged`, `removed` and `notes`. After a successful run that isn't `incremental` or `dryRun`, pages the importer wrote before and neither wrote nor kept this run are removed, children first; a page that still has children stays. Once removal starts it finishes, even if `signal` aborts. Ownership is per importer, so don't let two importers write the same page: either one's run can remove it. A `dryRun` writes nothing and drops state saves. Throws `KnowledgeImporterBusyError` while the same importer is already running in this process. Runs aren't locked across processes.
 
 #### `getImportRun()`
 
