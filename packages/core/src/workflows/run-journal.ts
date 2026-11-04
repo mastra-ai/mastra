@@ -10,7 +10,7 @@ import type { StepResult, WorkflowRunState, WorkflowRunStatus } from './types';
 
 type StepResults = Record<string, StepResult<any, any, any, any>>;
 
-type StepCopy = { json: unknown; patchBytes: number; write: number };
+type StepCopy = { json: unknown; bytes: number; patchBytes: number; write: number };
 
 // Private to this module, so only the journal can make an object count as a stub. A spread or
 // clone of a stub is a new object, so it isn't one.
@@ -228,6 +228,10 @@ export class RunJournal {
    * flight (an entry's end, a loop iteration's start, a finished parallel arm or foreach item,
    * sleeps, the run stopping): it sends every step result that changed since it was last written,
    * the state's changes, and the checkpoint when that is still to do.
+   * @param foreachItems Set by a running foreach's progress write: the foreach's result differs
+   * from the one it last wrote only by these indices' `metadata.foreachProgress` entries. When the
+   * last written result can be patched, only those entries are sent, so recording a finished item
+   * costs that item rather than every item finished so far.
    * @param expectedStatus Sent with the write as the store's compare-and-set guard on the stored status.
    * @returns False when the store rejected the write because of `expectedStatus`. Nothing was
    * stored, as with a write that throws.
@@ -236,11 +240,13 @@ export class RunJournal {
     resourceId,
     snapshot,
     stepIds,
+    foreachItems,
     expectedStatus,
   }: {
     resourceId?: string;
     snapshot: WorkflowRunState;
     stepIds?: readonly string[];
+    foreachItems?: { stepId: string; indices: readonly number[] };
     expectedStatus?: WorkflowRunStatus[];
   }): Promise<boolean> {
     const store = this.store;
@@ -284,7 +290,12 @@ export class RunJournal {
     // match the copy kept for its step.
     const sentWrites = sent.map(stepId => {
       const result = results[stepId] as StepResult<any, any, any, any>;
-      const write = this.#stepWrite(stepId, result, !checkpoint);
+      const write = this.#stepWrite(
+        stepId,
+        result,
+        !checkpoint,
+        foreachItems?.stepId === stepId ? foreachItems.indices : undefined,
+      );
       if (write.ops) stepPatches[stepId] = write.ops;
       else if (!write.unchanged) steps[stepId] = result;
       return { stepId, result, copy: write.copy, unchanged: write.unchanged };
@@ -397,26 +408,48 @@ export class RunJournal {
    * step to be stored (else the stored result the patch applies to isn't known), and the patches
    * since the last full write to stay within its size, as for the state. `copy` is what
    * `#writtenCopies` holds for the step once the write is stored.
+   *
+   * With `foreachItems` (see `write`), the patch is built from those entries alone, without
+   * serializing the whole result.
    */
   #stepWrite(
     stepId: string,
     result: StepResult<any, any, any, any>,
     mayPatch: boolean,
+    foreachItems?: readonly number[],
   ): { ops?: StatePatchOp[]; unchanged?: true; copy: StepCopy | undefined } {
     const previous = this.#written.get(stepId) as { status?: string } | undefined;
     const rewritten = previous !== undefined && previous.status !== 'success' && result?.status !== 'success';
+    const started = this.#stepWrites.get(stepId) ?? 0;
+    const prior = this.#writtenCopies.get(stepId);
+    if (foreachItems && rewritten && mayPatch && prior?.write === started) {
+      const progressPatch = foreachProgressPatch(prior, result, foreachItems);
+      if (progressPatch === 'unchanged') return { unchanged: true, copy: prior };
+      if (progressPatch) {
+        const patchBytes = prior.patchBytes + JSON.stringify(progressPatch.ops).length;
+        if (patchBytes <= progressPatch.bytes) {
+          // Updated in place: the copy is only patched on while it is the step's latest write, and
+          // this write becomes that, so a failed write leaves it unused.
+          for (const { key, value } of progressPatch.entries) progressPatch.written[key] = value;
+          return {
+            ops: progressPatch.ops,
+            copy: { json: prior.json, bytes: progressPatch.bytes, patchBytes, write: started + 1 },
+          };
+        }
+      }
+    }
     const json = rewritten && isPlainJson(result, new Set()) ? JSON.stringify(result) : undefined;
     if (json === undefined) return { copy: undefined };
     const next: unknown = JSON.parse(json);
-    const started = this.#stepWrites.get(stepId) ?? 0;
-    const prior = this.#writtenCopies.get(stepId);
     if (mayPatch && prior?.write === started) {
       const ops = diffState(prior.json, next);
       if (!ops.length) return { unchanged: true, copy: prior };
       const patchBytes = prior.patchBytes + JSON.stringify(ops).length;
-      if (patchBytes <= json.length) return { ops, copy: { json: next, patchBytes, write: started + 1 } };
+      if (patchBytes <= json.length) {
+        return { ops, copy: { json: next, bytes: json.length, patchBytes, write: started + 1 } };
+      }
     }
-    return { copy: { json: next, patchBytes: 0, write: started + 1 } };
+    return { copy: { json: next, bytes: json.length, patchBytes: 0, write: started + 1 } };
   }
 
   /**
@@ -554,6 +587,47 @@ function normalizeState(state: unknown): {
  * plain objects (no `Date`, `Error` or other class instance, and no `undefined` array item). An
  * `undefined` object value is allowed: JSON drops the key, which reads back the same.
  */
+/**
+ * The ops that add a running foreach's newly finished items to the copy of its last written result,
+ * and the copy's JSON size with them. `'unchanged'` when every item is in the copy already.
+ * Undefined when the copy holds no progress or an item isn't plain JSON: the result is then
+ * written the general way.
+ */
+function foreachProgressPatch(
+  prior: StepCopy,
+  result: StepResult<any, any, any, any>,
+  indices: readonly number[],
+):
+  | 'unchanged'
+  | {
+      ops: StatePatchOp[];
+      entries: { key: string; value: unknown }[];
+      written: Record<string, unknown>;
+      bytes: number;
+    }
+  | undefined {
+  const written = (prior.json as { metadata?: { foreachProgress?: unknown } } | null)?.metadata?.foreachProgress;
+  const live = (result as { metadata?: { foreachProgress?: Record<string, unknown> } }).metadata?.foreachProgress;
+  if (typeof written !== 'object' || written === null || !live) return undefined;
+  const progress = written as Record<string, unknown>;
+  const ops: StatePatchOp[] = [];
+  const entries: { key: string; value: unknown }[] = [];
+  let bytes = prior.bytes;
+  for (const index of indices) {
+    const key = String(index);
+    // A finished item's entry never changes, so one in the copy is already stored.
+    if (Object.hasOwn(progress, key) || !Object.hasOwn(live, key)) continue;
+    if (!isPlainJson(live[key], new Set())) return undefined;
+    const json = JSON.stringify(live[key]);
+    const value: unknown = JSON.parse(json);
+    ops.push({ op: 'set', path: ['metadata', 'foreachProgress', key], value });
+    entries.push({ key, value });
+    // `"key":value,` in the result's JSON.
+    bytes += key.length + json.length + 4;
+  }
+  return ops.length ? { ops, entries, written: progress, bytes } : 'unchanged';
+}
+
 function isPlainJson(value: unknown, ancestors: Set<object>): boolean {
   switch (typeof value) {
     case 'string':

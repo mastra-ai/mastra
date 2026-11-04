@@ -1154,17 +1154,22 @@ export async function executeForeach(
   const totalCount = prevOutput.length;
   let completedCount = 0;
 
-  /** The running foreach result that carries the checkpointed progress. */
+  /**
+   * The running foreach result that carries the checkpointed progress. Only its progress changes
+   * between calls, so a progress write can send just the items finished since the previous one.
+   */
+  const runningFields = {
+    payload: prevOutput,
+    startedAt: Date.now(),
+    ...stepInfo,
+    // A resumed foreach keeps the per-item suspend state that resumed siblings read.
+    ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
+    status: 'running',
+  };
   const runningWithProgress = (): StepResult<any, any, any, any> =>
-    ({
-      payload: prevOutput,
-      startedAt: Date.now(),
-      ...stepInfo,
-      // A resumed foreach keeps the per-item suspend state that resumed siblings read.
-      ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
-      status: 'running',
-      metadata: { ...stepInfo.metadata, foreachProgress },
-    }) as StepResult<any, any, any, any>;
+    ({ ...runningFields, metadata: { ...stepInfo.metadata, foreachProgress } }) as StepResult<any, any, any, any>;
+  /** Items finished since the latest progress write started. */
+  let unsentItems: number[] = [];
 
   // Finished items are checkpointed on one serialized chain per foreach: at most one
   // write in flight, and items that finish meanwhile are folded into the next write,
@@ -1182,6 +1187,8 @@ export async function executeForeach(
       while (checkpointDirty && !checkpointClosed) {
         checkpointDirty = false;
         executionContext.activeStepsPath[stepId] = executionContext.executionPath;
+        const indices = unsentItems;
+        unsentItems = [];
         try {
           await engine.persistStepUpdate({
             workflowId,
@@ -1189,6 +1196,7 @@ export async function executeForeach(
             resourceId,
             serializedStepGraph,
             stepResults: { ...stepResults, [stepId]: runningWithProgress() },
+            foreachItems: { stepId, indices },
             executionContext,
             workflowStatus: 'running',
             requestContext,
@@ -1374,6 +1382,7 @@ export async function executeForeach(
           output: result.output,
           ...(nestedRunIds[k] ? { nestedRunId: nestedRunIds[k] } : {}),
         };
+        unsentItems.push(k);
         stepResults[stepId] = runningWithProgress();
         // Not awaited: holding the queue slot for the write would change which
         // items start before a sibling suspends and stops the queue.

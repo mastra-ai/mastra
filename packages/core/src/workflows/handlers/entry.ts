@@ -176,6 +176,12 @@ export interface PersistStepUpdateParams {
    */
   stepIds?: string[];
   /**
+   * Storage v2: set by a running foreach's progress write. The foreach's result differs from the
+   * one it last wrote only by these indices' `metadata.foreachProgress` entries, so the journal can
+   * send just those (see `RunJournal.write`).
+   */
+  foreachItems?: { stepId: string; indices: readonly number[] };
+  /**
    * Storage v2: the journal of the execution this write belongs to, set by the engine's own writes,
    * which aren't made from one of the execution's entries. Unset, the write uses the journal of the
    * execution it is made from (see `getRunJournal`).
@@ -222,6 +228,7 @@ export async function persistStepUpdate(
     phase,
     recordResumedStepStart,
     stepIds,
+    foreachItems,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
@@ -288,6 +295,7 @@ export async function persistStepUpdate(
         resourceId,
         snapshot,
         stepIds,
+        foreachItems,
         ...(guardCancellation ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
       });
       if (!written) {

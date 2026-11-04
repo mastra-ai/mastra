@@ -859,6 +859,53 @@ describe('storage v2 write volume', () => {
     },
   );
 
+  it.each([1, 4])(
+    "serializes JSON linear in a foreach's item count as it records its finished items (concurrency %s)",
+    async concurrency => {
+      /** The JSON length that serializing during the run produced. */
+      async function serialized(count: number) {
+        const kb = createStep({
+          id: 'kb',
+          inputSchema: num,
+          outputSchema: z.object({ text: z.string() }),
+          execute: async ({ inputData }) => ({ text: String(inputData.n % 10).repeat(1024) }),
+        });
+        const workflow = createWorkflow({
+          id: 'items',
+          inputSchema: z.array(num),
+          outputSchema: z.array(z.object({ text: z.string() })),
+          options: { storageVersion: 2 },
+        })
+          .foreach(kb, { concurrency })
+          .commit();
+        new Mastra({ logger: false, storage: new MockStore(), workflows: { items: workflow } });
+        const run = await workflow.createRun();
+        const inputData = Array.from({ length: count }, (_, n) => ({ n }));
+
+        const stringify = JSON.stringify;
+        let chars = 0;
+        const spy = vi.spyOn(JSON, 'stringify').mockImplementation((...args: Parameters<typeof stringify>) => {
+          const json = stringify(...args);
+          chars += json?.length ?? 0;
+          return json;
+        });
+        try {
+          const result = await run.start({ inputData });
+          expect(result.status).toBe('success');
+        } finally {
+          spy.mockRestore();
+        }
+        return chars;
+      }
+
+      const small = await serialized(128);
+      const large = await serialized(512);
+      // Serializing the whole foreach result each time an item finishes would grow with the square
+      // of the item count: 16 times as much for 4 times the items.
+      expect(large).toBeLessThanOrEqual(6 * small);
+    },
+  );
+
   it('keeps the patches after the latest full state within the state size across suspend and resume cycles', async () => {
     const storage = new MockStore();
     const store = storage.stores.workflows!;
