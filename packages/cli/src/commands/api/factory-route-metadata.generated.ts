@@ -3415,7 +3415,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "expectedRevision": {
           "type": "integer",
-          "minimum": 1,
+          "minimum": 0,
           "maximum": 9007199254740991
         }
       },
@@ -4782,7 +4782,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "__schema12": {
           "type": "integer",
-          "minimum": 1,
+          "minimum": 0,
           "maximum": 9007199254740991
         }
       }
@@ -6335,7 +6335,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "expectedRevision": {
           "type": "integer",
-          "minimum": 1,
+          "minimum": 0,
           "maximum": 9007199254740991
         }
       },

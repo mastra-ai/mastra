@@ -125,6 +125,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     return new ProjectBoardCache({ codeRegistry, storage, recheckMs: RECHECK_MS, ...options });
   }
 
+  /** Stores a project's first edit of a code board, as the boards API does. */
+  function copy(
+    storage: StoredBoardsStorage,
+    boards: ProjectBoardCache,
+    scope: StoredBoardScope,
+    key: string,
+    edit: (definition: StoredBoardInput) => StoredBoardInput = definition => definition,
+  ) {
+    const seed = boards.seedFor(key)!;
+    return storage.create(scope, edit(seed.definition), 'user-1', { seedHash: seed.hash });
+  }
+
   it('serves unedited code boards as code built them, Work and app boards editable and Review read-only, without writing anything', async () => {
     const { a, scope } = await setup();
     const release = appBoard('release');
@@ -154,7 +166,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
       problems: [],
     });
     expect(described.problems).toEqual([]);
-    expect(boards.seeds().map(seed => seed.definition.key)).toEqual(['work', 'release']);
+    expect(boards.seedFor('work')?.definition.key).toBe('work');
+    expect(boards.seedFor('release')?.definition.key).toBe('release');
     expect(boards.seedFor('review')).toBeUndefined();
   });
 
@@ -163,21 +176,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     let now = 0;
     const replicaA = cache(a.boards, undefined, { now: () => now });
     const replicaB = cache(b.boards, undefined, { now: () => now });
-    await a.boards.seedCodeBoards(scope, replicaA.seeds());
     expect((await replicaB.load(scope)).get('work')).toBe(workBoard);
 
-    const row = (await a.boards.get(scope, 'work'))!;
-    await a.boards.replace(
-      scope,
-      'work',
-      {
-        name: row.name,
-        phases: row.phases.map(phase =>
-          phase.key === 'planning' ? { ...phase, autoStart: true, autoStartWhen: EFFORT_LOW } : phase,
-        ),
-      },
-      { expectedRevision: row.revision, actor: 'user-1' },
-    );
+    await copy(a.boards, replicaA, scope, 'work', definition => ({
+      ...definition,
+      phases: definition.phases.map(phase =>
+        phase.key === 'planning' ? { ...phase, autoStart: true, autoStartWhen: EFFORT_LOW } : phase,
+      ),
+    }));
     replicaA.invalidate(scope);
 
     const described = await replicaA.describe(scope);
@@ -204,26 +210,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(replicaB.forProject(scope).get('work')!.phases.planning!.autoStartWhen).toEqual(EFFORT_LOW);
   });
 
-  it("serves the current code board for an unedited copy of an older release's default", async () => {
+  it("serves a stored copy of an older release's default as the project's edit, and flags the change", async () => {
     const { a, scope } = await setup();
     const boards = cache(a.boards);
-    await a.boards.seedCodeBoards(
-      scope,
-      boards.seeds().map(seed => ({ definition: { ...seed.definition, name: 'Older default' }, hash: 'older' })),
-    );
+    const seed = boards.seedFor('work')!;
+    await a.boards.create(scope, { ...seed.definition, name: 'Older default' }, 'user-1', { seedHash: 'older' });
 
     const described = await boards.describe(scope);
 
-    expect(described.registry.get('work')).toBe(workBoard);
-    expect(described.registry.get('work')!.name).toBe(workBoard.name);
-    expect(described.details.get('work')).toMatchObject({ customized: false, defaultChanged: false });
+    expect(described.registry.get('work')!.name).toBe('Older default');
+    expect(codeBoardOf(described.registry.get('work')!)).toBe(workBoard);
+    expect(described.details.get('work')).toMatchObject({ customized: true, defaultChanged: true });
     expect(described.problems).toEqual([]);
   });
 
   it('keeps serving the code board when an edited copy conflicts with a newer code default, and flags the change', async () => {
     const { a, scope } = await setup();
     const before = cache(a.boards);
-    await a.boards.seedCodeBoards(scope, before.seeds());
+    await copy(a.boards, before, scope, 'release');
     const row = (await a.boards.get(scope, 'release'))!;
     await a.boards.replace(
       scope,
@@ -258,7 +262,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
   it('flags an edited copy whose code default changed but still serves the edit when it fits', async () => {
     const { a, scope } = await setup();
-    await a.boards.seedCodeBoards(scope, cache(a.boards).seeds());
+    await copy(a.boards, cache(a.boards), scope, 'release');
     const row = (await a.boards.get(scope, 'release'))!;
     await a.boards.replace(
       scope,
@@ -284,7 +288,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
   it('does not serve a copy of a code board this Factory no longer defines', async () => {
     const { a, scope } = await setup();
-    await a.boards.seedCodeBoards(scope, cache(a.boards).seeds());
+    await copy(a.boards, cache(a.boards), scope, 'release');
 
     const described = await cache(a.boards, createBoardRegistry({ boards: [] })).describe(scope);
 
@@ -427,7 +431,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
       },
     });
 
-    await a.boards.seedCodeBoards(first, boards.seeds());
+    await copy(a.boards, boards, first, 'work');
     const work = (await a.boards.get(first, 'work'))!;
     await a.boards.replace(
       first,

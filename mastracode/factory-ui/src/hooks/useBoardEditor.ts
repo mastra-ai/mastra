@@ -29,7 +29,8 @@ async function sendBoardRequest(
     ...(init ? { body: JSON.stringify(init.body) } : {}),
   });
   const body = (await res.json().catch(() => undefined)) as
-    | (Partial<StoredBoardResponse> & { error?: string; message?: string; conflicts?: string[] })
+    | (StoredBoardResponse & { error?: undefined; message?: undefined; conflicts?: undefined })
+    | { board?: undefined; error?: string; message?: string; conflicts?: string[] }
     | undefined;
   if (!res.ok || !body?.board) {
     throw new BoardRequestError(
@@ -39,7 +40,7 @@ async function sendBoardRequest(
       body?.conflicts,
     );
   }
-  return body as StoredBoardResponse;
+  return body;
 }
 
 function boardPath(factoryProjectId: string, boardKey: string) {
