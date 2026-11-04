@@ -576,6 +576,7 @@ export class MessageList {
         options,
       );
     }
+    if (messageSource === 'memory') this.moveLiveMessagesPastStoredTies();
     return this;
   }
 
@@ -2815,6 +2816,38 @@ export class MessageList {
   }
 
   private lastCreatedAt?: number;
+
+  // A run's input can be stamped in the same millisecond as the stored message it follows
+  // (the previous turn's answer, saved just before this turn was queued). Sorting on equal
+  // timestamps would then put the stored answer last, and this turn's response would merge
+  // into it. Stored history sits underneath the live turn, so a live message tied with a stored
+  // one moves 1 ms later. Live messages that tie only with each other keep their timestamps.
+  private moveLiveMessagesPastStoredTies(): void {
+    const memory = this.memoryMessages;
+    const live = this.messages.filter(message => !memory.has(message));
+    if (!live.length) return;
+
+    const storedTimes = new Set<number>();
+    for (const message of this.messages) {
+      if (memory.has(message)) storedTimes.add(message.createdAt.getTime());
+    }
+
+    let moved = false;
+    for (const message of live) {
+      const original = message.createdAt.getTime();
+      if (!storedTimes.has(original)) continue;
+      let time = original + 1;
+      while (storedTimes.has(time)) time++;
+
+      const previous = message.createdAt.toISOString();
+      message.createdAt = new Date(time);
+      const signal = message.content.metadata?.signal as { createdAt?: string } | undefined;
+      if (signal?.createdAt === previous) signal.createdAt = message.createdAt.toISOString();
+      this.updateLastCreatedAt(message);
+      moved = true;
+    }
+    if (moved) this.sortMessages();
+  }
 
   private updateLastCreatedAt(message: MastraDBMessage): void {
     // Message-level createdAt controls transcript ordering and OM observation boundaries.

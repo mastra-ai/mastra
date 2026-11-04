@@ -2829,22 +2829,28 @@ describe('anthropicStripEmptySignedReasoningContent (reactive)', () => {
   });
 
   it('drops legacy empty signed blocks from earlier messages after the 400, keeping valid ones and the trailing assistant', async () => {
+    // Distinct timestamps fix the transcript order; messages stamped in one millisecond have no defined order.
+    const start = Date.now();
+    const at = <T extends object>(message: T, offset: number) => ({ ...message, createdAt: new Date(start + offset) });
     const args = argsFor(list => {
-      list.add([createUserMessage('q1')], 'input');
+      list.add([at(createUserMessage('q1'), 0)], 'input');
       list.add(
         [
-          assistant('a1', [
-            { type: 'step-start' },
-            reasoning('LEGACY', ''),
-            reasoning('VALID', 'real thinking'),
-            { type: 'text', text: 'one' },
-          ]),
+          at(
+            assistant('a1', [
+              { type: 'step-start' },
+              reasoning('LEGACY', ''),
+              reasoning('VALID', 'real thinking'),
+              { type: 'text', text: 'one' },
+            ]),
+            1,
+          ),
         ],
         'memory',
       );
-      list.add([createUserMessage('q2')], 'input');
+      list.add([at(createUserMessage('q2'), 2)], 'input');
       list.add(
-        [assistant('a2', [{ type: 'step-start' }, reasoning('TRAILING', ''), { type: 'text', text: 'two' }])],
+        [at(assistant('a2', [{ type: 'step-start' }, reasoning('TRAILING', ''), { type: 'text', text: 'two' }]), 3)],
         'memory',
       );
     });

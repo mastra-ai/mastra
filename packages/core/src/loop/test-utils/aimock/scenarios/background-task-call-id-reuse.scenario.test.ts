@@ -1,5 +1,5 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
@@ -84,12 +84,15 @@ describeForAllEngines(
       // The tool ran once per turn — turn 2+ did not hang or get dropped.
       expect(executions).toBe(3);
 
-      // Every turn's real result (not the placeholder) is in the transcript.
-      const { messages } = await memory.recall({ threadId, resourceId });
-      const serialized = JSON.stringify(messages);
-      expect(serialized).toContain('turn-1 done');
-      expect(serialized).toContain('turn-2 done');
-      expect(serialized).toContain('turn-3 done');
+      // Every turn's real result (not the placeholder) is in the transcript. The last turn's
+      // background result lands after its run returns, so wait for it rather than read once.
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId, resourceId });
+        const serialized = JSON.stringify(messages);
+        expect(serialized).toContain('turn-1 done');
+        expect(serialized).toContain('turn-2 done');
+        expect(serialized).toContain('turn-3 done');
+      });
     }, 30_000);
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
