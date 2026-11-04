@@ -29,6 +29,7 @@ beforeEach(() => {
   directory = mkdtempSync(path.join(tmpdir(), 'factory-provider-limit-'));
   vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-test');
   vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+  vi.stubEnv('ZHIPU_API_KEY', 'zai-test');
   vi.stubEnv('MASTRA_APP_DATA_DIR', path.join(directory, 'app-data'));
   vi.stubEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB', '1');
   vi.stubEnv('MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY', '1');
@@ -45,6 +46,7 @@ afterEach(async () => {
 const PROVIDERS = {
   anthropic: { model: 'anthropic/claude-sonnet-4-5', endpoint: 'https://api.anthropic.com/v1/messages' },
   openai: { model: 'openai/gpt-5.4-mini', endpoint: 'https://api.openai.com/v1/*' },
+  zai: { model: 'zai/glm-4.5', endpoint: 'https://api.z.ai/api/paas/v4/chat/completions' },
 } as const;
 
 async function startFactorySession(provider: keyof typeof PROVIDERS) {
@@ -170,6 +172,110 @@ describe('a Factory kickoff whose model provider refuses it on a limit (#28696)'
       attempts: 1,
       failureCode: 'run_provider_limited',
       lastError: expect.stringContaining(body.error.message),
+    });
+  });
+
+  // A provider that already started answering reports a limit inside the 200 stream. Anthropic's and OpenAI's
+  // SDKs infer a status for it; the OpenAI-compatible one passes the provider's error on with its codes alone,
+  // which used to be replayed like any other failure.
+  it.each([
+    [
+      'an Anthropic rate limit',
+      'anthropic',
+      [
+        {
+          type: 'message_start',
+          message: {
+            id: 'msg_1',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-sonnet-4-5',
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 1 },
+          },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Looking into it' } },
+        {
+          type: 'error',
+          error: {
+            type: 'rate_limit_error',
+            message: 'Number of request tokens has exceeded your per-minute rate limit.',
+          },
+        },
+      ],
+    ],
+    [
+      'an OpenAI rate limit',
+      'openai',
+      [
+        {
+          type: 'response.created',
+          sequence_number: 0,
+          response: { id: 'resp_1', created_at: 1, model: 'gpt-5.4-mini', status: 'in_progress', output: [] },
+        },
+        {
+          type: 'response.output_item.added',
+          sequence_number: 1,
+          output_index: 0,
+          item: { type: 'message', id: 'msg_1', status: 'in_progress', role: 'assistant', content: [] },
+        },
+        {
+          type: 'response.output_text.delta',
+          sequence_number: 2,
+          item_id: 'msg_1',
+          output_index: 0,
+          content_index: 0,
+          delta: 'Looking into it',
+        },
+        {
+          type: 'error',
+          sequence_number: 3,
+          code: 'rate_limit_exceeded',
+          message: 'Rate limit reached for gpt-5.4-mini on tokens per min.',
+          param: null,
+        },
+      ],
+    ],
+    [
+      'an OpenAI-compatible provider rate limit',
+      'zai',
+      [
+        {
+          id: 'chunk-1',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: 'glm-4.5',
+          choices: [{ index: 0, delta: { role: 'assistant', content: 'Looking into it' }, finish_reason: null }],
+        },
+        { error: { message: 'Rate limit reached for requests.', type: 'requests', code: 'rate_limit_exceeded' } },
+      ],
+    ],
+  ] as const)('stops after one attempt on %s reported mid-stream', async (_case, provider, events) => {
+    let modelCalls = 0;
+    server.use(
+      http.post(PROVIDERS[provider].endpoint, () => {
+        modelCalls += 1;
+        const stream = events
+          .map(event => `${'type' in event ? `event: ${event.type}\n` : ''}data: ${JSON.stringify(event)}\n\n`)
+          .join('');
+        return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } });
+      }),
+    );
+    const { storage, dispatcher } = await startFactorySession(provider);
+
+    await dispatcher.runOnce(new Date());
+    const callsInFirstAttempt = modelCalls;
+    await dispatcher.runOnce(new Date(Date.now() + 2 * 60 * 60_000));
+
+    expect(callsInFirstAttempt).toBeGreaterThan(0);
+    expect(modelCalls).toBe(callsInFirstAttempt);
+    expect((await storage.listPendingStarts(USER.organizationId, PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      failureCode: 'run_provider_limited',
     });
   });
 });

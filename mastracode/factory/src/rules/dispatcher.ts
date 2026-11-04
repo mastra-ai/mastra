@@ -1,6 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
-import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
+import { classifyProviderError, PROVIDER_CALL_ERROR_NAME, toPersistedErrorIdentity } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
@@ -142,8 +142,9 @@ function runErrorCode(error: unknown): FactoryDispatchFailureCode {
   const status = httpStatus(error) ?? httpStatus(causeOf(error));
   if (status === 401 || status === 403) return 'run_credentials_unavailable';
   const providerCall = isProviderCallError(error) || isProviderCallError(causeOf(error));
-  if (!providerCall) return 'run_failed';
-  const kind = classifyProviderError(error);
+  // Without an HTTP call only the provider's own codes count, as when an OpenAI-compatible provider reports a
+  // limit inside its stream. Wording alone can come from any service the run touched.
+  const kind = classifyProviderError(providerCall ? error : { codes: toPersistedErrorIdentity(error).codes });
   if (kind === 'auth') return 'run_credentials_unavailable';
   return kind === 'rate_limited' || kind === 'quota' ? 'run_provider_limited' : 'run_failed';
 }

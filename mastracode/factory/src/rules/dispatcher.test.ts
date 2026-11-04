@@ -1828,15 +1828,17 @@ describe('FactoryDecisionDispatcher', () => {
       });
     });
 
-    it('parks the card for a person when the OM model call hit a provider rate limit', async () => {
+    // A limit reported inside the OM model's stream reaches the marker with its codes and no HTTP status.
+    it.each([
+      ['with its HTTP status', { statusCode: 429, codes: ['requests', 'rate_limit_exceeded'] }],
+      ['inside its stream, with codes only', { codes: ['requests', 'rate_limit_exceeded'] }],
+    ])('parks the card for a person when the OM model call hit a provider rate limit %s', async (_case, cause) => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(storage, planSkill('plan-om-rate-limited'));
       const { controller } = createSession(undefined, {
         agentEndReason: 'aborted',
-        omObservationError: 'Rate limit reached for requests: HTTP 429',
-        runError: new Error('Observational memory observation run failed: Rate limit reached for requests: HTTP 429', {
-          cause: { statusCode: 429, codes: ['requests', 'rate_limit_exceeded'] },
-        }),
+        omObservationError: 'Rate limit reached for requests',
+        runError: new Error('Observational memory observation run failed: Rate limit reached for requests', { cause }),
       });
       await bindRole(storage, item.id, 'plan');
       const dispatcher = new FactoryDecisionDispatcher({
