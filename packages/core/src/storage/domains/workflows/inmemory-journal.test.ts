@@ -1,6 +1,8 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { describe, expect, it } from 'vitest';
 import type { WorkflowRunState } from '../../../workflows';
-import { RunFenceConflictError } from '../../run-fencing';
+import { RunFenceConflictError, setRunFenceContext } from '../../run-fencing';
+import type { RunFenceScope } from '../../run-fencing';
 import { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
 import { WorkflowsInMemory } from './inmemory';
@@ -542,6 +544,12 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     await expect(store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' }, fence })).rejects.toBeInstanceOf(
       RunFenceConflictError,
     );
+    // The engine writes state drafts with the fence of the run fence scope it runs in.
+    const scopes = new AsyncLocalStorage<RunFenceScope | undefined>();
+    const context = setRunFenceContext({ current: () => scopes.getStore(), run: (s, f) => scopes.run(s, f) });
+    await expect(
+      context.run({ fenceFor: () => fence }, () => store.appendWorkflowRunStateDraft({ ...run, state: { stale: 1 } })),
+    ).rejects.toBeInstanceOf(RunFenceConflictError);
 
     expect(await store.loadWorkflowRun({ ...run, successfulSteps: 'full' })).toMatchObject({
       header: { status: 'running' },

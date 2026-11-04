@@ -615,6 +615,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       | { state: Record<string, any> }
     ),
   ): Promise<{ seq: number }> {
+    this.assertFence(undefined, args.runId, 'appendWorkflowRunStateDraft');
     const key = this.getWorkflowKey(args.workflowName, args.runId);
     const record = this.db.workflowRunHeaders.get(key);
     if (!record) throw new Error(`Storage v2 run ${args.workflowName}/${args.runId} is not stored`);
