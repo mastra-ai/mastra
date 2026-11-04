@@ -31,9 +31,30 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'auth/clerk',
+          label: 'Clerk',
+          customProps: { icon: 'https://cdn.simpleicons.org/clerk?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'channels/discord',
+          label: 'Discord',
+          customProps: { icon: 'https://cdn.simpleicons.org/discord?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'providers/fireflies',
           label: 'Fireflies.ai',
           customProps: { icon: 'https://app.nango.dev/images/template-logos/fireflies.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'channels/github',
+          label: 'GitHub',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/github/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/github/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -52,6 +73,12 @@ const sidebars = {
           id: 'providers/google-docs',
           label: 'Google Docs',
           customProps: { icon: 'https://cdn.simpleicons.org/googledocs?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'file-storage/google-drive',
+          label: 'Google Drive',
+          customProps: { icon: 'https://svgl.app/library/drive.svg' },
         },
         {
           type: 'doc',
@@ -103,9 +130,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'channels/teams',
+          label: 'Microsoft Teams',
+          customProps: { icon: 'https://svgl.app/library/microsoft-teams.svg' },
+        },
+        {
+          type: 'doc',
           id: 'providers/microsoft-word',
           label: 'Microsoft Word',
           customProps: { icon: 'https://app.nango.dev/images/template-logos/microsoft-word.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
@@ -121,6 +160,30 @@ const sidebars = {
           id: 'providers/one-drive',
           label: 'OneDrive',
           customProps: { icon: 'https://app.nango.dev/images/template-logos/one-drive.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'voice/openai',
+          label: 'OpenAI',
+          customProps: { icon: 'https://svgl.app/library/openai.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'observability/posthog',
+          label: 'PostHog',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/posthog/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/posthog/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'deploy/render',
+          label: 'Render',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/render/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/render/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -154,9 +217,33 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'channels/slack',
+          label: 'Slack',
+          customProps: { icon: 'https://svgl.app/library/slack.svg' },
+        },
+        {
+          type: 'doc',
           id: 'providers/snowflake',
           label: 'Snowflake',
           customProps: { icon: 'https://cdn.simpleicons.org/snowflake?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'auth/supabase',
+          label: 'Supabase',
+          customProps: { icon: 'https://cdn.simpleicons.org/supabase?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'channels/telegram',
+          label: 'Telegram',
+          customProps: { icon: 'https://cdn.simpleicons.org/telegram?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'auth/workos',
+          label: 'WorkOS',
+          customProps: { icon: 'https://svgl.app/library/workos.svg' },
         },
       ],
     },
@@ -167,48 +254,15 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'channels/discord',
-          label: 'Discord',
-          customProps: { icon: 'https://cdn.simpleicons.org/discord?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
-          id: 'channels/github',
-          label: 'GitHub',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/github/black?viewbox=auto&size=28',
-            iconDark: 'https://cdn.simpleicons.org/github/white?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
           id: 'channels/imessage',
           label: 'iMessage',
           customProps: { icon: 'https://cdn.simpleicons.org/imessage?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
-          id: 'channels/teams',
-          label: 'Microsoft Teams',
-          customProps: { icon: 'https://svgl.app/library/microsoft-teams.svg' },
-        },
-        {
-          type: 'doc',
           id: 'channels/ring',
           label: 'Ring',
           customProps: { icon: 'https://cdn.simpleicons.org/ring?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
-          id: 'channels/slack',
-          label: 'Slack',
-          customProps: { icon: 'https://svgl.app/library/slack.svg' },
-        },
-        {
-          type: 'doc',
-          id: 'channels/telegram',
-          label: 'Telegram',
-          customProps: { icon: 'https://cdn.simpleicons.org/telegram?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
@@ -508,15 +562,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'observability/posthog',
-          label: 'PostHog',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/posthog/black?viewbox=auto&size=28',
-            iconDark: 'https://cdn.simpleicons.org/posthog/white?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
           id: 'observability/sentry',
           label: 'Sentry',
           customProps: {
@@ -630,12 +675,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'databases/neon',
-          label: 'Neon Postgres',
-          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
           id: 'databases/oracledb',
           label: 'OracleDB',
           customProps: { icon: '/img/integrations/oracle.svg' },
@@ -743,26 +782,12 @@ const sidebars = {
           href: '/docs/mastra-platform/deploy',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
-        {
-          type: 'doc',
-          id: 'deploy/neon',
-          label: 'Neon',
-          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
-        },
+
         {
           type: 'doc',
           id: 'deploy/netlify',
           label: 'Netlify',
           customProps: { icon: 'https://cdn.simpleicons.org/netlify?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
-          id: 'deploy/render',
-          label: 'Render',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/render/black?viewbox=auto&size=28',
-            iconDark: 'https://cdn.simpleicons.org/render/white?viewbox=auto&size=28',
-          },
         },
         {
           type: 'doc',
@@ -899,12 +924,6 @@ const sidebars = {
         { type: 'doc', id: 'voice/murf', label: 'Murf', customProps: { icon: '/img/integrations/murf.svg' } },
         {
           type: 'doc',
-          id: 'voice/openai',
-          label: 'OpenAI',
-          customProps: { icon: 'https://svgl.app/library/openai.svg', customCSS: 'dark:invert' },
-        },
-        {
-          type: 'doc',
           id: 'voice/sarvam',
           label: 'Sarvam',
           customProps: { icon: '/img/integrations/sarvam.svg', customCSS: 'dark:invert' },
@@ -948,12 +967,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'auth/clerk',
-          label: 'Clerk',
-          customProps: { icon: 'https://cdn.simpleicons.org/clerk?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
           id: 'auth/firebase',
           label: 'Firebase',
           customProps: { icon: 'https://cdn.simpleicons.org/firebase?viewbox=auto&size=28' },
@@ -969,18 +982,6 @@ const sidebars = {
           id: 'auth/okta',
           label: 'Okta',
           customProps: { icon: 'https://cdn.simpleicons.org/okta?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
-          id: 'auth/supabase',
-          label: 'Supabase',
-          customProps: { icon: 'https://cdn.simpleicons.org/supabase?viewbox=auto&size=28' },
-        },
-        {
-          type: 'doc',
-          id: 'auth/workos',
-          label: 'WorkOS',
-          customProps: { icon: 'https://svgl.app/library/workos.svg' },
         },
       ],
     },
@@ -1058,22 +1059,11 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'file-storage/google-drive',
-          label: 'Google Drive',
-          customProps: { icon: 'https://svgl.app/library/drive.svg' },
-        },
-        {
-          type: 'doc',
           id: 'file-storage/mesa',
           label: 'Mesa',
           customProps: { icon: '/img/integrations/mesa.svg', customCSS: 'dark:invert' },
         },
-        {
-          type: 'doc',
-          id: 'file-storage/neon',
-          label: 'Neon Object Storage',
-          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
-        },
+
         {
           type: 'doc',
           id: 'file-storage/vercel-files',

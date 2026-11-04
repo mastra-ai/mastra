@@ -2213,6 +2213,31 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/connect/providers",
+      "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/tools",
+      "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/channels",
+      "destination": "/docs/mastra-platform/connect",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/deploy/neon",
+      "destination": "/integrations/databases/neon",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/file-storage/neon",
+      "destination": "/integrations/databases/neon",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
       "destination": "/docs/mastra-platform/connect/llms.txt",
       "permanent": false
@@ -4090,6 +4115,31 @@
     {
       "source": "/docs/mastra-platform/connect/overview/llms.txt",
       "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/providers/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/tools/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/channels/llms.txt",
+      "destination": "/docs/mastra-platform/connect/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/deploy/neon/llms.txt",
+      "destination": "/integrations/databases/neon/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/file-storage/neon/llms.txt",
+      "destination": "/integrations/databases/neon/llms.txt",
       "permanent": true
     },
     {

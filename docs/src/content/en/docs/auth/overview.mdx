@@ -6,6 +6,7 @@ packages:
 ---
 
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
+import { getIntegrationItems } from '@site/src/components/integrations/data';
 import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
 
 # Auth
@@ -53,7 +54,10 @@ Authentication for Studio is currently supported by the following providers: Sim
 
 ### Third-party integrations
 
-<IntegrationGrid section="Auth" />
+<IntegrationGrid
+  section="Auth"
+  additionalItems={getIntegrationItems('Providers', ['auth/clerk', 'auth/supabase', 'auth/workos'])}
+/>
 
 ### Advanced
 

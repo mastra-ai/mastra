@@ -46,7 +46,7 @@ describe('getIntegrationItems', () => {
   })
 
   it('excludes blocklisted items without changing the remaining section items', () => {
-    const blocklist = ['channels/github', 'channels/imessage']
+    const blocklist = ['channels/ring', 'channels/imessage']
     const expectedItems = getIntegrationItems('Channels').filter(
       item => !blocklist.includes(getIntegrationItemKey(item)),
     )
@@ -58,16 +58,18 @@ describe('getIntegrationItems', () => {
     expect(
       getIntegrationItems(
         'Channels',
-        ['channels/slack', 'channels/github', 'channels/discord'],
-        ['channels/github'],
+        ['channels/whatsapp', 'channels/ring', 'channels/imessage'],
+        ['channels/ring'],
       ).map(item => getIntegrationItemKey(item)),
-    ).toEqual(['channels/slack', 'channels/discord'])
+    ).toEqual(['channels/whatsapp', 'channels/imessage'])
   })
 
   it('ignores unknown sections and list entries', () => {
     expect(getIntegrationItems('Unknown')).toEqual([])
     expect(
-      getIntegrationItems('Channels', ['channels/slack', 'channels/unknown']).map(item => getIntegrationItemKey(item)),
-    ).toEqual(['channels/slack'])
+      getIntegrationItems('Channels', ['channels/whatsapp', 'channels/unknown']).map(item =>
+        getIntegrationItemKey(item),
+      ),
+    ).toEqual(['channels/whatsapp'])
   })
 })

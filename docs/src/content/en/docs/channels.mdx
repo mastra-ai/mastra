@@ -6,6 +6,7 @@ packages:
 ---
 
 import { IntegrationGrid } from '@site/src/components/integrations/grid';
+import { getIntegrationItems } from '@site/src/components/integrations/data';
 
 # Channels
 
@@ -15,7 +16,16 @@ Channels connect agents to messaging and collaboration platforms like Slack, Mic
 
 Start with the page for your platform:
 
-<IntegrationGrid section="Channels" />
+<IntegrationGrid
+  section="Channels"
+  additionalItems={getIntegrationItems('Providers', [
+  'channels/discord',
+  'channels/github',
+  'channels/teams',
+  'channels/slack',
+  'channels/telegram',
+])}
+/>
 
 [Other adapters](#other-adapters) lists additional platforms. Mastra channels work with compatible [Chat SDK adapters](https://chat-sdk.dev/adapters) beyond the platforms listed here, and the same Mastra configuration pattern applies across adapters.
 
@@ -30,7 +40,7 @@ Use channels when an agent needs to:
 
 ## Configure channels faster with Mastra Connect
 
-If you don't want to configure a bot or app for each channel and maintain the credentials yourself, you can use [Mastra Connect](/docs/mastra-platform/connect/channels). It manages credentials for you, simplifying channel setup and maintenance.
+If you don't want to configure a bot or app for each channel and maintain the credentials yourself, you can use [Mastra Connect](/docs/mastra-platform/connect#add-channels). It manages credentials for you, simplifying channel setup and maintenance.
 
 ## Configure an agent
 
