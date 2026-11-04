@@ -50,8 +50,9 @@ export interface GatewayApiKey {
 }
 
 /**
- * Create a Gateway API key by provisioning a Gateway project with a key. Organization (v2) keys
- * aren't released yet, so they aren't issued here; `keyId` stays unset and nothing is revoked.
+ * Create a Gateway API key in the organization. Uses the organization key service and falls back
+ * to provisioning a Gateway project with a key only where that service doesn't exist (404). A 503
+ * means the service failed, so it surfaces instead of leaving a stray project behind.
  */
 export async function createGatewayApiKey(
   token: string,
@@ -59,6 +60,19 @@ export async function createGatewayApiKey(
   label: string,
   signal?: AbortSignal,
 ): Promise<GatewayApiKey> {
+  try {
+    const result = await request<{ apiKey: string; keyId?: string }>(
+      token,
+      orgId,
+      '/v1/gateway/organization/v2/keys',
+      { method: 'POST', body: JSON.stringify({ label }) },
+      signal,
+    );
+    return { apiKey: result.apiKey, keyId: result.keyId };
+  } catch (error) {
+    if (!(error instanceof GatewayApiError) || error.status !== 404) throw error;
+  }
+
   const result = await request<{ apiKey: string }>(
     token,
     orgId,
