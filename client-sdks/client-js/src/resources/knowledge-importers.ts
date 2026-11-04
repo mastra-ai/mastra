@@ -154,7 +154,16 @@ export interface KnowledgeImporterRunEvent {
   at: string;
   level: KnowledgeImporterRunEventLevel;
   type:
-    'started' | 'fetch' | 'item' | 'skipped' | 'placed' | 'retry' | 'rate_limited' | 'error' | 'omitted' | 'finished';
+    | 'started'
+    | 'fetch'
+    | 'item'
+    | 'skipped'
+    | 'placed'
+    | 'retry'
+    | 'rate_limited'
+    | 'error'
+    | 'omitted'
+    | 'finished';
   message: string;
   data?: Record<string, unknown>;
 }
