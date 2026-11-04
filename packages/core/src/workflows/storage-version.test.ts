@@ -228,6 +228,46 @@ describe('storageVersion per run', () => {
     expect(storedInNextStep?.steps.approve).toMatchObject({ status: 'success', output: { n: 1 } });
   });
 
+  it("stores a v1 run's resumed branch step with the next step's start, as before storage v2", async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const workflow = createWorkflow({ id: 'branched', inputSchema: num, outputSchema: z.any() })
+      .branch([[async () => true, approveAddOne('approve')]])
+      .then(
+        createStep({
+          id: 'next',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ inputData }) => inputData,
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { branched: workflow } });
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: { n: 0 } })).status).toBe('suspended');
+
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    const writes: unknown[] = [];
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      const { status, context } = args.snapshot;
+      const { input: _input, ...stepResults } = context;
+      const steps = Object.fromEntries(Object.entries(stepResults).map(([id, step]) => [id, step.status]));
+      writes.push({ status, steps });
+      return persist(args);
+    });
+    const resumed = await (
+      await workflow.createRun({ runId: run.runId })
+    ).resume({ step: 'approve', resumeData: true });
+
+    expect(resumed.status).toBe('success');
+    expect(writes).toEqual([
+      { status: 'running', steps: { approve: 'running' } },
+      { status: 'running', steps: { approve: 'success', next: 'running' } },
+      { status: 'running', steps: { approve: 'success', next: 'success' } },
+      { status: 'success', steps: { approve: 'success', next: 'success' } },
+    ]);
+  });
+
   it('reruns the time travel target on restart when the process died right after the checkpoint', async () => {
     const storage = new MockStore();
     const store = storage.stores.workflows!;
@@ -501,7 +541,7 @@ describe('storageVersion per run', () => {
         return {
           returned: results.map(result => ({ status: result.status, steps: outputs(result.steps) })),
           stored: { status: stored.status, result: stored.result, steps: outputs(stored.context) },
-          read: { status: read.status, result: read.result, steps: outputs(read.steps) },
+          read: { status: read.status, result: read.result, steps: outputs(read.steps ?? {}) },
           listed: (await workflow.listWorkflowRuns()).total,
         };
       }
