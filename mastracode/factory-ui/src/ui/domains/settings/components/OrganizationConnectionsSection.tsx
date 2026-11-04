@@ -11,16 +11,15 @@ import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
-import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
 import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
-import { connectLinear } from '../../factory/services/linear';
 import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { connectGithub, manageGithubConnection } from '../../workspaces/services/github';
 import { isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { IntegrationLabel } from './IntegrationLabel';
+import { LinearConnectionRows } from './LinearConnectionRows';
 import { connectionName, ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
@@ -61,7 +60,7 @@ export function OrganizationConnectionsSection() {
         <SettingsContainer className="peer empty:hidden">
           <GithubInstallationRow showAvailable={adding} />
           <GitLabConnectionRows showAvailable={adding} />
-          <LinearConnectionRow showAvailable={adding} />
+          <LinearConnectionRows showAvailable={adding} />
           <JiraConnectionRows showAvailable={adding} />
           <IncidentioConnectionRows showAvailable={adding} />
         </SettingsContainer>
@@ -125,30 +124,6 @@ function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {
           Connect GitHub
         </Button>
       )}
-    </SettingsRow>
-  );
-}
-
-function LinearConnectionRow({ showAvailable }: { showAvailable: boolean }) {
-  const { baseUrl } = useApiConfig();
-  const query = useLinearStatusQuery();
-  const status = query.data;
-  const label = <IntegrationLabel provider="linear" name="Linear" />;
-
-  if (query.isPending) return <SettingsRowsSkeleton label="Loading Linear connection" rows={1} />;
-  if (status?.reason === 'unavailable') {
-    return <RetryRow label={label} errorMsg="Couldn't load Linear connections." onRetry={() => void query.refetch()} />;
-  }
-  const access = accessDescription(status?.reason, 'Linear');
-  if (access) return <SettingsRow label={label} description={access} />;
-  if (!status?.enabled) return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
-  if (!status.connected && !showAvailable) return null;
-
-  return (
-    <SettingsRow label={label} description={status.workspace?.name || status.workspace?.urlKey || undefined}>
-      <Button size="sm" icon={<Link2 />} onClick={() => connectLinear(baseUrl)}>
-        {status.connected ? 'Reconnect Linear' : 'Connect Linear'}
-      </Button>
     </SettingsRow>
   );
 }

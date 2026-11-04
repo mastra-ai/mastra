@@ -10,18 +10,23 @@
 import { RequestError } from './request';
 
 export type LinearStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready'
-  | 'unavailable';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
 
 export interface LinearStatus {
+  mode?: 'platform';
+  /** Includes previously authorized workspaces whose connection has stopped working. */
+  workspaces?: LinearWorkspaceConnection[];
   enabled: boolean;
   connected: boolean;
   workspace: { name: string | null; urlKey: string | null } | null;
   reason?: LinearStatusReason;
+}
+
+export interface LinearWorkspaceConnection {
+  id: string;
+  name: string;
+  urlKey: string | null;
+  connected: boolean;
 }
 
 export interface LinearIssue {
@@ -99,8 +104,10 @@ export async function fetchLinearStatus(baseUrl: string): Promise<LinearStatus> 
 }
 
 /** Begin the Linear OAuth connect flow (full-page redirect). */
-export function connectLinear(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/linear/connect`);
+export function connectLinear(baseUrl: string, workspaceId?: string): void {
+  const params = new URLSearchParams({ return_to: `${window.location.pathname}${window.location.search}` });
+  if (workspaceId) params.set('workspace_id', workspaceId);
+  window.location.assign(`${baseUrl}/auth/linear/connect?${params}`);
 }
 
 /** GET helper for the read-only Linear endpoints; throws server messages. */
@@ -162,8 +169,19 @@ export async function getLinearIssue(
 
 /** List the connected workspace's projects (Settings intake-source picker). */
 export async function listLinearProjects(baseUrl: string): Promise<LinearProject[]> {
-  const { projects } = await getLinearResource<{ projects: LinearProject[] }>(baseUrl, '/web/linear/projects');
+  const { projects } = await listLinearProjectsWithStatus(baseUrl);
   return projects;
+}
+
+export interface LinearWorkspaceListingError {
+  workspaceId: string;
+  name: string;
+}
+export function listLinearProjectsWithStatus(baseUrl: string) {
+  return getLinearResource<{ projects: LinearProject[]; workspaceErrors?: LinearWorkspaceListingError[] }>(
+    baseUrl,
+    '/web/linear/projects',
+  );
 }
 
 /** A Linear team, selectable as an intake source in its own right. */
@@ -180,8 +198,15 @@ export interface LinearTeam {
 
 /** List the connected workspace's teams (Settings intake-source picker). */
 export async function listLinearTeams(baseUrl: string): Promise<LinearTeam[]> {
-  const { teams } = await getLinearResource<{ teams: LinearTeam[] }>(baseUrl, '/web/linear/teams');
+  const { teams } = await listLinearTeamsWithStatus(baseUrl);
   return teams;
+}
+
+export function listLinearTeamsWithStatus(baseUrl: string) {
+  return getLinearResource<{ teams: LinearTeam[]; workspaceErrors?: LinearWorkspaceListingError[] }>(
+    baseUrl,
+    '/web/linear/teams',
+  );
 }
 
 /**
@@ -203,8 +228,11 @@ export function linearSourceWorkspaceId(sourceId: string): string | null {
   const encoded = /^linear-(?:project|team):(.+)$/.exec(sourceId)?.[1];
   if (!encoded) return null;
   try {
-    const parsed = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))) as { workspaceId?: unknown };
-    return typeof parsed.workspaceId === 'string' && parsed.workspaceId ? parsed.workspaceId : null;
+    const value: unknown = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')));
+    if (value && typeof value === 'object' && 'workspaceId' in value && typeof value.workspaceId === 'string') {
+      return value.workspaceId || null;
+    }
+    return null;
   } catch {
     return null;
   }

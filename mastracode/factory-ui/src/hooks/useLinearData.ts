@@ -6,8 +6,8 @@ import {
   fetchLinearStatus,
   getLinearIssue,
   listLinearIssues,
-  listLinearProjects,
-  listLinearTeams,
+  listLinearProjectsWithStatus,
+  listLinearTeamsWithStatus,
 } from '../ui/domains/factory/services/linear';
 import { RequestError } from '../ui/domains/factory/services/request';
 import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
@@ -71,7 +71,17 @@ export function useLinearProjectsQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearProjects(),
-    queryFn: () => listLinearProjects(baseUrl),
+    queryFn: () => listLinearProjectsWithStatus(baseUrl),
+    select: data => data.projects,
+    enabled,
+  });
+}
+
+export function useLinearProjectListingQuery(enabled: boolean) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearProjects(),
+    queryFn: () => listLinearProjectsWithStatus(baseUrl),
     enabled,
   });
 }
@@ -81,7 +91,17 @@ export function useLinearTeamsQuery(enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.linearTeams(),
-    queryFn: () => listLinearTeams(baseUrl),
+    queryFn: () => listLinearTeamsWithStatus(baseUrl),
+    select: data => data.teams,
+    enabled,
+  });
+}
+
+export function useLinearTeamListingQuery(enabled: boolean) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.linearTeams(),
+    queryFn: () => listLinearTeamsWithStatus(baseUrl),
     enabled,
   });
 }

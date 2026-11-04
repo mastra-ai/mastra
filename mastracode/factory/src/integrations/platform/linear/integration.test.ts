@@ -1,12 +1,16 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
 
+import { createStateSigner } from '../../../state-signing.js';
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 
-import { createPlatformStorageForTests } from '../test-utils.js';
+import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 
 vi.mock('./event-worker.js', () => ({
   PlatformLinearEventWorker: class {
@@ -95,6 +99,157 @@ function createIntegration(fetchImpl?: typeof fetch): PlatformLinearIntegration 
 }
 
 describe('PlatformLinearIntegration', () => {
+  describe('workspace connection recovery', () => {
+    const provider = setupServer();
+    const disconnected = { ...workspace, linearWorkspaceId: 'old', linearWorkspaceName: 'Mastra', connected: false };
+    beforeEach(() => provider.listen({ onUnhandledRequest: 'error' }));
+    afterEach(() => provider.close());
+
+    async function recoveryApp() {
+      const seed = await createFactoryStorageForTests();
+      const integration = createIntegration();
+      const sourceControl = seed.sourceControl.forIntegration('linear');
+      const context: IntegrationContext = {
+        auth: fakeAuth(),
+        baseUrl: 'https://factory.example',
+        stateSigner: createStateSigner('test-secret'),
+        storage: {
+          generic: seed.integrations.forIntegration('linear'),
+          sourceControl,
+          sourceControls: [sourceControl],
+          projects: seed.projects,
+          intake: seed.intake,
+          memorySettings: seed.memorySettings,
+          modelDefaults: seed.modelDefaults,
+          channelIdentity: seed.channelIdentity,
+        },
+      };
+      integration.initialize?.({ storage: context.storage.generic, projects: seed.projects, auth: context.auth });
+      const app = new Hono();
+      mountApiRoutes(app, integration.routes(context));
+      return { app, integration };
+    }
+
+    it.each([true, false])(
+      'retains disconnected workspace names when a healthy workspace exists: %s',
+      async healthy => {
+        provider.use(
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+            HttpResponse.json({
+              workspaces: [...(healthy ? [workspace] : []), disconnected],
+            }),
+          ),
+        );
+        const { app } = await recoveryApp();
+        const response = await app.request('/web/linear/status');
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          mode: 'platform',
+          connected: healthy,
+          workspaces: expect.arrayContaining([{ id: 'old', name: 'Mastra', urlKey: 'acme', connected: false }]),
+        });
+      },
+    );
+
+    it('keeps the intended workspace in the authorization return path and verifies recovery', async () => {
+      let restored = false;
+      let authorizationReturnTo: string | null = null;
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+          HttpResponse.json({ workspaces: [workspace, { ...disconnected, connected: restored }] }),
+        ),
+        http.get(`${config.baseUrl}/v1/server/linear/authorize`, ({ request }) => {
+          authorizationReturnTo = new URL(request.url).searchParams.get('return_to');
+          return new HttpResponse(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } });
+        }),
+      );
+      const { app } = await recoveryApp();
+      const destination = '/factories/fp-1/settings/intake';
+      const connect = await app.request(
+        `/auth/linear/connect?${new URLSearchParams({ workspace_id: 'old', return_to: destination })}`,
+      );
+      expect(connect.status).toBe(302);
+      expect(authorizationReturnTo).toBe(
+        `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: 'old', return_to: destination })}`,
+      );
+      if (!authorizationReturnTo) throw new Error('Authorization return path is missing');
+      const mismatch = await app.request(authorizationReturnTo);
+      expect(mismatch.headers.get('location')).toBe(
+        `${destination}?linear_reconnect=not_connected&linear_workspace_id=old`,
+      );
+      restored = true;
+      const repaired = await app.request(authorizationReturnTo);
+      expect(repaired.headers.get('location')).toBe(
+        `${destination}?linear_reconnect=connected&linear_workspace_id=old`,
+      );
+      expect((await app.request('/auth/linear/connect?workspace_id=another-org')).status).toBe(404);
+    });
+
+    it.each(['https://example.org/steal', '//example.org/steal', '/\\example.org/steal'])(
+      'keeps the reconnect return on the Factory host for %s',
+      async returnTo => {
+        provider.use(
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+            HttpResponse.json({ workspaces: [workspace] }),
+          ),
+        );
+        const { app } = await recoveryApp();
+        const result = await app.request(
+          `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: 'workspace-1', return_to: returnTo })}`,
+        );
+        expect(result.headers.get('location')).toBe('/?linear_reconnect=connected&linear_workspace_id=workspace-1');
+      },
+    );
+
+    it.each(['projects', 'issues'])(
+      'keeps healthy workspace intake working when another workspace fails to load %s',
+      async failedResource => {
+        const other = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Unavailable workspace' };
+        const pageInfo = { hasNextPage: false, endCursor: null };
+        provider.use(
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+            HttpResponse.json({ workspaces: [workspace, other] }),
+          ),
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/projects`, () =>
+            HttpResponse.json({ projects: [project], pageInfo }),
+          ),
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-2/projects`, () =>
+            failedResource === 'projects'
+              ? new HttpResponse(null, { status: 503 })
+              : HttpResponse.json({ projects: [{ ...project, id: 'project-2' }], pageInfo }),
+          ),
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/issues`, () =>
+            HttpResponse.json({ issues: [issue], pageInfo }),
+          ),
+          http.get(
+            `${config.baseUrl}/v1/server/linear/workspaces/workspace-2/issues`,
+            () => new HttpResponse(null, { status: 503 }),
+          ),
+        );
+        const { app, integration } = await recoveryApp();
+        const response = await app.request('/web/linear/projects');
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          projects: expect.arrayContaining([
+            {
+              id: project1SourceId,
+              name: 'Platform',
+              state: 'started',
+              teams: project.teams,
+              workspaceId: 'workspace-1',
+            },
+          ]),
+          workspaceErrors:
+            failedResource === 'projects' ? [{ workspaceId: 'workspace-2', name: 'Unavailable workspace' }] : [],
+        });
+        const intake = await integration.intake.listIssues({
+          connection: { type: 'oauth', accessToken: 'unused' },
+          sourceIds: [project1SourceId, project2SourceId],
+        });
+        expect(intake.issues.map(item => item.identifier)).toEqual(['ENG-42']);
+      },
+    );
+  });
   describe('when issues belong to a Linear project', () => {
     function projectIntegration() {
       return createIntegration(async input => {
@@ -1015,6 +1170,7 @@ describe('PlatformLinearIntegration', () => {
     const teams = await app.request('/web/linear/teams');
     expect(teams.status).toBe(200);
     await expect(teams.json()).resolves.toEqual({
+      workspaceErrors: [],
       teams: [
         {
           id: 'team-1',

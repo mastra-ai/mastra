@@ -46,6 +46,18 @@ export interface LinearFeatureDiagnostics {
 }
 
 export interface MountLinearRoutesOptions {
+  listProjectsWithStatus?: () => Promise<{
+    projects: Awaited<ReturnType<LinearIntegration['listProjects']>>;
+    workspaceErrors: Array<{ workspaceId: string; name: string }>;
+  }>;
+  listTeamsWithStatus?: () => Promise<{
+    teams: Awaited<ReturnType<LinearIntegration['listTeams']>>;
+    workspaceErrors: Array<{ workspaceId: string; name: string }>;
+  }>;
+  /** Platform connection inventory, including disconnected workspaces. Never contains tokens. */
+  listConnectionWorkspaces?: () => Promise<
+    Array<{ id: string; name: string; urlKey: string | null; connected: boolean }>
+  >;
   /**
    * The integration instance providing OAuth + GraphQL access. Required for
    * everything beyond the disabled `status` route.
@@ -248,6 +260,19 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
           });
         }
 
+        if (options.listConnectionWorkspaces) {
+          const workspaces = await options.listConnectionWorkspaces();
+          const active = workspaces.find(workspace => workspace.connected);
+          return c.json({
+            enabled: true,
+            connected: Boolean(active),
+            mode: 'platform',
+            workspace: active ? { name: active.name, urlKey: active.urlKey } : null,
+            workspaces,
+            reason: active ? 'ready' : 'not_connected',
+            diagnostics: diagnostics(),
+          });
+        }
         const connection = await linear.loadConnection(tenant.orgId);
         return c.json({
           enabled: true,
@@ -345,6 +370,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         try {
+          if (options.listProjectsWithStatus) return c.json(await options.listProjectsWithStatus());
           const accessToken = await linear.getFreshAccessToken(connection);
           const projects = await linear.listProjects(accessToken);
           return c.json({ projects });
@@ -370,6 +396,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         try {
+          if (options.listTeamsWithStatus) return c.json(await options.listTeamsWithStatus());
           const accessToken = await linear.getFreshAccessToken(connection);
           const teams = await linear.listTeams(accessToken);
           return c.json({ teams });

@@ -87,6 +87,7 @@ type LinearProject = {
 type LinearTeam = { id: string; key: string; name: string };
 type ProjectSource = { workspace: LinearWorkspace; project: LinearProject };
 type TeamSource = { workspace: LinearWorkspace; team: LinearTeam };
+type WorkspaceListingError = { workspaceId: string; name: string };
 type LinearWorkflowState = {
   id: string;
   name: string;
@@ -428,9 +429,46 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     return [
       this.#connectRoute(ctx),
+      this.#reconnectReturnRoute(ctx),
       ...buildLinearRoutes({
         auth: ctx.auth,
         linear: this as unknown as LinearIntegration,
+        listConnectionWorkspaces: async () => {
+          const result = await this.#client.request<{ workspaces: LinearWorkspace[] }>(
+            'GET',
+            `${API_PREFIX}/workspaces`,
+          );
+          return result.workspaces.map(workspace => ({
+            id: workspace.linearWorkspaceId,
+            name: workspace.linearWorkspaceName,
+            urlKey: workspace.urlKey,
+            connected: workspace.connected,
+          }));
+        },
+        listProjectsWithStatus: async () => {
+          const workspaceErrors: WorkspaceListingError[] = [];
+          const sources = await this.#listProjectSources(undefined, workspaceErrors);
+          return {
+            projects: sources.map(({ workspace, project }) => ({
+              ...project,
+              id: encodeSourceId(workspace.linearWorkspaceId, project.id),
+              workspaceId: workspace.linearWorkspaceId,
+            })),
+            workspaceErrors,
+          };
+        },
+        listTeamsWithStatus: async () => {
+          const workspaceErrors: WorkspaceListingError[] = [];
+          const sources = await this.#listTeamSources(undefined, workspaceErrors);
+          return {
+            teams: sources.map(({ workspace, team }) => ({
+              ...team,
+              sourceId: encodeTeamSourceId(workspace.linearWorkspaceId, team.id),
+              workspaceId: workspace.linearWorkspaceId,
+            })),
+            workspaceErrors,
+          };
+        },
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
@@ -451,16 +489,52 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         const tenant = ctx.auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
-        const returnTo = c.req.query('return_to') || '/';
+        const returnTo = localReturnPath(c.req.query('return_to'));
         const originator = routeBaseUrl(ctx, c.req.url);
+        const workspaceId = c.req.query('workspace_id');
+        let authorizationReturnTo = returnTo;
+        if (workspaceId) {
+          const result = await this.#client.request<{ workspaces: LinearWorkspace[] }>(
+            'GET',
+            `${API_PREFIX}/workspaces`,
+          );
+          if (!result.workspaces.some(workspace => workspace.linearWorkspaceId === workspaceId)) {
+            return c.json({ error: 'linear_workspace_not_found' }, 404);
+          }
+          // Platform owns OAuth. Verify the intended workspace after it returns;
+          // authorizing a different workspace must not claim to repair this one.
+          authorizationReturnTo = `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: workspaceId, return_to: returnTo })}`;
+        }
         logPlatformInfo('Starting Platform Linear connect flow', {
           orgId: tenant.orgId,
           returnTo,
           originator,
         });
-        const query = new URLSearchParams({ return_to: returnTo, originator });
+        const query = new URLSearchParams({ return_to: authorizationReturnTo, originator });
         const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
         return c.redirect(location);
+      },
+    });
+  }
+
+  #reconnectReturnRoute(ctx: IntegrationContext): ApiRoute {
+    return registerApiRoute('/auth/linear/reconnect-return', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        await ctx.auth.ensureUser(loose(c));
+        if (!ctx.auth.tenant(loose(c))?.orgId) return c.json({ error: 'unauthorized' }, 401);
+        const destination = new URL(localReturnPath(c.req.query('return_to')), 'https://factory.invalid');
+        const workspaceId = c.req.query('workspace_id');
+        try {
+          const workspaces = await this.#listWorkspaces();
+          const restored = workspaces.some(workspace => workspace.linearWorkspaceId === workspaceId);
+          destination.searchParams.set('linear_reconnect', restored ? 'connected' : 'not_connected');
+        } catch {
+          destination.searchParams.set('linear_reconnect', 'unavailable');
+        }
+        if (workspaceId) destination.searchParams.set('linear_workspace_id', workspaceId);
+        return c.redirect(`${destination.pathname}${destination.search}${destination.hash}`);
       },
     });
   }
@@ -534,12 +608,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     return source.kind === 'team' ? issue.teamId === source.teamId : issue.projectId === source.projectId;
   }
 
-  async #listProjectSources(workspaceIds?: ReadonlySet<string>): Promise<ProjectSource[]> {
+  async #listProjectSources(
+    workspaceIds?: ReadonlySet<string>,
+    errors?: WorkspaceListingError[],
+  ): Promise<ProjectSource[]> {
     const workspaces = await this.#listWorkspaces();
     const scopedWorkspaces = workspaceIds
       ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
       : workspaces;
-    const projectGroups = await Promise.all(
+    const projectGroups = await Promise.allSettled(
       scopedWorkspaces.map(async workspace => {
         const projects: LinearProject[] = [];
         let after: string | undefined;
@@ -559,15 +636,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         return projects.map(project => ({ workspace, project }));
       }),
     );
-    return projectGroups.flat();
+    return collectWorkspaceListings(scopedWorkspaces, projectGroups, errors);
   }
 
-  async #listTeamSources(workspaceIds?: ReadonlySet<string>): Promise<TeamSource[]> {
+  async #listTeamSources(workspaceIds?: ReadonlySet<string>, errors?: WorkspaceListingError[]): Promise<TeamSource[]> {
     const workspaces = await this.#listWorkspaces();
     const scopedWorkspaces = workspaceIds
       ? workspaces.filter(workspace => workspaceIds.has(workspace.linearWorkspaceId))
       : workspaces;
-    const teamGroups = await Promise.all(
+    const teamGroups = await Promise.allSettled(
       scopedWorkspaces.map(async workspace => {
         const teams: LinearTeam[] = [];
         let after: string | undefined;
@@ -587,7 +664,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         return teams.map(team => ({ workspace, team }));
       }),
     );
-    return teamGroups.flat();
+    return collectWorkspaceListings(scopedWorkspaces, teamGroups, errors);
   }
 
   async listWorkspaces(): Promise<LinearWorkspace[]> {
@@ -614,12 +691,18 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const teamWorkspaceIds = new Set(
       parsedSources.flatMap(source => (source.kind === 'team' ? [source.workspaceId] : [])),
     );
-    const [projectSources, teamSources] = await Promise.all([
+    const [projectsResult, teamsResult] = await Promise.allSettled([
       projectWorkspaceIds.size > 0
         ? this.#listProjectSources(projectWorkspaceIds)
         : Promise.resolve([] as ProjectSource[]),
       teamWorkspaceIds.size > 0 ? this.#listTeamSources(teamWorkspaceIds) : Promise.resolve([] as TeamSource[]),
     ]);
+    if (projectsResult.status === 'rejected' && (teamWorkspaceIds.size === 0 || teamsResult.status === 'rejected')) {
+      throw projectsResult.reason;
+    }
+    if (teamsResult.status === 'rejected' && projectWorkspaceIds.size === 0) throw teamsResult.reason;
+    const projectSources = projectsResult.status === 'fulfilled' ? projectsResult.value : [];
+    const teamSources = teamsResult.status === 'fulfilled' ? teamsResult.value : [];
     const projectMap = new Map(
       projectSources.map(source => [encodeSourceId(source.workspace.linearWorkspaceId, source.project.id), source]),
     );
@@ -674,7 +757,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const normalizedLabels = normalizeLabels(labels);
     const nextState: Record<string, string | null> = {};
     let hasNextPage = false;
-    const pages = await Promise.all(
+    const pages = await Promise.allSettled(
       descriptors.map(async ({ kind, sourceId, workspace, query }) => {
         if (cursors[sourceId] === null) {
           nextState[sourceId] = null;
@@ -705,7 +788,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }),
     );
     return {
-      issues: dedupeIssuesBySource(pages.flat(), sourceIds),
+      // A failed workspace is retried from the start on the next intake poll;
+      // successful workspaces can finish their own pagination in this cycle.
+      issues: dedupeIssuesBySource(
+        collectWorkspaceListings(
+          descriptors.map(source => source.workspace),
+          pages,
+        ),
+        sourceIds,
+      ),
       nextCursor: hasNextPage ? await encodeCursor(nextState, sourceIds, attributionSourceIds) : null,
     };
   }
@@ -1018,6 +1109,41 @@ function requireLinearConnection(connection: IntegrationConnection): void {
 
 function isNotFound(error: unknown): boolean {
   return error instanceof PlatformApiError && error.status === 404;
+}
+
+/** A provider outage in one workspace must not hide sources from the others. */
+function collectWorkspaceListings<T>(
+  workspaces: LinearWorkspace[],
+  results: PromiseSettledResult<T[]>[],
+  errors?: WorkspaceListingError[],
+): T[] {
+  const items: T[] = [];
+  let firstFailure: unknown;
+  let succeeded = false;
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'fulfilled') {
+      succeeded = true;
+      items.push(...result.value);
+      continue;
+    }
+    const workspace = workspaces[index]!;
+    firstFailure ??= result.reason;
+    errors?.push({ workspaceId: workspace.linearWorkspaceId, name: workspace.linearWorkspaceName });
+    logPlatformWarn('Platform Linear workspace sources could not be loaded; intake will retry.', {
+      workspaceId: workspace.linearWorkspaceId,
+    });
+  }
+  // Keep retry/backoff behavior when no workspace could be read. Browser
+  // listings receive explicit workspace errors, including a complete outage.
+  if (!errors && !succeeded && firstFailure) throw firstFailure;
+  return items;
+}
+
+/** OAuth may only return to a path on this Factory host. */
+function localReturnPath(value: string | undefined): string {
+  if (!value?.startsWith('/') || value.startsWith('//') || /[\\\r\n]/.test(value)) return '/';
+  const url = new URL(value, 'https://factory.invalid');
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function optionalPositiveIntegerEnv(name: string): number | undefined {

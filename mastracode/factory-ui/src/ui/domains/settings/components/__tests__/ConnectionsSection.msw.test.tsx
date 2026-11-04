@@ -9,6 +9,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/ren
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../../factory/services/platformConnect';
 import type { GithubStatus } from '../../../workspaces/services/github';
 import { ConnectionsSection } from '../ConnectionsSection';
+import { linearWorkspaceStatus } from './fixtures/linearConnections';
 
 const authCalls: Array<{ integrationId: string; options: Record<string, unknown> }> = [];
 vi.mock('@nangohq/frontend', () => {
@@ -109,6 +110,52 @@ function githubTokens(configured = false) {
 }
 
 describe('Connections settings', () => {
+  it('keeps a disconnected Linear workspace visible beside a healthy workspace and separates adding', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json(linearWorkspaceStatus)));
+    renderConnections();
+    expect(await screen.findByText('Mastra')).toBeInTheDocument();
+    expect(screen.getByText('Mastra Labs')).toBeInTheDocument();
+    expect(screen.getByText('Disconnected · Intake paused')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Reconnect Mastra Labs' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Manage Mastra Labs' }));
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        'This workspace is connected. Your saved intake sources and routing are kept when you reauthorize.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Reauthorize in Linear' })).toBeEnabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('button', { name: 'Add Linear workspace' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add connection' }));
+    expect(screen.getByRole('button', { name: 'Add Linear workspace' })).toBeEnabled();
+  });
+
+  it('keeps the last disconnected Linear workspace visible without opening Add connection', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({
+          ...linearWorkspaceStatus,
+          connected: false,
+          workspace: null,
+          workspaces: linearWorkspaceStatus.workspaces.filter(workspace => !workspace.connected),
+        }),
+      ),
+    );
+    renderConnections();
+    expect(await screen.findByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Connect Linear' })).not.toBeInTheDocument();
+  });
+
+  it('does not report a workspace repaired when authorization returned with another workspace', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json(linearWorkspaceStatus)));
+    renderConnections('/factories/fp-1/settings/connections?linear_reconnect=not_connected&linear_workspace_id=mastra');
+    expect(
+      await screen.findByText('This workspace is still disconnected. Choose Mastra when authorizing in Linear.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
+  });
   it.each([
     { status: 404, retryable: false },
     { status: 503, retryable: true },
@@ -323,7 +370,7 @@ describe('Connections settings', () => {
     expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 
-  it('shows the Linear workspace with its existing reconnect flow', async () => {
+  it('offers management for a healthy connection on older Linear servers', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({
@@ -336,7 +383,8 @@ describe('Connections settings', () => {
     );
     renderConnections();
     expect(await screen.findByText('Acme workspace')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reconnect Linear' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manage Acme workspace' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reconnect Linear' })).not.toBeInTheDocument();
   });
 
   it('preserves a failed token draft for retry, then removes the saved worker token', async () => {
