@@ -392,12 +392,9 @@ describe('durable snapshot write amplification (issue #20747)', () => {
     expect(growth).toBeLessThan(2.6);
   }, 120000);
 
-  // Durable agents keep new runs on storage v1 (`DurableAgent.storesRunsInJournal`)
-  // because of what this measures. At 16 steps, v2 writes 10.2 MB against v1's
-  // 25.3 MB with recovery `auto`, and 2.0 MB against 3.6 MB with suspend-only,
-  // but its largest single write with suspend-only is 155 kB against v1's
-  // 103 kB. That write is the agent's nested run pausing: its step entries
-  // keep four copies of the provider request body, 35 kB each, which v1 prunes.
+  // At 16 steps, v2 writes 4.2 MB against v1's 28.6 MB with recovery `auto`,
+  // and 1.2 MB against 4.1 MB with suspend-only. Its largest single write is
+  // 185 kB against 237 kB with `auto`, and 44 kB against 115 kB with suspend-only.
   it.each<Recovery>(['auto', 'suspend-only'])(
     'compares storage v1 and v2 writes with recovery %s',
     async recovery => {

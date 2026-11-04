@@ -2383,8 +2383,8 @@ export class DurableAgent<
    * Whether new runs of this agent's loop are stored as workflow storage
    * version 2 where the engine and store support it (see the workflow's
    * `autoStorageVersion` option). A resumed run stays in its stored version.
-   * Off until version 2 prunes what version 1 prunes: a paused v2 run's
-   * largest write is 1.5 times v1's (see snapshot-write-amplification.test.ts).
+   * Off until crash recovery and resume claims are tested on version 2: the
+   * restart harness and resume-claim-loser.test.ts still store runs in v1.
    * EventedAgent overrides this to `false`.
    * @internal
    */
