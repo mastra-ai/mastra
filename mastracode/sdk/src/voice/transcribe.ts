@@ -1,32 +1,19 @@
-/**
- * Cloud speech-to-text for an STT registry entry, shared by the TUI `/voice`
- * command and the Factory. Every provider goes through its `MastraVoice`
- * (`@mastra/voice-*`), loaded on first use rather than with every session.
- *
- * OAuth (Codex) tokens cannot call the transcription endpoints, so callers
- * must pass a real provider API key.
- */
+// OAuth (Codex) tokens cannot call the transcription endpoints, so callers pass a real provider API key.
 
 import { Readable } from 'node:stream';
+
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { ProviderConfig } from '@mastra/core/llm';
 
 import type { AuthStorage } from '../auth/storage.js';
 import type { STTModel } from './stt-registry.js';
 
-const STT_API_KEY_ENV_VARS: Record<string, string> = {
-  openai: 'OPENAI_API_KEY',
-  groq: 'GROQ_API_KEY',
-  alibaba: 'DASHSCOPE_API_KEY',
-  'alibaba-cn': 'DASHSCOPE_API_KEY',
-  scaleway: 'SCALEWAY_API_KEY',
-  nvidia: 'NVIDIA_API_KEY',
-  nearai: 'NEAR_AI_API_KEY',
-  evroc: 'EVROC_API_KEY',
-  deepgram: 'DEEPGRAM_API_KEY',
-  mistral: 'MISTRAL_API_KEY',
-};
+/** Deepgram is speech-to-text only, so the chat provider registry doesn't list it. */
+const STT_ONLY_API_KEY_ENV_VARS: Record<string, string> = { deepgram: 'DEEPGRAM_API_KEY' };
 
 export function sttApiKeyEnvVar(provider: string): string | undefined {
-  return STT_API_KEY_ENV_VARS[provider];
+  const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[provider]?.apiKeyEnvVar;
+  return STT_ONLY_API_KEY_ENV_VARS[provider] ?? (Array.isArray(envVars) ? envVars[0] : envVars);
 }
 
 /** The provider's env var wins, then the stored `/api-keys` credential. */
@@ -41,6 +28,7 @@ interface VoiceListener {
   listen(audioStream: NodeJS.ReadableStream, options?: Record<string, unknown>): Promise<unknown>;
 }
 
+// Each voice SDK loads on first dictation, not with every session.
 async function buildVoice(entry: STTModel, apiKey: string): Promise<VoiceListener> {
   if (entry.resolver === 'deepgram') {
     const { DeepgramVoice } = await import('@mastra/voice-deepgram');
