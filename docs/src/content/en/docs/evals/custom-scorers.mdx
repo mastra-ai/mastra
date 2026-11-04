@@ -396,6 +396,49 @@ ${JSON.stringify(run.output)}`,
 
 This matters most for [gates](/docs/evals/gates-and-verdicts), whose thresholds must be between 0 and 1 even though the judge's number is stored exactly as returned. A prompt that asks for a 1 to 10 score makes a failing `2` pass every threshold you're allowed to set. The gate then never fires.
 
+## Caching large judge input
+
+Many judge calls often share one large input, such as a report, and differ only in the question. Put the shared input in a system message with a cache setting and the question in `createPrompt`. The first call writes the cache, and later calls with the same output format read it.
+
+`judge.instructions` accepts the same forms as agent instructions, and a function receives the run's `requestContext`. This lets each run supply its own report:
+
+```typescript title="src/mastra/scorers/report-accuracy.ts"
+import { createScorer } from '@mastra/core/evals'
+
+export const reportAccuracy = createScorer({
+  id: 'report-accuracy',
+  description: 'Scores the accuracy of a report',
+  judge: {
+    model: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+    instructions: ({ requestContext }) => [
+      { role: 'system', content: 'Score the report from 0 to 1.' },
+      {
+        role: 'system',
+        content: `Report: ${requestContext.get('report')}`,
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      },
+    ],
+  },
+}).generateScore({
+  description: 'Score the accuracy of the report',
+  createPrompt: () => 'How accurate is the report?',
+})
+
+await reportAccuracy.run({
+  input: 'Summarize the quarter',
+  output: 'Revenue grew in every region',
+  requestContext: { report },
+})
+```
+
+Parallel judge calls can't read each other's cache writes. Run one call first, then start the rest.
+
+By default, each step with a different output format writes its own cache entry. To share one entry across `analyze`, `generateScore`, and `generateReason`, set `jsonPromptInjection: 'inline'` on the judge.
+
+Each judge stays on its own memory thread because Mastra removes reserved keys and `MastraMemory` from the run's context. Experiments and trace scoring run scorers without a request context. For those runs, set `judge.requestContext` on the scorer. Live scorers receive only string, number, and boolean values from the agent's request context, and nested values use dotted keys such as `report.title`.
+
+Mastra records the resolved instructions on each judge's agent span. Your traces store a copy of the report for every call.
+
 ## Example: Create a custom scorer
 
 A custom scorer in Mastra uses `createScorer` with four core components:

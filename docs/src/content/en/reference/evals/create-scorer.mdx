@@ -75,9 +75,17 @@ const scorer = createScorer({
           },
           {
             name: 'instructions',
-            type: 'string',
+            type: 'SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>',
             isOptional: false,
-            description: 'System prompt/instructions for the LLM.',
+            description:
+              'System instructions for the LLM. Can be a string, array of strings, system message object, array of system messages, or a function that returns any of these types.',
+          },
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            description:
+              "Values available to the judge's dynamic instructions, model, tools, and processors. Values from the run's `requestContext` override these values, except for reserved Mastra keys and `MastraMemory`, which the judge doesn't receive from the run. Only the scorer-level `judge` reads this option.",
           },
           {
             name: 'jsonPromptInjection',
