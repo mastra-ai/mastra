@@ -48,7 +48,7 @@ POSTHOG_API_KEY=phc_xxxxxxxxxxxxxxxx
 POSTHOG_HOST=https://us.i.posthog.com  # or eu.i.posthog.com for EU region
 ```
 
-#### Zero-Config Setup
+#### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -69,7 +69,7 @@ export const mastra = new Mastra({
 })
 ```
 
-#### Explicit Configuration
+#### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -96,7 +96,7 @@ export const mastra = new Mastra({
 
 ### Configuration options
 
-#### Complete Configuration
+#### Complete configuration
 
 ```typescript
 new PosthogExporter({
@@ -124,7 +124,7 @@ new PosthogExporter({
 })
 ```
 
-#### Serverless Mode
+#### Serverless mode
 
 Optimized batching for serverless environments:
 
@@ -135,7 +135,7 @@ new PosthogExporter({
 })
 ```
 
-#### Privacy Mode
+#### Privacy mode
 
 Exclude input/output data from generation events while preserving token metrics:
 

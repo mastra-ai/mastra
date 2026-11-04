@@ -29,7 +29,7 @@ One `microsoft-teams` connection provides both agent tools and agent chat. Sign 
 
 When you connect an agent, Mastra registers a bot for it in the Teams Developer Portal. Mastra stores the bot credential encrypted. Set `MASTRA_ENCRYPTION_KEY` to use a dedicated key. Without it, `channels()` derives a key from the platform access token and logs a warning. If you then rotate the platform access token, Mastra can't read the stored bot credentials. Disconnect and reconnect the channel to create new ones.
 
-Your server needs a public URL that Teams can reach for webhook delivery and OAuth callbacks. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development, use a public HTTPS tunnel.
+Your server needs a public URL for Teams webhooks and OAuth callbacks. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development, use a public HTTPS tunnel.
 
 1. If you haven't added the connection yet, run `mastra connect add microsoft-teams` and sign in.
 
