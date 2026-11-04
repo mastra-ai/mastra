@@ -215,6 +215,22 @@ describe('PlatformMemoryClient', () => {
     }
   });
 
+  it('uses the Platform-injected MASTRA_MEMORY_SERVICE_URL when MASTRA_MEMORY_API_URL is unset', () => {
+    process.env.MASTRA_MEMORY_SERVICE_URL = 'http://injected.local/';
+    try {
+      expect(new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' }).mcpUrl).toBe(
+        'http://injected.local/v1/memory/mem_1/mcp',
+      );
+      process.env.MASTRA_MEMORY_API_URL = 'https://api.example/';
+      expect(new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' }).mcpUrl).toBe(
+        'https://api.example/v1/memory/mem_1/mcp',
+      );
+    } finally {
+      delete process.env.MASTRA_MEMORY_SERVICE_URL;
+      delete process.env.MASTRA_MEMORY_API_URL;
+    }
+  });
+
   it('defaults to the hosted Memory API', () => {
     const client = new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' });
     expect(client.mcpUrl).toBe('https://memory-api.mastra.ai/v1/memory/mem_1/mcp');

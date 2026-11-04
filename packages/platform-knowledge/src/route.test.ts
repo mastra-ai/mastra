@@ -50,9 +50,13 @@ it('defaults to the hosted Knowledge API and accepts an env or explicit URL over
     return new Response(JSON.stringify({ result: { pages: [] } }), { headers: { 'content-type': 'application/json' } });
   });
   const previousUrl = process.env.MASTRA_KNOWLEDGE_API_URL;
+  const previousServiceUrl = process.env.MASTRA_KNOWLEDGE_SERVICE_URL;
   try {
     delete process.env.MASTRA_KNOWLEDGE_API_URL;
+    delete process.env.MASTRA_KNOWLEDGE_SERVICE_URL;
     const options = { instanceId: 'kn_1', accessToken: 'token' };
+    await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
+    process.env.MASTRA_KNOWLEDGE_SERVICE_URL = 'http://injected.local/';
     await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
     process.env.MASTRA_KNOWLEDGE_API_URL = 'http://localhost:3062/';
     await (await new PlatformKnowledge(options).getStorage()).listPages({ read: 'all' });
@@ -62,10 +66,13 @@ it('defaults to the hosted Knowledge API and accepts an env or explicit URL over
   } finally {
     if (previousUrl === undefined) delete process.env.MASTRA_KNOWLEDGE_API_URL;
     else process.env.MASTRA_KNOWLEDGE_API_URL = previousUrl;
+    if (previousServiceUrl === undefined) delete process.env.MASTRA_KNOWLEDGE_SERVICE_URL;
+    else process.env.MASTRA_KNOWLEDGE_SERVICE_URL = previousServiceUrl;
     fetchSpy.mockRestore();
   }
   expect(urls).toEqual([
     'https://knowledge-api.mastra.ai/v1/knowledge/kn_1/operations/listPages',
+    'http://injected.local/v1/knowledge/kn_1/operations/listPages',
     'http://localhost:3062/v1/knowledge/kn_1/operations/listPages',
     'http://localhost:8080/v1/knowledge/kn_1/operations/listPages',
   ]);
