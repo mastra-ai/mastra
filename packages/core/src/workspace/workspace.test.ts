@@ -2976,6 +2976,19 @@ Line 3 conclusion`;
       expect(resolved!.provider).toBe('local');
     });
 
+    it('retries the filesystem resolver after a failure in the same request', async () => {
+      const fsInstance = new LocalFilesystem({ basePath: tempDir });
+      const resolver = vi.fn().mockRejectedValueOnce(new Error('temporary outage')).mockResolvedValue(fsInstance);
+      const workspace = new Workspace({ filesystem: resolver });
+      const ctx = new RequestContext();
+
+      await expect(workspace.resolveFilesystem({ requestContext: ctx })).rejects.toThrow('temporary outage');
+      await expect(workspace.resolveFilesystem({ requestContext: ctx })).resolves.toBe(fsInstance);
+      // Successful results are still memoized per request.
+      await workspace.resolveFilesystem({ requestContext: ctx });
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
     it('should fall back to static filesystem in resolveFilesystem', async () => {
       const staticFs = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem: staticFs });
