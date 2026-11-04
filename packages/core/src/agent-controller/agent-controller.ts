@@ -1869,10 +1869,10 @@ export class AgentController<TState = {}> {
   /**
    * Get available models from the configured gateways with use counts applied.
    *
-   * Remote catalogs (models.dev, Netlify) are refreshed in the background every
-   * few minutes and their last good result is served meanwhile. Configured
-   * gateways and auth are checked again after a few seconds, or on the next
-   * call after {@link invalidateAvailableModelsCache}.
+   * Remote catalogs (models.dev, Netlify) are served from their last good
+   * download and refreshed in the background once it is a few minutes old.
+   * Configured gateways and auth are checked again after a few seconds, or on
+   * the next call after {@link invalidateAvailableModelsCache}.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
     const catalog = await this.#modelCatalog.list();

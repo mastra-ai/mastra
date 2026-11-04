@@ -6,13 +6,13 @@ import type { GatewayManager, GatewayModel, MastraModelGatewayInterface, Provide
  * app changes at runtime (stored credentials, custom providers), so this stays
  * short.
  */
-export const MODEL_CATALOG_TTL_MS = 10_000;
+const MODEL_CATALOG_TTL_MS = 10_000;
 
-/** How often remote catalogs (models.dev, Netlify, ...) are refreshed in the background. */
-export const REMOTE_CATALOG_REFRESH_MS = 5 * 60_000;
+/** How long a downloaded remote catalog (models.dev, Netlify, ...) is served before a call refreshes it in the background. */
+const REMOTE_CATALOG_REFRESH_MS = 5 * 60_000;
 
 /** After a remote catalog fails, how long its last known providers are served before the next try. */
-export const REMOTE_CATALOG_RETRY_MS = 60_000;
+const REMOTE_CATALOG_RETRY_MS = 60_000;
 
 type Providers = Record<string, ProviderConfig>;
 
@@ -22,13 +22,19 @@ interface RemoteSnapshot {
   nextFetchAt: number;
 }
 
+interface BuiltCatalog {
+  models: GatewayModel[];
+  builtAt: number;
+  remoteVersion: number;
+}
+
 /**
  * Model catalog cache with two refresh speeds.
  *
- * Remote gateways download public catalogs (models.dev's is ~6 MB), so they
- * are refreshed in the background while their last good result keeps being
- * served, including when a refresh fails. Only the very first build waits for
- * them.
+ * Remote gateways download public catalogs (models.dev's is ~6 MB). Once a
+ * downloaded catalog is older than {@link REMOTE_CATALOG_REFRESH_MS}, the next
+ * call refreshes it in the background and keeps serving the last good result,
+ * including when the refresh fails. Only the very first build waits for them.
  *
  * Everything else (configured gateways and per-provider auth) is rebuilt at
  * most every {@link MODEL_CATALOG_TTL_MS}, or on the next call after
@@ -40,13 +46,9 @@ export class ModelCatalogCache {
   readonly #manager: GatewayManager;
   readonly #isRemote: (gateway: MastraModelGatewayInterface) => boolean;
   readonly #remote = new Map<MastraModelGatewayInterface, RemoteSnapshot>();
-  /** Last successful result of each configured gateway, served when it fails. */
-  readonly #local = new Map<MastraModelGatewayInterface, Providers>();
   #remoteVersion = 0;
   #remoteRefresh: Promise<void> | undefined;
-  #models: GatewayModel[] | undefined;
-  #modelsBuiltAt = 0;
-  #modelsRemoteVersion = -1;
+  #built: BuiltCatalog | undefined;
   #build: Promise<GatewayModel[]> | undefined;
   /** Bumped by {@link invalidate} so builds started before it are not kept. */
   #generation = 0;
@@ -57,14 +59,13 @@ export class ModelCatalogCache {
   }
 
   async list(): Promise<GatewayModel[]> {
-    if (this.#isRemoteRefreshDue()) {
+    if (this.#dueRemoteGateways().length > 0) {
       this.#refreshRemote().catch(() => {});
     }
-    const fresh =
-      this.#models !== undefined &&
-      this.#modelsRemoteVersion === this.#remoteVersion &&
-      Date.now() - this.#modelsBuiltAt < MODEL_CATALOG_TTL_MS;
-    if (fresh) return this.#models!;
+    const built = this.#built;
+    if (built && built.remoteVersion === this.#remoteVersion && Date.now() - built.builtAt < MODEL_CATALOG_TTL_MS) {
+      return built.models;
+    }
     return this.#rebuild();
   }
 
@@ -75,7 +76,7 @@ export class ModelCatalogCache {
    */
   invalidate(): void {
     this.#generation += 1;
-    this.#models = undefined;
+    this.#built = undefined;
     this.#build = undefined;
   }
 
@@ -98,35 +99,23 @@ export class ModelCatalogCache {
       remoteNeverFetched ? this.#refreshRemote() : undefined,
     ]);
 
-    const localProviders = new Map(
-      local.map((gateway, index) => [gateway, localResults[index] ?? this.#local.get(gateway) ?? {}] as const),
-    );
+    const localProviders = new Map(local.map((gateway, index) => [gateway, localResults[index]] as const));
     const remoteVersion = this.#remoteVersion;
     const registry = this.#manager.mergeProviders(
       gateways.map(gateway => ({
         gateway,
-        providers: this.#isRemote(gateway)
-          ? (this.#remote.get(gateway)?.providers ?? {})
-          : (localProviders.get(gateway) ?? {}),
+        providers: (this.#isRemote(gateway) ? this.#remote.get(gateway)?.providers : localProviders.get(gateway)) ?? {},
       })),
     );
     const models = await this.#manager.listModelsForProviders(registry);
 
-    if (generation === this.#generation) {
-      local.forEach((gateway, index) => {
-        const providers = localResults[index];
-        if (providers) this.#local.set(gateway, providers);
-      });
-      this.#models = models;
-      this.#modelsBuiltAt = Date.now();
-      this.#modelsRemoteVersion = remoteVersion;
-    }
+    if (generation === this.#generation) this.#built = { models, builtAt: Date.now(), remoteVersion };
     return models;
   }
 
-  #isRemoteRefreshDue(): boolean {
+  #dueRemoteGateways(): MastraModelGatewayInterface[] {
     const now = Date.now();
-    return this.#manager.gateways.some(
+    return this.#manager.gateways.filter(
       gateway => this.#isRemote(gateway) && (this.#remote.get(gateway)?.nextFetchAt ?? 0) <= now,
     );
   }
@@ -139,10 +128,7 @@ export class ModelCatalogCache {
   }
 
   async #fetchRemote(): Promise<void> {
-    const now = Date.now();
-    const due = this.#manager.gateways.filter(
-      gateway => this.#isRemote(gateway) && (this.#remote.get(gateway)?.nextFetchAt ?? 0) <= now,
-    );
+    const due = this.#dueRemoteGateways();
     if (due.length === 0) return;
 
     const results = await Promise.all(due.map(gateway => this.#manager.fetchGatewayProviders(gateway)));
@@ -153,7 +139,6 @@ export class ModelCatalogCache {
       if (providers) {
         this.#remote.set(gateway, { providers, nextFetchAt: fetchedAt + REMOTE_CATALOG_REFRESH_MS });
       } else if (previous) {
-        // Keep serving the last good catalog rather than dropping its providers.
         this.#remote.set(gateway, { providers: previous, nextFetchAt: fetchedAt + REMOTE_CATALOG_RETRY_MS });
       } else {
         // Nothing to fall back on yet: retry at the normal catalog cadence.
