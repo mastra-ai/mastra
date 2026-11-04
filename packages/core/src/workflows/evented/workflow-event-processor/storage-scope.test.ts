@@ -25,7 +25,7 @@ function recordingPubSub() {
 const stepEnd = (data: Record<string, any>) => ({ type: 'workflow.step.end', runId: 'r', data });
 
 describe('storage scope on storage v2', () => {
-  it('sends a step message without earlier step results, and its state as a patch on the stored state', async () => {
+  it('sends a step message without step results, and its state as a patch on the stored state', async () => {
     const { pubsub, published } = recordingPubSub();
     await runInStorageScope(2, async () => {
       hydrateEventData('workflow.step.run', { runId: 'r' }, stored({ input: {}, a: ok('big') }, { n: 1, keep: true }));
@@ -42,10 +42,40 @@ describe('storage scope on storage v2', () => {
 
     expect(published[0]!.event.data).toEqual({
       runId: 'r',
-      stepResults: { input: { x: 1 } },
       prevResult: ok('b'),
       statePatch: [{ op: 'set', path: ['n'], value: 2 }],
       storageVersion: 2,
+    });
+  });
+
+  it("sends a nested run's parent descriptors without the parents' step results, and its input only to its start", async () => {
+    const { pubsub, published } = recordingPubSub();
+    const grandparent = { workflowId: 'g', runId: 'gr', executionPath: [0], stepResults: { a: ok(1) }, input: ok(2) };
+    const parent = { workflowId: 'p', runId: 'pr', executionPath: [1], stepResults: { b: ok(3) }, input: ok(4) };
+    const descriptor = { ...parent, parentWorkflow: grandparent };
+    await runInStorageScope(2, async () => {
+      await pubsub.publish('workflows', {
+        type: 'workflow.start',
+        runId: 'r',
+        data: { runId: 'r', parentWorkflow: descriptor },
+      });
+      await pubsub.publish('workflows', stepEnd({ runId: 'r', parentWorkflow: descriptor, parentContext: descriptor }));
+    });
+
+    const withoutResults = { workflowId: 'p', runId: 'pr', executionPath: [1] };
+    const grandparentWithoutResults = { workflowId: 'g', runId: 'gr', executionPath: [0] };
+    expect(published[0]!.event.data.parentWorkflow).toEqual({
+      ...withoutResults,
+      input: ok(4),
+      parentWorkflow: grandparentWithoutResults,
+    });
+    expect(published[1]!.event.data.parentWorkflow).toEqual({
+      ...withoutResults,
+      parentWorkflow: grandparentWithoutResults,
+    });
+    expect(published[1]!.event.data.parentContext).toEqual({
+      ...withoutResults,
+      parentWorkflow: grandparentWithoutResults,
     });
   });
 

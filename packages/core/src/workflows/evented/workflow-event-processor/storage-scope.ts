@@ -80,16 +80,13 @@ export function hydrateEventData(
 }
 
 /**
- * A step message's data without what the next dispatch loads: step results other than `input`,
- * and the state, which becomes a patch on the run's stored state. Another run's state (a nested
- * run handing back to its parent) is sent whole.
+ * A step message's data without what the next dispatch loads: the step results, and the state,
+ * which becomes a patch on the run's stored state. Another run's state (a nested run handing back
+ * to its parent) is sent whole.
  */
 function trimStepEventData(data: Record<string, any>, scope: StorageScope): Record<string, any> {
   const { state, stepResults, prevResult, ...rest } = data;
   const trimmed: Record<string, any> = rest;
-  if (stepResults) {
-    trimmed.stepResults = 'input' in stepResults ? { input: stepResults.input } : {};
-  }
 
   const base = scope.bases.get(data.runId);
   if (!base) {
@@ -111,10 +108,29 @@ function trimStepEventData(data: Record<string, any>, scope: StorageScope): Reco
   return trimmed;
 }
 
+/**
+ * A nested run's parent (or ancestor) descriptor without the parent's step results, which its
+ * dispatches load, and without the nested step's input unless `keepInput`: the nested run's start
+ * stores that input as the step's payload in the parent.
+ */
+function trimParent(parent: Record<string, any>, keepInput: boolean): Record<string, any> {
+  const { stepResults: _stepResults, input, parentWorkflow, ...rest } = parent;
+  return {
+    ...rest,
+    ...(keepInput && { input }),
+    ...(parentWorkflow && { parentWorkflow: trimParent(parentWorkflow, false) }),
+  };
+}
+
+/** Events that start a nested run, whose start needs its parent descriptor's `input`. */
+const NESTED_START_EVENTS = new Set(['workflow.start', 'workflow.resume']);
+
 function scopedEvent(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id' | 'createdAt'> {
   const scope = scopes.getStore();
   if (topic !== 'workflows' || scope?.storageVersion !== 2 || !event.data) return event;
-  const data = TRIMMED_EVENTS.has(event.type) ? trimStepEventData(event.data, scope) : event.data;
+  const data = TRIMMED_EVENTS.has(event.type) ? trimStepEventData(event.data, scope) : { ...event.data };
+  if (data.parentWorkflow) data.parentWorkflow = trimParent(data.parentWorkflow, NESTED_START_EVENTS.has(event.type));
+  if (data.parentContext) data.parentContext = trimParent(data.parentContext, false);
   return { ...event, data: { ...data, storageVersion: 2 } };
 }
 

@@ -98,7 +98,8 @@ export type ParentWorkflow = {
   runId: string;
   executionPath: number[];
   resume: boolean;
-  stepResults: Record<string, StepResult<any, any, any, any>>;
+  /** Not carried on storage v2: the parent's dispatches load its step results. */
+  stepResults?: Record<string, StepResult<any, any, any, any>>;
   parentWorkflow?: ParentWorkflow;
   timeTravel?: TimeTravelExecutionParams;
   restart?: RestartExecutionParams;
@@ -984,7 +985,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (liveParentWorkflow && step?.type === 'loop') {
         // The nested run's final state replaces the parent's: the parent's
         // `__state` predates this iteration and would win over `state`.
-        const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: finalState };
+        // (On storage v2 the descriptor doesn't carry the parent's step results.)
+        const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
+        const parentSteps = parentWorkflow.stepResults ?? (await parentStorage.loadFull())?.context;
+        const loopStepResults: Record<string, any> = { ...parentSteps, __state: finalState };
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
         await processWorkflowLoop(
           {
@@ -1005,7 +1009,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
           {
             pubsub: this.#pubsub,
-            runStorage: this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId),
+            runStorage: parentStorage,
             stepExecutor: this.stepExecutor,
             step,
             stepResult: prevResult,
@@ -3029,7 +3033,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (parentContext) {
         prevResult = stepResults[stepId] = {
           ...prevResult,
-          payload: parentContext.input?.output ?? {},
+          // On storage v2 the descriptor doesn't carry the input: the nested run's start stored it.
+          payload: (parentContext.input ? parentContext.input.output : stepResults[stepId]?.payload) ?? {},
           // Store nestedRunId in metadata for getWorkflowRunById retrieval
           ...(nestedRunId && {
             metadata: {

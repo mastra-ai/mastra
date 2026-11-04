@@ -89,11 +89,11 @@ describe('evented step messages on storage v2', () => {
     expect((v1.result as any).result).toEqual(expected);
     expect((v2.result as any).result).toEqual(expected);
 
-    // Step messages carry only the run's input of the step results, and the state as a patch.
+    // Step messages carry no step results, and the state only as a patch.
     const isStep = (m: { type: string }) => m.type === 'workflow.step.run' || m.type === 'workflow.step.end';
     for (const message of v2.messages.filter(isStep)) {
       const data = JSON.parse(message.data);
-      expect(Object.keys(data.stepResults ?? {}).filter(id => id !== 'input')).toEqual([]);
+      expect(data).not.toHaveProperty('stepResults');
       expect(data).not.toHaveProperty('state');
       expect(data.prevResult ?? {}).not.toHaveProperty('__state');
     }
@@ -246,6 +246,144 @@ describe('evented step messages on storage v2', () => {
     const { result } = await runWorkflow(workflow);
     expect(result.status).toBe('success');
     expect(counts).toEqual([1, 2, 3]);
+  });
+
+  // A nested run's messages leave out its parent's step results and the nested step's input on v2:
+  // the parent's dispatches load them, and the nested run's start stores the input as the step's payload.
+  it.each([1, 2] as const)("leave a nested run's parent's results out of its messages (v%i)", async storageVersion => {
+    const big = createStep({
+      id: 'big',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async () => ({ big: BIG }),
+    });
+    const flag = (id: string) =>
+      createStep({
+        id,
+        inputSchema: looseObject,
+        outputSchema: looseObject,
+        execute: async ({ setState }) => {
+          await setState({ [id]: true });
+          return { [id]: true };
+        },
+      });
+    const inner = createWorkflow({
+      id: `inner-v${storageVersion}`,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      stateSchema: looseObject,
+      options: { storageVersion },
+    })
+      .then(flag('a'))
+      .then(flag('b'))
+      .commit();
+    const last = createStep({
+      id: 'last',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ inputData, getState }) => ({ inner: inputData, state: await getState() }),
+    });
+    const workflow = createWorkflow({
+      id: `nested-v${storageVersion}`,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      stateSchema: looseObject,
+      options: { storageVersion },
+    })
+      .then(big)
+      .then(inner)
+      .then(last)
+      .commit();
+
+    const { result, messages } = await runWorkflow(workflow);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ inner: { b: true }, state: { a: true, b: true } });
+    expect(result.steps[inner.id].payload).toEqual({ big: BIG });
+
+    if (storageVersion === 2) {
+      const innerSteps = messages
+        .map(m => ({ type: m.type, data: JSON.parse(m.data) }))
+        .filter(m => m.type.startsWith('workflow.step.') && m.data.parentWorkflow?.workflowId === workflow.id);
+      expect(innerSteps.length).toBeGreaterThan(0);
+      for (const { data } of innerSteps) {
+        expect(JSON.stringify(data.parentWorkflow)).not.toContain(BIG);
+      }
+    }
+  });
+
+  // A loop hands each iteration's nested run back without its parent's step results on v2: it loads them.
+  it.each([1, 2] as const)('loop over a nested workflow (v%i)', async storageVersion => {
+    const inc = createStep({
+      id: 'inc',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ inputData }) => ({ n: ((inputData as { n?: number }).n ?? 0) + 1 }),
+    });
+    const inner = createWorkflow({
+      id: `loop-body-v${storageVersion}`,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion },
+    })
+      .then(inc)
+      .commit();
+    const counts: number[] = [];
+    const workflow = createWorkflow({
+      id: `nested-loop-v${storageVersion}`,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion },
+    })
+      .dountil(inner, async ({ inputData, iterationCount }) => {
+        counts.push(iterationCount);
+        return (inputData as { n: number }).n >= 3 || counts.length >= 5;
+      })
+      .commit();
+
+    const { result } = await runWorkflow(workflow);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ n: 3 });
+    expect(counts).toEqual([1, 2, 3]);
+    expect(result.steps[inner.id].payload).toEqual({ n: 2 });
+  });
+
+  // Each iteration's hand-back takes the nested step's payload from the stored foreach result on v2.
+  it.each([1, 2] as const)('run a foreach over a nested workflow (v%i)', async storageVersion => {
+    const inc = createStep({
+      id: 'inc',
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      execute: async ({ inputData }) => ({ n: (inputData as { n: number }).n + 1 }),
+    });
+    const inner = createWorkflow({
+      id: `foreach-body-v${storageVersion}`,
+      inputSchema: looseObject,
+      outputSchema: looseObject,
+      options: { storageVersion },
+    })
+      .then(inc)
+      .commit();
+    const items = [{ n: 1 }, { n: 10 }, { n: 100 }];
+    const list = createStep({
+      id: 'list',
+      inputSchema: looseObject,
+      outputSchema: z.array(looseObject),
+      execute: async () => items,
+    });
+    const workflow = createWorkflow({
+      id: `nested-foreach-v${storageVersion}`,
+      inputSchema: looseObject,
+      outputSchema: z.array(looseObject),
+      options: { storageVersion },
+    })
+      .then(list)
+      .foreach(inner, { concurrency: 2 })
+      .commit();
+
+    const { result } = await runWorkflow(workflow);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual([{ n: 2 }, { n: 11 }, { n: 101 }]);
+    expect(result.steps[inner.id].payload).toEqual(items);
   });
 
   // A branch's write returns only its own result on v2, so it loads its siblings' as of its write:
