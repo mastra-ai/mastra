@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
-import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
+import { createMastraCodeWorkspaceTools } from '@mastra/code-sdk/agents/tool-availability';
 import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
@@ -66,6 +66,9 @@ import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
+/** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
+export const FACTORY_PLANS_DIR = '.artifacts/plans';
+const FACTORY_WORKSPACE_TOOLS = createMastraCodeWorkspaceTools(false, FACTORY_PLANS_DIR);
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
 export const BUNDLED_FACTORY_SKILLS_PATH =
@@ -1299,7 +1302,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
-      existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+      existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       // Likewise when the project's skill-override revision moves: a save or revert
@@ -1696,7 +1699,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
       sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: MASTRACODE_WORKSPACE_TOOLS,
+      tools: FACTORY_WORKSPACE_TOOLS,
       skills: skillPaths,
       // Project skill roots live in the sandbox checkout; guard them so skill
       // discovery before materialization (e.g. kickoff skill resolution in the

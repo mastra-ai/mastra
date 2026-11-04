@@ -53,6 +53,7 @@ import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
+import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -168,7 +169,7 @@ import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
-import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
+import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -499,6 +500,9 @@ export class MastraFactory {
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
+  /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
+  readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
+  #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -662,6 +666,17 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    // The dispatcher sleeps while idle. It wakes itself on this replica's writes
+    // that leave claimable work; the bus carries those wakes to other replicas.
+    workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
+    this.#unsubscribeDispatchWakes = subscribeDispatchWakes(eventBus, this.#dispatchWakeOrigin, () =>
+      this.#dispatcher?.wake(),
+    ).catch(error => {
+      console.warn(
+        `[factory] subscribing to dispatcher wakes failed; other replicas' work waits for this replica's own wakes: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    });
     workItemsStorage.useTerminalPhasePredicate(item =>
       isTerminalWorkItem(this.#projectBoards?.forProject(item) ?? this.#boards, item),
     );
@@ -1294,6 +1309,7 @@ export class MastraFactory {
           boards: boards,
           loadMemorySettings,
           defaultThinkingLevel: resolveDefaultThinkingLevel,
+          onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1371,6 +1387,8 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // User sessions carry no `factoryProjectId` to select this per session.
+        plansDir: FACTORY_PLANS_DIR,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
@@ -2195,6 +2213,15 @@ export class MastraFactory {
     const channelShutdowns = this.#channelShutdowns;
     this.#channelShutdowns = [];
     const shutdownPromise = (async () => {
+      const unsubscribeDispatchWakes = this.#unsubscribeDispatchWakes;
+      this.#unsubscribeDispatchWakes = undefined;
+      await unsubscribeDispatchWakes
+        ?.then(unsubscribe => unsubscribe?.())
+        .catch(error =>
+          console.warn(
+            `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
+          ),
+        );
       const results = await Promise.allSettled([
         this.#dispatcher?.stop() ?? Promise.resolve(),
         ...channelShutdowns.map(async shutdown => shutdown()),

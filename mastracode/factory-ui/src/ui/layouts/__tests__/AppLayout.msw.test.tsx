@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { useSidebarHeaderSlots } from '../../domains/chat/components/useSidebarHeaderSlots';
@@ -18,7 +19,7 @@ function stubFactory() {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory', repositories: [] }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory' } }),
@@ -36,19 +37,14 @@ function stubFactory() {
 
 function stubRepository() {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
+            id: FACTORY_ID,
+            name: 'Acme Factory',
             repositories: [
-              {
-                id: 'repo-1',
-                branch: 'main',
-                sandboxWorkdir: '/workspace/acme',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
+              listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
             ],
           },
         ],
