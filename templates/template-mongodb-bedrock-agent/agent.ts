@@ -13,11 +13,8 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { mastra } from './src/mastra/index.js';
 
-// Keep the runtime (and its /ping health check) alive through transient backend
-// errors — e.g. a brief MongoDB blip during startup init. Individual invocations
-// still surface their own errors via the 500 response below.
+// Log asynchronous backend rejections; invocation failures return HTTP 500 below.
 process.on('unhandledRejection', err => console.error('[unhandledRejection]', err));
-process.on('uncaughtException', err => console.error('[uncaughtException]', err));
 
 const PORT = Number(process.env.PORT ?? 8080);
 const SESSION_HEADER = 'x-amzn-bedrock-agentcore-runtime-session-id';
