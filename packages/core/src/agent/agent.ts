@@ -10250,27 +10250,43 @@ export class Agent<
     toolCallId: string;
     toolName: string;
     status: 'completed' | 'failed';
+    /** The dispatching run's request context, so a woken run resolves model, instructions and memory as it did. */
+    requestContext?: RequestContext;
   }): Promise<void> {
     const { threadId, resourceId, taskId, toolCallId, toolName, status } = params;
     if (this.#mastra?.backgroundTaskManager?.config.notifyAgentOnFinish === false) return;
     if (this.__untilIdleHandlesBackgroundTask(threadId, resourceId, taskId)) return;
     const outcome = status === 'completed' ? 'completed' : 'failed';
+    // A copy, so later writes by the finished run don't reach the woken one.
+    const requestContext = params.requestContext ? new RequestContext(params.requestContext.entries()) : undefined;
+    const ifIdleStreamOptions = requestContext ? { streamOptions: { requestContext } } : {};
+    const signal: AgentSignal = {
+      type: 'notification',
+      tagName: 'background-task',
+      contents:
+        `Background task ${taskId} for tool call ${toolCallId} (${toolName}) has ${outcome}. ` +
+        `It ran as a background task: when called, the tool returned only a placeholder with the task id, and ` +
+        `that placeholder has now been replaced with the task's ${status === 'completed' ? 'result' : 'error'}. ` +
+        `Earlier messages saying it was running, and the task id they quoted, were correct; don't correct them. ` +
+        `Tell the user the outcome. Do not call the tool again for it.`,
+      attributes: { taskId, toolCallId, toolName, status },
+    };
     try {
-      const result = this.sendSignal(
-        {
-          type: 'notification',
-          tagName: 'background-task',
-          contents:
-            `Background task ${taskId} for tool call ${toolCallId} (${toolName}) has ${outcome}. ` +
-            `It ran as a background task: when called, the tool returned only a placeholder with the task id, and ` +
-            `that placeholder has now been replaced with the task's ${status === 'completed' ? 'result' : 'error'}. ` +
-            `Earlier messages saying it was running, and the task id they quoted, were correct; don't correct them. ` +
-            `Tell the user the outcome. Do not call the tool again for it.`,
-          attributes: { taskId, toolCallId, toolName, status },
-        },
-        { threadId, resourceId, ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
-      );
-      await result.accepted;
+      const result = this.sendSignal<unknown>(signal, {
+        threadId,
+        resourceId,
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'wake', ...ifIdleStreamOptions },
+      });
+      const accepted = await result.accepted;
+      // Another agent's run holds the thread (e.g. waiting for approval, or in another
+      // process). Queue the notice so it starts this agent's run once that run ends.
+      if (accepted.action === 'blocked' && accepted.reason === 'thread-blocked') {
+        await this.queueSignal<unknown>(
+          { ...signal, id: result.signal.id },
+          { threadId, resourceId, ...(requestContext ? { ifIdle: { streamOptions: { requestContext } } } : {}) },
+        ).accepted;
+      }
     } catch (error) {
       this.logger.warn('Could not notify the agent that a background task finished', {
         taskId,

@@ -509,7 +509,8 @@ export async function runIdleLoop<
     }
     aborting = true;
     // The caller stopped waiting, so a task this stream was waiting for must not wake the agent later.
-    if (runningTaskIds.size > 0) {
+    // A newer wrapper closing this one isn't a caller stop: it adopts the tasks, or the wake reports them.
+    if (reason === undefined && runningTaskIds.size > 0) {
       let stopped = callerStoppedTasks.get(deps.activeStreams);
       if (!stopped) callerStoppedTasks.set(deps.activeStreams, (stopped = new Set()));
       for (const taskId of runningTaskIds) stopped.add(taskId);
