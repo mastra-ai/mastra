@@ -42,6 +42,9 @@ const parsed = (run: WorkflowRun) =>
 // Runs are listed by createdAt, which v2 writes take from the clock.
 const tick = () => new Promise(resolve => setTimeout(resolve, 5));
 
+// A stored run's opaque identity, which the store picks.
+const token = expect.any(String);
+
 /**
  * Conformance cases for storage v2 runs (`storageVersion: 2`), stored as a header plus
  * append-only entries. Skipped for adapters whose `supportsRunJournal()` is false.
@@ -111,6 +114,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(stored).toEqual({
           header,
           lastSeq: 4,
+          runToken: token,
           startStateSeq: 4,
           state: value,
           statePatchBytes: 0,
@@ -121,6 +125,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toEqual({
           header,
           lastSeq: 4,
+          runToken: stored!.runToken,
           startStateSeq: 4,
         });
         expect(await load(id)).toEqual(snapshot);
@@ -213,6 +218,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await loadRun(id)).toEqual({
           header: makeHeader(id),
           lastSeq: 1,
+          runToken: token,
           startStateSeq: 0,
           state: {},
           statePatchBytes: 0,
@@ -222,12 +228,18 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await store.getWorkflowRunById({ workflowName, runId: id }))!.resourceId).toBe('res');
       });
 
-      it('returns the last seq of each write', async () => {
+      it('returns the last seq of each write, and a run token that changes only when the run is recreated', async () => {
         const id = runId();
         const header = makeHeader(id);
-        expect(
-          await store.writeWorkflowRunCheckpoint({ workflowName, runId: id, header, steps: { a: ok(1) }, state: {} }),
-        ).toEqual({ lastSeq: 2 });
+        const first = await store.writeWorkflowRunCheckpoint({
+          workflowName,
+          runId: id,
+          header,
+          steps: { a: ok(1) },
+          state: {},
+        });
+        expect(first).toEqual({ lastSeq: 2, runToken: token });
+        const { runToken } = first!;
         expect(
           await store.appendWorkflowRunEntries({
             workflowName,
@@ -236,10 +248,25 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
             steps: { b: ok(2) },
             state: { n: 1 },
           }),
-        ).toEqual({ lastSeq: 4 });
+        ).toEqual({ lastSeq: 4, runToken });
         expect(await store.appendWorkflowRunEntries({ workflowName, runId: id, header, steps: {} })).toEqual({
           lastSeq: 4,
+          runToken,
         });
+        expect(
+          await store.writeWorkflowRunCheckpoint({ workflowName, runId: id, header, steps: {}, state: {} }),
+        ).toEqual({ lastSeq: 5, runToken });
+        expect(
+          await store.updateWorkflowRunHeader({ workflowName, runId: id, opts: { status: 'success' } }),
+        ).toMatchObject({ runToken });
+
+        // Deleted and written again under the same id, it is another run.
+        await store.deleteWorkflowRunById({ workflowName, runId: id });
+        const recreated = await store.appendWorkflowRunEntries({ workflowName, runId: id, header, steps: {} });
+        expect(recreated).toEqual({ lastSeq: 0, runToken: token });
+        expect(recreated!.runToken).not.toBe(runToken);
+        expect((await store.loadWorkflowRunHeader({ workflowName, runId: id }))!.runToken).toBe(recreated!.runToken);
+        expect((await loadRun(id))!.runToken).toBe(recreated!.runToken);
       });
 
       it('writes a checkpoint or an append only when the stored status matches expectedStatus', async () => {
@@ -255,7 +282,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
             state: { n: 1 },
             expectedStatus: [...notCanceled],
           }),
-        ).toEqual({ lastSeq: 2 });
+        ).toEqual({ lastSeq: 2, runToken: token });
         const appended = runId();
         expect(
           await store.appendWorkflowRunEntries({
@@ -265,7 +292,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
             steps: { a: ok(1) },
             expectedStatus: [],
           }),
-        ).toEqual({ lastSeq: 1 });
+        ).toEqual({ lastSeq: 1, runToken: token });
         expect(
           await store.appendWorkflowRunEntries({
             workflowName,
@@ -274,7 +301,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
             steps: { b: ok(2) },
             expectedStatus: 'running',
           }),
-        ).toEqual({ lastSeq: 3 });
+        ).toEqual({ lastSeq: 3, runToken: token });
 
         // Another process cancels the run: guarded writes of its owner leave it exactly as it is.
         await store.updateWorkflowRunHeader({ workflowName, runId: id, opts: { status: 'canceled' } });
@@ -314,7 +341,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
             header: makeHeader(id, { status: 'canceled' }),
             steps: { c: ok(3) },
           }),
-        ).toEqual({ lastSeq: 4 });
+        ).toEqual({ lastSeq: 4, runToken: token });
       });
 
       it("records the drive's start state seq, and loads the state as of a seq", async () => {
@@ -387,7 +414,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         (stored!.steps.a as any).output.list.push(3);
         stored!.header.activePaths.push(3);
         (await store.loadWorkflowRunHeader({ workflowName, runId: id }))!.header.activePaths.push(4);
-        (await store.loadWorkflowRunSteps({ workflowName, runId: id, stepIds: ['a'] })).a!.payload.x = 1;
+        (await store.loadWorkflowRunSteps({ workflowName, runId: id, stepIds: ['a'] }))!.a!.payload.x = 1;
         expect(await loadRun(id)).toMatchObject({ header: { activePaths: [0] }, steps: { a: ok({ list: [1] }) } });
       });
 
@@ -488,7 +515,53 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
           a: ok(10),
         });
         expect(await store.loadWorkflowRunSteps({ workflowName, runId: id, stepIds: [] })).toEqual({});
-        expect(await store.loadWorkflowRunSteps({ workflowName, runId: 'nope', stepIds: ['a'] })).toEqual({});
+        expect(await store.loadWorkflowRunSteps({ workflowName, runId: 'nope', stepIds: ['a'] })).toBeNull();
+      });
+
+      it('loads the steps only while the run is at `expectedLastSeq` and `expectedRunToken`', async () => {
+        const id = runId();
+        const run = { workflowName, runId: id };
+        const header = makeHeader(id);
+        const load = (expected: { lastSeq: number; runToken?: string }, stepIds = ['a']) =>
+          store.loadWorkflowRunSteps({
+            ...run,
+            stepIds,
+            expectedLastSeq: expected.lastSeq,
+            expectedRunToken: expected.runToken,
+          });
+        const written = (await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(1) }, state: {} }))!;
+        expect(await load(written)).toEqual({ a: ok(1) });
+        // With no steps to load, the load still says whether the run is the one expected.
+        expect(await load(written, [])).toEqual({});
+        expect(await load({ lastSeq: written.lastSeq, runToken: 'another-run' })).toBeNull();
+        expect(await load({ lastSeq: written.lastSeq, runToken: 'another-run' }, [])).toBeNull();
+
+        // A draft leaves the steps as they are, but it is a write to the run.
+        const { seq } = await store.appendWorkflowRunStateDraft({ ...run, state: { x: 1 } });
+        expect(await load(written)).toBeNull();
+        expect(await load(written, [])).toBeNull();
+        expect(await load({ ...written, lastSeq: seq })).toEqual({ a: ok(1) });
+
+        const appended = (await store.appendWorkflowRunEntries({ ...run, header, steps: { a: ok(2) } }))!;
+        expect(await load({ ...written, lastSeq: seq })).toBeNull();
+        expect(await load(appended)).toEqual({ a: ok(2) });
+
+        // A header update (a cancel, a resume's claim) isn't a write to the run's entries.
+        await store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' } });
+        expect(await load(appended)).toEqual({ a: ok(2) });
+
+        await store.deleteWorkflowRunById(run);
+        expect(await load(appended)).toBeNull();
+        expect(await load(appended, [])).toBeNull();
+
+        // Recreated under the same id and written up to the same seq, it is still another run.
+        const recreated = (await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(3) }, state: {} }))!;
+        await store.appendWorkflowRunStateDraft({ ...run, state: {} });
+        await store.appendWorkflowRunEntries({ ...run, header, steps: { a: ok(3) } });
+        expect((await store.loadWorkflowRunHeader(run))!.lastSeq).toBe(appended.lastSeq);
+        expect(await load(appended)).toBeNull();
+        expect(await load(appended, [])).toBeNull();
+        expect(await load({ lastSeq: appended.lastSeq, runToken: recreated.runToken })).toEqual({ a: ok(3) });
       });
 
       it('loads the header without the entries, and only for v2 runs', async () => {
@@ -499,12 +572,13 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toEqual({
           header: makeHeader(id),
           lastSeq: 2,
+          runToken: token,
           startStateSeq: 2,
         });
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: 'v1' })).toBeNull();
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: 'nope' })).toBeNull();
         expect(await store.loadWorkflowRun({ workflowName, runId: 'v1', successfulSteps: 'full' })).toBeNull();
-        expect(await store.loadWorkflowRunSteps({ workflowName, runId: 'v1', stepIds: ['a'] })).toEqual({});
+        expect(await store.loadWorkflowRunSteps({ workflowName, runId: 'v1', stepIds: ['a'] })).toBeNull();
       });
     });
 
@@ -1003,6 +1077,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(updated).toEqual({
           header: makeHeader(id, { status: 'canceled', suspendedPaths: { a: [0] } }),
           lastSeq: 2,
+          runToken: token,
           startStateSeq: 2,
         });
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toEqual(updated);
@@ -1179,7 +1254,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await store.getWorkflowRunById({ workflowName, runId: 'v2-run' })).toBeNull();
         expect(await store.getWorkflowRunById({ workflowName, runId: 'v1-run' })).toBeNull();
         expect(await loadRun('v2-run')).toBeNull();
-        expect(await store.loadWorkflowRunSteps({ workflowName, runId: 'v2-run', stepIds: ['a'] })).toEqual({});
+        expect(await store.loadWorkflowRunSteps({ workflowName, runId: 'v2-run', stepIds: ['a'] })).toBeNull();
         expect((await store.listWorkflowRuns({ workflowName })).runs.map(r => r.runId)).toEqual(['other']);
 
         // A run written again after its deletion holds only the new entries.

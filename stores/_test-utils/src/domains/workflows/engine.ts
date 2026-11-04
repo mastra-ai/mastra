@@ -209,9 +209,11 @@ export function createWorkflowEngineTests({
         return runs;
       };
       const midway: Record<string, unknown>[] = [];
-      const result = await drive(workflow, runId, async () => {
+      const result: any = await drive(workflow, runId, async () => {
         midway.push(await readRuns());
       });
+      // A v2 result loads its steps from the store when asked.
+      if (typeof result?.steps === 'function') result.steps = await result.steps();
       return { result: normalize(result, runId), midway, runs: await readRuns() };
     }
 
@@ -320,6 +322,29 @@ export function createWorkflowEngineTests({
         expect((await store.loadWorkflowSnapshot({ workflowName, runId: run.runId, storageVersion }))?.status).toBe(
           'canceled',
         );
+      });
+    }
+
+    // An earlier result's steps come from the run it was returned for, never from a later one.
+    for (const change of ['resume', 'delete', 'recreate'] as const) {
+      it(`rejects the steps of a v2 result whose run was written since: ${change}`, async () => {
+        const workflow = scenarios['suspend and resume']!.build(id, 2);
+        new Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow } });
+        const runId = `${prefix}-stale-${change}`;
+        const suspended: any = await (await workflow.createRun({ runId })).start({ inputData: {} });
+        expect(suspended.status).toBe('suspended');
+
+        let current: any;
+        if (change === 'resume') {
+          current = await (await workflow.createRun({ runId })).resume({ step: 'gate', resumeData: true });
+          expect(current.status).toBe('success');
+        } else {
+          await workflow.deleteWorkflowRunById(runId);
+          if (change === 'recreate') current = await (await workflow.createRun({ runId })).start({ inputData: {} });
+        }
+
+        await expect(suspended.steps()).rejects.toMatchObject({ id: 'WORKFLOW_STORAGE_V2_STEPS_STALE' });
+        if (current) expect(await current.steps()).toMatchObject({ gate: { status: current.status } });
       });
     }
 
