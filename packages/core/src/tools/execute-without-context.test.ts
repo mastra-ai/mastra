@@ -40,6 +40,21 @@ describe('calling tool.execute() without a context (#28651)', () => {
     }
   });
 
+  it('gives each context-free call a fresh, empty request context', async () => {
+    const { tool, seen } = createAddOne();
+
+    await tool.execute?.({ a: 1 });
+    const first = seen.requestContext as RequestContext;
+    expect(first.size()).toBe(0);
+    first.set('leaked', 'from the first call');
+
+    await tool.execute?.({ a: 2 });
+    const second = seen.requestContext as RequestContext;
+    expect(second).not.toBe(first);
+    expect(second.size()).toBe(0);
+    expect(second.get('leaked')).toBeUndefined();
+  });
+
   it('still validates the input', async () => {
     const { tool, seen } = createAddOne();
 
