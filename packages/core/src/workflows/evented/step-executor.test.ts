@@ -355,7 +355,7 @@ describe('StepExecutor', () => {
       ['0', 0],
       ['an empty string', ''],
       ['null', null],
-    ])('records %s as the resume payload so crash recovery can re-enter the step with it', async (_label, value) => {
+    ])('records %s as the resume payload on the step result', async (_label, value) => {
       let seen: unknown = 'not called';
       const step = createStep({
         id: 'approval',
