@@ -747,7 +747,7 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
-  /** Transient tracing fact; not part of the iteration state or finish payload. */
+  /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
   tracingTermination?: SpanTermination;
   tracingDelegationFailure?: SpanTermination;
   tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
