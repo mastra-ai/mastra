@@ -341,6 +341,16 @@ export class AdvisoryStore {
     });
     return result.rows.map(row => String(row.advisory_id));
   }
+  async deferRefresh(id: string) {
+    await this.write(async tx => {
+      const removed = await tx.execute({
+        sql: 'DELETE FROM scanner_advisory_refresh_queue WHERE advisory_id = ?',
+        args: [id],
+      });
+      if (removed.rowsAffected !== 1) throw new ControlPlaneError('ADVISORY_REFRESH_QUEUE_INVALID', 503);
+      await tx.execute({ sql: 'INSERT INTO scanner_advisory_refresh_queue(advisory_id) VALUES (?)', args: [id] });
+    });
+  }
   async importPage(kind: CursorKind, details: AdvisoryDetail[], nextCursor: string | null, refreshedId?: string) {
     const now = new Date().toISOString();
     if (refreshedId && details.length !== 1) throw new ControlPlaneError('ADVISORY_REFRESH_QUEUE_INVALID', 503);

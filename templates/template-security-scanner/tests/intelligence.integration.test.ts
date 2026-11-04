@@ -465,6 +465,48 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect(await app.request(`/api/advisories/${alias}/events`)).toEqual(canonical);
   }, 60000);
 
+  it.each([
+    { status: 404, code: 'ADVISORY_DETAIL_PRIMARY_404' },
+    { status: 200, body: {}, code: 'ADVISORY_SCHEMA_UNKNOWN' },
+  ])(
+    'rotates failed refreshes without starving later advisories: $code',
+    async failure => {
+      const fixture = await startAdvisoryFixture();
+      const entries = [24060, 24061, 24062, 24063].map(number => detail(`CVE-2026-${number}`));
+      entries.forEach(entry => fixture.setDetail(entry));
+      fixture.page(
+        null,
+        entries.map(entry => entry.id),
+        null,
+      );
+      const app = await startHarness(fixture);
+      expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+      const queued = await app.query('SELECT advisory_id FROM scanner_advisory_refresh_queue ORDER BY position');
+      const failedId = String(queued[0]!.advisory_id),
+        healthyId = String(queued[1]!.advisory_id);
+      const previous = await app.request(`/api/advisories/${failedId}`);
+      fixture.page(null, [], null);
+      fixture.details.set(failedId, failure);
+      expect(await app.request('/api/advisories/sync', 'POST', {})).toMatchObject({
+        status: 200,
+        body: { outcome: 'SKIPPED', phase: 'refresh', reasonCode: failure.code },
+      });
+      expect(
+        (await app.query('SELECT advisory_id FROM scanner_advisory_refresh_queue ORDER BY position')).map(
+          row => row.advisory_id,
+        ),
+      ).toEqual([...queued.slice(1).map(row => row.advisory_id), failedId]);
+      expect(await app.request(`/api/advisories/${failedId}`)).toEqual(previous);
+      await app.restart();
+      await waitForAdvisoryRetry(app);
+      fixture.setDetail(detail(healthyId, 'Healthy update after failed refresh'));
+      expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+      expect((await app.request(`/api/advisories/${healthyId}`)).body.revision).toBe(2);
+      expect((await app.request('/api/advisories/status')).body).toMatchObject({ stale: false, failureCount: 0 });
+    },
+    60000,
+  );
+
   it('skips and quarantines changed canonical refreshes without starving healthy queued entries', async () => {
     const fixture = await startAdvisoryFixture();
     const entries = [24010, 24011, 24012, 24013].map(number => detail(`CVE-2026-${number}`));

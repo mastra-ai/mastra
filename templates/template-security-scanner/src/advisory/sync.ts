@@ -80,7 +80,13 @@ export class AdvisorySync {
       const ids = await this.store.knownIdsForRefresh(2);
       for (const id of ids) {
         sourceId = id;
-        const detail = await this.fromSource(() => this.source.detail(id, signal));
+        let detail;
+        try {
+          detail = await this.fromSource(() => this.source.detail(id, signal));
+        } catch (error) {
+          if (error instanceof UpstreamCycleFailure) await this.store.deferRefresh(id);
+          throw error;
+        }
         await this.importPage('rotation', [detail], rotation.nextCursor, id);
         sourceId = undefined;
       }
