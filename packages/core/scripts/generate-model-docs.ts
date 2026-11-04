@@ -1152,7 +1152,7 @@ const response = await agent.generate("Hello", {
 Other keys behave differently unless they match the key from the \`id\`:
 
 - \`openaiCompatible\`: Applies only the typed options \`user\`, \`reasoningEffort\`, \`textVerbosity\`, and \`strictJsonSchema\`. Other keys under it are dropped. The \`openai-compatible\` spelling is deprecated. It still works but adds a warning to the result.
-- \`openai\`: Ignored on the Chat Completions path. With \`api: "responses"\`, only \`openai\` applies, whatever the \`id\` prefix. It takes only the OpenAI provider's typed options, such as \`parallelToolCalls\`. Other keys, such as \`parallel_tool_calls\`, are dropped.
+- \`openai\`: Ignored on the Chat Completions path, unless the \`id\` itself starts with \`openai/\`, as in \`openai/my-model\`. Then it's the key from the \`id\` and works as described above. With \`api: "responses"\`, only \`openai\` applies, whatever the \`id\` prefix. On that path it takes only the OpenAI provider's typed options, such as \`parallelToolCalls\`, and other keys, such as \`parallel_tool_calls\`, are dropped.
 
 Options under a key that doesn't apply are dropped without a warning. If an option has no effect on the request, check the key first.
 
