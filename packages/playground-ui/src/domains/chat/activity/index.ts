@@ -11,4 +11,4 @@ export type {
   ActivityMember,
   ActivityThought,
 } from './model/activity-members';
-export { callPose, liveWords } from './model/activity-words';
+export { liveWords } from './model/activity-words';

@@ -20,8 +20,14 @@ import type { Span, TracingContext } from '@mastra/core/observability';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
-import { createTool, isValidationError, validateToolInput } from '@mastra/core/tools';
-import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
+import { createTool, getValidationIssuePaths, isValidationError, validateToolInput } from '@mastra/core/tools';
+import type {
+  InternalCoreTool,
+  MCPToolExecutionContext,
+  MCPToolType,
+  ToolAction,
+  ValidationError,
+} from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { ToolExecuteFGACheck } from '@mastra/core/utils';
 import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
@@ -1501,7 +1507,9 @@ export class MCPServer extends MCPServerBase {
     // Rejected input answers as the plain tool does, before a run or task exists to be left behind.
     const input = validateToolInput(workflow.inputSchema, args, name);
     if (input.error) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: input.error.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, {
+        issuePaths: getValidationIssuePaths(input.error, workflow.inputSchema),
+      });
       return errorResult(input.error.message);
     }
     // Never the task id: a task id is unguessable, a run id is visible to anyone who can list runs.
@@ -1907,7 +1915,9 @@ export class MCPServer extends MCPServerBase {
 
   private toCallToolResult(name: string, tool: InternalCoreTool, value: unknown): CallToolResult {
     if (isValidationError(value)) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, {
+        issuePaths: getValidationIssuePaths(value, tool.parameters),
+      });
       return errorResult(value.message);
     }
     // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
@@ -2445,7 +2455,7 @@ export class MCPServer extends MCPServerBase {
             id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
             domain: ErrorDomain.MCP,
             category: ErrorCategory.USER,
-            details: { toolId, args: JSON.stringify(args) },
+            details: { toolId },
           },
           error,
         );

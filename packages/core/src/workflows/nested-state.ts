@@ -110,3 +110,47 @@ function rebaseValue(
   }
   return final;
 }
+
+/**
+ * Removes the state a nested run started from out of a step result that is leaving the process.
+ *
+ * A parent that parks on a nested run records that state in `suspendPayload.__workflow_meta.startState`
+ * so a crashed parent can rebase the run's changes when it re-drives the step. Callers never need it:
+ * results keep the rest of the metadata (run id, path, `.foreach()` iteration ids) but not workflow
+ * state, which they only see through `includeState`.
+ */
+export function withoutNestedRunStartState<T>(stepResult: T): T {
+  if (Array.isArray(stepResult)) {
+    const items = stepResult.map(item => stripStartStateOnce(item));
+    return items as T;
+  }
+  return stripStartStateOnce(stepResult) as T;
+}
+
+function stripStartStateOnce(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const result = value as Record<string, unknown>;
+  const suspendPayload = result.suspendPayload as Record<string, unknown> | undefined;
+  const meta = suspendPayload?.__workflow_meta as Record<string, unknown> | undefined;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return value;
+
+  // A `.foreach()` over a nested run keeps one base per parked item, next to the item's own metadata.
+  // An item that parks is stripped here even when the step's own metadata carries no base: a sibling
+  // item that fails leaves the step metadata without one while the parked item keeps its own.
+  const { startState: _startState, foreachOutput, ...restMeta } = meta;
+  const isList = Array.isArray(foreachOutput);
+  const nextForeachOutput = isList ? (foreachOutput as unknown[]).map(stripStartStateOnce) : foreachOutput;
+  const listChanged = isList && (nextForeachOutput as unknown[]).some((item, index) => item !== foreachOutput[index]);
+  const hasBase = Object.hasOwn(meta, 'startState');
+
+  if (!hasBase && !listChanged) return value;
+
+  // The list itself is part of the step result; only the bases inside it are internal.
+  const nextMeta: Record<string, unknown> = { ...restMeta };
+  if (Object.hasOwn(meta, 'foreachOutput')) {
+    nextMeta.foreachOutput = isList ? nextForeachOutput : foreachOutput;
+  }
+
+  return { ...result, suspendPayload: { ...suspendPayload, __workflow_meta: nextMeta } };
+}
