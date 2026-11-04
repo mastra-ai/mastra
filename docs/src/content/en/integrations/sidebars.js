@@ -8,6 +8,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Providers',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'providers/google-calendar',
+          label: 'Google Calendar',
+          customProps: { icon: 'https://cdn.simpleicons.org/googlecalendar?viewbox=auto&size=28' },
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Channels',
       collapsed: true,
       items: [

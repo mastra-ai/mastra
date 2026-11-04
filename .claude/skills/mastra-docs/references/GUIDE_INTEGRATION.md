@@ -98,6 +98,17 @@ Usually cover:
 - tool availability and exclusions;
 - a minimal invocation.
 
+### Mastra Connect providers
+
+A provider with a Mastra Connect toolset or MCP server has one integration page. Put `## Connect` first, then `## Self-managed setup` when a supported alternative exists. Don't add a self-managed section for Connect-only providers.
+
+`packages/connect/scripts/generate-provider-docs.ts` owns these pages:
+
+- Simple providers have fully generated pages. Change `packages/connect/scripts/provider-docs-metadata.ts` and regenerate; don't edit the page.
+- Pages with other capabilities, such as channels or authentication, are handwritten and import a generated `### Agent tools` partial from `src/components/connect/generated/`.
+
+Link the full tool list in `/reference/connect/providers` instead of repeating it. See `packages/connect/scripts/README.md` for regeneration.
+
 ## Deployment integrations
 
 Use the following guidance for pages under `/integrations/deploy`.

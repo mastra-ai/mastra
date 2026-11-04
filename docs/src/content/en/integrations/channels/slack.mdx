@@ -3,14 +3,22 @@ title: "Slack | Channels"
 description: "Connect a Mastra agent to Slack channels and direct messages, configure the Slack app and webhook route, and test threaded agent conversations."
 packages:
   - "@mastra/core"
+  - "@mastra/connect"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import SlackConnectTools from "@site/src/components/connect/generated/slack.mdx";
 
 # Slack
 
 Add your agent to Slack so people can message it in shared channel threads or direct messages. When someone sends a message, Mastra runs your agent through the normal agent pipeline and streams the response back to Slack. The Slack adapter handles Slack AI indicators and interactive cards for you.
+
+## Connect
+
+[Mastra Connect](/docs/mastra-platform/connect/overview) keeps Slack credentials on the Mastra platform, so your application never stores them.
+
+<SlackConnectTools />
 
 ## Installation
 
