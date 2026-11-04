@@ -413,13 +413,26 @@ describe.each([
       expect(result.isError).toBe(false);
       const answer = {
         status: 'success',
-        steps: { double: { status: 'success', output: { doubled: 42 } } },
+        input: { n: 21 },
+        steps: {
+          input: { n: 21 },
+          double: {
+            status: 'success',
+            output: { doubled: 42 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        },
         result: { doubled: 42 },
       };
-      expect(JSON.parse(result.content[0].text)).toMatchObject(answer);
-      // The plain run_ tool answers with the same fields.
+      expect(JSON.parse(result.content[0].text)).toEqual(answer);
+      // The plain run_ tool also includes the run id and execution path.
       const { result: plain } = await call('run_doubler', { n: 21 }, { tasks: false });
-      expect(JSON.parse(plain.content[0].text)).toMatchObject(answer);
+      expect(JSON.parse(plain.content[0].text)).toEqual({
+        ...answer,
+        runId: expect.any(String),
+        stepExecutionPath: ['double'],
+      });
     });
 
     it("answers an 'auto' run that fails within the window with isError, as its task would, unlike a client without tasks", async () => {
@@ -490,11 +503,25 @@ describe.each([
 
       await tasks.update(result.taskId, { [key]: { action: 'accept', content: { approver: 'bob' } } });
       const done = await waitFor(tasks, result.taskId, 'completed');
-      expect(JSON.parse(text(done))).toMatchObject({
+      expect(JSON.parse(text(done))).toEqual({
         status: 'success',
+        input: { release: 'v2' },
         steps: {
-          prepare: { status: 'success', output: { release: 'v2' } },
-          ask: { status: 'success', output: { outcome: 'v2 approved by bob' } },
+          input: { release: 'v2' },
+          prepare: {
+            status: 'success',
+            output: { release: 'v2' },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          ask: {
+            status: 'success',
+            output: { outcome: 'v2 approved by bob' },
+            resumePayload: { approver: 'bob' },
+            startedAt: expect.any(Number),
+            resumedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         },
         result: { outcome: 'v2 approved by bob' },
       });

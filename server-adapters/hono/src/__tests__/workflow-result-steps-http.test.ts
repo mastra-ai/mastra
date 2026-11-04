@@ -59,21 +59,61 @@ describe.each([1, 2] as const)('workflow routes answer with every step result (s
     };
   }
 
-  const drafted = { status: 'success', output: { to: 'ana', body: 'hello ana' } };
-  const approved = { status: 'success', output: { to: 'ana', body: 'hello ana', approver: 'bo' } };
-  const sent = { status: 'success', output: { sent: 'hello ana (approved by bo)' } };
+  const input = { to: 'ana' };
+  const drafted = {
+    status: 'success',
+    output: { to: 'ana', body: 'hello ana' },
+    startedAt: expect.any(Number),
+    endedAt: expect.any(Number),
+  };
+  const approved = {
+    status: 'success',
+    output: { to: 'ana', body: 'hello ana', approver: 'bo' },
+    resumePayload: { approver: 'bo' },
+    startedAt: expect.any(Number),
+    resumedAt: expect.any(Number),
+    endedAt: expect.any(Number),
+  };
+  const sent = {
+    status: 'success',
+    output: { sent: 'hello ana (approved by bo)' },
+    startedAt: expect.any(Number),
+    endedAt: expect.any(Number),
+  };
 
   it('start-async and resume-async', async () => {
     const post = await serve();
     const runId = crypto.randomUUID();
 
     const started = await post('start-async', runId, { inputData: { to: 'ana' } });
-    expect(started.status).toBe('suspended');
-    expect(started.steps).toMatchObject({ draft: drafted, approve: { status: 'suspended' } });
+    expect(started).toEqual({
+      status: 'suspended',
+      runId,
+      input,
+      stepExecutionPath: ['draft', 'approve'],
+      suspended: [['approve']],
+      suspendPayload: { approve: {} },
+      steps: {
+        input,
+        draft: drafted,
+        approve: {
+          status: 'suspended',
+          suspendPayload: {},
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      },
+    });
 
     const resumed = await post('resume-async', runId, { step: 'approve', resumeData: { approver: 'bo' } });
-    expect(resumed.status).toBe('success');
-    expect(resumed.steps).toMatchObject({ draft: drafted, approve: approved, send: sent });
+    expect(resumed).toEqual({
+      status: 'success',
+      runId,
+      input,
+      stepExecutionPath: ['draft', 'approve', 'send'],
+      result: sent.output,
+      steps: { input, draft: drafted, approve: approved, send: sent },
+    });
   });
 
   it('restart-async of a finished run', async () => {
@@ -83,8 +123,20 @@ describe.each([1, 2] as const)('workflow routes answer with every step result (s
     await post('resume-async', runId, { step: 'approve', resumeData: { approver: 'bo' } });
 
     const restarted = await post('restart-async', runId, {});
-    expect(restarted.status).toBe('success');
-    expect(restarted.steps).toMatchObject({ draft: drafted, approve: approved, send: sent });
+    expect(restarted).toEqual({
+      status: 'success',
+      runId,
+      input,
+      resumeLabels: {},
+      stepExecutionPath: ['draft', 'approve', 'send'],
+      result: sent.output,
+      steps: {
+        input,
+        draft: { ...drafted, payload: input },
+        approve: { ...approved, payload: drafted.output },
+        send: { ...sent, payload: approved.output },
+      },
+    });
   });
 
   it('time-travel-async', async () => {
@@ -97,12 +149,23 @@ describe.each([1, 2] as const)('workflow routes answer with every step result (s
       step: 'send',
       inputData: { to: 'ana', body: 'hi again', approver: 'cy' },
     });
-    expect(travelled.status).toBe('success');
     // Time travel records the input it was given as the output of the step before.
-    expect(travelled.steps).toMatchObject({
-      draft: drafted,
-      approve: { status: 'success', output: { to: 'ana', body: 'hi again', approver: 'cy' } },
-      send: { status: 'success', output: { sent: 'hi again (approved by cy)' } },
+    expect(travelled).toEqual({
+      status: 'success',
+      runId,
+      input,
+      stepExecutionPath: ['draft', 'approve', 'send', 'send'],
+      result: { sent: 'hi again (approved by cy)' },
+      steps: {
+        input,
+        draft: drafted,
+        approve: { ...approved, output: { to: 'ana', body: 'hi again', approver: 'cy' } },
+        send: {
+          ...sent,
+          payload: { to: 'ana', body: 'hi again', approver: 'cy' },
+          output: { sent: 'hi again (approved by cy)' },
+        },
+      },
     });
   });
 });
