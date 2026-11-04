@@ -32,8 +32,12 @@ export function ComposerAnnotationList({ annotations, onRemove }: ComposerAnnota
           <TextQuote aria-hidden="true" />
           {pluralize(annotations.length, 'annotation')}
         </PopoverTrigger>
-        <PopoverContent align="start" side="top" className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-1 p-1.5">
-          <ol aria-label="Annotations" className="flex flex-col">
+        <PopoverContent
+          align="start"
+          side="top"
+          className="flex max-h-(--available-height) w-80 max-w-[calc(100vw-2rem)] flex-col gap-1 p-1.5"
+        >
+          <ol aria-label="Annotations" className="flex min-h-0 flex-col overflow-y-auto">
             {annotations.map((annotation, index) => (
               <li key={annotation.id} className="flex items-start gap-2 rounded-lg p-1.5">
                 <AnnotationNumber className="mt-px">{index + 1}</AnnotationNumber>
@@ -75,7 +79,7 @@ export function ComposerAnnotationList({ annotations, onRemove }: ComposerAnnota
               type="button"
               variant="ghost"
               size="sm"
-              className="self-end"
+              className="shrink-0 self-end"
               onClick={() => {
                 for (const annotation of annotations) onRemove(annotation.id);
               }}
