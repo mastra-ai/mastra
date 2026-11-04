@@ -11,7 +11,13 @@ export type SettingsAddRowProps = Omit<ButtonProps, 'variant' | 'size'> & {
 
 /** The last row of a list in a `SettingsContainer`: "Add header", "Create join link". Lists put
  * their add action and other list controls here, inside the card, not in the section header. */
-export function SettingsAddRow({ className, icon = <PlusIcon />, actions, ...props }: SettingsAddRowProps) {
+export function SettingsAddRow({
+  className,
+  icon = <PlusIcon />,
+  actions,
+  type = 'button',
+  ...props
+}: SettingsAddRowProps) {
   return (
     <div data-slot="settings-add-row" className="flex items-center justify-between gap-2 px-4 py-2">
       {/* Pulled left by its icon-side padding, so the icon lines up with the row labels above. */}
@@ -20,6 +26,7 @@ export function SettingsAddRow({ className, icon = <PlusIcon />, actions, ...pro
         size="sm"
         icon={icon}
         className={cn('-ms-[calc(var(--control-px)-2px)]', className)}
+        type={type}
         {...props}
       />
       {actions != null && <div className="flex items-center gap-1">{actions}</div>}

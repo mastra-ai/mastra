@@ -299,4 +299,25 @@ describe('Settings', () => {
       expect(screen.getByTestId('empty-notices').className).toContain('empty:hidden');
     });
   });
+
+  describe('when an add row sits inside a form', () => {
+    it('adds without submitting the form', () => {
+      let submitted = 0;
+      render(
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            submitted += 1;
+          }}
+        >
+          <SettingsContainer>
+            <SettingsAddRow>Add header</SettingsAddRow>
+          </SettingsContainer>
+        </form>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
+      expect(submitted).toBe(0);
+    });
+  });
 });
