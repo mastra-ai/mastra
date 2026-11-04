@@ -75,6 +75,8 @@ export type Target = {
   policyId: string;
   /** Exact policy revision authorized for this operation. */
   policyRevision: number;
+  /** Persisted discovery schedule, preserved when reconfirming route rules. */
+  schedule: { enabled: boolean; timezone: string; cron?: string };
   /** Finite scan budgets, bounded by the target policy. */
   scanLimits: Limits;
   /** Target-owned profile identifiers, maintained by profile registration/removal. */

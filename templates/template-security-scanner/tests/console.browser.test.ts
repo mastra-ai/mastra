@@ -257,6 +257,81 @@ async function localConsole() {
 }
 
 describe('real security console browser journeys', () => {
+  it('reconfirms REST route revisions after each supported profile form submission', async () => {
+    const { url, secret } = await localConsole();
+    const { page } = await browser(url);
+    page.setDefaultTimeout(5000);
+    await loginConsole(page, secret);
+    const session = await (await page.request.get(`${url}/api/session`)).json();
+    const headers = { origin: url, 'x-csrf-token': session.csrfToken };
+    const scanLimits = { maxRequests: 10, maxDurationSeconds: 30, maxResponseBytes: 65536, maxConcurrency: 1 };
+    const policyResponse = await page.request.post(`${url}/api/policies`, {
+      headers,
+      data: { name: 'REST profile policy', permittedMethods: ['GET'], scanLimits },
+    });
+    expect(policyResponse.status()).toBe(201);
+    const policy = await policyResponse.json();
+    const created = await page.request.post(`${url}/api/targets`, {
+      headers,
+      data: {
+        name: 'REST profile revisions',
+        entryUrl: 'http://allowed.lab/api/orders',
+        approvedOrigins: ['http://allowed.lab'],
+        allowedPaths: ['/api'],
+        excludedPaths: [],
+        permittedMethods: ['GET'],
+        environment: 'lab',
+        authorizationEvidenceRef: 'operator:owned-browser-fixture',
+        authorizationConfirmed: true,
+        policyId: policy.id,
+        policyRevision: policy.revision,
+        schedule: { enabled: false, timezone: 'America/Sao_Paulo' },
+        scanLimits,
+        authProfileIds: [],
+        application: { kind: 'rest_api', version: 1, discoveryModes: ['observed_json'] },
+        authenticationDrivers: [],
+        routeAccessRules: [
+          {
+            version: 1,
+            method: 'GET',
+            pathTemplate: '/api/orders',
+            source: 'operator',
+            operatorRevision: 1,
+            audience: 'public',
+            expectedUnauthorizedStatus: [],
+          },
+        ],
+      },
+    });
+    expect(created.status()).toBe(201);
+    const target = await created.json();
+    await navigate(page, 'Targets');
+    await page.getByRole('button', { name: target.name, exact: true }).click();
+    for (const kind of ['public', 'bearer', 'header']) {
+      await page.getByRole('button', { name: 'Add profile' }).click();
+      const form = page.getByRole('dialog', { name: 'Add profile' });
+      await form.getByLabel('Name').fill(`${kind} account`);
+      await form.getByLabel('Role').fill(kind);
+      await form.getByLabel('Identity type').selectOption(kind);
+      if (kind !== 'public') {
+        await form.getByLabel('Identity endpoint').fill('http://allowed.lab/api/identity');
+        await form.getByLabel('Expected identity').fill(`${kind}-account`);
+        if (kind === 'header') await form.getByLabel('Header name').selectOption('x-api-key');
+        await form.getByLabel('Credential', { exact: true }).fill('owned-local-test-value');
+      }
+      await form.getByRole('button', { name: 'Save profile' }).click();
+      await form.waitFor({ state: 'hidden' });
+      const read = await page.request.get(`${url}/api/targets/${target.id}`);
+      expect(read.status()).toBe(200);
+      const current = await read.json();
+      expect(current.routeAccessRules.map((rule: { operatorRevision: number }) => rule.operatorRevision)).toEqual([
+        current.revision,
+      ]);
+      expect(current.schedule).toEqual(target.schedule);
+      expect(current.authenticationDrivers).toEqual([]);
+    }
+  }, 45000);
+
   it('edits unauthorized status codes character by character and persists submit without blur', async () => {
     const { url, secret } = await localConsole();
     const { page } = await browser(url);

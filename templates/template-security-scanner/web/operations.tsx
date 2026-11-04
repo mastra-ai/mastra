@@ -684,20 +684,25 @@ export function ProfileForm({
         input,
         profile?.revision ?? target.revision,
       );
-      if (kind === 'api_key_header' && !profile) {
+      if (!profile && target.application?.kind === 'rest_api') {
         const current = await get<Target>(`/api/targets/${target.id}`);
         const origin = new URL(current.entryUrl).origin;
-        const driver = {
-          kind: 'api_key_header' as const,
-          version: 1 as const,
-          profileId: saved.id,
-          secretRef: saved.id,
-          credentialOrigins: [origin],
-          headerName: value(data, 'headerName'),
-          accessCheckPath: value(data, 'accessCheckPath'),
-          ...(value(data, 'principalJsonPointer') ? { principalJsonPointer: value(data, 'principalJsonPointer') } : {}),
-          refresh: 'reregister' as const,
-        };
+        const driver =
+          kind === 'api_key_header'
+            ? {
+                kind: 'api_key_header' as const,
+                version: 1 as const,
+                profileId: saved.id,
+                secretRef: saved.id,
+                credentialOrigins: [origin],
+                headerName: value(data, 'headerName'),
+                accessCheckPath: value(data, 'accessCheckPath'),
+                ...(value(data, 'principalJsonPointer')
+                  ? { principalJsonPointer: value(data, 'principalJsonPointer') }
+                  : {}),
+                refresh: 'reregister' as const,
+              }
+            : undefined;
         await send(
           `/api/targets/${target.id}`,
           'PUT',
@@ -713,11 +718,13 @@ export function ProfileForm({
             authorizationConfirmed: true,
             policyId: current.policyId,
             policyRevision: current.policyRevision,
-            schedule: { enabled: false, timezone: 'UTC' },
+            schedule: driver ? { enabled: false, timezone: 'UTC' } : current.schedule,
             scanLimits: current.scanLimits,
             authProfileIds: current.authProfileIds,
             application: current.application,
-            authenticationDrivers: [...(current.authenticationDrivers ?? []), driver],
+            authenticationDrivers: driver
+              ? [...(current.authenticationDrivers ?? []), driver]
+              : current.authenticationDrivers,
             routeAccessRules: current.routeAccessRules?.map(rule => ({
               ...rule,
               operatorRevision: current.revision + 1,
