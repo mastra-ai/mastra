@@ -55,6 +55,27 @@ describe('credential store provider registry', () => {
     expect(seenTenant).toEqual({ orgId: 'org_1', userId: 'user_1', credentialScope: 'user' });
   });
 
+  // better-auth stores a session without an active organization as `null`, and `@mastra/server`
+  // puts the session on the request as is. Every model call of such a user used to fail closed.
+  it.each([
+    [
+      'a better-auth user with no active organization',
+      { session: { activeOrganizationId: null }, user: { id: 'user_1' } },
+    ],
+    ['a user whose organization is null', { id: 'user_1', organizationId: null }],
+  ])('gives %s their own model credentials', async (_case, user) => {
+    let seenTenant: unknown;
+    setCredentialStoreProvider(tenant => {
+      seenTenant = tenant;
+      return fakeStore({ anthropic: { type: 'api_key', key: 'sk-user-1' } });
+    });
+    const ctx = new RequestContext();
+    ctx.set('user', user);
+
+    await expect(resolveCredentialStore(ctx)?.getApiKey('anthropic')).resolves.toBe('sk-user-1');
+    expect(seenTenant).toEqual({ orgId: undefined, userId: 'user_1', credentialScope: 'user' });
+  });
+
   it('fails closed without an authenticated tenant on the request context', async () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     setCredentialStoreProvider(() => fakeStore({}));

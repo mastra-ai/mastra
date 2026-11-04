@@ -184,7 +184,7 @@ export function hasCredentialTenantResolver(): boolean {
 interface RequestContextUser {
   workosId?: string;
   id?: string;
-  organizationId?: string;
+  organizationId?: string | null;
 }
 
 /**
@@ -193,7 +193,7 @@ interface RequestContextUser {
  */
 interface RequestContextSession {
   user?: RequestContextUser;
-  session?: { activeOrganizationId?: string };
+  session?: { activeOrganizationId?: string | null };
 }
 
 export function resolveCredentialScope(requestContext?: RequestContext): CredentialScope {
@@ -228,10 +228,11 @@ function readPrincipal(
   if (!raw || typeof raw !== 'object') return { failure: 'missing-user-context' };
 
   // Precedence matches `toFactoryAuthUser` in `@mastra/factory`: a wrapper's org
-  // comes from the session half only, never from the inner user.
+  // comes from the session half only, never from the inner user. Like there, `null`
+  // means no organization: better-auth's value for a session with no active one.
   const wrapped = Boolean(raw.user && typeof raw.user === 'object' && raw.session && typeof raw.session === 'object');
   const user = wrapped ? (raw.user as RequestContextUser) : raw;
-  const principalOrgId = wrapped ? raw.session?.activeOrganizationId : user.organizationId;
+  const principalOrgId = (wrapped ? raw.session?.activeOrganizationId : user.organizationId) ?? undefined;
   const principalUserId = user.workosId ?? user.id;
   if (typeof principalUserId !== 'string' || !principalUserId) return { failure: 'missing-user-context' };
   if (principalOrgId !== undefined && typeof principalOrgId !== 'string') return { failure: 'invalid-organization-id' };
