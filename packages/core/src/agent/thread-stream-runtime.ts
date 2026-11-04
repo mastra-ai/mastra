@@ -2043,9 +2043,11 @@ export class AgentThreadStreamRuntime {
         }
       } else if (data?.type === 'run-completed' || data?.type === 'run-failed') {
         this.#releaseRunSupersededBy(state, resolvedPubSub, key, subscription, data.runId);
-        const requeued = this.#requeueUnadmittedForwards(state, key, data.runId);
         const lostStreamId = subscription.successorRunIds.get(data.runId);
-        if (lostStreamId === undefined || data.streamId === lostStreamId) {
+        // The lost segment ended but the run goes on elsewhere: its forwards stay held so its admission settles them.
+        if (lostStreamId !== undefined && data.streamId === lostStreamId) return;
+        const requeued = this.#requeueUnadmittedForwards(state, key, data.runId);
+        if (lostStreamId === undefined) {
           // Like a remote completion drain, take the lease over from the ended run if it still holds it.
           if (requeued) await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
           return;
