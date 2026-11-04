@@ -7,6 +7,7 @@ import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import { createWorkflow as createEventedWorkflow } from './evented';
+import { withoutNestedRunStartState } from './nested-state';
 import { createStep } from './workflow';
 import type { AnyWorkflow } from './workflow';
 
@@ -1170,9 +1171,18 @@ async function runAndReadBack(storageVersion: 1 | 2, { build, drive }: Scenario)
   ];
   const runs: Record<string, unknown> = {};
   for (const { workflow_name, run_id } of rows) {
-    runs[`${workflow_name}/${run_id}`] = withoutTimestamps(
-      await store.loadWorkflowSnapshot({ workflowName: workflow_name, runId: run_id, storageVersion }),
-    );
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow_name, runId: run_id, storageVersion });
+    // A v1 parent parked on a nested run also stores the state that run started from, for a
+    // re-drive after a crash; v2 reads it from the nested run's own stored states instead.
+    if (storageVersion === 1 && snapshot) {
+      snapshot.context = Object.fromEntries(
+        Object.entries(snapshot.context).map(([stepId, stepResult]) => [
+          stepId,
+          withoutNestedRunStartState(stepResult),
+        ]),
+      ) as typeof snapshot.context;
+    }
+    runs[`${workflow_name}/${run_id}`] = withoutTimestamps(snapshot);
   }
   return { result: withoutTimestamps(await withLoadedSteps(result)), runs };
 }

@@ -393,8 +393,10 @@ describe('durable snapshot write amplification (issue #20747)', () => {
   }, 120000);
 
   // At 16 steps, v2 writes 4.2 MB against v1's 28.6 MB with recovery `auto`,
-  // and 1.2 MB against 4.1 MB with suspend-only. Its largest single write is
-  // 185 kB against 237 kB with `auto`, and 44 kB against 115 kB with suspend-only.
+  // and 1.2 MB against 5.5 MB with suspend-only. Its largest single write is
+  // 185 kB against 237 kB with `auto`, and 44 kB against 202 kB with suspend-only.
+  // v1's suspend-only writes also store the state the parked nested run started
+  // from, step records included; v2 reads that state from the nested run instead.
   it.each<Recovery>(['auto', 'suspend-only'])(
     'compares storage v1 and v2 writes with recovery %s',
     async recovery => {

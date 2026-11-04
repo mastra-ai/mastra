@@ -429,7 +429,12 @@ export async function executeStep(
           : wrapMastra(engine.mastra, { currentSpan: stepSpan })
         : undefined;
 
-      let completedNestedOutput: { found: boolean; value?: unknown; state?: unknown } = { found: false };
+      let completedNestedOutput: {
+        found: boolean;
+        value?: unknown;
+        state?: unknown;
+        base?: Record<string, unknown>;
+      } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
         // The nested run has this run's version, which is 2 when this run has a journal.
@@ -439,7 +444,18 @@ export async function executeStep(
           if (stored?.header.status === 'success') {
             // The header alone has no state; read it only once the run is known to be finished.
             const run = await workflowsStore?.loadWorkflowRun({ ...nestedRun, successfulSteps: 'summary' });
-            completedNestedOutput = { found: true, value: stored.header.result, state: run?.state };
+            // The state the nested run's last drive started from: the one it parked with, which
+            // this run already took in, or its start state if it never parked.
+            const base =
+              stored.startStateSeq === undefined
+                ? undefined
+                : await workflowsStore?.loadWorkflowRunState({ ...nestedRun, seq: stored.startStateSeq });
+            completedNestedOutput = {
+              found: true,
+              value: stored.header.result,
+              state: run?.state,
+              base: base ?? undefined,
+            };
           }
         } else {
           const snapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -448,7 +464,17 @@ export async function executeStep(
             storageVersion: 1,
           });
           if (snapshot?.status === 'success') {
-            completedNestedOutput = { found: true, value: snapshot.result, state: snapshot.value };
+            // The state the nested run started from, recorded when this run parked on it.
+            const meta = stepResults[step.id]?.suspendPayload?.__workflow_meta;
+            completedNestedOutput = {
+              found: true,
+              value: snapshot.result,
+              state: snapshot.value,
+              base:
+                executionContext.foreachIndex !== undefined
+                  ? meta?.foreachOutput?.[executionContext.foreachIndex]?.suspendPayload?.__workflow_meta?.startState
+                  : meta?.startState,
+            };
           }
         }
       }
@@ -464,14 +490,10 @@ export async function executeStep(
           throw stateValidationError;
         }
         contextMutations.stateUpdate = stateData;
-        // The state this nested run started from, recorded when the parent parked on it. Merging
-        // against it replays only the nested run's own changes, so keys another step changed while
-        // it ran keep their newer value instead of reverting to the nested run's copy.
-        contextMutations.stateBase =
-          executionContext.foreachIndex !== undefined
-            ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]
-                ?.suspendPayload?.__workflow_meta?.startState
-            : stepResults[step.id]?.suspendPayload?.__workflow_meta?.startState;
+        // Merging against the state the nested run started from replays only its own changes, so
+        // keys another step changed while it ran keep their newer value instead of reverting to the
+        // nested run's copy, and changes it handed back before parking aren't applied twice.
+        contextMutations.stateBase = completedNestedOutput.base;
         if (engine.requiresDurableContextSerialization()) {
           contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
         }

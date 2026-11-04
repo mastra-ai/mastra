@@ -3669,7 +3669,9 @@ export class Workflow<
     // before parking, and the hand-back above already merged those changes into the parent. If the
     // parent crashes and re-executes this step, the finished run's state is rebased onto the
     // parent's current state from here, so the changes it already handed back aren't applied twice.
-    const handedBack = handBackBase ? toJsonState(res.state) : undefined;
+    // Storage v2 keeps the state each drive started from, so a v2 parent reads it from there
+    // instead of storing a copy.
+    const handedBack = handBackBase && !parentState ? toJsonState(res.state) : undefined;
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
