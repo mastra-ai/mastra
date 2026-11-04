@@ -71,7 +71,64 @@ async function reviewArguments(headBranch: string): Promise<string> {
   return decision.arguments;
 }
 
+/** An issue card in PR review carrying pull request #`number`, with `metadata` on the card. */
+function attachedReviewContext(number: number, metadata: Record<string, unknown>, fromStage = 'intake') {
+  const issue = createProviderWorkItemForTests({
+    id: 'item-2',
+    title: 'Fix the flaky upload',
+    source: { integrationId: 'github', type: 'issue', externalId: '12' },
+    metadata: { number: 12 },
+  });
+  const pullRequest = createProviderWorkItemForTests({
+    id: 'item-2',
+    title: 'Fix the flaky upload',
+    source: { integrationId: 'github', type: 'pull-request', externalId: String(number) },
+    metadata: { number, githubPullRequestNumber: number, state: 'open', headBranch: 'fix-upload' },
+  }).sources[0]!;
+  const context = reviewContext('fix-upload', fromStage);
+  return {
+    ...context,
+    item: {
+      ...context.item,
+      id: 'item-2',
+      source: 'github-issue',
+      sourceKey: 'github-issue:12',
+      url: 'https://github.com/mastra-ai/mastra/issues/12',
+      metadata: { pullRequestHeadSha: HEAD_35, ...metadata },
+      workItem: { ...issue, sources: [...issue.sources, pullRequest] },
+    },
+  } satisfies FactoryStageRuleContext;
+}
+
+const HEAD_34 = 'a'.repeat(40);
+const HEAD_35 = 'b'.repeat(40);
+
 describe("Work's PR review lane", () => {
+  it("gives a new pull request on an issue card a first pass, not a re-review of the card's last one", async () => {
+    const reviewedOther = { reviewVerdict: 'approve', reviewedHeadSha: HEAD_34, reviewedPullRequestNumber: 34 };
+    const first = await workBoard.rules['pr-review']?.pullRequest?.onEnter?.(attachedReviewContext(35, reviewedOther));
+    expect(first).toMatchObject({ type: 'invokeSkill', skillName: 'factory-review' });
+    if (!first || first.type !== 'invokeSkill') throw new Error('Expected review invocation.');
+    expect(first.arguments).toContain('GitHub pull request #35');
+    expect(first.arguments).not.toContain(HEAD_34);
+
+    const fromDone = await workBoard.rules['pr-review']?.pullRequest?.onEnter?.(
+      attachedReviewContext(35, reviewedOther, 'done'),
+    );
+    expect(fromDone).toMatchObject({ type: 'invokeSkill', skillName: 'factory-review' });
+
+    const again = await workBoard.rules['pr-review']?.pullRequest?.onEnter?.(
+      attachedReviewContext(35, {
+        reviewVerdict: 'request changes',
+        reviewedHeadSha: HEAD_34,
+        reviewedPullRequestNumber: 35,
+      }),
+    );
+    expect(again).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
+    if (!again || again.type !== 'invokeSkill') throw new Error('Expected review invocation.');
+    expect(again.arguments).toContain(`previous pass recorded "request changes" on \`${HEAD_34}\``);
+  });
+
   it('keeps completed reviews terminal when the PR or MR is later closed without merging', () => {
     expect(workBoard.phases.done.nextPhases).toEqual(['pr-review']);
     expect(workBoard.phases.canceled.nextPhases).toEqual(['intake', 'pr-review']);

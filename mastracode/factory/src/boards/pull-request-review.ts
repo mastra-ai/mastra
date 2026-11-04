@@ -107,8 +107,26 @@ function headLine(item: FactoryRuleItemContext, priorReviewCompleted: boolean): 
   return '';
 }
 
-export function hasRecordedVerdict(item: FactoryRuleItemContext): boolean {
-  return typeof item.metadata?.reviewVerdict === 'string';
+/**
+ * Whether a pass already recorded a verdict on `change`. An issue card can carry
+ * several pull requests, so a verdict stamped for another one doesn't count; a
+ * verdict with no number (a standalone card, or one stamped before verdicts named
+ * their pull request) covers the card.
+ */
+export function hasRecordedVerdict(
+  item: FactoryRuleItemContext,
+  change: Pick<ReviewedChangeRequest, 'number'> | undefined = reviewedChangeRequest(item),
+): boolean {
+  return typeof item.metadata?.reviewVerdict === 'string' && !reviewedAnotherPullRequest(item, change);
+}
+
+/** The card's recorded pass names a different pull request than `change`. */
+function reviewedAnotherPullRequest(
+  item: FactoryRuleItemContext,
+  change: Pick<ReviewedChangeRequest, 'number'> | undefined,
+): boolean {
+  const covered = item.metadata?.reviewedPullRequestNumber;
+  return typeof covered === 'number' && change?.number !== undefined && covered !== change.number;
 }
 
 export function reviewPullRequest(context: FactoryStageRuleContext) {
@@ -118,10 +136,13 @@ export function reviewPullRequest(context: FactoryStageRuleContext) {
   const supersedes = context.fromStage === context.toStage;
   // The re-review skill applies once a prior pass recorded a verdict. Cards
   // closed as Done before verdicts were recorded in place also count.
-  const priorReviewCompleted = hasRecordedVerdict(context.item) || context.fromStage === 'done';
   // An issue card with no pull request attached has nothing to review.
   const change = reviewedChangeRequest(context.item);
   if (!change) return;
+  // A pass recorded for another pull request on the card is no prior pass for this one.
+  const priorReviewCompleted =
+    !reviewedAnotherPullRequest(context.item, change) &&
+    (hasRecordedVerdict(context.item, change) || context.fromStage === 'done');
   const isGitlab = change.provider === 'gitlab';
   const skillName = isGitlab
     ? priorReviewCompleted

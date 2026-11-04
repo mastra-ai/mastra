@@ -725,7 +725,13 @@ describe('factory_transition_work_item', () => {
         factoryProjectId: PROJECT_ID,
         input: { title: 'Authoring work', stages: ['review'], metadata: { note: 'kept' } },
       });
-      await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { parentWorkItemId: parent.item.id } });
+      const reviewing = await storage.get({ orgId: 'org-1', id });
+      await storage.update({
+        orgId: 'org-1',
+        id,
+        userId: 'user-1',
+        patch: { parentWorkItemId: parent.item.id, metadata: { ...reviewing?.metadata, githubPullRequestNumber: 34 } },
+      });
       const context = requestContext();
       const tools = await createFactoryTransitionTools({
         requestContext: context,
@@ -745,6 +751,10 @@ describe('factory_transition_work_item', () => {
         reviewVerdict: 'request changes',
         reviewedHeadSha: 'abc1234def000000000000000000000000000000',
       });
+      const reviewed = await storage.get({ orgId: 'org-1', id });
+      // The mirror names the pull request it covers, so the Work card's next pass is scoped the same way.
+      expect(reviewed?.metadata?.reviewedPullRequestNumber).toBe(34);
+      expect(work?.metadata?.reviewedPullRequestNumber).toBe(34);
     });
 
     it('records the published PR verdict on a pull request card reviewed on the Work board', async () => {
