@@ -1801,6 +1801,62 @@ describe('PlatformGithubIntegration', () => {
       expect(migratedRepository?.installationId).toBe(newInstallation.id);
     });
 
+    it('skips stale installations from earlier reinstalls and only migrates to a live one', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldRepository } = await seedReinstalledOrg(storage);
+      // A third install of the same account: 456 is now stale too and 789 is live.
+      await new Promise(resolve => setTimeout(resolve, 5));
+      const liveInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '789',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      const dead = () =>
+        new Response(JSON.stringify({ error: 'Installation not found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      const fetchImpl = vi.fn<typeof fetch>(async input =>
+        String(input).includes('/installations/789/token')
+          ? json({ token: 'ghs_live', expiresAt: '2026-07-21T18:00:00Z' })
+          : dead(),
+      );
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toMatchObject({ authorization: { scheme: 'bearer', token: 'ghs_live' } });
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(liveInstallation.id);
+    });
+
+    it('does not repoint the repository at another dead installation', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldInstallation, oldRepository } = await seedReinstalledOrg(storage);
+      const fetchImpl = vi.fn<typeof fetch>(
+        async () =>
+          new Response(JSON.stringify({ error: 'Installation not found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).rejects.toThrow();
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(oldInstallation.id);
+    });
+
     it('leaves the repository alone when the mint fails for a transient reason', async () => {
       const { sourceControl } = await createPlatformStorageForTests();
       const storage = sourceControl.forIntegration('github');
