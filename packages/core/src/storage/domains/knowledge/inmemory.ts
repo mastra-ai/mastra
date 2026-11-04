@@ -1,8 +1,8 @@
 import type { InMemoryDB } from '../inmemory-db';
 import { KNOWLEDGE_STORAGE_CONTRACT_VERSION, KNOWLEDGE_STORAGE_SCHEMA_VERSION, KnowledgeStorage } from './base';
-import type { KnowledgePageStore } from './pages';
 import { InMemoryKnowledgeImporterStore } from './importers';
 import type { KnowledgeImporterStore } from './importers';
+import type { KnowledgePageStore } from './pages';
 import { InMemoryKnowledgePageStore } from './pages-inmemory';
 
 export class InMemoryKnowledgeStorage extends KnowledgeStorage {
