@@ -98,6 +98,25 @@ describe('Composer voice dictation', () => {
     expect(bodies).toEqual([]);
   });
 
+  it('opens one microphone even when clicked again while the browser asks for permission', async () => {
+    let grantMic: (stream: FakeMicStream) => void = () => {};
+    getUserMedia.mockReturnValue(new Promise<FakeMicStream>(resolve => (grantMic = resolve)));
+    acceptTranscribe(() => HttpResponse.json({ text: 'hello' }));
+    const user = userEvent.setup();
+    await composerReady();
+
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+    const waiting = await screen.findByRole('button', { name: 'Waiting for microphone…' });
+    expect(waiting).toBeDisabled();
+    await user.click(waiting);
+    grantMic(micStream());
+    await user.click(await screen.findByRole('button', { name: 'Stop dictation' }));
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled());
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the server error when no transcription key is configured', async () => {
     acceptTranscribe(() =>
       HttpResponse.json({ error: 'Voice input needs an API key for a speech-to-text provider.' }, { status: 400 }),

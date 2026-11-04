@@ -12,9 +12,6 @@ import { AddApiKeyDialog } from '../AddApiKeyDialog';
 import { hasVoiceKey } from './key-scope';
 import type { VoiceKeyScope } from './key-scope';
 
-/** Deepgram is speech-to-text only, so the chat provider list never carries its env var. */
-const STT_ENV_VAR: Record<string, string> = { deepgram: 'DEEPGRAM_API_KEY' };
-
 function keyStatusLabel({ user, org }: VoiceKeyStatus): string {
   if (user && org) return 'Personal and organization keys';
   if (user) return 'Personal key';
@@ -32,14 +29,8 @@ export function SpeechToTextKeys({ keys, keyScope }: { keys: VoiceKeyStatus[]; k
   const authEnabled = authQuery.data?.authEnabled === true;
   const cannotAddOrgKey = keyScope === 'org' && orgKeyAdminQuery.data === false;
 
-  const openDialog = (provider: string) =>
-    setDialogProvider(
-      providersQuery.data?.find(p => p.provider === provider) ?? {
-        provider,
-        source: 'none',
-        envVar: STT_ENV_VAR[provider],
-      },
-    );
+  const openDialog = ({ provider, envVar }: VoiceKeyStatus) =>
+    setDialogProvider(providersQuery.data?.find(p => p.provider === provider) ?? { provider, source: 'none', envVar });
 
   return (
     <>
@@ -54,7 +45,7 @@ export function SpeechToTextKeys({ keys, keyScope }: { keys: VoiceKeyStatus[]; k
                 icon={<KeyRound />}
                 disabled={cannotAddOrgKey}
                 aria-label={`${action} ${name} key`}
-                onClick={() => openDialog(status.provider)}
+                onClick={() => openDialog(status)}
               >
                 {action} key
               </Button>

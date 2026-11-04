@@ -27,9 +27,9 @@ function settings(overrides: Partial<VoiceSettingsResponse> = {}): VoiceSettings
     effective: { provider: 'openai', model: 'whisper-1' },
     models: MODELS,
     keys: [
-      { provider: 'openai', user: true, org: true },
-      { provider: 'mistral', user: true, org: false },
-      { provider: 'deepgram', user: false, org: false },
+      { provider: 'openai', envVar: 'OPENAI_API_KEY', user: true, org: true },
+      { provider: 'mistral', envVar: 'MISTRAL_API_KEY', user: true, org: false },
+      { provider: 'deepgram', envVar: 'DEEPGRAM_API_KEY', user: false, org: false },
     ],
     ...overrides,
   };
@@ -149,9 +149,9 @@ describe('VoiceInputSettings', () => {
         HttpResponse.json(
           settings({
             keys: [
-              { provider: 'openai', user: true, org: true },
-              { provider: 'mistral', user: true, org: false },
-              { provider: 'deepgram', user: hasDeepgram, org: false },
+              { provider: 'openai', envVar: 'OPENAI_API_KEY', user: true, org: true },
+              { provider: 'mistral', envVar: 'MISTRAL_API_KEY', user: true, org: false },
+              { provider: 'deepgram', envVar: 'DEEPGRAM_API_KEY', user: hasDeepgram, org: false },
             ],
           }),
         ),

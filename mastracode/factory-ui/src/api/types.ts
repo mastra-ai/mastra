@@ -177,19 +177,21 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
 }
 
-/** `GET`/`PUT /web/voice/settings`. `selected: null` means auto: the first provider with a key. */
 export interface VoiceChoice {
   provider: string;
   model: string;
 }
 
+/** `GET`/`PUT /web/voice/settings`. */
 export interface VoiceSettingsResponse {
   /** The Factory's model scope; `null` when no Factory was named. */
   modelScope: 'factory' | 'user' | 'hybrid' | null;
@@ -202,6 +204,6 @@ export interface VoiceSettingsResponse {
   effective: VoiceChoice | null;
   /** Every registry model; `available` when the caller can use a key for it under the Factory's scope. */
   models: Array<VoiceChoice & { label: string; available: boolean }>;
-  /** Which speech-to-text keys the caller holds personally and the org shares. */
-  keys: Array<{ provider: string; user: boolean; org: boolean }>;
+  /** Which speech-to-text keys the caller holds personally and the org shares, and the env var each key fills. */
+  keys: Array<{ provider: string; envVar?: string; user: boolean; org: boolean }>;
 }
