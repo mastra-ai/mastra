@@ -315,8 +315,9 @@ export class Knowledge extends MastraBase {
 
   /**
    * Runs a registered importer and returns its finished run. A failing or canceled importer doesn't
-   * throw: the run says `failed` or `canceled` with the error, and removes none of its pages. Throws
-   * {@link KnowledgeImporterBusyError} when the importer is already running in this process; runs
+   * throw: the run says `failed` or `canceled` with the error, keeps the writes it made, removes no
+   * stale pages and saves no state. Throws {@link KnowledgeImporterBusyError} when the importer is
+   * already running on this instance; runs
    * aren't locked across processes, so schedule each importer on one worker.
    *
    * Writes are host writes made as `importer:<id>`. **Host-only**, like {@link Knowledge.upsertPage}.

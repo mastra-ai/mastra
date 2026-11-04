@@ -268,4 +268,49 @@ describe('Knowledge importers', () => {
     expect(knowledge.listImporters().map(importer => importer.id)).toEqual(['one']);
     return expect(knowledge.runImporter('missing')).rejects.toThrow(/No Knowledge importer/);
   });
+  it('never removes a page it did not create, even after writing to it', async () => {
+    const source = items({ id: 'faq', title: 'FAQ', body: 'imported' });
+    const { knowledge, page } = setup([docsImporter(source)]);
+    await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'docs/faq',
+      name: 'FAQ',
+      body: 'by a person',
+      author: 'user:1',
+    });
+    await knowledge.runImporter('docs');
+    source.clear();
+    const run = await knowledge.runImporter('docs');
+    expect(run.counts.removed).toBe(0);
+    expect(await page('docs/faq')).not.toBeNull();
+  });
+
+  it('keeps a cursor unchanged when the run fails', async () => {
+    const importer: KnowledgeImporter = {
+      id: 'cursor',
+      async run(ctx) {
+        await ctx.state.set('since', 5);
+        throw new Error('source down');
+      },
+    };
+    const { knowledge } = setup([importer]);
+    const run = await knowledge.runImporter('cursor', { incremental: true });
+    expect(run.status).toBe('failed');
+    const storage = await knowledge.getStorage();
+    expect(await storage.getImportState({ importerId: 'cursor', key: 'since' })).toBeUndefined();
+  });
+
+  it('records the run failed when a stale page cannot be removed', async () => {
+    const source = items({ id: 'a', title: 'A', body: 'a' });
+    const { knowledge } = setup([docsImporter(source)]);
+    await knowledge.runImporter('docs');
+    const storage = await knowledge.getStorage();
+    storage.deletePage = async () => {
+      throw new Error('storage down');
+    };
+    source.clear();
+    const run = await knowledge.runImporter('docs');
+    expect(run.status).toBe('failed');
+    expect(run.error).toContain('storage down');
+  });
 });

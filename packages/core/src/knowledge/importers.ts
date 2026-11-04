@@ -112,10 +112,6 @@ function emptyCounts(): KnowledgeImportRunCounts {
   return { created: 0, updated: 0, unchanged: 0, removed: 0, notes: 0 };
 }
 
-function isAbort(error: unknown, signal: AbortSignal): boolean {
-  return signal.aborted || (error as Error | undefined)?.name === 'AbortError';
-}
-
 /** @internal */
 export interface KnowledgeImporterHost extends KnowledgeHostWriter {
   log(level: 'info' | 'warn', message: string, data?: Record<string, unknown>): void;
@@ -139,8 +135,6 @@ export async function runKnowledgeImporter<TOptions>(
   const counts = emptyCounts();
   const controller = new AbortController();
   const onAbort = () => controller.abort(input.signal?.reason);
-  if (input.signal?.aborted) onAbort();
-  else input.signal?.addEventListener('abort', onAbort, { once: true });
 
   const run = await storage.createImportRun({
     id: randomUUID(),
@@ -152,9 +146,16 @@ export async function runKnowledgeImporter<TOptions>(
     startedAt: new Date(),
   });
 
+  if (input.signal?.aborted) onAbort();
+  else input.signal?.addEventListener('abort', onAbort, { once: true });
+
   const touched = new Map<string, KnowledgeImportOwnedPage>();
+  /** Pages this importer created in earlier runs. Only these, and pages it creates now, can be swept. */
+  let owned = new Set<string>();
   const keeps: Array<{ scope: string; path: string }> = [];
+  /** State saved by this run; written only when it succeeds, so a failed run doesn't move a cursor. */
   const pendingState = new Map<string, unknown>();
+  const dryCreated = new Set<string>();
   const scopeAddresses = new Map<string, string>();
 
   /** The stored address of `scope` (canonical), or the input when the scope doesn't exist yet. */
@@ -180,23 +181,32 @@ export async function runKnowledgeImporter<TOptions>(
     async upsert(page) {
       checkAbort();
       const result = dryRun ? await previewUpsert(storage, page) : await upsertKnowledgePage(host, { ...page, author });
+      if (dryRun && result.status === 'created') dryCreated.add(`${page.scope}#${page.path}`);
       counts[result.status]++;
-      const owned = await ownedPage(page.scope, page.path);
-      touched.set(ownedKey(owned), owned);
-      if (!dryRun) await storage.updateImportOwnedPages({ importerId: importer.id, add: [owned] });
+      const ownedEntry = await ownedPage(page.scope, page.path);
+      const key = ownedKey(ownedEntry);
+      // A page someone else created stays theirs: writing to it doesn't let a later run remove it.
+      if (result.status === 'created' || owned.has(key)) {
+        touched.set(key, ownedEntry);
+        if (!dryRun && !owned.has(key)) {
+          await storage.updateImportOwnedPages({ importerId: importer.id, add: [ownedEntry] });
+          owned.add(key);
+        }
+      }
       return result;
     },
     async remove(page) {
       checkAbort();
-      const owned = await ownedPage(page.scope, page.path);
-      touched.delete(ownedKey(owned));
+      const ownedEntry = await ownedPage(page.scope, page.path);
+      touched.delete(ownedKey(ownedEntry));
       if (dryRun) {
         const exists = await pageExists(storage, page.scope, page.path);
         if (exists) counts.removed++;
         return exists;
       }
       const removed = await removeKnowledgePage(host, { ...page, author });
-      await storage.updateImportOwnedPages({ importerId: importer.id, remove: [owned] });
+      await storage.updateImportOwnedPages({ importerId: importer.id, remove: [ownedEntry] });
+      owned.delete(ownedKey(ownedEntry));
       if (removed) counts.removed++;
       return removed !== null;
     },
@@ -206,25 +216,37 @@ export async function runKnowledgeImporter<TOptions>(
     },
     async addNote(note) {
       checkAbort();
-      counts.notes++;
       if (dryRun) {
-        const owned = await ownedPage(note.scope, note.path);
-        if (!touched.has(ownedKey(owned)) && !(await pageExists(storage, note.scope, note.path))) {
+        if (!dryCreated.has(`${note.scope}#${note.path}`) && !(await pageExists(storage, note.scope, note.path))) {
           throw new Error(`No page at ${note.scope}#${note.path}: upsert it first.`);
         }
+        counts.notes++;
         return dryRunNote(note.text);
       }
-      return addKnowledgeNote(host, { ...note, author });
+      const added = await addKnowledgeNote(host, { ...note, author });
+      counts.notes++;
+      return added;
     },
     async updateNote(note) {
       checkAbort();
+      if (dryRun) {
+        if ((await storage.getNote({ id: note.id, read: 'all' })) === null) {
+          throw new Error(`Knowledge note "${note.id}" does not exist.`);
+        }
+        counts.notes++;
+        return dryRunNote(note.text);
+      }
+      const updated = await updateKnowledgeNote(host, { ...note, author });
       counts.notes++;
-      if (dryRun) return dryRunNote(note.text);
-      return updateKnowledgeNote(host, { ...note, author });
+      return updated;
     },
     async removeNote({ id }) {
       checkAbort();
-      if (dryRun) return (await storage.getNote({ id, read: 'all' })) !== null;
+      if (dryRun) {
+        const exists = (await storage.getNote({ id, read: 'all' })) !== null;
+        if (exists) counts.notes++;
+        return exists;
+      }
       const removed = await removeKnowledgeNote(host, { id, author });
       if (removed) counts.notes++;
       return removed !== null;
@@ -245,8 +267,7 @@ export async function runKnowledgeImporter<TOptions>(
       },
       async set(key, value) {
         if (value !== undefined) JSON.stringify(value);
-        if (dryRun) pendingState.set(key, value);
-        else await storage.setImportState({ importerId: importer.id, key, value });
+        pendingState.set(key, value);
       },
     },
     log: (message, data) => host.log('info', `[knowledge importer ${importer.id}] ${message}`, data),
@@ -254,9 +275,16 @@ export async function runKnowledgeImporter<TOptions>(
 
   let status: KnowledgeImportRun['status'] = 'succeeded';
   let error: string | undefined;
+  const sweepFailures: string[] = [];
   try {
+    owned = new Set((await storage.listImportOwnedPages({ importerId: importer.id })).map(ownedKey));
     await importer.run(ctx);
     checkAbort();
+    if (!dryRun) {
+      for (const [key, value] of pendingState) {
+        await storage.setImportState({ importerId: importer.id, key, value });
+      }
+    }
     if (!incremental) {
       for (const page of keeps) {
         const owned = await ownedPage(page.scope, page.path);
@@ -264,8 +292,12 @@ export async function runKnowledgeImporter<TOptions>(
       }
       await sweep();
     }
+    if (sweepFailures.length > 0) {
+      status = 'failed';
+      error = `Could not remove ${sweepFailures.length} page(s): ${sweepFailures.join('; ')}`;
+    }
   } catch (caught) {
-    status = isAbort(caught, controller.signal) ? 'canceled' : 'failed';
+    status = controller.signal.aborted ? 'canceled' : 'failed';
     error = caught instanceof Error ? caught.message : String(caught);
   } finally {
     input.signal?.removeEventListener('abort', onAbort);
@@ -275,8 +307,7 @@ export async function runKnowledgeImporter<TOptions>(
 
   /** Removes the pages this importer owns but didn't write or keep in this run, deepest first. */
   async function sweep() {
-    const owned = await storage.listImportOwnedPages({ importerId: importer.id });
-    const stale = owned
+    const stale = (await storage.listImportOwnedPages({ importerId: importer.id }))
       .filter(page => !touched.has(ownedKey(page)))
       .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
     // Not abortable once started: a canceled run must not have removed anything.
@@ -289,10 +320,17 @@ export async function runKnowledgeImporter<TOptions>(
         if (await removeKnowledgePage(host, { ...page, author })) counts.removed++;
         await storage.updateImportOwnedPages({ importerId: importer.id, remove: [page] });
       } catch (caught) {
-        // Kept owned so a later run retries, e.g. once someone moved the child pages a user added.
-        host.log('warn', `[knowledge importer ${importer.id}] could not remove ${page.scope}#${page.path}`, {
-          error: caught instanceof Error ? caught.message : String(caught),
-        });
+        const message = caught instanceof Error ? caught.message : String(caught);
+        if (
+          (caught as Error | undefined)?.name === 'KnowledgePageHasChildrenError' ||
+          /has child pages/.test(message)
+        ) {
+          // Someone added child pages under it: the page is theirs to keep now, so stop owning it.
+          await storage.updateImportOwnedPages({ importerId: importer.id, remove: [page] });
+          host.log('info', `[knowledge importer ${importer.id}] kept ${page.scope}#${page.path}: it has child pages`);
+        } else {
+          sweepFailures.push(`${page.scope}#${page.path}: ${message}`);
+        }
       }
     }
   }
