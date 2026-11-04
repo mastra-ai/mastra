@@ -12,7 +12,7 @@ export type CopyInputProps = Omit<InputGroupInputProps, 'value' | 'readOnly' | '
 export function CopyInput({ value, label, className, disabled, ...props }: CopyInputProps) {
   return (
     <InputGroup className={className}>
-      <InputGroupInput aria-label={label} value={value} readOnly spellCheck={false} disabled={disabled} {...props} />
+      <InputGroupInput {...props} aria-label={label} value={value} readOnly spellCheck={false} disabled={disabled} />
       <InputGroupAddon align="inline-end">
         <CopyButton content={value} tooltip={`Copy ${label}`} variant="ghost" disabled={disabled} />
       </InputGroupAddon>

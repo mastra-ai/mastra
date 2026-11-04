@@ -130,14 +130,13 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
 }
 
 function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills: FactorySkillInfo[] }) {
-  return (
-    <SettingsContainer>
-      {displayed.flatMap(({ name, title }) => {
-        const skill = skills.find(s => s.name === name);
-        return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
-      })}
-    </SettingsContainer>
-  );
+  const cards = displayed.flatMap(({ name, title }) => {
+    const skill = skills.find(s => s.name === name);
+    return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
+  });
+  // While skills load, or when none match, show no card rather than an empty one.
+  if (cards.length === 0) return null;
+  return <SettingsContainer>{cards}</SettingsContainer>;
 }
 
 /** A phase's skill while the skills catalog is loading or failed to load: we cannot tell whether it exists. */
