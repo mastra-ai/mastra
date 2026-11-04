@@ -7,7 +7,6 @@
 | File             | JSON Config        | Purpose                                   |
 | ---------------- | ------------------ | ----------------------------------------- |
 | `agentcore.ts`   | `agentcore.json`   | Project, agent, memory, credential config |
-| `mcp.ts`         | `agentcore.json`   | Gateways, targets, MCP runtime tools      |
 | `aws-targets.ts` | `aws-targets.json` | Deployment targets (account + region)     |
 
 ## Usage
