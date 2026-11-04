@@ -99,8 +99,8 @@ const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
         typeof part.type === 'string' && part.type.startsWith('data-'),
     )
     .map(part => ({
-      type: part.type,
-      name: 'name' in part && typeof part.name === 'string' ? part.name : undefined,
+      type: 'data',
+      name: part.type.slice('data-'.length),
       data: readField(part, 'data'),
     }));
 
@@ -177,7 +177,7 @@ export const MessageRow = memo(function MessageRow({
                 steps={members.map(member => ({
                   toolName: member.toolName,
                   args: member.input,
-                  status: badgeStatus(member.state, isRunning),
+                  status: badgeStatus(member, dataParts, isRunning),
                   hasResult: isSettledState(member.state),
                 }))}
               >
