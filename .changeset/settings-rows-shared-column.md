@@ -7,7 +7,7 @@
 New pieces for settings pages:
 
 - `SettingsTitle` takes `info`, shown as a tooltip on the title (it gets a dotted underline on hover), for section descriptions that are worth keeping but don't need to sit on the page.
-- `SettingsAddRow` and `SettingsEmptyRow` put a list's add action and empty state inside its `SettingsContainer`, as its last row.
+- `SettingsAddRow`, `SettingsEmptyRow` and `SettingsNoticeRow` keep a list's add action (with other controls like refresh in `actions`), empty state and notices inside its `SettingsContainer`, so the card holds everything about the list.
 - `CopyInput` (`@mastra/playground-ui/components/CopyInput`) shows a read-only value, like an ID, with a copy button.
 - `PageLayout` takes `variant="form"`: `narrow` at 768px, for settings and other form pages.
 

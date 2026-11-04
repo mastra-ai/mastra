@@ -7,6 +7,7 @@ import {
   SettingsContainer,
   SettingsDescription,
   SettingsEmptyRow,
+  SettingsNoticeRow,
   SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
@@ -279,6 +280,23 @@ describe('Settings', () => {
       expect(screen.getByRole('group', { name: 'Invite' }).className).toContain(
         '[.divide-y>&:not(:last-child)]:border-b',
       );
+    });
+  });
+
+  describe('when a list has notices and other controls', () => {
+    it('keeps them inside the container, and hides an empty notice row', () => {
+      render(
+        <SettingsContainer>
+          <SettingsNoticeRow>Couldn’t load accounts</SettingsNoticeRow>
+          <SettingsNoticeRow data-testid="empty-notices" />
+          <SettingsAddRow actions={<button type="button">Refresh</button>}>Add account</SettingsAddRow>
+        </SettingsContainer>,
+      );
+
+      const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.contains(screen.getByText('Couldn’t load accounts'))).toBe(true);
+      expect(container?.contains(screen.getByRole('button', { name: 'Refresh' }))).toBe(true);
+      expect(screen.getByTestId('empty-notices').className).toContain('empty:hidden');
     });
   });
 });
