@@ -298,18 +298,22 @@ describe('Connect provider docs metadata matches the published catalog', () => {
     }
   });
 
-  it('titles each generated page with the sidebar category that lists it', async () => {
+  it('lists each generated page once, in the sidebar category its title names', async () => {
     const sidebarPath = join(packageDir, '../../docs/src/content/en/integrations/sidebars.js');
     const { default: sidebars } = (await import(sidebarPath)) as {
       default: { integrationsSidebar: Array<{ type: string; label?: string; items?: Array<{ id?: string }> }> };
     };
-    const categoryOf = new Map<string, string>();
+    const categoriesOf = new Map<string, string[]>();
     for (const entry of sidebars.integrationsSidebar) {
-      for (const item of entry.items ?? []) if (item.id) categoryOf.set(`${item.id}.mdx`, entry.label!);
+      for (const item of entry.items ?? []) {
+        if (!item.id) continue;
+        const page = `${item.id}.mdx`;
+        categoriesOf.set(page, [...(categoriesOf.get(page) ?? []), entry.label!]);
+      }
     }
     for (const docs of [...Object.values(TOOL_PROVIDERS), ...Object.values(MCP_PROVIDERS)]) {
       if (docs.ownership !== 'generated-page' || !docs.emit) continue;
-      expect([docs.canonicalPage, categoryOf.get(docs.canonicalPage)]).toEqual([docs.canonicalPage, docs.category]);
+      expect([docs.canonicalPage, categoriesOf.get(docs.canonicalPage)]).toEqual([docs.canonicalPage, [docs.category]]);
     }
   });
 
