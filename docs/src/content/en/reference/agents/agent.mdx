@@ -1121,7 +1121,7 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     type: 'boolean | { pubsub?: PubSub; cache?: MastraServerCache | false; shouldCache?: (topic: string) => boolean; cleanupTimeoutMs?: number }',
     isOptional: true,
     description:
-      'Publishes each run on its stream topic so another reader can follow it with observe() or reconnect after a disconnect. Omit to turn streams on when the agent is registered on Mastra and off for standalone agents. Pass false to turn them off. See [Resumable streams](/docs/agents/resumable-streams).',
+      'Publishes each run on its stream topic so another reader can follow it with observe() or reconnect after a disconnect. Omit to turn streams on when the agent is registered on Mastra and off for standalone agents. On a plain agent, pass false to stop publishing. A durable agent always publishes, so false only turns off its replay cache. See [Resumable streams](/docs/agents/resumable-streams).',
   },
   {
     name: 'editor',

@@ -5,6 +5,7 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
@@ -113,6 +114,17 @@ describe('Agent streams option', () => {
     const runId = await run(agent);
     await waitForFinish(pubsub, runId);
     expect(agent.__getStreamBus()?.cache).toBeNull();
+  });
+
+  it('`streams: { cache: false }` overrides `durable.cache` on the wrapper', async () => {
+    const pubsub = new RecordingPubSub();
+    const durableCache = new InMemoryServerCache();
+    const agent = makeAgent({ durable: { cache: durableCache }, streams: { cache: false } });
+    const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+    const durable = mastra.getAgent('agent') as any;
+
+    expect(durable).not.toBe(agent);
+    expect(durable.cache).toBeNull();
   });
 
   it('folds `streams` into the DurableAgent created for `durable: true`', async () => {
