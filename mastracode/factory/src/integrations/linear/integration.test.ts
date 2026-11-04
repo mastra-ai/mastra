@@ -243,6 +243,97 @@ describe('LinearIntegration capability surface', () => {
     };
     expect(secondRequest.variables).toEqual({ first: 100, after: 'teams-page-2' });
   });
+
+  it('follows project pagination cursors so workspaces with more than one page list every project', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              projects: {
+                nodes: [{ id: 'proj-1', name: 'Onboarding', state: 'started', teams: { nodes: [] } }],
+                pageInfo: { hasNextPage: true, endCursor: 'projects-page-2' },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              projects: {
+                nodes: [
+                  {
+                    id: 'proj-101',
+                    name: 'Feedback API Responses',
+                    state: 'planned',
+                    teams: { nodes: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
+                  },
+                ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(integration().listProjects('linear-token')).resolves.toEqual([
+      { id: 'proj-1', name: 'Onboarding', state: 'started', teams: [] },
+      {
+        id: 'proj-101',
+        name: 'Feedback API Responses',
+        state: 'planned',
+        teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+      },
+    ]);
+    const secondRequest = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)) as {
+      variables: Record<string, unknown>;
+    };
+    expect(secondRequest.variables).toEqual({ first: 100, after: 'projects-page-2' });
+  });
+
+  it('rejects a project page that hands back the cursor it was asked for', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              projects: {
+                nodes: [{ id: 'proj-1', name: 'Onboarding', state: 'started', teams: { nodes: [] } }],
+                pageInfo: { hasNextPage: true, endCursor: 'stuck' },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(integration().listProjects('linear-token')).rejects.toMatchObject({ code: 'invalid_cursor' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an issue page that hands back the cursor it was asked for', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ data: { issues: { nodes: [], pageInfo: { hasNextPage: true, endCursor: 'stuck' } } } }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    await expect(integration().listActiveIssues('linear-token', 'stuck', ['proj-1'])).rejects.toMatchObject({
+      code: 'invalid_cursor',
+    });
+  });
   it('applies a team filter (and no project filter) when teamIds is provided', async () => {
     const fetchMock = vi.fn(
       async () =>

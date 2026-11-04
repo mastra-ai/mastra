@@ -400,6 +400,16 @@ describe('linear_list_projects / linear_list_issues — execute', () => {
     expect(result).toEqual({ projects: [{ sourceId: 'proj-1', name: 'Feedback: API responses' }], teams: [] });
   });
 
+  it('matches a hyphenated URL slug against a project name', async () => {
+    vi.mocked(linear.listProjects).mockResolvedValue([
+      { id: 'proj-3', name: 'Agent Browser', state: 'started', teams: [] },
+      { id: 'proj-2', name: 'Onboarding', state: 'planned', teams: [] },
+    ]);
+    const tools = await getTools();
+    const result = await (tools.linear_list_projects!.execute as any)({ query: 'agent-browser' });
+    expect(result).toEqual({ projects: [{ sourceId: 'proj-3', name: 'Agent Browser' }], teams: [] });
+  });
+
   it('lists the open issues in a project and pages with the returned cursor', async () => {
     const listActiveIssues = vi
       .spyOn(linear, 'listActiveIssues')

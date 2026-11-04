@@ -101,7 +101,7 @@ function createLinearListProjectsTool(linear: LinearIntegration, orgId: string) 
   return createTool({
     id: 'linear_list_projects',
     description:
-      'List the Linear projects and teams in the connected workspace, with the source id linear_list_issues needs. Use this to find a project (e.g. from a linear.app/<workspace>/project/<name-slug>-<id> URL, by matching its name) before listing its issues.',
+      'List the Linear projects and teams in the connected workspace, with the source id linear_list_issues needs. Use this to find a project (e.g. from a linear.app/<workspace>/project/<name-slug>-<id> URL, by matching its name; drop the trailing id from the slug) before listing its issues.',
     inputSchema: z.object({
       query: z.string().optional().describe('Case-insensitive text to match against project and team names.'),
     }),
@@ -113,8 +113,14 @@ function createLinearListProjectsTool(linear: LinearIntegration, orgId: string) 
       try {
         // Linear sources are scoped by org alone; no Linear implementation reads userId.
         const sources = await linear.intake.listSources({ orgId, userId: '' });
-        const needle = query?.trim().toLowerCase();
-        const matches = needle ? sources.filter(source => source.name.toLowerCase().includes(needle)) : sources;
+        // Fold hyphens into spaces so a URL slug like "agent-browser" matches "Agent Browser".
+        const normalize = (text: string) =>
+          text
+            .toLowerCase()
+            .replace(/[\s-]+/g, ' ')
+            .trim();
+        const needle = normalize(query ?? '');
+        const matches = needle ? sources.filter(source => normalize(source.name).includes(needle)) : sources;
         return {
           projects: matches
             .filter(source => source.type === 'project')
