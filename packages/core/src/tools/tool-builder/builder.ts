@@ -278,9 +278,15 @@ function buildJsonOverrideSchema(
  * A remote MCP tool's error text is written by the server and can echo the submitted arguments
  * (Issue #29318). The model still receives it; the tracked exception records only its id.
  */
+const REMOTE_TOOL_FAILURE_IDS = new Set([
+  'MCP_CLIENT_TOOL_EXECUTION_FAILED',
+  'MCP_CLIENT_TOOL_TASK_FAILED',
+  'MCP_CLIENT_TOOL_TASK_CANCELLED',
+]);
+
 function trackableToolError(mastraError: MastraError, err: unknown, model: string): MastraError {
   const id = (err as { id?: unknown } | null)?.id;
-  if (id !== 'MCP_CLIENT_TOOL_EXECUTION_FAILED') return mastraError;
+  if (typeof id !== 'string' || !REMOTE_TOOL_FAILURE_IDS.has(id)) return mastraError;
   return new MastraError({
     id: mastraError.id,
     domain: mastraError.domain as ErrorDomain,

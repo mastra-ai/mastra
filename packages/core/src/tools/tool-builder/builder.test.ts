@@ -2,6 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { noopLogger } from '../../logger';
 import { runBeforeApprovalChecks } from '../../loop/workflows/agentic-execution/tool-approval-verdict';
 import { SpanType } from '../../observability';
@@ -1025,6 +1026,43 @@ describe('CoreToolBuilder execution failures', () => {
       }
     }
   });
+
+  it.each(['MCP_CLIENT_TOOL_TASK_FAILED', 'MCP_CLIENT_TOOL_TASK_CANCELLED'])(
+    'keeps remote task failure text out of tracked exceptions (%s)',
+    async id => {
+      const secret = 'person@example.com';
+      const testTool = createTool({
+        id: 'remote_task',
+        description: 'Fails like an MCP task',
+        inputSchema: z.object({ email: z.string() }),
+        execute: async () => {
+          throw new MastraError({
+            id,
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `task task-123 failed for ${secret}`,
+          });
+        },
+      });
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+      const builtTool = new CoreToolBuilder({
+        originalTool: testTool,
+        options: { name: 'remote_task', logger: logger as any },
+      }).build();
+
+      const thrown = await builtTool.execute!({ email: secret }, { toolCallId: 'call-1', messages: [] }).catch(
+        (err: unknown) => err,
+      );
+
+      expect(String(thrown)).toContain(secret);
+      expect(logger.trackException).toHaveBeenCalledTimes(1);
+      const [tracked, metadata] = logger.trackException.mock.calls[0]!;
+      const trackedText = JSON.stringify({ ...tracked, message: tracked.message, metadata });
+      expect(trackedText).toContain(id);
+      expect(trackedText).not.toContain(secret);
+      expect(trackedText).not.toContain('task-123');
+    },
+  );
 });
 
 describe('CoreToolBuilder validation failure logs', () => {
