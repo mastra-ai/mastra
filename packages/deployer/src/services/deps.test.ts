@@ -268,6 +268,7 @@ overrides:
   '@my/app>@mastra/core': 1.82.0
   '@my/app@^1.0.0>zod': 4.5.4
   '@my/app@^2.0.0>lodash': 4.18.1
+  '@my/app@>=1.0.0>ms@<3': 2.1.3
   '@my/app-utils>ms': 2.1.3
   '@my/worker>ms': 2.1.2
 
@@ -282,6 +283,7 @@ importers: {}
       '@mastra/core': '1.67.0',
       'server>@mastra/core': '1.82.0',
       'server>zod': '4.5.4',
+      'server>ms@<3': '2.1.3',
       // The app is 1.2.0, so `@my/app@^2.0.0` didn't apply in the source install either.
       '@my/app-utils>ms': '2.1.3',
       // Packed workspace packages keep their names in the output.

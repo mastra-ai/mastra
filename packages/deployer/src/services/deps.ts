@@ -571,24 +571,26 @@ function retargetAppScopedOverrides(
   app: PackageIdentity | undefined,
   outputName: string | undefined,
 ): Record<string, string> {
-  if (!app || !outputName || app.name === outputName) return overrides;
+  if (!app || !outputName) return overrides;
 
   const retargeted: Record<string, string> = {};
   for (const [selector, spec] of Object.entries(overrides)) {
-    let parentPkg: PackageSelector | undefined;
+    let parsed: { parentPkg?: PackageSelector; targetPkg: PackageSelector } | undefined;
     try {
-      parentPkg = parsePkgAndParentSelector(selector).parentPkg;
+      parsed = parsePkgAndParentSelector(selector);
     } catch {
       // pnpm rejects selectors it can't parse, so the source install could not have used this one.
     }
-    if (parentPkg?.name !== app.name) {
+    if (!parsed?.parentPkg || parsed.parentPkg.name !== app.name) {
       retargeted[selector] = spec;
       continue;
     }
 
-    const range = parentPkg.bareSpecifier;
+    const range = parsed.parentPkg.bareSpecifier;
     if (!range || (app.version && semver.satisfies(app.version, range))) {
-      retargeted[`${outputName}${selector.slice(selector.indexOf('>'))}`] = spec;
+      // Rebuilt from the parsed target, because a parent range like `>=1` also contains `>`.
+      const { name, bareSpecifier } = parsed.targetPkg;
+      retargeted[`${outputName}>${bareSpecifier ? `${name}@${bareSpecifier}` : name}`] = spec;
     }
   }
   return retargeted;
