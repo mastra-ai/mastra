@@ -921,7 +921,8 @@ describe('issue detail route', () => {
           metadata: { linearIssueId: 'issue-1' },
         },
       });
-      await seed.storage.ops.updateMany('work_items', { id: item.id }, { created_at: createdAt });
+      await seed.storage.ops.updateMany('factory_board_items', { id: item.id }, { created_at: createdAt });
+      expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.createdAt).toEqual(createdAt);
     }
     // The finished card is the newer one, so it lists first.
     const listed = await seed.workItems.list({ orgId: 'org1', factoryProjectId: projectB });

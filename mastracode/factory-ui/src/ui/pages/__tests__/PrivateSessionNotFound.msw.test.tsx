@@ -25,7 +25,7 @@ function stubSessionRoute(answer: SessionAnswer) {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory', repositories: [] }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-instructions';
 import { RequestContext } from '@mastra/core/request-context';
-import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
+import { FactorySandbox, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -515,9 +515,9 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain(
-      'This records the classification without advancing; stop until a maintainer moves the card',
+      'use `Route: Await approval` and request `stage: "intake"`. The card rests in Intake until a maintainer moves it on',
     );
-    expect(triage).toContain('triageType');
+    expect(triage).toContain('never pass a `triageType` argument');
     expect(triage).toContain('approval_required');
     const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',
@@ -1068,6 +1068,38 @@ describe('GitHub session workspace preparation', () => {
       workspace: eager(resolver),
     };
   }
+
+  it('lets plan-mode writes through the Factory plans dir on new and reused workspaces', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', branch: 'feature-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const planWrite = (path: string) => ({
+      toolName: 'write_file',
+      workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+      input: { path },
+      context: {
+        requestContext: {
+          controller: { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } },
+        },
+      },
+    });
+
+    const expectFactoryPlansGuard = (resolved: Awaited<ReturnType<typeof workspace>>) => {
+      const guard = resolved.getToolsConfig()!.hooks!.beforeToolCall!;
+      expect(guard(planWrite('.artifacts/plans/ratecard.md') as never)).toBeUndefined();
+      expect(guard(planWrite('.mastracode/plans/ratecard.md') as never)).toMatchObject({ proceed: false });
+    };
+
+    const created = await workspace({ requestContext });
+    expectFactoryPlansGuard(created);
+
+    // Clear it so only the reuse path can put the guard back.
+    created.setToolsConfig(undefined);
+    const reused = await workspace({ requestContext });
+    expect(reused).toBe(created);
+    expectFactoryPlansGuard(reused);
+  });
 
   it('prepares distinct local session checkouts and branches through the factory', async () => {
     const { root, workspace } = await createLocalFactory();

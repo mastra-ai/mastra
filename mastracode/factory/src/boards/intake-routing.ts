@@ -1,7 +1,7 @@
 import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
-import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 
 /** Reads a project's intake routes, in order. */
@@ -16,7 +16,7 @@ type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'ta
 export const INTAKE_ROUTE_METADATA_KEY = 'intakeRouteId';
 
 /** Whether an intake route chose this card's board when it arrived. */
-export function placedByIntakeRoute(item: Pick<WorkItemRow, 'metadata'>): boolean {
+export function placedByIntakeRoute(item: Pick<Card, 'metadata'>): boolean {
   return typeof item.metadata?.[INTAKE_ROUTE_METADATA_KEY] === 'string';
 }
 

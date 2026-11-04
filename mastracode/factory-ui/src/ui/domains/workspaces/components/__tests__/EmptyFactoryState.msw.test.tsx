@@ -95,7 +95,9 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: project ? [project] : [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: project ? [{ ...project, repositories: [] }] : [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
       project ? HttpResponse.json({ project }) : HttpResponse.json({ error: 'not_found' }, { status: 404 }),
     ),

@@ -186,6 +186,50 @@ describe('KnowledgePageExplorer body links', () => {
       expect(screen.getByTestId('knowledge-legend-link')).toBeTruthy();
     });
   });
+  describe('when the exact link counts fail to refresh', () => {
+    const counts = { overview: { in: 0, out: 9 } };
+    const badge = (container: HTMLElement) =>
+      container
+        .querySelector('.react-flow__node [data-page-id="overview"]')
+        ?.querySelector('[data-testid="knowledge-hidden-links"]');
+
+    it('keeps drawing the last exact counts rather than the loaded-page numbers', () => {
+      const failed: KnowledgeExplorerSource = {
+        ...source,
+        useLinkCounts: () => ({ data: counts, isPending: false, isError: true, error: new Error('refetch failed') }),
+      };
+      const { container } = renderWithProviders(
+        <KnowledgePageExplorer
+          graph={graph}
+          source={failed}
+          selectedPageId={null}
+          onSelect={() => {}}
+          view="graph"
+          onViewChange={() => {}}
+        />,
+      );
+      expect(badge(container)?.textContent).toBe('9→');
+    });
+
+    it('falls back to the loaded-page numbers only when there never were exact counts', () => {
+      const never: KnowledgeExplorerSource = {
+        ...source,
+        useLinkCounts: () => ({ isPending: false, isError: true, error: new Error('unavailable') }),
+      };
+      const { container } = renderWithProviders(
+        <KnowledgePageExplorer
+          graph={graph}
+          source={never}
+          selectedPageId={null}
+          onSelect={() => {}}
+          view="graph"
+          onViewChange={() => {}}
+        />,
+      );
+      expect(badge(container)?.textContent).toBe('2→');
+    });
+  });
+
   describe('the graph toggles', () => {
     it('float over the graph, beside Back, and not in the toolbar', () => {
       renderWithProviders(<Host initial={null} initialView="graph" />);

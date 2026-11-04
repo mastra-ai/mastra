@@ -27,6 +27,7 @@ import {
   getDisplayTransform,
   toStepTokenUsage,
 } from './stream-content';
+import { isToolResultError } from './tool-result';
 import { createEmptyTokenUsage } from './types';
 import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
 
@@ -787,7 +788,7 @@ export class SessionRunEngine {
           toolCallId: getString(toolResult.toolCallId) ?? '',
           toolName: getString(toolResult.toolName) ?? '',
           result: getDisplayTransform(chunk.metadata, 'output-available', toolResult.result),
-          isError: getBoolean(toolResult.isError, false),
+          isError: isToolResultError(toolResult),
           providerMetadata: isProviderMetadata(toolResult.providerMetadata) ? toolResult.providerMetadata : undefined,
         });
         break;
@@ -847,7 +848,7 @@ export class SessionRunEngine {
               agentType,
               subToolName: getString(nested.toolName) ?? '',
               subToolResult: output.type === 'tool-error' ? nested.error : nested.result,
-              isError: output.type === 'tool-error' || getBoolean(nested.isError, false),
+              isError: output.type === 'tool-error' || isToolResultError(nested),
             });
             break;
         }

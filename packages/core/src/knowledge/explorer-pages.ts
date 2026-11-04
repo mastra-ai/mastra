@@ -234,7 +234,7 @@ export async function readKnowledgePage(
       cursor: input.noteCursor,
       limit: input.noteLimit ?? DEFAULT_KNOWLEDGE_PAGE_NOTE_LIMIT,
     }),
-    store.listPins({ audience: 'all', read, pageIds: [pageId], limit: 1 }),
+    store.listPins({ audience: 'all', read, kind: 'page', pageIds: [pageId], limit: 1 }),
     store.listNotesMentioning({ pageId, read, limit: DEFAULT_KNOWLEDGE_PAGE_NOTE_LIMIT }),
     readableAncestors(store, page, read),
   ]);
@@ -295,6 +295,62 @@ export interface KnowledgePageGraph {
   truncated: boolean;
 }
 
+/** Runs a per-id count over `pages` in list-limit batches; null when the store can't count. */
+async function countInBatches(
+  pages: KnowledgePage[],
+  count: (ids: string[]) => Promise<Record<string, number>>,
+): Promise<Record<string, number> | null> {
+  const counts: Record<string, number> = {};
+  try {
+    for (let start = 0; start < pages.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+      Object.assign(
+        counts,
+        await count(pages.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT).map(page => page.id)),
+      );
+    }
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return null;
+    throw error;
+  }
+  return counts;
+}
+
+/**
+ * Children of every parent in one graph level, in the tree's order: readable child scopes of scope
+ * parents (scope pages only sit under scopes), then child pages, listed only for parents the level's
+ * one count says have some. `null` lists the root scopes.
+ */
+async function graphLevelChildren(
+  store: KnowledgePageStore,
+  level: Array<string | null>,
+  read: KnowledgeReadScope,
+  byId: Map<string, KnowledgePage>,
+): Promise<{ byParent: KnowledgePage[][]; truncated: boolean }> {
+  let truncated = false;
+  const parents = level.flatMap(id => (id === null ? [] : [byId.get(id)!]));
+  const pageCounts = await countInBatches(parents, ids => store.countChildPages({ parentIds: ids, read }));
+  const byParent: KnowledgePage[][] = [];
+  for (const parentId of level) {
+    const parent = parentId === null ? null : byId.get(parentId)!;
+    const children: KnowledgePage[] = [];
+    if (!parent || parent.isScope) {
+      const scopes = await visibleChildScopes(store, parentId, read, { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN });
+      truncated ||= scopes.truncated;
+      children.push(...scopes.scopes);
+    }
+    if (parent && (!pageCounts || pageCounts[parent.id])) {
+      let cursor: string | undefined;
+      do {
+        const result = await store.listChildPages({ parentId: parent.id, read, cursor });
+        children.push(...result.pages);
+        cursor = result.nextCursor;
+      } while (cursor);
+    }
+    byParent.push(children);
+  }
+  return { byParent, truncated };
+}
+
 /**
  * A bounded graph: pages breadth-first under `rootId` (or every root scope `read` reaches), parent
  * edges between them, and mention edges from their readable notes. A hidden note never contributes
@@ -325,14 +381,16 @@ export async function readKnowledgePageGraph(
     queue = [root.id];
   }
   // Tree parent of each walked page as the tree shows it (hoisted scopes attach to their visible parent).
+  // The walk goes a level at a time: one child-page count for the whole level, then a listing only for
+  // the parents that have children, so a tree of mostly leaf pages costs a few calls per level.
   const treeParent = new Map<string, string>();
   walk: while (queue.length) {
-    const parentId = queue.shift()!;
-    let cursor: string | undefined;
-    do {
-      const level = await listKnowledgeTreeChildren(store, { parentId, read, cursor });
-      truncated ||= level.truncated;
-      for (const child of level.pages) {
+    const level = queue;
+    queue = [];
+    const children = await graphLevelChildren(store, level, read, byId);
+    truncated ||= children.truncated;
+    for (const [i, parentId] of level.entries()) {
+      for (const child of children.byParent[i]!) {
         if (byId.has(child.id)) continue;
         if (pages.length >= limits.maxPages) {
           truncated = true;
@@ -342,18 +400,19 @@ export async function readKnowledgePageGraph(
         if (parentId !== null) treeParent.set(child.id, parentId);
         queue.push(child.id);
       }
-      cursor = level.nextCursor;
-    } while (cursor);
+    }
   }
 
   const edges: KnowledgePageGraphEdge[] = [];
   for (const [child, parent] of treeParent) edges.push({ source: parent, target: child, kind: 'parent' });
 
   const walked = [...pages];
+  const noteCounts = await countInBatches(walked, ids => store.countNotes({ pageIds: ids, read }));
   const mentionCounts = new Map<string, Map<string, number>>();
   const outsideWanted = new Set<string>();
   let notesLeft = limits.maxNotes;
   notes: for (const page of walked) {
+    if (noteCounts && !noteCounts[page.id]) continue;
     let cursor: string | undefined;
     do {
       if (notesLeft <= 0) {
@@ -376,15 +435,20 @@ export async function readKnowledgePageGraph(
   }
 
   const outsideIds: string[] = [];
-  for (const id of outsideWanted) {
-    if (outsideIds.length >= limits.maxOutsidePages) {
-      truncated = true;
-      break;
+  const wanted = [...outsideWanted];
+  outside: for (let start = 0; start < wanted.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+    const ids = wanted.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
+    const found = new Map((await store.getPages({ ids, read })).map(page => [page.id, page]));
+    for (const id of ids) {
+      const page = found.get(id);
+      if (!page || page.deletedAt || page.mergedInto) continue;
+      if (outsideIds.length >= limits.maxOutsidePages) {
+        truncated = true;
+        break outside;
+      }
+      add(page);
+      outsideIds.push(page.id);
     }
-    const page = await store.getPage({ id, read });
-    if (!page || page.deletedAt || page.mergedInto) continue;
-    add(page);
-    outsideIds.push(page.id);
   }
 
   for (const [source, counts] of mentionCounts) {
@@ -401,6 +465,7 @@ export async function readKnowledgePageGraph(
       const result = await store.listPins({
         audience: 'all',
         read,
+        kind: 'page',
         pageIds: ids.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT),
         cursor,
       });

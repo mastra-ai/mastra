@@ -1438,6 +1438,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
+    "model": "llmgateway-providers/baidu/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
     "model": "llmgateway-providers/bytedance/deepseek-v3.2",
     "imageInput": false,
     "audioInput": false,
@@ -3834,8 +3846,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 262144,
-    "inputCost": 0.15,
-    "outputCost": 0.5
+    "inputCost": 0.11,
+    "outputCost": 0.33
   },
   {
     "model": "llmgateway-providers/reka-ai/reka-edge-2603",
@@ -4628,18 +4640,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 117964,
     "inputCost": 0.35,
     "outputCost": 1.5
-  },
-  {
-    "model": "llmgateway-providers/together-ai/qwen3.8-2.4t-a95b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1010000,
-    "maxOutput": 909000,
-    "inputCost": 2,
-    "outputCost": 6
   },
   {
     "model": "llmgateway-providers/vertex-anthropic/claude-haiku-4-5",

@@ -15,18 +15,10 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "zai-org/GLM-5.1": [
-      {
-        "type": "toggle"
       },
       {
         "type": "budget_tokens"
@@ -44,10 +36,18 @@
         "type": "budget_tokens"
       }
     ],
-    "zai-org/GLM-5.3": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "zai-org/GLM-5.1": [
+      {
+        "type": "toggle"
       },
       {
         "type": "budget_tokens"
