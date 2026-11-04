@@ -55,6 +55,7 @@ async function main() {
 
   console.log(`Ensuring vector index "${VECTOR_INDEX}" (dimension ${EMBED_DIMENSION}, cosine)…`);
   await vectorStore.createIndex({ indexName: VECTOR_INDEX, dimension: EMBED_DIMENSION, metric: 'cosine' });
+  await vectorStore.waitForIndexReady({ indexName: VECTOR_INDEX });
 
   let totalChunks = 0;
   for (const [i, link] of links.entries()) {
