@@ -83,7 +83,7 @@ describe('formatAnnotatedMessage', () => {
     });
 
     it('shows nothing but the passage and the typed item', () => {
-      expect(renderMarkdown(message).textContent?.replace(/[\s\p{Cf}]/gu, '')).toBe('OpenrowsDothisfirst');
+      expect(renderMarkdown(message).textContent?.replace(/\s/g, '')).toBe('OpenrowsDothisfirst');
     });
   });
 

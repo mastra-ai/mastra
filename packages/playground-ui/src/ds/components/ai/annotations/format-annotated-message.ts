@@ -24,9 +24,9 @@ function formatListItem({ text, comment }: AnnotatedPassage, number: number): st
   return [quote, '', ...indentedNote].join('\n');
 }
 
-// CommonMark keeps a numbered or indented line that follows the list inside it; a zero-width-space paragraph ends the list unseen.
+// CommonMark keeps a numbered or indented line that follows the list inside it; an empty link definition ends the list and renders nothing.
 const JOINS_LIST = /^(?:\s|\d{1,9}[.)](?:\s|$))/;
-const LIST_END = '\n\n\u200B\n\n';
+const LIST_END = '\n\n[//]: #\n\n';
 
 /**
  * The message the agent receives: the annotations as a numbered Markdown list, each holding its passage
