@@ -559,7 +559,7 @@ Intended to be passed onto an Agent definition.
 
 App-only tools, whose `_meta.ui.visibility` omits `"model"`, are left out. `listToolsets()` and `listToolDefinitions()` leave them out too.
 
-Server names and tool names can both contain `_`, so two different pairs can produce the same key. For example, server `local` with tool `x_status` and server `local_x` with tool `status` both produce `local_x_status`. Only one of the two tools keeps the key, and the client logs a warning that names both pairs. Rename one of the servers to keep both tools.
+Server names and tool names can both contain `_`, so two different pairs can produce the same key. For example, server `local` with tool `x_status` and server `local_x` with tool `status` both produce `local_x_status`. The tool from the server listed later in `servers` keeps the key, and the client logs a warning that names both pairs. Rename one of the servers to keep both tools.
 
 ```ts
 new Agent({ id: 'agent', tools: await mcp.listTools() })
