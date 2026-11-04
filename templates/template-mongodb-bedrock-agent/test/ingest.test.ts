@@ -53,3 +53,21 @@ test('fails ingestion when the documentation index returns HTTP 503', async () =
   expect(result.code).toBe(1);
   expect(result.output).not.toContain('Done.');
 });
+
+test('stops when the vector index configuration is invalid', async () => {
+  const result = await ingest(
+    (req, res) => {
+      if (req.url === '/llms.txt') {
+        res.end('[Introduction](https://mastra.ai/docs/introduction.md)');
+      } else {
+        res.writeHead(503);
+        res.end('Unavailable');
+      }
+    },
+    { EMBED_DIMENSION: '0' },
+  );
+  expect(result.output).toContain('Dimension must be a positive integer');
+  expect(result.code).toBe(1);
+  expect(result.output).not.toContain('SKIPPED');
+  expect(result.output).not.toContain('Done.');
+});

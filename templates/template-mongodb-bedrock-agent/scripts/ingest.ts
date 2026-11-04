@@ -54,11 +54,7 @@ async function main() {
   const vectorStore = new MongoDBVector({ id: 'ingest', uri: MONGODB_URI, dbName: MONGODB_DATABASE });
 
   console.log(`Ensuring vector index "${VECTOR_INDEX}" (dimension ${EMBED_DIMENSION}, cosine)…`);
-  try {
-    await vectorStore.createIndex({ indexName: VECTOR_INDEX, dimension: EMBED_DIMENSION, metric: 'cosine' });
-  } catch (err) {
-    console.log(`  (index may already exist) ${(err as Error).message}`);
-  }
+  await vectorStore.createIndex({ indexName: VECTOR_INDEX, dimension: EMBED_DIMENSION, metric: 'cosine' });
 
   let totalChunks = 0;
   for (const [i, link] of links.entries()) {
