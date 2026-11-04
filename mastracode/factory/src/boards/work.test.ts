@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { openApprovedChangeRequest, workBoard } from './work.js';
 
 function executeContext(source: FactoryRuleItemContext['source']): FactoryStageRuleContext {
@@ -20,7 +21,13 @@ function executeContext(source: FactoryRuleItemContext['source']): FactoryStageR
       url: 'https://gitlab.com/acme/app/-/issues/3',
       stages: ['execute'],
       acceptedAt: null,
-      metadata: { identifier: 'acme/app#3' },
+      metadata: {},
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Fix the issue',
+        source: { integrationId: source === 'gitlab-issue' ? 'gitlab' : 'github', type: 'issue', externalId: '3' },
+        metadata: { identifier: 'acme/app#3' },
+      }),
     },
     board: 'work',
     itemRevision: 1,
@@ -40,7 +47,13 @@ describe('work board triage dispatch', () => {
       item: {
         ...context.item,
         sourceKey: 'incidentio:issue:incidentio:follow-up:01HFOLLOWUP',
-        metadata: { identifier: 'ENG-42' },
+        metadata: { identifier: 'stale-board-identifier' },
+        workItem: createProviderWorkItemForTests({
+          id: context.item.id,
+          title: context.item.title,
+          source: { integrationId: 'incidentio', type: 'issue', externalId: 'incidentio:follow-up:01HFOLLOWUP' },
+          metadata: { identifier: 'ENG-42' },
+        }),
       },
       source: 'incidentioFollowUp',
       stage: 'triage',

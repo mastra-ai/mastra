@@ -327,13 +327,17 @@ describe('factory_update_work_item', () => {
   });
 
   it("refuses to repoint a card synced from an issue, which follows the issue's repository", async () => {
-    const { run, workItems, fileItem } = await setup();
-    const { item } = await fileItem('project-1', 'Issue card');
-    await workItems.update({
+    const { run, workItems } = await setup();
+    const { item } = await workItems.upsert({
       orgId: 'org-1',
-      id: item.id,
+      factoryProjectId: 'project-1',
       userId: 'user-1',
-      patch: { metadata: { githubRepositoryId: '2', repository: 'mastra-ai/mastra' } },
+      input: {
+        title: 'Issue card',
+        stages: ['intake'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: '42' },
+        metadata: { githubRepositoryId: '2', repository: 'mastra-ai/mastra' },
+      },
     });
 
     await expect(

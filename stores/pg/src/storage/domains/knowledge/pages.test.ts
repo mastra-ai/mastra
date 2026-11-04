@@ -312,6 +312,49 @@ describe('PgKnowledgePages (schema 4)', () => {
     await pool.query(`DROP SCHEMA stale_key_test CASCADE`);
   });
 
+  it('keeps pins from before pin kinds as page pins and then takes a list pin on the same page', async () => {
+    const schema = 'pin_kind_upgrade_test';
+    await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await pool.query(`CREATE SCHEMA ${schema}`);
+    await initPgKnowledgePagesSchema(client, schema);
+    const old = new PgKnowledgePages({
+      client,
+      schemaName: schema,
+      bounds: async () => ({
+        assertKnowledgePageDescriptionWithinBound: () => {},
+        assertKnowledgeNoteTextWithinBound: () => {},
+      }),
+    });
+    const { scope } = await old.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'Acme',
+      provenance,
+    });
+    const page = await old.createPage({ parentId: scope.id, name: 'Policy', body: 'Be kind.', provenance });
+    // The pins table as it shipped before kinds: one pin per page.
+    await pool.query(`DROP TABLE ${schema}.mastra_knowledge_pins`);
+    await pool.query(`CREATE TABLE ${schema}.mastra_knowledge_pins (
+      "id" text PRIMARY KEY, "pageId" text NOT NULL UNIQUE REFERENCES ${schema}.mastra_knowledge_pages ("id"),
+      "audience" text[] NOT NULL, "createdBy" text NOT NULL, "createdAt" timestamptz NOT NULL, "updatedAt" timestamptz NOT NULL)`);
+    await pool.query(
+      `INSERT INTO ${schema}.mastra_knowledge_pins VALUES ('pin-old', $1, '{org:acme}', 'agent:alex', now(), now())`,
+      [page.id],
+    );
+
+    await initPgKnowledgePagesSchema(client, schema);
+    await initPgKnowledgePagesSchema(client, schema);
+    const { pins } = await old.listPins({ audience: ['org:acme'], read: 'all' });
+    expect(pins).toMatchObject([{ id: 'pin-old', pageId: page.id, kind: 'page', audience: ['org:acme'] }]);
+    await old.addPinAudience({ pageId: page.id, kind: 'list', depth: 2, audience: ['org:acme'], createdBy: 'a' });
+    const kinds = (await old.listPins({ audience: ['org:acme'], read: 'all' })).pins.map(pin => [pin.kind, pin.depth]);
+    expect(kinds.sort()).toEqual([
+      ['list', 2],
+      ['page', undefined],
+    ]);
+    await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+  });
+
   it('refuses an unknown schema version until reset, and resets only Knowledge tables', async () => {
     await pool.query(`DROP SCHEMA IF EXISTS legacy_test CASCADE`);
     await pool.query(`CREATE SCHEMA legacy_test`);

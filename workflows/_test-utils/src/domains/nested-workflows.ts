@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { stepsOf } from '../steps';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
@@ -456,7 +457,8 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
         const parentRun = await parent.createRun();
         const suspended = await parentRun.start({ inputData: { value: 'request' } });
         expect(suspended.status).toBe('suspended');
-        const childRunId = (suspended.steps[child.id] as any)?.suspendPayload?.__workflow_meta?.runId as string;
+        const childRunId = ((await stepsOf(suspended))[child.id] as any)?.suspendPayload?.__workflow_meta
+          ?.runId as string;
         expect(childRunId).toEqual(expect.any(String));
 
         const childRun = await child.createRun({ runId: childRunId });

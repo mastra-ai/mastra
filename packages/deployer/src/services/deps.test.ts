@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@internal/core/error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { parse } from 'yaml';
+import { parse, parseAllDocuments } from 'yaml';
 import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';
 
 const { runChildProcess } = vi.hoisted(() => ({
@@ -16,6 +16,9 @@ vi.mock('../deploy/log.js', () => ({
 }));
 
 const tempDirs: string[] = [];
+
+// pnpm 11+ writes this environment document before the project document when `packageManager` is set.
+const pnpmEnvironmentDocument = `---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    configDependencies: {}\n    packageManagerDependencies:\n      pnpm:\n        specifier: 12.15.0\n        version: 12.15.0\n\n---\n`;
 
 beforeEach(() => {
   runChildProcess.mockReset();
@@ -45,7 +48,7 @@ describe('copyPnpmWorkspaceSettings', () => {
   // workspace root. They are re-emitted from options once rewritten for the output directory.
   it('copies pnpm install policy without copying source workspace packages or raw patch paths', () => {
     const output = copyPnpmWorkspaceSettings(
-      `packages:\n  - packages/*\n\ncatalog:\n  react: ^19.0.0\n\nminimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@mastra/*'\n\nallowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`,
+      `packages:\n  - packages/*\n\ncatalog:\n  react: ^19.0.0\n\nminimumReleaseAge: 1440\n//registry.example/:_authToken: secret\nminimumReleaseAgeExclude:\n  - '@mastra/*'\n\nallowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`,
     );
 
     expect(output).toBe(
@@ -57,6 +60,8 @@ describe('copyPnpmWorkspaceSettings', () => {
     `allowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\nonlyBuiltDependencies:\n  - better-sqlite3\n  - '@duckdb/node-bindings'\n`,
     `allowBuilds: { onnxruntime-node: false, node-pty: true }\n\nonlyBuiltDependencies: [better-sqlite3, '@duckdb/node-bindings']\n`,
     `allowBuilds: {}\n\nonlyBuiltDependencies: []\n`,
+    `onlyBuiltDependencies:\n- better-sqlite3\n# approved for the sqlite store\n- '@duckdb/node-bindings'\n`,
+    `"allowBuilds":\n  node-pty: true\n\n'onlyBuiltDependencies': [better-sqlite3]\n`,
   ])('preserves valid explicit pnpm build approvals', source => {
     expect(copyPnpmWorkspaceSettings(source)).toBe(`packages:\n  - '.'\n\n${source}`);
   });
@@ -92,6 +97,13 @@ describe('copyPnpmWorkspaceSettings', () => {
       details: { key },
     });
     expect((error as Error).message).toContain(invalidEntry);
+  });
+
+  it('copies build approvals written as YAML explicit keys', () => {
+    expect(parse(copyPnpmWorkspaceSettings('? onlyBuiltDependencies\n: [esbuild]\n'))).toEqual({
+      packages: ['.'],
+      onlyBuiltDependencies: ['esbuild'],
+    });
   });
 
   it('uses requested architecture over source supportedArchitectures', () => {
@@ -221,6 +233,134 @@ describe('DepsService custom pnpm workspace settings', () => {
       minimumReleaseAge: 1440,
       blockExoticSubdeps: false,
     });
+  });
+
+  const projectLockfile = `lockfileVersion: '9.0'\n\noverrides:\n  lodash@<4.18.0: ^4.18.1\n  '@inner/shared': 1.0.0\n  local-fork: link:../forks/local-fork\n\nimporters: {}\n`;
+
+  // The lockfile holds overrides with catalog and `$name` specs resolved, wherever pnpm read them from.
+  it.each([
+    ['a single-document lockfile', projectLockfile],
+    ['a lockfile with a pnpm environment document', `${pnpmEnvironmentDocument}${projectLockfile}`],
+  ])('installs with the overrides the source lockfile was resolved with, from %s (#29192)', async (_, lockfile) => {
+    await writeFile(join(sourceRoot, 'pnpm-lock.yaml'), lockfile);
+
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmOverrides: { '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz' },
+    });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.overrides).toEqual({
+      'lodash@<4.18.0': '^4.18.1',
+      '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz',
+    });
+  });
+
+  it('points overrides scoped to the app at the output package (#29348)', async () => {
+    await writeFile(join(sourceRoot, 'package.json'), JSON.stringify({ name: '@my/app', version: '1.2.0' }));
+    await writeFile(join(outputDir, 'package.json'), JSON.stringify({ name: 'server', version: '1.0.0' }));
+    await writeFile(
+      join(sourceRoot, 'pnpm-lock.yaml'),
+      `lockfileVersion: '9.0'
+
+overrides:
+  '@mastra/core': 1.67.0
+  '@my/app>@mastra/core': 1.82.0
+  '@my/app@^1.0.0>zod': 4.5.4
+  '@my/app@^2.0.0>lodash': 4.18.1
+  '@my/app@>=1.0.0>ms@<3': 2.1.3
+  '@my/app-utils>ms': 2.1.3
+  '@my/worker>ms': 2.1.2
+
+importers: {}
+`,
+    );
+
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.overrides).toEqual({
+      '@mastra/core': '1.67.0',
+      'server>@mastra/core': '1.82.0',
+      'server>zod': '4.5.4',
+      'server>ms@<3': '2.1.3',
+      // The app is 1.2.0, so `@my/app@^2.0.0` didn't apply in the source install either.
+      '@my/app-utils>ms': '2.1.3',
+      // Packed workspace packages keep their names in the output.
+      '@my/worker>ms': '2.1.2',
+    });
+  });
+
+  it('copies source package extensions with catalog specs resolved', async () => {
+    await writeFile(
+      join(sourceRoot, 'pnpm-workspace.yaml'),
+      `packages: ["apps/*"]
+catalog:
+  has-flag: 4.0.0
+catalogs:
+  legacy:
+    supports-color: 7.2.0
+packageExtensions:
+  debug@4:
+    dependencies:
+      has-flag: 'catalog:'
+      supports-color: 'catalog:legacy'
+  zod@4:
+    peerDependencies:
+      local: link:../local
+`,
+    );
+
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.packageExtensions).toEqual({
+      'debug@4': { dependencies: { 'has-flag': '4.0.0', 'supports-color': '7.2.0' } },
+    });
+  });
+
+  // pnpm 11 stopped reading the `pnpm` field, so copying it for a newer pnpm would approve builds the project never ran.
+  it.each([
+    ['pnpm@10.34.6', true],
+    ['pnpm@12.15.0', false],
+  ])(
+    'copies build approvals from the package.json pnpm field only for pnpm 10 (%s)',
+    async (packageManager, copied) => {
+      const extensions = { 'debug@4': { dependencies: { 'has-flag': '4.0.0' } } };
+      await writeFile(
+        join(sourceRoot, 'package.json'),
+        JSON.stringify({
+          name: 'source',
+          packageManager,
+          pnpm: { onlyBuiltDependencies: ['esbuild'], packageExtensions: extensions },
+        }),
+      );
+
+      await new DepsService(sourceRoot).install({ dir: outputDir });
+
+      const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+      expect(workspace.minimumReleaseAge).toBe(1440);
+      expect(workspace.onlyBuiltDependencies).toEqual(copied ? ['esbuild'] : undefined);
+      expect(workspace.packageExtensions).toEqual(copied ? extensions : undefined);
+    },
+  );
+
+  it.each([
+    ['first', '"onlyBuiltDependencies": []\nminimumReleaseAge: 1440\n'],
+    ['after a copied key', 'minimumReleaseAge: 1440\n"onlyBuiltDependencies": []\n'],
+  ])('keeps a quoted pnpm-workspace.yaml key %s over package.json build approvals', async (_, workspaceYaml) => {
+    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), workspaceYaml);
+    await writeFile(
+      join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: 'source', packageManager: 'pnpm@10.34.6', pnpm: { onlyBuiltDependencies: ['esbuild'] } }),
+    );
+
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    // `parse` rejects duplicate keys, so this also checks the setting is written once.
+    expect(workspace.minimumReleaseAge).toBe(1440);
+    expect(workspace.onlyBuiltDependencies).toEqual([]);
   });
 
   it('preserves existing behavior when custom settings are omitted', async () => {
@@ -610,14 +750,17 @@ describe('DepsService lockfile installation', () => {
     expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('bun install');
   });
 
-  it('drops workspace links for packed workspace tarballs from a copied pnpm lockfile', async () => {
+  it.each([
+    ['a single-document lockfile', ''],
+    ['a lockfile with a pnpm environment document', pnpmEnvironmentDocument],
+  ])('drops workspace links for packed workspace tarballs from %s', async (_, environmentDocument) => {
     // The app is the workspace root, so the lockfile's root importer is the app and links its
     // workspace dependency. pnpm keeps a `link:` version even when an override points elsewhere.
     const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pnpm-root-app-'));
     tempDirs.push(root);
     const outputDir = join(root, '.mastra', 'output');
     await mkdir(outputDir, { recursive: true });
-    const sourceLock = `lockfileVersion: '9.0'
+    const sourceLock = `${environmentDocument}lockfileVersion: '9.0'
 
 importers:
 
@@ -649,9 +792,20 @@ packages:
       pnpmOverrides: { '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz' },
     });
 
-    const outputLock = parse(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8'));
+    const outputDocuments = parseAllDocuments(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).map(
+      document => document.toJS(),
+    );
+    const outputLock = outputDocuments.at(-1);
+    expect(outputDocuments.slice(0, -1)).toEqual(
+      parseAllDocuments(environmentDocument)
+        .map(document => document.toJS())
+        .slice(0, -1),
+    );
     expect(outputLock.importers['.'].dependencies).toEqual({ zod: { specifier: '^4.0.0', version: '4.1.0' } });
-    expect(outputLock.importers['packages/shared'].devDependencies).toEqual({});
+    // The output installs only the root importer. Editing others would only make pnpm 11 recheck the lockfile (#29279).
+    expect(outputLock.importers['packages/shared'].devDependencies).toEqual({
+      '@inner/shared': { specifier: 'workspace:*', version: 'link:.' },
+    });
     expect(outputLock.packages).toEqual({ 'zod@4.1.0': { resolution: { integrity: 'sha512-abc' } } });
     expect(await readFile(join(root, 'pnpm-lock.yaml'), 'utf-8')).toBe(sourceLock);
   });

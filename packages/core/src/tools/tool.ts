@@ -18,7 +18,13 @@ import type {
   ToolExecutionContext,
   ToolPayloadTransform,
 } from './types';
-import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
+import {
+  getValidationIssuePaths,
+  validateToolInput,
+  validateToolOutput,
+  validateToolSuspendData,
+  validateRequestContext,
+} from './validation';
 import type { ValidationError } from './validation';
 
 /**
@@ -630,7 +636,10 @@ export class Tool<
 
         if (outputValidation.error) {
           const logger = organizedContext.mastra?.getLogger?.() ?? this.mastra?.getLogger?.();
-          logger?.warn(outputValidation.error.message, { toolId: this.id });
+          logger?.warn('Tool output validation failed', {
+            toolId: this.id,
+            issuePaths: getValidationIssuePaths(outputValidation.error, this.outputSchema, 'output'),
+          });
           if (this.outputValidation === 'warn') {
             // The tool already ran, so keep its real result and only report the mismatch.
             return output;
