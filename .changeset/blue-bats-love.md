@@ -11,3 +11,14 @@ Improved MCP Apps support in Studio:
 - Apps now receive object tool outputs as `structuredContent`, with the JSON text kept alongside it, so apps that render from structured data work in Studio.
 - Links an app asks Studio to open must be `http` or `https`; others (such as `javascript:` or `file:`) are refused.
 - Apps follow Studio's light or dark theme.
+
+```tsx
+import { McpAppViewer } from '@mastra/playground-ui/domains/mcps/components/mcp-app-viewer';
+
+<McpAppViewer
+  html={html}
+  toolName="showObservabilityDashboard"
+  onToolCall={(name, args) => callServerTool(name, args)}
+  onUpdateModelContext={context => setNextTurnContext(context)}
+/>;
+```

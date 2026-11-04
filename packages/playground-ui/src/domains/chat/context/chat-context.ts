@@ -44,8 +44,8 @@ export interface SendContextValue {
    * Holds context for the agent's next turn, keyed by where it comes from (such as an MCP App's tool
    * call). On the next send, each source's latest value goes out once in the user turn, inside an
    * `<mcp-app-context trust="untrusted">` block marked as data rather than instructions, then is
-   * cleared. Keep it out of the system prompt: apps are third parties. `undefined` drops a source's
-   * context. Absent when the chat can't carry it.
+   * cleared. Keep it out of the system prompt: apps are third parties. `undefined` or an empty string
+   * drops a source's context. Absent when the chat can't carry it.
    */
   setModelContext?: (sourceId: string, context: string | undefined) => void;
 }

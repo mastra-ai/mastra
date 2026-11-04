@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -1582,13 +1583,6 @@ export function resolveRouteValidationError(
   };
 }
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  hasPermissionPromise ??= import('@mastra/core/auth/ee').then(m => m.hasPermission).catch(() => undefined);
-  return hasPermissionPromise;
-}
-
 export interface InvokeRouteOptions {
   mastra: Mastra;
   /**
@@ -1692,16 +1686,13 @@ export async function invokeRoute(route: ServerRoute, options: InvokeRouteOption
   };
 
   if (authConfigured) {
-    const hasPermission = await loadHasPermission();
-    if (hasPermission) {
-      const userPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
-      const permissionError = getRoutePermissionError(mastra, route, userPermissions, hasPermission, requestContext);
-      if (permissionError) {
-        return {
-          status: permissionError.status,
-          body: { error: permissionError.error, message: permissionError.message },
-        };
-      }
+    const userPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
+    const permissionError = getRoutePermissionError(mastra, route, userPermissions, hasPermission, requestContext);
+    if (permissionError) {
+      return {
+        status: permissionError.status,
+        body: { error: permissionError.error, message: permissionError.message },
+      };
     }
   }
 

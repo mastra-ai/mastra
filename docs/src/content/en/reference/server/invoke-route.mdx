@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # invokeRoute()
 
-The `invokeRoute()` function runs a server route in-process as the calling user and returns what the route would have answered over HTTP. It applies the same checks as the route's HTTP endpoint on every adapter: authentication, your auth provider's `authorize`, `authorizeUser`, and `rules`, schema validation, RBAC permission, and fine-grained authorization (FGA).
+The `invokeRoute()` function runs a server route in-process as the calling user and returns what the route would have answered over HTTP. It expects a request context that Mastra server auth already authenticated, then applies the same checks as the route's HTTP endpoint on every adapter: your auth provider's `authorize`, `authorizeUser`, and `rules`, schema validation, RBAC permission, and fine-grained authorization (FGA).
 
 Use it to expose a route through another channel, such as an MCP tool, without proxying through the HTTP server and without the two drifting apart.
 
