@@ -33,6 +33,8 @@ const AUDIENCE: Record<CredentialScope, string> = {
   org: 'Everyone in your organization can use it.',
 };
 
+const PROVIDER_LIST_CLASS = 'border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border';
+
 function matchesSearch(provider: ProviderInfo, query: string): boolean {
   return (
     provider.provider.toLowerCase().includes(query) ||
@@ -85,7 +87,8 @@ export function AddProviderDrawer({
   const sorted = providers.toSorted(
     (left, right) => Number(isGateway(right)) - Number(isGateway(left)) || left.provider.localeCompare(right.provider),
   );
-  const signInProviders = sorted.filter(provider => isGateway(provider) || provider.oauth?.supported === true);
+  const gateway = query ? undefined : sorted.find(isGateway);
+  const signInProviders = sorted.filter(provider => provider.oauth?.supported === true);
   const shown = query ? sorted.filter(provider => matchesSearch(provider, query)) : signInProviders;
   const keyOnlyCount = providers.filter(provider => provider.oauth?.supported !== true && takesApiKey(provider)).length;
   const connectingGateway = connectGatewayMutation.isPending ? providers.find(isGateway)?.provider : undefined;
@@ -101,6 +104,17 @@ export function AddProviderDrawer({
   const connectGateway = () => {
     connectGatewayMutation.mutate({ scope: requestScope }, { onSuccess: onClose });
   };
+
+  const providerRow = (provider: ProviderInfo) => (
+    <AddProviderRow
+      key={provider.provider}
+      provider={provider}
+      credentialScope={credentialScope}
+      startingProvider={startingProvider}
+      onSignIn={() => (isGateway(provider) ? connectGateway() : signIn(provider))}
+      onAddKey={() => onAddKey(provider)}
+    />
+  );
 
   const closeUnlessStarting = (nextOpen: boolean) => {
     if (!nextOpen && startingProvider === undefined) onClose();
@@ -136,6 +150,14 @@ export function AddProviderDrawer({
             value={search}
             onValueChange={setSearch}
           />
+          {gateway && (
+            <>
+              <Txt as="p" variant="caption" tone="muted">
+                Recommended
+              </Txt>
+              <ul className={PROVIDER_LIST_CLASS}>{providerRow(gateway)}</ul>
+            </>
+          )}
           <Txt as="p" variant="caption" tone="muted">
             {query ? `${shown.length} of ${providers.length} providers` : 'Sign in with a subscription'}
           </Txt>
@@ -144,18 +166,7 @@ export function AddProviderDrawer({
               {emptyMessage(search)}
             </Txt>
           ) : (
-            <ul className="border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border">
-              {shown.map(provider => (
-                <AddProviderRow
-                  key={provider.provider}
-                  provider={provider}
-                  credentialScope={credentialScope}
-                  startingProvider={startingProvider}
-                  onSignIn={() => (isGateway(provider) ? connectGateway() : signIn(provider))}
-                  onAddKey={() => onAddKey(provider)}
-                />
-              ))}
-            </ul>
+            <ul className={PROVIDER_LIST_CLASS}>{shown.map(providerRow)}</ul>
           )}
           {!query && keyOnlyCount > 0 && (
             <Txt as="p" variant="caption" tone="muted">
