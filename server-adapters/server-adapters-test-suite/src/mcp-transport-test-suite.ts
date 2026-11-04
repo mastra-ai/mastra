@@ -422,6 +422,82 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       });
     });
 
+    describe('HTTP Transport with server auth', () => {
+      // Reports what an MCP tool can see of the caller, so the test can check it
+      // matches what Mastra server auth resolved for the HTTP request.
+      const whoamiTool = createTool({
+        id: 'whoami',
+        description: 'Reports the caller identity the tool sees',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          const requestContext = context?.requestContext;
+          const user = requestContext?.get('user') as { id?: string } | undefined;
+          return {
+            userId: user?.id ?? null,
+            permissions: requestContext?.get('mastra__userPermissions') ?? null,
+          };
+        },
+      });
+
+      let authedHttpServer: { close: () => void };
+      let authedPort: number;
+      let authedMcpServer: MCPServer;
+      let authedClient: MCPClient;
+
+      beforeAll(async () => {
+        authedMcpServer = new MCPServer({ name: 'authed', version: '1.0.0', tools: { whoami: whoamiTool } });
+        const authedMastra = new Mastra({
+          mcpServers: { authed: authedMcpServer },
+          server: {
+            auth: {
+              authenticateToken: async (token: string) => (token === 'reader-token' ? { id: 'user-reader' } : null),
+              authorize: async () => true,
+            },
+            rbac: {
+              getPermissions: async () => ['observability:read'],
+              getRoles: async () => ['reader'],
+            } as any,
+          },
+        });
+        const setup = await createServer(authedMastra);
+        authedHttpServer = setup.server;
+        authedPort = setup.port;
+        authedClient = new MCPClient({
+          servers: {
+            authed: {
+              url: new URL(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`),
+              requestInit: { headers: { Authorization: 'Bearer reader-token' } },
+            },
+          },
+        });
+      }, 30000);
+
+      afterAll(async () => {
+        await authedClient?.disconnect();
+        authedHttpServer?.close();
+        await authedMcpServer?.close();
+      }, 30000);
+
+      it('gives MCP tools the user and permissions server auth resolved', async () => {
+        const tools = await authedClient.listTools();
+        const whoami = tools['authed_whoami'];
+        if (!whoami?.execute) throw new Error('Expected authed_whoami tool');
+
+        const result = await whoami.execute({}, {} as any);
+
+        expectTextToolResult(result, { userId: 'user-reader', permissions: ['observability:read'] });
+      });
+
+      it('rejects MCP requests without credentials', async () => {
+        const response = await fetch(`http://localhost:${authedPort}/api/mcp/${authedMcpServer.id}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+        });
+        expect(response.status).toBe(401);
+      });
+    });
+
     describe('HTTP Transport client disconnect', () => {
       // Sends a raw tools/call and destroys the socket while the tool is running. The tool
       // must observe the abort promptly, not only after it has run to completion.
