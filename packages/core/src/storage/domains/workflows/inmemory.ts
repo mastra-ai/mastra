@@ -981,16 +981,19 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   async deleteWorkflowRunById({
     runId,
     workflowName,
+    storageVersion,
     fence,
   }: {
     runId: string;
     workflowName: string;
+    storageVersion?: 1 | 2;
     fence?: RunFence;
   }): Promise<void> {
     this.assertFence(fence, runId, 'deleteWorkflowRunById');
     const key = this.getWorkflowKey(workflowName, runId);
+    if (storageVersion !== 2) this.db.workflows.delete(key);
+    if (storageVersion === 1) return;
     this.detachStateChildren(workflowName, runId);
-    this.db.workflows.delete(key);
     this.db.workflowRunHeaders.delete(key);
     this.db.workflowRunEntries.delete(key);
   }
