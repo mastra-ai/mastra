@@ -13,4 +13,4 @@ const workflow = createWorkflow({
 });
 ```
 
-`init()` creates the new `mastra_workflow_runs` and `mastra_workflow_run_entries` tables. Existing runs keep working and are listed together with version 2 runs. Retention removes old version 2 runs along with their entries. Requires `@mastra/core` 1.82.0 or newer.
+`init()` creates the new `mastra_workflow_runs` and `mastra_workflow_run_entries` tables. Existing runs keep working and are listed together with version 2 runs. Retention removes old version 2 runs along with their entries. Requires `@mastra/core` 1.83.0 or newer.

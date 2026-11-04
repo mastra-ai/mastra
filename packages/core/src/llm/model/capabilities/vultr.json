@@ -39,6 +39,33 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
+    "qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-pro-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "qwen3.8-27b": [
       {
         "type": "toggle"
@@ -48,10 +75,20 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -61,16 +98,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
       }
     ],
     "glm-5.3-flash": [
@@ -85,22 +112,6 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "mimo-v2.6-pro-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-v4.1-flash": [
       {
         "type": "toggle"
@@ -110,23 +121,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.8-flash-next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
       {
         "type": "toggle"
       }

@@ -1,6 +1,6 @@
 ---
 title: "Memory"
-description: "Add memory to Mastra agents with message history, semantic recall, working memory, and observational memory across threads and multi-agent delegation."
+description: "Add memory to Mastra agents with message history, observational memory, and working memory across threads and multi-agent delegation."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -18,8 +18,7 @@ Memory gives your agent access to earlier messages and tool results. The agent c
 Mastra agents can be configured to store [message history](/docs/memory/message-history). Additionally, you can enable:
 
 - [Observational Memory](../memory/observational-memory) (Recommended): Uses background agents to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
-- [Working memory](../memory/working-memory): Stores persistent, structured user data such as names, preferences, and goals.
-- [Semantic recall](../memory/semantic-recall): Retrieves relevant past messages based on semantic meaning rather than exact keywords.
+- [Working memory](../memory/working-memory): Stores persistent, structured information about the user, the application, or the task, such as names, preferences, and goals.
 - [Multi-user threads](../memory/multi-user-threads): Share one thread between multiple users.
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
@@ -152,7 +151,7 @@ const response = await memoryAgent.generate('Remember my favorite color is blue.
 })
 ```
 
-Scopes can also come from the agent and from the request context. Mastra combines all three sources:
+Scopes can also come from the request context and from the agent. Scopes from the call and the request context arrive first. The agent's `scopes` option then adds a list to them, or a function receives them and returns the run's final set:
 
 ```typescript title="src/mastra/agents/memory-agent.ts" {7-11}
 import { Agent } from '@mastra/core/agent'
@@ -161,10 +160,10 @@ import { Memory } from '@mastra/memory'
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  scopes: ({ requestContext }) => {
+  scopes: ({ scopes, requestContext }) => {
     // Set by your auth middleware. Request bodies can fill unreserved keys.
     const orgId = requestContext.get('org-id')
-    return orgId ? [`org:${orgId}`] : []
+    return orgId ? [...scopes, `org:${orgId}`] : scopes
   },
   memory: new Memory(),
 })
@@ -172,13 +171,15 @@ export const memoryAgent = new Agent({
 
 The resolver's inputs must come from the server, not the client: a request body can set any request context key that isn't reserved. Trusted server middleware can also set scopes directly with the `MASTRA_SCOPES_KEY` request context key. Visit [Request Context](/docs/server/request-context#reserved-keys) for details. Clients can't send scopes in a request body.
 
-You can mix scopes with `memory.resource`, `memory.thread`, or the resource and thread request context keys, as long as they agree. If a `resource:` or `thread:` scope names a different value than another source, the call throws an error.
+You can mix scopes with `memory.resource`, `memory.thread`, or the resource and thread request context keys, as long as they agree. If a `resource:` or `thread:` scope names a different value than another source, the call throws an error. A `scopes` function must also return every `resource:` and `thread:` scope it receives. Dropping one throws an error.
 
 Tools, processors, and subagents receive the run's other scopes, but not its `resource:` and `thread:` scopes. Each nested agent call picks its own resource and thread.
 
 ## Observational Memory
 
 Long conversations can fill the context window with raw message history and reduce agent performance. [Observational Memory](../memory/observational-memory) uses background agents to compress older messages into observations. This reduces the context used by message history while retaining information for later turns.
+
+Compression loses exact wording, so Observational Memory can register a `recall` tool that goes back to the original messages. The tool is off by default: set `retrieval: true` to enable browsing, which lists earlier messages across the resource's threads unless you pass `scope: 'thread'`. With `retrieval: { vector: true }` plus a vector store and embedder on `Memory`, it can also search by meaning. That search matches observation groups rather than raw messages, so a detail the summary dropped may not turn up, and each hit links back to the messages it came from. See [retrieval mode](../memory/observational-memory#retrieval-mode).
 
 <Inject>
   **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
@@ -305,3 +306,16 @@ Visit [Request Context](/docs/server/request-context) for more information.
 - [Tracing](/docs/observability/tracing/overview)
 - [Request Context](/docs/server/request-context)
 - [Mastra Code](https://code.mastra.ai/): A coding agent using Mastra's memory system
+
+<Inject>
+  **For AI agents:** Observational Memory has a few failure modes that cause real problems.
+
+  - Thread scope requires a `threadId` when you call the agent. Without one, Observational Memory throws.
+  - On an existing thread, the first turn loads every stored message until the first observation completes. A large thread pays a one-time context cost.
+  - `lastMessages` does nothing under Observational Memory. It replaces raw history itself, so the MessageHistory processor is skipped.
+  - Leave `observation.observeOnContextOverflow` at its default `true`. When the main model's context overflows, it can activate buffered observations, observe pending messages, and retry the request. It skips read-only requests and only retries when it observed or activated something. With it off, the overflowing request fails.
+  - Some invalid options are validated on first use, not when you construct `Memory`. For example, `shareTokenBudget: true` with async buffering enabled fails on the first memory operation. Read the error instead of retrying.
+  - With async buffering, work continues in the background. Call `await memory.settled()` before closing storage or shutting down, or that work is lost.
+  - The observation mutex only works inside one process. Across processes, coordination comes from a shared PubSub backend and storage: the agent loop uses a backend with leases to run one loop per thread, and the Observer runs inside that loop. Configure every process with the same backend with leases and the same storage. See [Running across processes](/docs/signals/running-across-processes).
+  - Debug with `OM_DEBUG=1`, which writes `om-debug.log`, plus `getStatus()` and the `onDebugEvent` callback.
+</Inject>

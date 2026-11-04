@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { Mastra } from '../mastra';
+import { MockStore } from '../storage/mock';
+import { createWorkflow } from './create';
 import type { Predicate } from './predicate';
 import { collectMappingStepRefs, collectPredicateStepRefs, resolveStepOutputs, stepRefId } from './step-refs';
-import { predicateToCondition } from './workflow';
+import { createStep, predicateToCondition } from './workflow';
 
 describe('collectMappingStepRefs', () => {
   it('collects step sources, array arms and template placeholders without duplicates', () => {
@@ -28,12 +32,44 @@ describe('collectMappingStepRefs', () => {
   it('skips step sources without an id', () => {
     expect(collectMappingStepRefs({ broken: { step: {}, path: '.' }, nothing: { path: '.' } })).toEqual([]);
   });
+});
 
-  it('caches the result per config object', () => {
-    const config = { a: { step: { id: 'a' }, path: '.' } };
-    const first = collectMappingStepRefs(config);
-    expect(collectMappingStepRefs(config)).toBe(first);
-    expect(collectMappingStepRefs({ ...config })).not.toBe(first);
+describe('a .map() config', () => {
+  // `.map()` keeps the config object it is given, and each run reads that object as it is then.
+  // Caching the step ids a config reads per config object kept a step added after the first run
+  // from being read, so it mapped from `null`.
+  it.each([1, 2] as const)('maps a step added to it after an earlier run (storage v%s)', async storageVersion => {
+    const lookup = createStep({
+      id: 'lookup',
+      inputSchema: z.object({ city: z.string() }),
+      outputSchema: z.object({ temp: z.number() }),
+      execute: async () => ({ temp: 21 }),
+    });
+    const forecast = createStep({
+      id: 'forecast',
+      inputSchema: z.object({ temp: z.number() }),
+      outputSchema: z.object({ sky: z.string() }),
+      execute: async () => ({ sky: 'clear' }),
+    });
+    const config: Record<string, { step: typeof lookup | typeof forecast; path: string }> = {
+      temp: { step: lookup, path: 'temp' },
+    };
+    const workflow = createWorkflow({
+      id: 'weather',
+      inputSchema: z.object({ city: z.string() }),
+      outputSchema: z.any(),
+      options: { storageVersion },
+    })
+      .then(lookup)
+      .then(forecast)
+      .map(config)
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { weather: workflow } });
+    const run = () => workflow.createRun().then(r => r.start({ inputData: { city: 'Berlin' } }));
+
+    await expect(run()).resolves.toMatchObject({ status: 'success', result: { temp: 21 } });
+    config.sky = { step: forecast, path: 'sky' };
+    await expect(run()).resolves.toMatchObject({ status: 'success', result: { temp: 21, sky: 'clear' } });
   });
 });
 

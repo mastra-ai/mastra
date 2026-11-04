@@ -474,7 +474,8 @@ describe('MessageRow', () => {
           toolCall('call-3'),
         ]),
       );
-      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 failed')).toBeTruthy();
     });
 
     it('does not count recorded legacy tool errors as successful results', () => {
@@ -495,7 +496,8 @@ describe('MessageRow', () => {
           toolCall('three'),
         ]),
       );
-      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 failed')).toBeTruthy();
     });
 
     it('does not count unfinished calls in stopped history as successful', () => {
@@ -506,7 +508,8 @@ describe('MessageRow', () => {
           toolCall('call-3', 'genericTool', 'call'),
         ]),
       );
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
     });
 
     it('identifies only unfinished calls inside the expanded group', () => {
@@ -549,7 +552,8 @@ describe('MessageRow', () => {
       );
       const stored = messages.get.all.db();
       renderRow(stored[0]);
-      expect(screen.getByText('2 OK · 1 incomplete')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 incomplete')).toBeTruthy();
     });
 
     it('preserves incomplete counts when a live row stops and is remounted as history', () => {
@@ -573,13 +577,15 @@ describe('MessageRow', () => {
       const pendingCall = within(screen.getAllByRole('group', { name: 'genericTool' })[1]).getByRole('button');
       fireEvent.click(pendingCall);
       rerender(row(false));
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
       expect(screen.getAllByText('Incomplete')).toHaveLength(2);
       expect(pendingCall.getAttribute('aria-expanded')).toBe('true');
       expect(pendingCall.isConnected).toBe(true);
       unmount();
       renderRow(structuredClone(message));
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
       fireEvent.click(within(screen.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
       expect(screen.getAllByText('Incomplete')).toHaveLength(2);
     });

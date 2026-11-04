@@ -28,7 +28,7 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "zai-org/glm-5.1": [
       {
         "type": "toggle"
       }
@@ -39,18 +39,18 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/glm-5.1": [
+    "moonshotai/kimi-k2.5": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["high", "max"]

@@ -226,6 +226,46 @@ describe('storageVersion per run', () => {
     expect(storedInNextStep?.steps.approve).toMatchObject({ status: 'success', output: { n: 1 } });
   });
 
+  it("stores a v1 run's resumed branch step with the next step's start, as before storage v2", async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const workflow = createWorkflow({ id: 'branched', inputSchema: num, outputSchema: z.any() })
+      .branch([[async () => true, approveAddOne('approve')]])
+      .then(
+        createStep({
+          id: 'next',
+          inputSchema: z.any(),
+          outputSchema: z.any(),
+          execute: async ({ inputData }) => inputData,
+        }),
+      )
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { branched: workflow } });
+    const run = await workflow.createRun();
+    expect((await run.start({ inputData: { n: 0 } })).status).toBe('suspended');
+
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    const writes: unknown[] = [];
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      const { status, context } = args.snapshot;
+      const { input: _input, ...stepResults } = context;
+      const steps = Object.fromEntries(Object.entries(stepResults).map(([id, step]) => [id, step.status]));
+      writes.push({ status, steps });
+      return persist(args);
+    });
+    const resumed = await (
+      await workflow.createRun({ runId: run.runId })
+    ).resume({ step: 'approve', resumeData: true });
+
+    expect(resumed.status).toBe('success');
+    expect(writes).toEqual([
+      { status: 'running', steps: { approve: 'running' } },
+      { status: 'running', steps: { approve: 'success', next: 'running' } },
+      { status: 'running', steps: { approve: 'success', next: 'success' } },
+      { status: 'success', steps: { approve: 'success', next: 'success' } },
+    ]);
+  });
+
   it('reruns the time travel target on restart when the process died right after the checkpoint', async () => {
     const storage = new MockStore();
     const store = storage.stores.workflows!;
@@ -434,6 +474,86 @@ describe('storageVersion per run', () => {
     // Only the restarted execution's b starts in storage.
     expect(started).toEqual(['a', 'a', 'b']);
   });
+
+  it.each([
+    { endsFirst: 'hung', storedLast: { n: 22 } },
+    { endsFirst: 'restarted', storedLast: { n: 12 } },
+  ] as const)(
+    'stores the writes of a hung execution and the restart that replaced it as they come ($endsFirst ends first), as v1 does',
+    async ({ endsFirst, storedLast }) => {
+      async function restartWhileStepHangs(storageVersion: 1 | 2) {
+        const gates: (() => void)[] = [];
+        let calls = 0;
+        const workflow = createWorkflow({
+          id: 'hung',
+          inputSchema: num,
+          outputSchema: num,
+          options: { storageVersion },
+        })
+          .then(addOne('a'))
+          .then(
+            createStep({
+              id: 'slow',
+              inputSchema: num,
+              outputSchema: num,
+              execute: async ({ inputData }) => {
+                const call = ++calls;
+                await new Promise<void>(resolve => gates.push(resolve));
+                return { n: inputData.n + 10 * call };
+              },
+            }),
+          )
+          .then(addOne('c'))
+          .commit();
+        const storage = new MockStore();
+        new Mastra({ logger: false, storage, workflows: { hung: workflow } });
+        const run = await workflow.createRun();
+
+        const first = run.start({ inputData: { n: 0 } });
+        await vi.waitFor(() => expect(gates).toHaveLength(1));
+        // slow hangs and the run's lease lapses, so the run is restarted in the same process.
+        await expireRunLeases(storage);
+        const restarted = run.restart();
+        await vi.waitFor(() => expect(gates).toHaveLength(2));
+
+        // One execution ends while the other still runs.
+        const executions = [
+          { gate: gates[0]!, done: first },
+          { gate: gates[1]!, done: restarted },
+        ];
+        if (endsFirst === 'restarted') executions.reverse();
+        const results = [];
+        for (const { gate, done } of executions) {
+          gate();
+          // Read this execution's steps before the other execution writes a newer result.
+          results.push(await withLoadedSteps(await done));
+        }
+
+        // The snapshot resume, restart and time travel continue from.
+        const stored = (await storage.stores.workflows!.loadWorkflowSnapshot({
+          workflowName: 'hung',
+          runId: run.runId,
+        }))!;
+        const read = (await workflow.getWorkflowRunById(run.runId))!;
+        const outputs = (steps: Record<string, any>) =>
+          Object.fromEntries(Object.entries(steps).map(([id, step]) => [id, step.output ?? step]));
+        return {
+          returned: results.map(result => ({ status: result.status, steps: outputs(result.steps) })),
+          stored: { status: stored.status, result: stored.result, steps: outputs(stored.context) },
+          read: { status: read.status, result: read.result, steps: outputs(read.steps ?? {}) },
+          listed: (await workflow.listWorkflowRuns()).total,
+        };
+      }
+
+      const v1 = await restartWhileStepHangs(1);
+      expect(v1).toMatchObject({
+        stored: { status: 'success', result: storedLast },
+        read: { result: storedLast },
+        listed: 1,
+      });
+      expect(await restartWhileStepHangs(2)).toEqual(v1);
+    },
+  );
 
   it('makes sync getStepResult throw inside v2 steps', async () => {
     const workflow = createWorkflow({
@@ -853,6 +973,53 @@ describe('storage v2 write volume', () => {
     },
   );
 
+  it.each([1, 4])(
+    "serializes JSON linear in a foreach's item count as it records its finished items (concurrency %s)",
+    async concurrency => {
+      /** The JSON length that serializing during the run produced. */
+      async function serialized(count: number) {
+        const kb = createStep({
+          id: 'kb',
+          inputSchema: num,
+          outputSchema: z.object({ text: z.string() }),
+          execute: async ({ inputData }) => ({ text: String(inputData.n % 10).repeat(1024) }),
+        });
+        const workflow = createWorkflow({
+          id: 'items',
+          inputSchema: z.array(num),
+          outputSchema: z.array(z.object({ text: z.string() })),
+          options: { storageVersion: 2 },
+        })
+          .foreach(kb, { concurrency })
+          .commit();
+        new Mastra({ logger: false, storage: new MockStore(), workflows: { items: workflow } });
+        const run = await workflow.createRun();
+        const inputData = Array.from({ length: count }, (_, n) => ({ n }));
+
+        const stringify = JSON.stringify;
+        let chars = 0;
+        const spy = vi.spyOn(JSON, 'stringify').mockImplementation((...args: Parameters<typeof stringify>) => {
+          const json = stringify(...args);
+          chars += json?.length ?? 0;
+          return json;
+        });
+        try {
+          const result = await run.start({ inputData });
+          expect(result.status).toBe('success');
+        } finally {
+          spy.mockRestore();
+        }
+        return chars;
+      }
+
+      const small = await serialized(128);
+      const large = await serialized(512);
+      // Serializing the whole foreach result each time an item finishes would grow with the square
+      // of the item count: 16 times as much for 4 times the items.
+      expect(large).toBeLessThanOrEqual(6 * small);
+    },
+  );
+
   it('keeps the patches after the latest full state within the state size across suspend and resume cycles', async () => {
     const storage = new MockStore();
     const store = storage.stores.workflows!;
@@ -968,6 +1135,11 @@ function withoutTimestamps(value: unknown): unknown {
   );
 }
 
+/** The result with its steps loaded: a storage v2 result's `steps` is a loader. */
+async function withLoadedSteps(result: any) {
+  return { ...result, steps: typeof result.steps === 'function' ? await result.steps() : result.steps };
+}
+
 type Scenario = {
   build: (storageVersion: 1 | 2) => AnyWorkflow;
   drive: (workflow: AnyWorkflow, runId: string) => Promise<unknown>;
@@ -1002,7 +1174,7 @@ async function runAndReadBack(storageVersion: 1 | 2, { build, drive }: Scenario)
       await store.loadWorkflowSnapshot({ workflowName: workflow_name, runId: run_id, storageVersion }),
     );
   }
-  return { result: withoutTimestamps(result), runs };
+  return { result: withoutTimestamps(await withLoadedSteps(result)), runs };
 }
 
 const scenarios: Record<string, Scenario> = {
@@ -2526,10 +2698,13 @@ describe('storage v2 memory', () => {
     expect(readValues).toEqual([{ n: 1 }, { n: 9 }]);
     // step9 is the previous entry, so it's in memory; step1 was evicted.
     expect(readsInLastStep).toEqual([['step1']]);
-    // No step read its input from storage, since each one's previous entry was still in memory.
-    // The end of the run reads back what is still evicted, in one read.
-    expect(reads).toEqual([['step1'], ['step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8']]);
-    expect(withoutTimestamps(v2)).toEqual(withoutTimestamps(v1));
+    // No step read its input from storage, since each one's previous entry was still in memory, and
+    // returning the result read nothing.
+    expect(reads).toEqual([['step1']]);
+    // The result holds every successful step as a stub, so `steps()` reads all of them, in one read.
+    const loaded = await withLoadedSteps(v2);
+    expect(reads).toEqual([['step1'], Array.from({ length: 10 }, (_, i) => `step${i + 1}`)]);
+    expect(withoutTimestamps(loaded)).toEqual(withoutTimestamps(v1));
   });
 
   it('keeps a parallel entry for the entry after it, then evicts it', async () => {
@@ -2564,9 +2739,11 @@ describe('storage v2 memory', () => {
     expect(joined).toEqual({ left: { n: 1 }, right: { n: 1 } });
     // left was evicted when join ended, so after reads it from storage.
     expect(afterReads).toEqual([['left']]);
-    // join and after find their input in memory, and join finds left there too. The only other
-    // read is the end of the run reading back what is still evicted.
-    expect(reads).toEqual([['left'], ['left', 'right', 'join']]);
+    // join and after find their input in memory, and join finds left there too. Returning the
+    // result reads nothing more; `steps()` reads every successful step, which the result holds as stubs.
+    expect(reads).toEqual([['left']]);
+    await (result.steps as unknown as () => Promise<unknown>)();
+    expect(reads).toEqual([['left'], ['left', 'right', 'join', 'after', 'last']]);
   });
 
   it('reads an evicted step once across foreach iterations', async () => {
@@ -2647,8 +2824,12 @@ describe('storage v2 memory', () => {
     const v2 = await startOn(2, build, storage);
 
     expect(readValue).toEqual({ n: 1 });
+    // Nothing was evicted while the run went on, so d read a from memory. The final write stored
+    // every result, so the returned result holds them as stubs and `steps()` reads them once.
     expect(reads).toEqual([]);
-    expect(withoutTimestamps(v2)).toEqual(withoutTimestamps(v1));
+    const loaded = await withLoadedSteps(v2);
+    expect(reads).toEqual([['a', 'b', 'c', 'd']]);
+    expect(withoutTimestamps(loaded)).toEqual(withoutTimestamps(v1));
   });
 
   it.each([
@@ -2727,7 +2908,11 @@ describe('storage v2 memory', () => {
     ).toEqual(['loadWorkflowRun summary', 'loadWorkflowRunSteps']);
     // The finished sibling and the previous entry, read before the entry runs.
     expect([...calls[1]!.args.stepIds].sort()).toEqual(['a', 'done']);
-    expect(withoutTimestamps(v2)).toEqual(withoutTimestamps(v1));
+    // The result holds every successful step as a stub, so `steps()` reads them once.
+    const loaded = await withLoadedSteps(v2);
+    expect(calls).toHaveLength(3);
+    expect([...calls[2]!.args.stepIds].sort()).toEqual(['a', 'done', 'gate']);
+    expect(withoutTimestamps(loaded)).toEqual(withoutTimestamps(v1));
   });
 
   it('gives a concurrent resume WORKFLOW_RESUME_ALREADY_CLAIMED', async () => {

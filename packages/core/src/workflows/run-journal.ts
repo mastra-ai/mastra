@@ -11,7 +11,7 @@ import type { StepResult, WorkflowRunState, WorkflowRunStatus } from './types';
 
 type StepResults = Record<string, StepResult<any, any, any, any>>;
 
-type StepCopy = { json: unknown; patchBytes: number; write: number };
+type StepCopy = { json: unknown; bytes: number; patchBytes: number; write: number };
 
 // Private to this module, so only the journal can make an object count as a stub. A spread or
 // clone of a stub is a new object, so it isn't one.
@@ -119,6 +119,19 @@ export class RunJournal {
   #inFlight = 0;
   #boundaryInFlight = false;
   #closed = false;
+  /** The highest `lastSeq` of the run known here: as loaded, or reported by a write or draft. */
+  #lastSeq: number | undefined;
+  #runToken: string | undefined;
+  /** Store calls (writes and drafts) sent and not yet settled. */
+  #pending = new Set<Promise<unknown>>();
+  #resolveSettledLastSeq!: (seq: number | undefined) => void;
+  /**
+   * The run's `lastSeq` once its execution has ended (`close`) and every write and draft sent has
+   * settled: the version a read of its stored steps must still find to see what the execution left.
+   * Undefined when the run wasn't loaded and nothing was stored.
+   */
+  readonly settledLastSeq: Promise<number | undefined>;
+  readonly settledRunToken: Promise<string | undefined>;
 
   /**
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
@@ -145,7 +158,7 @@ export class RunJournal {
     runId: string;
     seed?: Record<string, unknown>;
     state?: unknown;
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; runToken?: string };
     inherited?: StateBase;
     resumed?: boolean;
   }) {
@@ -164,6 +177,28 @@ export class RunJournal {
     }
     this.#patchBytes = storedState?.patchBytes ?? 0;
     if (resumed && seed) this.#startStateSeq = storedState?.seq;
+    this.#lastSeq = storedState?.seq;
+    this.#runToken = storedState?.runToken;
+    this.settledLastSeq = new Promise(resolve => {
+      this.#resolveSettledLastSeq = resolve;
+    });
+    this.settledRunToken = this.settledLastSeq.then(() => this.#runToken);
+  }
+
+  /**
+   * Sends a store call, keeping it in `#pending` until it settles and noting the run's `lastSeq` it
+   * reports, so `settledLastSeq` cannot resolve before a settled call's seq is noted.
+   */
+  #send<T>(call: Promise<T>, seqOf: (result: T) => number | undefined): Promise<T> {
+    const tracked = call.then(result => {
+      const seq = seqOf(result);
+      if (seq !== undefined && (this.#lastSeq === undefined || seq > this.#lastSeq)) this.#lastSeq = seq;
+      return result;
+    });
+    this.#pending.add(tracked);
+    const settle = () => this.#pending.delete(tracked);
+    tracked.then(settle, settle);
+    return tracked;
   }
 
   /**
@@ -201,11 +236,16 @@ export class RunJournal {
     const chained = own && this.#draftBytes + opsBytes <= next.bytes;
     let seq: number;
     try {
-      ({ seq } = await store.appendWorkflowRunStateDraft({
-        workflowName: this.workflowName,
-        runId: this.runId,
-        ...(chained ? { on: { seq: current!.ref.seq, draft: current!.ref.draft }, ops: ops! } : { state: next.state }),
-      }));
+      ({ seq } = await this.#send(
+        store.appendWorkflowRunStateDraft({
+          workflowName: this.workflowName,
+          runId: this.runId,
+          ...(chained
+            ? { on: { seq: current!.ref.seq, draft: current!.ref.draft }, ops: ops! }
+            : { state: next.state }),
+        }),
+        written => written.seq,
+      ));
     } catch {
       return undefined;
     }
@@ -219,7 +259,10 @@ export class RunJournal {
    * running then (the block's `Promise.all` rejects on the first failure), and its write is dropped.
    */
   close(): void {
+    if (this.#closed) return;
     this.#closed = true;
+    // Nothing is sent once closed, so these are the last calls.
+    void Promise.allSettled(this.#pending).then(() => this.#resolveSettledLastSeq(this.#lastSeq));
   }
 
   /**
@@ -229,6 +272,10 @@ export class RunJournal {
    * flight (an entry's end, a loop iteration's start, a finished parallel arm or foreach item,
    * sleeps, the run stopping): it sends every step result that changed since it was last written,
    * the state's changes, and the checkpoint when that is still to do.
+   * @param foreachItems Set by a running foreach's progress write: the foreach's result differs
+   * from the one it last wrote only by these indices' `metadata.foreachProgress` entries. When the
+   * last written result can be patched, only those entries are sent, so recording a finished item
+   * costs that item rather than every item finished so far.
    * @param expectedStatus Sent with the write as the store's compare-and-set guard on the stored status.
    * @returns False when the store rejected the write because of `expectedStatus`. Nothing was
    * stored, as with a write that throws.
@@ -237,11 +284,13 @@ export class RunJournal {
     resourceId,
     snapshot,
     stepIds,
+    foreachItems,
     expectedStatus,
   }: {
     resourceId?: string;
     snapshot: WorkflowRunState;
     stepIds?: readonly string[];
+    foreachItems?: { stepId: string; indices: readonly number[] };
     expectedStatus?: WorkflowRunStatus[];
   }): Promise<boolean> {
     const store = this.store;
@@ -285,7 +334,12 @@ export class RunJournal {
     // match the copy kept for its step.
     const sentWrites = sent.map(stepId => {
       const result = results[stepId] as StepResult<any, any, any, any>;
-      const write = this.#stepWrite(stepId, result, !checkpoint);
+      const write = this.#stepWrite(
+        stepId,
+        result,
+        !checkpoint,
+        foreachItems?.stepId === stepId ? foreachItems.indices : undefined,
+      );
       if (write.ops) stepPatches[stepId] = write.ops;
       else if (!write.unchanged) steps[stepId] = result;
       return { stepId, result, copy: write.copy, unchanged: write.unchanged };
@@ -362,9 +416,15 @@ export class RunJournal {
         statePatch,
         ...(expectedStatus ? { expectedStatus } : {}),
       };
-      const written = checkpoint
-        ? await store.writeWorkflowRunCheckpoint({ ...run, stateBase })
-        : await store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq });
+      const written = await this.#send(
+        checkpoint
+          ? store.writeWorkflowRunCheckpoint({ ...run, stateBase })
+          : store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq }),
+        written => {
+          this.#runToken ??= written?.runToken;
+          return written?.lastSeq;
+        },
+      );
       if (written === null) {
         if (checkpoint) this.#needsCheckpoint = true;
         return false;
@@ -402,26 +462,48 @@ export class RunJournal {
    * step to be stored (else the stored result the patch applies to isn't known), and the patches
    * since the last full write to stay within its size, as for the state. `copy` is what
    * `#writtenCopies` holds for the step once the write is stored.
+   *
+   * With `foreachItems` (see `write`), the patch is built from those entries alone, without
+   * serializing the whole result.
    */
   #stepWrite(
     stepId: string,
     result: StepResult<any, any, any, any>,
     mayPatch: boolean,
+    foreachItems?: readonly number[],
   ): { ops?: StatePatchOp[]; unchanged?: true; copy: StepCopy | undefined } {
     const previous = this.#written.get(stepId) as { status?: string } | undefined;
     const rewritten = previous !== undefined && previous.status !== 'success' && result?.status !== 'success';
+    const started = this.#stepWrites.get(stepId) ?? 0;
+    const prior = this.#writtenCopies.get(stepId);
+    if (foreachItems && rewritten && mayPatch && prior?.write === started) {
+      const progressPatch = foreachProgressPatch(prior, result, foreachItems);
+      if (progressPatch === 'unchanged') return { unchanged: true, copy: prior };
+      if (progressPatch) {
+        const patchBytes = prior.patchBytes + JSON.stringify(progressPatch.ops).length;
+        if (patchBytes <= progressPatch.bytes) {
+          // Updated in place: the copy is only patched on while it is the step's latest write, and
+          // this write becomes that, so a failed write leaves it unused.
+          for (const { key, value } of progressPatch.entries) progressPatch.written[key] = value;
+          return {
+            ops: progressPatch.ops,
+            copy: { json: prior.json, bytes: progressPatch.bytes, patchBytes, write: started + 1 },
+          };
+        }
+      }
+    }
     const json = rewritten && isPlainJson(result, new Set()) ? JSON.stringify(result) : undefined;
     if (json === undefined) return { copy: undefined };
     const next: unknown = JSON.parse(json);
-    const started = this.#stepWrites.get(stepId) ?? 0;
-    const prior = this.#writtenCopies.get(stepId);
     if (mayPatch && prior?.write === started) {
       const ops = diffState(prior.json, next);
       if (!ops.length) return { unchanged: true, copy: prior };
       const patchBytes = prior.patchBytes + JSON.stringify(ops).length;
-      if (patchBytes <= json.length) return { ops, copy: { json: next, patchBytes, write: started + 1 } };
+      if (patchBytes <= json.length) {
+        return { ops, copy: { json: next, bytes: json.length, patchBytes, write: started + 1 } };
+      }
     }
-    return { copy: { json: next, patchBytes: 0, write: started + 1 } };
+    return { copy: { json: next, bytes: json.length, patchBytes: 0, write: started + 1 } };
   }
 
   /**
@@ -466,6 +548,11 @@ export class RunJournal {
     }
   }
 
+  /** Whether `result` is what the store holds for `stepId`, as of the writes that have settled. */
+  isStored(stepId: string, result: unknown): boolean {
+    return this.#written.get(stepId) === result;
+  }
+
   /** Swap the stubs among `stepIds` back for their stored results, with one read. */
   async hydrate(stepResults: StepResults, stepIds: readonly string[] = Object.keys(stepResults)): Promise<void> {
     const store = this.store;
@@ -484,7 +571,7 @@ export class RunJournal {
       // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
       // is at least as new as the one read.
       if (stepResults[stepId] !== stub) continue;
-      const result = loaded[stepId];
+      const result = loaded?.[stepId];
       if (!result) {
         throw new MastraError({
           id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
@@ -559,6 +646,47 @@ function normalizeState(state: unknown): {
  * plain objects (no `Date`, `Error` or other class instance, and no `undefined` array item). An
  * `undefined` object value is allowed: JSON drops the key, which reads back the same.
  */
+/**
+ * The ops that add a running foreach's newly finished items to the copy of its last written result,
+ * and the copy's JSON size with them. `'unchanged'` when every item is in the copy already.
+ * Undefined when the copy holds no progress or an item isn't plain JSON: the result is then
+ * written the general way.
+ */
+function foreachProgressPatch(
+  prior: StepCopy,
+  result: StepResult<any, any, any, any>,
+  indices: readonly number[],
+):
+  | 'unchanged'
+  | {
+      ops: StatePatchOp[];
+      entries: { key: string; value: unknown }[];
+      written: Record<string, unknown>;
+      bytes: number;
+    }
+  | undefined {
+  const written = (prior.json as { metadata?: { foreachProgress?: unknown } } | null)?.metadata?.foreachProgress;
+  const live = (result as { metadata?: { foreachProgress?: Record<string, unknown> } }).metadata?.foreachProgress;
+  if (typeof written !== 'object' || written === null || !live) return undefined;
+  const progress = written as Record<string, unknown>;
+  const ops: StatePatchOp[] = [];
+  const entries: { key: string; value: unknown }[] = [];
+  let bytes = prior.bytes;
+  for (const index of indices) {
+    const key = String(index);
+    // A finished item's entry never changes, so one in the copy is already stored.
+    if (Object.hasOwn(progress, key) || !Object.hasOwn(live, key)) continue;
+    if (!isPlainJson(live[key], new Set())) return undefined;
+    const json = JSON.stringify(live[key]);
+    const value: unknown = JSON.parse(json);
+    ops.push({ op: 'set', path: ['metadata', 'foreachProgress', key], value });
+    entries.push({ key, value });
+    // `"key":value,` in the result's JSON.
+    bytes += key.length + json.length + 4;
+  }
+  return ops.length ? { ops, entries, written: progress, bytes } : 'unchanged';
+}
+
 function isPlainJson(value: unknown, ancestors: Set<object>): boolean {
   switch (typeof value) {
     case 'string':
@@ -589,4 +717,169 @@ function isPlainJson(value: unknown, ancestors: Set<object>): boolean {
     default:
       return false;
   }
+}
+
+/** The `steps` loader of a storage v2 result -> the step results it was built from (see `residentStepResults`). */
+const residentResults = new WeakMap<object, StepResults>();
+
+/**
+ * The `steps()` of a storage v2 run's result: its step results as the execution left them, formatted
+ * by `format`. The successful results the journal evicted are read from storage on the first call,
+ * with one read shared by concurrent calls; the read fails if the run was written to since its
+ * execution ended (e.g. resumed or restarted), since storage then no longer holds what the result
+ * describes. A failed read isn't cached, so a later call retries.
+ *
+ * Holds the stubs and the results that weren't evicted until the run's writes settle; then the
+ * stored successful results are evicted too, so it holds only stubs, `input` and the results a
+ * reader needs without loading (suspended, failed, running). Call it after the run's last write is
+ * sent, and close the journal before anything awaits the loader.
+ *
+ * @internal
+ */
+export function lazyStepResults(
+  journal: RunJournal,
+  stepResults: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  const results = { ...stepResults };
+  evictOnceStored(journal, results);
+  const { store, workflowName, runId, settledLastSeq, settledRunToken } = journal;
+  return storedStepResults(
+    { store: store!, workflowName, runId, lastSeq: settledLastSeq, runToken: settledRunToken },
+    results,
+    format,
+  );
+}
+
+// Kept apart from `lazyStepResults`, so the loader it returns doesn't hold on to the journal.
+function evictOnceStored(journal: RunJournal, results: StepResults): void {
+  void journal.settledLastSeq.then(() => {
+    for (const [stepId, result] of Object.entries(results)) {
+      if (
+        stepId !== 'input' &&
+        result?.status === 'success' &&
+        !isStepResultStub(result) &&
+        journal.isStored(stepId, result)
+      ) {
+        results[stepId] = stubStepResult(result);
+      }
+    }
+  });
+}
+
+/**
+ * The `steps()` of a storage v2 result reconstructed from stored state. Holds successful-step
+ * stubs and hydrates them on the first call while the stored run identity and `lastSeq` still match.
+ *
+ * @internal
+ */
+export function loadedStepResults(
+  {
+    store,
+    workflowName,
+    runId,
+    lastSeq,
+    runToken,
+  }: { store: WorkflowsStorage; workflowName: string; runId: string; lastSeq: number; runToken?: string },
+  stepResults: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  const results: StepResults = {};
+  for (const [stepId, result] of Object.entries(stepResults)) {
+    results[stepId] =
+      stepId !== 'input' && result?.status === 'success' && !isStepResultStub(result) ? stubStepResult(result) : result;
+  }
+  return storedStepResults(
+    { store, workflowName, runId, lastSeq: Promise.resolve(lastSeq), runToken: Promise.resolve(runToken) },
+    results,
+    format,
+  );
+}
+
+function storedStepResults(
+  {
+    store,
+    workflowName,
+    runId,
+    lastSeq,
+    runToken,
+  }: {
+    store: WorkflowsStorage;
+    workflowName: string;
+    runId: string;
+    lastSeq: Promise<number | undefined>;
+    runToken: Promise<string | undefined>;
+  },
+  results: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  let loaded: Promise<StepResults> | undefined;
+
+  const load = async (): Promise<StepResults> => {
+    const expectedLastSeq = await lastSeq;
+    const expectedRunToken = await runToken;
+    const stubbed = Object.keys(results).filter(stepId => isStepResultStub(results[stepId]));
+    if (!stubbed.length && expectedLastSeq === undefined) return format(results);
+
+    const stored = await store.loadWorkflowRunSteps({
+      workflowName,
+      runId,
+      stepIds: stubbed,
+      expectedLastSeq,
+      expectedRunToken,
+    });
+    if (!stored) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_STEPS_STALE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `The steps of run ${runId} can't be loaded for this result: the run was written to (e.g. resumed or restarted) or deleted since. Read the run again for its current steps.`,
+      });
+    }
+    const full = { ...results };
+    for (const stepId of stubbed) {
+      const result = stored[stepId];
+      if (!result) {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.SYSTEM,
+          text: `The stored result of step "${stepId}" in run ${runId} is missing.`,
+        });
+      }
+      full[stepId] = result;
+    }
+    return format(full);
+  };
+
+  const steps = () => {
+    loaded ??= load().catch(error => {
+      loaded = undefined;
+      throw error;
+    });
+    return loaded;
+  };
+  residentResults.set(steps, results);
+  return steps;
+}
+
+/**
+ * The step results a storage v2 result's `steps` loader holds without reading storage: every result
+ * but the successful ones that were evicted, which are stubs. Undefined for anything else (a v1
+ * result's `steps` record). For the engine's own reads of a nested run's suspended and failed steps.
+ *
+ * @internal
+ */
+export function residentStepResults(steps: unknown): StepResults | undefined {
+  return typeof steps === 'function' ? residentResults.get(steps) : undefined;
+}
+
+/**
+ * Every step result of a run's result: a storage v2 result's `steps` loader is called, a v1
+ * result's record returned as is. For the framework's readers that hand all of them on.
+ *
+ * @internal
+ */
+export async function loadStepResults(steps: unknown): Promise<StepResults> {
+  return typeof steps === 'function' ? steps() : (steps as StepResults);
 }

@@ -2,6 +2,8 @@ import { MastraClientError } from '@mastra/client-js';
 import type {
   KnowledgeActivityResponse,
   KnowledgeGraphResponse,
+  KnowledgeLinkCountsResponse,
+  KnowledgePageLinksResponse,
   KnowledgePageResponse,
   KnowledgeSearchResponse,
   KnowledgeTreeResponse,
@@ -9,7 +11,7 @@ import type {
 import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 const MIN_SEARCH_LENGTH = 2;
 
@@ -40,16 +42,29 @@ function sleep(ms: number, signal: AbortSignal) {
   });
 }
 
+function onVisibilityChange(notify: () => void) {
+  document.addEventListener('visibilitychange', notify);
+  return () => document.removeEventListener('visibilitychange', notify);
+}
+const pageVisible = () => document.visibilityState !== 'hidden';
+
 /**
  * Follows the instance's change stream and refetches the open Knowledge queries when a change arrives.
  * Returns whether the stream is connected, so the queries poll only while it isn't.
+ *
+ * The stream holds an HTTP connection open, and a browser allows about six per host over HTTP/1.1. With
+ * Studio's own reload stream, every open tab held two, so a few tabs left a new tab's requests queued
+ * forever. A hidden tab closes its stream, and reconnects and refetches when it is shown again.
  */
 export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boolean {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const [live, setLive] = useState(false);
+  const visible = useSyncExternalStore(onVisibilityChange, pageVisible, () => true);
+  // Only the first connection of the page can skip the catch-up refetch.
+  const connectedBefore = useRef(false);
   useEffect(() => {
-    if (!knowledgeKey) return;
+    if (!knowledgeKey || !visible) return;
     const abort = new AbortController();
     let debounce: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
@@ -60,11 +75,12 @@ export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boole
       );
     };
     void (async () => {
-      for (let connects = 0; !abort.signal.aborted;) {
+      while (!abort.signal.aborted) {
         try {
           const reader = (await client.getKnowledge(knowledgeKey).events({ signal: abort.signal })).getReader();
-          // Writes may have landed while the stream was down.
-          if (connects++ > 0) refresh();
+          // Writes may have landed while the stream was down or the tab was hidden.
+          if (connectedBefore.current) refresh();
+          connectedBefore.current = true;
           setLive(true);
           while (!(await reader.read()).done) refresh();
         } catch (error) {
@@ -84,7 +100,7 @@ export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boole
       clearTimeout(debounce);
       setLive(false);
     };
-  }, [client, queryClient, knowledgeKey]);
+  }, [client, queryClient, knowledgeKey, visible]);
   return live;
 }
 
@@ -126,6 +142,21 @@ export function useKnowledgePage(
   });
 }
 
+/** Pages a link reaches, by id or `[[ref]]`, sharing the page query's cache. A 404 is not retried. */
+export function useKnowledgeLinkedPages(knowledgeKey: string | undefined, keys: string[]) {
+  const client = useMastraClient();
+  return useQueries({
+    queries: keys.map(key => ({
+      queryKey: ['knowledge', knowledgeKey, 'page', key, null],
+      queryFn: knowledgeKey
+        ? async (): Promise<KnowledgePageResponse> => client.getKnowledge(knowledgeKey).page(key)
+        : skipToken,
+      retry: (failures: number, error: Error) => !(error && 'status' in error && error.status === 404) && failures < 2,
+      staleTime: 30_000,
+    })),
+  });
+}
+
 /** Tree levels for the explorer's lazily loaded sidebar, one query per request, in order. */
 export function useKnowledgeTreeLevels(
   knowledgeKey: string | undefined,
@@ -143,6 +174,48 @@ export function useKnowledgeTreeLevels(
       // A level's first chunk polls, so new children appear in the tree and the page's child list.
       refetchInterval: request.cursor ? false : pollUnless(live),
     })),
+  });
+}
+
+/** The most pages one link count request may ask about; the route rejects more. */
+const LINK_COUNT_BATCH = 200;
+/** A server with no link index answers 501 every time, and a refused caller the same; neither is retried. */
+const retryUnlessFinal = (failures: number, error: unknown) => !isFinal(error) && failures < 2;
+
+/** Exact link counts for the pages the graph holds, in batches. 501 (no link index) is an error the graph falls back from. */
+export function useKnowledgeLinkCounts(knowledgeKey: string | undefined, live: boolean, pageIds: string[]) {
+  const client = useMastraClient();
+  return useQuery<KnowledgeLinkCountsResponse['counts']>({
+    queryKey: ['knowledge', knowledgeKey, 'link-counts', pageIds],
+    queryFn:
+      knowledgeKey && pageIds.length
+        ? async (): Promise<KnowledgeLinkCountsResponse['counts']> => {
+            const knowledge = client.getKnowledge(knowledgeKey);
+            const batches: string[][] = [];
+            for (let i = 0; i < pageIds.length; i += LINK_COUNT_BATCH)
+              batches.push(pageIds.slice(i, i + LINK_COUNT_BATCH));
+            const results = await Promise.all(batches.map(batch => knowledge.linkCounts(batch)));
+            return Object.assign({}, ...results.map(result => result.counts));
+          }
+        : skipToken,
+    // The graph loads more pages as the person explores; keep the counts already known meanwhile.
+    placeholderData: keepPreviousData,
+    retry: retryUnlessFinal,
+    refetchInterval: pollUnless(live),
+  });
+}
+
+/** One page's links, for the page under the pointer. Cached per page, so returning to it asks nothing. */
+export function useKnowledgePageLinks(knowledgeKey: string | undefined, pageId: string | null) {
+  const client = useMastraClient();
+  return useQuery<KnowledgePageLinksResponse>({
+    queryKey: ['knowledge', knowledgeKey, 'page-links', pageId],
+    queryFn:
+      knowledgeKey && pageId
+        ? async (): Promise<KnowledgePageLinksResponse> => client.getKnowledge(knowledgeKey).pageLinks(pageId)
+        : skipToken,
+    staleTime: 30_000,
+    retry: retryUnlessFinal,
   });
 }
 

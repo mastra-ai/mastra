@@ -408,6 +408,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Knowledge',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'knowledge/knowledge-class', label: 'Knowledge Class' },
+        { type: 'doc', id: 'knowledge/knowledge-tools', label: 'Knowledge Tools' },
+        { type: 'doc', id: 'knowledge/knowledge-memory-scopes', label: 'knowledgeMemoryScopes()' },
+        { type: 'doc', id: 'knowledge/limits', label: 'Limits' },
+        { type: 'doc', id: 'knowledge/scope-declarations', label: 'Scope declarations' },
+        { type: 'doc', id: 'knowledge/tool-instructions', label: 'Tool instructions' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [
@@ -689,6 +702,7 @@ const sidebars = {
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
+        { type: 'doc', id: 'server/invoke-route', label: 'invokeRoute()' },
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
         { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
@@ -709,6 +723,7 @@ const sidebars = {
           label: 'createNotificationInboxTool()',
         },
         { type: 'doc', id: 'signals/notifications', label: 'Notifications' },
+        { type: 'doc', id: 'signals/ring-signals', label: 'RingSignals' },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
         { type: 'doc', id: 'signals/task-signal-provider', label: 'TaskSignalProvider' },
         { type: 'doc', id: 'signals/thread-events', label: 'Thread events' },

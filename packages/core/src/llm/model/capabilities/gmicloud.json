@@ -52,14 +52,11 @@
         "values": ["high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "anthropic/claude-sonnet-4.6": [
       {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-Max": [
-      {
-        "type": "toggle"
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
       }
     ],
     "anthropic/claude-opus-4.8": [
@@ -81,11 +78,14 @@
         "max": 127999
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
+    "Qwen/Qwen3.8-Max": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
       }
     ]
   }

@@ -10,9 +10,10 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
 import { seedWorkflowRun } from '../seed-run';
+import { stepsOf } from '../steps';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for restart tests.
@@ -505,7 +506,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const result = await run.restart();
 
       expect(result.status).toBe('success');
-      expect((result.steps.counter as any)?.output).toMatchObject({ count: 1, value: 42 });
+      expect((await stepsOf(result)).counter?.output).toMatchObject({ count: 1, value: 42 });
       expect(mocks.counter).toHaveBeenCalledTimes(1);
     });
 
@@ -563,7 +564,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
 
       expect(result.status).toBe('success');
       // step2: 15 * 2 = 30
-      expect((result.steps.step2 as any)?.output).toEqual({ value: 30 });
+      expect((await stepsOf(result)).step2?.output).toEqual({ value: 30 });
       // step1 was already done, step2 runs on restart
       expect(mocks.step1).toHaveBeenCalledTimes(0); // Already completed in snapshot
       expect(mocks.step2).toHaveBeenCalledTimes(1); // Restarted
@@ -618,7 +619,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const result = await run.restart();
 
       expect(result.status).toBe('success');
-      expect((result.steps.failingStep as any)?.output).toEqual({ result: 'HELLO' });
+      expect((await stepsOf(result)).failingStep?.output).toEqual({ result: 'HELLO' });
       expect(mocks.failingStep).toHaveBeenCalledTimes(1);
     });
 
@@ -809,9 +810,10 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         const run = await workflow.createRun({ runId });
         const initialResult = await run.restart();
 
-        expect(initialResult.steps.promptAgent!.status).toBe('suspended');
+        const initialSteps = await stepsOf(initialResult);
+        expect(initialSteps.promptAgent!.status).toBe('suspended');
         expect(mocks.promptAgent).toHaveBeenCalledTimes(1);
-        expect(initialResult.steps).toMatchObject({
+        expect(initialSteps).toMatchObject({
           input: { input: 'test' },
           getUserInput: {
             status: 'success',
@@ -836,7 +838,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
           throw new Error('Resume failed to return a result');
         }
 
-        expect(firstResumeResult.steps).toMatchObject({
+        expect(await stepsOf(firstResumeResult)).toMatchObject({
           promptAgent: {
             status: 'success',
             output: { modelOutput: 'test output' },
@@ -865,7 +867,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
           throw new Error('Resume failed to return a result');
         }
 
-        expect(secondResumeResult.steps).toMatchObject({
+        expect(await stepsOf(secondResumeResult)).toMatchObject({
           improveResponse: {
             status: 'success',
             output: { improvedOutput: 'improved output' },
@@ -933,8 +935,9 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
 
       expect(result.status).toBe('success');
       // step1: 5 * 2 = 10, step2: 5 + 10 = 15
-      expect((result.steps.step1 as any)?.output).toEqual({ result: 10 });
-      expect((result.steps.step2 as any)?.output).toEqual({ result: 15 });
+      const steps = await stepsOf(result);
+      expect(steps.step1?.output).toEqual({ result: 10 });
+      expect(steps.step2?.output).toEqual({ result: 15 });
       expect(mocks.step1).toHaveBeenCalledTimes(1);
       expect(mocks.step2).toHaveBeenCalledTimes(1);
     });

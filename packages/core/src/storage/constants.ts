@@ -1166,6 +1166,8 @@ export const WORKFLOW_RUNS_SCHEMA: Record<string, StorageColumn> = {
   lastSeq: { type: 'integer', nullable: false },
   startStateSeq: { type: 'integer', nullable: false },
   stateShared: { type: 'boolean', nullable: false },
+  /** Picked when the run is first stored, kept until it is deleted (see `StoredWorkflowRunHeader`). */
+  runToken: { type: 'text', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
