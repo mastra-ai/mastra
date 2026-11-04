@@ -969,7 +969,7 @@
     "@modelcontextprotocol/server": "2.4.0",
     "@openrouter/ai-sdk-provider": "^0.7.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.5.4",
-    "@openrouter/ai-sdk-provider-v6": "npm:@openrouter/ai-sdk-provider@2.10.0",
+    "@openrouter/ai-sdk-provider-v6": "npm:@openrouter/ai-sdk-provider@3.1.0",
     "@sindresorhus/slugify": "^2.2.1",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.15",
