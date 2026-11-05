@@ -146,6 +146,41 @@ describe('evented start() with no inputData key (#29424)', () => {
   });
 });
 
+describe('evented stream() passes the caller input to inputSchema (#29424)', () => {
+  async function drain(output: { fullStream: AsyncIterable<unknown> }) {
+    for await (const _event of output.fullStream) {
+      // consume the stream so the run finishes
+    }
+  }
+
+  it('applies the inputSchema default when inputData is omitted', async () => {
+    const { workflow, observed } = buildWorkflow(
+      'stream-object-default',
+      z.object({ count: z.number() }).default({ count: 5 }),
+    );
+    await startHost(workflow);
+    const run = await workflow.createRun();
+
+    const output = run.stream({});
+    await drain(output);
+
+    expect((await output.result).status).toBe('success');
+    expect(observed).toEqual([{ inputData: { count: 5 }, initData: { count: 5 } }]);
+  });
+
+  it('passes explicit null to a nullable inputSchema', async () => {
+    const { workflow, observed } = buildWorkflow('stream-nullable', z.string().nullable());
+    await startHost(workflow);
+    const run = await workflow.createRun();
+
+    const output = run.stream({ inputData: null });
+    await drain(output);
+
+    expect((await output.result).status).toBe('success');
+    expect(observed).toEqual([{ inputData: null, initData: null }]);
+  });
+});
+
 describe('evented resume feeds the first step the input it started with (#29424)', () => {
   it.each([
     {
