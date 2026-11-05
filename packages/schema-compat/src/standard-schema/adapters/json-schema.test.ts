@@ -292,6 +292,48 @@ describe('json-schema standard-schema adapter', () => {
     });
   });
 
+  describe('format keywords', () => {
+    const validate = (schema: JSONSchema7, value: unknown, options?: Parameters<typeof toStandardSchema>[1]) =>
+      toStandardSchema(schema, options)['~standard'].validate(value);
+
+    it.each([
+      ['draft-07', undefined],
+      ['draft 2020-12', 'https://json-schema.org/draft/2020-12/schema'],
+    ])('enforces standard formats for %s schemas', async (_, $schema) => {
+      const schema: JSONSchema7 = {
+        ...($schema ? { $schema } : {}),
+        type: 'object',
+        properties: {
+          email: { type: 'string', format: 'email' },
+          at: { type: 'string', format: 'date-time' },
+        },
+      };
+
+      expect(await validate(schema, { email: 'ada@example.com', at: '2026-11-05T10:00:00Z' })).toEqual({
+        value: { email: 'ada@example.com', at: '2026-11-05T10:00:00Z' },
+      });
+      expect('issues' in (await validate(schema, { email: 'not-an-email' }))).toBe(true);
+      expect('issues' in (await validate(schema, { at: 'tomorrow' }))).toBe(true);
+    });
+
+    it('keeps format definitions passed through ajvOptions', async () => {
+      const schema: JSONSchema7 = {
+        type: 'object',
+        properties: {
+          email: { type: 'string', format: 'email' },
+          slug: { type: 'string', format: 'slug' },
+        },
+      };
+      const options = { ajvOptions: { formats: { email: /@mastra\.ai$/, slug: /^[a-z-]+$/ } } };
+
+      expect(await validate(schema, { email: 'ada@mastra.ai', slug: 'launch-board' }, options)).toEqual({
+        value: { email: 'ada@mastra.ai', slug: 'launch-board' },
+      });
+      expect('issues' in (await validate(schema, { email: 'ada@example.com' }, options))).toBe(true);
+      expect('issues' in (await validate(schema, { slug: 'Launch Board' }, options))).toBe(true);
+    });
+  });
+
   describe('isStandardSchemaWithJSON', () => {
     it('should return true for JSON Schema wrapped schemas', () => {
       const jsonSchema: JSONSchema7 = { type: 'string' };

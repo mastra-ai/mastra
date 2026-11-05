@@ -216,6 +216,10 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
       });
       // Ajv ignores `format` (email, uri, date-time, ...) unless the formats are registered.
       addFormats(this.#ajvInstance);
+      // addFormats overwrites same-named formats, so reapply the caller's definitions on top.
+      for (const [name, format] of Object.entries(this.#options.ajvOptions?.formats ?? {})) {
+        if (format !== undefined) this.#ajvInstance.addFormat(name, format);
+      }
 
       this.#ajvValidateCache = this.#ajvInstance.compile(this.#schema);
     }
