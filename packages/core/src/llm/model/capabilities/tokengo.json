@@ -27,7 +27,15 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "z-ai/glm-5.3-flash": [
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/kimi-k3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -36,6 +44,12 @@
     "z-ai/glm-5": [
       {
         "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "z-ai/glm-5.1": [
@@ -55,6 +69,11 @@
         "values": ["high", "max"]
       }
     ],
+    "deepseek/deepseek-v3.1": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -62,11 +81,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v3.1": [
-      {
-        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v4-flash": [
@@ -84,20 +98,6 @@
       }
     ],
     "qwen/qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
       }
