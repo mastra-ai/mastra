@@ -313,6 +313,11 @@ export function KnowledgePageDetail({
   const path = knowledgePagePath(page, ancestors);
 
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
+  // Core's `related` leaves out the page and its ancestors, so notes mentioning them resolve against these too.
+  const notePages = useMemo(
+    () => new Map([...pagesById, ...[...ancestors, page].map(entry => [entry.id, entry] as const)]),
+    [pagesById, ancestors, page],
+  );
   const pagesByRef = useContext(KnowledgePagesByRef);
   const refIndex = useMemo(
     () => knowledgePageRefIndex([...pagesById.values(), ...ancestors, page], pagesByRef),
@@ -412,7 +417,7 @@ export function KnowledgePageDetail({
                     <KnowledgeNoteItem
                       key={note.id}
                       note={note}
-                      pagesById={pagesById}
+                      pagesById={notePages}
                       onPageClick={onPageClick}
                       highlighted={highlighted}
                       itemRef={
@@ -441,7 +446,7 @@ export function KnowledgePageDetail({
                   <KnowledgeNoteItem
                     key={note.id}
                     note={note}
-                    pagesById={pagesById}
+                    pagesById={notePages}
                     onPageClick={onPageClick}
                     showPage
                     compact

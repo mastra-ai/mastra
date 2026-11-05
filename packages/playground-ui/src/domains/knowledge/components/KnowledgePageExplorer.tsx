@@ -652,7 +652,10 @@ function MentionPopup({
               <KnowledgeNoteItem
                 key={note.id}
                 note={note}
-                pagesById={withPages(pagesById, detail.data?.related ?? [])}
+                pagesById={withPages(
+                  pagesById,
+                  detail.data ? [...detail.data.related, ...detail.data.ancestors, detail.data.page] : [],
+                )}
                 onPageClick={page => onOpen(page.id)}
                 compact
               />

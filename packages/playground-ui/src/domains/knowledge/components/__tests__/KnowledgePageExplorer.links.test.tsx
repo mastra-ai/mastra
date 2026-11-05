@@ -235,13 +235,13 @@ describe('KnowledgePageExplorer body links', () => {
         keys.map(key => (key === ref ? ok({ page: plan, notes: [], ancestors: [], related: [] }) : idle)),
     };
 
-    function ImportedHost() {
+    function ImportedHost({ graphPages = [docs, issue] }: { graphPages?: KnowledgePagePayload[] }) {
       const [selected, setSelected] = useState<string | null>('issue');
       return (
         <>
           <output data-testid="selected">{selected}</output>
           <KnowledgePageExplorer
-            graph={{ pages: [docs, issue], edges: [], pinnedIds: [], truncated: false }}
+            graph={{ pages: graphPages, edges: [], pinnedIds: [], truncated: false }}
             source={importedSource}
             selectedPageId={selected}
             onSelect={setSelected}
@@ -269,6 +269,13 @@ describe('KnowledgePageExplorer body links', () => {
       expect(mentions.getByRole('button', { name: 'ENG-2 Ship the launch' })).toBeTruthy();
       fireEvent.click(notes.getByRole('button', { name: 'Q3 launch plan' }));
       expect(screen.getByTestId('selected').textContent).toBe('plan');
+    });
+
+    it('names the open page in a note elsewhere that mentions it, though the graph has not loaded it', () => {
+      renderWithProviders(<ImportedHost graphPages={[docs]} />);
+      const mentions = within(screen.getByRole('region', { name: 'Mentioned in' }));
+      expect(mentions.queryByText('docs:mastra#eng-2', { exact: false })).toBeNull();
+      expect(mentions.getByRole('button', { name: 'ENG-2 Ship the launch' })).toBeTruthy();
     });
   });
 
