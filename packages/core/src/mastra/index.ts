@@ -6595,8 +6595,11 @@ export class Mastra<
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
+        this.#agents?.[key]?.getChannels()?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#harnesses ?? {}).forEach(controller => controller.getChannels()?.__setLogger(this.#logger));
 
     if (this.#deployer) {
       this.#deployer.__setLogger(this.#logger);
