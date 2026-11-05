@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { getToolCategory } from '@mastra/code-sdk/permissions';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
@@ -48,9 +48,37 @@ export function isReservedToolName(name: string): boolean {
   return getToolCategory(name) !== 'mcp' || BUILT_IN_TOOL_NAMES.has(name) || name.startsWith('factory_');
 }
 
+/**
+ * Everything a server's connection is built from. A rename, a new tool
+ * selection, or a refresh leaves it alone, so turns already using the
+ * server's tools keep working through them.
+ */
+function connectionKey(record: McpServerRecord): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        record.slug,
+        record.url,
+        record.authType,
+        Object.entries(record.headers ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        record.oauthClientId,
+        record.oauthClientSecret,
+        record.oauthScopes,
+        record.oauthGeneration,
+        record.authorizationServerHosts,
+      ]),
+    )
+    .digest('hex');
+}
+
+/** Whether an edit changed what the server's connection is built from. */
+export function connectionChanged(before: McpServerRecord, after: McpServerRecord): boolean {
+  return connectionKey(before) !== connectionKey(after);
+}
+
 interface CachedClient {
   orgId: string;
-  updatedAt: number;
+  key: string;
   client: MCPClient;
 }
 
@@ -59,7 +87,7 @@ interface CachedClient {
  * returns the server's tool definitions; sessions rebuild the selected tools
  * from the stored catalog without connecting, through one cached client per
  * server that connects lazily on the first tool call and is replaced whenever
- * the server row changes.
+ * the server's URL, authentication, or credentials change.
  */
 export class McpServersRuntime {
   readonly #storage: McpServersStorage;
@@ -258,10 +286,10 @@ export class McpServersRuntime {
 
   /**
    * Calls only go through the server's current connection on this replica:
-   * once the server is edited, removed, or signed out here, a tool a turn
-   * already holds refuses instead of reconnecting with the old address and
-   * credentials. A change made on another replica reaches this one's turns at
-   * their next `toolsFor`.
+   * once the server's URL, authentication, or credentials change here, or it
+   * is removed or signed out here, a tool a turn already holds refuses instead
+   * of reconnecting with the old address and credentials. A change made on
+   * another replica reaches this one's turns at their next `toolsFor`.
    *
    * A call the server refuses with a 401 means the saved credentials or tokens
    * stopped working (an OAuth refresh was already attempted): mark the server
@@ -291,6 +319,7 @@ export class McpServersRuntime {
               status: 'needs_auth',
               lastError: needsAuthMessage(record.authType),
               // A refusal of credentials an admin has since replaced (on any replica) says nothing about the new ones.
+              // Any other edit since this turn's read also skips it; the next turn's refusal is recorded.
               ifUpdatedAt: record.updatedAt,
             })
             .catch(() => undefined);
@@ -303,9 +332,9 @@ export class McpServersRuntime {
   }
 
   #clientFor(record: McpServerRecord, readAt: number): MCPClient | undefined {
-    const updatedAt = record.updatedAt.getTime();
+    const key = connectionKey(record);
     const cached = this.#clients.get(record.id);
-    if (cached?.updatedAt === updatedAt) return cached.client;
+    if (cached?.key === key) return cached.client;
     // Shut down (a connection made now would never be closed), or a read older than the connection's last change.
     if (this.#closed || this.#changedSince(record.id, readAt)) return undefined;
     // Disconnect first: it also removes the stale instance from MCPClient's id cache.
@@ -316,7 +345,7 @@ export class McpServersRuntime {
       servers: { [record.slug]: this.#buildDefinition(record, { signedIn: true }) },
       registerProcessHooks: false,
     });
-    this.#clients.set(record.id, { orgId: record.orgId, updatedAt, client });
+    this.#clients.set(record.id, { orgId: record.orgId, key, client });
     this.#connectionChangedAt.set(record.id, ++this.#connectionChanges);
     return client;
   }

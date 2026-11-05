@@ -557,6 +557,25 @@ describe('MCP server OAuth tokens in sessions', () => {
     expect(logged).not.toContain(refreshToken!);
   });
 
+  it("gives another replica's sessions the new sign-in after the server was signed out and back in elsewhere", async () => {
+    const ctx = await signedIn();
+    const other = replica(ctx.storage);
+    const before = (await other.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools;
+    await before.orders_echo!.execute!({ text: 'first sign-in' }, {} as never);
+
+    // Signed out and back in on this replica, with no turn on the other one in between.
+    expect((await ctx.request(admin, 'DELETE', `/web/config/mcp-servers/${ctx.server.id}/oauth`)).status).toBe(200);
+    expect(await deliverCallback(ctx, await authorize(await startSignIn(ctx, ctx.server.id)))).toContain(
+      'oauth=connected',
+    );
+
+    const { tools } = await other.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    expect(await tools.orders_echo!.execute!({ text: 'second sign-in' }, {} as never)).toMatchObject({
+      isError: false,
+    });
+    expect(await getServer(ctx, ctx.server.id)).toMatchObject({ status: 'connected', oauth: { connected: true } });
+  });
+
   it('signs the server out for the whole organization', async () => {
     const ctx = await signedIn();
 

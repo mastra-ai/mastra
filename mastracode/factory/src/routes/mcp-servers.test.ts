@@ -434,30 +434,43 @@ describe('MCP server routes', () => {
     expect((await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools).toEqual({});
   });
 
-  it('stops the tools a turn already has from calling a server once it is edited or removed', async () => {
+  it("keeps a running turn's tools through edits that leave the connection alone, and stops them once it changes or the server is removed", async () => {
     const mcp = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();
     const server = await createServer(ctx, admin, bearerBody(mcp.url));
     await ctx.request(admin, 'POST', `/${server.id}/discover`);
     const turn = async () => (await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools;
-    const changed = `MCP server "Docs" was changed or removed after this turn started; its tools can no longer be called in this turn.`;
+    const changed = (name: string) =>
+      `MCP server "${name}" was changed or removed after this turn started; its tools can no longer be called in this turn.`;
 
     const first = await turn();
-    await first.docs_echo!.execute!({ text: 'before the edit' }, {} as never);
+    await first.docs_echo!.execute!({ text: 'before the edits' }, {} as never);
     expect((await ctx.request(admin, 'PATCH', `/${server.id}`, { name: 'Docs search' })).status).toBe(200);
-    await expect(first.docs_echo!.execute!({ text: 'after the edit' }, {} as never)).rejects.toThrow(changed);
+    expect((await ctx.request(admin, 'PUT', `/${server.id}/tools`, { selected: ['echo'] })).status).toBe(200);
+    expect((await ctx.request(admin, 'POST', `/${server.id}/discover`)).status).toBe(200);
+    await first.docs_echo!.execute!({ text: 'after rename, selection and refresh' }, {} as never);
 
-    // The next turn gets the edited server's tools again.
+    mcp.acceptToken('rotated-token-8d2f');
+    const rotate = { headers: [{ name: 'Authorization', value: 'Bearer rotated-token-8d2f' }] };
+    expect((await ctx.request(admin, 'PATCH', `/${server.id}`, rotate)).status).toBe(200);
+    await expect(first.docs_echo!.execute!({ text: 'after rotation' }, {} as never)).rejects.toThrow(changed('Docs'));
+
+    // The next turn gets the server's tools again, with the new credentials.
+    await ctx.request(admin, 'POST', `/${server.id}/discover`);
     const second = await turn();
     await second.docs_echo!.execute!({ text: 'next turn' }, {} as never);
     expect((await ctx.request(admin, 'DELETE', `/${server.id}`)).status).toBe(200);
     await expect(second.docs_echo!.execute!({ text: 'after removal' }, {} as never)).rejects.toThrow(
-      changed.replace('"Docs"', '"Docs search"'),
+      changed('Docs search'),
     );
 
-    expect(mcp.calls.map(call => call.args)).toEqual([{ text: 'before the edit' }, { text: 'next turn' }]);
-    // Nothing reconnected behind the runtime's back.
-    expect(mcp.methods.filter(method => method === 'server/discover' || method === 'initialize')).toHaveLength(3);
+    expect(mcp.calls.map(call => call.args)).toEqual([
+      { text: 'before the edits' },
+      { text: 'after rename, selection and refresh' },
+      { text: 'next turn' },
+    ]);
+    // One connection per credential, plus the three discoveries; nothing reconnected behind the runtime's back.
+    expect(mcp.methods.filter(method => method === 'server/discover' || method === 'initialize')).toHaveLength(5);
   });
 
   it('does not save a connection made with headers an admin replaced while it was connecting', async () => {

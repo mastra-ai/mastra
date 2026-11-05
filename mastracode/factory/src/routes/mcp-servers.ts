@@ -13,7 +13,7 @@ import {
   mcpOAuthEndpoints,
   startMcpOAuth,
 } from '../mcp-servers/oauth.js';
-import { isReservedToolName } from '../mcp-servers/runtime.js';
+import { connectionChanged, isReservedToolName } from '../mcp-servers/runtime.js';
 import type { McpServersRuntime } from '../mcp-servers/runtime.js';
 import { createMcpServerSchemas, MCP_SERVER_LIMITS, slugify } from '../mcp-servers/schemas.js';
 import { createGuardedFetch } from '../mcp-servers/url-policy.js';
@@ -322,7 +322,6 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
               lastError: result.error,
               ifUpdatedAt: record.updatedAt,
             });
-      runtime.invalidate(record.id);
       if (updated) return updated;
       return (await ctx.storage.get({ orgId: ctx.orgId, id: record.id })) ? 'changed' : 'not_found';
     };
@@ -404,7 +403,8 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
               userId: ctx.userId,
               input: parsed.data,
             });
-            runtime.invalidate(record.id);
+            // Turns using the server's tools keep them through a rename; a new address or credentials cut them off.
+            if (!updated || connectionChanged(record, updated)) runtime.invalidate(record.id);
             if (!updated) return notFound(c);
             return c.json({ server: await toMcpServerInfo(ctx.storage, updated) });
           }),
@@ -446,7 +446,6 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
               userId: ctx.userId,
               selected: parsed.data.selected,
             });
-            runtime.invalidate(record.id);
             if (!updated) return notFound(c);
             return c.json({ server: await toMcpServerInfo(ctx.storage, updated) });
           }),

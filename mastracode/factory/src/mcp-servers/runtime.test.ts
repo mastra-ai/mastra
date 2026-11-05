@@ -276,7 +276,7 @@ describe('McpServersRuntime.toolsFor', () => {
     ]);
   });
 
-  it('reuses one connection per server until the server changes, then replaces it', async () => {
+  it('reuses one connection per server until its URL or credentials change, then replaces it', async () => {
     const server = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();
     const record = await connectServer(ctx, 'org-a', bearerServer(server.url));
@@ -295,12 +295,38 @@ describe('McpServersRuntime.toolsFor', () => {
     expect(handshakes()).toHaveLength(1);
     expect(disconnect).not.toHaveBeenCalled();
 
+    // Edited on another replica: a rename and a new selection keep the connection.
     await ctx.storage.update({ orgId: 'org-a', id: record.id, userId: 'admin', input: { name: 'Docs v2' } });
+    await ctx.storage.setSelectedTools({ orgId: 'org-a', id: record.id, userId: 'admin', selected: ['echo'] });
     await turn('three');
+    expect(handshakes()).toHaveLength(1);
+    expect(disconnect).not.toHaveBeenCalled();
+
+    server.acceptToken('rotated-token-3c1e');
+    await ctx.storage.update({
+      orgId: 'org-a',
+      id: record.id,
+      userId: 'admin',
+      input: { headers: { Authorization: 'Bearer rotated-token-3c1e' } },
+    });
+    // A credential change resets the status until the server is connected again.
+    const rotated = (await ctx.storage.get({ orgId: 'org-a', id: record.id }))!;
+    await ctx.storage.saveDiscovery({
+      orgId: 'org-a',
+      id: record.id,
+      ifUpdatedAt: rotated.updatedAt,
+      tools: Object.values(rotated.toolCatalog!).map(entry => entry.definition),
+    });
+    await turn('four');
 
     expect(handshakes()).toHaveLength(2);
     expect(disconnect).toHaveBeenCalledTimes(1);
-    expect(server.calls.map(call => call.args)).toEqual([{ text: 'one' }, { text: 'two' }, { text: 'three' }]);
+    expect(server.calls.map(call => call.args)).toEqual([
+      { text: 'one' },
+      { text: 'two' },
+      { text: 'three' },
+      { text: 'four' },
+    ]);
   });
 
   it('releases the connection of a server that was removed', async () => {
