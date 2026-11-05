@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const commandModule = fileURLToPath(new URL('./index.ts', import.meta.url));
+// The inline child script resolves `commander` and `tsx` from its cwd, so run it from the CLI package
+// rather than wherever vitest was started (CI runs from the repo root).
+const cliPackageDir = fileURLToPath(new URL('../../../', import.meta.url));
 const bigRows = Array.from({ length: 100_000 }, (_, id) => ({ id, city: `City ${id}` }));
 
 let server: Server;
@@ -42,6 +45,7 @@ function runToolExecute(toolId: string, closedStream: 'stdout' | 'stderr') {
   `;
   const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
     stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: cliPackageDir,
     env: { ...process.env, MASTRA_TELEMETRY_DISABLED: '1' },
   });
 
