@@ -1272,6 +1272,52 @@ describe('Memory Handlers', () => {
   });
 
   describe('listMessagesHandler', () => {
+    it('does not list shared storage messages for a v2 Gateway agent without memory', async () => {
+      vi.stubEnv('MASTRA_GATEWAY_VERSION', 'v2');
+      try {
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) throw new Error('Memory store not initialized');
+        await memoryStore.saveThread({ thread: createThread({ id: 'stale-thread' }) });
+        await memoryStore.saveMessages({
+          messages: [
+            {
+              id: 'stale-message',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'stale-thread',
+              resourceId: 'test-resource',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'Stale message' }],
+                content: 'Stale message',
+              },
+            },
+          ],
+        });
+
+        const gatewayAgent = new Agent({
+          id: 'gateway-agent',
+          name: 'Gateway Agent',
+          instructions: 'test-instructions',
+          model: 'mastra/openai/gpt-5-mini' as any,
+        });
+        const mastra = new Mastra({ logger: false, storage, agents: { 'gateway-agent': gatewayAgent } });
+
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'gateway-agent',
+          threadId: 'stale-thread',
+          resourceId: 'test-resource',
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result).toEqual({ messages: [], uiMessages: [] });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('should throw error when threadId is not provided', async () => {
       const mastra = new Mastra({
         logger: false,
