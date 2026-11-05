@@ -1097,7 +1097,7 @@ The tools take their scope as an argument rather than reading the request, so th
 
 ### Your own tools in sessions
 
-`tools` gives every Factory session more tools, such as an MCP server's or those of your [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect/tools) connections. Pass a record of tools, or a function that returns them for each run from its `requestContext`:
+`tools` gives every Factory session more tools, such as an MCP server's or those of your [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) connections. Pass a record of tools, or a function that returns them for each run from its `requestContext`:
 
 ```typescript
 import { tools as connectTools } from '@mastra/connect';

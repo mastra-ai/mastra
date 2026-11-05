@@ -204,7 +204,7 @@ Deployments can instead use a service account or a Google Cloud runtime identity
 
 ### Mastra Connect tools
 
-Sessions can use the tools of your Platform project's [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect/tools) connections, for example to answer questions about Linear in a Slack thread. Connect the provider in the project, then name it in `mastracode/web/.env`:
+Sessions can use the tools of your Platform project's [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) connections, for example to answer questions about Linear in a Slack thread. Connect the provider in the project, then name it in `mastracode/web/.env`:
 
 ```dotenv
 FACTORY_CONNECT_PROVIDERS=linear
