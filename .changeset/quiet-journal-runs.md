@@ -13,15 +13,10 @@ const workflow = createWorkflow({
 });
 ```
 
-**Durable agents**
-
-Durable agents now store new runs in version 2 when their storage adapter supports it. Runs stored before upgrading keep their version, so a suspended run still resumes.
-
 **Limitations**
 
 - Version 2 requires the default engine and a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. Creating a run on another adapter throws.
 - Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`.
 - A `shouldPersistSnapshot` predicate on a version 2 run sees earlier successful steps without their `output`.
 - Workflow state is stored as JSON, so values such as `Date` are read back as strings, as with database storage.
-- A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.
-- A nested workflow's runs use their parent run's version.
+- Runs keep the version they were created with, so resuming a run after changing this option throws.
