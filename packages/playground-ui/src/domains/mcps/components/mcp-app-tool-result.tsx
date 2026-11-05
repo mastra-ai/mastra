@@ -1,6 +1,9 @@
 import { useMastraClient } from '@mastra/react';
 import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useMcpAppHostContext } from '../context/mcp-app-host-context-value';
+import type { McpAppModelContextParams, McpAppRef } from '../context/mcp-app-host-context-value';
 import { useMcpAppToolCall } from '../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from './mcp-app-viewer';
 import { Txt } from '@/ds/components/Txt';
@@ -9,6 +12,8 @@ interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;
   toolArgs?: Record<string, unknown>;
   toolResult?: unknown;
+  /** The chat tool call that rendered this app. Required for an `McpAppHostProvider` to reach the app. */
+  toolCallId?: string;
   onSendMessage?: (content: string) => void;
   onUpdateModelContext?: (context: string | undefined) => void;
   readOnly?: boolean;
@@ -26,11 +31,24 @@ export function McpAppToolResult({
   appInfo,
   toolArgs,
   toolResult,
+  toolCallId,
   onSendMessage,
   onUpdateModelContext,
   readOnly,
 }: McpAppToolResultProps) {
   const client = useMastraClient();
+  const host = useMcpAppHostContext();
+  const { toolName, resourceUri } = appInfo;
+  const app: McpAppRef | undefined = useMemo(
+    () => (toolCallId === undefined ? undefined : { toolName, toolCallId, resourceUri }),
+    [toolName, toolCallId, resourceUri],
+  );
+  const hostContext = useMemo(() => (app && host?.hostContext?.(app)) || undefined, [app, host]);
+  const onModelContext = useMemo(() => {
+    const handler = host?.onModelContext;
+    if (!app || !handler || readOnly) return undefined;
+    return (params: McpAppModelContextParams) => handler(app, params);
+  }, [app, host, readOnly]);
 
   const { data: html, isLoading } = useQuery({
     queryKey: ['mcp-app-html', appInfo.serverId, appInfo.resourceUri],
@@ -62,6 +80,8 @@ export function McpAppToolResult({
       onToolCall={readOnly ? undefined : handleToolCall}
       onSendMessage={readOnly ? undefined : onSendMessage}
       onUpdateModelContext={readOnly ? undefined : onUpdateModelContext}
+      onModelContext={onModelContext}
+      hostContext={hostContext}
       className="rounded-md border border-border"
     />
   );

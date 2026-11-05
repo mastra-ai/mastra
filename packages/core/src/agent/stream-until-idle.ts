@@ -84,6 +84,7 @@ export async function runStreamUntilIdle<OUTPUT>(
         },
       }) as MastraModelOutput<OUTPUT>;
     },
+    { detachOnCancel: streamOptions?._detachObserverOnCancel === true },
   );
 }
 
@@ -122,5 +123,6 @@ export async function runResumeStreamUntilIdle<OUTPUT>(
         },
       }) as MastraModelOutput<OUTPUT>;
     },
+    { detachOnCancel: streamOptions?._detachObserverOnCancel === true },
   );
 }

@@ -496,12 +496,12 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(back().disabled).toBe(false);
     });
 
-    it('floats Back over the graph, with a solid background and a pointer cursor', () => {
+    it('floats Back over the graph with the other graph options', () => {
       renderWithProviders(<Host requested={[]} />);
       expect(screen.getByTestId('knowledge-graph-container').contains(back())).toBe(true);
-      expect(back().className).toMatch(/\bbg-card\b/);
-      expect(back().className).toMatch(/\bcursor-pointer\b/);
-      expect(back().className).toMatch(/\bhover:bg-fill-subtle\b/);
+      expect(within(screen.getByRole('group', { name: 'Graph options' })).getByRole('button', { name: 'Back' })).toBe(
+        back(),
+      );
     });
 
     it('goes back one focus at a time through the walk', () => {
