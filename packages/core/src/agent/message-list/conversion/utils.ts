@@ -1,7 +1,9 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 
+import { removeWorkingMemoryTags, removeWorkingMemoryToolInvocationParts } from '../../../memory/working-memory-utils';
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { TypeDetector } from '../detection/TypeDetector';
+import type { MastraDBMessage, MastraMessagePart } from '../state/types';
 import type { MessageInput } from '../types';
 
 /**
@@ -81,4 +83,28 @@ export function messagesAreEqual(one: MessageInput, two: MessageInput): boolean 
 
   // default to it did change. we'll likely never reach this codepath
   return true;
+}
+
+/**
+ * The parts as memory persists them: `updateWorkingMemory` tool steps removed, and
+ * `<working_memory>` tags and surrounding whitespace stripped from text.
+ */
+function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePart[] {
+  return removeWorkingMemoryToolInvocationParts(parts).map(part =>
+    part.type === 'text' ? { ...part, text: removeWorkingMemoryTags(part.text).trim() } : part,
+  );
+}
+
+/**
+ * Whether `stored` is the persisted copy of `live`: the same id, and the same parts once
+ * both go through the cleanup memory applies when it saves a message. That cleanup makes
+ * `messagesAreEqual` treat a stored copy as a different message, for example when the live
+ * text ends in a newline.
+ */
+export function isPersistedCopy(live: MastraDBMessage, stored: MastraDBMessage): boolean {
+  return (
+    live.id === stored.id &&
+    CacheKeyGenerator.fromDBParts(projectPartsForPersistence(live.content.parts)) ===
+      CacheKeyGenerator.fromDBParts(projectPartsForPersistence(stored.content.parts))
+  );
 }
