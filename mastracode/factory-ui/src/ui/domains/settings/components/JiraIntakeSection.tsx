@@ -7,8 +7,8 @@ import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraStatus } from '../../factory/services/jira';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
-import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupJiraProjectsBySite } from './intakeSourceGroups';
+import { JiraRoutedSourcePicker } from './jira/JiraRoutedSourcePicker';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 
@@ -69,9 +69,7 @@ export function JiraIntakeSection({
       }
     >
       {configured && config.jira.enabled && !authError && (
-        <RoutedSourcePicker
-          integrationId="jira"
-          routingLabel="Jira"
+        <JiraRoutedSourcePicker
           factories={factories}
           label="Jira projects"
           addLabel="Add project"

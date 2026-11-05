@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { FilterBarFieldLabel, formatValue } from '@/ds/components/FilterBar/filter-bar-chip';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
 import { Txt } from '@/ds/components/Txt';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
+import { cn } from '@/lib/utils';
 
 type SavedViewSummaryProps = {
   filters: readonly FilterBarItem[];
@@ -26,7 +28,9 @@ export function SavedViewSummary({ filters, fields, operators, settings }: Saved
             return (
               <li key={filter.id} className="min-w-0">
                 <Txt as="span" variant="body-sm" className="flex min-w-0 items-center gap-1.5">
-                  <span className="flex min-w-0 shrink-0 items-center gap-1 text-muted-foreground">
+                  <span
+                    className={cn('flex min-w-0 shrink-0 items-center gap-1 text-muted-foreground', iconSizeClasses.sm)}
+                  >
                     <FilterBarFieldLabel field={field} label={field?.label ?? filter.fieldId} />
                   </span>
                   {operatorStated && <span className="shrink-0 text-muted-foreground">{operator?.label}</span>}

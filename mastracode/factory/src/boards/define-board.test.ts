@@ -6,7 +6,7 @@ import {
   isWorkingFactoryRuleStage,
 } from '../rules/types.js';
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
-import { BoardDefinitionError, defineBoard } from './define-board.js';
+import { BoardDefinitionError, compileBoardDefinition, defineBoard, isDefinedBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 import { allowsBuiltInBoardTransition } from './index.js';
@@ -254,10 +254,20 @@ describe('defineBoard', () => {
 
   it('defines the built-in Work lifecycle and phase behavior', () => {
     expect(workBoard.initialPhase).toBe('intake');
-    const phases = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-    for (const from of phases) {
-      for (const to of phases) {
-        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(true);
+    const flow: Record<string, string[]> = {
+      intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
+      triage: ['intake', 'planning', 'done', 'canceled'],
+      planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
+      execute: ['review', 'planning', 'done', 'canceled'],
+      review: ['execute', 'intake', 'done', 'canceled'],
+      'pr-review': ['intake', 'done', 'canceled'],
+      done: ['pr-review'],
+      canceled: ['intake', 'pr-review'],
+    };
+    for (const from of Object.keys(flow)) {
+      for (const to of Object.keys(flow)) {
+        // Staying put is always allowed.
+        expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(from === to || flow[from]!.includes(to));
       }
     }
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
@@ -386,5 +396,27 @@ describe('defineBoard sourceClosed', () => {
   it('maps Work closures to its Done and Canceled phases and leaves Review undeclared', () => {
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
     expect(reviewBoard.sourceClosed).toBeUndefined();
+  });
+});
+
+describe('isDefinedBoard', () => {
+  const config = {
+    id: 'release',
+    name: 'Release',
+    initialPhase: 'queued',
+    phases: {
+      queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
+      shipped: { name: 'Shipped', kind: 'terminal' },
+    },
+  } as const;
+
+  it('recognises a board an app declared with defineBoard(), but not a copy of it or a built-in board', () => {
+    const board = defineBoard(config);
+
+    expect(isDefinedBoard(board)).toBe(true);
+    expect(isDefinedBoard({ ...board })).toBe(false);
+    expect(isDefinedBoard(compileBoardDefinition(config))).toBe(false);
+    expect(isDefinedBoard(workBoard)).toBe(false);
+    expect(isDefinedBoard(reviewBoard)).toBe(false);
   });
 });

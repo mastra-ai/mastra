@@ -5,6 +5,7 @@ import type { ValkeyClientOptions, ValkeyClientType } from './client.js';
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Page size for replaying existing entries to a fan-out subscriber joining a shared reader. */
 const REPLAY_PAGE_SIZE = 500;
 
@@ -51,6 +52,17 @@ const NACK_IF_OWNED_SCRIPT = `
   redis.call("XACK", KEYS[1], ARGV[1], ARGV[3])
   return 1
 `;
+
+/**
+ * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
+ * return the policy when the server can evict keys under memory pressure.
+ */
+function evictingMaxmemoryPolicy(info: string): string | undefined {
+  const field = (name: string) => info.match(new RegExp(`^${name}:(.*)$`, 'm'))?.[1]?.trim();
+  const policy = field('maxmemory_policy');
+  if (!policy || policy === 'noeviction' || Number(field('maxmemory') ?? 0) <= 0) return undefined;
+  return policy;
+}
 
 /**
  * Flatten an error into searchable text. node-redis MULTI failures throw a
@@ -112,7 +124,7 @@ export interface ValkeyStreamsPubSubConfig {
    * option only bounds memory for streams that never reach a `clearTopic` call
    * — e.g. a run that crashed before cleanup — so they don't linger forever.
    *
-   * Defaults to 0 (disabled) to preserve existing behavior.
+   * Defaults to 7 days (604_800_000). Set to 0 to disable expiry.
    */
   streamIdleTtlMs?: number;
   /**
@@ -205,6 +217,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Set<EventCallback>> = new Map();
   #closed = false;
+  #evictionPolicyChecked = false;
 
   constructor(options: ValkeyStreamsPubSubConfig = {}) {
     super();
@@ -216,7 +229,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
     this.#blockMs = options.blockMs ?? 1000;
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
-    const ttl = options.streamIdleTtlMs ?? 0;
+    const ttl = options.streamIdleTtlMs ?? DEFAULT_STREAM_IDLE_TTL_MS;
     // Must be a non-negative integer: node-redis serializes the PEXPIRE arg with
     // toString(), and Valkey rejects a non-integer/Infinity ('value is not an
     // integer or out of range'). Without this guard a bad value would poison
@@ -288,6 +301,31 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   async #ensureWriterConnected(): Promise<void> {
     if (this.#writeClient.isOpen) return;
     await this.#writeClient.connect();
+    if (!this.#evictionPolicyChecked) {
+      this.#evictionPolicyChecked = true;
+      void this.#warnOnEvictingPolicy();
+    }
+  }
+
+  /**
+   * Consumer-group state, lease keys and TTL'd streams are all live data. A
+   * server with `maxmemory` set and any policy other than `noeviction` deletes
+   * them under memory pressure (silently losing events and leases), so warn
+   * once. INFO rather than CONFIG GET because managed services often block CONFIG.
+   */
+  async #warnOnEvictingPolicy(): Promise<void> {
+    try {
+      const policy = evictingMaxmemoryPolicy(String(await this.#writeClient.command(['INFO', 'memory'])));
+      if (!policy) return;
+      const warn = this.#logger?.warn ? this.#logger.warn.bind(this.#logger) : console.warn;
+      warn(
+        `valkey-streams: maxmemory-policy is "${policy}". Under memory pressure the server will evict ` +
+          `pubsub keys (TTL'd streams, consumer groups, lease keys), losing events and leases. ` +
+          `Set maxmemory-policy to "noeviction".`,
+      );
+    } catch (err) {
+      this.#logger?.debug?.('valkey-streams: maxmemory-policy check failed', { err: errorText(err) });
+    }
   }
 
   #streamKey(topic: string): string {
@@ -792,6 +830,58 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       // warn, not debug: a failed delete means the memory leak clearTopic
       // exists to prevent is silently recurring for this topic.
       this.#logger?.warn?.('valkey-streams: clearTopic failed', {
+        topic,
+        err: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  override async trimTopic(
+    topic: string,
+    {
+      runId,
+      producedBefore,
+      retainTerminalEvents,
+    }: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
+  ): Promise<void> {
+    if (this.#closed) return;
+    try {
+      await this.#ensureWriterConnected();
+      const streamKey = this.#streamKey(topic);
+      const [tail] = await this.#writeClient.xRevRange(streamKey, '+', '-', { COUNT: 1 });
+      if (!tail) return;
+      let start = '-';
+      for (;;) {
+        const page = await this.#writeClient.xRange(streamKey, start, tail.id, { COUNT: REPLAY_PAGE_SIZE });
+        const ids: string[] = [];
+        for (const entry of page) {
+          try {
+            const event = JSON.parse(entry.message.event ?? '{}') as {
+              runId?: string;
+              data?: { type?: string; status?: string; producedAt?: unknown; pinned?: unknown };
+            };
+            if (event.runId !== runId) continue;
+            if (
+              retainTerminalEvents &&
+              event.data?.status !== 'suspended' &&
+              ['run-registered', 'run-completed', 'run-failed', 'run-aborted'].includes(event.data?.type ?? '')
+            )
+              continue;
+            if (producedBefore !== undefined) {
+              const producedAt = event.data?.producedAt;
+              if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;
+            }
+            ids.push(entry.id);
+          } catch {
+            // Unparseable entries cannot be attributed to this run.
+          }
+        }
+        if (ids.length > 0) await this.#writeClient.command(['XDEL', streamKey, ...ids]);
+        if (page.length < REPLAY_PAGE_SIZE) break;
+        start = `(${page[page.length - 1]!.id}`;
+      }
+    } catch (err) {
+      this.#logger?.warn?.('valkey-streams: trimTopic failed', {
         topic,
         err: err instanceof Error ? err.message : err,
       });

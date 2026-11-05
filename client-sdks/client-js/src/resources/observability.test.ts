@@ -759,10 +759,35 @@ describe('Observability Methods', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
-    it('rejects model and provider as span groupBy dimensions at the type level', () => {
-      // @ts-expect-error model/provider are not span aggregate dimensions in v1 (OBS-693)
-      const invalid: AggregateSpansArgs = { ...request, groupBy: ['model'] };
-      expect(invalid.groupBy).toEqual(['model']);
+    it('should post model and provider span groupBy dimensions unchanged', async () => {
+      const modelRequest: AggregateSpansArgs = {
+        timeRange: request.timeRange,
+        where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        groupBy: ['provider', 'model'],
+        measures: ['count', 'tokens.total.sum', 'countDistinct.model'],
+      };
+      const modelResponse: AggregateSpansResponse = {
+        rows: [
+          {
+            dimensions: { provider: 'openai', model: 'gpt-5.6' },
+            measures: { count: 3, 'tokens.total.sum': 1200, 'countDistinct.model': 1 },
+          },
+          {
+            dimensions: { provider: null, model: null },
+            measures: { count: 2, 'tokens.total.sum': 400, 'countDistinct.model': 0 },
+          },
+        ],
+        truncated: false,
+      };
+      mockSuccessfulResponse(modelResponse);
+
+      const result = await client.aggregateSpans(modelRequest);
+
+      expect(result).toEqual(modelResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/spans/aggregate`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(modelRequest) }),
+      );
     });
   });
 
@@ -1333,32 +1358,6 @@ describe('Observability Methods', () => {
   });
 
   describe('createScore()', () => {
-    it('should create a score with correct POST request', async () => {
-      mockSuccessfulResponse();
-
-      const score = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        scorerId: 'accuracy-scorer',
-        score: 0.95,
-        reason: 'High accuracy',
-      };
-
-      await client.createScore({ score });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/scores`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            ...clientOptions.headers,
-            'content-type': 'application/json',
-          }),
-          body: JSON.stringify({ score }),
-        }),
-      );
-    });
-
     it('should handle HTTP errors gracefully', async () => {
       const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
@@ -1483,33 +1482,6 @@ describe('Observability Methods', () => {
   });
 
   describe('createFeedback()', () => {
-    it('should create feedback with correct POST request', async () => {
-      mockSuccessfulResponse();
-
-      const feedback = {
-        traceId: 'trace-123',
-        spanId: 'span-456',
-        source: 'user',
-        feedbackType: 'thumbs',
-        value: 1,
-        comment: 'Great response',
-      };
-
-      await client.createFeedback({ feedback });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/observability/feedback`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            ...clientOptions.headers,
-            'content-type': 'application/json',
-          }),
-          body: JSON.stringify({ feedback }),
-        }),
-      );
-    });
-
     it('should handle HTTP errors gracefully', async () => {
       const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);

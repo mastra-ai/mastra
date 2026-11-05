@@ -7,22 +7,22 @@
     "│           └── model_step: \"step: 0\"",
     "│               ├── processor_run: \"llm request processor: provider-history-compat\"",
     "│               ├── processor_run: \"llm request processor: unsupported-file-handler\"",
-    "│               └── model_inference: \"inference: 0\"",
-    "│                   └── model_chunk: \"chunk: 'text'\"",
+    "│               ├── model_inference: \"inference: 0\"",
+    "│               └── model_chunk: \"chunk: 'text'\"",
     "├── model_generation: \"llm: 'mock-model-id'\"",
     "│   └── model_step: \"step: 0\"",
     "│       ├── processor_run: \"llm request processor: provider-history-compat\"",
     "│       ├── processor_run: \"llm request processor: unsupported-file-handler\"",
-    "│       └── model_inference: \"inference: 0\"",
-    "│           └── model_chunk: \"chunk: 'text'\"",
+    "│       ├── model_inference: \"inference: 0\"",
+    "│       └── model_chunk: \"chunk: 'text'\"",
     "└── processor_run: \"output processor: summarizer\"",
     "    └── agent_run: \"agent run: 'summarizer-agent'\"",
     "        └── model_generation: \"llm: 'mock-model-id'\"",
     "            └── model_step: \"step: 0\"",
     "                ├── processor_run: \"llm request processor: provider-history-compat\"",
     "                ├── processor_run: \"llm request processor: unsupported-file-handler\"",
-    "                └── model_inference: \"inference: 0\"",
-    "                    └── model_chunk: \"chunk: 'text'\""
+    "                ├── model_inference: \"inference: 0\"",
+    "                └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -368,7 +368,6 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
-                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,
@@ -380,9 +379,8 @@
                                 }
                               },
                               "finishReason": "stop",
-                              "warnings": [],
                               "completionStartTime": "<date>",
-                              "responseModel": "mock-model-id"
+                              "timeToFirstTokenMs": "<ms>"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
@@ -397,39 +395,33 @@
                                 "role": "user",
                                 "content": "Validate:   Hello! How are you?  "
                               }
-                            ],
+                            ]
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-9>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'text'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-5>",
+                            "entityType": "agent",
+                            "entityId": "validator-agent",
+                            "attributes": {
+                              "chunkType": "text",
+                              "sequenceNumber": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
                             "output": {
-                              "text": "Mock V2 generate response",
-                              "toolCalls": []
+                              "text": "Mock V2 generate response"
                             }
-                          },
-                          "children": [
-                            {
-                              "span": {
-                                "id": "<span-9>",
-                                "traceId": "<trace-1>",
-                                "name": "chunk: 'text'",
-                                "type": "model_chunk",
-                                "completed": true,
-                                "isEvent": false,
-                                "isRootSpan": false,
-                                "parentId": "<span-8>",
-                                "entityType": "agent",
-                                "entityId": "validator-agent",
-                                "attributes": {
-                                  "chunkType": "text",
-                                  "sequenceNumber": 0
-                                },
-                                "metadata": {
-                                  "runId": "<runId-2>",
-                                  "environment": "test"
-                                },
-                                "output": {
-                                  "text": "Mock V2 generate response"
-                                }
-                              }
-                            }
-                          ]
+                          }
                         }
                       ]
                     }
@@ -672,7 +664,6 @@
                       },
                       "availableTools": [],
                       "toolChoice": "auto",
-                      "timeToFirstTokenMs": "<ms>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -684,9 +675,8 @@
                         }
                       },
                       "finishReason": "stop",
-                      "warnings": [],
                       "completionStartTime": "<date>",
-                      "responseModel": "mock-model-id"
+                      "timeToFirstTokenMs": "<ms>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -701,39 +691,33 @@
                         "role": "user",
                         "content": "  Hello! How are you?  "
                       }
-                    ],
+                    ]
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-15>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-11>",
+                    "entityType": "agent",
+                    "entityId": "test-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
                     "output": {
-                      "text": "Mock V2 generate response",
-                      "toolCalls": []
+                      "text": "Mock V2 generate response"
                     }
-                  },
-                  "children": [
-                    {
-                      "span": {
-                        "id": "<span-15>",
-                        "traceId": "<trace-1>",
-                        "name": "chunk: 'text'",
-                        "type": "model_chunk",
-                        "completed": true,
-                        "isEvent": false,
-                        "isRootSpan": false,
-                        "parentId": "<span-14>",
-                        "entityType": "agent",
-                        "entityId": "test-agent",
-                        "attributes": {
-                          "chunkType": "text",
-                          "sequenceNumber": 0
-                        },
-                        "metadata": {
-                          "runId": "<runId-1>",
-                          "environment": "test"
-                        },
-                        "output": {
-                          "text": "Mock V2 generate response"
-                        }
-                      }
-                    }
-                  ]
+                  }
                 }
               ]
             }
@@ -1057,7 +1041,6 @@
                               },
                               "availableTools": [],
                               "toolChoice": "auto",
-                              "timeToFirstTokenMs": "<ms>",
                               "usage": {
                                 "inputTokens": 15,
                                 "outputTokens": 25,
@@ -1069,9 +1052,8 @@
                                 }
                               },
                               "finishReason": "stop",
-                              "warnings": [],
                               "completionStartTime": "<date>",
-                              "responseModel": "mock-model-id"
+                              "timeToFirstTokenMs": "<ms>"
                             },
                             "metadata": {
                               "runId": "<runId-3>",
@@ -1086,39 +1068,33 @@
                                 "role": "user",
                                 "content": "Summarize: Mock V2 generate response"
                               }
-                            ],
+                            ]
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-23>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'text'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-19>",
+                            "entityType": "agent",
+                            "entityId": "summarizer-agent",
+                            "attributes": {
+                              "chunkType": "text",
+                              "sequenceNumber": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-3>",
+                              "environment": "test"
+                            },
                             "output": {
-                              "text": "Mock V2 generate response",
-                              "toolCalls": []
+                              "text": "Mock V2 generate response"
                             }
-                          },
-                          "children": [
-                            {
-                              "span": {
-                                "id": "<span-23>",
-                                "traceId": "<trace-1>",
-                                "name": "chunk: 'text'",
-                                "type": "model_chunk",
-                                "completed": true,
-                                "isEvent": false,
-                                "isRootSpan": false,
-                                "parentId": "<span-22>",
-                                "entityType": "agent",
-                                "entityId": "summarizer-agent",
-                                "attributes": {
-                                  "chunkType": "text",
-                                  "sequenceNumber": 0
-                                },
-                                "metadata": {
-                                  "runId": "<runId-3>",
-                                  "environment": "test"
-                                },
-                                "output": {
-                                  "text": "Mock V2 generate response"
-                                }
-                              }
-                            }
-                          ]
+                          }
                         }
                       ]
                     }

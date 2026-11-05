@@ -7,7 +7,6 @@
  */
 import { z } from 'zod/v4';
 import {
-  digestBinding,
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
   isTraceQuerySortValueFor,
@@ -22,6 +21,7 @@ import {
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
+import { digestBinding } from './trace-query-plan';
 import { isPreviewTruncated } from './tracing';
 
 /**
@@ -136,6 +136,22 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
      * span has none. Absent when the store lacks the `trace-query-time-to-first-token` feature.
      */
     timeToFirstTokenMs: z.number().nullable().optional(),
+    /**
+     * How the span ended, for example `success`, `limit` or a custom string. Separate from `status`,
+     * which reflects only `error`. `null` when not recorded (older SDKs or a running span), which
+     * does not mean success. Absent when the store lacks the `span-query-outcome-fields` feature.
+     */
+    outcome: z.string().nullable().optional(),
+    /**
+     * Why the span stopped, for example `max_steps`. `null` when not recorded.
+     * Absent when the store lacks the `span-query-outcome-fields` feature.
+     */
+    stopReason: z.string().nullable().optional(),
+    /**
+     * Details for `stopReason`. Returned only; not filterable.
+     * Absent when the store lacks the `span-query-outcome-fields` feature.
+     */
+    stopReasonContext: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);

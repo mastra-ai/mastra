@@ -196,6 +196,57 @@ const action = createAction({
 export default action;
 `;
 
+const paginateOnlyTemplate = `import { z } from 'zod';
+import { createAction, type ProxyConfiguration } from 'nango';
+
+const InputSchema = z.object({ listId: z.string() });
+const OutputSchema = z.object({ ids: z.array(z.string()) });
+
+const action = createAction({
+  description: 'List every item, following provider next-links.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const config: ProxyConfiguration = {
+      endpoint: '/lists/' + encodeURIComponent(input.listId) + '/items',
+      paginate: { type: 'link', link_path_in_response_body: '@odata.nextLink', response_path: 'value' },
+    };
+    const ids: string[] = [];
+    for await (const page of nango.paginate<{ id: string }>(config)) {
+      ids.push(...page.map(item => item.id));
+    }
+    return { ids };
+  },
+});
+
+export default action;
+`;
+
+const graphCursorTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ cursor: z.string().optional() });
+const OutputSchema = z.object({ nextCursor: z.string().optional() });
+
+const action = createAction({
+  description: 'List users.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    const baseUrl = 'https://graph.microsoft.com';
+    const endpoint = input.cursor ? input.cursor.slice(baseUrl.length) : '/v1.0/users';
+    await nango.get({ endpoint });
+    return {};
+  },
+});
+
+export default action;
+`;
+
 const connectionContextTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
@@ -397,14 +448,25 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'generic-typed-request.ts'), genericTypedRequestTemplate);
         writeFileSync(resolve(actionDir, 'generic-proxy-request.ts'), genericProxyRequestTemplate);
         writeFileSync(resolve(actionDir, 'random-uuid-import.ts'), randomUuidImportTemplate);
+        writeFileSync(resolve(actionDir, 'paginate-only.ts'), paginateOnlyTemplate);
       }
     }
     const integrationsDir = resolve(packageRoot, '.templates', 'integrations');
     symlinkSync('first-provider', resolve(integrationsDir, 'first-provider-alias'), 'dir');
+    const outsideActionDir = resolve(packageRoot, 'outside-provider', 'actions');
+    mkdirSync(outsideActionDir, { recursive: true });
+    writeFileSync(resolve(outsideActionDir, 'echo.ts'), actionTemplate);
+    symlinkSync(resolve(packageRoot, 'outside-provider'), resolve(integrationsDir, 'outside-provider-alias'), 'dir');
+    mkdirSync(resolve(integrationsDir, 'outside-actions-provider'));
+    symlinkSync(outsideActionDir, resolve(integrationsDir, 'outside-actions-provider', 'actions'), 'dir');
+    const outsideFileActionDir = resolve(integrationsDir, 'outside-file-provider', 'actions');
+    mkdirSync(outsideFileActionDir, { recursive: true });
+    symlinkSync(resolve(outsideActionDir, 'echo.ts'), resolve(outsideFileActionDir, 'echo.ts'));
 
     const microsoftExcelActionDir = resolve(integrationsDir, 'microsoft-excel-oauth2-cc', 'actions');
     mkdirSync(microsoftExcelActionDir, { recursive: true });
     writeFileSync(resolve(microsoftExcelActionDir, 'get-user-drive.ts'), getUserDriveActionTemplate);
+    writeFileSync(resolve(microsoftExcelActionDir, 'list-users.ts'), graphCursorTemplate);
     symlinkSync('microsoft-excel-oauth2-cc', resolve(integrationsDir, 'microsoft-excel'), 'dir');
 
     const openaiActionDir = resolve(integrationsDir, 'openai', 'actions');
@@ -630,6 +692,21 @@ export default action;
     expect(labelDeclarations).toHaveLength(1);
   });
 
+  it('pins Graph next-page cursors when generating from the delegated provider alias', async () => {
+    await addProvider({
+      providerId: 'microsoft-excel',
+      localId: 'microsoft-excel',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const generated = readFileSync(resolve(packageRoot, 'src/providers/microsoft-excel/tools/list-users.ts'), 'utf8');
+    expect(generated).toContain('inputSchema: listUsersInputSchemaChecked,');
+    expect(generated).toContain('export const listUsersInputSchemaChecked = listUsersInputSchema.extend({');
+    expect(generated).toMatch(/cursor: listUsersInputSchema\.shape\["cursor"\]\s*\.unwrap\(\)\s*\.regex\(/);
+    expect(generated).not.toContain('.refine(');
+  });
+
   it('adds model-native image output to the OpenAI image generation tool', async () => {
     await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
 
@@ -647,7 +724,7 @@ export default action;
       'first-provider (1 action templates) [installed as custom]',
     ]);
     expect(listProviders({ installedOnly: false, search: 'second' })).toEqual([
-      'second-provider (13 action templates)',
+      'second-provider (14 action templates)',
     ]);
   });
 
@@ -671,6 +748,33 @@ export default action;
       localId: 'first-provider-alias',
       toolCount: 1,
     });
+  });
+
+  it('rejects template symlinks that resolve outside the template checkout', async () => {
+    expect(listProviders({ installedOnly: false, search: 'outside-provider-alias' })).toEqual([]);
+    await expect(
+      addProvider({
+        providerId: 'outside-provider-alias',
+        localId: 'outside-provider-alias',
+        yes: true,
+        expectedTemplateSha: templateSha,
+      }),
+    ).rejects.toThrow("Unknown template provider 'outside-provider-alias'");
+  });
+
+  it('rejects template action directories and files that resolve outside the template checkout', async () => {
+    expect(listProviders({ installedOnly: false, search: 'outside-actions-provider' })).toEqual([]);
+    await expect(
+      addProvider({
+        providerId: 'outside-file-provider',
+        localId: 'outside-file-provider',
+        yes: true,
+        expectedTemplateSha: templateSha,
+      }),
+    ).rejects.toThrow(
+      "Action template 'outside-file-provider/actions/echo.ts' resolves outside the template checkout.",
+    );
+    expect(existsSync(resolve(packageRoot, 'src/providers/outside-file-provider'))).toBe(false);
   });
 
   it('adapts shared Office templates for delegated OAuth without changing client-credentials providers', async () => {
@@ -800,10 +904,18 @@ export default action;
     expect(randomUuidImportTool).toContain('const randomUUID = () => globalThis.crypto.randomUUID();');
     expect(randomUuidImportTool).not.toContain("from 'crypto'");
 
+    // A template that only pages through `nango.paginate` counts as calling
+    // the provider proxy and generates against the runtime paginate helper.
+    const paginateTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/paginate-only.ts'),
+      'utf8',
+    );
+    expect(paginateTool).toContain('platformProxy.paginate<{ id: string }>(config)');
+
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(12);
+    expect(manifest.toolCount).toBe(13);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
@@ -862,7 +974,7 @@ export default action;
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (12 tools, 1 skipped)',
+      'other <- second-provider (13 tools, 1 skipped)',
     ]);
   });
 

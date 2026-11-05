@@ -56,6 +56,34 @@ function createThrowingStreamModel(modelId: string, statusCode: number) {
 }
 
 describe('Per-fallback-entry settings', () => {
+  describe('Editor ownership', () => {
+    it('rejects model entries without stable IDs before they can be persisted', () => {
+      expect(
+        () =>
+          new Agent({
+            id: 'editor-owned-models',
+            name: 'Editor-owned models',
+            instructions: 'You are a test agent',
+            model: [{ model: createRecordingStreamModel('primary', 'ok') }],
+            editor: { model: true },
+          }),
+      ).toThrow('Every model entry must have an explicit id when Editor owns the model list.');
+    });
+
+    it('continues assigning runtime IDs when the model list is code-owned', async () => {
+      const agent = new Agent({
+        id: 'code-owned-models',
+        name: 'Code-owned models',
+        instructions: 'You are a test agent',
+        model: [{ model: createRecordingStreamModel('primary', 'ok') }],
+      });
+
+      await expect(agent.getModelList()).resolves.toEqual([
+        expect.objectContaining({ id: expect.any(String), model: expect.anything() }),
+      ]);
+    });
+  });
+
   describe('modelSettings', () => {
     it('should shallow-merge per-entry modelSettings on top of call-time modelSettings', async () => {
       const primary = createRecordingStreamModel('shallow-merge', 'ok');

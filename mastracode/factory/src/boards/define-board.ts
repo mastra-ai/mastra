@@ -178,9 +178,13 @@ export type BoardPhaseDefinition<PhaseId extends string> =
 
 type ResolvedPhaseBase<PhaseId extends string> = {
   readonly name: string;
+  /** @deprecated Use `name`; kept equal to it for code written against older Factory versions. */
+  readonly title: string;
   readonly description?: string;
   /** Every phase a card may move to from here, including outcome targets. */
   readonly nextPhases: readonly PhaseId[];
+  /** @deprecated Use `nextPhases`; set when the phase declared `next`. */
+  readonly next?: PhaseId;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
@@ -195,6 +199,8 @@ export type BoardPhase<PhaseId extends string> =
   | (ResolvedPhaseBase<PhaseId> & {
       readonly kind: 'working';
       readonly runner: Readonly<BoardPhaseRunner & { agentId: string; context: string }>;
+      /** @deprecated Use `runner.context`; kept equal to it. */
+      readonly role: string;
       readonly autoStart?: boolean;
       readonly autoStartWhen?: RuleGroup;
       readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup }>;
@@ -218,6 +224,8 @@ export type BoardSourceClosed<PhaseId extends string> = Readonly<{ completed: Ph
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
   readonly id: BoardId;
   readonly name: string;
+  /** @deprecated Use `name`; kept equal to it for code written against older Factory versions. */
+  readonly title: string;
   readonly description?: string;
   readonly initialPhase: PhaseId;
   readonly phases: Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
@@ -227,6 +235,7 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly tools: BoardToolRules;
   /** Integration event handlers for cards on this board; empty when the board declares none. */
   readonly events: BoardEventRules;
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   readonly transitionPolicy?: BoardTransitionPolicy;
   /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
@@ -256,6 +265,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   phases: Phases;
   tools?: Record<string, BoardToolRule>;
   events?: BoardEventRules;
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   transitionPolicy?: BoardTransitionPolicy;
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
 };
@@ -488,17 +498,27 @@ type DeclaredBoard = {
   readonly id: string;
   readonly name?: string;
   readonly title?: string;
+  readonly transitionPolicy?: BoardTransitionPolicy;
   readonly phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
 };
 
-/** Deprecated fields a board declaration still uses; `defineBoard()` maps each to its replacement. */
+/**
+ * Deprecated fields a board declaration still relies on; `defineBoard()` maps each to its
+ * replacement. A deprecated field next to its replacement adds nothing, so it is not reported:
+ * that is how a resolved board, which carries both, is declared again.
+ */
 function deprecatedFields(config: DeclaredBoard): string[] {
   const found: string[] = [];
-  if (config.title !== undefined) found.push('title → name');
+  if (config.title !== undefined && config.name === undefined) found.push('title → name');
+  if (config.transitionPolicy !== undefined) found.push('transitionPolicy → phases.*.nextPhases and exitTool');
   for (const [phaseId, phase] of Object.entries(config.phases)) {
-    if (phase.title !== undefined) found.push(`phases.${phaseId}.title → name`);
-    if (phase.next !== undefined) found.push(`phases.${phaseId}.next → nextPhases`);
-    if (phase.role !== undefined) found.push(`phases.${phaseId}.role → runner.context`);
+    if (phase.title !== undefined && phase.name === undefined) found.push(`phases.${phaseId}.title → name`);
+    if (phase.next !== undefined && !phase.nextPhases?.includes(phase.next)) {
+      found.push(`phases.${phaseId}.next → nextPhases`);
+    }
+    if (phase.role !== undefined && phase.runner?.context === undefined) {
+      found.push(`phases.${phaseId}.role → runner.context`);
+    }
   }
   return found;
 }
@@ -514,10 +534,71 @@ function warnDeprecatedFields(config: DeclaredBoard): void {
   );
 }
 
+/** Marks a board an app declared with the deprecated `defineBoard()`; a copy does not carry it. */
+const DEFINED_BOARD = Symbol('DefinedBoard');
+
+/**
+ * Declares a board in code.
+ *
+ * @deprecated Write the board's definition into projects with `factory.upsertBoard()`, or manage
+ * it through the boards API
+ * (`/web/factory/projects/:id/boards`, README "Stored boards"); removal is tracked in
+ * mastra-ai/mastra#28920. A board defined here still works: each project stores it once and is
+ * served from its row, with the code behaviour it declares.
+ */
 export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
+  return buildBoard(config, true);
+}
+
+/** Whether an app declared the board with the deprecated `defineBoard()`. */
+export function isDefinedBoard(board: object): boolean {
+  return DEFINED_BOARD in board;
+}
+
+/** A board declaration as `defineBoard()` takes it, with any phase keys. */
+export type AnyBoardConfig = BoardConfig<string, Record<string, BoardPhaseDefinition<string>>>;
+
+/**
+ * The declaration a board was built from. A resolved board's `onEnter` handlers already carry its
+ * runner's skill and instructions, so a board with other runner fields is rebuilt from this.
+ */
+const BOARD_DECLARATION = Symbol('BoardDeclaration');
+
+/** On a board built from a stored definition, the code board that gave it its behaviour. */
+const CODE_BOARD = Symbol('CodeBoard');
+
+/** The declaration a board was built from; undefined for an object that was not built as a board. */
+export function declarationOf(board: object): AnyBoardConfig | undefined {
+  return (board as { [BOARD_DECLARATION]?: AnyBoardConfig })[BOARD_DECLARATION];
+}
+
+/** The code board a board takes its behaviour from: itself unless it was built from a stored definition. */
+export function codeBoardOf<Board extends object>(board: Board): Board {
+  return (board as { [CODE_BOARD]?: Board })[CODE_BOARD] ?? board;
+}
+
+/**
+ * Validates and resolves a board declaration. Factory's own boards use this directly. A board
+ * built from a stored definition names the code board whose behaviour it carries.
+ */
+export function compileBoardDefinition<
+  const BoardId extends string,
+  const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
+>(config: BoardConfig<BoardId, Phases>, codeBoard?: object): BoardDefinition<BoardId, keyof Phases & string> {
+  return buildBoard(config, false, codeBoard);
+}
+
+function buildBoard<
+  const BoardId extends string,
+  const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
+>(
+  config: BoardConfig<BoardId, Phases>,
+  defined: boolean,
+  codeBoard?: object,
+): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
   validateBoardIdentifier(config.id, 'Board id');
   const boardName = resolveName(config.name, config.title, `Board "${config.id}"`);
@@ -595,11 +676,13 @@ export function defineBoard<
           phaseId,
           Object.freeze({
             name,
+            title: name,
             ...(description !== undefined ? { description } : {}),
             kind: phase.kind,
             nextPhases,
+            ...(phase.next !== undefined ? { next: phase.next } : {}),
             ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
-            ...(runner ? { runner } : {}),
+            ...(runner ? { runner, role: runner.context } : {}),
             ...(working?.autoStart ? { autoStart: true } : {}),
             ...(autoStartWhen ? { autoStartWhen } : {}),
             ...(exitTool ? { exitTool } : {}),
@@ -649,9 +732,10 @@ export function defineBoard<
     if (!phaseByRole.has(phase.runner.context)) phaseByRole.set(phase.runner.context, phaseId);
   }
 
-  return Object.freeze({
+  const board = {
     id: config.id,
     name: boardName,
+    title: boardName,
     ...(boardDescription !== undefined ? { description: boardDescription } : {}),
     initialPhase: config.initialPhase,
     phases,
@@ -675,5 +759,9 @@ export function defineBoard<
       if (!definition.autoStartWhen) return true;
       return facts !== undefined && evaluateRuleGroup(definition.autoStartWhen, facts);
     },
-  });
+  };
+  if (defined) Object.defineProperty(board, DEFINED_BOARD, { value: true });
+  Object.defineProperty(board, BOARD_DECLARATION, { value: config });
+  if (codeBoard) Object.defineProperty(board, CODE_BOARD, { value: codeBoardOf(codeBoard) });
+  return Object.freeze(board);
 }

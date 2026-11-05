@@ -89,6 +89,7 @@ import {
   SUBSCRIBE_PENDING_SIGNALS_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
+  STEP_RESPONSE_MESSAGE_ID_KEY,
   STEP_TOOLS_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
@@ -1030,6 +1031,12 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
 
       case 'tool-result': {
+        // Partial provider results (e.g. OpenAI image_generation partial images) are
+        // streamed as-is; only the final result is processed, saved and ends the span.
+        if (chunk.payload.preliminary) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
         // Patch deferred provider-executed tool results inline.
         // When a provider tool is deferred (e.g., Anthropic web_search called alongside
         // a client tool), the tool-call arrives in step N and is added to messageList as
@@ -1643,7 +1650,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
         materializeFailedAttempt = undefined;
         settleRequest();
-        settleRequest = startRunStep(options?.abortSignal);
+        settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1952,6 +1959,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           currentStep.activeTools as string[] | undefined,
         );
 
+        // Publish the response message this step writes into. A processor can rotate
+        // it (task-state signals) well after the run-level id was chosen, and a tool
+        // data chunk persisted under the stale id replaces the sealed earlier row.
+        writeScoped(scopeCtx, STEP_RESPONSE_MESSAGE_ID_KEY, 'stepResponseMessageId', currentStep.messageId);
+
         if (toolCallForeachOptions) {
           updateToolCallForeachConcurrency(toolCallForeachOptions, {
             requireToolApproval,
@@ -2174,7 +2186,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 // runs while the retry waits, so a lease lost during that wait stops the run too.
                 onRequestFailed: () => settleRequest(),
                 onRequestRetry: () => {
-                  settleRequest = startRunStep(options?.abortSignal);
+                  settleRequest = startRunStep(options?.stepOwner ?? options?.abortSignal);
                 },
                 model: currentStep.model,
                 providerOptions: currentStep.providerOptions,

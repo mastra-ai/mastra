@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { releaseBoard } from '../../../e2e/ui/board-catalog';
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../api/types';
@@ -19,26 +20,18 @@ function renderBoard(board = 'boards/release', workItems: unknown[] = [], boards
     http.get('*/auth/me', () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Factory' }] })),
-    http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
-    http.get('*/web/factory/projects/:id/source-control-connections', () =>
+    http.get('*/web/factory/projects', () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: 'repo-1',
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: 'fp-1',
+            name: 'Factory',
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
     ),
+    http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json({ boards } satisfies BoardCatalogResponse)),
     http.get('*/web/intake/config', () =>
       HttpResponse.json({
         config: { github: { enabled: true, sourceIds: ['acme/app'] }, linear: { enabled: false, sourceIds: null } },
@@ -138,7 +131,6 @@ describe('custom-only board routing', () => {
         triageType: null,
         acceptedAt: null,
         commentCount: 0,
-        feedActivityAt: null,
         revision: 1,
         createdAt: now,
         updatedAt: now,

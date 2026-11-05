@@ -2,7 +2,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { ArrivalScope, Arriving } from './arrival';
+import { ArrivalScope, Arriving, Continuing } from './arrival';
 import { useArriving } from './use-watched';
 import { ARRIVING_CLASS } from '@/ds/tokens';
 
@@ -73,5 +73,23 @@ describe('arrival scope', () => {
     );
 
     expect(arrives('detail')).toBe(true);
+  });
+
+  it('moves what the reader already sees into place without fading it in again', () => {
+    const { rerender } = render(
+      <ArrivalScope>
+        <span />
+      </ArrivalScope>,
+    );
+
+    rerender(
+      <ArrivalScope>
+        <Continuing>
+          <Mark name="indicator" />
+        </Continuing>
+      </ArrivalScope>,
+    );
+
+    expect(arrives('indicator')).toBe(false);
   });
 });

@@ -302,7 +302,8 @@ export function createThreadQueryTests(
               spanId: 'model',
               parentSpanId: 'root-a',
               spanType: SpanType.MODEL_GENERATION,
-              attributes: { model: 'gpt-4o', provider: 'openai' },
+              model: 'gpt-4o',
+              provider: 'openai',
             }),
           ],
         });

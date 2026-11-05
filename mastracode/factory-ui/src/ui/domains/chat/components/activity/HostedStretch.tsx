@@ -1,13 +1,13 @@
-import { Arriving } from '@mastra/playground-ui/components/Arrival';
+import { Arriving, Continuing } from '@mastra/playground-ui/components/Arrival';
 import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { ActivityStretchLine } from '@mastra/playground-ui/domains/chat/activity';
-import type { ActivityMember } from '@mastra/playground-ui/domains/chat/activity';
+import type { ActivityCallState, ActivityMember } from '@mastra/playground-ui/domains/chat/activity';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
+import { useState } from 'react';
 
 import { ToolBody, toolHasBody } from '../tool/ToolBody';
-import { toolFromInvocationPart } from '../transcript-parts';
+import { reasoningWithState, toolFromInvocationPart } from '../transcript-parts';
 import type { MessagePart } from '../transcript-parts';
-import { reasoningWithState } from './activity-plan';
 import type { ActivityStretch, StretchMember } from './activity-plan';
 import { StretchToolRow } from './StretchToolRow';
 
@@ -23,7 +23,6 @@ function activityMember(member: StretchMember, part: HostedPart | undefined): Ac
       toolName: tool.toolName,
       args: tool.args,
       status: tool.status,
-      startedAt: tool.createdAt,
       row: <StretchToolRow tool={tool} />,
       body: toolHasBody(tool, command) ? <ToolBody tool={tool} command={command} /> : undefined,
     };
@@ -35,9 +34,16 @@ function activityMember(member: StretchMember, part: HostedPart | undefined): Ac
   return undefined;
 }
 
+function callState(member: StretchMember): ActivityCallState[] {
+  if (member.kind !== 'tool') return [];
+  const { toolName, args, status } = toolFromInvocationPart(member.part, member.runtime, member.messageCreatedAt);
+  return [{ toolName, args, status }];
+}
+
 /**
  * The stretch an entry hosts. Its own members show only once revealed, so streaming reasoning keeps its pacing;
- * members from later entries are already settled.
+ * members from later entries are already settled. A live one takes the run's indicator over from the tail
+ * line, so it draws from the start, and moves into place instead of fading in.
  */
 export function HostedStretch({
   stretch,
@@ -48,15 +54,16 @@ export function HostedStretch({
   hostEntryId: string;
   revealed: ReadonlyMap<string, MessagePart>;
 }) {
+  const [takesOverIndicator] = useState(stretch.live);
   const members = stretch.members.flatMap(member => {
     const shown = activityMember(member, member.entryId === hostEntryId ? revealed.get(member.key) : member.part);
     return shown ? [shown] : [];
   });
-  if (members.length === 0) return null;
+  if (members.length === 0 && !stretch.live) return null;
+  const current = stretch.live ? stretch.members.flatMap(callState) : undefined;
 
-  return (
-    <Arriving>
-      <ActivityStretchLine members={members} live={stretch.live} elapsedMs={stretch.elapsedMs} />
-    </Arriving>
+  const line = (
+    <ActivityStretchLine members={members} live={stretch.live} elapsedMs={stretch.elapsedMs} current={current} />
   );
+  return takesOverIndicator ? <Continuing>{line}</Continuing> : <Arriving>{line}</Arriving>;
 }

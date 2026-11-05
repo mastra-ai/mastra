@@ -5,13 +5,14 @@ import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 
 interface PlanPromptContext {
   state?: Record<string, unknown>;
+  plansDir?: string;
   /** False when the host disabled or denied `submit_plan`; defaults to available. */
   submitPlanAvailable?: boolean;
 }
 
 export function planModePrompt(ctx: PlanPromptContext): string {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
-  const plansDir = getLocalPlansRelativeDir({ factoryProjectId });
+  const plansDir = getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir });
   const examplePath = `${plansDir}/add-dark-mode.md`;
   const submitPlanAvailable = ctx.submitPlanAvailable !== false;
 
