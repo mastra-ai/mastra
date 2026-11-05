@@ -132,9 +132,9 @@ This top-level predicate doesn't inspect child spans. In contrast, `spans.some` 
 
 Trace queries exclude incomplete roots before evaluating predicates. As a result, `{ op: 'notExists', path: 'durationMs' }` doesn't find running traces or malformed roots without a usable `endedAt`.
 
-#### Filter and sort by time to first chunk or token
+#### Filter and sort by time to first chunk (TTFC)
 
-`timeToFirstChunkMs` and `timeToFirstTokenMs` hold each span's [time to first chunk (TTFC) and time to first token (TTFT)](#time-to-first-token-and-chunk-measures). At trace scope, the fields read the current root span's value. Inside `spans.some` or `spans.none`, they read each related span.
+`timeToFirstChunkMs` holds each span's [time to first chunk (TTFC)](#time-to-first-chunk-ttfc). At trace scope, the field reads the current root span's value. Inside `spans.some` or `spans.none`, it reads each related span.
 
 This predicate finds traces with a model call that took more than 2 seconds to stream its first chunk:
 
@@ -152,15 +152,21 @@ const slowFirstChunk = {
 }
 ```
 
+Pass `orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }]` to list the slowest first chunks first. Traces sort by the root span's value. Ties break by `traceId` for traces and by span identity for `querySpans()`.
+
+#### Filter and sort by time to first token (TTFT)
+
+`timeToFirstTokenMs` holds each span's [time to first token (TTFT)](#time-to-first-token-ttft). At trace scope, the field reads the current root span's value. Inside `spans.some` or `spans.none`, it reads each related span.
+
 This predicate finds traces whose root agent waited more than 2 seconds for the model's first token:
 
 ```typescript
 const slowFirstToken = { op: 'gt', left: { path: 'timeToFirstTokenMs' }, right: { literal: 2000 } }
 ```
 
-Pass `orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }]`, or the same with `timeToFirstTokenMs`, to list the slowest first. Traces sort by the root span's value. Ties break by `traceId` for traces and by span identity for `querySpans()`.
+Pass `orderBy: [{ field: 'timeToFirstTokenMs', direction: 'desc' }]` to list the slowest first tokens first, with the same ordering and tie-breaks.
 
-Trace query results include the root span's values, and `querySpans()` results include each span's values. See [Missing values and store support](#missing-values-and-store-support) for `null`, `0`, and the capabilities each use needs.
+Trace query results include the root span's `timeToFirstChunkMs` and `timeToFirstTokenMs`, and `querySpans()` results include each span's values. See [Missing first chunk and token values](#missing-first-chunk-and-token-values) for `null`, `0`, and the capabilities each use needs.
 
 #### Filter by outcome
 
@@ -560,7 +566,7 @@ A query using keyset pagination returns lightweight completed traces and a curso
 
 The response includes `name`, `createdAt`, identity fields, `metadata`, and input/output/error previews. Supported nullable fields remain present with `null` when no value was recorded. Fields that require an optional store feature are omitted when the store lacks that feature. Previews summarize payloads; retrieve the full trace for complete input, output, and error details.
 
-`timeToFirstChunkMs` and `timeToFirstTokenMs` are present only when the configured store supports them. See [Filter and sort by time to first chunk or token](#filter-and-sort-by-time-to-first-chunk-or-token). `outcome`, `stopReason`, and `stopReasonContext` read the root span and are present only when the store supports the `traceQueryOutcomeFields` capability. They're `null` when the root span didn't record them. See [Filter by outcome](#filter-by-outcome).
+`timeToFirstChunkMs` and `timeToFirstTokenMs` are present only when the configured store supports them. See [Filter and sort by time to first chunk (TTFC)](#filter-and-sort-by-time-to-first-chunk-ttfc) and [Filter and sort by time to first token (TTFT)](#filter-and-sort-by-time-to-first-token-ttft). `outcome`, `stopReason`, and `stopReasonContext` read the root span and are present only when the store supports the `traceQueryOutcomeFields` capability. They're `null` when the root span didn't record them. See [Filter by outcome](#filter-by-outcome).
 
 The response doesn't include the related spans that matched the predicate. Use [`getTrace()`](/reference/client-js/observability#getting-a-specific-trace) to load the full trace after selecting a result.
 
@@ -862,11 +868,11 @@ When you request any `cost.*` measure, every row also includes a `cost` object:
 
 `cost.sum` and `cost.avg` are `null` when the group has no priced traces or `unit` is `'mixed'`. A coverage below 1 means the cost understates the group's spend. The `cost` object isn't a measure, so `having` and `orderBy` can't reference it.
 
-#### Time to first token and chunk measures
+### Time to first chunk (TTFC)
 
-Time to first chunk (TTFC) and time to first token (TTFT) measure how long a caller waits for a streamed model response. Spans store them as `timeToFirstChunkMs` and `timeToFirstTokenMs`, in milliseconds. You can [filter and sort](#filter-and-sort-by-time-to-first-chunk-or-token) traces and spans by them.
+Time to first chunk (TTFC) is how long a caller waits for the first streamed chunk. `timeToFirstChunkMs` is the time from a span's start to the first chunk of its model response. Agent run and model spans record it when the model streams a response. On an agent run, it's measured from the run's start and includes work done before the first model call, such as input processors and memory recall.
 
-`timeToFirstChunk.*` and `timeToFirstToken.*` aggregate the root span's values, the same values [`queryTraces()`](#query-traces) returns. `avg`, `min`, `max`, and the percentiles are `null` for a group where no trace has a value, and `.count` is the number of traces that do have one. Percentiles can be approximate, depending on the store. The measures require the `aggregateTimeToFirstMeasures` capability.
+The `timeToFirstChunk.*` measures aggregate the root span's `timeToFirstChunkMs`, the same value [`queryTraces()`](#query-traces) returns. To filter or sort by it, see [Filter and sort by time to first chunk (TTFC)](#filter-and-sort-by-time-to-first-chunk-ttfc).
 
 ```typescript
 const { capabilities } = await mastraClient.getObservabilityCapabilities()
@@ -885,17 +891,13 @@ if (capabilities.traceAggregate && capabilities.aggregateTimeToFirstMeasures) {
 }
 ```
 
-##### Time to first chunk (TTFC)
+### Time to first token (TTFT)
 
-`timeToFirstChunkMs` is the time from a span's start to the first chunk of its model response. Agent run and model spans record it when the model streams a response. On an agent run, it's measured from the run's start and includes work done before the first model call, such as input processors and memory recall.
+Time to first token (TTFT) is how long the model takes to stream its first chunk. `timeToFirstTokenMs` is the time in milliseconds from the start of a model call, the provider request itself, to the first chunk that call streams. It leaves out the work Mastra does before calling the model, such as input processors. The value is measured once, on the model inference span that streamed the chunk. Model step, model generation, and agent run spans carry the value of the nearest such inference below them: each step takes its own, and the generation and agent run take the first step's. A step can run more than one inference, for example a fallback model or a retry that opens a new inference span. The value then comes from the first inference that streamed a chunk. A fallback attempt that failed ends its inference span with its error. That span has a value only if it streamed a chunk first. Mastra storage keeps the value in its own column and leaves it out of the stored `attributes`. Read it from the span's `timeToFirstTokenMs` field. When an in-process agent retries a failed model call, the AI SDK retries inside a single inference span. The value then includes the failed attempt and the retry wait. Durable agents open one inference span per attempt and don't.
 
-##### Time to first token (TTFT)
+The `timeToFirstToken.*` measures aggregate the root span's `timeToFirstTokenMs`. To filter or sort by it, see [Filter and sort by time to first token (TTFT)](#filter-and-sort-by-time-to-first-token-ttft). Compare TTFC with TTFT to see how much of an agent's wait comes from work before the model call.
 
-`timeToFirstTokenMs` is the time in milliseconds from the start of a model call, the provider request itself, to the first chunk that call streams. It leaves out the work Mastra does before calling the model, such as input processors. The value is measured once, on the model inference span that streamed the chunk. Model step, model generation, and agent run spans carry the value of the nearest such inference below them: each step takes its own, and the generation and agent run take the first step's. A step can run more than one inference, for example a fallback model or a retry that opens a new inference span. The value then comes from the first inference that streamed a chunk. A fallback attempt that failed ends its inference span with its error. That span has a value only if it streamed a chunk first. Mastra storage keeps the value in its own column and leaves it out of the stored `attributes`. Read it from the span's `timeToFirstTokenMs` field. When an in-process agent retries a failed model call, the AI SDK retries inside a single inference span. The value then includes the failed attempt and the retry wait. Durable agents open one inference span per attempt and don't.
-
-Compare TTFC with TTFT to see how much of an agent's wait comes from work before the model call.
-
-##### Span types
+### First chunk and token span types
 
 These span types record TTFC and TTFT:
 
@@ -906,7 +908,7 @@ These span types record TTFC and TTFT:
 
 Other spans, such as tool calls and workflow runs, record neither value. A trace rooted in a workflow has no TTFC or TTFT at trace scope.
 
-##### Missing values and store support
+### Missing first chunk and token values
 
 The value is `null` when the span didn't stream a chunk. A value of `0` isn't missing. It means the first chunk arrived in the same millisecond the span started.
 
@@ -915,6 +917,8 @@ The value is `null` when the span didn't stream a chunk. A value of `0` isn't mi
 - In aggregates, spans and traces without a value are skipped, never counted as 0.
 
 Filtering, sorting, and aggregating each require a store feature. See [Check capabilities](#check-capabilities) for the `traceQueryTimeToFirstChunk`, `traceQueryTimeToFirstChunkSort`, `traceQueryTimeToFirstToken`, `traceQueryTimeToFirstTokenSort`, and `aggregateTimeToFirstMeasures` flags. Against an older store, results omit the unsupported fields, a request that uses them returns `501` before storage runs, and [field discovery](#discover-fields-and-values) omits them.
+
+For `timeToFirstChunk.*` and `timeToFirstToken.*`, `avg`, `min`, `max`, and the percentiles are `null` for a group where no trace has a value, and `.count` is the number of traces that do have one. Percentiles can be approximate, depending on the store. The measures require the `aggregateTimeToFirstMeasures` capability.
 
 ### Filter and order groups
 
@@ -1047,7 +1051,7 @@ Aggregation uses the same span predicates as [`querySpans()`](#query-spans), wit
 
 `count` counts selected spans in each group or time bucket. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.
 
-`timeToFirstToken.*` and `timeToFirstChunk.*` read the span's own `timeToFirstTokenMs` and `timeToFirstChunkMs`. See [Span types](#span-types) for which spans record them. Filter to `model_inference` for per-call TTFT, or to `agent_run` for latency as the caller of each agent sees it. Without a `spanType` filter, one agent call contributes its agent run, its model generation, and every model step and model inference.
+`timeToFirstToken.*` and `timeToFirstChunk.*` read the span's own `timeToFirstTokenMs` and `timeToFirstChunkMs`. See [First chunk and token span types](#first-chunk-and-token-span-types) for which spans record them. Filter to `model_inference` for per-call TTFT, or to `agent_run` for latency as the caller of each agent sees it. Without a `spanType` filter, one agent call contributes its agent run, its model generation, and every model step and model inference.
 
 On ClickHouse, a direct `spanType` `eq` or `in` predicate, or one immediately inside an `and`, can select the smaller branch table. All selected types must be branch types: `agent_run`, `workflow_run`, `processor_run`, `scorer_run`, `rag_ingestion`, `tool_call`, or `mcp_tool_call`. Every requested field must be available in that table. An equivalent `or` predicate doesn't select this optimization. The branch path can differ from `querySpans()`:
 
