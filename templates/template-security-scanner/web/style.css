@@ -681,6 +681,210 @@ body:has(dialog[open]) {
   font-size: 18px;
   overflow-wrap: anywhere;
 }
+.assessment-detail {
+  display: grid;
+  gap: 16px;
+  font-size: 13px;
+}
+.assessment-detail h3,
+.assessment-detail h4,
+.assessment-detail p,
+.assessment-detail dl {
+  margin: 0;
+}
+.assessment-detail dd {
+  margin: 0;
+}
+.assessment-detail dt {
+  color: #95969c;
+  font-size: 12px;
+}
+.assessment-detail code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.assessment-result,
+.assessment-panel,
+.assessment-disclosure {
+  border: 1px solid #333439;
+  border-radius: 8px;
+  min-width: 0;
+}
+.assessment-result,
+.assessment-panel {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+.assessment-result {
+  background: #222328;
+  border-left: 3px solid #95969c;
+}
+.assessment-result[data-outcome='CONFIRMED'] {
+  border-left-color: #df9696;
+}
+.assessment-result[data-outcome='CONFIRMED'] .status {
+  border-color: #623d3d;
+  background: #352222;
+  color: #df9696;
+}
+.assessment-result-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.assessment-result h3 {
+  margin-top: 8px;
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+.assessment-result > p {
+  color: #bfc0c4;
+}
+.assessment-route {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  border-top: 1px solid #333439;
+  padding-top: 12px;
+}
+.assessment-accounts,
+.assessment-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.assessment-accounts > div {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #333439;
+  border-radius: 6px;
+  background: #18191d;
+}
+.assessment-accounts dd {
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.assessment-accounts [data-outcome='CONFIRMED'] dd {
+  color: #df9696;
+}
+.assessment-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.assessment-facts dd {
+  margin-top: 6px;
+  font-weight: 600;
+}
+.assessment-note {
+  border-top: 1px solid #333439;
+  padding-top: 12px;
+}
+.assessment-properties,
+.assessment-models {
+  display: grid;
+  gap: 12px;
+}
+.assessment-properties > div,
+.assessment-models > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr);
+  align-items: baseline;
+  gap: 8px 16px;
+}
+.assessment-capitalize {
+  text-transform: capitalize;
+}
+.assessment-limits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.assessment-limits li {
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: #292a2e;
+  color: #bfc0c4;
+  font-size: 12px;
+}
+.assessment-finding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  padding: 2px 0;
+}
+.assessment-disclosure summary {
+  padding: 15px 18px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.assessment-disclosure summary:focus-visible {
+  outline: 2px solid #c8a36f;
+  outline-offset: -3px;
+}
+.assessment-disclosure-body {
+  display: grid;
+  gap: 16px;
+  padding: 16px 18px;
+  border-top: 1px solid #333439;
+}
+.assessment-candidates {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.assessment-candidates li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+}
+.assessment-candidates li + li {
+  border-top: 1px solid #333439;
+}
+.assessment-candidates li > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .assessment-columns,
+  .assessment-facts,
+  .assessment-properties > div,
+  .assessment-models > div {
+    grid-template-columns: 1fr;
+  }
+  .assessment-facts > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .assessment-facts dd {
+    margin-top: 0;
+  }
+  .assessment-accounts {
+    gap: 8px;
+  }
+  .assessment-accounts > div {
+    padding: 12px;
+  }
+  .assessment-accounts dd {
+    font-size: 19px;
+  }
+}
 .form {
   padding: 19px 21px;
   display: flex;

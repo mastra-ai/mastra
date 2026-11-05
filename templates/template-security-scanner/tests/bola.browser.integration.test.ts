@@ -169,11 +169,23 @@ describe('one-button REST assessment in the real console', () => {
       expect(assessment?.candidates.length).toBeGreaterThanOrEqual(2);
       await view('Scans');
       await page.getByRole('button', { name: assessment!.id.slice(0, 8), exact: true }).click();
-      await page
-        .getByRole('dialog', { name: `Assessment ${assessment!.id.slice(0, 8)}` })
-        .waitFor({ state: 'visible' });
-      await page.getByText('Checker: bola_rest_read', { exact: false }).waitFor({ state: 'visible' });
-      await page.getByText('Gateway requests: 2', { exact: false }).waitFor({ state: 'visible' });
+      const result = page.getByRole('dialog', { name: `Assessment ${assessment!.id.slice(0, 8)}` });
+      await result.waitFor({ state: 'visible' });
+      await result.getByRole('heading', { name: 'Unauthorized access confirmed', exact: true }).waitFor();
+      const comparison = result.getByRole('region', { name: 'Account comparison' });
+      const field = (name: string) =>
+        comparison.locator('dl > div').filter({ has: page.getByText(name, { exact: true }) });
+      expect(await field('Owner account').textContent()).toContain(`HTTP ${assessment!.proof!.ownerStatus}`);
+      expect(await field('Alternate account').textContent()).toContain(`HTTP ${assessment!.proof!.alternateStatus}`);
+      expect(await field('Same private response').textContent()).toContain('Yes');
+      expect(await field('Proof complete').textContent()).toContain('Yes');
+      expect(await field('Gateway requests').textContent()).toContain(String(assessment!.proof!.requestCount));
+      await result.getByText('bola_rest_read', { exact: true }).waitFor();
+      await result.getByText(assessment!.findingId!, { exact: true }).waitFor();
+      await result.getByText('Analysis & model details', { exact: true }).click();
+      await result.getByText('local-deterministic-watson', { exact: true }).waitFor();
+      await result.getByText(`Observed candidates (${assessment!.candidates.length})`, { exact: true }).click();
+      expect(await result.getByRole('listitem').filter({ hasText: 'Collection → detail' }).count()).toBeGreaterThan(0);
       await view('Findings');
       await page.getByText(assessment!.findingId!, { exact: true }).waitFor({ state: 'visible' });
       for (const name of [

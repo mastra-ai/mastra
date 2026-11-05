@@ -15,6 +15,7 @@ import {
 } from './api';
 import { Dialog, Empty, Loading, Notice, Pager, Section, Status, Time, errorCode, useData } from './ui';
 import { ScanInvestigations } from './investigation';
+import { AssessmentDetail } from './assessment';
 
 const limit = 25;
 /** Read and trim a named form field, using an empty string when absent. */
@@ -1341,60 +1342,7 @@ export function ScansView() {
           onClose={() => setSelectedAssessment(undefined)}
           variant="details"
         >
-          <p>
-            <Status value={assessment.outcome ?? assessment.state} /> · {assessment.reason ?? 'In progress'}
-          </p>
-          <p>
-            Evidence: {assessment.evidenceAvailability ?? 'unknown'}
-            {assessment.evidenceAvailability === 'available' && assessment.expiresAt
-              ? ` until ${assessment.expiresAt}`
-              : ''}
-          </p>
-          <p>Verifier cleanup: {assessment.verificationCleanup ?? 'unknown'}</p>
-          <p>
-            Checker: {assessment.selected ? 'bola_rest_read' : 'Pending'} · Selected route:{' '}
-            {assessment.selected?.routeTemplate ?? 'Pending'}
-          </p>
-          <p>
-            Sherlock hypothesis: {assessment.selection?.hypothesis ?? 'Pending'} · Rationale:{' '}
-            {assessment.selection?.rationaleCode ?? 'Pending'} · Confidence:{' '}
-            {assessment.selection?.confidence ?? 'Pending'}
-          </p>
-          <p>Limitations: {assessment.selection?.limitations.join(', ') ?? 'Pending'}</p>
-          <p>
-            Observed candidates:{' '}
-            {assessment.candidates
-              .map(candidate => `${candidate.routeTemplate} (${candidate.prerequisite})`)
-              .join(', ') || 'Pending'}
-          </p>
-          <p>
-            Expected: an alternate account cannot read an owner-only resource. Observed owner status:{' '}
-            {assessment.proof?.ownerStatus ?? 'unknown'}; alternate status:{' '}
-            {assessment.proof?.alternateStatus ?? 'unknown'}.
-          </p>
-          <p>
-            Same private response:{' '}
-            {assessment.proof?.bodyMatches === null || assessment.proof?.bodyMatches === undefined
-              ? 'unknown'
-              : assessment.proof.bodyMatches
-                ? 'yes'
-                : 'no'}{' '}
-            · Gateway requests: {assessment.proof?.requestCount ?? 0} · Proof complete:{' '}
-            {assessment.proof?.completed ? 'yes' : 'no'}
-          </p>
-          <p>
-            Model roles:{' '}
-            {assessment.modelEvents.map(event => `${event.role} (${event.modelId})`).join(', ') || 'Pending'} · Reserved
-            model tokens: {assessment.usedTokens}
-          </p>
-          {assessment.findingId && (
-            <p>
-              Finding: <span className="mono">{assessment.findingId}</span>
-            </p>
-          )}
-          <p className="hint">
-            An incomplete comparison is inconclusive. A protected response does not create a finding.
-          </p>
+          <AssessmentDetail assessment={assessment} />
         </Dialog>
       )}
       <Section title="Scans" action={<button onClick={records.reload}>Refresh</button>}>
