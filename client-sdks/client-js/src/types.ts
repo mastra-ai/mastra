@@ -418,7 +418,7 @@ export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
 export type StreamParamsBase<OUTPUT = undefined> = {
   model?: string;
   tracingOptions?: TracingOptions;
-  requestContext?: RequestContext;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
   clientToolsResolver?: ClientToolsResolver;
   /**
