@@ -94,15 +94,32 @@ export class HttpTransport extends LoggerTransport {
 
     // Start flush interval
     this.flushIntervalId = setInterval(() => this.requestFlush(), this.flushInterval);
+    this.updateIntervalRef();
   }
 
-  private async makeHttpRequest(data: any, retryCount = 0): Promise<Response> {
+  // The interval only keeps the process alive while logs are waiting to be sent, so an idle transport
+  // doesn't stop a script from exiting, but buffered logs still get delivered (or retried) first.
+  // Web-standard runtimes return a numeric timer id without ref()/unref(), so those calls are optional.
+  private updateIntervalRef(): void {
+    if (this.logBuffer.length > 0 || this.flushPromise) {
+      this.flushIntervalId.ref?.();
+    } else {
+      this.flushIntervalId.unref?.();
+    }
+  }
+
+  private async makeHttpRequest(data: any): Promise<Response> {
+    // Serialize once, outside the retry loop: serialization failures are not retryable,
+    // and every retry must send the exact same payload.
+    const body = JSON.stringify({ logs: data });
+    return this.sendWithRetry(body);
+  }
+
+  private async sendWithRetry(body: string, retryCount = 0): Promise<Response> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
-      const body = JSON.stringify({ logs: data });
-
       const response = await fetch(this.url, {
         method: this.method,
         headers: this.headers,
@@ -130,7 +147,7 @@ export class HttpTransport extends LoggerTransport {
         const delay = Math.max(backoff, Math.min(retryAfter, this.timeout));
 
         await new Promise(resolve => setTimeout(resolve, delay));
-        return this.makeHttpRequest(data, retryCount + 1);
+        return this.sendWithRetry(body, retryCount + 1);
       }
 
       throw error;
@@ -177,6 +194,7 @@ export class HttpTransport extends LoggerTransport {
     this.flushRequested = false;
     const flush = this.flushBatch().finally(() => {
       this.flushPromise = null;
+      this.updateIntervalRef();
     });
     this.flushPromise = flush;
     // Flushes requested while this request was in flight only got this promise back, so send their logs now,
@@ -242,6 +260,7 @@ export class HttpTransport extends LoggerTransport {
       // Add to buffer
       this.logBuffer.push(log);
       this.enforceBufferLimit();
+      this.updateIntervalRef();
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
@@ -354,6 +373,7 @@ export class HttpTransport extends LoggerTransport {
 
   public clearBuffer(): void {
     this.logBuffer = [];
+    this.updateIntervalRef();
   }
 
   public getDroppedLogCount(): number {

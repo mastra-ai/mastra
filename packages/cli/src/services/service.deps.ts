@@ -80,14 +80,10 @@ export class DepsService {
   }
 
   public async getProjectName() {
-    try {
-      const packageJsonPath = path.join(process.cwd(), 'package.json');
-      const packageJson = await fsPromises.readFile(packageJsonPath, 'utf-8');
-      const pkg = JSON.parse(packageJson);
-      return pkg.name;
-    } catch (err) {
-      throw err;
-    }
+    const packageJsonPath = path.join(process.cwd(), 'package.json');
+    const packageJson = await fsPromises.readFile(packageJsonPath, 'utf-8');
+    const pkg = JSON.parse(packageJson);
+    return pkg.name;
   }
 
   public async addScriptsToPackageJson(scripts: Record<string, string>) {

@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
-import ts from 'typescript';
+import ts from 'typescript-classic';
 
 /**
  * Dev-time identity helper for zod schemas that are compiled away by esbuildCompileZod.
@@ -23,8 +23,8 @@ function getZod() {
 }
 
 /**
- * @param {import('typescript').Expression} expression
- * @param {import('typescript').SourceFile} sourceFile
+ * @param {import('typescript-classic').Expression} expression
+ * @param {import('typescript-classic').SourceFile} sourceFile
  */
 function evaluateZodExpression(expression, sourceFile) {
   const expr = expression.getText(sourceFile).replace(/,\s*$/, '');
@@ -40,7 +40,7 @@ function evaluateZodExpression(expression, sourceFile) {
 }
 
 /**
- * @param {import('typescript').ImportSpecifier} specifier
+ * @param {import('typescript-classic').ImportSpecifier} specifier
  */
 function isCompileSchemaImportSpecifier(specifier) {
   if ((specifier.propertyName?.text ?? specifier.name.text) !== 'compileSchema') {
@@ -56,10 +56,10 @@ function isCompileSchemaImportSpecifier(specifier) {
 }
 
 /**
- * @param {import('typescript').SourceFile} sourceFile
+ * @param {import('typescript-classic').SourceFile} sourceFile
  */
 function findCompileSchemaImportSpecifiers(sourceFile) {
-  /** @type {Map<string, import('typescript').ImportSpecifier>} */
+  /** @type {Map<string, import('typescript-classic').ImportSpecifier>} */
   const specifiers = new Map();
 
   for (const statement of sourceFile.statements) {
@@ -83,7 +83,7 @@ function findCompileSchemaImportSpecifiers(sourceFile) {
 }
 
 /**
- * @param {import('typescript').BindingName | undefined} bindingName
+ * @param {import('typescript-classic').BindingName | undefined} bindingName
  * @param {string} name
  */
 function bindingNameContains(bindingName, name) {
@@ -99,7 +99,7 @@ function bindingNameContains(bindingName, name) {
 }
 
 /**
- * @param {import('typescript').Node} node
+ * @param {import('typescript-classic').Node} node
  * @param {string} name
  */
 function declaresValueName(node, name) {
@@ -124,9 +124,9 @@ function declaresValueName(node, name) {
 }
 
 /**
- * @param {import('typescript').Identifier} identifier
- * @param {import('typescript').SourceFile} sourceFile
- * @param {Map<string, import('typescript').ImportSpecifier>} importSpecifiers
+ * @param {import('typescript-classic').Identifier} identifier
+ * @param {import('typescript-classic').SourceFile} sourceFile
+ * @param {Map<string, import('typescript-classic').ImportSpecifier>} importSpecifiers
  */
 function isImportBinding(identifier, sourceFile, importSpecifiers) {
   const localName = identifier.text;
@@ -165,14 +165,14 @@ function isImportBinding(identifier, sourceFile, importSpecifiers) {
 }
 
 /**
- * @param {import('typescript').SourceFile} sourceFile
- * @param {Map<string, import('typescript').ImportSpecifier>} importSpecifiers
+ * @param {import('typescript-classic').SourceFile} sourceFile
+ * @param {Map<string, import('typescript-classic').ImportSpecifier>} importSpecifiers
  */
 function findCompileSchemaCalls(sourceFile, importSpecifiers) {
   /** @type {{ start: number; end: number; replacement: string }[]} */
   const replacements = [];
 
-  /** @param {import('typescript').Node} node */
+  /** @param {import('typescript-classic').Node} node */
   function visit(node) {
     if (
       ts.isCallExpression(node) &&
@@ -196,7 +196,7 @@ function findCompileSchemaCalls(sourceFile, importSpecifiers) {
 }
 
 /**
- * @param {import('typescript').SourceFile} sourceFile
+ * @param {import('typescript-classic').SourceFile} sourceFile
  */
 function findCompileSchemaImportEdits(sourceFile) {
   /** @type {{ start: number; end: number; replacement: string }[]} */

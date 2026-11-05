@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
+import { EntityType, InternalSpans, SpanType } from '../../../observability';
 import { executeTarget } from '../executor';
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from '../tool-mocks';
 import type { ItemToolMock } from '../tool-mocks';
@@ -24,6 +25,8 @@ interface MockAgentOptions {
     beforeToolCall?: (ctx: any) => any;
     afterToolCall?: (ctx: any) => any;
   };
+  /** Tool invocation options the "tool-call step" hands to each hook (tracing context, toolCallId). */
+  invocationOptions?: Record<string, unknown>;
 }
 
 /**
@@ -47,7 +50,12 @@ const createHookDrivenAgent = (options: MockAgentOptions): Agent =>
         if (abortSignal?.aborted) {
           throw abortSignal.reason instanceof Error ? abortSignal.reason : new Error('aborted');
         }
-        const context = { toolName: call.toolName, input: call.input, context: {}, metadata: {} };
+        const context = {
+          toolName: call.toolName,
+          input: call.input,
+          context: options.invocationOptions ?? {},
+          metadata: {},
+        };
         const before = await hooks?.beforeToolCall?.(context);
         if (before?.proceed === false) {
           continue;
@@ -169,6 +177,57 @@ describe('executeTarget agent tool mocks', () => {
 
     expect(result.error).toBeNull();
     expect(result.toolMockReport?.unconsumed).toEqual([{ mockIndex: 1, toolName: 't', args: { a: 2 } }]);
+  });
+
+  it('records a mocked tool_call span under the current span when a mock is served', async () => {
+    const toolSpan = { end: vi.fn() };
+    const tracingPolicy = { internal: InternalSpans.TOOL };
+    const currentSpan = { createChildSpan: vi.fn().mockReturnValue(toolSpan), tracingPolicy };
+    const agent = createHookDrivenAgent({
+      toolCalls: [{ toolName: 'getWeather', input: { city: 'Seattle' } }],
+      liveExecutions: [],
+      invocationOptions: { toolCallId: 'call-1', tracingContext: { currentSpan } },
+    });
+    const mocks: ItemToolMock[] = [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }];
+
+    const result = await executeTarget(agent, 'agent', { input: 'hi' }, { toolMocks: mocks });
+
+    expect(result.error).toBeNull();
+    expect(currentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+    expect(currentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'getWeather'",
+        input: { city: 'Seattle' },
+        entityType: EntityType.TOOL,
+        entityId: 'getWeather',
+        attributes: { toolType: 'tool', toolCallId: 'call-1', mocked: true },
+        tracingPolicy,
+      }),
+    );
+    expect(toolSpan.end).toHaveBeenCalledWith({ output: { temp: 52 }, attributes: { success: true } });
+  });
+
+  it('records a failed mocked tool_call span when the mock call mismatches', async () => {
+    const toolSpan = { end: vi.fn() };
+    const currentSpan = { createChildSpan: vi.fn().mockReturnValue(toolSpan) };
+    const agent = createHookDrivenAgent({
+      toolCalls: [{ toolName: 'getWeather', input: { city: 'Paris' } }],
+      liveExecutions: [],
+      invocationOptions: { toolCallId: 'call-1', tracingContext: { currentSpan } },
+    });
+    const mocks: ItemToolMock[] = [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }];
+
+    const result = await executeTarget(agent, 'agent', { input: 'hi' }, { toolMocks: mocks });
+
+    expect(result.error?.code).toBe(TOOL_MOCK_MISMATCH);
+    expect(currentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ type: SpanType.TOOL_CALL, attributes: expect.objectContaining({ mocked: true }) }),
+    );
+    expect(toolSpan.end).toHaveBeenCalledWith({
+      output: { error: TOOL_MOCK_MISMATCH },
+      attributes: { success: false },
+    });
   });
 
   it('user beforeToolCall returning proceed:false short-circuits and leaves the mock unconsumed', async () => {

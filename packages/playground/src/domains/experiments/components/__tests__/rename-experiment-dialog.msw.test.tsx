@@ -40,7 +40,7 @@ beforeEach(() => {
     http.patch(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments/:experimentId`, async ({ params, request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       patchCalls.push({ datasetId: String(params.datasetId), experimentId: String(params.experimentId), body });
-      current = { ...current, ...body } as typeof base;
+      current = { ...current, ...body };
       return HttpResponse.json(current);
     }),
   );

@@ -64,7 +64,7 @@ describe('ExperimentsList keyboard navigation', () => {
       renderList({ selection: selection(onToggleSelection) });
 
       const rows = interactiveRows();
-      fireEvent.click(rows[1] as HTMLElement);
+      fireEvent.click(rows[1]);
       expect(onToggleSelection).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole('checkbox', { name: `Select experiment ${experiments[2].id}` }));

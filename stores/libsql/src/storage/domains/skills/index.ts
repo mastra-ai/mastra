@@ -328,6 +328,7 @@ export class SkillsLibSQL extends SkillsStorage {
         entityIds,
         pinFavoritedFor,
         favoritedOnly,
+        metadata,
       } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -366,8 +367,37 @@ export class SkillsLibSQL extends SkillsStorage {
         queryParams.push(...entityIds);
       }
 
-      // Note: metadata filter is ignored for skills since the entity table doesn't have a metadata column.
-      // Metadata lives on the version table.
+      if (metadata && Object.keys(metadata).length > 0) {
+        // Metadata lives on version rows; match against the resolved version
+        // (active, falling back to latest; latest when listing drafts).
+        const latestVersionId = `(SELECT lv.id FROM "${TABLE_SKILL_VERSIONS}" lv WHERE lv."skillId" = s_e.id ORDER BY lv."versionNumber" DESC LIMIT 1)`;
+        const resolvedVersionId =
+          status === 'draft' ? latestVersionId : `COALESCE(s_e."activeVersionId", ${latestVersionId})`;
+        const metadataConditions: string[] = [];
+        for (const [key, value] of Object.entries(metadata)) {
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_SKILLS', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}. Keys must be alphanumeric with underscores.`,
+              details: { key },
+            });
+          }
+          if (typeof value === 'string') {
+            metadataConditions.push(`json_extract(mv.metadata, '$.${key}') = ?`);
+            queryParams.push(value);
+          } else {
+            // Decode the filter value with SQLite's JSON semantics so booleans,
+            // numbers and nested values compare like the stored ones (true -> 1).
+            metadataConditions.push(`json_extract(mv.metadata, '$.${key}') = json_extract(?, '$')`);
+            queryParams.push(JSON.stringify(value));
+          }
+        }
+        conditions.push(
+          `EXISTS (SELECT 1 FROM "${TABLE_SKILL_VERSIONS}" mv WHERE mv."skillId" = s_e.id AND mv.id = ${resolvedVersionId} AND ${metadataConditions.join(' AND ')})`,
+        );
+      }
 
       // Optional LEFT JOIN on favorites for favorited-first ordering / favoritedOnly filter.
       const joinUserId = pinFavoritedFor;

@@ -19,6 +19,13 @@ describe('Avatar', () => {
       fireEvent.error(screen.getByRole('img', { name: 'justin' }));
       expect(screen.getByText('J')).toBeDefined();
     });
+
+    it('shows a new image after the previous one failed', () => {
+      const { rerender } = render(<Avatar name="justin" src="/missing.png" />);
+      fireEvent.error(screen.getByRole('img', { name: 'justin' }));
+      rerender(<Avatar name="justin" src="/justin.png" />);
+      expect(screen.getByRole('img', { name: 'justin' }).getAttribute('src')).toBe('/justin.png');
+    });
   });
 
   describe('composed from parts', () => {

@@ -2,7 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useProvidersQuery } from '../../../../hooks/use-providers';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
 /**
  * Warns when a factory-wide default model is backed only by the caller's
@@ -25,7 +25,7 @@ export function SharedCredentialNotice({ modelId }: { modelId?: string }) {
 
   return (
     <Txt tone="muted" as="p" variant="caption" className="m-0" role="note">
-      Personal {providerDisplayName(provider.provider)} credential — teammates without their own can&apos;t run this
+      Personal {providerDisplayName(provider.provider)} credential. Teammates without their own can&apos;t run this
       model.
     </Txt>
   );

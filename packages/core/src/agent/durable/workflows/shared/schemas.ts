@@ -89,6 +89,7 @@ export const modelListEntrySchema = z.object({
     modelId: z.string(),
     specificationVersion: z.string().optional(),
     originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+    settings: z.record(z.string(), z.any()).optional(),
     providerOptions: z.record(z.string(), z.any()).optional(),
   }),
   maxRetries: z.number(),
@@ -121,6 +122,13 @@ export const accumulatedUsageSchema = z.object({
 }) as z.ZodType<AccumulatedUsage>;
 
 /**
+ * Provider id and serving model of one response.
+ */
+export const responseRecordSchema = z.object({ id: z.string().optional(), modelId: z.string().optional() });
+
+export type ResponseRecord = z.infer<typeof responseRecordSchema>;
+
+/**
  * Schema for output from the durable agentic workflow
  */
 export const durableAgenticOutputSchema = z.object({
@@ -149,6 +157,14 @@ export const baseDurableAgenticInputSchema = z.object({
   options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
+  inputTripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      processorId: z.string().optional(),
+      metadata: z.unknown().optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -175,6 +191,7 @@ export const baseIterationStateSchema = z.object({
   // instance resolve with the same request context on iteration N as on
   // iteration 1. Dropping it here silently falls back to an empty context.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseDurableAgenticInputSchema.shape.inputTripwire,
   // Iteration tracking
   iterationCount: z.number(),
   // Absent when the run keeps its step records in workflow state.
@@ -197,6 +214,12 @@ export const baseIterationStateSchema = z.object({
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
+  // First chunk clock, carried so the final step can end the generation and AGENT_RUN with it
+  completionStartTime: z.coerce.date().optional(),
+  // Time to first token of the inference that streamed that chunk, carried the same way
+  timeToFirstTokenMs: z.number().optional(),
+  // Provider id and model of the latest response, carried the same way
+  lastResponse: responseRecordSchema.optional(),
 });
 
 /**

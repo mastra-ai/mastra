@@ -11,7 +11,6 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
-  ensureLocalBranch,
   hasLocalBranch,
   checkoutSessionBranch,
   configureGitIdentity,
@@ -355,12 +354,25 @@ describe('materializeRepo', () => {
     expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
   });
 
-  it('throws git-missing when git is absent', async () => {
+  it('throws git-missing with the exit code and output when git is absent', async () => {
     const sandbox = new FakeSandbox(script =>
-      script === 'git --version' ? { exitCode: 127, stdout: '', stderr: 'not found' } : OK,
+      script === 'git --version' ? { exitCode: 127, stdout: '', stderr: 'sh: git: not found' } : OK,
     );
     await expect(materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok')).rejects.toMatchObject({
       code: 'git-missing',
+      message: expect.stringContaining('exited 127: sh: git: not found'),
+    });
+  });
+
+  it('reports a timed-out git preflight as an unresponsive sandbox, not a missing git', async () => {
+    // Providers map a command timeout to exit 124. During the Oct 29 incident
+    // every "git is not installed" failure followed timeouts on a stalled VM.
+    const sandbox = new FakeSandbox(script =>
+      script === 'git --version' ? { exitCode: 124, stdout: '', stderr: '' } : OK,
+    );
+    await expect(materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok')).rejects.toMatchObject({
+      code: 'sandbox-unresponsive',
+      message: expect.stringContaining('stopped responding'),
     });
   });
 
@@ -795,7 +807,7 @@ describe('syncEnvironmentRepository', () => {
       outcome: 'kept',
       branch: 'factory/issue-7',
     });
-    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls.join('\n')).not.toMatch(/ls-remote|fetch|checkout/);
   });
 
   it('keeps local work when the resume checkout is blocked by uncommitted changes', async () => {
@@ -1040,18 +1052,6 @@ describe('pushRepositoryBranch', () => {
     expect(push.options?.env?.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
     expect(sandbox.calls.join('\n')).not.toContain('glpat-secret');
     expect(sandbox.calls.some(call => call.includes('remote set-url'))).toBe(false);
-  });
-
-  it('creates a missing local branch at HEAD and switches to it, and leaves an existing one alone', async () => {
-    const missing = new FakeSandbox(script =>
-      script.includes('show-ref') ? { exitCode: 1, stdout: '', stderr: '' } : OK,
-    );
-    await ensureLocalBranch(missing, '/workspace/hello', 'feat/x');
-    expect(missing.executions.map(entry => entry.args)).toContainEqual(['-C', '/workspace/hello', 'switch', '-c', 'feat/x']);
-
-    const existing = new FakeSandbox(() => OK);
-    await ensureLocalBranch(existing, '/workspace/hello', 'feat/x');
-    expect(existing.executions.some(entry => entry.args.includes('switch'))).toBe(false);
   });
 
   it('keeps a failed push credential-free in argv and persistent config', async () => {

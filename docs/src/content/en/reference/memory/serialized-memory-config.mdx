@@ -117,8 +117,10 @@ new MastraEditor({
   {
     name: 'scope',
     type: "'resource' | 'thread'",
-    description: 'Whether observations are scoped to a resource or a single thread.',
+    description:
+      "Deprecated. `'resource'` will be removed in a future release, leaving `'thread'` (already the default) as the only scope. Omit this option to use thread scope. See [resource scope (deprecated)](/docs/memory/observational-memory#resource-scope-deprecated).",
     isOptional: true,
+    defaultValue: "'thread'",
   },
   {
     name: 'activateAfterIdle',

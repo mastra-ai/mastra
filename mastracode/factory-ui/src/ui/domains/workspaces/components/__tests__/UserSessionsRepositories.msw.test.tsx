@@ -6,10 +6,13 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 function userSession(projectRepositoryId: string, sessionId: string, title: string): FactoryUserSession {
   return {
@@ -37,20 +40,14 @@ function stubRepositories(repositoryIds: string[], sessions: FactoryUserSession[
       HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
-            repositories: repositoryIds.map(id => ({
-              id,
-              branch: 'main',
-              sandboxWorkdir: `/workspace/${id}`,
-              repository: { slug: `octo/${id}`, defaultBranch: 'main' },
-            })),
+            id: 'fp-1',
+            name: 'Mastra',
+            repositories: repositoryIds.map(id =>
+              listedRepository(id, `octo/${id}`, { branch: 'main', sandboxWorkdir: `/workspace/${id}` }),
+            ),
           },
         ],
       }),
@@ -67,14 +64,16 @@ function stubRepositories(repositoryIds: string[], sessions: FactoryUserSession[
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', 'ghp-1')}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
 
-describe('UserSessionsSection across linked repositories', () => {
+describe('User sessions across linked repositories', () => {
   it('lists sessions from every linked repository with one Factory request', async () => {
     const requested = stubRepositories(
       ['ghp-1', 'ghp-2'],
@@ -83,8 +82,8 @@ describe('UserSessionsSection across linked repositories', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Fix the app')).toBeTruthy();
-    expect(await screen.findByText('Tune the api')).toBeTruthy();
+    expect(await screen.findByText('Fix the app')).toBeInTheDocument();
+    expect(await screen.findByText('Tune the api')).toBeInTheDocument();
     expect(requested).toEqual(['fp-1']);
   });
 
@@ -93,7 +92,16 @@ describe('UserSessionsSection across linked repositories', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Couldn’t load sessions')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('offers a retry when the sessions fail to load and no repository is linked', async () => {
+    stubRepositories([], 'error');
+
+    renderSection();
+
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

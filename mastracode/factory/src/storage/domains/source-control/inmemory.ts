@@ -6,6 +6,7 @@ import type {
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
+  ProjectConnectionWithRepositories,
   ProjectRepository,
   ProjectSourceControlConnection,
   SessionBranchKey,
@@ -13,6 +14,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
+  SourceControlSessionVisibility,
   SourceControlSessionRepository,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
@@ -185,6 +187,33 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   readonly connections = {
     list: async ({ factoryProjectId }: { orgId: string; factoryProjectId: string }) =>
       this.connectionsRows.filter(row => row.factoryProjectId === factoryProjectId),
+    listWithRepositories: async ({
+      orgId,
+      factoryProjectIds,
+    }: {
+      orgId: string;
+      factoryProjectIds: string[];
+    }): Promise<ProjectConnectionWithRepositories[]> => {
+      const connections: ProjectConnectionWithRepositories[] = [];
+      for (const row of this.connectionsRows.filter(candidate =>
+        factoryProjectIds.includes(candidate.factoryProjectId),
+      )) {
+        const installation = await this.installations.get({ orgId, id: row.installationId });
+        if (!installation) continue;
+        const links = this.projectRepositoriesRows.filter(link => link.connectionId === row.id);
+        connections.push({
+          ...row,
+          installation,
+          repositories: await Promise.all(
+            links.map(async link => ({
+              ...link,
+              repository: await this.repositories.get({ orgId, id: link.repositoryId }),
+            })),
+          ),
+        });
+      }
+      return connections;
+    },
     get: async ({ orgId, id }: { orgId: string; id: string }): Promise<ProjectSourceControlConnection | null> => {
       const row = this.connectionsRows.find(candidate => candidate.id === id);
       if (!row) return null;
@@ -423,12 +452,42 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       // Mirrors base.ts: a session whose project-repository link is gone does not resolve.
       return this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId) ? row : null;
     },
+    listByOrigin: async ({ orgId, originSessionId }: { orgId: string; originSessionId: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.orgId === orgId &&
+          row.originSessionId === originSessionId &&
+          // Mirrors base.ts: only sessions on this integration's links resolve.
+          this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId),
+      ),
     rename: async ({ sessionId, title }: { sessionId: string; title: string }): Promise<void> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (row) {
         row.title = title;
         row.updatedAt = new Date();
       }
+    },
+    setOriginMuted: async ({ sessionId, muted }: { sessionId: string; muted: boolean }): Promise<void> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row) {
+        row.originMutedAt = muted ? new Date() : null;
+        row.updatedAt = new Date();
+      }
+    },
+    setVisibility: async ({
+      sessionId,
+      visibility,
+      expectedUserId,
+    }: {
+      sessionId: string;
+      visibility: SourceControlSessionVisibility;
+      expectedUserId: string;
+    }): Promise<SourceControlSession | null> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (!row || row.userId !== expectedUserId) return null;
+      row.visibility = visibility;
+      row.updatedAt = new Date();
+      return row;
     },
     getForBranch: async (args: SessionBranchKey): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(
@@ -469,12 +528,16 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         throw new UniqueViolationError('Source-control session branch already exists in this factory');
       }
       const now = new Date();
+      const { origin, ...fields } = input;
       const session: SourceControlSession = {
         id: globalThis.crypto.randomUUID(),
-        ...input,
+        ...fields,
         factoryProjectId,
         title: input.title ?? null,
         visibility: input.visibility ?? 'org',
+        originSessionId: origin?.sessionId ?? null,
+        originThreadId: origin?.threadId ?? null,
+        originMutedAt: null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
@@ -485,6 +548,36 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       };
       this.sessionsRows.push(session);
       return session;
+    },
+    transferOwner: async ({
+      sessionId,
+      expectedUserId,
+      toUserId,
+    }: {
+      sessionId: string;
+      expectedUserId: string;
+      toUserId: string;
+    }) => {
+      const index = this.sessionsRows.findIndex(row => row.sessionId === sessionId);
+      const session = this.sessionsRows[index] ?? null;
+      if (!session || session.userId !== expectedUserId || session.visibility === 'private') {
+        return { status: 'conflict' as const, reason: 'stale_owner' as const, session };
+      }
+      if (session.userId === toUserId) return { status: 'updated' as const, session };
+      // Mirrors base.ts: the branch is unique per repository link and per Factory.
+      const branchOwned = this.sessionsRows.some(
+        row =>
+          row.id !== session.id &&
+          row.userId === toUserId &&
+          row.branch === session.branch &&
+          (row.projectRepositoryId === session.projectRepositoryId ||
+            (session.factoryProjectId !== null && row.factoryProjectId === session.factoryProjectId)),
+      );
+      if (branchOwned) return { status: 'conflict' as const, reason: 'branch_owned' as const, session };
+      // A new row, so a caller holding the old one keeps its pre-transfer snapshot like base.ts.
+      const updated = { ...session, userId: toUserId, updatedAt: new Date() };
+      this.sessionsRows[index] = updated;
+      return { status: 'updated' as const, session: updated };
     },
     setSandbox: async ({
       id,

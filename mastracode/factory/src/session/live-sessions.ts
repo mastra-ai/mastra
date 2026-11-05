@@ -31,7 +31,7 @@ interface TrackedSession {
  * The sessions this process has materialized, by session id.
  *
  * Membership comes from the controller's notifications rather than
- * `getSessionByResource`, which hands back the pending creation — awaiting it
+ * `getSession`, which hands back the pending creation — awaiting it
  * from a request blocks for as long as the session takes to materialize its
  * sandbox, minutes on a cold clone. Notifications only fire once a session
  * exists, so a read never waits.

@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core/mastra';
+import type { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it, vi } from 'vitest';
 import { MastraServer } from './index';
 

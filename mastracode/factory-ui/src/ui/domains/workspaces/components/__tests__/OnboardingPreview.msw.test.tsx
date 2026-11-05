@@ -21,20 +21,17 @@ describe('contextual onboarding previews', () => {
     renderWithProviders(
       <OnboardingPreview
         step="review"
+        modelScope="user"
         personalProviderId="anthropic"
         personalModel="anthropic/claude-fable-5"
         personalConnectionMethod="api_key"
       />,
     );
-    const personalScene = screen.getByLabelText('Personal access preview');
+    const personalScene = screen.getByLabelText('Account setup preview');
     expect(personalScene.closest('[data-active]')).toHaveAttribute('data-active', 'true');
     const personal = within(personalScene);
     expect(within(personal.getByLabelText('Factory work model')).getByText('anthropic/claude-fable-5')).toBeVisible();
-    expect(await personal.findByText('Connected · your account')).toBeVisible();
-    expect(screen.getByLabelText('Default model preview').closest('[data-active]')).toHaveAttribute(
-      'data-active',
-      'false',
-    );
+    expect(await personal.findByText('Your account is connected')).toBeVisible();
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
@@ -49,16 +46,20 @@ describe('contextual onboarding previews', () => {
         }),
       ),
     );
-    const { rerender } = renderWithProviders(<OnboardingPreview step="project-management" source="linear" />);
-    expect(screen.getByText('ENG-124 · Issue')).toBeInTheDocument();
+    const { container, rerender } = renderWithProviders(
+      <OnboardingPreview step="project-management" source="linear" />,
+    );
+    const intakeFields = () =>
+      Array.from(container.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent);
+    expect(intakeFields()).toEqual(['ENG-124', 'Issue']);
     expect(screen.getByText('Example')).toBeInTheDocument();
     expect(screen.getByText('Choose what to bring in after setup.')).toBeInTheDocument();
 
     rerender(<OnboardingPreview step="project-management" source="incident-io" />);
     expect(await screen.findByText('Connected')).toBeInTheDocument();
-    expect(screen.getByText('INC-124 · Follow-up')).toBeInTheDocument();
+    expect(intakeFields()).toEqual(['INC-124', 'Follow-up']);
     expect(screen.getAllByText('Add a health check')).toHaveLength(2);
-    expect(screen.queryByText('ENG-124 · Issue')).not.toBeInTheDocument();
+    expect(screen.queryByText('ENG-124')).not.toBeInTheDocument();
   });
 
   it('keeps the shared model while personal access changes from a proposed connection to a saved credential', async () => {
@@ -81,21 +82,25 @@ describe('contextual onboarding previews', () => {
       ),
     );
     const { client, rerender } = renderWithProviders(
-      <OnboardingPreview step="personal-provider" model="openai/gpt-5.6-sol" personalProviderId="anthropic" />,
+      <OnboardingPreview
+        step="personal-provider"
+        modelScope="hybrid"
+        model="openai/gpt-5.6-sol"
+        personalProviderId="anthropic"
+      />,
     );
     const shared = within(screen.getByLabelText('Factory work model'));
-    const personal = within(screen.getByLabelText('Personal sessions provider'));
+    const personal = within(screen.getByLabelText('Session model'));
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
     expect(await personal.findByText('Connect your account')).toBeInTheDocument();
-    expect(personal.getByText('Anthropic')).toBeInTheDocument();
 
     saved = true;
     await client.invalidateQueries({ queryKey: queryKeys.providers() });
-    expect(await personal.findByText('Connected · your account')).toBeInTheDocument();
+    expect(await personal.findByText('Your account is connected')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
 
-    rerender(<OnboardingPreview step="personal-provider" model="openai/gpt-5.6-sol" />);
-    expect(personal.getByText('Shared access available')).toBeInTheDocument();
+    rerender(<OnboardingPreview step="personal-provider" modelScope="hybrid" model="openai/gpt-5.6-sol" />);
+    expect(personal.getByText('Connect your account')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
   });
 });

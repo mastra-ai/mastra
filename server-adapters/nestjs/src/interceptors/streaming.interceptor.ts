@@ -1,9 +1,10 @@
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { redactStreamChunk, serializeStreamChunk } from '@mastra/server/server-adapter';
+import { applyMcpRequestAuth, redactStreamChunk, serializeStreamChunk } from '@mastra/server/server-adapter';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { Observable, from, of, switchMap } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { from, of, switchMap } from 'rxjs';
 
 import { MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
@@ -247,8 +248,13 @@ export class StreamingInterceptor implements NestInterceptor {
 
     try {
       // Merge module-level mcpOptions with route-specific options (route takes precedence)
-      const options = { ...this.options.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.options.mcpOptions, ...routeMcpOptions };
       const requestUrl = (request as Request & { originalUrl?: string }).originalUrl ?? request.url;
+      await applyMcpRequestAuth({
+        req: request,
+        requestContext: result.requestContext,
+        setRequestAuth,
+      });
 
       await server.startHTTP({
         url: new URL(requestUrl, `http://${request.headers.host}`),
@@ -289,6 +295,11 @@ export class StreamingInterceptor implements NestInterceptor {
 
     try {
       const requestUrl = (request as Request & { originalUrl?: string }).originalUrl ?? request.url;
+      await applyMcpRequestAuth({
+        req: request,
+        requestContext: result.requestContext,
+        setRequestAuth: this.options.mcpOptions?.setRequestAuth,
+      });
 
       await server.startSSE({
         url: new URL(requestUrl, `http://${request.headers.host}`),

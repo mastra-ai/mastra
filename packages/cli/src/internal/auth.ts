@@ -25,7 +25,7 @@ export {
   validateOrgAccess,
 } from '../commands/auth/credentials.js';
 
-export type { Credentials, LoginOptions } from '../commands/auth/credentials.js';
+export type { Credentials, LoginOptions, LoginSource } from '../commands/auth/credentials.js';
 
 export { resolveCurrentOrg, OrgSelectionCancelledError } from '../commands/auth/orgs.js';
 

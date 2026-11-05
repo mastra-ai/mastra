@@ -1,7 +1,8 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check, RefreshCw } from 'lucide-react';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -10,7 +11,7 @@ import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-val
 import { useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
+import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { isGitLabRepository } from '../services/github';
@@ -93,6 +94,7 @@ export function VcsFactoryStep({
   const repositoryForProvider =
     chosenRepository && repositoryHost(chosenRepository) === selectedProvider ? chosenRepository : undefined;
   const repos = useGithubReposQuery(debouncedQuery || undefined, connected && selectedProvider === 'github');
+  const refreshRepos = useRefreshGithubReposMutation(debouncedQuery || undefined);
   const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured && selectedProvider === 'gitlab');
   const gitlabRepos = (gitlabProjects.data ?? []).flatMap(project => {
     const repository = gitLabProjectRepository(project);
@@ -151,7 +153,7 @@ export function VcsFactoryStep({
           </div>
           <SearchInput
             label="Search repositories"
-            placeholder="Find a repository…"
+            placeholder="Find a repository"
             value={query}
             onValueChange={value => {
               setQuery(value);
@@ -196,9 +198,24 @@ export function VcsFactoryStep({
               </span>
             </Button>
             {selectedProvider === 'github' && (
-              <Button variant="ghost" size="sm" onClick={onManageConnection}>
-                Manage access
-              </Button>
+              <>
+                <Button variant="ghost" size="sm" onClick={onManageConnection}>
+                  Manage access
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Refresh GitHub repositories"
+                  disabled={refreshRepos.isPending}
+                  onClick={() => refreshRepos.mutate()}
+                >
+                  <RefreshCw
+                    className={refreshRepos.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
+                    aria-hidden="true"
+                  />
+                  Refresh
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -388,8 +405,10 @@ function RepositoryRows({
               {repo.fullName}
             </Txt>
             <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
-              {repo.defaultBranch}
-              {repo.private ? ' · Private' : ''}
+              <Metadata>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+                {repo.private && <Metadata.Item>Private</Metadata.Item>}
+              </Metadata>
             </Txt>
           </span>
         </label>

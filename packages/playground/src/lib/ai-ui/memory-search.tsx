@@ -196,7 +196,7 @@ export const MemorySearch = ({
       <SearchInput
         label="Search memory"
         className="shrink-0"
-        placeholder="Search memory..."
+        placeholder="Search memory"
         value={query}
         onValueChange={handleInputChange}
         onKeyDown={handleKeyDown}
@@ -278,7 +278,7 @@ export const MemorySearch = ({
                                 )}
                                 title={result.threadTitle}
                               >
-                                • {result.threadTitle}
+                                {result.threadTitle}
                               </Txt>
                               {result.threadId !== currentThreadId && (
                                 <ExternalLink className="h-3 w-3 text-info-indicator" />

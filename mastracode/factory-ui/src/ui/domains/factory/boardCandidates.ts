@@ -10,22 +10,7 @@ import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
 
-/**
- * Candidate feeds the Intake swimlane can browse. Only one paginated list is
- * shown at a time; a pill switcher inside the column picks the active feed
- * when more than one is available.
- */
-export const INTAKE_SOURCES = [
-  { id: 'github', label: 'Issues' },
-  { id: 'github-prs', label: 'PRs' },
-  { id: 'gitlab-prs', label: 'MRs' },
-  { id: 'gitlab', label: 'GitLab' },
-  { id: 'linear', label: 'Linear' },
-  { id: 'jira', label: 'Jira' },
-  { id: 'incidentio', label: 'incident.io' },
-] as const;
-
-export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
+export type IntakeSource = 'github' | 'github-prs' | 'gitlab-prs' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
 
 /** What a candidate feed exposes to the column rendering it. */
 export interface IntakeFeed {
@@ -36,6 +21,8 @@ export interface IntakeFeed {
   isFetchingNextPage?: boolean;
   fetchNextPage: () => unknown;
   refetch: () => unknown;
+  /** Retries only the failed provider in a combined feed. */
+  retryFailed?: () => unknown;
 }
 
 /** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
@@ -44,8 +31,8 @@ export interface BoardCandidate {
   source: WorkItemSource;
   title: string;
   url: string;
-  /** Meta line under the title, e.g. `#12 · alice · opened 3 days ago`. */
-  meta: string;
+  /** Meta fields under the title, e.g. `#12`, `alice`, and `opened 3 days ago`. */
+  meta: readonly string[];
   /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
   metadata: Record<string, unknown>;
@@ -58,7 +45,7 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
-    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
+    meta: [`#${issue.number}`, ...(issue.author ? [issue.author] : []), relativeTime(issue.createdAt)],
     column: hasLabel(labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
     metadata: {
       number: issue.number,
@@ -77,7 +64,7 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     source: 'github-pr',
     title: pr.title,
     url: pr.url,
-    meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
+    meta: [`#${pr.number}`, ...(pr.author ? [pr.author] : []), `${pr.headBranch} → ${pr.baseBranch}`],
     column: 'intake',
     metadata: {
       number: pr.number,
@@ -98,7 +85,7 @@ export function gitlabCandidate(issue: GitLabIssue): BoardCandidate {
     source: 'gitlab-issue',
     title: issue.title,
     url: issue.url,
-    meta: issue.identifier + ' · ' + issue.state + (issue.assignee ? ' · ' + issue.assignee : ''),
+    meta: [issue.identifier, issue.state, ...(issue.assignee ? [issue.assignee] : [])],
     column: 'intake',
     metadata: {
       gitlabIssueId: issue.id,
@@ -121,7 +108,7 @@ export function gitlabMergeRequestCandidate(pr: GitLabMergeRequest): BoardCandid
     source: 'gitlab-pr',
     title: pr.title,
     url: pr.url,
-    meta: `!${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
+    meta: [`!${pr.number}`, ...(pr.author ? [pr.author] : []), `${pr.headBranch} → ${pr.baseBranch}`],
     column: 'intake',
     metadata: {
       gitlabMergeRequestIid: pr.number,
@@ -141,7 +128,7 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     source: 'linear-issue',
     title: issue.title,
     url: issue.url,
-    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    meta: [issue.identifier, issue.state, ...(issue.assignee ? [issue.assignee] : [])],
     column: 'intake',
     metadata: {
       linearIssueId: issue.id,
@@ -161,7 +148,7 @@ export function jiraCandidate(issue: JiraIssue): BoardCandidate {
     source: 'jira-issue',
     title: issue.title,
     url: issue.url,
-    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    meta: [issue.identifier, issue.state, ...(issue.assignee ? [issue.assignee] : [])],
     column: 'intake',
     metadata: {
       identifier: issue.identifier,
@@ -188,7 +175,7 @@ export function incidentioCandidate(issue: IncidentioIssue): BoardCandidate {
     source: 'incidentio-follow-up',
     title: issue.title,
     url: issue.url,
-    meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    meta: [issue.identifier, issue.state, ...(issue.assignee ? [issue.assignee] : [])],
     column: 'intake',
     metadata: {
       identifier: issue.identifier,

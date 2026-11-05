@@ -1,4 +1,4 @@
-import { Code } from '@mastra/playground-ui/components/Code';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 
 export interface ComparisonPayloadProps {
@@ -12,10 +12,14 @@ export function ComparisonPayload({ value }: ComparisonPayloadProps) {
       {typeof value === 'string' ? (
         <MarkdownRenderer>{value}</MarkdownRenderer>
       ) : (
-        <Code
-          code={JSON.stringify(value ?? null, null, 2)}
-          lang="json"
-          className="text-caption text-wrap break-all text-muted-foreground"
+        <CodeEditor
+          value={JSON.stringify(value ?? null, null, 2)}
+          language="json"
+          editable={false}
+          lineNumbers={false}
+          showCopyButton={false}
+          variant="embedded"
+          aria-label="JSON payload"
         />
       )}
     </div>

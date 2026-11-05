@@ -3,15 +3,17 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../channels/output-processor';
+import { getErrorFromUnknown } from '../error';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
-import { RequestContext } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import { askUserTool } from '../tools/builtin/ask-user';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { summarizeTaskCheck } from '../tools/builtin/task-tools';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
+import { isToolResultError } from './tool-result';
 import type { AgentControllerRequestContext, AgentControllerSubagent } from './types';
 
 // `ask_user` is an agent-agnostic built-in tool. It is defined in
@@ -266,6 +268,9 @@ Use this tool when:
               resourceId: forkedThread.resourceId,
             });
           }
+          // Reserved memory keys win over `streamMemory`, so re-point them at the fork too.
+          subagentRequestContext.set(MASTRA_THREAD_ID_KEY, forkedThread.id);
+          subagentRequestContext.set(MASTRA_RESOURCE_ID_KEY, forkedThread.resourceId);
           // The fork runs on the channel-bearing parent agent instance, so the
           // ChatChannelOutputProcessor is attached. Clear the inherited render
           // key so the subagent's stream never renders back to the chat
@@ -330,6 +335,8 @@ Use this tool when:
               resourceId: '',
             });
           }
+          subagentRequestContext.delete(MASTRA_THREAD_ID_KEY);
+          subagentRequestContext.delete(MASTRA_RESOURCE_ID_KEY);
         }
 
         let model: MastraModelConfig;
@@ -428,15 +435,19 @@ Use this tool when:
               }
               break;
 
-            case 'tool-result': {
-              const isErr = chunk.payload.isError ?? false;
+            case 'tool-result':
+            case 'tool-error': {
+              const isErr = chunk.type === 'tool-error' || isToolResultError(chunk.payload);
               if (!(runAsForked && chunk.payload.toolName === 'subagent')) {
                 emitEvent?.({
                   type: 'subagent_tool_end',
                   toolCallId,
                   agentType,
                   subToolName: chunk.payload.toolName,
-                  subToolResult: chunk.payload.result,
+                  subToolResult:
+                    chunk.type === 'tool-error'
+                      ? getErrorFromUnknown(chunk.payload.error).message
+                      : chunk.payload.result,
                   isError: isErr,
                 });
               }

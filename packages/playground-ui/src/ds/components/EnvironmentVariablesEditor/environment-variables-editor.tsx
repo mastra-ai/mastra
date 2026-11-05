@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 const renderEnvironmentVariablesEditor = <TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
   className,
   children,
-  addLabel = 'Add Variable',
+  addLabel = 'Add variable',
   keyLabel = 'Key',
   valueLabel = 'Value',
   keyPlaceholder = 'e.g: OPEN_AI_KEY',

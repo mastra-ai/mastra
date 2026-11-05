@@ -1,6 +1,6 @@
 services:
   db:
-    image: pgvector/pgvector:0.8.4-pg16
+    image: pgvector/pgvector:0.8.7-pg16
     container_name: 'pg-benchmark-db'
     ports:
       # Direct port for cleanup/setup operations.
@@ -20,7 +20,7 @@ services:
   # (high RTT, no pooler) is the scenario this benchmark is designed to
   # quantify.
   toxiproxy:
-    image: ghcr.io/shopify/toxiproxy:2.12.0
+    image: ghcr.io/shopify/toxiproxy:2.13.0
     container_name: 'pg-benchmark-toxiproxy'
     depends_on:
       - db

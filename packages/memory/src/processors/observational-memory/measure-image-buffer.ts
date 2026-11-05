@@ -17,7 +17,8 @@
 // without this package's ambient declarations.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore TS7016/TS2307 -- probe-image-size ships no types
-import probeImageSizeSync from 'probe-image-size/sync';
+// Explicit `.js`: the package has no `exports` map, so Node ESM needs the full file path.
+import probeImageSizeSync from 'probe-image-size/sync.js';
 
 const probeBuffer = probeImageSizeSync as (buffer: Uint8Array) => { width?: number; height?: number } | null;
 

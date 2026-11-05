@@ -24,7 +24,7 @@ function mulberry32(seed: number) {
   return () => {
     seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
@@ -186,7 +186,7 @@ function timeWrites(storage: Storage, timing: WriteTiming | undefined): Recorded
   const writes: RecordedWrite[] = [];
   let clock = 0;
   for (const method of ['writeWorkflowRunCheckpoint', 'appendWorkflowRunEntries'] as const) {
-    const original = store[method].bind(store) as (args: any) => Promise<void>;
+    const original = store[method].bind(store) as (args: any) => Promise<{ lastSeq: number }>;
     store[method] = async (args: Parameters<(typeof store)[typeof method]>[0]) => {
       const write: RecordedWrite = {
         runId: args.runId,
@@ -195,7 +195,7 @@ function timeWrites(storage: Storage, timing: WriteTiming | undefined): Recorded
         steps: Object.fromEntries(
           Object.entries(args.steps).map(([stepId, result]) => [stepId, (result as { status: string }).status]),
         ),
-        state: args.state !== undefined,
+        state: args.state !== undefined || args.statePatch !== undefined || args.stateBase !== undefined,
         issued: clock++,
         committed: -1,
         replied: -1,
@@ -206,9 +206,10 @@ function timeWrites(storage: Storage, timing: WriteTiming | undefined): Recorded
       // The in-memory store applies a write before its first await.
       const applied = original(args);
       write.committed = clock++;
-      await applied;
+      const result = await applied;
       if (delays) await sleep(delays.reply);
       write.replied = clock++;
+      return result;
     };
   }
   return writes;
@@ -309,7 +310,9 @@ describe('storage v2 writes that overlap', () => {
                     ...(isDeepStrictEqual(result.result, scenario.expected)
                       ? []
                       : [`read back ${JSON.stringify(result.result)}`]),
-                    ...wrongSteps(result.steps as any, scenario.expected).map(problem => `result: ${problem}`),
+                    ...wrongSteps(await (result.steps as any)(), scenario.expected).map(
+                      problem => `result: ${problem}`,
+                    ),
                     ...wrongSteps(stored?.steps, scenario.expected).map(problem => `stored: ${problem}`),
                     ...(isDeepStrictEqual(stored?.state, scenario.expectedState)
                       ? []

@@ -61,7 +61,6 @@ export const AgentBuilderStarter = () => {
       });
     } catch {
       toast.error('Failed to start a new agent');
-      return;
     }
   };
 
@@ -96,7 +95,7 @@ export const AgentBuilderStarter = () => {
             testId="agent-builder-starter-input"
             size="md"
             variant="unstyled"
-            placeholder="Describe the agent you want to build…"
+            placeholder="Describe the agent you want to build"
             value={message}
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -113,7 +112,6 @@ export const AgentBuilderStarter = () => {
               tooltip="Start building"
               disabled={isSubmitBlocked}
               data-testid="agent-builder-starter-submit"
-              className="rounded-full"
             >
               {isCreating ? (
                 <span data-testid="agent-builder-starter-submit-spinner">

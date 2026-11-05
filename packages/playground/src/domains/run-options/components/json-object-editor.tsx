@@ -3,7 +3,6 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { RequestContextLabel } from '@mastra/playground-ui/domains/request-context/components/request-context-label';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -144,7 +143,7 @@ export const JsonObjectEditor = ({
       <div>
         <Field>
           <div className="flex items-center justify-between">
-            <RequestContextLabel tooltip={labelTooltip}>{label} (JSON)</RequestContextLabel>
+            <FieldLabel info={labelTooltip}>{label} (JSON)</FieldLabel>
 
             <div className="flex items-center gap-2">
               {headerActions}
@@ -177,7 +176,7 @@ export const JsonObjectEditor = ({
               <FieldLabel className="sr-only">{label} preset</FieldLabel>
               <Select value={selectedPreset} onValueChange={handlePresetChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a preset..." />
+                  <SelectValue placeholder="Select a preset" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__custom__">Custom</SelectItem>

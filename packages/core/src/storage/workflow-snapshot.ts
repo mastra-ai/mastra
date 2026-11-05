@@ -35,7 +35,10 @@ function canResetWithPendingMarker(val: unknown): boolean {
     return true;
   }
 
-  return isSuspendedStepResult(val);
+  return (
+    isSuspendedStepResult(val) ||
+    (typeof val === 'object' && '__mastra_foreach_queued__' in val && val.__mastra_foreach_queued__ === true)
+  );
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
@@ -57,12 +60,13 @@ export function createEmptyWorkflowSnapshot(runId: string): WorkflowRunState {
 /**
  * A step's stored result with a new write of it merged in: per element when both outputs are
  * arrays (foreach iterations written one at a time, or pending markers resetting elements),
- * otherwise the new result.
+ * otherwise the new result. Foreach child run ids from both are kept.
  */
 export function mergeStepResult(
   existingResult: StepResult<any, any, any, any> | undefined,
   result: StepResult<any, any, any, any>,
 ): StepResult<any, any, any, any> {
+  let merged = result;
   if (
     existingResult &&
     'output' in existingResult &&
@@ -90,7 +94,7 @@ export function mergeStepResult(
         }
       }
     }
-    return {
+    merged = {
       ...existingResult,
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
@@ -98,7 +102,22 @@ export function mergeStepResult(
       output: mergedOutput,
     };
   }
-  return result;
+
+  // Concurrent child starts and completions carry partial/stale foreach metadata.
+  // Preserve the durable identity of every sibling, not just the last writer's child.
+  if (existingResult?.metadata?.foreachNestedRunIds || result.metadata?.foreachNestedRunIds) {
+    merged = {
+      ...merged,
+      metadata: {
+        ...merged.metadata,
+        foreachNestedRunIds: {
+          ...existingResult?.metadata?.foreachNestedRunIds,
+          ...merged.metadata?.foreachNestedRunIds,
+        },
+      },
+    };
+  }
+  return merged;
 }
 
 export function mergeWorkflowStepResult({

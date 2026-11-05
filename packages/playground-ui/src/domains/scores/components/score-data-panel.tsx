@@ -45,7 +45,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
   const { Link, paths } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
-  const naText = isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured';
+  const naText = isCodeBased ? 'Code-based scorer does not use prompts' : 'Step not configured';
 
   return (
     <>
@@ -112,7 +112,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
 
               <div className="my-6 flex justify-end">
                 <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
-                  Save as Dataset Item
+                  Save as dataset item
                 </Button>
               </div>
 
@@ -137,7 +137,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 </div>
                 <Txt as="p" variant="body-sm" className="mt-2">
                   {score.reason ||
-                    (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
+                    (isCodeBased ? 'Code-based scorer does not generate a reason' : 'Step not configured')}
                 </Txt>
               </div>
 
@@ -159,28 +159,28 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                   dialogTitle={buildDialogTitle('Preprocess Prompt', <ReceiptText />, score)}
                   icon={<ReceiptText />}
                   codeStr={score.preprocessPrompt || naText}
-                  simplified={true}
+                  simplified
                 />
                 <DataPanel.CodeSection
                   title="Analyze Prompt"
                   dialogTitle={buildDialogTitle('Analyze Prompt', <ReceiptText />, score)}
                   icon={<ReceiptText />}
                   codeStr={score.analyzePrompt || naText}
-                  simplified={true}
+                  simplified
                 />
                 <DataPanel.CodeSection
                   title="Generate Score Prompt"
                   dialogTitle={buildDialogTitle('Generate Score Prompt', <ReceiptText />, score)}
                   icon={<ReceiptText />}
                   codeStr={score.generateScorePrompt || naText}
-                  simplified={true}
+                  simplified
                 />
                 <DataPanel.CodeSection
                   title="Generate Reason Prompt"
                   dialogTitle={buildDialogTitle('Generate Reason Prompt', <ReceiptText />, score)}
                   icon={<ReceiptText />}
                   codeStr={score.generateReasonPrompt || naText}
-                  simplified={true}
+                  simplified
                 />
               </div>
             </DataPanel.Content>
@@ -189,7 +189,12 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
       </DataPanel>
 
       {score && (
-        <ScoreAsItemDialog score={score} isOpen={datasetDialogOpen} onClose={() => setDatasetDialogOpen(false)} />
+        <ScoreAsItemDialog
+          score={score}
+          isOpen={datasetDialogOpen}
+          onClose={() => setDatasetDialogOpen(false)}
+          depth={(depth ?? 1) > 1 ? 3 : 2}
+        />
       )}
     </>
   );

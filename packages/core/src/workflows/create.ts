@@ -55,7 +55,18 @@ export function createWorkflow<
   TStateSchema extends PublicSchema<any> | undefined = undefined,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
->(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
+  TStorageVersion extends 1 | 2 = 1,
+>(
+  params: CreateWorkflowParams<
+    TWorkflowId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TSteps,
+    TRequestContextSchema,
+    TStorageVersion
+  >,
+) {
   // Any non-empty MASTRA_WORKERS, including `false` on the API process, marks a
   // split-worker deployment, where every process must pick the same engine.
   if (params.schedule !== undefined && process.env.MASTRA_WORKERS?.trim()) {
@@ -72,7 +83,8 @@ export function createWorkflow<
     InferPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
     InferPublicSchema<TInputSchema>,
-    InferWorkflowRequestContext<TRequestContextSchema>
+    InferWorkflowRequestContext<TRequestContextSchema>,
+    TStorageVersion
   >(params as any);
 }
 
@@ -89,7 +101,18 @@ export function createEventedWorkflow<
   TStateSchema extends PublicSchema<any> | undefined = undefined,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
->(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
+  TStorageVersion extends 1 | 2 = 1,
+>(
+  params: CreateWorkflowParams<
+    TWorkflowId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TSteps,
+    TRequestContextSchema,
+    TStorageVersion
+  >,
+) {
   return createEventedWorkflowImpl(params as any) as unknown as Workflow<
     DefaultEngineType,
     TSteps,
@@ -98,7 +121,8 @@ export function createEventedWorkflow<
     InferPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
     InferPublicSchema<TInputSchema>,
-    InferWorkflowRequestContext<TRequestContextSchema>
+    InferWorkflowRequestContext<TRequestContextSchema>,
+    TStorageVersion
   >;
 }
 
@@ -117,11 +141,22 @@ export function cloneWorkflow<
     DefaultEngineType
   >[],
   TPrevSchema = TInput,
+  TStorageVersion extends 1 | 2 = any,
 >(
-  workflow: Workflow<DefaultEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
+  workflow: Workflow<DefaultEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema, unknown, TStorageVersion>,
   opts: { id: TWorkflowId },
-): Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  const wf: Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> = new Workflow({
+): Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, unknown, TStorageVersion> {
+  const wf: Workflow<
+    DefaultEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    TPrevSchema,
+    unknown,
+    TStorageVersion
+  > = new Workflow({
     id: opts.id,
     inputSchema: workflow.inputSchema,
     outputSchema: workflow.outputSchema,

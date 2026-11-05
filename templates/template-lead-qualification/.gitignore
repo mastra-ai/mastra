@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.mastra/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+.DS_Store
+data/
+/attio.mapping.json
+
+/attio.mapping.json.*

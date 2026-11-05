@@ -154,6 +154,45 @@ describe('runOMCommit', () => {
     expect(order).toEqual(['running', 'running done', 'reflection', 'normal a', 'normal b']);
   });
 
+  it('rejects an aborted caller and skips its op while it is still queued', async () => {
+    const gate = deferred();
+    const first = runOMCommit('abort-queued', () => gate.promise);
+    const controller = new AbortController();
+    const op = vi.fn(async () => 'late');
+    const queued = runOMCommit('abort-queued', op, { abortSignal: controller.signal });
+    controller.abort();
+    await expect(queued).rejects.toHaveProperty('name', 'AbortError');
+    gate.resolve();
+    await first;
+    await tick();
+    expect(op).not.toHaveBeenCalled();
+  });
+
+  it('waits for an op that already started when its caller aborts', async () => {
+    const gate = deferred<string>();
+    const controller = new AbortController();
+    const started = deferred();
+    const running = runOMCommit(
+      'abort-running',
+      () => {
+        started.resolve();
+        return gate.promise;
+      },
+      { abortSignal: controller.signal },
+    );
+    await started.promise;
+    controller.abort();
+    let settled = false;
+    void running.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    await tick();
+    expect(settled).toBe(false);
+    gate.resolve('landed');
+    await expect(running).resolves.toBe('landed');
+  });
+
   it('rejects only the failing caller and keeps the queue going', async () => {
     const failing = runOMCommit('thread:errors', async () => {
       throw new Error('boom');

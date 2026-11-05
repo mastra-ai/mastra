@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import {
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeGoogleWithoutTrailingModelTurn,
@@ -6,6 +6,27 @@ import {
 import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './index';
 
 const SETTLED_TOOL_STATES = new Set(['result', 'output-error']);
+
+/** Metadata key that marks the synthetic user turn appended by {@link TrailingAssistantGuard}. */
+export const TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY = 'trailingAssistantGuardContinuation';
+
+/** Whether `message` is the synthetic user turn appended by {@link TrailingAssistantGuard}. */
+export function isTrailingAssistantGuardContinuation(message: MastraDBMessage): boolean {
+  return message.content.metadata?.[TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY] === true;
+}
+
+/**
+ * Drop the guard's synthetic user turn once the step's prompt has been built. It only has
+ * to reach the provider; left in the list it sits between the trailing assistant message
+ * and the reply, so the reply is saved as a separate assistant message (#27520).
+ */
+export function removeTrailingAssistantGuardContinuations(messageList: MessageList): void {
+  const ids = messageList.get.all
+    .db()
+    .filter(isTrailingAssistantGuardContinuation)
+    .map(message => message.id);
+  if (ids.length > 0) messageList.removeByIds(ids);
+}
 
 /**
  * Whether a step needs `TrailingAssistantGuard` attached.
@@ -117,6 +138,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
       content: {
         format: 2,
         parts: [{ type: 'text', text: willUseResponseFormat ? 'Generate the structured response.' : 'Continue.' }],
+        metadata: { [TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY]: true },
       },
       createdAt,
     };

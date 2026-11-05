@@ -5,6 +5,7 @@ import {
   createHumanFormatState,
   formatHuman,
   formatJsonl,
+  isJsonlEvent,
   renderJsonResult,
   renderTextResult,
   truncate,
@@ -109,6 +110,15 @@ describe('formatJsonl', () => {
   it('returns a plain object copy of the event', () => {
     const event = { type: 'tool_start', toolName: 'shell', toolCallId: 'c1' } as AgentControllerEvent;
     expect(formatJsonl(event)).toEqual({ type: 'tool_start', toolName: 'shell', toolCallId: 'c1' });
+  });
+});
+
+describe('isJsonlEvent', () => {
+  it('skips display_state_changed snapshots and keeps every other event', () => {
+    expect(isJsonlEvent({ type: 'display_state_changed', displayState: {} } as AgentControllerEvent)).toBe(false);
+    for (const type of ['agent_start', 'message_update', 'tool_end', 'shell_output', 'agent_end', 'error']) {
+      expect(isJsonlEvent({ type } as AgentControllerEvent)).toBe(true);
+    }
   });
 });
 

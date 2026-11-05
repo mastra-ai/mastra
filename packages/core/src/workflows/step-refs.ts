@@ -17,8 +17,6 @@ export function stepRefId(step: unknown): string | undefined {
   return typeof id === 'string' && id ? id : undefined;
 }
 
-const mappingRefsCache = new WeakMap<MappingConfig, string[]>();
-
 /**
  * Step ids an object mapping config reads: `{ step }` sources (including every
  * arm of an array) and `${stepResults.<id>}` template placeholders. `value`,
@@ -26,9 +24,6 @@ const mappingRefsCache = new WeakMap<MappingConfig, string[]>();
  * Checks run in the same order `runMappingEntry` applies them.
  */
 export function collectMappingStepRefs(mapConfig: MappingConfig): string[] {
-  const cached = mappingRefsCache.get(mapConfig);
-  if (cached) return cached;
-
   const ids = new Set<string>();
   for (const mapping of Object.values(mapConfig)) {
     const m: any = mapping;
@@ -45,9 +40,7 @@ export function collectMappingStepRefs(mapConfig: MappingConfig): string[] {
     }
   }
 
-  const refs = [...ids];
-  mappingRefsCache.set(mapConfig, refs);
-  return refs;
+  return [...ids];
 }
 
 /** The normalized paths a predicate reads. */

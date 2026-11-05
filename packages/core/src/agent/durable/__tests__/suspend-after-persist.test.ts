@@ -55,7 +55,8 @@ describe('deferred suspension events (#26435)', () => {
     ] as const) {
       const write = (workflows[method] as (args: any) => Promise<unknown>).bind(workflows);
       (workflows[method] as (args: any) => Promise<unknown>) = async args => {
-        if (args.header?.status === 'suspended') throw new Error('storage down');
+        const status = method === 'updateWorkflowRunHeader' ? args.opts?.status : args.header?.status;
+        if (status === 'suspended') throw new Error('storage down');
         return write(args);
       };
     }

@@ -2,12 +2,12 @@
  * Callback tests for DurableAgent and Workflows
  */
 
+import { RequestContext } from '@mastra/core/di';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { RequestContext } from '@mastra/core/di';
-import type { DurableAgentTestContext, WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { createTextStreamModel, createErrorModel } from '../mock-models';
 import { MockRegistry } from '../mock-registry';
+import type { DurableAgentTestContext, WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 export function createCallbackTests(context: DurableAgentTestContext) {
   const { createAgent, eventPropagationDelay } = context;
@@ -39,7 +39,7 @@ export function createCallbackTests(context: DurableAgentTestContext) {
 
     it('should invoke onError callback when error occurs', async () => {
       const errorModel = createErrorModel('Simulated LLM error');
-      let errorReceived: Error | null = null;
+      let errorReceived: Error | string | null = null;
 
       const agent = await createAgent({
         id: 'error-callback-agent',
@@ -49,7 +49,7 @@ export function createCallbackTests(context: DurableAgentTestContext) {
       });
 
       const { cleanup } = await agent.stream('Test', {
-        onError: error => {
+        onError: ({ error }) => {
           errorReceived = error;
         },
       });
@@ -57,7 +57,7 @@ export function createCallbackTests(context: DurableAgentTestContext) {
       // Wait for error to propagate
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
 
-      // Error propagation is timing-dependent across executor implementations
+      expect(errorReceived).not.toBeNull();
       cleanup();
     });
 

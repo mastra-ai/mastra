@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { pushableFeedStream } from '../../../e2e/ui/feed-stream';
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { WorkItemComment } from '../domains/factory/services/commentsWire';
@@ -33,28 +34,18 @@ function wireComment(id: string, body: string): WorkItemComment {
   };
 }
 
-function stubBoardEndpoints(board: { commentCount: number; feedActivityAt: string | null }) {
+function stubBoardEndpoints(board: { commentCount: number }) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -75,7 +66,6 @@ function stubBoardEndpoints(board: { commentCount: number; feedActivityAt: strin
             sessions: {},
             metadata: {},
             commentCount: board.commentCount,
-            feedActivityAt: board.feedActivityAt,
             revision: 1,
             createdAt: '2026-07-18T00:00:00.000Z',
             updatedAt: '2026-07-18T00:00:00.000Z',
@@ -126,7 +116,7 @@ function renderBoard(search = '') {
 
 describe('Board popover comment feed', () => {
   it('opens straight onto the feed and the composer, without stealing focus', async () => {
-    const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
+    const board = { commentCount: 1 };
     let commentRequests = 0;
     stubBoardEndpoints(board);
     server.use(
@@ -149,7 +139,7 @@ describe('Board popover comment feed', () => {
   });
 
   it('opens an empty feed straight onto the composer, with no skeleton first', async () => {
-    const board = { commentCount: 0, feedActivityAt: null };
+    const board = { commentCount: 0 };
     stubBoardEndpoints(board);
     server.use(http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [] })));
     const user = userEvent.setup();
@@ -165,7 +155,7 @@ describe('Board popover comment feed', () => {
   });
 
   it('posts from the popover composer and refreshes the row list and the card count', async () => {
-    const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
+    const board = { commentCount: 1 };
     const serverComments = [wireComment('c1', 'hello from the feed')];
     stubBoardEndpoints(board);
     server.use(
@@ -174,7 +164,6 @@ describe('Board popover comment feed', () => {
         const input = (await request.json()) as { clientToken: string };
         serverComments.unshift({ ...wireComment('c2', 'fresh words'), clientToken: input.clientToken });
         board.commentCount = 2;
-        board.feedActivityAt = '2026-08-26T10:05:00.000Z';
         return HttpResponse.json({ comment: serverComments[0] }, { status: 201 });
       }),
     );
@@ -198,7 +187,7 @@ describe('Board popover comment feed', () => {
 
   it('opens the phone sheet straight onto the timeline and the composer', async () => {
     mockMobileViewport();
-    const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
+    const board = { commentCount: 1 };
     stubBoardEndpoints(board);
     server.use(
       http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [wireComment('c1', 'hello from the feed')] })),
@@ -215,7 +204,7 @@ describe('Board popover comment feed', () => {
   });
 
   it('shows a comment pushed over the feed stream while the board stays still', async () => {
-    const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
+    const board = { commentCount: 1 };
     const serverComments = [wireComment('c1', 'hello from the feed')];
     const stream = pushableFeedStream(FACTORY_ID);
     stubBoardEndpoints(board);
@@ -240,7 +229,7 @@ describe('Board popover comment feed', () => {
   });
 
   it('leaves a closed feed alone when a frame names its item', async () => {
-    const board = { commentCount: 1, feedActivityAt: '2026-08-26T10:00:00.000Z' };
+    const board = { commentCount: 1 };
     let commentRequests = 0;
     const stream = pushableFeedStream(FACTORY_ID);
     stubBoardEndpoints(board);

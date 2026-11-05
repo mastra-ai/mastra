@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createTool } from '@mastra/core/tools';
 import { CLIENT_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { serveHTTP } from '../server/__tests__/harness.mock';
 import { MCPServer } from '../server/server';
 import { InternalMastraMCPClient } from './client';
@@ -18,6 +20,46 @@ describe('MCPClient tool discovery retries', () => {
     vi.restoreAllMocks();
     await Promise.all(clients.map(client => client.disconnect().catch(() => {})));
     clients.length = 0;
+  });
+
+  it('replaces a cached same-id instance when the requested typegen output differs', () => {
+    const options = { id: `typegen-cache-${++clientId}`, servers: {}, typegen: { outFile: 'first.ts' } };
+    const original = new MCPClient(options);
+    clients.push(original);
+    // A cached instance must never keep an output file the caller did not ask for, in either
+    // construction order, so the differing `typegen` replaces it exactly like a server change.
+    const replacement = new MCPClient({ ...options, typegen: { outFile: 'second.ts' } });
+    clients.push(replacement);
+    expect(replacement).not.toBe(original);
+    expect(replacement.typegen).toEqual({ outFile: 'second.ts' });
+    options.typegen.outFile = 'mutated.ts';
+    expect(original.typegen?.outFile).toBe('first.ts');
+    expect(replacement.typegen?.outFile).toBe('second.ts');
+    expect(Object.isFrozen(replacement.typegen)).toBe(true);
+    // An untyped construction with the same id must not inherit or hide the requested output.
+    const untypedAfter = new MCPClient({ id: options.id, servers: {} });
+    clients.push(untypedAfter);
+    expect(untypedAfter).not.toBe(replacement);
+    expect(untypedAfter.typegen).toBeUndefined();
+    const typedAfter = new MCPClient({ id: options.id, servers: {}, typegen: { outFile: 'third.ts' } });
+    clients.push(typedAfter);
+    expect(typedAfter.typegen).toEqual({ outFile: 'third.ts' });
+    const independent = new MCPClient({ ...options, id: `typegen-cache-${++clientId}` });
+    clients.push(independent);
+    expect(independent).not.toBe(original);
+  });
+
+  it('keeps returning the cached instance when the requested typegen output matches', () => {
+    const options = { id: `typegen-same-${++clientId}`, servers: {}, typegen: { outFile: 'same.ts' } };
+    const original = new MCPClient(options);
+    clients.push(original);
+    const alias = new MCPClient({ ...options, typegen: { outFile: 'same.ts' } });
+    expect(alias).toBe(original);
+    expect(alias.typegen).toEqual({ outFile: 'same.ts' });
+  });
+
+  it.each(['', '  ', '\0'])('rejects invalid typegen output paths', outFile => {
+    expect(() => new MCPClient({ id: `typegen-invalid-${++clientId}`, servers: {}, typegen: { outFile } })).toThrow('nonempty file path');
   });
 
   function createClient() {
@@ -222,7 +264,7 @@ describe('MCPClient tool discovery retries', () => {
         stock: 'Discovery timed out after 50ms',
       },
       errorDetails: {
-        stock: { message: 'Discovery timed out after 50ms' },
+        stock: { message: 'Discovery timed out after 50ms', code: 'MCP_DISCOVERY_TIMEOUT' },
       },
       durations: {
         weather: 0,
@@ -675,6 +717,42 @@ describe('MCPClient clientInfo', () => {
   });
 });
 
+describe('MCPClient process hook identity', () => {
+  it('reuses the default explicit-id client when hooks are explicitly enabled', async () => {
+    const options = { id: `hooks-default-${++clientId}`, servers: {} };
+    const original = new MCPClient(options);
+    try {
+      expect(new MCPClient({ ...options, registerProcessHooks: true })).toBe(original);
+    } finally {
+      await original.disconnect();
+    }
+  });
+
+  it('allows independent clients with identical servers and different hook settings', async () => {
+    const servers = { weather: { url: new URL('http://localhost:4324/mcp') } };
+    const original = new MCPClient({ servers });
+    let independent: MCPClient | undefined;
+    try {
+      independent = new MCPClient({ servers, registerProcessHooks: false });
+      expect(independent).not.toBe(original);
+    } finally {
+      await Promise.all([original.disconnect(), independent?.disconnect()]);
+    }
+  });
+
+  it('replaces a cached explicit-id client when process hook ownership changes', async () => {
+    const options = { id: `hooks-changed-${++clientId}`, servers: {} };
+    const original = new MCPClient(options);
+    const replacement = new MCPClient({ ...options, registerProcessHooks: false });
+    try {
+      expect(replacement).not.toBe(original);
+      expect(new MCPClient({ ...options, registerProcessHooks: false })).toBe(replacement);
+    } finally {
+      await Promise.all([original.disconnect(), replacement.disconnect()]);
+    }
+  });
+});
+
 describe('MCPClient clientInfo identity', () => {
   it('keeps auto-generated ids unchanged when clientInfo is not set', async () => {
     const servers = { weather: { url: new URL('http://localhost:4320/mcp') } };
@@ -781,3 +859,105 @@ async function recordingLegacyServer() {
     },
   };
 }
+
+describe('MCPClient app-only tools', () => {
+  const echo = (id: string, visibility?: Array<'model' | 'app'>) =>
+    createTool({
+      id,
+      description: id,
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+      ...(visibility ? { mcp: { _meta: { ui: { visibility } } } } : {}),
+    });
+
+  async function connectToAppServer() {
+    const served = await serveHTTP(
+      new MCPServer({
+        name: 'Apps',
+        version: '1.0.0',
+        tools: {
+          plain: echo('plain'),
+          shared: echo('shared', ['model', 'app']),
+          appOnly: echo('appOnly', ['app']),
+        },
+      }),
+    );
+    const client = new MCPClient({ id: `app-only-${++clientId}`, servers: { apps: { url: served.url } } });
+    return {
+      client,
+      close: async () => {
+        await client.disconnect();
+        await served.close();
+      },
+    };
+  }
+
+  it('keeps tools meant only for MCP Apps away from agents', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      expect(Object.keys(await client.listTools()).sort()).toEqual(['apps_plain', 'apps_shared']);
+      expect(Object.keys((await client.listToolsets()).apps ?? {}).sort()).toEqual(['plain', 'shared']);
+    } finally {
+      await close();
+    }
+  });
+
+  it('keeps them out of cached tool catalogs, so agents rebuilt from a cache never get them', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const definitions = JSON.parse(JSON.stringify(await client.listToolDefinitions()));
+      expect(Object.keys(definitions.apps ?? {}).sort()).toEqual(['plain', 'shared']);
+      expect(Object.keys(await client.toolsFromDefinitions({ definitions })).sort()).toEqual([
+        'apps_plain',
+        'apps_shared',
+      ]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('drops app-only tools from a catalog cached before they were filtered out', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const definitions = JSON.parse(JSON.stringify(await client.listToolDefinitions()));
+      definitions.apps.appOnly = { ...definitions.apps.plain, name: 'appOnly', _meta: { ui: { visibility: ['app'] } } };
+
+      expect(Object.keys(await client.toolsFromDefinitions({ definitions })).sort()).toEqual([
+        'apps_plain',
+        'apps_shared',
+      ]);
+    } finally {
+      await close();
+    }
+  });
+
+  it('never hands app-only tools to the per-server discovery callback', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const seen: Record<string, string[]> = {};
+      await client.listToolsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`tools:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+      await client.listToolsetsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`toolsets:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+      await client.listToolDefinitionsWithErrors({
+        onServerSettled: (serverName, result) => {
+          seen[`definitions:${serverName}`] = Object.keys(result.value ?? {}).sort();
+        },
+      });
+
+      expect(seen).toEqual({
+        'tools:apps': ['plain', 'shared'],
+        'toolsets:apps': ['plain', 'shared'],
+        'definitions:apps': ['plain', 'shared'],
+      });
+    } finally {
+      await close();
+    }
+  });
+});

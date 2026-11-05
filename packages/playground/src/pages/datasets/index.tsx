@@ -1,3 +1,4 @@
+import { CreateButton } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -7,9 +8,9 @@ import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useInfiniteDatasets, useExperiments } from '@mastra/react/hooks/datasets';
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { HeaderCreateAction } from '@/components/ui/header-create-action';
+import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import type { DatasetsFilters } from '@/domains/datasets/components/datasets-filter-bar';
 import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
 import { DatasetsListSkeleton } from '@/domains/datasets/components/datasets-list/datasets-list-skeleton';
@@ -45,6 +46,7 @@ export default function Datasets() {
   const [experimentFilter, setExperimentFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
   const { targetType, targetId } = useTargetFilterParams();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const handleFiltersChange = (next: DatasetsFilters) => {
     setSearch(next.search);
@@ -82,13 +84,13 @@ export default function Datasets() {
   const isLoading = isLoadingDatasets || (needsExperimentsForFilter && isLoadingExperiments);
   const error = errorDatasets || (needsExperimentsForFilter ? errorExperiments : undefined);
 
-  const navigate = useNavigate();
-  const openCreatePage = () => void navigate('/datasets/new');
+  const openCreateDialog = () => setIsCreateOpen(true);
+  const createDialog = <CreateDatasetDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} />;
 
   const headerCreateAction = (
-    <HeaderCreateAction href="/datasets/new" tooltip="Create a dataset">
+    <CreateButton onClick={openCreateDialog} tooltip="Create a dataset" variant="ghost" size="sm">
       New dataset
-    </HeaderCreateAction>
+    </CreateButton>
   );
 
   if (error && is401UnauthorizedError(error)) {
@@ -121,9 +123,10 @@ export default function Datasets() {
   // With a target filter active, keep the toolbar so the user can remove it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Datasets</h1>
-        <NoDatasetsInfo onCreateClick={openCreatePage} />
+        <NoDatasetsInfo onCreateClick={openCreateDialog} />
+        {createDialog}
       </PageLayout>
     );
   }
@@ -188,6 +191,7 @@ export default function Datasets() {
           onSortChange={onSortChange}
         />
       )}
+      {createDialog}
     </PageLayout>
   );
 }

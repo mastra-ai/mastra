@@ -134,8 +134,8 @@ describe('DurableAgent step records', () => {
     return { workflows, load, resumeToFinish };
   }
 
-  it('keeps them in workflow state, not in step payloads', async () => {
-    const { load, resumeToFinish } = await suspendAtApproval();
+  it.each([false, true])('keeps them in workflow state, not in step payloads (v2: %s)', async v2 => {
+    const { load, resumeToFinish } = await suspendAtApproval({ v2 });
 
     const outer = (await load(DurableStepIds.AGENTIC_LOOP)).snapshot as WorkflowRunState;
     const nested = (await load(DurableStepIds.AGENTIC_EXECUTION)).snapshot as WorkflowRunState;
@@ -143,9 +143,10 @@ describe('DurableAgent step records', () => {
     expect(outer.value.accumulatedSteps).toEqual([expect.objectContaining({ finishReason: 'tool-calls' })]);
     expect(JSON.stringify(outer.value.accumulatedSteps)).toContain('lookup');
     expect(nested.context.input).not.toHaveProperty('accumulatedSteps');
-    for (const snapshot of [outer, nested]) {
-      expect(JSON.stringify(snapshot).split('"accumulatedSteps"')).toHaveLength(2);
-    }
+    expect(JSON.stringify(nested).split('"accumulatedSteps"')).toHaveLength(2);
+    // On v1 the loop run parked on the nested run also stores the state that run started from, so a
+    // re-drive after a crash can merge it. v2 reads that state from the nested run's stored states.
+    expect(JSON.stringify(outer).split('"accumulatedSteps"')).toHaveLength(v2 ? 2 : 3);
 
     const finish = await resumeToFinish();
     expect(finish.steps.map((step: any) => step.finishReason)).toEqual(['tool-calls', 'tool-calls', 'stop']);

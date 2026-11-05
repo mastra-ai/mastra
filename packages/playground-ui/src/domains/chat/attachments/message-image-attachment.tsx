@@ -12,7 +12,7 @@ export function MessageImageAttachment({ src, name, typeLabel }: { src: string; 
       <AttachmentCard
         buttonRef={triggerRef}
         name={name}
-        typeLabel={failed ? `${typeLabel} · Preview unavailable` : typeLabel}
+        typeLabel={failed ? `${typeLabel} (preview unavailable)` : typeLabel}
         icon={<FileImage className="size-5" />}
         onClick={failed || !src ? undefined : () => setOpen(true)}
         href={failed && /^https?:\/\//.test(src) ? src : undefined}

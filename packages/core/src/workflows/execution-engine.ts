@@ -17,6 +17,7 @@ import type {
   WorkflowFinishCallbackResult,
   WorkflowErrorCallbackInfo,
   WorkflowStartCallbackInfo,
+  WorkflowStateTracingContext,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -30,6 +31,8 @@ export interface ExecutionGraph<TEngineType = any> {
 }
 
 export interface ExecutionEngineOptions {
+  /** @internal Explicit suspension context supplied by agent-loop workflows. */
+  resumeTracingContext?: WorkflowStateTracingContext;
   tracingPolicy?: TracingPolicy;
   validateInputs: boolean;
   emitStepEvents?: boolean;
@@ -44,6 +47,12 @@ export interface ExecutionEngineOptions {
    * resume claim, suppressing the per-resume warning. See `WorkflowOptions.allowUnclaimedResumes`.
    */
   allowUnclaimedResumes?: boolean;
+
+  /**
+   * Writes the resume claim even when `shouldPersistSnapshot` excludes `running`.
+   * See `WorkflowOptions.persistResumeClaim`.
+   */
+  persistResumeClaim?: boolean;
 
   /**
    * Transforms the run snapshot immediately before it is persisted.
@@ -61,13 +70,13 @@ export interface ExecutionEngineOptions {
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+  onFinish?(result: WorkflowFinishCallbackResult<1 | 2>): Promise<void> | void;
 
   /**
    * Called only when workflow execution fails (failed or tripwire status).
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
+  onError?(errorInfo: WorkflowErrorCallbackInfo<1 | 2>): Promise<void> | void;
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs

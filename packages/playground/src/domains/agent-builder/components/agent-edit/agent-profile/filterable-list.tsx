@@ -62,7 +62,7 @@ export const FilterableList = ({
         size="md"
         className="flex-none"
         data-testid={`${testIdPrefix}-filter-search`}
-        placeholder={`Filter ${title.toLowerCase()}...`}
+        placeholder={`Filter ${title.toLowerCase()}`}
         value={search}
         onValueChange={setSearch}
       />
@@ -79,9 +79,6 @@ export const FilterableList = ({
             Select all
           </Txt>
         </button>
-        <Txt as="span" variant="meta" tone="faint" aria-hidden>
-          ·
-        </Txt>
         <button
           type="button"
           onClick={onClearAll}

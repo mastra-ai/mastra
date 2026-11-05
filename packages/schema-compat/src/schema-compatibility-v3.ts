@@ -354,9 +354,8 @@ export class SchemaCompatLayer {
   ): string | undefined {
     if (constraints.length > 0) {
       return (description ? description + '\n' : '') + `constraints: ${constraints.join(`, `)}`;
-    } else {
-      return description;
     }
+    return description;
   }
 
   /**
@@ -612,9 +611,8 @@ export class SchemaCompatLayer {
   ): ZodTypeAny {
     if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
       return this.processZodType(value._def.innerType).optional();
-    } else {
-      return value;
     }
+    return value;
   }
 
   /**
@@ -630,9 +628,8 @@ export class SchemaCompatLayer {
   ): ZodTypeAny {
     if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
       return this.processZodType(value._def.innerType).nullable();
-    } else {
-      return value;
     }
+    return value;
   }
 
   /**

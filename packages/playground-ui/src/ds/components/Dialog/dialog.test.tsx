@@ -502,7 +502,7 @@ describe('Dialog on a phone viewport', () => {
 
   const setPhoneViewport = (matches: boolean) => {
     phoneMatches = matches;
-    listeners.forEach(listener => listener());
+    Array.from(listeners).forEach(listener => act(listener));
   };
 
   beforeEach(() => {
@@ -531,11 +531,11 @@ describe('Dialog on a phone viewport', () => {
 
   const isDrawer = () => document.querySelector('.drawer-popup[data-slot="dialog-content"]') !== null;
 
-  function EditFixture({ pending = false }) {
+  function EditFixture({ pending = false, size = 'md' }: { pending?: boolean; size?: 'md' | 'full' }) {
     return (
       <Dialog pending={pending}>
         <DialogTrigger>Open</DialogTrigger>
-        <DialogContent>
+        <DialogContent size={size}>
           <DialogHeader>
             <DialogTitle>Edit agent</DialogTitle>
           </DialogHeader>
@@ -569,6 +569,38 @@ describe('Dialog on a phone viewport', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open' }));
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
 
+    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
+  });
+
+  it.each(['md', 'full'] as const)('keeps an open %s dialog usable across both breakpoint directions', size => {
+    phoneMatches = false;
+    render(<EditFixture size={size} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    setPhoneViewport(true);
+    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
+    expect(isDrawer()).toBe(true);
+
+    setPhoneViewport(false);
+    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
+    expect(isDrawer()).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps pending dismissal blocked after switching shells', () => {
+    phoneMatches = false;
+    render(<EditFixture pending />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    setPhoneViewport(true);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(true);
+    expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
+
+    setPhoneViewport(false);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.getByRole('dialog', { name: 'Edit agent' })).toBeDefined();
   });
 

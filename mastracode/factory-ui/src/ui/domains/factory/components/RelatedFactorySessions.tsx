@@ -3,13 +3,15 @@ import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, useMatch, useNavigate, useParams } from 'react-router';
+import { Link, useMatch, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
+import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
+import { linearIdentifierForItem } from '../boardItems';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
@@ -38,7 +40,7 @@ function externalWorkItemLabel(item: WorkItem): string {
   if (item.source === 'gitlab-pr') return number ? `MR !${number}` : 'Merge request';
   if (item.source === 'github-issue') return number ? `Issue #${number}` : 'Issue';
   if (item.source === 'linear-issue') {
-    return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : (number ?? 'Linear issue');
+    return linearIdentifierForItem(item) ?? number ?? 'Linear issue';
   }
   return 'Work item';
 }
@@ -105,6 +107,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
       crumbs={crumbs}
       headerActions={
         <>
+          {isUserThread && factoryId && session ? <UserSessionSharing factoryId={factoryId} session={session} /> : null}
           {currentItem && factoryId && threadId ? (
             <WorkItemActions
               item={currentItem}
@@ -139,13 +142,8 @@ function WorkItemActions({
   threadId: string;
   projectRepositoryId?: string;
 }) {
-  const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
-
-  const openSession = (session: WorkItemSessionRef) => {
-    void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
-  };
 
   return (
     <>
@@ -186,11 +184,10 @@ function WorkItemActions({
         return (
           <Button
             key={related.id}
-            type="button"
             variant="ghost"
             size="sm"
             aria-label={`Open ${label}: ${related.title}`}
-            onClick={() => openSession(session)}
+            render={<Link to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
           >
             <Link2 size={13} aria-hidden />
             {label}

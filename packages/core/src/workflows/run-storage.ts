@@ -4,6 +4,7 @@ import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
+import type { WorkflowStepCompletionGuard, WorkflowStepStartGuard } from '../storage/workflow-step-guard';
 import { stubStepResult } from './run-journal';
 import type { StepResult, WorkflowRunState } from './types';
 import { waitForSuspendedSnapshot } from './utils';
@@ -16,8 +17,8 @@ import { waitForSuspendedSnapshot } from './utils';
  */
 export interface RunStorage {
   loadHeader(): Promise<WorkflowRunHeader | null>;
-  /** True when the compare-and-set applied. */
-  updateHeader(opts: UpdateWorkflowStateOptions): Promise<boolean>;
+  /** The run's header as stored after the update, or null when the compare-and-set didn't apply. */
+  updateHeader(opts: UpdateWorkflowStateOptions): Promise<WorkflowRunHeader | null>;
   /** What resume needs. v2 returns successful steps as stubs. `wait` polls while running/pending. */
   loadForResume(opts: { wait: boolean }): Promise<WorkflowRunState | null>;
   /** Fully materialized, for restart and time travel. */
@@ -34,7 +35,9 @@ export interface RunStorage {
    * What the store reported for the state of a snapshot loaded by `loadForResume` or `loadFull`:
    * the run's `lastSeq` it is as of, its `statePatchBytes` and its `statePatchCount`.
    */
-  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number; patchCount: number } | undefined;
+  storedState(
+    snapshot: WorkflowRunState,
+  ): { seq: number; patchBytes: number; patchCount: number; runToken?: string } | undefined;
   /**
    * The state the run's current drive started from: as of its latest checkpoint, or as of the
    * resume that started the drive. Undefined for v1, or when the run or that version isn't stored.
@@ -72,6 +75,10 @@ type StepResultWrite = StateWrite & {
   stepId: string;
   result: StepResult<any, any, any, any>;
   requestContext: Record<string, any>;
+  /** Storage v1 only: the store rejects the write unless this delivery may start the step. */
+  startGuard?: WorkflowStepStartGuard;
+  /** Storage v1 only: the store rejects the write unless this delivery owns the running step. */
+  completionGuard?: WorkflowStepCompletionGuard;
 };
 
 /**
@@ -118,7 +125,7 @@ class RunStorageV1 implements RunStorage {
     return this.#load(await this.#getStore());
   }
 
-  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<boolean> {
+  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<WorkflowRunHeader | null> {
     const store = await this.#getStore();
     const updated = await store?.updateWorkflowState({
       workflowName: this.#workflowName,
@@ -126,7 +133,7 @@ class RunStorageV1 implements RunStorage {
       storageVersion: 1,
       opts,
     });
-    return !!updated;
+    return updated ?? null;
   }
 
   async loadForResume({ wait }: { wait: boolean }): Promise<WorkflowRunState | null> {
@@ -211,6 +218,8 @@ class RunStorageV1 implements RunStorage {
     requestContext,
     state,
     statePatch,
+    startGuard,
+    completionGuard,
   }: StepResultWrite): Promise<StepWriteResult | undefined> {
     if (statePatch) throw new Error('Storage v1 runs write the whole state, not a patch');
     const store = await this.#getStore();
@@ -221,6 +230,8 @@ class RunStorageV1 implements RunStorage {
       result,
       requestContext,
       ...(state !== undefined ? { state } : {}),
+      ...(startGuard ? { startGuard } : {}),
+      ...(completionGuard ? { completionGuard } : {}),
     });
     return results && { results };
   }
@@ -248,7 +259,10 @@ class RunStorageV1 implements RunStorage {
 // Keyed by the loaded snapshot, not the RunStorage: the parent-claim path loads a parent's
 // snapshot through a throwaway RunStorage, and the parent Run's own RunStorage releases it.
 const claimedSeqs = new WeakMap<WorkflowRunState, number>();
-const storedStates = new WeakMap<WorkflowRunState, { seq: number; patchBytes: number; patchCount: number }>();
+const storedStates = new WeakMap<
+  WorkflowRunState,
+  { seq: number; patchBytes: number; patchCount: number; runToken?: string }
+>();
 
 class RunStorageV2 implements RunStorage {
   readonly #workflowName: string;
@@ -274,7 +288,12 @@ class RunStorageV2 implements RunStorage {
     }
     const snapshot = { ...run.header, context, value: run.state } as WorkflowRunState;
     claimedSeqs.set(snapshot, run.lastSeq);
-    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes, patchCount: run.statePatchCount });
+    storedStates.set(snapshot, {
+      seq: run.lastSeq,
+      patchBytes: run.statePatchBytes,
+      patchCount: run.statePatchCount,
+      runToken: run.runToken,
+    });
     return snapshot;
   }
 
@@ -284,14 +303,14 @@ class RunStorageV2 implements RunStorage {
     return stored?.header ?? null;
   }
 
-  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<boolean> {
+  async updateHeader(opts: UpdateWorkflowStateOptions): Promise<WorkflowRunHeader | null> {
     const store = await this.#getStore();
     const updated = await store?.updateWorkflowRunHeader({
       workflowName: this.#workflowName,
       runId: this.#runId,
       opts,
     });
-    return !!updated;
+    return updated?.header ?? null;
   }
 
   async loadForResume({ wait }: { wait: boolean }): Promise<WorkflowRunState | null> {
@@ -314,7 +333,12 @@ class RunStorageV2 implements RunStorage {
     });
     if (!run) return null;
     const snapshot = { ...run.header, context: run.steps, value: run.state } as WorkflowRunState;
-    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes, patchCount: run.statePatchCount });
+    storedStates.set(snapshot, {
+      seq: run.lastSeq,
+      patchBytes: run.statePatchBytes,
+      patchCount: run.statePatchCount,
+      runToken: run.runToken,
+    });
     return snapshot;
   }
 
@@ -338,7 +362,9 @@ class RunStorageV2 implements RunStorage {
     });
   }
 
-  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number; patchCount: number } | undefined {
+  storedState(
+    snapshot: WorkflowRunState,
+  ): { seq: number; patchBytes: number; patchCount: number; runToken?: string } | undefined {
     return storedStates.get(snapshot);
   }
 
@@ -385,7 +411,7 @@ class RunStorageV2 implements RunStorage {
     const stored = await store?.loadWorkflowRunHeader(args);
     if (!stored) return null;
     // Bounded by the header's `lastSeq`, so a write landing between the two reads isn't half-seen.
-    const context = await store!.loadWorkflowRunSteps({ ...args, stepIds: [stepId], upToSeq: stored.lastSeq });
+    const context = (await store!.loadWorkflowRunSteps({ ...args, stepIds: [stepId], upToSeq: stored.lastSeq })) ?? {};
     return { ...stored.header, context } as StepSnapshot;
   }
 
@@ -408,8 +434,11 @@ class RunStorageV2 implements RunStorage {
     requestContext,
     state,
     statePatch,
+    startGuard,
+    completionGuard,
   }: StepResultWrite): Promise<StepWriteResult | undefined> {
     if (state) throw wholeStateOnV2();
+    if (startGuard || completionGuard) throw new Error('Storage v2 runs do not support step guards');
     const store = await this.#getStore();
     if (!store) return undefined;
     const written = await store.appendWorkflowRunEntries({
@@ -428,8 +457,11 @@ class RunStorageV2 implements RunStorage {
     requestContext,
     state,
     statePatch,
+    startGuard,
+    completionGuard,
   }: StepResultWrite): Promise<StepWriteResult | undefined> {
     if (state) throw wholeStateOnV2();
+    if (startGuard || completionGuard) throw new Error('Storage v2 runs do not support step guards');
     const store = await this.#getStore();
     if (!store) return undefined;
     const merged = await store.mergeWorkflowRunStepResult({

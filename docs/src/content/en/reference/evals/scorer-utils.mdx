@@ -220,7 +220,7 @@ Combines all system messages into a single prompt string, joined with double new
 
 ### `extractToolCalls`
 
-Extracts information about all tool calls from the run output, including tool names, call IDs, and their positions in the message array.
+Extracts information about tool calls from the run output, excluding partial calls (`partial-call` state), including tool names, call IDs, and their positions in the message array.
 
 ```typescript
 const toolUsageScorer = createScorer({
@@ -424,10 +424,12 @@ Creates a test run object for trajectory scorers. Wraps a `Trajectory` into the 
 import { createTrajectoryTestRun } from '@mastra/evals/scorers/utils'
 
 const run = createTrajectoryTestRun({
-  steps: [
-    { stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } },
-    { stepType: 'tool_call', name: 'summarize' },
-  ],
+  trajectory: {
+    steps: [
+      { stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } },
+      { stepType: 'tool_call', name: 'summarize' },
+    ],
+  },
 })
 
 const result = await trajectoryScorer.run(run)

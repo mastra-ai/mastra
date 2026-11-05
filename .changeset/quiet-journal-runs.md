@@ -1,8 +1,8 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
-Added an experimental `storageVersion` workflow option. With `storageVersion: 2`, each run is stored as a header plus one entry per step, and each write saves only what changed instead of rewriting the whole run: the steps that changed, and the changes to the workflow state. A nested workflow run stores its state as changes to its parent's. Runs also keep in memory only the step results the next step needs, and read older ones from storage when `getStepResultAsync` asks for them. This cuts storage writes and memory use for long workflows and loops, including loops whose state grows every iteration.
+Added an experimental `storageVersion` workflow option. With `storageVersion: 2`, a run saves only what changed at each step instead of rewriting the whole run. This cuts storage writes for long workflows and loops, including loops whose state grows every iteration.
 
 ```ts
 const workflow = createWorkflow({
@@ -13,4 +13,11 @@ const workflow = createWorkflow({
 });
 ```
 
-Version 2 requires the default engine and a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`. A `shouldPersistSnapshot` predicate on a version 2 run sees earlier successful steps without their `output`. Version 2 stores the workflow state as JSON, so values such as `Date` are read back as strings, as with database storage. A run keeps the version it was stored with, so a run resumed after changing this option continues in that version. A nested workflow's runs use their parent run's version.
+**Limitations**
+
+- Version 2 requires the default engine and a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. Creating a run on another adapter throws.
+- Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`.
+- A `shouldPersistSnapshot` predicate on a version 2 run sees earlier successful steps without their `output`.
+- Workflow state is stored as JSON, so values such as `Date` are read back as strings, as with database storage.
+- A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.
+- A nested workflow's runs use their parent run's version.

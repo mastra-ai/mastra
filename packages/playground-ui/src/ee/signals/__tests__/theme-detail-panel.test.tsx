@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -110,10 +111,12 @@ describe('ThemeDetailPanel', () => {
       renderPanel();
 
       expect(await screen.findByRole('heading', { name: 'Trend' })).not.toBeNull();
-      expect(screen.getByText('First seen Jul 8, 2026 · in 2 snapshots · growing')).not.toBeNull();
+      expect(screen.getByText('First seen Jul 8, 2026')).not.toBeNull();
+      expect(screen.getByText('in 2 snapshots')).not.toBeNull();
+      expect(screen.getByText('growing')).not.toBeNull();
       expect(screen.getByTestId('trend-chart')).not.toBeNull();
-      const olderMarker = screen.getByLabelText('Jul 8, 2026 · 1 trace (50%)');
-      const newerMarker = screen.getByLabelText('Jul 15, 2026 · 2 traces (67%)');
+      const olderMarker = screen.getByLabelText('Jul 8, 2026: 1 trace (50%)');
+      const newerMarker = screen.getByLabelText('Jul 15, 2026: 2 traces (67%)');
       expect(parseFloat(olderMarker.style.left)).toBeLessThan(parseFloat(newerMarker.style.left));
       expect(screen.queryByText(/^birth$/i)).toBeNull();
       expect(screen.queryByText(/^continue$/i)).toBeNull();
@@ -150,7 +153,9 @@ describe('ThemeDetailPanel', () => {
       usePanelHandlers({ history: fadingThemeHistoryResponse });
       renderPanel();
 
-      expect(await screen.findByText('First seen Jul 8, 2026 · in 2 snapshots · fading')).not.toBeNull();
+      expect(await screen.findByText('First seen Jul 8, 2026')).not.toBeNull();
+      expect(screen.getByText('in 2 snapshots')).not.toBeNull();
+      expect(screen.getByText('fading')).not.toBeNull();
     });
   });
 
@@ -159,7 +164,9 @@ describe('ThemeDetailPanel', () => {
       usePanelHandlers({ history: truncatedThemeHistoryResponse });
       renderPanel();
 
-      expect(await screen.findByText('Active since at least Jul 8, 2026 · in 3+ snapshots · growing')).not.toBeNull();
+      expect(await screen.findByText('Active since at least Jul 8, 2026')).not.toBeNull();
+      expect(screen.getByText('in 3+ snapshots')).not.toBeNull();
+      expect(screen.getByText('growing')).not.toBeNull();
     });
   });
 
@@ -168,7 +175,7 @@ describe('ThemeDetailPanel', () => {
       usePanelHandlers({ history: risingTrendFallingCountsHistoryResponse });
       renderPanel();
 
-      expect(await screen.findByText(/· growing$/)).not.toBeNull();
+      expect(await screen.findByText('growing')).not.toBeNull();
     });
   });
 
@@ -177,7 +184,9 @@ describe('ThemeDetailPanel', () => {
       usePanelHandlers({ history: singlePointThemeHistoryResponse });
       renderPanel();
 
-      expect(await screen.findByText('First seen Jul 15, 2026 · in 1 snapshot · steady')).not.toBeNull();
+      expect(await screen.findByText('First seen Jul 15, 2026')).not.toBeNull();
+      expect(screen.getByText('in 1 snapshot')).not.toBeNull();
+      expect(screen.getByText('steady')).not.toBeNull();
       expect(screen.queryByTestId('trend-chart')).toBeNull();
     });
   });

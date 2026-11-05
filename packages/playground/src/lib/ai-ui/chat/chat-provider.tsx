@@ -123,7 +123,7 @@ export function ChatProvider({
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
     onSignalSent: () => {
-      void refreshThreadList?.();
+      refreshThreadList?.();
     },
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
@@ -285,7 +285,7 @@ export function ChatProvider({
     requireToolApproval,
   };
 
-  const { send, cancel } = useChatSendHandler({
+  const { send, cancel, setModelContext } = useChatSendHandler({
     agentId,
     requestContext,
     agentVersionId,
@@ -346,7 +346,7 @@ export function ChatProvider({
     () => ({ isRunning, activeRunId, cancelRun: cancel, canSendWhileStreaming }),
     [isRunning, activeRunId, cancel, canSendWhileStreaming],
   );
-  const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
+  const sendValue = useMemo<SendContextValue>(() => ({ send, setModelContext }), [send, setModelContext]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
   const agentValue = useMemo<AgentContextValue>(
     () => ({ agentId, agentVersionId, requestContext }),

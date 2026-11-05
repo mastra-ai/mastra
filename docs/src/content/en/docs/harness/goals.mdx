@@ -40,7 +40,7 @@ const worker = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory,
   goal: {
-    judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+    judge: '__GATEWAY_OPENAI_MODEL_LUNA__',
     maxRuns: 50,
   },
 })
@@ -79,7 +79,7 @@ Effective settings resolve as per-objective record value, then agent `goal` conf
 
 `goal.judge` and `goal.scorer` work at different levels. `goal.scorer` is the evaluation pipeline that produces the score the loop gates on. `goal.judge` is the model the default pipeline calls to reach that score.
 
-Omit `scorer` and Mastra builds a default LLM-as-judge scorer, which returns `1` when the objective is achieved and `0` otherwise. Configure it with these settings:
+Omit `scorer` and Mastra builds a default LLM-as-judge scorer, which returns `1` when the objective is achieved, `0.5` when the judge decides the agent is waiting for user input, and `0` otherwise. A `0.5` score stops the automatic loop without completing the goal, so the next agent turn is still judged. Configure it with these settings:
 
 - `goal.judge`: The model that decides whether the objective is met.
 - `goal.prompt`: Extra instructions for the judge. Defaults to the built-in goal judge prompt.
@@ -91,6 +91,8 @@ Pass `goal.scorer` to replace the pipeline with your own [scorer](/reference/eva
 Configure the default scorer with `judge`, `maxRuns`, and `prompt`:
 
 ```typescript title="src/mastra/agents/worker.ts"
+import { Agent } from '@mastra/core/agent'
+
 const worker = new Agent({
   id: 'worker',
   name: 'worker',
@@ -112,7 +114,7 @@ To hand the decision to your own scorer, pass it as `scorer` and keep `judge` se
 
 ```typescript oxfmt:false
 goal: {
-  judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+  judge: '__GATEWAY_OPENAI_MODEL_LUNA__',
   // Replaces the built-in judge pipeline. `prompt`, `tools`, and `maxSteps` no longer apply.
   scorer: 'tests-pass',
 }
@@ -141,6 +143,6 @@ Per-objective values written by `setObjective` / `updateObjectiveOptions` take p
 ## Related
 
 - [Supervisor agents](/docs/subagents): `isTaskComplete` and the rubric scorer
-- [Signal providers](/docs/harness/signal-providers): How the objective is projected into context
+- [Signal providers](/docs/signals/signal-providers): How the objective is projected into context
 - [Memory storage](/docs/storage): The storage backend goals require
 - [Mastra Factory](https://factory.mastra.ai) and [Mastra Code](https://code.mastra.ai): Examples of goal-driven coding agents

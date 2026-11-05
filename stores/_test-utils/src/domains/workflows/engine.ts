@@ -1,8 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraStorage, WorkflowRun, WorkflowsStorage } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { AnyWorkflow } from '@mastra/core/workflows';
-import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -43,7 +43,8 @@ type Scenario = {
   build: (id: (name: string) => string, storageVersion: 1 | 2) => AnyWorkflow;
   /** The workflows (by `id` name) that store runs, including nested ones. */
   stores: string[];
-  drive: (workflow: AnyWorkflow, runId: string) => Promise<unknown>;
+  /** Runs the workflow; `readBack` reads back the stored runs midway, compared like the final ones. */
+  drive: (workflow: AnyWorkflow, runId: string, readBack: () => Promise<void>) => Promise<unknown>;
 };
 
 const startOnly: Scenario['drive'] = async (workflow, runId) =>
@@ -72,6 +73,33 @@ const scenarios: Record<string, Scenario> = {
         .commit(),
     stores: ['loops'],
     drive: startOnly,
+  },
+  // Item 3 suspends after the items before it finish (the default concurrency of 1 keeps that
+  // order), so on v2 the suspension follows progress written as patches on the foreach's result.
+  'foreach with a suspended item': {
+    build: (id, storageVersion) =>
+      createWorkflow({ id: id('items'), inputSchema: z.array(num), outputSchema: z.any(), options: { storageVersion } })
+        .foreach(
+          createStep({
+            id: 'item',
+            inputSchema: num,
+            outputSchema: num,
+            resumeSchema: z.number(),
+            execute: async ({ inputData, resumeData, suspend }) => {
+              if (inputData.n === 3 && resumeData === undefined) return suspend({});
+              return { n: inputData.n + (resumeData ?? 1) };
+            },
+          }),
+        )
+        .commit(),
+    stores: ['items'],
+    drive: async (workflow, runId, readBack) => {
+      const inputData = [0, 1, 2, 3, 4].map(n => ({ n }));
+      const suspended = await (await workflow.createRun({ runId })).start({ inputData });
+      expect(suspended.status).toBe('suspended');
+      await readBack();
+      return (await workflow.createRun({ runId })).resume({ step: 'item', resumeData: 10, forEachIndex: 3 });
+    },
   },
   'nested workflow': {
     build: (id, storageVersion) => {
@@ -122,9 +150,10 @@ const scenarios: Record<string, Scenario> = {
         )
         .commit(),
     stores: ['gated'],
-    drive: async (workflow, runId) => {
+    drive: async (workflow, runId, readBack) => {
       const suspended = await (await workflow.createRun({ runId })).start({ inputData: {} });
       expect(suspended.status).toBe('suspended');
+      await readBack();
       return (await workflow.createRun({ runId })).resume({ step: 'gate', resumeData: true });
     },
   },
@@ -154,27 +183,38 @@ export function createWorkflowEngineTests({
 
     const id = (name: string) => `${prefix}-${name}`;
 
-    /** Runs a scenario on one storage version and returns its result plus every run it stored, reloaded. */
+    /**
+     * Runs a scenario on one storage version and returns its result plus every run it stored,
+     * reloaded at the end and wherever the scenario reads them back midway.
+     */
     async function runAndReadBack(storageVersion: 1 | 2, { build, stores, drive }: Scenario) {
       const runId = `${prefix}-v${storageVersion}`;
       const workflow = build(id, storageVersion);
       new Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow } });
-      const result = await drive(workflow, runId);
 
-      const runs: Record<string, unknown> = {};
-      for (const name of stores) {
-        const workflowName = id(name);
-        const listed = await store.listWorkflowRuns({ workflowName, perPage: false });
-        for (const run of listed.runs.filter(r => (r.storageVersion ?? 1) === storageVersion)) {
-          const loaded = normalize(
-            await store.loadWorkflowSnapshot({ workflowName, runId: run.runId, storageVersion }),
-            runId,
-          );
-          expect(normalize(parsed(run), runId)).toEqual(loaded);
-          runs[`${name}/${normalize(run.runId, runId)}`] = loaded;
+      const readRuns = async () => {
+        const runs: Record<string, unknown> = {};
+        for (const name of stores) {
+          const workflowName = id(name);
+          const listed = await store.listWorkflowRuns({ workflowName, perPage: false });
+          for (const run of listed.runs.filter(r => (r.storageVersion ?? 1) === storageVersion)) {
+            const loaded = normalize(
+              await store.loadWorkflowSnapshot({ workflowName, runId: run.runId, storageVersion }),
+              runId,
+            );
+            expect(normalize(parsed(run), runId)).toEqual(loaded);
+            runs[`${name}/${normalize(run.runId, runId)}`] = loaded;
+          }
         }
-      }
-      return { result: normalize(result, runId), runs };
+        return runs;
+      };
+      const midway: Record<string, unknown>[] = [];
+      const result: any = await drive(workflow, runId, async () => {
+        midway.push(await readRuns());
+      });
+      // A v2 result loads its steps from the store when asked.
+      if (typeof result?.steps === 'function') result.steps = await result.steps();
+      return { result: normalize(result, runId), midway, runs: await readRuns() };
     }
 
     for (const [name, scenario] of Object.entries(scenarios)) {
@@ -183,6 +223,128 @@ export function createWorkflowEngineTests({
         const v2 = await runAndReadBack(2, scenario);
         expect(Object.keys(v1.runs).length).toBeGreaterThan(0);
         expect(v2).toEqual(v1);
+      });
+    }
+
+    // A restart after a crash skips the items this records as finished.
+    for (const storageVersion of [1, 2] as const) {
+      it(`stores the finished items of a running foreach as they finish: v${storageVersion}`, async () => {
+        const workflowName = id(`progress-v${storageVersion}`);
+        const runId = `${prefix}-progress`;
+        const finished = async () => {
+          const snapshot = await store.loadWorkflowSnapshot({ workflowName, runId, storageVersion });
+          return Object.keys((snapshot?.context.item as any)?.metadata?.foreachProgress ?? {}).length;
+        };
+        let seenByLast = 0;
+        const workflow = createWorkflow({
+          id: workflowName,
+          inputSchema: z.array(num),
+          outputSchema: z.any(),
+          options: { storageVersion },
+        })
+          .foreach(
+            createStep({
+              id: 'item',
+              inputSchema: num,
+              outputSchema: num,
+              execute: async ({ inputData }) => {
+                // The progress writes don't hold up the next item, so wait for them to land.
+                for (let i = 0; inputData.n === 3 && seenByLast < 3 && i < 100; i++) {
+                  await new Promise(resolve => setTimeout(resolve, 20));
+                  seenByLast = await finished();
+                }
+                return { n: inputData.n + 1 };
+              },
+            }),
+          )
+          .commit();
+        new Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow } });
+
+        const result = await (await workflow.createRun({ runId })).start({ inputData: [0, 1, 2, 3].map(n => ({ n })) });
+        expect(result.status).toBe('success');
+        expect(seenByLast).toBe(3);
+      });
+
+      it(`stops a run canceled by another process before its next step, and keeps it canceled: v${storageVersion}`, async () => {
+        const workflowName = id(`remote-cancel-v${storageVersion}`);
+        let releaseFirst!: () => void;
+        let firstStarted!: () => void;
+        const started = new Promise<void>(resolve => (firstStarted = resolve));
+        let laterRan = false;
+        const build = (first: () => Promise<void>) =>
+          createWorkflow({ id: workflowName, inputSchema: num, outputSchema: num, options: { storageVersion } })
+            .then(
+              createStep({
+                id: 'first',
+                inputSchema: num,
+                outputSchema: num,
+                execute: async ({ inputData }) => {
+                  await first();
+                  return inputData;
+                },
+              }),
+            )
+            .then(
+              createStep({
+                id: 'later',
+                inputSchema: num,
+                outputSchema: num,
+                execute: async ({ inputData }) => {
+                  laterRan = true;
+                  return inputData;
+                },
+              }),
+            )
+            .commit();
+        const owner = new Mastra({
+          logger: false,
+          storage,
+          workflows: {
+            [workflowName]: build(() => {
+              firstStarted();
+              return new Promise<void>(resolve => (releaseFirst = resolve));
+            }),
+          },
+        });
+        // Another process: its own Mastra and workflow, sharing only the storage.
+        const other = new Mastra({ logger: false, storage, workflows: { [workflowName]: build(async () => {}) } });
+
+        const run = await owner.getWorkflow(workflowName).createRun({ runId: `${prefix}-remote-cancel` });
+        const resultPromise = run.start({ inputData: { n: 0 } });
+        await started;
+        await (await other.getWorkflow(workflowName).createRun({ runId: run.runId })).cancel();
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: run.runId })).toBe('canceled');
+
+        releaseFirst();
+        expect((await resultPromise).status).toBe('canceled');
+        expect(laterRan).toBe(false);
+        expect(await store.loadWorkflowRunStatus({ workflowName, runId: run.runId })).toBe('canceled');
+        expect((await store.loadWorkflowSnapshot({ workflowName, runId: run.runId, storageVersion }))?.status).toBe(
+          'canceled',
+        );
+      });
+    }
+
+    // An earlier result's steps come from the run it was returned for, never from a later one.
+    for (const change of ['resume', 'delete', 'recreate'] as const) {
+      it(`rejects the steps of a v2 result whose run was written since: ${change}`, async () => {
+        const workflow = scenarios['suspend and resume']!.build(id, 2);
+        new Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow } });
+        const runId = `${prefix}-stale-${change}`;
+        const suspended: any = await (await workflow.createRun({ runId })).start({ inputData: {} });
+        expect(suspended.status).toBe('suspended');
+
+        let current: any;
+        if (change === 'resume') {
+          current = await (await workflow.createRun({ runId })).resume({ step: 'gate', resumeData: true });
+          expect(current.status).toBe('success');
+        } else {
+          await workflow.deleteWorkflowRunById(runId);
+          if (change === 'recreate') current = await (await workflow.createRun({ runId })).start({ inputData: {} });
+        }
+
+        await expect(suspended.steps()).rejects.toMatchObject({ id: 'WORKFLOW_STORAGE_V2_STEPS_STALE' });
+        if (current) expect(await current.steps()).toMatchObject({ gate: { status: current.status } });
       });
     }
 
