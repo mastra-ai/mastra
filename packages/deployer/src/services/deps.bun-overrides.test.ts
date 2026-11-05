@@ -197,11 +197,13 @@ describe('Bun output install keeps the project overrides (#29311)', () => {
 
   it('does not apply an override for another package named like the output package to the app', async () => {
     // In the source, `server` names some other package. In the output it would name the app's own package.
-    await installBun({ overrides: { api: { uuid: '^11.1.1' }, server: { exceljs: '4.3.0' } } });
+    const { warn } = await installBun({ overrides: { api: { uuid: '^11.1.1' }, server: { exceljs: '4.3.0' } } });
 
     expect(installedManifest).toEqual(
       expect.objectContaining({ overrides: { server: { uuid: '^11.1.1' }, foo: PACKED_FOO } }),
     );
+    // The project's own `server` package loses this override in the output, so the user is told.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Not copying Bun override "server"'));
   });
 
   it('keeps version-qualified overrides nested under a packed package when its version matches', async () => {

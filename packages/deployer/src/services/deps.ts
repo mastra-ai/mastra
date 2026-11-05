@@ -1199,7 +1199,9 @@ export class Deps extends MastraBase {
         }
       } else if (name === outputName) {
         // In the output this key would name the app's own package, not the package it was written for.
-        skip(selector, `"${outputName}" is the name of the output package`);
+        warn(
+          `Not copying Bun override "${selector}" into the build output: "${outputName}" is the name of the output package, so the project's "${outputName}" package keeps its own dependencies there.`,
+        );
       } else if (tarball === undefined) {
         const value = toPortableBunOverride(selector, name, spec, rootManifest, warn);
         if (value !== undefined) mergeBunOverride(carried, selector, value);
