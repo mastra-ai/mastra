@@ -22,7 +22,7 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "moonshotai/Kimi-K3": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -34,7 +34,7 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "moonshotai/Kimi-K3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

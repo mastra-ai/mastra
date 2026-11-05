@@ -2,6 +2,7 @@ import type { BlockedFields } from '../../components/view-gate';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { useViewMenu } from '../../hooks/use-widget-views';
 import { unsupportedMessage } from '../../lib/chrome';
+import { pinActions } from '../../lib/pin-actions';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { countRows, isValueColumn, openingView, parseColumns } from '../../lib/table';
@@ -50,7 +51,9 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
         openerResults.map(r => r?.data),
       )
     : 'uncountable';
-  const { view, index, heading } = useViewMenu(props.widget, props.views, openingView(props.views, rows));
+  const menu = useViewMenu(props.widget, props.views, openingView(props.views, rows));
+  const { view, index } = menu;
+  const heading = { ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) };
 
   const unsupported = blocked(view.queries);
   if (unsupported) {

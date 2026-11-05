@@ -7,6 +7,7 @@ import { Card } from '../../../ds/components/Card';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import { getSignalColor } from '../signal-colors';
 import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -120,7 +121,10 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
               </Txt>
             </div>
             <Txt variant="caption" tone="muted" className="mt-1">
-              {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
+              <Metadata>
+                <Metadata.Item>{formatNumber(value.generated)} generated</Metadata.Item>
+                <Metadata.Item>{formatNumber(value.embedded)} embedded</Metadata.Item>
+              </Metadata>
             </Txt>
           </li>
         );
@@ -167,7 +171,10 @@ export function PendingSignalProgress({
                 </Txt>
               ) : null}
               <Txt font="body" variant="caption" tone="muted" className="mt-1">
-                {formatNumber(value.generated)} generated · {formatNumber(value.embedded)} embedded
+                <Metadata>
+                  <Metadata.Item>{formatNumber(value.generated)} generated</Metadata.Item>
+                  <Metadata.Item>{formatNumber(value.embedded)} embedded</Metadata.Item>
+                </Metadata>
               </Txt>
             </li>
           );

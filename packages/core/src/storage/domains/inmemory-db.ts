@@ -34,6 +34,7 @@ import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
 import type { WorkflowDefinition } from './workflow-definitions';
+import type { WorkflowRunEntry, WorkflowRunHeader } from './workflows/journal';
 import type { WorkspaceVersion } from './workspaces';
 
 /**
@@ -48,6 +49,26 @@ export class InMemoryDB {
   readonly messages = new Map<string, StorageMessageType>();
   readonly resources = new Map<string, StorageResourceType>();
   readonly workflows = new Map<string, StorageWorkflowRun>();
+  /** Storage v2 run headers, keyed like `workflows`. */
+  readonly workflowRunHeaders = new Map<
+    string,
+    {
+      workflow_name: string;
+      run_id: string;
+      resourceId?: string;
+      header: WorkflowRunHeader;
+      lastSeq: number;
+      runToken: string;
+      /** See `StoredWorkflowRunHeader.startStateSeq`. */
+      startStateSeq: number;
+      /** Set once another run's `state-base`, or a draft, builds on this run's state: its checkpoints then keep the earlier state entries. */
+      stateShared?: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+    }
+  >();
+  /** Storage v2 run entries in `seq` order, keyed like `workflowRunHeaders`. */
+  readonly workflowRunEntries = new Map<string, WorkflowRunEntry[]>();
   /** Workflows-domain run ownership, keyed by runId. */
   readonly runOwners = new Map<string, { generation: number; ownerId: string; leaseExpiresAt: Date | null }>();
   /** Memory-domain run fences, keyed by runId. */
@@ -120,6 +141,8 @@ export class InMemoryDB {
     this.messages.clear();
     this.resources.clear();
     this.workflows.clear();
+    this.workflowRunHeaders.clear();
+    this.workflowRunEntries.clear();
     this.runOwners.clear();
     this.runFences.clear();
     this.workflowDefinitions.clear();

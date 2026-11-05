@@ -1,11 +1,13 @@
 import { createContext, useContext } from 'react';
 
+import { escapeRegExp } from '@/lib/string';
+
 export const WorkingDirectoryContext = createContext<string | undefined>(undefined);
 
 function relativeTo(directory: string | undefined, text: string): string {
   const root = directory?.replace(/\/+$/, '');
   if (!root) return text;
-  const escaped = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = escapeRegExp(root);
   return text.replace(new RegExp(`(?<![^\\s'"=(])${escaped}(?:/(?=[^\\s/])|(?![\\w.-]))`, 'g'), match =>
     match.endsWith('/') ? '' : '.',
   );

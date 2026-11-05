@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
@@ -133,8 +134,10 @@ export function MessageBubble({
       <TooltipTrigger
         render={
           <MessageMetadata tabIndex={0}>
-            {formatModelName(modelId)}
-            {credentialLabel && ` · ${credentialLabel}`}
+            <Metadata>
+              <Metadata.Item>{formatModelName(modelId)}</Metadata.Item>
+              {credentialLabel && <Metadata.Item>{credentialLabel}</Metadata.Item>}
+            </Metadata>
           </MessageMetadata>
         }
       />

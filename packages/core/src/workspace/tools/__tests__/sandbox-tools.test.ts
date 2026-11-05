@@ -954,9 +954,12 @@ describe('kill_process tool', () => {
         kill: vi.fn().mockResolvedValue(false),
       },
     });
-    const ctx = createContext(sandbox);
+    const custom = vi.fn();
+    const ctx = { ...createContext(sandbox), writer: { custom } };
     const result = await killProcessTool.execute({ pid: '99999' }, ctx);
     expect(result).toContain('was not found or had already exited');
+    // An unknown process has no exit, so chats must not show one (they read -1 as `exit -1`).
+    expect(custom.mock.calls.map(([chunk]) => chunk.type)).not.toContain('data-sandbox-exit');
   });
 
   it('returns not found when process already exited', async () => {

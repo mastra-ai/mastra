@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDatasetExperiment, useExperiment } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
@@ -53,8 +54,11 @@ export function ExperimentCrumbItemCount() {
   const count = `${totalItems} ${totalItems === 1 ? 'item' : 'items'}`;
 
   return (
-    <Txt as="span" variant="caption" tone="muted" className="whitespace-nowrap tabular-nums">
-      {failedCount > 0 ? `${count} · ${failedCount} errored` : count}
+    <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
+      <Metadata>
+        <Metadata.Item>{count}</Metadata.Item>
+        {failedCount > 0 && <Metadata.Item>{failedCount} errored</Metadata.Item>}
+      </Metadata>
     </Txt>
   );
 }
