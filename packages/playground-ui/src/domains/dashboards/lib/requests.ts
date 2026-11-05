@@ -229,7 +229,7 @@ export function buildPreviousRequest(
 }
 
 /** What an unsatisfiable request answers: nothing matched. */
-function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
+export function emptyAnswer(method: DashboardRequestMethod): DashboardAnswer {
   switch (method) {
     case 'aggregateTraces':
     case 'aggregateSpans':

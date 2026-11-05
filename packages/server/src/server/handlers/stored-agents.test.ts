@@ -1208,7 +1208,7 @@ describe('Stored Agents Handlers', () => {
     it('should persist durable config on the initial version', async () => {
       const storage = new InMemoryStore();
       const mastra = createMockMastra({ storage: storage as unknown as MockStorage });
-      const durable = { maxSteps: 25, cleanupTimeoutMs: 0 };
+      const durable = { cleanupTimeoutMs: 0 };
 
       const result = await CREATE_STORED_AGENT_ROUTE.handler({
         ...createTestContext(mastra),
@@ -2789,19 +2789,19 @@ describe('createStoredAgentBodySchema', () => {
   it('should accept durable as a serializable config object', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: 25, cleanupTimeoutMs: 0 },
+      durable: { cleanupTimeoutMs: 0 },
     });
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.durable).toEqual({ maxSteps: 25, cleanupTimeoutMs: 0 });
+      expect(result.data.durable).toEqual({ cleanupTimeoutMs: 0 });
     }
   });
 
   it('should reject durable options that are not serializable config', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: -1 },
+      durable: { cleanupTimeoutMs: -1 },
     });
 
     expect(result.success).toBe(false);
