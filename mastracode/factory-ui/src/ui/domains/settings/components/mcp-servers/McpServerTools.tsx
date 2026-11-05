@@ -18,6 +18,8 @@ export function McpServerTools({ server, canManage }: { server: McpServerInfo; c
   const saved = server.tools.filter(tool => tool.selected).map(tool => tool.name);
   const [selected, setSelected] = useState(() => new Set(saved));
   const changed = selected.size !== saved.length || saved.some(name => !selected.has(name));
+  // Saving, even unchanged, marks new tools as reviewed: the admin can keep them off.
+  const reviewing = server.tools.some(tool => tool.isNew);
   const disabled = !canManage || setTools.isPending;
 
   const toggle = (name: string, on: boolean) => {
@@ -110,7 +112,7 @@ export function McpServerTools({ server, canManage }: { server: McpServerInfo; c
           <Button
             size="sm"
             variant="primary"
-            disabled={!changed || setTools.isPending}
+            disabled={!(changed || reviewing) || setTools.isPending}
             onClick={() => setTools.mutate({ id: server.id, selected: [...selected] })}
           >
             {setTools.isPending && <Spinner size="sm" aria-hidden className="size-3" />}

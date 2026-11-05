@@ -69,7 +69,11 @@ function initialDraft(server: McpServerInfo | undefined): Draft {
     url: server?.url ?? '',
     auth: server ? savedAuth(server) : 'none',
     token: '',
-    headers: [{ name: '', value: '' }],
+    // Replacing saved headers starts from their names.
+    headers:
+      server?.authType === 'headers' && server.headerNames.length > 0
+        ? server.headerNames.map(name => ({ name, value: '' }))
+        : [{ name: '', value: '' }],
     replaceHeaders: false,
     clientId: server?.oauth?.clientId ?? '',
     clientSecret: '',
@@ -134,6 +138,11 @@ function createBody(draft: Draft): CreateMcpServerRequest | string {
   return typeof headers === 'string' ? headers : { ...base, authType: 'headers', headers };
 }
 
+function sameOrigin(a: string, b: string): boolean {
+  const left = parsedUrl(a);
+  return left !== null && left.origin === parsedUrl(b)?.origin;
+}
+
 /** Only what changed: omitted credentials keep their saved values. */
 function updateBody(server: McpServerInfo, draft: Draft): UpdateMcpServerRequest | string {
   const body: UpdateMcpServerRequest = {};
@@ -145,9 +154,11 @@ function updateBody(server: McpServerInfo, draft: Draft): UpdateMcpServerRequest
   if (authType !== server.authType) body.authType = authType;
 
   if (authType === 'headers') {
+    // Saved headers never follow a server to another origin.
     const keepSaved =
       server.authType === 'headers' &&
       draft.auth === savedAuth(server) &&
+      sameOrigin(url, server.url) &&
       !draft.replaceHeaders &&
       !(draft.auth === 'bearer' && draft.token.trim());
     if (!keepSaved) {
@@ -206,7 +217,7 @@ export function McpServerDrawer({
   const signsOut =
     server?.authType === 'oauth' && draft.auth === 'oauth' && draftUrl !== null && draftUrl.href !== server.url;
   const savedHeaders =
-    server?.authType === 'headers' && draft.auth === savedAuth(server) && !draft.replaceHeaders
+    server?.authType === 'headers' && draft.auth === savedAuth(server) && !originChanged && !draft.replaceHeaders
       ? server.headerNames
       : null;
 
@@ -350,12 +361,7 @@ export function McpServerDrawer({
                     <Button
                       size="sm"
                       type="button"
-                      onClick={() =>
-                        update({
-                          replaceHeaders: true,
-                          headers: savedHeaders.map(name => ({ name, value: '' })),
-                        })
-                      }
+                      onClick={() => update({ replaceHeaders: true })}
                     >
                       Replace headers
                     </Button>

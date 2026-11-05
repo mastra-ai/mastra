@@ -446,6 +446,65 @@ describe('McpServersSection', () => {
       ).toBeInTheDocument();
     });
 
+    it('asks for the token or headers again when a server moves to another address', async () => {
+      const api = mockMcpServersApi();
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(within(await row('Docs')).getByRole('button', { name: 'Edit' }));
+      const url = screen.getByRole('textbox', { name: 'Server URL' });
+      await user.clear(url);
+      await user.type(url, 'https://docs.example.org/mcp');
+      expect(screen.getByLabelText('Token')).toHaveAttribute('placeholder', 'Paste the token');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText('Enter the token.')).toBeInTheDocument();
+      expect(api.mutations()).toEqual([]);
+
+      await user.type(screen.getByLabelText('Token'), 'moved-token');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(api.mutations()[0]).toEqual({
+          method: 'PATCH',
+          path: `/${DOCS_ID}`,
+          body: {
+            url: 'https://docs.example.org/mcp',
+            headers: [{ name: 'Authorization', value: 'Bearer moved-token' }],
+          },
+        }),
+      );
+    });
+
+    it('asks for custom header values again, keeping their names, when a server moves to another address', async () => {
+      const api = mockMcpServersApi({ servers: [{ ...docsServer, headerNames: ['X-Api-Key', 'X-Team'] }] });
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(within(await row('Docs')).getByRole('button', { name: 'Edit' }));
+      const url = screen.getByRole('textbox', { name: 'Server URL' });
+      await user.clear(url);
+      await user.type(url, 'https://docs.example.org/mcp');
+      expect(screen.queryByRole('list', { name: 'Saved headers' })).not.toBeInTheDocument();
+      expect(screen.getByRole('textbox', { name: 'Header 1 name' })).toHaveValue('X-Api-Key');
+      expect(screen.getByRole('textbox', { name: 'Header 2 name' })).toHaveValue('X-Team');
+      await user.type(screen.getByLabelText('Header 1 value'), 'key-2');
+      await user.type(screen.getByLabelText('Header 2 value'), 'team-2');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() =>
+        expect(api.mutations()[0]).toEqual({
+          method: 'PATCH',
+          path: `/${DOCS_ID}`,
+          body: {
+            url: 'https://docs.example.org/mcp',
+            headers: [
+              { name: 'X-Api-Key', value: 'key-2' },
+              { name: 'X-Team', value: 'team-2' },
+            ],
+          },
+        }),
+      );
+    });
+
     it('warns that changing the URL of an OAuth server signs it out', async () => {
       mockMcpServersApi();
       const user = userEvent.setup();
@@ -493,7 +552,6 @@ describe('McpServersSection', () => {
       expect(within(tools).getByText('docs_add')).toBeInTheDocument();
       expect(within(tools).getByText('New')).toBeInTheDocument();
       expect(within(tools).getByText('Read-only')).toBeInTheDocument();
-      expect(within(docs).getByRole('button', { name: 'Save selection' })).toBeDisabled();
 
       await user.click(within(tools).getByRole('checkbox', { name: 'add' }));
       await user.click(within(docs).getByRole('button', { name: 'Save selection' }));
@@ -503,6 +561,23 @@ describe('McpServersSection', () => {
         { method: 'PUT', path: `/${DOCS_ID}/tools`, body: { selected: ['search', 'add'] } },
       ]);
       expect(within(docs).queryByText('1 new tool')).not.toBeInTheDocument();
+      // Nothing left to save until the selection changes again.
+      expect(within(docs).getByRole('button', { name: 'Save selection' })).toBeDisabled();
+    });
+
+    it('lets the admin keep a new tool off, so it stops being shown as new', async () => {
+      const api = mockMcpServersApi();
+      const user = userEvent.setup();
+      renderSection();
+
+      const docs = await row('Docs');
+      expect(within(docs).getByText('1 new tool')).toBeInTheDocument();
+      await user.click(within(docs).getByRole('button', { name: 'Choose tools' }));
+      await user.click(within(docs).getByRole('button', { name: 'Save selection' }));
+
+      await waitFor(() => expect(within(docs).queryByText('1 new tool')).not.toBeInTheDocument());
+      expect(api.mutations()).toEqual([{ method: 'PUT', path: `/${DOCS_ID}/tools`, body: { selected: ['search'] } }]);
+      expect(within(docs).getByText('1 of 2 tools')).toBeInTheDocument();
     });
 
     it("sends the admin to the server's sign-in page, returning to this Factory", async () => {
