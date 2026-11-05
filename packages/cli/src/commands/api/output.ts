@@ -7,7 +7,26 @@ interface PaginationInfo {
   hasMore: boolean;
 }
 
+const guardedStreams = new WeakSet<NodeJS.WritableStream>();
+
+/**
+ * `mastra api` writes its result once, after the request has finished. If the
+ * reader already went away (`mastra api ... | head`), that write fails with
+ * EPIPE, which Node would otherwise throw as an unhandled 'error' event and exit
+ * 1 — turning a successful request into a failure. Nobody is reading anymore, so
+ * drop the output and keep the request's exit code.
+ */
+function ignoreBrokenPipe(stream: NodeJS.WritableStream): void {
+  if (guardedStreams.has(stream)) return;
+  guardedStreams.add(stream);
+  stream.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EPIPE') return;
+    throw error;
+  });
+}
+
 export function writeJson(value: unknown, pretty: boolean, stream: NodeJS.WritableStream = process.stdout): void {
+  ignoreBrokenPipe(stream);
   stream.write(`${JSON.stringify(value, null, pretty ? 2 : 0)}\n`);
 }
 

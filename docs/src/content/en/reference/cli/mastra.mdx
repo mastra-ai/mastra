@@ -1266,6 +1266,13 @@ Errors are written to `stderr` as JSON and return a non-zero exit code:
 }
 ```
 
+The exit code reflects whether the request succeeded, not the contents of the response:
+
+- `0`: The server returned a successful response. This includes empty results and payloads that report existing state, such as a tool result saying a record already exists. A tool that returns an object with an `error` field still exits `0`, so check the `data` payload when the tool reports its own failures.
+- `1`: The request failed. This includes an unreachable server, invalid JSON input, a missing resource, or a tool that throws an error.
+
+If the command reading the output exits early, as with `| head`, the exit code still reflects whether the request succeeded.
+
 ### Target resolution
 
 For runtime commands, the command resolves the target server in this order:
