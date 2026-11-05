@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
+import { DASHBOARD_DATA_TOOL_NAME } from '../data';
 import {
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
   DASHBOARD_WIDGET_PIN_NOTIFICATION,
@@ -37,9 +38,44 @@ describe('dashboard renderer app', () => {
       expect(await screen.findByText('Agent runs')).toBeTruthy();
       expect(await screen.findByText('693')).toBeTruthy();
       // The iframe never reaches the network itself: MSW fails any request it didn't expect,
-      // and every read went through the server's metrics tool.
+      // and every read went through the server's data tool, named after the MastraClient call.
       expect(host.toolCalls.length).toBeGreaterThan(0);
-      expect(host.toolCalls.every(name => name === 'observabilityMetricAggregate')).toBe(true);
+      expect(host.toolCalls).toEqual(
+        host.toolCalls.map(() =>
+          expect.objectContaining({
+            name: DASHBOARD_DATA_TOOL_NAME,
+            call: expect.objectContaining({ operation: 'getMetricAggregate' }),
+          }),
+        ),
+      );
+      // A dashboard without a project leaves the server to pick its own.
+      expect(host.toolCalls.filter(({ call }) => call && 'projectId' in call)).toEqual([]);
+    });
+  });
+
+  describe("when the tool result names the dashboard's project", () => {
+    it('reads every widget from that project', async () => {
+      server.use(http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)));
+      const host = await renderWithHost(app);
+
+      await host.sendToolResult({
+        content: [],
+        structuredContent: { definition: agentRunsDashboard, projectId: 'proj_1' },
+      });
+
+      expect(await screen.findByText('693')).toBeTruthy();
+      expect(host.toolCalls.length).toBeGreaterThan(0);
+      expect(host.toolCalls.map(({ call }) => call?.projectId)).toEqual(host.toolCalls.map(() => 'proj_1'));
+    });
+
+    it('explains an empty project instead of reading without one', async () => {
+      const host = await renderWithHost(app);
+
+      await host.sendToolResult({ content: [], structuredContent: { definition: agentRunsDashboard, projectId: '' } });
+
+      expect(await screen.findByText("Couldn't show this dashboard")).toBeTruthy();
+      expect(screen.getByText(/`projectId`/)).toBeTruthy();
+      expect(host.toolCalls).toEqual([]);
     });
   });
 
@@ -52,6 +88,22 @@ describe('dashboard renderer app', () => {
 
       expect(await screen.findByText('Agent runs')).toBeTruthy();
       await expect.poll(() => host.toolCalls.length).toBeGreaterThan(0);
+      expect(screen.queryByText('693')).toBeNull();
+    });
+  });
+
+  describe('when the server serving the app has no data tool', () => {
+    it('reads each widget once instead of retrying a call that can never succeed', async () => {
+      const host = await renderWithHost(app, { dataTool: false });
+
+      await host.sendToolResult({ content: [], structuredContent: { definition: agentRunsDashboard } });
+
+      expect(await screen.findByText('Agent runs')).toBeTruthy();
+      await expect.poll(() => host.toolCalls.length).toBeGreaterThan(0);
+      const reads = host.toolCalls.length;
+      // MastraClient retries a failure it deems transient after 100ms, then 200ms and 400ms.
+      await new Promise(resolve => setTimeout(resolve, 800));
+      expect(host.toolCalls).toHaveLength(reads);
       expect(screen.queryByText('693')).toBeNull();
     });
   });
