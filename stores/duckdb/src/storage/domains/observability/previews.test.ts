@@ -211,10 +211,26 @@ describe('DuckDB payload lookups on a large span_events table', () => {
   let observability: ObservabilityStorage;
   const pageRange = { from: '2026-05-01T00:00:00.000Z', to: '2026-05-02T00:00:00.000Z' };
   const FILLER_ROWS = 300_000;
+  const root = (id: string, startedAt: Date): CreateSpanRecord => ({
+    traceId: id,
+    spanId: id,
+    parentSpanId: null,
+    name: 'root',
+    spanType: SpanType.AGENT_RUN,
+    isEvent: false,
+    threadId: 'thread-page',
+    startedAt,
+    endedAt: new Date(startedAt.getTime() + 30_000),
+    input: `input ${id}`,
+    output: `output ${id}`,
+    error: null,
+  });
 
   beforeAll(async () => {
     observability = (await big.getStore('observability'))!;
     await observability.init();
+    // A chat that began before the filler and continues on the page, so its first trace is in the oldest row group.
+    await observability.batchCreateSpans({ records: [root('abcdef9', new Date(Date.UTC(2025, 11, 31, 12)))] });
     await big.db.execute(
       `INSERT INTO span_events (eventType, timestamp, cursorId, traceId, spanId, name, spanType, isEvent, endedAt, input, output)
        SELECT 'end', ts, i, md5(i::VARCHAR), md5('span' || i), 'old', 'agent_run', false, ts, '"old"', '"old"'
@@ -222,21 +238,9 @@ describe('DuckDB payload lookups on a large span_events table', () => {
     );
     // Random-looking ids and distinct times, as in real data. Otherwise DuckDB prunes on the ids'
     // prefixes, or factors a time shared by every key tuple out of the OR, and no range is needed.
-    const roots = [0, 1].map(i => ({
-      traceId: `abcdef${i}`,
-      spanId: `abcdef${i}`,
-      parentSpanId: null,
-      name: 'root',
-      spanType: SpanType.AGENT_RUN,
-      isEvent: false,
-      threadId: 'thread-page',
-      startedAt: new Date(Date.UTC(2026, 4, 1, 12, i)),
-      endedAt: new Date(Date.UTC(2026, 4, 1, 12, i, 30)),
-      input: `input ${i}`,
-      output: `output ${i}`,
-      error: null,
-    }));
-    await observability.batchCreateSpans({ records: roots });
+    await observability.batchCreateSpans({
+      records: [0, 1].map(i => root(`abcdef${i}`, new Date(Date.UTC(2026, 4, 1, 12, i)))),
+    });
     await big.db.execute(
       `UPDATE span_events SET inputPreview = NULL, outputPreview = NULL, errorPreview = NULL,
          hasInputPayload = NULL, hasOutputPayload = NULL, hasErrorPayload = NULL
@@ -280,7 +284,7 @@ describe('DuckDB payload lookups on a large span_events table', () => {
     ],
     ['querySpans', () => observability.querySpans(planSpanQuery({ timeRange: pageRange }))],
     ['queryThreads', () => observability.queryThreads(planThreadRowsQuery({ timeRange: { traces: pageRange } }))],
-  ])('%s reads the payloads of the page without scanning older row groups', async (_name, read) => {
-    expect(await lookupRowsScanned(read)).toBeLessThan(FILLER_ROWS / 2);
+  ])('%s reads only the row groups that hold the page', async (_name, read) => {
+    expect(await lookupRowsScanned(read)).toBeLessThan((FILLER_ROWS * 2) / 3);
   });
 });
