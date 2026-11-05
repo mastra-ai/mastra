@@ -24,7 +24,7 @@ type Segment =
   | { kind: 'optional'; segments: Segment[] }
   | { kind: 'repeat'; segments: Segment[] };
 
-const encoded: Allowed = char => /[\w\-.~%,]/.test(char) || char.charCodeAt(0) > 127;
+const encoded: Allowed = char => /[\w\-.~,]/.test(char) || char.charCodeAt(0) > 127;
 const anything: Allowed = () => true;
 
 const literal = (text: string): Segment => ({ kind: 'literal', text });
@@ -107,13 +107,20 @@ function step(uri: string, positions: Set<number>, segment: Segment): Set<number
       for (const option of segment.options) for (const p of advance(uri, positions, option)) next.add(p);
       return next;
     case 'run': {
-      // A run stops at the first disallowed character, so a start inside an earlier run reaches nothing new.
+      // A run stops at the first disallowed character, so a start already reached by an earlier run reaches nothing new.
       let end = 0;
       for (const p of [...positions].sort((a, b) => a - b)) {
+        const covered = p < end && next.has(p);
         if (segment.min === 0) next.add(p);
-        if (p < end) continue;
+        if (covered) continue;
         end = p;
-        while (end < uri.length && segment.allowed(uri[end]!)) next.add(++end);
+        for (
+          let width = charWidth(uri, end, segment.allowed);
+          width > 0;
+          width = charWidth(uri, end, segment.allowed)
+        ) {
+          next.add((end += width));
+        }
       }
       return next;
     }
@@ -132,4 +139,11 @@ function step(uri: string, positions: Set<number>, segment: Segment): Set<number
       return next;
     }
   }
+}
+
+/** Characters a run consumes at `i`: a whole `%HH` triplet, one allowed character, or none. */
+function charWidth(uri: string, i: number, allowed: Allowed): number {
+  if (i >= uri.length) return 0;
+  if (uri[i] === '%') return /^%[0-9A-Fa-f]{2}/.test(uri.slice(i, i + 3)) ? 3 : 0;
+  return allowed(uri[i]!) ? 1 : 0;
 }

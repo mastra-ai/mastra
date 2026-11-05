@@ -10,6 +10,8 @@ describe('matchesUriTemplate', () => {
     ['weather://{city}', 'xweather://berlin', false],
     ['weather://{city}', 'weather://s%C3%A3o%20paulo', true],
     ['weather://{city}', 'weather://münchen', true],
+    ['file://data/{id}F', 'file://data/%2F', false],
+    ['file://data/{id}', 'file://data/%2', false],
     ['file://data{?format}', 'file://data?format=a/b', false],
     ['file://data{?ids}', 'file://data?ids=1,2', true],
     ['file://data/{+path}', 'file://data/a/b', true],
