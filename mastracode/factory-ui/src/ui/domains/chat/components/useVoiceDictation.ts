@@ -46,23 +46,29 @@ interface Capture {
   cancel(): void;
 }
 
+export interface VoiceDictation {
+  state: VoiceDictationState;
+  start(): Promise<void>;
+  stop(): void;
+}
+
 export function useVoiceDictation({
   factoryId,
   onTranscript,
   onError,
 }: {
-  factoryId: string;
+  factoryId: string | undefined;
   onTranscript: (transcript: string, replacing: string) => void;
   onError: (message: string) => void;
-}) {
+}): VoiceDictation {
   const { client } = useApiConfig();
   const [phase, setPhase] = useState<RecordingPhase>('idle');
   const captureRef = useRef<Capture>(undefined);
   const mountedRef = useRef(true);
-  const query = `factoryId=${encodeURIComponent(factoryId)}`;
+  const query = factoryId ? `?factoryId=${encodeURIComponent(factoryId)}` : '';
 
   const transcribe = useMutation({
-    mutationFn: (clip: Blob) => client.post<TranscribeResponse>(`/web/voice/transcribe?${query}`, clip),
+    mutationFn: (clip: Blob) => client.post<TranscribeResponse>(`/web/voice/transcribe${query}`, clip),
     onSuccess: ({ text }) => {
       if (text) onTranscript(text, '');
       else onError(NO_SPEECH);
@@ -147,7 +153,7 @@ export function useVoiceDictation({
     setPhase('requesting');
     let session: LiveSessionResponse;
     try {
-      session = await client.post<LiveSessionResponse>(`/web/voice/live-session?${query}`);
+      session = await client.post<LiveSessionResponse>(`/web/voice/live-session${query}`);
     } catch (error) {
       fail(error instanceof Error ? serverErrorMessage(error) : MIC_FAILED);
       return;

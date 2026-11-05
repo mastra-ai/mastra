@@ -64,7 +64,7 @@ interface RealtimeSession {
   hangUp(): void;
 }
 
-function acceptRealtime({ final }: { final?: string } = {}): RealtimeSession {
+function acceptRealtime({ final, opens = true }: { final?: string; opens?: boolean } = {}): RealtimeSession {
   const session: RealtimeSession = {
     protocols: undefined,
     received: [],
@@ -87,7 +87,7 @@ function acceptRealtime({ final }: { final?: string } = {}): RealtimeSession {
       client.addEventListener('close', () => {
         session.closed = true;
       });
-      client.send(JSON.stringify({ type: 'session.created', session: {} }));
+      if (opens) client.send(JSON.stringify({ type: 'session.created', session: {} }));
     }),
   );
   return session;
@@ -109,6 +109,7 @@ describe('Composer live dictation', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     Reflect.deleteProperty(navigator, 'mediaDevices');
     Reflect.deleteProperty(URL, 'createObjectURL');
@@ -152,6 +153,29 @@ describe('Composer live dictation', () => {
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });
 
+  it('holds the message until dictation finishes, so the whole sentence goes out together', async () => {
+    const mistral = acceptRealtime({ final: 'fix the login bug and add a test.' });
+    const user = userEvent.setup();
+    const message = await composerReady();
+
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+    const recording = await screen.findByRole('button', { name: 'Dictate', pressed: true });
+    await speak(100);
+    await waitFor(() => expect(mistral.received.map(event => event.type)).toContain('input_audio.append'));
+    mistral.say({ type: 'transcription.text.delta', text: 'fix the login bug' });
+    await waitFor(() => expect(message).toHaveValue('fix the login bug'));
+
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+    await user.click(message);
+    await user.keyboard('{Enter}');
+    expect(message).toHaveValue('fix the login bug');
+
+    await user.click(recording);
+
+    await waitFor(() => expect(message).toHaveValue('fix the login bug and add a test.'));
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
+  });
+
   it('keeps what was heard and explains when the live connection drops mid-sentence', async () => {
     const mistral = acceptRealtime();
     const user = userEvent.setup();
@@ -173,19 +197,41 @@ describe('Composer live dictation', () => {
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });
 
-  it('shows the provider error and releases the microphone when Mistral rejects the session', async () => {
+  it('explains a Mistral error in its own words, keeps what was heard, and releases the microphone', async () => {
     const mistral = acceptRealtime();
     const user = userEvent.setup();
-    await composerReady();
+    const message = await composerReady();
 
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
     await screen.findByRole('button', { name: 'Dictate', pressed: true });
-    await waitFor(() => expect(mistral.received.map(event => event.type)).toContain('session.update'));
+    await speak(100);
+    await waitFor(() => expect(mistral.received.map(event => event.type)).toContain('input_audio.append'));
+    mistral.say({ type: 'transcription.text.delta', text: 'Refactor the' });
+    await waitFor(() => expect(message).toHaveValue('Refactor the'));
     mistral.say({ type: 'error', error: { message: 'Invalid audio format', code: 'invalid_request' } });
 
-    expect(await screen.findByText('Live transcription failed: Invalid audio format')).toBeVisible();
+    expect(await screen.findByText('Live transcription failed. Try again.')).toBeVisible();
+    expect(screen.queryByText(/Invalid audio format/)).toBeNull();
+    expect(message).toHaveValue('Refactor the');
     await waitFor(() => expect(mistral.closed).toBe(true));
     expect(stopTrack).toHaveBeenCalled();
+  });
+
+  it('gives up and releases the microphone when Mistral never opens the session', async () => {
+    const mistral = acceptRealtime({ opens: false });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await composerReady();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+    await screen.findByRole('button', { name: 'Dictate', pressed: true });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(await screen.findByText('Live transcription could not connect. Try again.')).toBeVisible();
+    expect(stopTrack).toHaveBeenCalled();
+    expect(contexts[0]?.state).toBe('closed');
+    await waitFor(() => expect(mistral.closed).toBe(true));
+    expect(mistral.received).toEqual([]);
   });
 
   it('releases the microphone and hangs up when the composer goes away mid-dictation', async () => {

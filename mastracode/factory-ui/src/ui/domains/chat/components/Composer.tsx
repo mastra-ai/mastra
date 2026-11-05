@@ -52,6 +52,7 @@ import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
+import { useVoiceDictation } from './useVoiceDictation';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
@@ -103,7 +104,18 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     disabled: chatPreparing || planFeedback.pending || startingDraft,
   });
   const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
-  const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
+  const updateDraft = setComposerDraft;
+  const insertTranscript = (transcript: string, replacing: string) => {
+    updateDraft(current => mergeDictation(current, replacing, transcript));
+    if (!replacing) inputRef.current?.focus();
+  };
+  const dictation = useVoiceDictation({
+    factoryId,
+    onTranscript: insertTranscript,
+    onError: message => pushNotice(message, 'error'),
+  });
+  const dictating = dictation.state !== 'idle';
+  const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading || dictating;
   const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
   const shownText = preview?.text ?? draft;
   const hasSubmittableDraft =
@@ -116,14 +128,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       ? 'Steer the agent'
       : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = chatPreparing ? 'Initializing session…' : startingDraft ? 'Starting session…' : undefined;
-
-  const updateDraft = setComposerDraft;
-
-  const insertTranscript = (transcript: string, replacing: string) => {
-    updateDraft(current => mergeDictation(current, replacing, transcript));
-    if (!replacing) inputRef.current?.focus();
-  };
+  const sendTitle = chatPreparing
+    ? 'Initializing session…'
+    : startingDraft
+      ? 'Starting session…'
+      : dictating
+        ? 'Finish dictation to send'
+        : undefined;
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -329,8 +340,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 <ComposerVoiceButton
                   factoryId={factoryId}
                   disabled={textareaDisabled || preview !== undefined}
-                  onTranscript={insertTranscript}
-                  onError={message => pushNotice(message, 'error')}
+                  dictation={dictation}
                 />
               )}
               <ComposerPrimaryAction

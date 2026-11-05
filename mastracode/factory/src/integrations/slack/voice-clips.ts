@@ -34,6 +34,7 @@ export interface VoiceClipFailure {
 }
 
 export interface VoiceClipReport {
+  transcribed: number;
   failures: VoiceClipFailure[];
   settingsFactoryId?: string;
 }
@@ -178,7 +179,7 @@ export async function transcribeVoiceClips(
   factories: VoiceClipFactories = {},
 ): Promise<VoiceClipReport> {
   const clips = messages.flatMap(message => voiceClips(message).map(clip => ({ message, clip })));
-  if (clips.length === 0) return { failures: [] };
+  if (clips.length === 0) return { transcribed: 0, failures: [] };
 
   if (!sender || !deps.modelCredentials) {
     for (const { message, clip } of clips) detach(message, clip);
@@ -186,16 +187,17 @@ export async function transcribeVoiceClips(
       reason: 'Voice clips need a linked Mastra account with a speech-to-text API key.',
       fix: 'none',
     };
-    return { failures: clips.map(() => failure) };
+    return { transcribed: 0, failures: clips.map(() => failure) };
   }
 
   // Routing failures stay fatal: the message must not run under the wrong Factory.
   const factory = await factories.run?.();
   const failures = await transcribeAll(clips, sender, deps.modelCredentials, deps.voiceSettings, factory);
   for (const { message, clip } of clips) detach(message, clip);
-  if (!failures.some(failure => failure.fix === 'settings')) return { failures };
+  const transcribed = clips.length - failures.length;
+  if (!failures.some(failure => failure.fix === 'settings')) return { transcribed, failures };
   const settingsFactoryId = await resolveSettingsFactory(factory, factories.home);
-  return settingsFactoryId ? { failures, settingsFactoryId } : { failures };
+  return settingsFactoryId ? { transcribed, failures, settingsFactoryId } : { transcribed, failures };
 }
 
 async function transcribeAttachment(

@@ -11,17 +11,19 @@ const CAPTURE_WORKLET = `registerProcessor('${CAPTURE_PROCESSOR}', class extends
   }
 });`;
 
+const CONNECT_TIMEOUT_MS = 10_000;
 const FINISH_TIMEOUT_MS = 10_000;
 
 const COULD_NOT_CONNECT = 'Live transcription could not connect. Try again.';
 const CONNECTION_LOST = 'Live transcription stopped unexpectedly. Try again.';
+const LIVE_FAILED = 'Live transcription failed. Try again.';
 const AUDIO_FAILED = 'This browser could not capture audio for live transcription. Try again or use another browser.';
 
 const realtimeEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.created') }),
   z.object({ type: z.literal('transcription.text.delta'), text: z.string() }),
   z.object({ type: z.literal('transcription.done'), text: z.string() }),
-  z.object({ type: z.literal('error'), error: z.object({ message: z.unknown() }).optional() }),
+  z.object({ type: z.literal('error') }),
 ]);
 
 type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
@@ -104,6 +106,7 @@ export function startLiveDictation({
   const finish = (outcome: LiveDictationOutcome) => {
     if (settled) return;
     settled = true;
+    clearTimeout(connectTimer);
     clearTimeout(finishTimer);
     releaseAudio();
     socket.onmessage = null;
@@ -117,6 +120,7 @@ export function startLiveDictation({
     const message = parseRealtimeEvent(event.data);
     if (!message) return;
     if (message.type === 'session.created') {
+      clearTimeout(connectTimer);
       send({
         type: 'session.update',
         session: { audio_format: { encoding: 'pcm_s16le', sample_rate: encoder.sampleRate } },
@@ -130,17 +134,14 @@ export function startLiveDictation({
     } else if (message.type === 'transcription.done') {
       finish({ transcript: message.text || transcript });
     } else {
-      const reason = message.error?.message;
-      finish({
-        transcript,
-        error: typeof reason === 'string' && reason ? `Live transcription failed: ${reason}` : CONNECTION_LOST,
-      });
+      finish({ transcript, error: LIVE_FAILED });
     }
   };
   socket.onclose = () => {
     if (!configured) finish({ transcript, error: COULD_NOT_CONNECT });
     else finish(ending ? { transcript } : { transcript, error: CONNECTION_LOST });
   };
+  const connectTimer = setTimeout(() => finish({ transcript, error: COULD_NOT_CONNECT }), CONNECT_TIMEOUT_MS);
 
   const startCapture = async () => {
     const moduleUrl = URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: 'text/javascript' }));

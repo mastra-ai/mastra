@@ -257,13 +257,12 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           if ('response' in selection) return selection.response;
           const { chosen } = selection;
           const { realtimeModel } = chosen.entry;
-          const overLimit = this.#overLimit(c, selection.caller, realtimeModel ? 'take' : 'check');
+          const overLimit = this.#overLimit(c, selection.caller, 'check');
           if (overLimit) return overLimit;
           if (!realtimeModel) return c.json({ mode: 'batch' } satisfies LiveSessionResponse);
+          let session: RealtimeSession;
           try {
-            const session = await mintRealtimeSession(chosen.apiKey, realtimeModel);
-            const body: LiveSessionResponse = { mode: 'live', ...session };
-            return c.json(body, 200, { 'Cache-Control': 'no-store' });
+            session = await mintRealtimeSession(chosen.apiKey, realtimeModel);
           } catch (error) {
             console.warn('[voice] realtime session request failed', { provider: chosen.entry.provider, error });
             if (keyCannotTranscribe(error)) {
@@ -271,6 +270,10 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
             }
             return c.json({ mode: 'batch' } satisfies LiveSessionResponse);
           }
+          const overLimitAfterMint = this.#overLimit(c, selection.caller, 'take');
+          if (overLimitAfterMint) return overLimitAfterMint;
+          const body: LiveSessionResponse = { mode: 'live', ...session };
+          return c.json(body, 200, { 'Cache-Control': 'no-store' });
         },
       }),
     ];

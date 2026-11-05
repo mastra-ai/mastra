@@ -2726,12 +2726,12 @@ describe('Slack voice clips', () => {
     expect(events).toEqual([]);
   });
 
-  it("cards the sender, and starts no session, when a clip-only message can't be transcribed for lack of a key", async () => {
+  it("cards the sender, and starts no session, when a clip sent with only a mention of the bot can't be transcribed for lack of a key", async () => {
     const f = await fixture();
     const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
     await f.defaultFactory(project.id);
     f.thread.isSubscribed = vi.fn().mockResolvedValue(false);
-    const message = voiceMessage({ isMention: true });
+    const message = voiceMessage({ isMention: true, text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' });
 
     await createHandlers(f.deps).onMention!(f.thread, message, f.defaultHandler, f.ctx);
 
@@ -2754,6 +2754,31 @@ describe('Slack voice clips', () => {
         ],
       }),
     );
+  });
+
+  it('answers the clip it could transcribe when another clip of the batch failed', async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    const expired = { ...voiceMessage({ text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' }), id: '1700.41' };
+    expired.attachments = expired.attachments.map(clip => ({
+      ...clip,
+      fetchData: async () => {
+        throw new Error('file gone');
+      },
+    }));
+    const message = voiceMessage({ isMention: true, text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' });
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, {
+      ...f.ctx,
+      skipped: [expired],
+    });
+
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(message.text).toBe('@Mastra Factory(Caleb)\n\nship the fix');
+    expect(f.thread.postEphemeral).toHaveBeenCalledTimes(1);
   });
 
   it("dispatches a message's text without a clip that couldn't be transcribed", async () => {

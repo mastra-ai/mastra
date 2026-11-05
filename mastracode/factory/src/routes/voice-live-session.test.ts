@@ -81,6 +81,20 @@ async function tenantWithPersonalMistralKey() {
   };
 }
 
+function refuseLiveSessions() {
+  const batchKeys: (string | null)[] = [];
+  server.use(
+    http.post(CLIENT_SESSIONS_URL, () =>
+      HttpResponse.json({ message: 'Missing permission: create_client_session', code: '1000' }, { status: 403 }),
+    ),
+    http.post('https://api.mistral.ai/v1/audio/transcriptions', ({ request }) => {
+      batchKeys.push(request.headers.get('authorization'));
+      return HttpResponse.json({ model: 'voxtral-mini-latest', text: 'recorded instead', language: 'en', usage: {} });
+    }),
+  );
+  return batchKeys;
+}
+
 describe('POST /web/voice/live-session', () => {
   it("starts a live session with the member's own Mistral key, and the browser only ever sees the short-lived token", async () => {
     const { app } = await tenantWithPersonalMistralKey();
@@ -150,16 +164,7 @@ describe('POST /web/voice/live-session', () => {
   });
 
   it("records the clip with the same key instead when Mistral won't start a live session", async () => {
-    const batchKeys: (string | null)[] = [];
-    server.use(
-      http.post(CLIENT_SESSIONS_URL, () =>
-        HttpResponse.json({ message: 'Missing permission: create_client_session', code: '1000' }, { status: 403 }),
-      ),
-      http.post('https://api.mistral.ai/v1/audio/transcriptions', ({ request }) => {
-        batchKeys.push(request.headers.get('authorization'));
-        return HttpResponse.json({ model: 'voxtral-mini-latest', text: 'recorded instead', language: 'en', usage: {} });
-      }),
-    );
+    const batchKeys = refuseLiveSessions();
     const { app } = await tenantWithPersonalMistralKey();
 
     const live = await liveSession(app);
@@ -210,24 +215,39 @@ describe('POST /web/voice/live-session', () => {
 });
 
 describe('voice request rate limit', () => {
-  it('counts a recorded dictation once, and refuses before recording once the minute is used up', async () => {
-    const app = await mountVoiceRoutes({ authStorage: localAuthStorage({ openai: 'sk-openai' }) });
-    for (let i = 0; i < VOICE_REQUESTS_PER_MINUTE; i++) {
-      expect(await (await liveSession(app)).json()).toEqual({ mode: 'batch' });
-      expect((await transcribe(app)).status).toBe(200);
-    }
+  it.each([
+    {
+      name: 'a provider without live transcription',
+      mount: () => mountVoiceRoutes({ authStorage: localAuthStorage({ openai: 'sk-openai' }) }),
+    },
+    {
+      name: "Mistral when it won't start a live session",
+      mount: async () => {
+        refuseLiveSessions();
+        return (await tenantWithPersonalMistralKey()).app;
+      },
+    },
+  ])(
+    'counts a recorded dictation once with $name, and refuses before recording once the minute is used up',
+    async ({ mount }) => {
+      const app = await mount();
+      for (let i = 0; i < VOICE_REQUESTS_PER_MINUTE; i++) {
+        expect(await (await liveSession(app)).json()).toEqual({ mode: 'batch' });
+        expect((await transcribe(app)).status).toBe(200);
+      }
 
-    const live = await liveSession(app);
-    const recorded = await transcribe(app);
+      const live = await liveSession(app);
+      const recorded = await transcribe(app);
 
-    for (const res of [live, recorded]) {
-      expect(res.status).toBe(429);
-      expect(await res.json()).toEqual({ error: 'voice_rate_limited' });
-      const retryAfter = Number(res.headers.get('retry-after'));
-      expect(retryAfter).toBeGreaterThan(0);
-      expect(retryAfter).toBeLessThanOrEqual(60);
-    }
-  });
+      for (const res of [live, recorded]) {
+        expect(res.status).toBe(429);
+        expect(await res.json()).toEqual({ error: 'voice_rate_limited' });
+        const retryAfter = Number(res.headers.get('retry-after'));
+        expect(retryAfter).toBeGreaterThan(0);
+        expect(retryAfter).toBeLessThanOrEqual(60);
+      }
+    },
+  );
 
   it('counts each live session it starts', async () => {
     const { app } = await tenantWithPersonalMistralKey();

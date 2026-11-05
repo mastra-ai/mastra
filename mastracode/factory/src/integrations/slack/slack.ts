@@ -1033,7 +1033,7 @@ async function transcribeBatch(
     .catch((error: unknown) => {
       console.warn('[slack] voice clip failure card failed', { thread: thread.id, messageId: message.id, error });
     });
-  if (batch.some(m => m.attachments.length > 0 || m.text.trim() !== '')) return true;
+  if (report.transcribed > 0 || batch.some(m => m.attachments.length > 0 || typedText(m) !== '')) return true;
   if (deps.adapterOptions?.typingStatus !== false) {
     void thread.startTyping('').catch(error => {
       console.warn('[slack] typing status clear failed', { thread: thread.id, error });
@@ -1173,20 +1173,23 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
 const MUTED_KEY = 'factory_muted';
 
 /**
- * `mute` or `unmute` when that word, with the mentions taken out, is the whole
- * message. Reads Slack's raw text, where a mention is still `<@U…>`: the
- * normalized `message.text` spells it as the bot's display name, which can
- * hold spaces and punctuation (`@Mastra Factory(Caleb)`).
+ * What the sender typed, with the mentions taken out. Reads Slack's raw text,
+ * where a mention is still `<@U…>`: the normalized `message.text` spells it as
+ * the bot's display name, which can hold spaces and punctuation
+ * (`@Mastra Factory(Caleb)`), and carries any clip transcript.
  */
-function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
+function typedText(message: HandlerMessage): string {
   const raw = message.raw as { text?: unknown } | undefined;
   const text = typeof raw?.text === 'string' ? raw.text : message.text;
-  const rest = text
+  return text
     .replace(/<@[^>]+>/g, ' ')
     .replace(/(?<!\w)@[\w.-]+/g, ' ')
-    .trim()
-    .replace(/[.!]+$/, '')
-    .toLowerCase();
+    .trim();
+}
+
+/** `mute` or `unmute` when that word is all the sender typed. */
+function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
+  const rest = typedText(message).replace(/[.!]+$/, '').toLowerCase();
   return rest === 'mute' || rest === 'unmute' ? rest : undefined;
 }
 

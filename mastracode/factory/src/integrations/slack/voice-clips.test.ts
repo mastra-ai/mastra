@@ -129,6 +129,7 @@ describe('transcribeVoiceClips', () => {
     );
 
     expect(report).toEqual({
+      transcribed: 0,
       failures: [{ reason: expect.stringContaining('API key'), fix: 'settings' }],
       settingsFactoryId: project.id,
     });
@@ -465,7 +466,11 @@ describe('voiceClipFailureCard', () => {
   it('links a setup problem to the voice input section of the Factory settings', () => {
     vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://mc.example.com/');
     const card = voiceClipFailureCard(
-      { failures: [{ reason: 'The speech-to-text provider rejected the API key.', fix: 'settings' }], settingsFactoryId: 'fp 1' },
+      {
+        transcribed: 0,
+        failures: [{ reason: 'The speech-to-text provider rejected the API key.', fix: 'settings' }],
+        settingsFactoryId: 'fp 1',
+      },
       'message me again',
     );
 
@@ -476,7 +481,11 @@ describe('voiceClipFailureCard', () => {
   it('still explains a setup problem when the server has no public URL to link to', () => {
     vi.stubEnv('MASTRACODE_PUBLIC_URL', '');
     const card = voiceClipFailureCard(
-      { failures: [{ reason: 'The speech-to-text provider rejected the API key.', fix: 'settings' }], settingsFactoryId: 'fp-1' },
+      {
+        transcribed: 0,
+        failures: [{ reason: 'The speech-to-text provider rejected the API key.', fix: 'settings' }],
+        settingsFactoryId: 'fp-1',
+      },
       'mention me again',
     );
 
