@@ -12504,7 +12504,9 @@ export class Agent<
     options?: {
       /**
        * Inclusive, zero-based PubSub event index. It counts all cached run-topic events, including
-       * lifecycle events, not chunks. Omit it to replay all available cached events. Transports
+       * lifecycle events, not chunks. Each chunk carries its event's index as `chunk.index`: to resume
+       * after a dropped connection, pass the last received chunk's `index + 1` (an `abort` chunk shares
+       * its index with the `finish` after it). Omit it to replay all available cached events. Transports
        * without numeric offsets live-tail instead. Skipping earlier text deltas produces partial text
        * and may make structured output fail to parse; beyond retained history, an offset also skips
        * lower-index live events on numeric-offset transports. See

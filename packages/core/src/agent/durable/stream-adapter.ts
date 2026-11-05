@@ -620,7 +620,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   let pendingRejection: Error | undefined;
   // Ends this reader's stream with an error, then fires onError once.
-  const deliverError = async (error: Error, delivery?: AgentErrorEventData['delivery']) => {
+  const deliverError = async (error: Error, delivery?: AgentErrorEventData['delivery'], index?: number) => {
     if (!controller || terminated) return;
     if (delivery === 'reject') {
       // Erroring a ReadableStream discards chunks still queued for the reader, so with
@@ -632,6 +632,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       // closes normally even when no finish event follows.
       safeEnqueue(controller, {
         type: 'error',
+        ...(index === undefined ? {} : { index }),
         payload: { error },
       } as ChunkType<OUTPUT>);
       safeClose(controller);
@@ -676,10 +677,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
     if (streamEvent.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
 
+    // Public chunks carry their run-log index so a client can resume at index + 1.
+    const logIndex = typeof streamEvent.index === 'number' ? { index: streamEvent.index } : undefined;
+
     try {
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
-          const chunk = streamEvent.data as AgentChunkEventData;
+          const chunk = (
+            logIndex ? { ...(streamEvent.data as AgentChunkEventData), ...logIndex } : streamEvent.data
+          ) as AgentChunkEventData;
           if (chunk.type === 'agent-execution-suspended' || chunk.type === 'tripwire') readLocalRequest = undefined;
           if (typeof streamEvent.producedAt === 'number') stampChunkProducedAt(chunk, streamEvent.producedAt);
           if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);
@@ -707,8 +713,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.STEP_START: {
           // Step start - enqueue if it's a chunk type
-          const chunk = streamEvent.data as ChunkType<OUTPUT>;
-          if (chunk && 'type' in chunk) {
+          const data = streamEvent.data as ChunkType<OUTPUT>;
+          if (data && 'type' in data) {
+            const chunk = logIndex ? { ...data, ...logIndex } : data;
             if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);
             safeEnqueue(controller, chunk);
           }
@@ -739,6 +746,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               type: 'abort',
               runId,
               from: ChunkFrom.AGENT,
+              ...logIndex,
               payload: {},
             } as ChunkType<OUTPUT>);
           }
@@ -746,6 +754,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             type: 'finish',
             runId,
             from: ChunkFrom.AGENT,
+            ...logIndex,
             payload: {
               output: data.output,
               stepResult: data.stepResult,
@@ -848,7 +857,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          await deliverError(error, data.delivery);
+          await deliverError(error, data.delivery, logIndex?.index);
           break;
         }
 
@@ -886,6 +895,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             type: 'abort',
             runId,
             from: ChunkFrom.AGENT,
+            ...logIndex,
             payload: {},
           } as ChunkType<OUTPUT>);
           const finishData: AgentFinishEventData = {
@@ -900,6 +910,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             type: 'finish',
             runId,
             from: ChunkFrom.AGENT,
+            ...logIndex,
             payload: {
               output: finishData.output,
               stepResult: finishData.stepResult,
