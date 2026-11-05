@@ -1,5 +1,31 @@
 import type { KnowledgePagePayload } from '../pageTypes';
 
+import { GithubIcon, GoogleIcon, LinearIcon, SlackIcon } from '@/ds/icons';
+
+const SOURCES = {
+  linear: { label: 'Linear', icon: LinearIcon },
+  github: { label: 'GitHub', icon: GithubIcon },
+  slack: { label: 'Slack', icon: SlackIcon },
+  google: { label: 'Google', icon: GoogleIcon },
+};
+
+function isSource(prefix: string): prefix is keyof typeof SOURCES {
+  return Object.hasOwn(SOURCES, prefix);
+}
+
+/** The source an imported scope came from, read from its address prefix (`linear:…`). */
+export function scopeSource(page: KnowledgePagePayload) {
+  if (!page.isScope || !page.address) return undefined;
+  const prefix = page.address.slice(0, page.address.indexOf(':'));
+  return isSource(prefix) ? SOURCES[prefix] : undefined;
+}
+
+/** A scope's readable name: an imported scope named only by its address reads as its source, e.g. "Linear". */
+export function scopeTitle(page: KnowledgePagePayload): string {
+  const source = scopeSource(page);
+  return source && page.name === page.address ? source.label : page.name;
+}
+
 /** The page's place from its root scope down, through the pages the graph holds. */
 export function pagePath(page: KnowledgePagePayload, byId: ReadonlyMap<string, KnowledgePagePayload>): string {
   const names: string[] = [];
