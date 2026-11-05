@@ -1,8 +1,11 @@
 import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
-import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
+import { createTool } from '../../../../tools';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -80,3 +83,108 @@ describeForAllEngines('AIMock loop scenario: sub-agent delegation result', engin
     });
   });
 });
+
+/**
+ * A plain supervisor delegating to a DurableAgent or EventedAgent sub-agent.
+ *
+ * The cases above vary the supervisor's engine with plain sub-agents; here the
+ * supervisor is a plain Agent and the worker is the durable wrapper, which is
+ * how users register a durable sub-agent. COR-1511.
+ */
+const isWorkerSupervisor = (req: ChatCompletionRequest) => toolNames(req).includes('agent-worker');
+
+describe.each(['durable', 'evented'] as const)(
+  'AIMock scenario: plain supervisor delegating to a %s sub-agent',
+  kind => {
+    const getMock = useLoopScenarioAimock();
+
+    function setup() {
+      const llm = getMock();
+      const toolRuns: string[] = [];
+      const lookupOrder = createTool({
+        id: 'lookup-order',
+        description: 'Look up an order',
+        inputSchema: z.object({ orderId: z.string() }),
+        execute: async ({ orderId }) => {
+          toolRuns.push(orderId);
+          return { orderId, status: 'shipped' };
+        },
+      });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+      const inner = new Agent({
+        id: 'worker',
+        name: 'worker',
+        description: 'Looks up orders',
+        instructions: 'You look up orders.',
+        model: openai(SCENARIO_MODEL_ID),
+        tools: { 'lookup-order': lookupOrder },
+      });
+      const worker = kind === 'durable' ? createDurableAgent({ agent: inner }) : createEventedAgent({ agent: inner });
+
+      llm.on(
+        { endpoint: 'chat', predicate: req => isWorkerSupervisor(req) && !lastIsToolResult(req) },
+        { toolCalls: [{ id: 'call-worker-1', name: 'agent-worker', arguments: { prompt: 'Where is order 42?' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: req => !isWorkerSupervisor(req) && !lastIsToolResult(req) },
+        { toolCalls: [{ id: 'call-lookup-1', name: 'lookup-order', arguments: { orderId: '42' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: req => !isWorkerSupervisor(req) && lastIsToolResult(req) },
+        { content: 'Order 42 has shipped.' },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: req => isWorkerSupervisor(req) && lastIsToolResult(req) },
+        { content: 'Your order 42 has shipped.' },
+      );
+
+      const delegationResultSeenBySupervisor = () => {
+        const continuation = llm
+          .getRequests()
+          .map(r => r.body as ChatCompletionRequest)
+          .find(req => isWorkerSupervisor(req) && lastIsToolResult(req));
+        return continuation?.messages.at(-1);
+      };
+
+      // Register the worker on the same Mastra as the supervisor, as an app would:
+      // the durable run resolves its agent by id from Mastra.
+      const buildSupervisor = async () => {
+        const shared = await createSharedAgent(llm, { agents: { worker: worker as unknown as Agent } });
+        shared.mastra.addAgent(worker, 'worker');
+        return shared;
+      };
+
+      return { llm, toolRuns, delegationResultSeenBySupervisor, buildSupervisor };
+    }
+
+    // Bug: the stream delegation path read `streamResult.messageList`, which
+    // DurableAgentStreamResult does not have, so the delegation tool failed after
+    // the worker had already run its tools and the supervisor got error text.
+    it('a streaming supervisor receives the sub-agent answer after the sub-agent runs its tool (COR-1511)', async () => {
+      const { llm, toolRuns, delegationResultSeenBySupervisor, buildSupervisor } = setup();
+
+      const { output } = await runLoopScenario({
+        engine: 'normal',
+        llm,
+        prompt: 'Where is order 42?',
+        sharedAgent: await buildSupervisor(),
+        fixtures: () => {},
+      });
+
+      expect(toolRuns).toEqual(['42']);
+      expect(delegationResultSeenBySupervisor()).toMatchObject({ role: 'tool', content: 'Order 42 has shipped.' });
+      expect(await output.text).toBe('Your order 42 has shipped.');
+    });
+
+    it('a generating supervisor receives the sub-agent answer after the sub-agent runs its tool', async () => {
+      const { toolRuns, delegationResultSeenBySupervisor, buildSupervisor } = setup();
+      const { agent } = await buildSupervisor();
+
+      const result = await agent.generate('Where is order 42?', { maxSteps: 3 });
+
+      expect(toolRuns).toEqual(['42']);
+      expect(delegationResultSeenBySupervisor()).toMatchObject({ role: 'tool', content: 'Order 42 has shipped.' });
+      expect(result.text).toBe('Your order 42 has shipped.');
+    });
+  },
+);
