@@ -911,7 +911,11 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         expect(persist).not.toHaveBeenCalled();
         expect(remove).not.toHaveBeenCalled();
         const events = publish.mock.calls
-          .filter(([topic]) => topic === `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`)
+          .filter(
+            ([topic]) =>
+              topic ===
+              `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
+          )
           .map(([, event]) => (event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type));
         expect(events).not.toContain('finish');
         expect(events).not.toContain('error');
@@ -1372,7 +1376,9 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         await vi.waitFor(() => expect(globalRunRegistry.get(runId)).toBeUndefined());
         for (const cleanup of cleanups) cleanup();
         // ...but left the topics alone.
-        expect(clearTopic).not.toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
+        expect(clearTopic).not.toHaveBeenCalledWith(
+          `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
+        );
         expect(clearTopic).not.toHaveBeenCalledWith(`workflow.events.v2.${runId}`);
       },
     );
@@ -1532,12 +1538,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         if (recoveryStarts === 'before') await generated;
         expect(globalRunRegistry.get(runId)).toBe(recoveredEntry);
         expect(durableAgent.runRegistry.get(runId)).toBe(recoveredLocalEntry);
-        expect(clearTopic).not.toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
+        expect(clearTopic).not.toHaveBeenCalledWith(
+          `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
+        );
 
         // The recovery's own cleanup still finds its state, and clears it.
         recovered.cleanup();
         expect(globalRunRegistry.get(runId)).toBeUndefined();
-        expect(clearTopic).toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
+        expect(clearTopic).toHaveBeenCalledWith(
+          `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
+        );
       },
     );
 

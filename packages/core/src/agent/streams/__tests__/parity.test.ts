@@ -81,7 +81,7 @@ async function recordRun(getMock: () => any, engine: Engine, scenario: Scenario)
     ...(scenario.requireToolApproval !== undefined ? { requireToolApproval: scenario.requireToolApproval } : {}),
   });
 
-  const topic = `agent.stream.v2.${JSON.stringify([agent.id, output.runId])}`;
+  const topic = `agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, output.runId]), 'utf8').toString('base64url')}`;
   await vi.waitFor(() => expect((pubsub.published.get(topic) ?? []).some(e => TERMINAL.has(e.type))).toBe(true));
   await pubsub.flush();
   const events = pubsub.published.get(topic)!;

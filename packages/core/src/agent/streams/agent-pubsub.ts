@@ -36,7 +36,7 @@ export function bindAgentPubSub<T extends PubSub>(pubsub: T, agentId: string): T
           ? (topic: string, ...args: unknown[]) => {
               const prefix = prefixes.find(prefix => topic.startsWith(prefix));
               const scopedTopic = prefix
-                ? `${prefix}v2.${JSON.stringify([agentId, topic.slice(prefix.length)])}`
+                ? `${prefix}v2.${Buffer.from(JSON.stringify([agentId, topic.slice(prefix.length)]), 'utf8').toString('base64url')}`
                 : topic;
               return value.call(inner, scopedTopic, ...args);
             }

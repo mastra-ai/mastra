@@ -165,7 +165,10 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     const releaseSubscription = Promise.withResolvers<void>();
     const originalSubscribe = pubsub.subscribe.bind(pubsub);
     const subscribeSpy = vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, callback, options) => {
-      if (topic === AGENT_STREAM_TOPIC(`v2.${JSON.stringify([durableAgent.id, runId])}`)) {
+      if (
+        topic ===
+        AGENT_STREAM_TOPIC(`v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`)
+      ) {
         subscribing.resolve();
         await releaseSubscription.promise;
       }

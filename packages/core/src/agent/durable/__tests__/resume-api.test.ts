@@ -1347,7 +1347,7 @@ describe('Observe API', () => {
         const ownerResult = await producer.observe(runId);
         try {
           expect(subscribe).toHaveBeenCalledWith(
-            `agent.stream.v2.${JSON.stringify([producer.id, runId])}`,
+            `agent.stream.v2.${Buffer.from(JSON.stringify([producer.id, runId]), 'utf8').toString('base64url')}`,
             expect.any(Function),
           );
           const fullOutput = ownerResult.output.getFullOutput();

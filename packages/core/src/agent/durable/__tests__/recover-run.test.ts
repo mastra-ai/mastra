@@ -602,7 +602,8 @@ describe('DurableAgent.recover(runId)', () => {
       expect(
         publish.mock.calls.filter(
           ([topic, event]) =>
-            topic === `agent.stream.v2.${JSON.stringify([conflictAgent.id, runId])}` &&
+            topic ===
+              `agent.stream.v2.${Buffer.from(JSON.stringify([conflictAgent.id, runId]), 'utf8').toString('base64url')}` &&
             event.type === AgentStreamEventTypes.ERROR,
         ),
       ).toHaveLength(0);
@@ -643,7 +644,7 @@ describe('DurableAgent.recover(runId)', () => {
     expect(
       publish.mock.calls.filter(
         ([topic, event]) =>
-          topic === `agent.stream.v2.${JSON.stringify([agent.id, runId])}` &&
+          topic === `agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, runId]), 'utf8').toString('base64url')}` &&
           event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(0);
@@ -669,7 +670,7 @@ describe('DurableAgent.recover(runId)', () => {
     expect(
       publish.mock.calls.filter(
         ([topic, event]) =>
-          topic === `agent.stream.v2.${JSON.stringify([agent.id, runId])}` &&
+          topic === `agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, runId]), 'utf8').toString('base64url')}` &&
           event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(0);
@@ -695,7 +696,7 @@ describe('DurableAgent.recover(runId)', () => {
     expect(
       publish.mock.calls.filter(
         ([topic, event]) =>
-          topic === `agent.stream.v2.${JSON.stringify([agent.id, runId])}` &&
+          topic === `agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, runId]), 'utf8').toString('base64url')}` &&
           event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(0);
@@ -833,7 +834,8 @@ describe('DurableAgent.recover(runId)', () => {
       expect(
         publish.mock.calls.filter(
           ([topic, event]) =>
-            topic === `agent.stream.v2.${JSON.stringify([lossAgent.id, runId])}` &&
+            topic ===
+              `agent.stream.v2.${Buffer.from(JSON.stringify([lossAgent.id, runId]), 'utf8').toString('base64url')}` &&
             event.type === AgentStreamEventTypes.ERROR,
         ),
       ).toHaveLength(0);
@@ -952,7 +954,8 @@ describe('DurableAgent.recover(runId)', () => {
     expect(
       publish.mock.calls.filter(
         ([topic, event]) =>
-          topic === `agent.stream.v2.${JSON.stringify([failureAgent.id, runId])}` &&
+          topic ===
+            `agent.stream.v2.${Buffer.from(JSON.stringify([failureAgent.id, runId]), 'utf8').toString('base64url')}` &&
           event.type === AgentStreamEventTypes.ERROR,
       ),
     ).toHaveLength(1);
@@ -990,7 +993,8 @@ describe('DurableAgent.recover(runId)', () => {
 
     const errorEvents = publish.mock.calls.filter(
       ([topic, event]) =>
-        topic === `agent.stream.v2.${JSON.stringify([failureAgent.id, runId])}` &&
+        topic ===
+          `agent.stream.v2.${Buffer.from(JSON.stringify([failureAgent.id, runId]), 'utf8').toString('base64url')}` &&
         event.type === AgentStreamEventTypes.ERROR,
     );
     expect(errorEvents).toHaveLength(1);
@@ -1168,7 +1172,8 @@ describe('DurableAgent.recover(runId)', () => {
 
     const errorEvents = publish.mock.calls.filter(
       ([topic, event]) =>
-        topic === `agent.stream.v2.${JSON.stringify([failedAgent.id, runId])}` &&
+        topic ===
+          `agent.stream.v2.${Buffer.from(JSON.stringify([failedAgent.id, runId]), 'utf8').toString('base64url')}` &&
         event.type === AgentStreamEventTypes.ERROR,
     );
     expect(errorEvents).toHaveLength(1);
@@ -1183,7 +1188,8 @@ describe('DurableAgent.recover(runId)', () => {
     const actualPublish = failedPubsub.publish.bind(failedPubsub);
     vi.spyOn(failedPubsub, 'publish').mockImplementation(async (topic, event, options) => {
       if (
-        topic === `agent.stream.v2.${JSON.stringify([failedAgent.id, runId])}` &&
+        topic ===
+          `agent.stream.v2.${Buffer.from(JSON.stringify([failedAgent.id, runId]), 'utf8').toString('base64url')}` &&
         event.type === AgentStreamEventTypes.ERROR
       ) {
         throw new Error('terminal error publication failed');
@@ -1213,7 +1219,10 @@ describe('DurableAgent.recover(runId)', () => {
     const failingPubsub = new EventEmitterPubSub();
     const actualSubscribe = failingPubsub.subscribe.bind(failingPubsub);
     vi.spyOn(failingPubsub, 'subscribe').mockImplementation((topic, callback, options) => {
-      if (topic === `agent.stream.v2.${JSON.stringify([failingAgent.id, runId])}`) {
+      if (
+        topic ===
+        `agent.stream.v2.${Buffer.from(JSON.stringify([failingAgent.id, runId]), 'utf8').toString('base64url')}`
+      ) {
         return Promise.reject(new Error('pubsub subscription failed'));
       }
       return actualSubscribe(topic, callback, options);
@@ -1226,7 +1235,8 @@ describe('DurableAgent.recover(runId)', () => {
     await expect(failingAgent.recover(runId)).rejects.toThrow('pubsub subscription failed');
     const errorEvents = publish.mock.calls.filter(
       ([topic, event]) =>
-        topic === `agent.stream.v2.${JSON.stringify([failingAgent.id, runId])}` &&
+        topic ===
+          `agent.stream.v2.${Buffer.from(JSON.stringify([failingAgent.id, runId]), 'utf8').toString('base64url')}` &&
         event.type === AgentStreamEventTypes.ERROR,
     );
     expect(errorEvents).toHaveLength(1);

@@ -24,7 +24,7 @@ const makeAgent = () =>
 
 const cacheKeyFor = (topic: string) => {
   const prefix = ['agent.stream.', 'agent.control.'].find(prefix => topic.startsWith(prefix));
-  return `pubsub:${prefix ? `${prefix}v2.${JSON.stringify(['inner', topic.slice(prefix.length)])}` : topic}`;
+  return `pubsub:${prefix ? `${prefix}v2.${Buffer.from(JSON.stringify(['inner', topic.slice(prefix.length)]), 'utf8').toString('base64url')}` : topic}`;
 };
 
 describe('DurableAgent shouldCache', () => {

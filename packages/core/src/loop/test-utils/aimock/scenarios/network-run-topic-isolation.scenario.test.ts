@@ -189,9 +189,8 @@ describeForAllEngines(
           } finally {
             await observer.detach();
           }
-          expect(pubsub.events.some(({ topic }) => topic.startsWith('agent.control.') && topic.includes(runId))).toBe(
-            true,
-          );
+          const controlTopic = `agent.control.v2.${Buffer.from(JSON.stringify([a.id, runId]), 'utf8').toString('base64url')}`;
+          expect(pubsub.events.some(({ topic }) => topic === controlTopic)).toBe(true);
           release.resolve();
           await finished;
           expect(bAborted).toBe(false);
@@ -199,11 +198,13 @@ describeForAllEngines(
         } else {
           const topicA = pubsub.events.find(
             ({ topic, event }) =>
-              topic.startsWith('agent.stream.') && topic.includes(runId) && JSON.stringify(event).includes('A_MARKER'),
+              topic === `agent.stream.v2.${Buffer.from(JSON.stringify([a.id, runId]), 'utf8').toString('base64url')}` &&
+              JSON.stringify(event).includes('A_MARKER'),
           )!.topic;
           const topicB = pubsub.events.find(
             ({ topic, event }) =>
-              topic.startsWith('agent.stream.') && topic.includes(runId) && JSON.stringify(event).includes('b-wait'),
+              topic === `agent.stream.v2.${Buffer.from(JSON.stringify([b.id, runId]), 'utf8').toString('base64url')}` &&
+              JSON.stringify(event).includes('b-wait'),
           )!.topic;
           const before = await cache.listFromTo(`pubsub:${topicB}`, 0, -1);
           expect(before?.length).toBeGreaterThan(0);

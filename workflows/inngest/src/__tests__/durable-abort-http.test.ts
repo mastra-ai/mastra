@@ -37,15 +37,21 @@ const LOOP_WORKFLOW = InngestDurableStepIds.AGENTIC_LOOP;
 let mock: LLMock;
 let devServer: ChildProcess | null = null;
 let worker: ChildProcess | undefined;
+let remoteServer: ChildProcess | undefined;
+let remoteUrl: string;
 let driver: ReturnType<typeof buildAbortHttpAgent>;
 let app: Awaited<ReturnType<typeof createHonoServer>>;
 
 function startWorker(): Promise<ChildProcess> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('npx', ['tsx', WORKER, DB_URL, AGENT_ID, String(INNGEST_PORT), mock.url, OUT_DIR], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
-    });
+    const proc = spawn(
+      process.execPath,
+      ['--import', 'tsx', WORKER, DB_URL, AGENT_ID, String(INNGEST_PORT), mock.url, OUT_DIR],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
+      },
+    );
     const timer = setTimeout(() => {
       proc.kill('SIGKILL');
       reject(new Error('worker did not become ready in 90s'));
@@ -70,11 +76,11 @@ const asUser = (token: string) => ({ method: 'POST', headers: { authorization: `
 const modelCalls = () => mock.getRequests().filter(entry => entry.path.includes('/chat/completions')).length;
 
 /** Start a run and wait until its tool is executing on the worker. */
-async function startRunMidTool() {
-  rmSync(path.join(OUT_DIR, 'tool-started'), { force: true });
+async function startRunMidTool(marker = 'owner') {
+  rmSync(path.join(OUT_DIR, `tool-started-${marker}`), { force: true });
   const threadId = `thread-${crypto.randomUUID()}`;
   const callbacks = { aborted: false, finished: false };
-  const res = await driver.durableAgent.stream([{ role: 'user', content: 'Wait, then reply.' }], {
+  const res = await driver.durableAgent.stream([{ role: 'user', content: `Wait for ${marker}, then reply.` }], {
     memory: { thread: threadId, resource: OWNER },
     maxSteps: 3,
     onAbort: () => {
@@ -95,7 +101,7 @@ async function startRunMidTool() {
       res.cleanup?.();
     }
   })();
-  await vi.waitFor(() => expect(existsSync(path.join(OUT_DIR, 'tool-started'))).toBe(true), {
+  await vi.waitFor(() => expect(existsSync(path.join(OUT_DIR, `tool-started-${marker}`))).toBe(true), {
     timeout: 60_000,
     interval: 200,
   });
@@ -108,6 +114,38 @@ describe('Inngest durable agent run abort over HTTP (real Inngest dev server)', 
     await mock.start();
     devServer = await startConnectInngestDevServer();
     worker = await startWorker();
+    remoteUrl = await new Promise<string>((resolve, reject) => {
+      remoteServer = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          path.join(path.dirname(WORKER), 'abort-http-server.ts'),
+          DB_URL,
+          AGENT_ID,
+          String(INNGEST_PORT),
+          mock.url,
+          OUT_DIR,
+        ],
+        {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
+        },
+      );
+      const timer = setTimeout(() => reject(new Error('remote HTTP server did not become ready')), 60_000);
+      remoteServer.stdout?.on('data', data => {
+        const match = data.toString().match(/\[server\] ready (\d+)/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(`http://localhost:${match[1]}`);
+        }
+      });
+      remoteServer.stderr?.on('data', data => console.error(data.toString()));
+      remoteServer.on('exit', code => {
+        clearTimeout(timer);
+        reject(new Error(`remote server exited: ${code}`));
+      });
+    });
     await vi.waitFor(
       async () => {
         const data = await (await fetch(`http://localhost:${INNGEST_PORT}/dev`)).json();
@@ -141,8 +179,20 @@ describe('Inngest durable agent run abort over HTTP (real Inngest dev server)', 
     mock.clearRequests();
     mock.resetMatchCounts();
     mock.on(
-      { endpoint: 'chat', predicate: req => !JSON.stringify(req.messages).includes('call-wait') },
+      {
+        endpoint: 'chat',
+        predicate: req =>
+          !JSON.stringify(req.messages).includes('call-wait') && !JSON.stringify(req.messages).includes('sibling'),
+      },
       { toolCalls: [{ id: 'call-wait', name: 'wait', arguments: '{}' }] },
+    );
+    mock.on(
+      {
+        endpoint: 'chat',
+        predicate: req =>
+          !JSON.stringify(req.messages).includes('call-wait') && JSON.stringify(req.messages).includes('sibling'),
+      },
+      { toolCalls: [{ id: 'call-wait', name: 'wait', arguments: '{"marker":"sibling"}' }] },
     );
     mock.on(
       { endpoint: 'chat', predicate: req => JSON.stringify(req.messages).includes('call-wait') },
@@ -151,6 +201,7 @@ describe('Inngest durable agent run abort over HTTP (real Inngest dev server)', 
   });
 
   afterAll(async () => {
+    remoteServer?.kill('SIGTERM');
     worker?.kill('SIGTERM');
     await new Promise(r => setTimeout(r, 500));
     if (worker && !worker.killed) worker.kill('SIGKILL');
@@ -158,6 +209,24 @@ describe('Inngest durable agent run abort over HTTP (real Inngest dev server)', 
     await mock?.stop();
     rmSync(OUT_DIR, { recursive: true, force: true });
     rmSync(DB_PATH, { force: true });
+  });
+
+  it('acknowledges an abort through a non-starting HTTP process while another run completes', async () => {
+    const [owner, sibling] = await Promise.all([startRunMidTool(), startRunMidTool('sibling')]);
+    const started = performance.now();
+    const response = await fetch(`${remoteUrl}/api/agents/${AGENT_ID}/runs/${owner.runId}/abort`, asUser('token-a'));
+    const elapsed = performance.now() - started;
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ aborted: true });
+    expect(elapsed).toBeLessThan(2_000);
+    await vi.waitFor(() => expect(existsSync(path.join(OUT_DIR, 'tool-aborted-owner'))).toBe(true), { timeout: 2_000 });
+    expect(existsSync(path.join(OUT_DIR, 'tool-aborted-sibling'))).toBe(false);
+    await Promise.all([owner.consumed, sibling.consumed]);
+    await expect(owner.finishReason).resolves.toBe('aborted');
+    await expect(sibling.finishReason).resolves.toBe('stop');
+    expect(sibling.callbacks.aborted).toBe(false);
+    expect(sibling.callbacks.finished).toBe(true);
+    expect(modelCalls()).toBe(3);
   });
 
   it('aborts a run mid-tool and stops it before the next model call', async () => {
