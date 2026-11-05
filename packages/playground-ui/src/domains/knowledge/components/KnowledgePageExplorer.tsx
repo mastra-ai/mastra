@@ -477,7 +477,7 @@ function ChildPageItems({
   onPageClick: (page: KnowledgePagePayload) => void;
 }) {
   return pages.map(child =>
-    child.childCount ? (
+    child.childCount !== 0 ? (
       <ChildPageFolder key={child.id} page={child} useTreeLevels={useTreeLevels} onPageClick={onPageClick} />
     ) : (
       <Tree.File key={child.id} id={child.id}>
@@ -528,9 +528,11 @@ function ChildPageFolder({
           <Folder />
         </Tree.Icon>
         <ChildPageLabel page={page} />
-        <Txt as="span" variant="caption" tone="muted" className="ml-auto pl-2 tabular-nums">
-          {page.childCount}
-        </Txt>
+        {page.childCount ? (
+          <Txt as="span" variant="caption" tone="muted" className="ml-auto pl-2 tabular-nums">
+            {page.childCount}
+          </Txt>
+        ) : null}
       </Tree.FolderTrigger>
       <Tree.FolderContent>
         {open ? <ChildPageLevel parentId={page.id} useTreeLevels={useTreeLevels} onPageClick={onPageClick} /> : null}
@@ -549,8 +551,7 @@ function ChildPageLevel({
   onPageClick: (page: KnowledgePagePayload) => void;
 }) {
   const [cursors, setCursors] = useState<string[]>([]);
-  const requests = useMemo(() => [{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))], [parentId, cursors]);
-  const levels = useTreeLevels(requests);
+  const levels = useTreeLevels([{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))]);
   const pages = levels.flatMap(level => level.data?.pages ?? []);
   const next = levels[levels.length - 1]?.data?.nextCursor;
   if (levels[0]?.isPending) {
@@ -560,6 +561,8 @@ function ChildPageLevel({
       </li>
     );
   }
+  if (levels[0]?.isError) return <ChildPageLevelNote>Couldn’t load the pages under this one.</ChildPageLevelNote>;
+  if (pages.length === 0) return <ChildPageLevelNote>No pages under this one.</ChildPageLevelNote>;
   return (
     <>
       <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onPageClick={onPageClick} />
@@ -569,6 +572,14 @@ function ChildPageLevel({
         </li>
       ) : null}
     </>
+  );
+}
+
+function ChildPageLevelNote({ children }: { children: ReactNode }) {
+  return (
+    <li role="none" className="flex h-8 items-center pl-9 text-caption text-muted-foreground">
+      {children}
+    </li>
   );
 }
 

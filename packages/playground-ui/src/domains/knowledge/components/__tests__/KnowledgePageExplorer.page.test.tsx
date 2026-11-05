@@ -230,8 +230,15 @@ describe('KnowledgePageExplorer page view', () => {
         'Child 1',
         'Child 2',
       ]);
-      fireEvent.click(childList.getByRole('treeitem', { name: 'Child 2' }));
+      fireEvent.click(childList.getByRole('button', { name: 'Open Child 2' }));
       expect(within(pageView()).getByRole('heading', { name: 'Child 2' })).toBeTruthy();
+    });
+
+    it('lets a child page without a count open, and says when it has nothing under it', () => {
+      renderWithProviders(<Host initial="refund" initialView="page" />);
+      const childList = within(within(pageView()).getByRole('region', { name: 'Pages' }));
+      fireEvent.click(childList.getByText('Child 0'));
+      expect(childList.getByText('No pages under this one.')).toBeTruthy();
     });
 
     it('starts the next page’s child list from its first batch, not where the last one was', () => {

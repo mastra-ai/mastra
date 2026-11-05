@@ -386,17 +386,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
   // A smaller circle gets smaller type and fewer lines, and the text keeps to the width of the circle's middle.
   const compact = size < COMPACT_CIRCLE_SIZE;
   const fit = Math.max(4, Math.floor((size * CIRCLE_TEXT_SHARE) / (compact ? 6.5 : 7.5)));
-  const tip = placeholder
-    ? `${kind}: ${page.address}. Nothing written to it yet.`
-    : rest
-      ? `Show ${Math.min(REST_BATCH, page.childCount ?? REST_BATCH)} more of ${page.childCount ?? 'the rest'}`
-      : group
-        ? `${page.name}: click to show them`
-        : page.isScope && page.address
-          ? `${kind}: ${scopeTitle(page)}`
-          : data.links && data.links.in + data.links.out > 0
-            ? `${page.name}: ${linkCountsText(data.links, data.notShown)}`
-            : page.name;
+  const tip = circleTooltip(data, kind);
   return (
     <div
       data-testid="knowledge-page-node"
@@ -443,11 +433,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
             style={data.far ? { color: 'var(--background)' } : undefined}
             data-testid="knowledge-circle-name"
           >
-            {page.isScope && page.address && !group && scopeTitle(page) === page.name ? (
-              <BreakAtColons text={fitWords(page.address, fit)} />
-            ) : (
-              fitWords(scopeTitle(page), fit)
-            )}
+            <BreakAtColons text={fitWords(scopeTitle(page), fit)} />
           </Txt>
         </div>
       </KnowledgeTooltip>
@@ -489,6 +475,21 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
   );
+}
+
+function circleTooltip(data: PageNodeData, kind: string): string {
+  const { page, links, notShown } = data;
+  if (isPlaceholder(page)) return `${kind}: ${page.address}. Nothing written to it yet.`;
+  if (isRestCircle(page)) {
+    return `Show ${Math.min(REST_BATCH, page.childCount ?? REST_BATCH)} more of ${page.childCount ?? 'the rest'}`;
+  }
+  if (isScopeGroup(page)) return `${page.name}: click to show them`;
+  if (page.isScope && page.address) {
+    const title = scopeTitle(page);
+    return title === page.address ? `${kind}: ${title}` : `${kind}: ${title} (${page.address})`;
+  }
+  if (links && links.in + links.out > 0) return `${page.name}: ${linkCountsText(links, notShown)}`;
+  return page.name;
 }
 
 function isPlaceholder(page: KnowledgePagePayload): boolean {
@@ -635,12 +636,14 @@ function GraphLegend({
   /** The branches dots are coloured by, each named for the circle it hangs under. */
   branches: LegendBranch[];
 }) {
-  const [open, setOpen] = useState(!collapsible);
+  const [pinned, setPinned] = useState(!collapsible);
+  const [peeking, setPeeking] = useState(false);
+  const open = pinned || peeking;
   return (
     <div
       className="absolute top-3 left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none"
-      onPointerEnter={collapsible ? () => setOpen(true) : undefined}
-      onPointerLeave={collapsible ? () => setOpen(false) : undefined}
+      onPointerEnter={collapsible ? () => setPeeking(true) : undefined}
+      onPointerLeave={collapsible ? () => setPeeking(false) : undefined}
     >
       {collapsible ? (
         <Button
@@ -648,9 +651,12 @@ function GraphLegend({
           icon={<Info />}
           aria-expanded={open}
           className="shadow-overlay"
-          onFocus={() => setOpen(true)}
-          onBlur={() => setOpen(false)}
-          onClick={() => setOpen(current => !current)}
+          onFocus={() => setPeeking(true)}
+          onBlur={() => setPeeking(false)}
+          onClick={() => {
+            setPinned(current => !current);
+            setPeeking(false);
+          }}
         >
           Legend
         </Button>
@@ -713,7 +719,7 @@ function GraphLegend({
               aria-hidden
             />
             <KnowledgeTooltip label={branch.name}>
-              <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate">
+              <Txt as="span" variant="meta" tone="muted" className="pointer-events-auto max-w-40 truncate">
                 {branches.length > 1
                   ? `Under ${branch.name}`
                   : branch.scope
