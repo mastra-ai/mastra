@@ -10,6 +10,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
+import { useAgentControllerThreadMessages } from '../../../../../hooks/useAgentControllerThreadMessages';
 import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
 import { HIDDEN_STREAM_GRACE_MS } from '../../../../lib/hooks/useDocumentVisible';
 
@@ -796,6 +797,65 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(result.current.state?.running).toBe(false));
     await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
   });
+
+  it.each([
+    { streamed: 'the whole run', initiallyRunning: false, events: ['agent_start', 'agent_end'], reads: 1 },
+    { streamed: 'only the end of a run it joined', initiallyRunning: true, events: ['agent_end'], reads: 2 },
+  ] as const)(
+    'given the stream delivered $streamed, when the run ends, then the message window is read $reads time(s)',
+    async ({ initiallyRunning, events, reads }) => {
+      const encoder = new TextEncoder();
+      let emit: (event: AgentControllerEvent) => void = () => {};
+      let messageReads = 0;
+
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+          HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+        ),
+        http.get(sessionUrl, () =>
+          HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1', running: initiallyRunning }),
+        ),
+        http.get(`${sessionUrl}/threads/thread-1/messages`, () => {
+          messageReads += 1;
+          return HttpResponse.json({ messages: [] });
+        }),
+        http.get(
+          `${sessionUrl}/stream`,
+          () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                },
+                cancel() {},
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+      );
+
+      const { client, result } = renderHookWithProviders(() => {
+        useAgentControllerThreadMessages({
+          agentControllerId: controllerId,
+          sessionId,
+          threadId: 'thread-1',
+          baseUrl: TEST_BASE_URL,
+        });
+        return useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent: vi.fn() });
+      });
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      await waitFor(() => expect(messageReads).toBe(1));
+
+      for (const type of events) {
+        emit({ type });
+        await waitFor(() => expect(result.current.state?.running).toBe(type === 'agent_start'));
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await waitFor(() => expect(client.isFetching()).toBe(0));
+
+      expect(messageReads).toBe(reads);
+    },
+  );
 
   it('reports the thread a switch bound the session to, not the thread its state is read for', async () => {
     let activeThreadId = 'primary-thread';

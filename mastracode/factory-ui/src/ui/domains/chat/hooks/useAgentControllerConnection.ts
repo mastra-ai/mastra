@@ -78,14 +78,18 @@ export function useAgentControllerConnection({
     liveState,
   });
   const observedRun = useRef<{ sessionId: string; running?: boolean }>({ sessionId });
+  const streamRun = useRef<'started' | 'ended'>(undefined);
   useEffect(() => {
     const running = syncQuery.data?.running;
     const previous = observedRun.current;
     observedRun.current = { sessionId, running };
-    if (previous.sessionId !== sessionId || previous.running !== true || running !== false) return;
+    const streamEnded = streamRun.current === 'ended';
+    if (running !== true || streamEnded) streamRun.current = undefined;
+    if (previous.sessionId !== sessionId || previous.running !== true || running !== false || streamEnded) return;
     // A state poll can discover completion even when the connected SSE stream
-    // missed the final message. Recover that persisted message through the
-    // existing window merge rather than waiting for a manual page refresh.
+    // missed the final message, and a stream that joined mid-run never drew the
+    // in-flight message. Recover it through the window merge; only a run this
+    // stream saw start and end needs no refetch.
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
     });
@@ -98,6 +102,7 @@ export function useAgentControllerConnection({
     if (next === previous) return;
     sseStateRef.current = next;
     setSseConnectionState(next);
+    streamRun.current = undefined;
     if (next !== 'connected') return;
     // Events sent while the stream was down are gone for good (the server does
     // not replay them), so a reconnect refetches the mounted message windows —
@@ -126,6 +131,8 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
+    if (event.type === 'agent_start') streamRun.current = 'started';
+    else if (running === false && streamRun.current) streamRun.current = 'ended';
     if (typeof running === 'boolean' || tasks) {
       // Bump the generation so a state request that was already in flight
       // knows this event is newer than its response, and keep the latest

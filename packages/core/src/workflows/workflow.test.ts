@@ -1666,6 +1666,91 @@ describe('createRun storage existence read (issue #19015)', () => {
   });
 });
 
+describe('run status reads for a run created without a stored row', () => {
+  const noopStep = (id: string, execute: () => Promise<void> = async () => {}) =>
+    createStep({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => {
+        await execute();
+        return {};
+      },
+    });
+
+  it('never reads the status of a run that never persists', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'transient-status-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(noopStep('first'))
+      .then(noopStep('second'))
+      .then(noopStep('third'))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'transient-status-wf': workflow } });
+    const workflowsStore = await storage.getStore('workflows');
+    const statusSpy = vi.spyOn(workflowsStore!, 'loadWorkflowRunStatus');
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: {} });
+
+    expect(result.status).toBe('success');
+    expect(statusSpy).not.toHaveBeenCalled();
+  });
+
+  it('stops at the next step when another instance cancels the run after it stored a row', async () => {
+    const workflowId = 'late-stored-cancel-wf';
+    const storage = new MockStore();
+    const buildWorkflow = (first: () => Promise<void>, later: () => Promise<void>) =>
+      createWorkflow({
+        id: workflowId,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: {
+          validateInputs: false,
+          shouldPersistSnapshot: ({ workflowStatus, stepResults }) =>
+            workflowStatus === 'running' && stepResults.first?.status === 'running',
+        },
+      })
+        .then(noopStep('first', first))
+        .then(noopStep('later', later))
+        .commit();
+
+    let releaseFirst = () => {};
+    let markFirstStarted = () => {};
+    const firstStarted = new Promise<void>(resolve => (markFirstStarted = resolve));
+    const later = vi.fn(async () => {});
+    const owner = new Mastra({
+      logger: false,
+      storage,
+      workflows: {
+        [workflowId]: buildWorkflow(
+          () =>
+            new Promise<void>(resolve => {
+              releaseFirst = resolve;
+              markFirstStarted();
+            }),
+          later,
+        ),
+      },
+    });
+    const other = new Mastra({ logger: false, storage, workflows: { [workflowId]: buildWorkflow(later, later) } });
+
+    const run = await owner.getWorkflow(workflowId).createRun();
+    const resultPromise = run.start({ inputData: {} });
+    await firstStarted;
+    const remoteRun = await other.getWorkflow(workflowId).createRun({ runId: run.runId });
+    await remoteRun.cancel();
+    releaseFirst();
+
+    expect((await resultPromise).status).toBe('canceled');
+    expect(later).not.toHaveBeenCalled();
+  });
+});
+
 describe('concurrent stream close', () => {
   // An abandoned stream can only be observed by bounding the read — a plain drain
   // would hang the suite rather than fail it.

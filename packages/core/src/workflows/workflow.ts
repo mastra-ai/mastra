@@ -3317,6 +3317,7 @@ export class Workflow<
       run.workflowRunStatus = stored.status;
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
+    run.unstored = !existsInStorage && !shouldPersistSnapshot;
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {
@@ -4195,6 +4196,9 @@ export class Run<
    */
   readonly storageVersion: 1 | 2;
 
+  /** @internal */
+  unstored = false;
+
   /**
    * For the next start or time travel of a storage v2 nested run: the stored version of its parent's
    * state it starts from and stores only its changes to. Set by `createRun`, taken by `_start` and
@@ -4588,6 +4592,8 @@ export class Run<
     const observabilityContext = resolveObservabilityContext(rest);
     const inheritedState = this.inheritedState;
     this.inheritedState = undefined;
+    let unstored = this.unstored;
+    this.unstored = false;
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -4670,6 +4676,7 @@ export class Run<
           workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
           throw error;
         }
+        unstored = false;
       }
       this.workflowRunStatus = 'running';
       onDispatched();
@@ -4698,6 +4705,7 @@ export class Run<
         perStep,
         storageVersion: this.storageVersion,
         inheritedState,
+        unstored,
       }),
     );
 
