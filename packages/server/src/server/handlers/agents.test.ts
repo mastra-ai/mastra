@@ -3159,6 +3159,19 @@ describe('Agent Routes Authorization', () => {
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
 
+    it('keeps a past-end resume open after a trailing error chunk until the run finishes', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-error-chunk';
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'error' } } as any);
+      const reader = (await observe(runId, { offset: 1 })).getReader();
+      const next = reader.read();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
+      expect((await next).value).toMatchObject({ type: 'finish', index: 1 });
+      expect(await reader.read()).toEqual({ done: true, value: undefined });
+    });
+
     it('closes and unsubscribes once when replay completes synchronously during setup', async () => {
       const unsubscribe = vi.fn(async () => {});
       vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, options, onEvent) => {

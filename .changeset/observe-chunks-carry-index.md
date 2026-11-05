@@ -7,16 +7,18 @@
 Agent stream chunks now carry `index`, the run-log position they came from, so a client can resume `observe()` after a dropped connection without repeated or missing chunks. Chunks from `observe()` carry it on every agent, and chunks from `stream()` carry it on durable and evented agents, both in core and over the HTTP `/stream` and `/observe` endpoints. To resume, pass the last received chunk's `index + 1`:
 
 ```ts
-let lastIndex: number | undefined;
+let offset = 0;
 const response = await agent.stream(messages, { runId });
 await response.processDataStream({
   onChunk: async chunk => {
-    if (chunk.index !== undefined) lastIndex = chunk.index;
+    if (chunk.index === undefined) return;
+    // An abort shares its index with the finish after it
+    offset = chunk.type === 'abort' ? chunk.index : chunk.index + 1;
   },
 });
 
 // After a dropped connection:
-await agent.observe({ runId, offset: lastIndex === undefined ? 0 : lastIndex + 1 });
+await agent.observe({ runId, offset });
 ```
 
 An `abort` chunk shares its index with the `finish` chunk that follows it. If the last chunk received was `abort`, pass its `index` to receive both again.

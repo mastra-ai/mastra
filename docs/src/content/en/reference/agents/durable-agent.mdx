@@ -335,15 +335,15 @@ The `offset` option is an inclusive, zero-based PubSub event index. It counts ev
 `index` is additive and `offset` keeps its meaning, so code that already passes a log position, or replays from `0`, needs no change. Code that passed a count of chunks received should switch to the last `index + 1`.
 
 ```typescript
-let lastIndex: number | undefined
+let offset = 0
 for await (const chunk of output.fullStream) {
-  if (chunk.index !== undefined) lastIndex = chunk.index
+  if (chunk.index === undefined) continue
+  // An abort shares its index with the finish after it
+  offset = chunk.type === 'abort' ? chunk.index : chunk.index + 1
 }
 
 // After a dropped connection:
-const { output: resumed } = await agent.observe(runId, {
-  offset: lastIndex === undefined ? 0 : lastIndex + 1,
-})
+const { output: resumed } = await agent.observe(runId, { offset })
 ```
 
 A non-zero offset can skip earlier events. Aggregated values are built only from chunks delivered to that observer. If the offset skips earlier text deltas, `output.text` is partial and structured output may be incomplete or fail validation or parsing.

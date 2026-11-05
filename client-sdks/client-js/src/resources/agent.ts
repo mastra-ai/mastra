@@ -3423,11 +3423,9 @@ export class Agent extends BaseResource {
    *
    * @example
    * ```typescript
-   * // Resume after the last chunk received
-   * const response = await client.agents('my-agent').observe({
-   *   runId: 'run-123',
-   *   offset: lastIndexedChunk.index + 1,
-   * });
+   * // Resume after the last indexed chunk received
+   * const offset = lastIndexedChunk.type === 'abort' ? lastIndexedChunk.index : lastIndexedChunk.index + 1;
+   * const response = await client.agents('my-agent').observe({ runId: 'run-123', offset });
    *
    * await response.processDataStream({
    *   onChunk: (chunk) => console.log('Received:', chunk),

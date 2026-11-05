@@ -3059,6 +3059,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           // run, nothing more will arrive, so close instead of waiting for the idle timeout.
           // Read only after subscribing so a terminal entry racing attachment is not lost.
           // A failed read only means we can't close early; the idle timer still bounds the stream.
+          // Terminal entries match the live check below: an error *chunk* can precede the
+          // finish, so only an error event ends the run.
           const last = await pubsub
             .getHistory(topic, 0)
             .then(history => history.at(-1))
@@ -3067,7 +3069,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           if (
             typeof last?.index === 'number' &&
             last.index < offset &&
-            (type === 'finish' || type === 'error' || type === 'abort')
+            (type === 'finish' || last.type === 'error' || type === 'abort')
           ) {
             onComplete();
           }
