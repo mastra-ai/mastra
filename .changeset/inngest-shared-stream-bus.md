@@ -1,8 +1,5 @@
 ---
-'@mastra/core': patch
 '@mastra/inngest': patch
 ---
 
-Reuse core's shared agent stream bus for Inngest agents. Expose an internal `@mastra/core/agent/streams` bridge and preserve Inngest's transport, replay cache, and agent-topic routing while removing duplicate stream setup.
-
-Raise Inngest's `@mastra/core` peer minimum to `>=1.83.0-0 <2.0.0-0` for the shared stream-bus integration.
+Reuse core's shared agent stream bus for Inngest agents while preserving Inngest's transport, replay cache, and agent-topic routing. Require `@mastra/core >=1.83.0 <2.0.0-0` so the peer range excludes prereleases without the shared stream-bus bridge.
