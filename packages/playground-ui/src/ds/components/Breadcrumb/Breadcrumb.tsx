@@ -49,13 +49,24 @@ const crumbControlClass = cn(
   '[&_button_svg]:m-0 [&_button_svg]:size-3.5 [&_button_svg]:shrink-0',
 );
 
-/** A control that is its own click target hovers as a 20px circle behind the glyph. */
+// The trimmed button box is too narrow to outline, so focus draws the ring on the shape people
+// see instead: the hover circle, or the whole crumb pill.
+const crumbFocusOnBefore =
+  '[&_button:focus-visible]:outline-hidden [&_button:focus-visible]:before:outline-1 [&_button:focus-visible]:before:outline-solid [&_button:focus-visible]:before:outline-border-focus';
+const crumbFocusOnAfter =
+  '[&_button:focus-visible]:outline-hidden [&_button:focus-visible]:after:outline-1 [&_button:focus-visible]:after:outline-solid [&_button:focus-visible]:after:outline-border-focus';
+
+/**
+ * A control that is its own click target: a 20px circle behind the glyph, which also widens the
+ * hit area past the trimmed box and carries the focus ring.
+ */
 const crumbControlHoverClass = cn(
   '[&_button]:relative [&_button]:isolate',
   '[&_button]:before:absolute [&_button]:before:top-1/2 [&_button]:before:left-1/2 [&_button]:before:-z-10',
   '[&_button]:before:size-5 [&_button]:before:-translate-x-1/2 [&_button]:before:-translate-y-1/2 [&_button]:before:rounded-full',
   '[&_button]:before:transition-colors [&_button]:before:duration-normal [&_button]:before:ease-out-custom',
   '[&_button:enabled:hover]:before:bg-fill-subtle [&_button[data-popup-open]]:before:bg-fill-subtle',
+  crumbFocusOnBefore,
 );
 
 /** The label's color, hover and width, by what clicking it does. */
@@ -184,7 +195,10 @@ export const Crumb = ({
               // The up-down chevron's ink is ~7px wide at 14px.
               '[--crumb-control-ink:7px]',
               switcherCoversCrumb &&
-                'ml-2 [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
+                cn(
+                  'ml-2 [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
+                  crumbFocusOnAfter,
+                ),
               // Beside a link the switcher is its own target; 2px more gap keeps its circle off the text.
               switcherBesideLink && cn('ml-2.5', crumbControlHoverClass),
             )}
