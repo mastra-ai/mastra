@@ -893,7 +893,7 @@ if (capabilities.traceAggregate && capabilities.aggregateTimeToFirstMeasures) {
 
 ### Time to first token (TTFT)
 
-Time to first token (TTFT) is how long the model takes to stream its first chunk. `timeToFirstTokenMs` is the time in milliseconds from the start of a model call, the provider request itself, to the first chunk that call streams. It leaves out the work Mastra does before calling the model, such as input processors. The value is measured once, on the model inference span that streamed the chunk. Model step, model generation, and agent run spans carry the value of the nearest such inference below them: each step takes its own, and the generation and agent run take the first step's. A step can run more than one inference, for example a fallback model or a retry that opens a new inference span. The value then comes from the first inference that streamed a chunk. A fallback attempt that failed ends its inference span with its error. That span has a value only if it streamed a chunk first. Mastra storage keeps the value in its own column and leaves it out of the stored `attributes`. Read it from the span's `timeToFirstTokenMs` field. When an in-process agent retries a failed model call, the AI SDK retries inside a single inference span. The value then includes the failed attempt and the retry wait. Durable agents open one inference span per attempt and don't.
+Time to first token (TTFT) is the time in milliseconds from the start of a model call, the provider request itself, to the first chunk that call streams. Unlike TTFC, it leaves out the work Mastra does before calling the model, such as input processors.
 
 The `timeToFirstToken.*` measures aggregate the root span's `timeToFirstTokenMs`. To filter or sort by it, see [Filter and sort by time to first token (TTFT)](#filter-and-sort-by-time-to-first-token-ttft). Compare TTFC with TTFT to see how much of an agent's wait comes from work before the model call.
 
@@ -907,6 +907,10 @@ These span types record TTFC and TTFT:
 - `agent_run`: the agent run, with the values of the first model generation of its own loop. Its TTFC is measured from the run's start.
 
 Other spans, such as tool calls and workflow runs, record neither value. A trace rooted in a workflow has no TTFC or TTFT at trace scope.
+
+TTFT is measured once, on the `model_inference` span that streamed the chunk. A step with a fallback model or a retry takes the value of its first inference that streamed a chunk. A failed fallback attempt has a value only if it streamed a chunk before failing. An in-process agent retries a failed model call inside a single inference span. Its TTFT then includes the failed attempt and the retry wait. Durable agents open one inference span per attempt.
+
+Mastra storage keeps TTFT in its own column, not in the stored `attributes`. Read it from the span's `timeToFirstTokenMs` field.
 
 ### Missing first chunk and token values
 
