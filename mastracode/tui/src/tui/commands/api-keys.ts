@@ -141,7 +141,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         if (data === '\x7f' || data === '\x1b[3~') {
           const info = providers.find(p => p.provider === currentSelection);
           if (info?.source === 'stored' && ctx.authStorage) {
-            ctx.authStorage.removeStoredApiKey(info.provider, info.envVar);
+            ctx.authStorage.removeStoredApiKey(info.provider);
             ctx.state.controller.invalidateAvailableModelsCache();
             models = await ctx.state.controller.listAvailableModels();
             providers = getProviderList(ctx, models);

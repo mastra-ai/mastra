@@ -1063,10 +1063,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-            const envVar = (await controller.listAvailableModels()).find(
-              model => model.provider === provider,
-            )?.apiKeyEnvVar;
-            authStorage.removeStoredApiKey(provider, envVar);
+            authStorage.removeStoredApiKey(provider);
             controller.invalidateAvailableModelsCache?.();
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });

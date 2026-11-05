@@ -685,12 +685,13 @@ describe('provider key routes in local mode', () => {
     expect(await modelIds()).not.toContain('acme-cloud/rocket-1');
   });
 
-  it('removing a saved key keeps the key the server was started with', async () => {
+  it('removing a saved key gives back the key the server was started with', async () => {
     process.env.ACME_CLOUD_API_KEY = 'sk-server';
+    // The settings dialog sends the provider's envVar, so saving overrides the server key.
     const saved = await app.request('/web/config/providers/acme-cloud/key', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key: 'sk-saved' }),
+      body: JSON.stringify({ key: 'sk-saved', envVar: 'ACME_CLOUD_API_KEY' }),
     });
     expect(saved.status).toBe(200);
     expect(await acme()).toMatchObject({ source: 'stored' });
@@ -698,6 +699,7 @@ describe('provider key routes in local mode', () => {
     const removed = await app.request('/web/config/providers/acme-cloud/key', { method: 'DELETE' });
     expect(removed.status).toBe(200);
     expect(await acme()).toMatchObject({ source: 'env' });
+    expect(process.env.ACME_CLOUD_API_KEY).toBe('sk-server');
     expect(await modelIds()).toContain('acme-cloud/rocket-1');
   });
 });

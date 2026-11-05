@@ -286,8 +286,9 @@ export class AgentController<TState = {}> {
     // (custom takes precedence). Shared by listAvailableModels,
     // getCurrentModelAuthStatus, and the OM model resolver.
     this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
-    // The router defaults serve public catalogs over the network (models.dev,
-    // Netlify), so they refresh in the background on a slower schedule.
+    // The router defaults list the same models whatever the credentials (and
+    // models.dev and Netlify download them), so they refresh in the background
+    // on a slower schedule.
     const remoteGateways = new Set<MastraModelGatewayInterface>(defaultGateways);
     this.#modelCatalog = new ModelCatalogCache(this.#gatewayManager, gateway => remoteGateways.has(gateway));
 
