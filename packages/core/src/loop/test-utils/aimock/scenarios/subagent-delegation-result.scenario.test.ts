@@ -174,6 +174,22 @@ describe.each(['durable', 'evented'] as const)(
       expect(toolRuns).toEqual(['42']);
       expect(delegationResultSeenBySupervisor()).toMatchObject({ role: 'tool', content: 'Order 42 has shipped.' });
       expect(await output.text).toBe('Your order 42 has shipped.');
+
+      const [delegation] = await output.toolResults;
+      expect(delegation?.payload.result).toStrictEqual({
+        text: 'Order 42 has shipped.',
+        subAgentThreadId: expect.any(String),
+        subAgentResourceId: expect.any(String),
+        subAgentToolResults: [
+          {
+            toolName: 'lookup-order',
+            toolCallId: 'call-lookup-1',
+            args: { orderId: '42' },
+            result: { orderId: '42', status: 'shipped' },
+            isError: undefined,
+          },
+        ],
+      });
     });
 
     it('a generating supervisor receives the sub-agent answer after the sub-agent runs its tool', async () => {
