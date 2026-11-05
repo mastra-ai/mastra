@@ -133,7 +133,7 @@ describe('DurableAgent terminal snapshot cleanup', () => {
       expect(result.succeeded).toBe(1);
 
       // Outer loop row deleted via workflow API…
-      expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-success', { storageVersion: 1 });
+      expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-success');
       // …and the nested execution row is gone from storage.
       expect(await readSnapshot(store, DurableStepIds.AGENTIC_EXECUTION, 'run-success')).toBeNull();
     });
@@ -144,7 +144,7 @@ describe('DurableAgent terminal snapshot cleanup', () => {
 
       await agent.recoverActiveRuns();
 
-      expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-failed', { storageVersion: 1 });
+      expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-failed');
       expect(await readSnapshot(store, DurableStepIds.AGENTIC_EXECUTION, 'run-failed')).toBeNull();
     });
 

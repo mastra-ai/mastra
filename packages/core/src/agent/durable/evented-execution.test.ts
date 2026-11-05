@@ -333,13 +333,20 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
         delivery.run({ deliveryRunId: event.runId, claimRunId }, () => handle.call(this, event)),
       );
     });
-    const updateResults = workflows.updateWorkflowResults.bind(workflows);
-    const resultsSpy = vi.spyOn(workflows, 'updateWorkflowResults').mockImplementation(args => {
-      const current = delivery.getStore();
-      if (current?.deliveryRunId === args.runId) {
-        writes.push({ ...current, fence: resolveRunFence(workflows, args.fence, args.runId) });
-      }
-      return updateResults(args);
+    // Step writes on storage v1, then storage v2.
+    const resultsSpies = (
+      ['updateWorkflowResults', 'appendWorkflowRunEntries', 'mergeWorkflowRunStepResult'] as const
+    ).map(method => {
+      const write = (workflows[method] as (args: { runId: string; fence?: RunFence }) => Promise<unknown>).bind(
+        workflows,
+      );
+      return vi.spyOn(workflows, method).mockImplementation((args: { runId: string; fence?: RunFence }) => {
+        const current = delivery.getStore();
+        if (current?.deliveryRunId === args.runId) {
+          writes.push({ ...current, fence: resolveRunFence(workflows, args.fence, args.runId) });
+        }
+        return write(args) as never;
+      });
     });
     try {
       const first = await parent.stream('Answer the parent question.', { requestContext, runId: 'parent-run' });
@@ -412,7 +419,7 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
       releaseChild.resolve();
       await mastra.shutdown();
       handleSpy.mockRestore();
-      resultsSpy.mockRestore();
+      for (const spy of resultsSpies) spy.mockRestore();
       delivery.disable();
       await pubsub.close();
       await rm(directory, { recursive: true, force: true });

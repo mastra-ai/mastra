@@ -993,7 +993,7 @@ describe('DurableAgent.recover(runId)', () => {
     await globalRunRegistry.get('run-ok')?.workflowExecution;
     cleanup();
 
-    expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-ok', { storageVersion: 1 });
+    expect(deleteWorkflowRunById).toHaveBeenCalledWith('run-ok');
     expect(await readSnapshot(store, DurableStepIds.AGENTIC_EXECUTION, 'run-ok')).toBeNull();
   });
 
