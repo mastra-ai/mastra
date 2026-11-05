@@ -487,7 +487,9 @@ export const createTimeTravelExecutionParams = (params: {
 
     //the stepResult input is basically the payload of the first step
     if (index === 0 && stepIds.includes(firstStepId)) {
-      stepResults.input = (context?.[firstStepId]?.payload ?? inputData ?? snapshotContext?.input) as any;
+      // An explicit null inputData replaces the stored input; only an omitted one falls back (#29424).
+      stepResults.input = (context?.[firstStepId]?.payload ??
+        (inputData !== undefined ? inputData : snapshotContext?.input)) as any;
     } else if (index === 0) {
       stepResults.input =
         stepIds?.reduce((acc, stepId) => {

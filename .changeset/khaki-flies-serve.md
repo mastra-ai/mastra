@@ -2,7 +2,12 @@
 '@mastra/core': patch
 ---
 
-Fixed evented workflows rejecting valid input in `start()`, `startAsync()` and `stream()`. An omitted `inputData` now lets the workflow `inputSchema` default apply, and an explicit `null` now reaches a nullable `inputSchema`, matching the default engine. Before, the evented engine replaced both with `{}` before validation. Resuming a suspended step now also gives it the same `null` or omitted input it started with, and a step failure in a run started with `null` input no longer leaves `start()` waiting forever. `timeTravel()` to the first step, or to the first step of a nested workflow, now replays the run's `null` or omitted input instead of `{}`, and uses new `inputData` passed to `timeTravel()` instead of the stored input. Fixes [#29424](https://github.com/mastra-ai/mastra/issues/29424).
+Fixed evented workflows replacing omitted or `null` input with `{}`, matching the default engine. Fixes [#29424](https://github.com/mastra-ai/mastra/issues/29424).
+
+- `start()`, `startAsync()` and `stream()`: an omitted `inputData` now lets the `inputSchema` default apply, and an explicit `null` reaches a nullable `inputSchema`.
+- Resume: a suspended step gets the same `null` or omitted input it started with.
+- Failures: a step that fails in a run started with `null` input no longer leaves `start()` waiting forever.
+- `timeTravel()` to the first step, or to a nested workflow's first step, replays the run's `null` or omitted input. New `inputData` passed to `timeTravel()`, including `null`, replaces the stored input.
 
 If you relied on that `{}` fallback, pass `inputData: {}` explicitly or add a schema default. Without an `inputSchema` or with `validateInputs: false`, the first step now receives `undefined` instead of `{}` when `inputData` is omitted, as on the default engine.
 

@@ -1858,6 +1858,21 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
           expect(mocks.observeInput.mock.calls).toEqual([[null], ['replayed']]);
         });
 
+        it('uses an explicit null inputData passed to time travel over a stored value', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-nullable-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-null-override');
+
+          const started = await execute(workflow, 'stored', { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId, inputData: null });
+
+          expect(replayed.status).toBe('success');
+          expect(replayed.result).toEqual({ received: null });
+          expect(mocks.observeInput.mock.calls).toEqual([['stored'], [null]]);
+        });
+
         it.each([
           { id: 'tt-replay-nested-object-input', input: {} },
           { id: 'tt-replay-nested-nullable-input', input: null },
