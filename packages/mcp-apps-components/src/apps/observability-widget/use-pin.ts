@@ -1,5 +1,5 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
-import type { WidgetPin } from '@mastra/playground-ui/domains/dashboards';
+import type { StatelessWidgetPin } from '@mastra/playground-ui/domains/dashboards';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { ObservabilityWidgetPreset } from './opened';
@@ -31,7 +31,7 @@ export function usePin(
   app: App,
   widget: DashboardWidget,
   datePreset: ObservabilityWidgetPreset,
-): WidgetPin | undefined {
+): StatelessWidgetPin | undefined {
   const hostIds = useHostPinnedIds(app);
   const [requested, setRequested] = useState<boolean>();
 
@@ -50,7 +50,8 @@ export function usePin(
   return {
     isPinned: requested ?? hostIds.includes(widget.id),
     name,
-    onPin: pinned => {
+    // The host gets the widget as the opening tool returned it, not as the renderer parsed it.
+    onPin: (_parsed, pinned) => {
       setRequested(pinned);
       const pin: ObservabilityWidgetPin = { pinned, widget, datePreset };
       app
