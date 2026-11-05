@@ -72,11 +72,13 @@ export function Notice({ code, onRetry, stale = false }: { code: string; onRetry
             ? 'Your session is no longer active. Sign in again.'
             : code === 'SIGN_OUT_FAILED'
               ? 'Could not confirm sign out. Check the connection and try again.'
-              : code === 'REVISION_CONFLICT' || code === 'APPROVAL_CONFLICT'
-                ? 'This record changed. Reload it before trying again.'
-                : code === 'CONNECTION_UNAVAILABLE'
-                  ? 'The local control plane is unavailable.'
-                  : `Request failed: ${code.replaceAll('_', ' ').toLowerCase()}.`;
+              : code === 'SCAN_BINDING_CHANGED'
+                ? 'This scan uses an older target, policy, or profile revision. Check identities and run a new scan before investigating.'
+                : code === 'REVISION_CONFLICT' || code === 'APPROVAL_CONFLICT'
+                  ? 'This record changed. Reload it before trying again.'
+                  : code === 'CONNECTION_UNAVAILABLE'
+                    ? 'The local control plane is unavailable.'
+                    : `Request failed: ${code.replaceAll('_', ' ').toLowerCase()}.`;
   return (
     <div className="notice" role="alert">
       <span>

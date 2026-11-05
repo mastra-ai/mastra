@@ -1301,7 +1301,8 @@ export function ScansView() {
       setSelected(scan.id);
       setInvestigationVersion(version => version + 1);
     } catch (reason) {
-      setError(errorCode(reason));
+      const code = errorCode(reason);
+      setError(code === 'REVISION_CONFLICT' ? 'SCAN_BINDING_CHANGED' : code);
     } finally {
       setBusy(false);
     }
@@ -1396,7 +1397,11 @@ export function ScansView() {
         </Section>
       )}
       <Section title="Scans" action={<button onClick={records.reload}>Refresh</button>}>
-        <Notice code={records.error || error} stale={records.stale} onRetry={records.reload} />
+        <Notice
+          code={records.error || error}
+          stale={records.stale}
+          onRetry={!records.error && error === 'SCAN_BINDING_CHANGED' ? undefined : records.reload}
+        />
         {message && (
           <p className="success" role="status">
             {message}
