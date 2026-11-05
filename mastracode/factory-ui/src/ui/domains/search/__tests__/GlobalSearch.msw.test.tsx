@@ -303,8 +303,8 @@ function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/setti
 
 async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryClient>) {
   await Promise.all([
-    client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.prefetchQuery({
+    client.query(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.query({
       queryKey: queryKeys.workItems(ACTIVE_FACTORY_ID),
       queryFn: ({ signal }) => listWorkItems(TEST_BASE_URL, ACTIVE_FACTORY_ID, signal),
     }),

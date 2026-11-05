@@ -10,6 +10,7 @@ import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { describeIssue, prepareWidget } from '../lib/prepare-widget';
 import type { PreparedWidget, StoredWidget } from '../lib/prepare-widget';
 import type { AnyWidgetKind, DashboardAlert, DashboardExpand } from '../widget-kind';
+import { ConnectedWidget } from './connected-widget';
 import { DashboardGrid, DashboardGridCell, DashboardGridRow } from './dashboard-grid';
 import type { DashboardSpan } from './dashboard-grid';
 import { WidgetError } from './widget-error';
@@ -129,9 +130,8 @@ export function DashboardRenderer({
                   )}
                 >
                   {prepared.ok ? (
-                    <prepared.kind.component
-                      widget={prepared.widget}
-                      views={prepared.views}
+                    <ConnectedWidget
+                      prepared={prepared}
                       scope={scope}
                       onDrilldown={onDrilldown}
                       expand={expand}

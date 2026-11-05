@@ -1,11 +1,12 @@
 import type { DashboardQuery, DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import type { ReactNode } from 'react';
-import type { PendingGate } from '../components/view-gate';
+
 import { AlertAction, AlertMenu } from '../components/widget-controls';
 import type { AlertEntry } from '../components/widget-controls';
 import type { DashboardAlert, DashboardAlertAction, DashboardAlertRef, DashboardAlertSource } from '../widget-kind';
 import type { ViewHeading } from './chrome';
 import { unsupportedMessage } from './chrome';
+import type { PendingGate } from './gate';
 import { pageQuery } from './requests';
 import type { DashboardPageContext } from './requests';
 import { exprRefs } from './values';

@@ -22,19 +22,18 @@ import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { RuleDecisionsSkeleton } from '../domains/factory/components/RuleDecisionsSkeleton';
+import { RULE_DECISION_GROUPS, ruleDecisionGroup } from '../domains/factory/ruleDecisionGroups';
+import type { RuleDecisionGroupKey } from '../domains/factory/ruleDecisionGroups';
 
-const DECISION_GROUPS: ReadonlyArray<{
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  statuses: FactoryDecisionStatus[] | undefined;
-}> = [
-  { key: 'all', label: 'All effects', icon: ListFilter, statuses: undefined },
-  { key: 'active', label: 'Active', icon: CircleDashed, statuses: ['pending', 'leased', 'retry'] },
-  { key: 'proposed', label: 'Awaiting approval', icon: CirclePause, statuses: ['proposed'] },
-  { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
-  { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
-];
+const GROUP_PRESENTATION: Record<RuleDecisionGroupKey, { label: string; icon: LucideIcon }> = {
+  all: { label: 'All effects', icon: ListFilter },
+  active: { label: 'Active', icon: CircleDashed },
+  proposed: { label: 'Awaiting approval', icon: CirclePause },
+  failed: { label: 'Failed', icon: CircleX },
+  succeeded: { label: 'Succeeded', icon: CircleCheck },
+};
+
+const DECISION_GROUPS = RULE_DECISION_GROUPS.map(group => ({ ...group, ...GROUP_PRESENTATION[group.key] }));
 
 const STATUS_STYLE: Record<
   FactoryDecisionStatus,
@@ -65,10 +64,8 @@ export function RulesPage() {
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedGroup = searchParams.get('group');
-  const decisionGroup = DECISION_GROUPS.find(entry => entry.key === requestedGroup)?.key ?? 'all';
+  const { key: decisionGroup, statuses: decisionStatuses } = ruleDecisionGroup(searchParams.get('group'));
   const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
-  const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
   const retryDecision = useFactoryDecisionAction(factoryProjectId, 'retry');
   const approveDecision = useFactoryDecisionAction(factoryProjectId, 'approve');
