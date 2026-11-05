@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { PubSub } from '../../../events/pubsub';
 import type { Event } from '../../../events/types';
-import { applyStatePatch, diffState } from '../../../storage/domains/workflows/state-patch';
+import { applyStatePatch, diffStateAsJson, patchState } from '../../../storage/domains/workflows/state-patch';
 import type { StatePatchOp } from '../../../storage/domains/workflows/state-patch';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { copyState, toJsonState } from '../../nested-state';
@@ -19,7 +19,10 @@ import type { RunStorage } from '../../run-storage';
  */
 type StorageScope = {
   storageVersion: 1 | 2;
-  /** Per run id: its state as stored, as this dispatch last loaded or wrote it. */
+  /**
+   * Per run id: its state as stored (JSON), as this dispatch last loaded or wrote it. Never changed
+   * in place: it is the loaded run's own state, and a write replaces it with a patched copy.
+   */
   bases: Map<string, Record<string, unknown>>;
 };
 
@@ -53,6 +56,15 @@ function toJson(state: unknown): Record<string, unknown> {
   return json;
 }
 
+/** The ops that turn the stored state `base` into `state`'s JSON form, without copying `state`. */
+function statePatchOn(base: Record<string, unknown>, state: unknown): StatePatchOp[] {
+  try {
+    return diffStateAsJson(base, state ?? {});
+  } catch {
+    throw new Error('Workflow state must be JSON-serializable on storage v2');
+  }
+}
+
 /**
  * A v2 event's data with the stored run filled in: step results the message doesn't carry, and
  * its state (sent whole, or as a patch on the stored state). Start events carry their own.
@@ -63,7 +75,8 @@ export function hydrateEventData(
   stored: WorkflowRunState | null | undefined,
 ): Record<string, any> {
   const scope = scopes.getStore()!;
-  const base = toJson(stored?.value ?? {});
+  // Stores load a v2 run's state as JSON, and `stored` is this dispatch's own load, so it is the base as it is.
+  const base = stored?.value ?? {};
   scope.bases.set(data.runId, base);
   if (type === 'workflow.start') return data;
 
@@ -102,7 +115,7 @@ function trimStepEventData(data: Record<string, any>, scope: StorageScope): Reco
     trimmed.prevResult = result;
   }
   if (current !== undefined) {
-    const statePatch = diffState(base, toJson(current));
+    const statePatch = statePatchOn(base, current);
     if (statePatch.length > 0) trimmed.statePatch = statePatch;
   }
   return trimmed;
@@ -162,10 +175,9 @@ export function scopedRunStorage(runId: string, runStorage: RunStorage): RunStor
 
   const toPatch = async <W extends { state?: Record<string, any> }>({ state, ...write }: W) => {
     if (state === undefined) return write;
-    const base = scope.bases.get(runId) ?? toJson(await runStorage.loadState());
-    const next = toJson(state);
-    scope.bases.set(runId, next);
-    const statePatch = diffState(base, next);
+    const base = scope.bases.get(runId) ?? (await runStorage.loadState());
+    const statePatch = statePatchOn(base, state);
+    scope.bases.set(runId, patchState(base, statePatch));
     return statePatch.length > 0 ? { ...write, statePatch } : write;
   };
 

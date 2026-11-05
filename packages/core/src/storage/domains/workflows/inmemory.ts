@@ -73,6 +73,14 @@ export function cloneRunData<T>(value: T): T {
   return deepCloneForRun(value, new WeakMap()) as T;
 }
 
+/**
+ * A storage v2 run's state (or state patch) as stored: its JSON form, as the SQL stores keep it, so
+ * every store loads the same state (the evented engine diffs against it as JSON).
+ */
+function storedJson<T>(state: T): T {
+  return JSON.parse(JSON.stringify(state));
+}
+
 function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknown {
   if (value === null || typeof value !== 'object') return value;
   const cached = seen.get(value as object);
@@ -718,7 +726,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     if (record?.stateSeq !== stateSeq) return;
     const seq = ++record.lastSeq;
     const entries = this.db.workflowRunEntries.get(key) ?? [];
-    entries.push({ seq, kind: 'state', state: cloneRunData(state) });
+    entries.push({ seq, kind: 'state', state: storedJson(state) });
     this.db.workflowRunEntries.set(key, entries);
     Object.assign(record, applyStateColumnsWrite(record, stateColumnsWrite({ state }, false), seq));
   }
@@ -738,8 +746,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const entries = this.db.workflowRunEntries.get(key) ?? [];
     entries.push(
       'state' in args
-        ? { seq, kind: 'state-draft', state: cloneRunData(args.state) }
-        : { seq, kind: 'state-draft', on: { ...args.on }, ops: cloneRunData(args.ops) },
+        ? { seq, kind: 'state-draft', state: storedJson(args.state) }
+        : { seq, kind: 'state-draft', on: { ...args.on }, ops: storedJson(args.ops) },
     );
     this.db.workflowRunEntries.set(key, entries);
     return { seq };
@@ -804,7 +812,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       entries.push({ seq: ++seq, kind: 'step-patch', stepId, ops: cloneRunData(ops) });
     }
     if (state !== undefined) {
-      entries.push({ seq: ++seq, kind: 'state', state: cloneRunData(state) });
+      entries.push({ seq: ++seq, kind: 'state', state: storedJson(state) });
     } else if (stateBase !== undefined) {
       entries.push({ seq: ++seq, kind: 'state-base', base: { ...stateBase } });
       const base = this.db.workflowRunHeaders.get(this.getWorkflowKey(stateBase.workflowName, stateBase.runId));
@@ -813,7 +821,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       entries.push({ seq: ++seq, kind: 'state', state: {} });
     }
     if (state === undefined && statePatch !== undefined) {
-      entries.push({ seq: ++seq, kind: 'state-patch', ops: cloneRunData(statePatch) });
+      entries.push({ seq: ++seq, kind: 'state-patch', ops: storedJson(statePatch) });
     }
     const runToken = existing?.runToken ?? randomUUID();
     const record = {

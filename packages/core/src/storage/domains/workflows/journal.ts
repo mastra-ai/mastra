@@ -1,5 +1,5 @@
 import type { StepResult, StepSuccess, WorkflowRunState } from '../../../workflows';
-import { applyStatePatch } from './state-patch';
+import { applyStatePatch, patchState } from './state-patch';
 import type { StatePatchOp } from './state-patch';
 
 /**
@@ -287,8 +287,8 @@ export function stateBaseOf(entries: readonly WorkflowRunEntry[], at?: StateVers
  * `state-base` entry's state is `base`, the state the store resolved for `stateBaseOf(entries, at)`.
  * The state of a draft is the version it is `on`, with its patch applied (or its full `state`).
  *
- * Patches are applied to a JSON copy, so the result never shares objects with `entries` or `base`
- * once a patch applies (it can when none does).
+ * Patches are applied copy-on-write: the result shares what they don't change with `entries` and
+ * `base`, which are left as they are.
  * @experimental
  */
 export function materializeState(
@@ -297,10 +297,7 @@ export function materializeState(
 ): Record<string, any> {
   const chain = stateChain(entries, at);
   const start = (chain.baseIsRef ? base : (chain.base as Record<string, any> | undefined)) ?? {};
-  if (chain.patches.length === 0) return start;
-  let state = JSON.parse(JSON.stringify(start));
-  for (const ops of chain.patches) state = applyStatePatch(state, ops);
-  return state;
+  return patchState(start, chain.patches.flat());
 }
 
 /**
