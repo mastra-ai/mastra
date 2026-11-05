@@ -62,6 +62,7 @@ import { Txt } from '@/ds/components/Txt';
 import './knowledge.css';
 
 const NO_PANE_INSETS: PaneInsets = { left: 0, right: 0 };
+type PaneStyle = CSSProperties & { '--knowledge-pane-left': string };
 
 // knowledge.css draws the border and the selection ring from this colour.
 type CircleStyle = CSSProperties & { '--knowledge-color': string };
@@ -606,10 +607,8 @@ function GraphLegend({
   focused,
   levels,
   branches,
-  left,
   collapsible,
 }: {
-  left: number;
   collapsible?: boolean;
   /** The line styles on screen right now; the legend explains those and only those. */
   drawn: ReadonlySet<EdgeStyleKey>;
@@ -627,10 +626,7 @@ function GraphLegend({
 }) {
   const [open, setOpen] = useState(!collapsible);
   return (
-    <div
-      style={{ left: left + 12 }}
-      className="absolute top-3 z-10 flex flex-col items-start gap-1.5 transition-[left] duration-slow ease-out-custom motion-reduce:transition-none"
-    >
+    <div className="absolute top-3 left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
       {collapsible ? (
         <Button
           size="sm"
@@ -1327,6 +1323,7 @@ function KnowledgePageGraphInner({
   // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
   const drawnNodes = useLeavingNodes(emphasisedNodes, prefersMotion());
   const linkedIds = laidOut.shape.linked;
+  const paneStyle: PaneStyle = { '--knowledge-pane-left': `${insets.left}px` };
   const fitState = useRef({ nodes, selectedPageId, centerId, reactFlow, linkedIds, insets });
   fitState.current = { nodes, selectedPageId, centerId, reactFlow, linkedIds, insets };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
@@ -1544,6 +1541,7 @@ function KnowledgePageGraphInner({
   return (
     <div
       ref={containerRef}
+      style={paneStyle}
       className="knowledge-graph relative size-full"
       data-emphasis={neighbours ? 'on' : undefined}
       data-testid="knowledge-page-graph"
@@ -1555,7 +1553,6 @@ function KnowledgePageGraphInner({
       }}
     >
       <GraphLegend
-        left={insets.left}
         collapsible={collapsibleLegend}
         branches={dotBranches}
         levels={drawnLevels}
@@ -1593,38 +1590,34 @@ function KnowledgePageGraphInner({
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
       </ReactFlow>
-      <ButtonsGroup
-        size="sm"
-        aria-label="Zoom"
-        data-knowledge-graph-zoom
-        style={{ left: insets.left + 12 }}
-        className="absolute bottom-3 z-10 shadow-overlay transition-[left] duration-slow ease-out-custom motion-reduce:transition-none"
-      >
-        <Button
-          size="icon-sm"
-          tooltip="Zoom out"
-          aria-label="Zoom out"
-          onClick={() => void reactFlow.zoomOut({ duration: fitDuration(prefersMotion()) })}
-        >
-          <Minus />
-        </Button>
-        <Button
-          size="icon-sm"
-          tooltip="Zoom in"
-          aria-label="Zoom in"
-          onClick={() => void reactFlow.zoomIn({ duration: fitDuration(prefersMotion()) })}
-        >
-          <Plus />
-        </Button>
-        <Button
-          size="icon-sm"
-          tooltip="Fit view"
-          aria-label="Fit view"
-          onClick={() => fit(fitDuration(prefersMotion()))}
-        >
-          <Maximize />
-        </Button>
-      </ButtonsGroup>
+      <div className="absolute bottom-3 left-3 z-10 translate-x-(--knowledge-pane-left) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
+        <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom className="shadow-overlay">
+          <Button
+            size="icon-sm"
+            tooltip="Zoom out"
+            aria-label="Zoom out"
+            onClick={() => void reactFlow.zoomOut({ duration: fitDuration(prefersMotion()) })}
+          >
+            <Minus />
+          </Button>
+          <Button
+            size="icon-sm"
+            tooltip="Zoom in"
+            aria-label="Zoom in"
+            onClick={() => void reactFlow.zoomIn({ duration: fitDuration(prefersMotion()) })}
+          >
+            <Plus />
+          </Button>
+          <Button
+            size="icon-sm"
+            tooltip="Fit view"
+            aria-label="Fit view"
+            onClick={() => fit(fitDuration(prefersMotion()))}
+          >
+            <Maximize />
+          </Button>
+        </ButtonsGroup>
+      </div>
     </div>
   );
 }

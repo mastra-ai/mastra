@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
@@ -238,6 +238,7 @@ function treeInset(overlay: boolean, treeOpen: boolean): number {
   return treeOpen ? TREE_DRAWER_INSET : TREE_TOGGLE_INSET;
 }
 const PAGE_DRAWER_INSET = 392;
+type InsetStyle = CSSProperties & { '--knowledge-tree-inset': string; '--knowledge-drawer-inset': string };
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
 const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
@@ -1042,6 +1043,10 @@ export function KnowledgePageExplorer({
     left: treeInset(overlay, treeOpen),
     right: drawerPageId ? PAGE_DRAWER_INSET : 0,
   };
+  const insetStyle: InsetStyle = {
+    '--knowledge-tree-inset': `${graphInsets.left}px`,
+    '--knowledge-drawer-inset': `${graphInsets.right}px`,
+  };
   const focusViewTab = () =>
     viewTabs.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
   const focusPageTabOnMount = (section: HTMLElement | null) => {
@@ -1160,13 +1165,13 @@ export function KnowledgePageExplorer({
           Page not found. The linked page may have been deleted or merged.
         </Txt>
       ) : null}
-      <div className="relative flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+      <div style={insetStyle} className="relative flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         {overlay ? (
           <div
             inert={treeClosed}
             aria-hidden={treeClosed || undefined}
             data-state={treeClosed ? 'closed' : 'open'}
-            className={`absolute inset-y-2 left-2 z-10 flex w-72 transition-[translate,opacity] duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'pointer-events-none -translate-x-4 opacity-0' : 'translate-x-0 opacity-100'}`}
+            className={`absolute inset-y-2 left-2 z-10 flex w-72 transition duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'pointer-events-none -translate-x-4 opacity-0' : 'translate-x-0 opacity-100'}`}
           >
             <DataPanel variant="inline" title="Pages" className="shadow-overlay">
               {treeHeader}
@@ -1199,8 +1204,7 @@ export function KnowledgePageExplorer({
           <section
             ref={focusPageTabOnMount}
             aria-label="Selected page"
-            style={overlay ? { paddingLeft: graphInsets.left } : undefined}
-            className={`min-h-0 min-w-0 flex-1 overflow-auto ${overlay ? `bg-background transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'rounded-lg border border-border bg-card'}`}
+            className={`min-h-0 min-w-0 flex-1 overflow-auto ${overlay ? `bg-background pl-(--knowledge-tree-inset) transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'rounded-lg border border-border bg-card'}`}
           >
             <SelectedPage
               source={source}
@@ -1216,46 +1220,42 @@ export function KnowledgePageExplorer({
             data-testid="knowledge-graph-container"
           >
             {graphShown ? (
-              <ButtonsGroup
-                orientation="vertical"
-                size="sm"
-                aria-label="Graph options"
-                style={{ right: graphInsets.right + 12 }}
-                className="absolute top-3 z-10 shadow-overlay transition-[right] duration-slow ease-out-custom motion-reduce:transition-none"
-              >
-                <Button
-                  data-testid="knowledge-graph-back"
-                  aria-label="Back"
-                  title={backTo ? 'Back to the page you focused before this one' : 'Back (nothing to go back to yet)'}
-                  size="icon-sm"
-                  disabled={!backTo}
-                  onClick={goBack}
-                >
-                  <ArrowLeft />
-                </Button>
-                <Button
-                  aria-label="All links"
-                  aria-pressed={allLinks}
-                  data-testid="knowledge-graph-all-links"
-                  title={`All links: ${allLinks ? 'on' : 'off'}. Draw every link between the pages in the graph, not only the selected page's`}
-                  size="icon-sm"
-                  variant={allLinks ? 'subtle' : 'default'}
-                  onClick={() => setAllLinks(current => !current)}
-                >
-                  <Link2 />
-                </Button>
-                <Button
-                  aria-label="Link counts"
-                  aria-pressed={dotCounts}
-                  data-testid="knowledge-graph-dot-counts"
-                  title={`Link counts: ${dotCounts ? 'on' : 'off'}. Write how many links go in and out of each dot inside it`}
-                  size="icon-sm"
-                  variant={dotCounts ? 'subtle' : 'default'}
-                  onClick={() => setDotCounts(current => !current)}
-                >
-                  <Hash />
-                </Button>
-              </ButtonsGroup>
+              <div className="absolute top-3 right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
+                <ButtonsGroup orientation="vertical" size="sm" aria-label="Graph options" className="shadow-overlay">
+                  <Button
+                    data-testid="knowledge-graph-back"
+                    aria-label="Back"
+                    title={backTo ? 'Back to the page you focused before this one' : 'Back (nothing to go back to yet)'}
+                    size="icon-sm"
+                    disabled={!backTo}
+                    onClick={goBack}
+                  >
+                    <ArrowLeft />
+                  </Button>
+                  <Button
+                    aria-label="All links"
+                    aria-pressed={allLinks}
+                    data-testid="knowledge-graph-all-links"
+                    title={`All links: ${allLinks ? 'on' : 'off'}. Draw every link between the pages in the graph, not only the selected page's`}
+                    size="icon-sm"
+                    variant={allLinks ? 'subtle' : 'default'}
+                    onClick={() => setAllLinks(current => !current)}
+                  >
+                    <Link2 />
+                  </Button>
+                  <Button
+                    aria-label="Link counts"
+                    aria-pressed={dotCounts}
+                    data-testid="knowledge-graph-dot-counts"
+                    title={`Link counts: ${dotCounts ? 'on' : 'off'}. Write how many links go in and out of each dot inside it`}
+                    size="icon-sm"
+                    variant={dotCounts ? 'subtle' : 'default'}
+                    onClick={() => setDotCounts(current => !current)}
+                  >
+                    <Hash />
+                  </Button>
+                </ButtonsGroup>
+              </div>
             ) : null}
             {graphShown ? (
               <KnowledgePageGraph
@@ -1308,7 +1308,7 @@ export function KnowledgePageExplorer({
                 onTransitionEnd={event => {
                   if (!drawerPageId && event.target === event.currentTarget) setDrawerLastId(undefined);
                 }}
-                className={`absolute inset-y-2 right-2 z-10 flex w-96 transition-[translate,opacity] duration-slow ease-out-custom motion-reduce:transition-none ${drawerPageId ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0'}`}
+                className={`absolute inset-y-2 right-2 z-10 flex w-96 transition duration-slow ease-out-custom motion-reduce:transition-none ${drawerPageId ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0'}`}
               >
                 {drawerShownId ? (
                   <DataPanel variant="inline" title="Page details" className="shadow-overlay">

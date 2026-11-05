@@ -427,8 +427,8 @@ export function KnowledgePageDetail({
         </dl>
       </header>
 
-      <div className={`grid gap-8 ${compact ? 'p-4' : 'p-6'} @4xl:grid-cols-[minmax(0,1fr)_18rem]`}>
-        <div className="flex min-w-0 flex-col gap-8">
+      <div className={`flex flex-col gap-8 ${compact ? 'p-4' : 'p-6'} @4xl:flex-row`}>
+        <div className="flex min-w-0 flex-col gap-8 @4xl:flex-1">
           {page.body ? (
             <div data-testid="knowledge-page-body" className="max-w-3xl">
               <BodyLinks.Provider value={bodyLinks}>
@@ -477,7 +477,7 @@ export function KnowledgePageDetail({
           </Section>
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-8">
+        <aside className="flex min-w-0 flex-col gap-8 @4xl:w-72 @4xl:shrink-0">
           {childPages ? <Section label="Pages">{childPages}</Section> : null}
 
           {mentionedBy.length > 0 ? (
