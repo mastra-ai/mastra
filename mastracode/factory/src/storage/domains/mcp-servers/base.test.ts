@@ -201,6 +201,21 @@ describe('McpServersStorage', () => {
     expect(await mcpServers.oauthStorage(server.id).get('tokens')).toBe('{"access_token":"t"}');
     expect((await mcpServers.get({ orgId: 'org-a', id: server.id }))?.selectedTools).toEqual(['issues']);
 
+    await mcpServers.setAuthorizationServerHosts({
+      orgId: 'org-a',
+      id: server.id,
+      ifUrl: server.url,
+      hosts: ['auth.example.com'],
+    });
+    await mcpServers.createFlow({
+      nonce: 'pending-sign-in',
+      orgId: 'org-a',
+      userId: 'admin',
+      serverId: server.id,
+      factoryProjectId: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
     const moved = await mcpServers.update({
       orgId: 'org-a',
       id: server.id,
@@ -213,9 +228,11 @@ describe('McpServersStorage', () => {
       toolCatalog: null,
       selectedTools: [],
       status: 'unknown',
-      authorizationServerHost: null,
+      authorizationServerHosts: [],
     });
     expect(await mcpServers.oauthStorage(server.id).get('tokens')).toBeUndefined();
+    // A sign-in started for the old address can no longer finish.
+    expect(await mcpServers.consumeFlow('pending-sign-in')).toBeNull();
   });
 
   it('clears OAuth tokens when the client ID changes or the server stops using OAuth', async () => {
@@ -325,8 +342,14 @@ describe('McpServersStorage', () => {
 
   it('keeps OAuth state per server', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
-    const a = mcpServers.oauthStorage('server-a');
-    const b = mcpServers.oauthStorage('server-b');
+    const serverA = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
+    const serverB = await mcpServers.create({
+      orgId: 'org-a',
+      userId: 'admin',
+      input: { ...oauthServer, slug: 'other', name: 'Other' },
+    });
+    const a = mcpServers.oauthStorage(serverA.id);
+    const b = mcpServers.oauthStorage(serverB.id);
     await a.set('tokens', 'a-tokens');
     await a.set('tokens', 'a-tokens-refreshed');
     await a.set('code_verifier', 'verifier');
@@ -337,8 +360,38 @@ describe('McpServersStorage', () => {
     await a.delete('code_verifier');
     expect(await a.get('code_verifier')).toBeUndefined();
 
-    await mcpServers.clearOAuth('server-a');
+    expect(await mcpServers.hasOAuthTokens(serverA.id)).toBe(true);
+    await mcpServers.setAuthorizationServerHosts({
+      orgId: 'org-a',
+      id: serverA.id,
+      ifUrl: serverA.url,
+      hosts: ['auth.example.com', 'auth.example.com', 'tokens.example.com'],
+    });
+    await mcpServers.createFlow({
+      nonce: 'pending-a',
+      orgId: 'org-a',
+      userId: 'admin',
+      serverId: serverA.id,
+      factoryProjectId: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    expect((await mcpServers.get({ orgId: 'org-a', id: serverA.id }))?.authorizationServerHosts).toEqual([
+      'auth.example.com',
+      'tokens.example.com',
+    ]);
+
+    // Another organization cannot sign the server out.
+    expect(await mcpServers.disconnectOAuth({ orgId: 'org-b', id: serverA.id })).toBeNull();
+    expect(await a.get('tokens')).toBe('a-tokens-refreshed');
+
+    expect(await mcpServers.disconnectOAuth({ orgId: 'org-a', id: serverA.id })).toMatchObject({
+      status: 'needs_auth',
+      lastError: 'Sign in to connect this server.',
+      authorizationServerHosts: [],
+    });
     expect(await a.get('tokens')).toBeUndefined();
+    expect(await mcpServers.hasOAuthTokens(serverA.id)).toBe(false);
+    expect(await mcpServers.consumeFlow('pending-a')).toBeNull();
     expect(await b.get('tokens')).toBe('b-tokens');
   });
 

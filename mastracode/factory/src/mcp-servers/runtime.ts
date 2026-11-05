@@ -1,27 +1,24 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Tool } from '@mastra/core/tools';
-import { MCPClient } from '@mastra/mcp';
-import type {
-  MastraMCPServerDefinition,
-  MCPDiscoveryErrorDetails,
-  MCPOAuthClientProvider,
-  SerializableMCPToolDefinition,
-} from '@mastra/mcp';
+import { MCPClient, UnauthorizedError } from '@mastra/mcp';
+import type { MastraMCPServerDefinition, MCPDiscoveryErrorDetails, SerializableMCPToolDefinition } from '@mastra/mcp';
 
-import type { McpServerRecord, McpServersStorage } from '../storage/domains/mcp-servers/base.js';
+import type { McpServerAuthType, McpServerRecord, McpServersStorage } from '../storage/domains/mcp-servers/base.js';
+import { safeErrorText } from './errors.js';
+import { createMcpOAuthProvider } from './oauth.js';
+import type { McpOAuthEndpoints } from './oauth.js';
 import { MCP_SERVER_LIMITS } from './schemas.js';
 import { McpServerNetworkPolicyError, createGuardedFetch } from './url-policy.js';
 import type { GuardedFetch } from './url-policy.js';
 
 const CONNECT_TIMEOUT_MS = 15_000;
-const MAX_ERROR_LENGTH = 300;
 
 export interface McpServersRuntimeOptions {
   storage: McpServersStorage;
   allowPrivateNetwork: boolean;
-  /** OAuth client provider for `oauth` servers; servers without one connect unauthenticated. */
-  oauthProvider?: (record: McpServerRecord) => MCPOAuthClientProvider | undefined;
+  /** OAuth callback and client metadata URLs; without them `oauth` servers connect unauthenticated. */
+  oauthEndpoints?: McpOAuthEndpoints;
 }
 
 export type McpServerDiscoveryResult =
@@ -50,26 +47,38 @@ interface CachedClient {
  */
 export class McpServersRuntime {
   readonly #storage: McpServersStorage;
-  readonly #oauthProvider: McpServersRuntimeOptions['oauthProvider'];
+  readonly #oauthEndpoints: McpOAuthEndpoints | undefined;
   readonly #fetch: GuardedFetch;
   readonly #clients = new Map<string, CachedClient>();
 
-  constructor({ storage, allowPrivateNetwork, oauthProvider }: McpServersRuntimeOptions) {
+  constructor({ storage, allowPrivateNetwork, oauthEndpoints }: McpServersRuntimeOptions) {
     this.#storage = storage;
-    this.#oauthProvider = oauthProvider;
+    this.#oauthEndpoints = oauthEndpoints;
     this.#fetch = createGuardedFetch({ allowPrivateNetwork });
   }
 
-  buildDefinition(record: McpServerRecord, fetch: GuardedFetch = this.#fetch): MastraMCPServerDefinition {
+  /**
+   * `signedIn` attaches the OAuth provider (and its stored tokens). Without
+   * tokens it is left off: the server's 401 then reads as "sign in", instead
+   * of the SDK starting an authorization of its own.
+   */
+  #buildDefinition(
+    record: McpServerRecord,
+    { fetch = this.#fetch, signedIn }: { fetch?: GuardedFetch; signedIn: boolean },
+  ): MastraMCPServerDefinition {
     const url = new URL(record.url);
+    const authProvider =
+      record.authType === 'oauth' && signedIn && this.#oauthEndpoints
+        ? createMcpOAuthProvider(record, { storage: this.#storage, endpoints: this.#oauthEndpoints })
+        : undefined;
     return {
       url,
       ...(record.authType === 'headers' && record.headers ? { requestInit: { headers: { ...record.headers } } } : {}),
-      ...(record.authType === 'oauth' ? { authProvider: this.#oauthProvider?.(record) } : {}),
+      ...(authProvider ? { authProvider } : {}),
       fetch,
-      // Redirects, OAuth discovery, and token requests may only reach the server
-      // and the authorization server recorded when sign-in started.
-      allowedHosts: [url.host, ...(record.authorizationServerHost ? [record.authorizationServerHost] : [])],
+      // Redirects and token refreshes may only reach the server and the
+      // authorization server hosts recorded by the last sign-in.
+      allowedHosts: [url.host, ...record.authorizationServerHosts],
       connectTimeout: CONNECT_TIMEOUT_MS,
     };
   }
@@ -87,9 +96,10 @@ export class McpServersRuntime {
         throw error;
       }
     };
+    const signedIn = record.authType === 'oauth' && (await this.#storage.hasOAuthTokens(record.id));
     const client = new MCPClient({
       id: `factory-mcp-discover:${record.id}:${randomUUID()}`,
-      servers: { [record.slug]: this.buildDefinition(record, fetch) },
+      servers: { [record.slug]: this.#buildDefinition(record, { fetch, signedIn }) },
       registerProcessHooks: false,
     });
     try {
@@ -145,10 +155,9 @@ export class McpServersRuntime {
           continue;
         }
         try {
-          tools[entry.exposedName] = await client.toolFromDefinition({
-            serverName: record.slug,
-            definition: entry.definition,
-          });
+          const tool = await client.toolFromDefinition({ serverName: record.slug, definition: entry.definition });
+          this.#watchForRefusedCredentials(record, tool);
+          tools[entry.exposedName] = tool;
           taken.add(entry.exposedName);
         } catch (error) {
           skip('invalid_definition', error instanceof Error ? error.message : String(error));
@@ -177,6 +186,35 @@ export class McpServersRuntime {
     await Promise.allSettled(clients.map(cached => cached.client.disconnect()));
   }
 
+  /**
+   * A tool call the server refuses with a 401 means the saved credentials or
+   * tokens stopped working (an OAuth refresh was already attempted): mark the
+   * server as needing sign-in so sessions stop getting its tools.
+   */
+  #watchForRefusedCredentials(record: McpServerRecord, tool: Tool<any, any, any, any>): void {
+    const execute = tool.execute;
+    if (!execute) return;
+    tool.execute = async (input, context) => {
+      try {
+        return await execute(input, context);
+      } catch (error) {
+        if (isUnauthorized(error)) {
+          await this.#storage
+            .setStatus({
+              orgId: record.orgId,
+              id: record.id,
+              status: 'needs_auth',
+              lastError: needsAuthMessage(record.authType),
+              ifUrl: record.url,
+            })
+            .catch(() => undefined);
+          this.invalidate(record.id);
+        }
+        throw error;
+      }
+    };
+  }
+
   #clientFor(record: McpServerRecord): MCPClient {
     const updatedAt = record.updatedAt.getTime();
     const cached = this.#clients.get(record.id);
@@ -185,7 +223,8 @@ export class McpServersRuntime {
     if (cached) this.invalidate(record.id);
     const client = new MCPClient({
       id: `factory-mcp:${record.id}`,
-      servers: { [record.slug]: this.buildDefinition(record) },
+      // Only connected servers reach here; an OAuth one has tokens.
+      servers: { [record.slug]: this.#buildDefinition(record, { signedIn: true }) },
       registerProcessHooks: false,
     });
     this.#clients.set(record.id, { orgId: record.orgId, updatedAt, client });
@@ -208,15 +247,7 @@ function classifyFailure(
   const message = failure.message;
   const code = typeof failure.code === 'string' ? failure.code.toUpperCase() : '';
   if (failure.httpStatus === 401 || /unauthori[sz]ed|\b401\b/i.test(message)) {
-    return {
-      status: 'needs_auth',
-      error:
-        record.authType === 'oauth'
-          ? 'Sign in to connect this server.'
-          : record.authType === 'headers'
-            ? 'The server rejected the saved credentials (HTTP 401). Update the headers and connect again.'
-            : 'The server requires authentication (HTTP 401).',
-    };
+    return { status: 'needs_auth', error: needsAuthMessage(record.authType) };
   }
   if (failure.httpStatus === 403) {
     return {
@@ -242,23 +273,21 @@ function classifyFailure(
       error: `The server responded with HTTP ${failure.httpStatus}. Check that the URL points at an MCP endpoint.`,
     };
   }
-  return { status: 'error', error: `Could not connect: ${scrubSecrets(record, firstLine(message))}` };
+  return { status: 'error', error: `Could not connect: ${safeErrorText(record, message)}` };
 }
 
-function firstLine(message: string): string {
-  const withoutPrefix = message.replace(/^Failed to connect to MCP server [^:]*:\s*/, '');
-  const line = withoutPrefix.split('\n').find(part => part.trim() && !/^\s+at /.test(part)) ?? 'unknown error';
-  return line.trim();
+function needsAuthMessage(authType: McpServerAuthType): string {
+  return authType === 'oauth'
+    ? 'Sign in to connect this server.'
+    : authType === 'headers'
+      ? 'The server rejected the saved credentials (HTTP 401). Update the headers and connect again.'
+      : 'The server requires authentication (HTTP 401).';
 }
 
-function scrubSecrets(record: McpServerRecord, text: string): string {
-  const secrets = [...Object.values(record.headers ?? {}), record.oauthClientSecret]
-    .filter((secret): secret is string => typeof secret === 'string' && secret.length > 0)
-    // A bearer header's token can appear without its "Bearer " prefix.
-    .flatMap(secret => [secret, secret.replace(/^\S+\s+/, '')])
-    .filter(secret => secret.length >= 4)
-    .sort((a, b) => b.length - a.length);
-  let scrubbed = text;
-  for (const secret of secrets) scrubbed = scrubbed.split(secret).join('[redacted]');
-  return scrubbed.length > MAX_ERROR_LENGTH ? `${scrubbed.slice(0, MAX_ERROR_LENGTH - 1)}…` : scrubbed;
+/** A transport-level 401, never an in-band tool error that merely mentions it. */
+function isUnauthorized(error: unknown): boolean {
+  for (let cause = error, depth = 0; cause && depth < 8; cause = (cause as { cause?: unknown }).cause, depth++) {
+    if (cause instanceof UnauthorizedError || (cause as { status?: unknown }).status === 401) return true;
+  }
+  return false;
 }

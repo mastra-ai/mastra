@@ -74,6 +74,7 @@ import { buildPlatformConnectRoutes } from './integrations/platform/connect/rout
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
+import { mcpOAuthEndpoints } from './mcp-servers/oauth.js';
 import { McpServersRuntime } from './mcp-servers/runtime.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
@@ -736,7 +737,11 @@ export class MastraFactory {
     const mcpServersRuntime =
       mcpServersConfig === false
         ? undefined
-        : new McpServersRuntime({ storage: mcpServersStorage, allowPrivateNetwork: mcpServersAllowPrivateNetwork });
+        : new McpServersRuntime({
+            storage: mcpServersStorage,
+            allowPrivateNetwork: mcpServersAllowPrivateNetwork,
+            oauthEndpoints: mcpOAuthEndpoints(publicOrigin),
+          });
     this.#mcpServersRuntime = mcpServersRuntime;
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -1368,6 +1373,14 @@ export class MastraFactory {
             `replica-stable state secret, but none is configured. Set 'stateSecret' on the factory config.`,
         );
       }
+    }
+    // MCP servers are on by default, so a missing secret warns instead of
+    // failing boot: one replica works, more than one breaks the callback.
+    if (mcpServersRuntime && routeAuth.enabled() && !stateSigner.stable) {
+      console.warn(
+        `[factory] MCP server OAuth sign-in signs its state with a per-process secret, so a sign-in fails when ` +
+          `the callback reaches another replica. Set 'stateSecret' on the factory config.`,
+      );
     }
 
     // The SDK needs to know which backend the injected Mastra store uses

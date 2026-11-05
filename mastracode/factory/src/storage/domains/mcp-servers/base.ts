@@ -36,8 +36,12 @@ export interface McpServerRecord {
   oauthClientId: string | null;
   oauthClientSecret: string | null;
   oauthScopes: string[];
-  /** Authorization-server host recorded when OAuth sign-in started; pinned in `allowedHosts`. */
-  authorizationServerHost: string | null;
+  /**
+   * Hosts of the OAuth authorization server (its issuer and token endpoint)
+   * recorded by the last sign-in; with the server's own host they are the
+   * only hosts its connections may reach.
+   */
+  authorizationServerHosts: string[];
   toolCatalog: McpServerToolCatalog | null;
   selectedTools: string[];
   /** Tools that appeared on a refresh and have not been reviewed; never selected automatically. */
@@ -111,7 +115,7 @@ export const MCP_SERVERS_SCHEMA: CollectionSchema = {
     oauth_client_id: { type: 'text', nullable: true },
     oauth_client_secret: { type: 'text', nullable: true },
     oauth_scopes: { type: 'json', nullable: true },
-    authorization_server_host: { type: 'text', nullable: true },
+    authorization_server_hosts: { type: 'json', nullable: true },
     tool_catalog: { type: 'json', nullable: true },
     selected_tools: { type: 'json' },
     new_tools: { type: 'json' },
@@ -163,7 +167,7 @@ interface McpServerDbRow extends Record<string, unknown> {
   oauth_client_id: string | null;
   oauth_client_secret: string | null;
   oauth_scopes: string[] | null;
-  authorization_server_host: string | null;
+  authorization_server_hosts: string[] | null;
   tool_catalog: McpServerToolCatalog | null;
   selected_tools: string[];
   new_tools: string[];
@@ -313,7 +317,7 @@ export class McpServersStorage extends FactoryStorageDomain {
       oauthClientSecret:
         row.oauth_client_secret === null ? null : (await this.#decryptString(row.oauth_client_secret)).value,
       oauthScopes: stringArray(row.oauth_scopes),
-      authorizationServerHost: row.authorization_server_host,
+      authorizationServerHosts: stringArray(row.authorization_server_hosts),
       toolCatalog: row.tool_catalog && typeof row.tool_catalog === 'object' ? row.tool_catalog : null,
       selectedTools: stringArray(row.selected_tools),
       newTools: stringArray(row.new_tools),
@@ -370,7 +374,7 @@ export class McpServersStorage extends FactoryStorageDomain {
         oauth_client_id: oauth?.clientId ?? null,
         oauth_client_secret: oauth?.clientId ? await this.#encryptString(oauth.clientSecret) : null,
         oauth_scopes: oauth?.scopes ?? null,
-        authorization_server_host: null,
+        authorization_server_hosts: null,
         tool_catalog: null,
         selected_tools: [],
         new_tools: [],
@@ -390,9 +394,10 @@ export class McpServersStorage extends FactoryStorageDomain {
   /**
    * Apply an edit. Stored credentials never follow a server to a new origin:
    * changing the URL's origin requires re-sending headers and the client
-   * secret, and clears OAuth tokens, the authorization-server host, the tool
-   * catalog, and the selection. Changing how the server authenticates resets
-   * its status so it is connected again before sessions use it.
+   * secret, and clears OAuth tokens, pending sign-ins, the authorization-server
+   * hosts, the tool catalog, and the selection. Changing how the server
+   * authenticates resets its status so it is connected again before sessions
+   * use it.
    */
   async update({
     orgId,
@@ -447,7 +452,10 @@ export class McpServersStorage extends FactoryStorageDomain {
         const clearsOAuth =
           current.auth_type === 'oauth' &&
           (originChanged || authType !== 'oauth' || clientId !== current.oauth_client_id);
-        if (clearsOAuth) await ops.deleteMany('mcp_server_oauth', { server_id: current.id });
+        if (clearsOAuth) {
+          await ops.deleteMany('mcp_server_oauth', { server_id: current.id });
+          await ops.deleteMany('mcp_server_oauth_flows', { server_id: current.id });
+        }
 
         const reconnect = originChanged || authType !== current.auth_type || input.headers !== undefined || clearsOAuth;
         return {
@@ -458,7 +466,7 @@ export class McpServersStorage extends FactoryStorageDomain {
           oauth_client_id: clientId,
           oauth_client_secret: clientSecret,
           oauth_scopes: scopes,
-          ...(clearsOAuth ? { authorization_server_host: null } : {}),
+          ...(clearsOAuth ? { authorization_server_hosts: null } : {}),
           ...(originChanged ? { tool_catalog: null, selected_tools: [], new_tools: [], discovered_at: null } : {}),
           ...(reconnect ? { status: 'unknown' as const, last_error: null } : {}),
           updated_by: userId,
@@ -610,8 +618,45 @@ export class McpServersStorage extends FactoryStorageDomain {
     };
   }
 
-  async clearOAuth(serverId: string): Promise<void> {
-    await this.#db.deleteMany('mcp_server_oauth', { server_id: serverId });
+  /**
+   * Sign the server out: forget its OAuth tokens, discovery state, pending
+   * sign-ins, and authorization-server hosts, and mark it as needing sign-in.
+   */
+  async disconnectOAuth({ orgId, id }: { orgId: string; id: string }): Promise<McpServerRecord | null> {
+    const row = await this.storage.withTransaction(ops =>
+      ops.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, async () => {
+        await ops.deleteMany('mcp_server_oauth', { server_id: id });
+        await ops.deleteMany('mcp_server_oauth_flows', { server_id: id });
+        return {
+          authorization_server_hosts: null,
+          status: 'needs_auth' as const,
+          last_error: 'Sign in to connect this server.',
+          updated_at: new Date(),
+        };
+      }),
+    );
+    return row ? this.#toRecord(row) : null;
+  }
+
+  /** Record the hosts a completed sign-in talked to. `ifUrl` discards a sign-in for an address the server no longer has. */
+  async setAuthorizationServerHosts({
+    orgId,
+    id,
+    ifUrl,
+    hosts,
+  }: {
+    orgId: string;
+    id: string;
+    ifUrl: string;
+    hosts: string[];
+  }): Promise<McpServerRecord | null> {
+    let applied = false;
+    const row = await this.#db.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, current => {
+      if (current.url !== ifUrl) return null;
+      applied = true;
+      return { authorization_server_hosts: [...new Set(hosts)], updated_at: new Date() };
+    });
+    return row && applied ? this.#toRecord(row) : null;
   }
 
   /** Whether a sign-in stored tokens for the server (`tokens`, or `tokens:<issuer>` per authorization server). */

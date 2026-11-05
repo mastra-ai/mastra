@@ -3,8 +3,20 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
+import {
+  canSignIn,
+  completeMcpOAuth,
+  MCP_OAUTH_CALLBACK_PATH,
+  MCP_OAUTH_CLIENT_METADATA_PATH,
+  MCP_OAUTH_FLOW_TTL_MS,
+  mcpOAuthClientMetadataDocument,
+  mcpOAuthEndpoints,
+  startMcpOAuth,
+} from '../mcp-servers/oauth.js';
 import type { McpServersRuntime } from '../mcp-servers/runtime.js';
 import { createMcpServerSchemas, MCP_SERVER_LIMITS, slugify } from '../mcp-servers/schemas.js';
+import { createGuardedFetch } from '../mcp-servers/url-policy.js';
+import type { StateSigner } from '../state-signing.js';
 import { McpServerInputError, McpServerSlugConflictError } from '../storage/domains/mcp-servers/base.js';
 import type {
   McpServerAuthType,
@@ -24,6 +36,8 @@ export interface McpServerRoutesDeps extends RouteDependencies {
   allowPrivateNetwork: boolean;
   /** Public origin of the Factory; the OAuth Client ID Metadata Document needs it to be https. */
   publicOrigin: string;
+  /** Signs the OAuth `state`; without it servers cannot sign in. Must be replica-stable in multi-replica deployments. */
+  stateSigner?: StateSigner;
 }
 
 export interface McpServerToolInfo {
@@ -67,6 +81,43 @@ interface McpServersContext {
 }
 
 const idSchema = z.uuid();
+
+const oauthStartSchema = z
+  .object({
+    /** The Factory whose settings page the callback returns to. */
+    factoryProjectId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,128}$/, 'Invalid Factory id.')
+      .optional(),
+  })
+  .strict();
+
+/** What the OAuth callback reports back to the settings page; nothing from the authorization server reaches the URL. */
+type OAuthCallbackOutcome =
+  | 'connected'
+  | 'invalid_state'
+  | 'signed_out'
+  | 'unavailable'
+  | 'expired'
+  | 'forbidden'
+  | 'not_found'
+  | 'denied'
+  | 'failed'
+  | 'changed'
+  | 'connect_failed';
+
+function oauthReturnPath(
+  outcome: OAuthCallbackOutcome,
+  { factoryProjectId, serverId }: { factoryProjectId?: string | null; serverId?: string } = {},
+): string {
+  const query = new URLSearchParams({
+    ...(serverId ? { mcpServer: serverId } : {}),
+    oauth: outcome === 'connected' ? 'connected' : 'error',
+    ...(outcome === 'connected' ? {} : { reason: outcome }),
+  });
+  const path = factoryProjectId ? `/factories/${encodeURIComponent(factoryProjectId)}/settings/mcp-servers` : '/';
+  return `${path}?${query}`;
+}
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -137,9 +188,10 @@ function notFound(c: Context) {
   return c.json({ error: 'mcp_server_not_found', message: 'MCP server not found.' }, 404);
 }
 
-async function readJson(c: Context): Promise<{ body: unknown } | { response: Response }> {
+async function readJson(c: Context, { optional = false } = {}): Promise<{ body: unknown } | { response: Response }> {
   try {
-    return { body: await c.req.json() };
+    const text = await c.req.text();
+    return { body: optional && !text.trim() ? {} : JSON.parse(text) };
   } catch {
     return { response: c.json({ error: 'invalid_mcp_server', message: 'Invalid JSON body.' }, 400) };
   }
@@ -153,15 +205,23 @@ async function readJson(c: Context): Promise<{ body: unknown } | { response: Res
  *   - `DELETE /web/config/mcp-servers/:id`         — remove a server (admin)
  *   - `POST   /web/config/mcp-servers/:id/discover` — connect and list the server's tools (admin)
  *   - `PUT    /web/config/mcp-servers/:id/tools`    — choose the tools sessions get (admin)
+ *   - `POST   /web/config/mcp-servers/:id/oauth/start` — begin an OAuth sign-in (admin)
+ *   - `DELETE /web/config/mcp-servers/:id/oauth`   — sign the server out (admin)
+ *   - `GET    /auth/mcp-servers/callback`          — where the authorization server returns the admin
+ *   - `GET    /.well-known/oauth-client/mastra-factory.json` — the Factory's Client ID Metadata Document (https only)
  *
  * Servers belong to the caller's organization (a sentinel `local` org in
- * no-auth mode); a server in another organization is a 404.
+ * no-auth mode); a server in another organization is a 404. OAuth tokens are
+ * shared by the whole organization, so signing in is an admin action, and
+ * the callback re-checks that the signed-in admin who started it finishes it.
  */
 export class McpServerRoutes extends Route<McpServerRoutesDeps> {
   routes(): ApiRoute[] {
-    const { runtime, allowPrivateNetwork, publicOrigin } = this.deps;
+    const { runtime, allowPrivateNetwork, publicOrigin, stateSigner } = this.deps;
     const schemas = createMcpServerSchemas({ allowPrivateNetwork });
-    const metadataDocument = new URL(publicOrigin).protocol === 'https:';
+    const endpoints = mcpOAuthEndpoints(publicOrigin);
+    const clientMetadataDocument = mcpOAuthClientMetadataDocument(endpoints);
+    const fetch = createGuardedFetch({ allowPrivateNetwork });
 
     const handle =
       (
@@ -198,6 +258,39 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
         return record ? run(c, ctx, record) : notFound(c);
       };
 
+    /** Discover the server's tools and save the outcome; a discovery for an address the server no longer has is dropped. */
+    const connect = async (
+      ctx: McpServersContext,
+      record: McpServerRecord,
+    ): Promise<McpServerRecord | 'not_found' | 'changed'> => {
+      const result = await runtime.discover(record);
+      const updated =
+        result.status === 'connected'
+          ? await ctx.storage.saveDiscovery({ orgId: ctx.orgId, id: record.id, ifUrl: record.url, tools: result.tools })
+          : await ctx.storage.setStatus({
+              orgId: ctx.orgId,
+              id: record.id,
+              status: result.status,
+              lastError: result.error,
+              ifUrl: record.url,
+            });
+      runtime.invalidate(record.id);
+      if (updated) return updated;
+      return (await ctx.storage.get({ orgId: ctx.orgId, id: record.id })) ? 'changed' : 'not_found';
+    };
+
+    const connectResponse = async (c: Context, ctx: McpServersContext, record: McpServerRecord) => {
+      const outcome = await connect(ctx, record);
+      if (outcome === 'not_found') return notFound(c);
+      if (outcome === 'changed') {
+        return c.json(
+          { error: 'mcp_server_changed', message: "The server's address changed while connecting. Connect again." },
+          409,
+        );
+      }
+      return c.json({ server: await toMcpServerInfo(ctx.storage, outcome) });
+    };
+
     return [
       registerApiRoute('/web/config/mcp-servers', {
         method: 'GET',
@@ -207,7 +300,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
           return c.json({
             servers: await Promise.all(records.map(record => toMcpServerInfo(ctx.storage, record))),
             canManage: await this.#canManage(c, ctx),
-            oauth: { metadataDocument },
+            oauth: { metadataDocument: Boolean(clientMetadataDocument) },
           });
         }),
       }),
@@ -285,37 +378,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
       registerApiRoute('/web/config/mcp-servers/:id/discover', {
         method: 'POST',
         requiresAuth: false,
-        handler: handle(
-          'admin',
-          withServer(async (c, ctx, record) => {
-            const result = await runtime.discover(record);
-            const updated =
-              result.status === 'connected'
-                ? await ctx.storage.saveDiscovery({
-                    orgId: ctx.orgId,
-                    id: record.id,
-                    ifUrl: record.url,
-                    tools: result.tools,
-                  })
-                : await ctx.storage.setStatus({
-                    orgId: ctx.orgId,
-                    id: record.id,
-                    status: result.status,
-                    lastError: result.error,
-                    ifUrl: record.url,
-                  });
-            runtime.invalidate(record.id);
-            if (updated) return c.json({ server: await toMcpServerInfo(ctx.storage, updated) });
-            if (!(await ctx.storage.get({ orgId: ctx.orgId, id: record.id }))) return notFound(c);
-            return c.json(
-              {
-                error: 'mcp_server_changed',
-                message: "The server's address changed while connecting. Connect again.",
-              },
-              409,
-            );
-          }),
-        ),
+        handler: handle('admin', withServer(connectResponse)),
       }),
 
       registerApiRoute('/web/config/mcp-servers/:id/tools', {
@@ -340,6 +403,159 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
           }),
         ),
       }),
+
+      registerApiRoute('/web/config/mcp-servers/:id/oauth/start', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: handle(
+          'admin',
+          withServer(async (c, ctx, record) => {
+            const json = await readJson(c, { optional: true });
+            if ('response' in json) return json.response;
+            const parsed = oauthStartSchema.safeParse(json.body);
+            if (!parsed.success) return invalidBody(c, parsed.error);
+            if (record.authType !== 'oauth') {
+              return c.json({ error: 'mcp_server_not_oauth', message: 'This server does not use OAuth.' }, 400);
+            }
+            if (!stateSigner) {
+              return c.json(
+                { error: 'mcp_oauth_unavailable', message: 'OAuth sign-in is not available on this deployment.' },
+                503,
+              );
+            }
+            if (!canSignIn(record, endpoints)) {
+              return c.json(
+                {
+                  error: 'mcp_oauth_client_required',
+                  message:
+                    "Add the client ID registered with the server's authorization server, or serve the Factory over https so it can identify itself with its client metadata document.",
+                },
+                400,
+              );
+            }
+
+            const { factoryProjectId } = parsed.data;
+            const state = stateSigner.sign(ctx.orgId, ctx.userId, factoryProjectId ? { factoryProjectId } : undefined);
+            const nonce = stateSigner.verify(state)?.nonce;
+            if (!nonce) throw new Error('The OAuth state signer produced a state it cannot verify.');
+            const result = await startMcpOAuth({
+              record,
+              storage: ctx.storage,
+              endpoints,
+              state,
+              fetch,
+              allowPrivateNetwork,
+            });
+            if (result.status === 'error') return c.json({ error: 'mcp_oauth_failed', message: result.error }, 502);
+            // Stored tokens were refreshed: nothing to sign in to.
+            if (result.status === 'authorized') return connectResponse(c, ctx, record);
+            await ctx.storage.createFlow({
+              nonce,
+              orgId: ctx.orgId,
+              userId: ctx.userId,
+              serverId: record.id,
+              factoryProjectId: factoryProjectId ?? null,
+              expiresAt: new Date(Date.now() + MCP_OAUTH_FLOW_TTL_MS),
+            });
+            return c.json({ authorizationUrl: result.authorizationUrl });
+          }),
+        ),
+      }),
+
+      registerApiRoute('/web/config/mcp-servers/:id/oauth', {
+        method: 'DELETE',
+        requiresAuth: false,
+        handler: handle(
+          'admin',
+          withServer(async (c, ctx, record) => {
+            if (record.authType !== 'oauth') {
+              return c.json({ error: 'mcp_server_not_oauth', message: 'This server does not use OAuth.' }, 400);
+            }
+            const updated = await ctx.storage.disconnectOAuth({ orgId: ctx.orgId, id: record.id });
+            runtime.invalidate(record.id);
+            if (!updated) return notFound(c);
+            return c.json({ server: await toMcpServerInfo(ctx.storage, updated) });
+          }),
+        ),
+      }),
+
+      registerApiRoute(MCP_OAUTH_CALLBACK_PATH, {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async raw => {
+          const c = loose(raw);
+          const back = (outcome: OAuthCallbackOutcome, at?: Parameters<typeof oauthReturnPath>[1]) =>
+            c.redirect(oauthReturnPath(outcome, at));
+          if (!stateSigner) return back('unavailable');
+          const signed = stateSigner.verify(c.req.query('state'));
+          if (!signed) return back('invalid_state');
+          const ctx = await this.#context(c);
+          if (ctx instanceof Response) {
+            return back(ctx.status === 401 ? 'signed_out' : 'unavailable', {
+              factoryProjectId: signed.factoryProjectId,
+            });
+          }
+          // CSRF and cross-tenant protection: only the signed-in user who
+          // started the sign-in, in the same organization, can finish it.
+          if (signed.orgId !== ctx.orgId || signed.userId !== ctx.userId) {
+            console.warn('[factory] MCP server OAuth callback rejected: the sign-in belongs to another user.');
+            return back('invalid_state');
+          }
+          try {
+            // Single use: a replayed or expired callback never reaches the token endpoint.
+            const flow = await ctx.storage.consumeFlow(signed.nonce);
+            if (!flow || flow.orgId !== ctx.orgId || flow.userId !== ctx.userId) {
+              return back('expired', { factoryProjectId: signed.factoryProjectId });
+            }
+            const at = { factoryProjectId: flow.factoryProjectId, serverId: flow.serverId };
+            if (!(await this.#canManage(c, ctx))) return back('forbidden', at);
+            const record = await ctx.storage.get({ orgId: ctx.orgId, id: flow.serverId });
+            if (!record || record.authType !== 'oauth') return back('not_found', at);
+            const error = c.req.query('error');
+            if (error) return back(error === 'access_denied' ? 'denied' : 'failed', at);
+            const code = c.req.query('code');
+            if (!code) return back('failed', at);
+
+            const exchanged = await completeMcpOAuth({
+              record,
+              storage: ctx.storage,
+              endpoints,
+              code,
+              iss: c.req.query('iss'),
+              fetch,
+            });
+            if (exchanged.status === 'error') {
+              console.warn(`[factory] MCP server OAuth sign-in for "${record.slug}" failed: ${exchanged.error}`);
+              return back('failed', at);
+            }
+            const signedIn = await ctx.storage.setAuthorizationServerHosts({
+              orgId: ctx.orgId,
+              id: record.id,
+              ifUrl: record.url,
+              hosts: exchanged.authorizationServerHosts,
+            });
+            if (!signedIn) return back('changed', at);
+            const connected = await connect(ctx, signedIn);
+            if (typeof connected === 'string') return back(connected, at);
+            return back(connected.status === 'connected' ? 'connected' : 'connect_failed', at);
+          } catch (error) {
+            console.error(
+              `[factory] MCP server OAuth callback failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return back('failed', { factoryProjectId: signed.factoryProjectId });
+          }
+        },
+      }),
+
+      ...(clientMetadataDocument
+        ? [
+            registerApiRoute(MCP_OAUTH_CLIENT_METADATA_PATH, {
+              method: 'GET',
+              requiresAuth: false,
+              handler: async raw => loose(raw).json(clientMetadataDocument),
+            }),
+          ]
+        : []),
     ];
   }
 

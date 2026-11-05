@@ -1357,6 +1357,29 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
+  it('warns at boot when MCP server sign-in would break across replicas', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warnings = () =>
+      warn.mock.calls.map(call => String(call[0])).filter(text => text.includes('MCP server OAuth'));
+    try {
+      const cases = [
+        { config: { auth: fakeProvider() }, warns: true },
+        { config: { auth: fakeProvider(), stateSecret: 'deployment-stable-secret' }, warns: false },
+        { config: { auth: fakeProvider(), mcpServers: false as const }, warns: false },
+        // Without auth the Factory is a single local process.
+        { config: { auth: null }, warns: false },
+      ];
+      for (const { config, warns } of cases) {
+        warn.mockClear();
+        prepareMock.mockClear();
+        await prepareFactory({ storage: fakeStorage(), ...config });
+        expect(warnings()).toHaveLength(warns ? 1 : 0);
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('registers the Factory transition tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });
@@ -2110,7 +2133,11 @@ describe('MastraFactory.prepare', () => {
     const authRoutes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).filter(r =>
       r.path.startsWith('/auth/'),
     );
-    expect(authRoutes.map(r => [r.method, r.path])).toEqual([['GET', '/auth/me']]);
+    // The MCP server OAuth callback is not an auth-provider route; local mode can sign MCP servers in.
+    expect(authRoutes.map(r => [r.method, r.path])).toEqual([
+      ['GET', '/auth/me'],
+      ['GET', '/auth/mcp-servers/callback'],
+    ]);
     const json = vi.fn((payload: unknown, status: number) => ({ payload, status }));
     authRoutes[0]!.handler({ json } as never);
     expect(json).toHaveBeenCalledWith({ authEnabled: false, authenticated: false }, 404);

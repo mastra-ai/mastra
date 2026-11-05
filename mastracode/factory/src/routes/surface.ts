@@ -805,6 +805,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           runtime: deps.mcpServers.runtime,
           allowPrivateNetwork: deps.mcpServers.allowPrivateNetwork,
           publicOrigin: deps.publicOrigin,
+          stateSigner: deps.stateSigner,
         }).routes()
       : []),
     ...new OAuthRoutes({
