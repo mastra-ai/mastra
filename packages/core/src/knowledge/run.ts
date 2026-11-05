@@ -30,8 +30,8 @@ export class KnowledgeNotFoundError extends Error {
 
 const NAME_CANDIDATES = 5;
 const CLOSE_MATCHES = 3;
-/** Most shared root scopes a run lists at its root. */
-const SHARED_ROOT_SCOPES = 100;
+/** Most scopes open to every run that a run lists at its root. */
+const OPEN_ROOT_SCOPES = 100;
 
 /**
  * One call's view of Knowledge: the run's principals, its read scope and its provenance. Built per
@@ -45,8 +45,8 @@ export class KnowledgeRun {
     readonly principals: string[],
     readonly read: Exclude<KnowledgeReadScope, 'all'>,
     readonly provenance: KnowledgeProvenance,
-    /** What every run reads in the store's shared scopes; part of {@link read}. */
-    readonly shared: Exclude<KnowledgeReadScope, 'all'>,
+    /** What `*` rules give every run; part of {@link read}. */
+    readonly open: Exclude<KnowledgeReadScope, 'all'>,
   ) {}
 
   static async start(
@@ -55,6 +55,7 @@ export class KnowledgeRun {
     context: KnowledgeRunContext | undefined,
     options: { write?: boolean } = {},
   ): Promise<KnowledgeRun> {
+    await runtime.resolve();
     const principals = knowledgeRunPrincipals(runtime, context);
     const author = context?.agent?.agentId ? `agent:${context.agent.agentId}` : 'agent';
     const provenance: KnowledgeProvenance = {
@@ -66,25 +67,20 @@ export class KnowledgeRun {
     if (options.write) {
       for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
     }
-    const shared = await runtime.sharedReadScope();
-    const read = await runtime.readScopeFor(principals, shared);
-    return new KnowledgeRun(runtime, storage, principals, read, provenance, shared);
+    const [read, open] = await Promise.all([runtime.readScopeFor(principals), runtime.readScopeFor([])]);
+    return new KnowledgeRun(runtime, storage, principals, read, provenance, open);
   }
 
   /**
-   * The scopes the run holds at the root of its listings: its own held scopes, in principal order,
-   * then up to {@link SHARED_ROOT_SCOPES} of the store's shared root scopes.
+   * The scopes at the root of the run's listings: its own held scopes, in principal order, then up to
+   * {@link OPEN_ROOT_SCOPES} root scopes that `*` rules open to every run.
    */
   async rootScopes(): Promise<KnowledgePage[]> {
     const held = await this.storage.getScopesByAddress(this.principals);
     const order = (scope: KnowledgePage) => this.principals.indexOf(scope.address ?? '');
     const own = held.filter(scope => knowledgeScopeReadable(scope, this.read)).sort((a, b) => order(a) - order(b));
-    if (!this.shared.addresses.length && !this.shared.prefixes.length) return own;
-    const { pages } = await this.storage.listChildScopes({
-      parentId: null,
-      read: this.shared,
-      limit: SHARED_ROOT_SCOPES,
-    });
+    if (!this.open.addresses.length && !this.open.prefixes.length) return own;
+    const { pages } = await this.storage.listChildScopes({ parentId: null, read: this.open, limit: OPEN_ROOT_SCOPES });
     const seen = new Set(own.map(scope => scope.id));
     return [...own, ...pages.filter(scope => !scope.deletedAt && !seen.has(scope.id))];
   }
@@ -153,7 +149,7 @@ export class KnowledgeRun {
       return page;
     }
 
-    if (this.runtime.compiled.match(ref) || this.shared.addresses.length || this.shared.prefixes.length) {
+    if (this.runtime.compiled.match(ref)) {
       const scope = await this.#readableScope(ref, createAt);
       if (scope) return scope;
     }

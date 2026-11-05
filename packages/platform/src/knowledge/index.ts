@@ -64,9 +64,9 @@ const operations = [
   'listPageBodyLinkSources',
 ] as const satisfies readonly (keyof KnowledgePageStore)[];
 
-// Storage methods outside the page store that the hosted store answers: the scopes its instance shares
-// with every reader, such as the ones its importers write to.
-const storeOperations = ['listSharedScopeDeclarations'] as const;
+// Storage methods outside the page store that the hosted store answers: the scope declarations its
+// instance supplies, such as the ones its importers write to, with their access rules.
+const storeOperations = ['getScopeDeclarations'] as const;
 
 // Fails to compile when a page-store method is neither forwarded nor deliberately left to the base class.
 type UnforwardedOperation = Exclude<keyof KnowledgePageStore, (typeof operations)[number]>;

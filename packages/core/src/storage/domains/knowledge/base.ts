@@ -1,3 +1,4 @@
+import type { KnowledgeScopeDeclarations } from '../../../knowledge/declarations';
 import { StorageDomain } from '../base';
 import type { KnowledgePageStore } from './pages';
 
@@ -191,14 +192,15 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   }
 
   /**
-   * Scope declaration keys the store declares itself and shares with every reader, such as the scopes
-   * a hosted store's importers write to. Every run reads their scopes and holds them at the root of
-   * its listings, and their stored scopes don't need declaring in config. None by default.
+   * Scope declarations the store supplies itself, such as the scopes a hosted store's importers write
+   * to, with their access rules (`principal: '*'` for every run). Knowledge reads them at the start of
+   * every call and merges them under its config's, so a declaration the store adds or changes applies
+   * from the next call; a key the config declares keeps the config's declaration. None by default.
    *
    * @experimental
    */
-  async listSharedScopeDeclarations(): Promise<string[]> {
-    return [];
+  async getScopeDeclarations(): Promise<KnowledgeScopeDeclarations> {
+    return {};
   }
 
   // Schema-4 page store (see ./pages.ts). Adapters override every method; the defaults refuse, so an

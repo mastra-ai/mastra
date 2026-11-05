@@ -42,11 +42,12 @@ it('uses the project-scoped operation route with bearer auth', async () => {
   ]);
 });
 
-it('asks the hosted store which scopes its instance shares with every reader', async () => {
+it('asks the hosted store for the scope declarations its instance supplies', async () => {
   const urls: string[] = [];
+  const declarations = { 'linear:$account:$connection': { access: [{ principal: '*', role: 'viewer' }] } };
   vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
     urls.push(String(input));
-    return new Response(JSON.stringify({ result: ['linear:$account:$connection'] }));
+    return new Response(JSON.stringify({ result: declarations }));
   });
   const store = (await new PlatformKnowledge({
     apiUrl: 'http://localhost',
@@ -54,8 +55,8 @@ it('asks the hosted store which scopes its instance shares with every reader', a
     accessToken: 'token',
   }).getStorage())!;
   try {
-    expect(await store.listSharedScopeDeclarations()).toEqual(['linear:$account:$connection']);
-    expect(urls).toEqual(['http://localhost/v1/knowledge/kn_1/operations/listSharedScopeDeclarations']);
+    expect(await store.getScopeDeclarations()).toEqual(declarations);
+    expect(urls).toEqual(['http://localhost/v1/knowledge/kn_1/operations/getScopeDeclarations']);
   } finally {
     vi.restoreAllMocks();
   }

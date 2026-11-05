@@ -163,6 +163,7 @@ export async function upsertKnowledgePage(
   host: KnowledgeHostWriter,
   input: KnowledgeUpsertPageInput,
 ): Promise<KnowledgeUpsertPageResult> {
+  await host.runtime.resolve();
   const keys = splitPath(input.path);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
   // No principals: the host is trusted, and the scope is placed (belongsTo) by the first run that holds it.
@@ -203,6 +204,7 @@ export async function removeKnowledgePage(
   host: KnowledgeHostWriter,
   input: KnowledgeRemovePageInput,
 ): Promise<KnowledgePage | null> {
+  await host.runtime.resolve();
   const keys = splitPath(input.path);
   await host.runtime.checkDeclarations();
   const storage = await host.getStorage();
@@ -262,6 +264,7 @@ export async function addKnowledgeNote(
   host: KnowledgeHostWriter,
   input: KnowledgeAddNoteInput,
 ): Promise<KnowledgeNote> {
+  await host.runtime.resolve();
   const keys = splitPath(input.path);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
   const storage = await host.getStorage();
@@ -285,6 +288,7 @@ export async function updateKnowledgeNote(
   host: KnowledgeHostWriter,
   input: KnowledgeUpdateNoteInput,
 ): Promise<KnowledgeNote> {
+  await host.runtime.resolve();
   assertKnowledgeNoteTextWithinBound(input.text);
   const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
   const storage = await host.getStorage();
@@ -324,6 +328,7 @@ export async function removeKnowledgeNote(
   host: KnowledgeHostWriter,
   input: { id: string; author?: string },
 ): Promise<KnowledgeNote | null> {
+  await host.runtime.resolve();
   const author = input.author ?? 'host';
   const storage = await host.getStorage();
   const note = await storage.getNote({ id: input.id, read: 'all' });

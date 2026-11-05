@@ -28,13 +28,13 @@ export function strongerKnowledgeRole(a: KnowledgeRole | null | undefined, b: Kn
 }
 
 /**
- * Runs holding `principal` get `role` on the declared scope. `self` is the scope itself; `$params` in
- * the principal are bound from the scope's address, or through its `belongsTo`.
+ * Runs holding `principal` get `role` on the declared scope. `self` is the scope itself and `*` is
+ * every run; `$params` in the principal are bound from the scope's address, or through its `belongsTo`.
  *
  * @experimental
  */
 export interface KnowledgeAccessRule {
-  principal: 'self' | (string & {});
+  principal: 'self' | '*' | (string & {});
   role: KnowledgeRole;
 }
 
@@ -170,6 +170,8 @@ export interface KnowledgeScopePattern {
 export type KnowledgeRuleReach =
   /** The principal is the scope itself. */
   | { kind: 'self' }
+  /** Every run, whatever it holds: every scope of the declaration. */
+  | { kind: 'everyone' }
   /** The target's params bound from the principal give an exact address (concrete target or every param bound). */
   | { kind: 'exact' }
   /** The principal binds a leading run of the target's params: every target address with that prefix. */
@@ -178,7 +180,7 @@ export type KnowledgeRuleReach =
   | { kind: 'belongsTo' };
 
 export interface CompiledKnowledgeRule {
-  /** Null for `self`. */
+  /** Null for `self` and `*`. */
   principal: KnowledgeScopePattern | null;
   role: KnowledgeRole;
   reach: KnowledgeRuleReach;
@@ -345,32 +347,6 @@ export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: R
   return prefix;
 }
 
-/**
- * What every run reads in a store's shared scope declarations (see
- * `KnowledgeStorage.listSharedScopeDeclarations`): every scope of a pattern key, a concrete key's own
- * address, and for a template child key (`<parent>/<name>`) the children of that name. A malformed
- * key reaches nothing.
- */
-export function knowledgeSharedReadScope(keys: readonly string[]): {
-  addresses: string[];
-  prefixes: Array<{ declaration: string; prefix: string }>;
-} {
-  const addresses: string[] = [];
-  const prefixes: Array<{ declaration: string; prefix: string }> = [];
-  for (const key of new Set(keys)) {
-    const slash = key.indexOf('/');
-    let pattern: KnowledgeScopePattern;
-    try {
-      pattern = parsePattern(slash === -1 ? key : key.slice(0, slash), 'Shared Knowledge scope key');
-    } catch {
-      continue;
-    }
-    if (pattern.params.length === 0) addresses.push(key);
-    else prefixes.push({ declaration: key, prefix: knowledgePatternPrefix(pattern, {})! });
-  }
-  return { addresses, prefixes };
-}
-
 /** Sample address for a pattern, used to check that a principal pattern fits its declared type. */
 function sampleAddress(pattern: KnowledgeScopePattern): string {
   return bindKnowledgePattern(pattern, Object.fromEntries(pattern.params.map((param, i) => [param, `p${i}`])))!;
@@ -533,6 +509,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
         throw new KnowledgeDeclarationError(`Knowledge rule on "${target}" has unknown role "${rule.role}".`);
       }
       if (rule.principal === 'self') return { principal: null, role: rule.role, reach: { kind: 'self' } };
+      if (rule.principal === '*') return { principal: null, role: rule.role, reach: { kind: 'everyone' } };
       const principal = principalPattern(rule.principal, target);
       const bound = principal.params;
       const unbindable = bound.filter(param => !targetParams.includes(param) && !belongsTo?.params.includes(param));

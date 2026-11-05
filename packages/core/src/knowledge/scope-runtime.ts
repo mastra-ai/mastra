@@ -11,7 +11,6 @@ import {
   compileKnowledgeScopes,
   KnowledgeDeclarationError,
   knowledgeRunScopes,
-  knowledgeSharedReadScope,
   strongerKnowledgeRole,
 } from './declarations';
 import type { CompiledKnowledgeScopes, KnowledgeRole, KnowledgeScopeDeclarations } from './declarations';
@@ -31,7 +30,10 @@ export interface KnowledgeAccessExplanation {
 
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
-  readonly compiled: CompiledKnowledgeScopes;
+  readonly #config: KnowledgeScopeDeclarations;
+  readonly #configCompiled: CompiledKnowledgeScopes;
+  /** The last resolved declarations, keyed by what the store supplied. */
+  #resolved: { stored: string; compiled: CompiledKnowledgeScopes };
   #declarationsChecked?: Promise<void>;
 
   constructor(
@@ -39,7 +41,43 @@ export class KnowledgeScopeRuntime {
     private readonly getStorage: () => Promise<KnowledgeStorage>,
     private readonly warn: (message: string) => void,
   ) {
-    this.compiled = compileKnowledgeScopes(structuredClone(declarations));
+    this.#config = structuredClone(declarations);
+    this.#configCompiled = compileKnowledgeScopes(structuredClone(declarations));
+    this.#resolved = { stored: '{}', compiled: this.#configCompiled };
+  }
+
+  /** The declarations as last resolved: the config's, plus the store's from the latest {@link resolve}. */
+  get compiled(): CompiledKnowledgeScopes {
+    return this.#resolved.compiled;
+  }
+
+  /**
+   * Re-reads the store's scope declarations and merges them under the config's: a key the config
+   * declares keeps the config's declaration. Called once at the start of every call, so a declaration
+   * the store adds or changes applies from the next call. A store declaration that doesn't compile
+   * next to the others is skipped with a warning. Recompiles only when the store's answer changes.
+   */
+  async resolve(): Promise<CompiledKnowledgeScopes> {
+    const stored = await (await this.getStorage()).getScopeDeclarations();
+    const key = JSON.stringify(stored);
+    if (key === this.#resolved.stored) return this.#resolved.compiled;
+    let merged = this.#config;
+    let compiled = this.#configCompiled;
+    for (const [name, declaration] of Object.entries(stored)) {
+      if (Object.hasOwn(this.#config, name)) continue;
+      const next = { ...merged, [name]: declaration };
+      try {
+        compiled = compileKnowledgeScopes(structuredClone(next));
+        merged = next;
+      } catch (error) {
+        this.warn(
+          `Knowledge skipped the store's scope declaration "${name}": ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    this.#resolved = { stored: key, compiled };
+    this.#declarationsChecked = undefined;
+    return compiled;
   }
 
   validatePrincipals(principals: readonly string[]): void {
@@ -51,9 +89,10 @@ export class KnowledgeScopeRuntime {
   }
 
   /**
-   * Fails when stored scope pages carry declaration keys this config doesn't declare: a renamed or
-   * removed key would otherwise silently cut those scopes off from prefix and `belongsTo` reach.
-   * Checked once per instance; only a pass is remembered, so a store error is retried next time.
+   * Fails when stored scope pages carry declaration keys neither the config nor the store declares: a
+   * renamed or removed key would otherwise silently cut those scopes off from prefix and `belongsTo`
+   * reach. Checked once per set of resolved declarations; only a pass is remembered, so a store error
+   * is retried next time.
    */
   checkDeclarations(): Promise<void> {
     if (!this.#declarationsChecked) {
@@ -68,13 +107,8 @@ export class KnowledgeScopeRuntime {
 
   async #checkDeclarations(): Promise<void> {
     const storage = await this.getStorage();
-    const [stored, shared] = await Promise.all([
-      storage.listScopeDeclarations(),
-      storage.listSharedScopeDeclarations(),
-    ]);
-    const storeDeclared = new Set(shared);
-    const orphans = stored.filter(
-      ({ declaration }) => !this.compiled.declarations.has(declaration) && !storeDeclared.has(declaration),
+    const orphans = (await storage.listScopeDeclarations()).filter(
+      ({ declaration }) => !this.compiled.declarations.has(declaration),
     );
     if (orphans.length === 0) return;
     const listed = orphans
@@ -119,29 +153,11 @@ export class KnowledgeScopeRuntime {
     return renamed;
   }
 
-  /** What every run reads in the store's shared scope declarations. See {@link KnowledgeStorage.listSharedScopeDeclarations}. */
-  async sharedReadScope(): Promise<Exclude<KnowledgeReadScope, 'all'>> {
-    const storage = await this.getStorage();
-    return { ...knowledgeSharedReadScope(await storage.listSharedScopeDeclarations()), children: [] };
-  }
-
-  /** What `principals` read: what their rules reach, plus the store's shared scopes. */
-  async readScopeFor(
-    principals: readonly string[],
-    shared?: Exclude<KnowledgeReadScope, 'all'>,
-  ): Promise<Exclude<KnowledgeReadScope, 'all'>> {
+  async readScopeFor(principals: readonly string[]): Promise<Exclude<KnowledgeReadScope, 'all'>> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
     const storage = await this.getStorage();
-    const [own, open] = await Promise.all([
-      knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses)),
-      shared ?? this.sharedReadScope(),
-    ]);
-    return {
-      addresses: [...new Set([...own.addresses, ...open.addresses])],
-      prefixes: [...own.prefixes, ...open.prefixes],
-      children: [...own.children, ...open.children],
-    };
+    return knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses));
   }
 
   async roleOn(principals: readonly string[], scope: KnowledgePage): Promise<KnowledgeRole | null> {
