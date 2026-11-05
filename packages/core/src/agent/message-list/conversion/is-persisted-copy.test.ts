@@ -96,4 +96,14 @@ describe('isPersistedCopy', () => {
 
     expect(isPersistedCopy(live, stored)).toBe(false);
   });
+
+  it('treats a stored text part with no string text as empty instead of throwing', () => {
+    // Rows from storage are not type-checked; memory saves such a part as ''.
+    const missingText = { type: 'text', text: null } as unknown as MastraMessagePart;
+    const live = assistant([reasoning('rs_example'), { type: 'text', text: '' }]);
+    const stored = assistant([reasoning('rs_example'), missingText]);
+
+    expect(() => isPersistedCopy(live, stored)).not.toThrow();
+    expect(isPersistedCopy(live, stored)).toBe(true);
+  });
 });

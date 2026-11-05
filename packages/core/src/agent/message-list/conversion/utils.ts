@@ -91,7 +91,9 @@ export function messagesAreEqual(one: MessageInput, two: MessageInput): boolean 
  */
 function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePart[] {
   return removeWorkingMemoryToolInvocationParts(parts).map(part =>
-    part.type === 'text' ? { ...part, text: removeWorkingMemoryTags(part.text).trim() } : part,
+    part.type === 'text'
+      ? { ...part, text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim() }
+      : part,
   );
 }
 
