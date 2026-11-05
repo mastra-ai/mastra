@@ -63,7 +63,6 @@ function VoiceButton({ factoryId, disabled, onTranscript, onError }: ComposerVoi
       aria-label="Dictate"
       aria-pressed={recording}
       tooltip={TOOLTIPS[state]}
-      className={recording ? 'text-destructive' : undefined}
     >
       <VoiceIcon state={state} />
     </Button>
