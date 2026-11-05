@@ -12,17 +12,20 @@ export interface ResolveRunBusInput {
   /** The Mastra-level bus, once the agent is registered. */
   sharedBus?: PubSub;
   /**
-   * Whether run frames must live on `sharedBus` (steps publish from any
-   * worker). Only called when `sharedBus` is set, so it may resolve state that
-   * needs registration.
+   * Whether run frames must live on `sharedBus` even when the user provided
+   * `agentBus` (steps publish from any worker). Only called when `sharedBus`
+   * is set and `agentBus` is the user's, so it may resolve state that needs
+   * registration.
    */
   requiresSharedBus: () => boolean;
   warn: (message: string) => void;
 }
 
 /**
- * The bus a run's frames live on: `sharedBus` when the run's steps publish
- * there, otherwise the agent's own bus.
+ * The bus a run's frames live on. A registered agent publishes on `sharedBus`
+ * so other Mastra instances on that bus can observe its runs. A user-provided
+ * `agentBus` takes precedence unless the run's steps publish on `sharedBus`.
+ * Unregistered agents keep their own bus.
  */
 export function resolveRunBus({
   agentBus,
@@ -31,8 +34,10 @@ export function resolveRunBus({
   requiresSharedBus,
   warn,
 }: ResolveRunBusInput): PubSub {
-  if (!sharedBus || !requiresSharedBus()) return agentBus;
-  if (hasCustomBus && sharedBus.__rawBus() !== agentBus.__rawBus()) {
+  if (!sharedBus) return agentBus;
+  if (!hasCustomBus) return sharedBus;
+  if (!requiresSharedBus()) return agentBus;
+  if (sharedBus.__rawBus() !== agentBus.__rawBus()) {
     warn(
       `Evented run frames use the Mastra pubsub, not the agent-level 'pubsub', because evented steps publish there.`,
     );
