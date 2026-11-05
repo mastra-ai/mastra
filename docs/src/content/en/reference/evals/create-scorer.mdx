@@ -85,7 +85,7 @@ const scorer = createScorer({
             type: 'RequestContext',
             isOptional: true,
             description:
-              "Values available to the judge's dynamic instructions, model, tools, and processors. Values from the run's `requestContext` override these values, except for reserved Mastra keys and `MastraMemory`, which the judge doesn't receive from the run. Only the scorer-level `judge` reads this option.",
+              "Values available to the judge's dynamic instructions, tools, and processors. Values from the run's `requestContext` override these values, except for reserved Mastra keys and `MastraMemory`, which the judge doesn't receive from the run. Only the scorer-level `judge` reads this option.",
           },
           {
             name: 'jsonPromptInjection',

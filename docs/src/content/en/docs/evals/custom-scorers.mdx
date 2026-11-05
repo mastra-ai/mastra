@@ -435,7 +435,7 @@ Parallel judge calls can't read each other's cache writes. Run one call first, t
 
 By default, each step with a different output format writes its own cache entry. To share one entry across `analyze`, `generateScore`, and `generateReason`, set `jsonPromptInjection: 'inline'` on the judge.
 
-Each judge stays on its own memory thread because Mastra removes reserved keys and `MastraMemory` from the run's context. Experiments and trace scoring run scorers without a request context. For those runs, set `judge.requestContext` on the scorer. Live scorers receive only string, number, and boolean values from the agent's request context, and nested values use dotted keys such as `report.title`.
+Each judge stays on its own memory thread because Mastra removes reserved keys and `MastraMemory` from the run's context. `runEvals` passes each item's `requestContext` to the judge. Dataset experiments and trace scoring run scorers without a request context, so set `judge.requestContext` on the scorer for those runs. Live scorers receive only string, number, and boolean values from the agent's request context, and nested values use dotted keys such as `report.title`.
 
 Mastra records the resolved instructions on each judge's agent span. Your traces store a copy of the report for every call.
 

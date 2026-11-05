@@ -983,34 +983,23 @@ class MastraScorer<
       return requestContext;
     }
 
-    // A RequestContext from a second copy of @mastra/core fails instanceof.
-    const entries =
-      typeof requestContext.entries === 'function' ? requestContext.entries() : Object.entries(requestContext);
-    return new RequestContext(entries);
+    return new RequestContext(Object.entries(requestContext));
   }
 
   private mergeJudgeRequestContext(
-    judgeRequestContext: RequestContext<any> | undefined,
     runRequestContext?: Record<string, any> | RequestContext,
   ): RequestContext<any> | undefined {
     const scorerRequestContext = this.config.judge?.requestContext;
-    const belongsToCallerRun = (key: string) => key === 'MastraMemory' || isReservedRequestContextKey(key);
+    // Reserved keys and the memory binding would put the judge on the caller's thread.
     const runEntries = [...(this.normalizeRunRequestContext(runRequestContext)?.entries() ?? [])].filter(
-      ([key]) => !belongsToCallerRun(key),
+      ([key]) => key !== 'MastraMemory' && !isReservedRequestContextKey(key),
     );
 
-    if (runEntries.length === 0 && judgeRequestContext === scorerRequestContext) {
-      return judgeRequestContext;
+    if (runEntries.length === 0) {
+      return scorerRequestContext;
     }
 
-    const merged = new RequestContext<any>([...(judgeRequestContext?.entries() ?? []), ...runEntries]);
-    // Each judge call binds its own memory, so the previous step's binding stays behind.
-    merged.delete('MastraMemory');
-    const scorerMemoryBinding = scorerRequestContext?.get('MastraMemory');
-    if (scorerMemoryBinding) {
-      merged.set('MastraMemory', scorerMemoryBinding);
-    }
-    return merged;
+    return new RequestContext<any>([...(scorerRequestContext?.entries() ?? []), ...runEntries]);
   }
 
   /**
@@ -1283,8 +1272,6 @@ class MastraScorer<
   }
 
   private toMastraWorkflow() {
-    const runJudgeContext = { current: this.config.judge?.requestContext };
-
     // Convert each scorer step to a workflow step
     const workflowSteps = this.steps.map(scorerStep => {
       return createStep({
@@ -1337,7 +1324,6 @@ class MastraScorer<
                     scorerStep,
                     stepObservabilityContext,
                     executionContext,
-                    runJudgeContext,
                   );
                   stepResult = promptStepResult.result;
                   prompt = promptStepResult.prompt;
@@ -1480,7 +1466,6 @@ class MastraScorer<
     scorerStep: ScorerStepDefinition,
     observabilityContext: ObservabilityContext,
     context: any,
-    runJudgeContext: { current: RequestContext<any> | undefined },
   ): Promise<{ result: unknown; prompt: string; judgeModel?: string; execution: ScorerJudgeExecution }> {
     const startedAt = performance.now();
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
@@ -1489,8 +1474,7 @@ class MastraScorer<
     }
 
     const prompt = await originalStep.createPrompt(context);
-    const judgeRequestContext = this.mergeJudgeRequestContext(runJudgeContext.current, context.run.requestContext);
-    runJudgeContext.current = judgeRequestContext;
+    const judgeRequestContext = this.mergeJudgeRequestContext(context.run.requestContext);
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
@@ -1540,7 +1524,11 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(modelConfig, judgeRequestContext, this.#mastra);
+    const resolvedModel = await resolveModelConfig(
+      modelConfig,
+      this.config.judge?.requestContext ?? undefined,
+      this.#mastra,
+    );
     const judgeModel = resolvedModel.modelId;
     const telemetry: ScorerJudgeTelemetryAccumulator = {
       usage: {},

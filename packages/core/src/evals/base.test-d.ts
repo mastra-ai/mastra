@@ -21,20 +21,3 @@ test('judge instructions accept the same forms as agent instructions', () => {
     createScorer({ id: 'report-judge', description: 'Scores a report', judge });
   }
 });
-
-test('dynamic judge instructions get a request context on the scorer and on a step', () => {
-  createScorer({
-    id: 'report-judge',
-    description: 'Scores a report',
-    judge: {
-      model,
-      instructions: ({ requestContext }) => [
-        { role: 'system', content: `Report: ${requestContext.get('report')}`, providerOptions: cache },
-      ],
-    },
-  }).generateScore({
-    description: 'Accuracy',
-    judge: { model, instructions: async ({ requestContext }) => `Report: ${requestContext.get('report')}` },
-    createPrompt: () => 'How accurate is it?',
-  });
-});
