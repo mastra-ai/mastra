@@ -134,3 +134,43 @@ it('rejects scope declaration renames locally because the rename check cannot cr
     fetchSpy.mockRestore();
   }
 });
+
+async function storeServer(declarations: { declaration: string; scopes: number }[]) {
+  const server = createServer(async (req, res) => {
+    for await (const _ of req);
+    const operation = req.url?.split('/').pop();
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ result: operation === 'listScopeDeclarations' ? declarations : [] }));
+  });
+  servers.push(server);
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Expected a TCP port');
+  return `http://127.0.0.1:${address.port}`;
+}
+
+it.each([
+  ['the default scopes', undefined],
+  ['scopes of its own', { 'agent:$agentId': { access: [{ principal: 'self' as const, role: 'owner' as const }] } }],
+])('accepts importer scopes in the store next to %s, and reads one a run holds', async (_, scopes) => {
+  const apiUrl = await storeServer([
+    { declaration: 'linear:$account:$connection', scopes: 1 },
+    { declaration: 'fireflies:$account:$connection', scopes: 1 },
+  ]);
+  const knowledge = new PlatformKnowledge({ apiUrl, instanceId: 'kn_1', accessToken: 'token', scopes });
+
+  expect(await knowledge.readScopeFor(['linear:acme:conn_1'])).toMatchObject({
+    addresses: expect.arrayContaining(['linear:acme:conn_1']),
+  });
+});
+
+it("keeps a project's own declaration of an importer pattern", () => {
+  const knowledge = new PlatformKnowledge({
+    apiUrl: 'http://localhost',
+    instanceId: 'kn_1',
+    accessToken: 'token',
+    scopes: { 'linear:$account:$connection': { displayLabel: 'Our Linear' } },
+  });
+  expect(knowledge.scopeDeclaration('linear:$account:$connection')?.displayLabel).toBe('Our Linear');
+  expect(knowledge.scopeDeclaration('notion:$account:$connection')?.displayLabel).toBe('Notion');
+});

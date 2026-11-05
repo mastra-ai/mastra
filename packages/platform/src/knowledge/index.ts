@@ -1,5 +1,5 @@
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
-import type { KnowledgeConfig } from '@mastra/core/knowledge';
+import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
 import {
   MastraCompositeStore,
   KnowledgeStorage,
@@ -171,6 +171,32 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
 
 const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 
+const IMPORTER_PROVIDERS = {
+  confluence: 'Confluence',
+  fireflies: 'Fireflies',
+  linear: 'Linear',
+  notion: 'Notion',
+  zendesk: 'Zendesk',
+} as const;
+
+/**
+ * Declarations for the scopes Mastra platform importers write to: `<provider>:$account:$connection`
+ * for each provider. A run holding one of these scopes can read the pages imported into it.
+ * Importers own those pages, so runs get `viewer`.
+ */
+export function knowledgeImporterScopes(): KnowledgeScopeDeclarations {
+  return Object.fromEntries(
+    Object.entries(IMPORTER_PROVIDERS).map(([provider, label]) => [
+      `${provider}:$account:$connection`,
+      {
+        displayLabel: label,
+        description: `Pages imported from a ${label} connection.`,
+        access: [{ principal: 'self', role: 'viewer' }],
+      },
+    ]),
+  );
+}
+
 export class PlatformKnowledge extends Knowledge {
   constructor(options: PlatformKnowledgeOptions = {}) {
     const token =
@@ -195,7 +221,9 @@ export class PlatformKnowledge extends Knowledge {
     super({
       ...config,
       tools: config.tools ?? { read: true },
-      scopes: config.scopes ?? knowledgeMemoryScopes(),
+      // Importers write to the same store, so their scopes are always declared; the project's own
+      // declaration of a pattern wins.
+      scopes: { ...knowledgeImporterScopes(), ...(config.scopes ?? knowledgeMemoryScopes()) },
       storage,
     });
   }
