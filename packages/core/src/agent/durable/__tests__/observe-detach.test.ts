@@ -55,8 +55,8 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
 
   const spies = async (runId: string) => {
     // These tests observe an existing run, not an unavailable topic.
-    await emitOwnershipClaimedEvent(agent.pubsub, runId, 1);
-    const topic = AGENT_STREAM_TOPIC(runId);
+    await emitOwnershipClaimedEvent(agent.pubsub, 'observe-detach-agent', runId, 1);
+    const topic = AGENT_STREAM_TOPIC('observe-detach-agent', runId);
     const unsubscribe = vi.spyOn(agent.pubsub, 'unsubscribe');
     const clearTopic = vi.spyOn(agent.pubsub, 'clearTopic');
     return {
@@ -125,7 +125,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
         if ((chunk as any).type === 'text-delta') break;
       }
     })();
-    await emitChunkEvent(agent.pubsub, runId, textChunk('a'));
+    await emitChunkEvent(agent.pubsub, 'observe-detach-agent', runId, textChunk('a'));
     expect(await within(consumed)).toBeUndefined();
     await delay(20);
 
@@ -176,7 +176,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
         // drain
       }
     })();
-    await emitFinishEvent(agent.pubsub, finishRun, finishData);
+    await emitFinishEvent(agent.pubsub, 'observe-detach-agent', finishRun, finishData);
     await within(consumed);
     await vi.waitFor(() => expect(f.topicCleared()).toBe(true), { timeout: 1000 });
 
@@ -199,8 +199,8 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
       cleanupTimeoutMs: 0,
     }) as DurableAgent;
     const runId = 'natural-end';
-    await emitOwnershipClaimedEvent(noCleanup.pubsub, runId, 1);
-    const topic = AGENT_STREAM_TOPIC(runId);
+    await emitOwnershipClaimedEvent(noCleanup.pubsub, 'no-cleanup', runId, 1);
+    const topic = AGENT_STREAM_TOPIC('no-cleanup', runId);
     const unsubscribe = vi.spyOn(noCleanup.pubsub, 'unsubscribe');
     const { fullStream } = await noCleanup.observe(runId);
     const consumed = (async () => {
@@ -208,7 +208,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
         // drain
       }
     })();
-    await emitFinishEvent(noCleanup.pubsub, runId, finishData);
+    await emitFinishEvent(noCleanup.pubsub, 'no-cleanup', runId, finishData);
     expect(await within(consumed)).toBeUndefined();
     await vi.waitFor(() => expect(unsubscribe.mock.calls.some(([t]) => t === topic)).toBe(true), { timeout: 1000 });
   });
@@ -226,9 +226,9 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
       }
     })();
 
-    await emitChunkEvent(agent.pubsub, runId, textChunk('a'));
+    await emitChunkEvent(agent.pubsub, 'observe-detach-agent', runId, textChunk('a'));
     first.detach();
-    await emitChunkEvent(agent.pubsub, runId, textChunk('b'));
+    await emitChunkEvent(agent.pubsub, 'observe-detach-agent', runId, textChunk('b'));
     await delay(20);
     expect(received).toEqual(['a', 'b']);
     expect(s.topicCleared()).toBe(false);

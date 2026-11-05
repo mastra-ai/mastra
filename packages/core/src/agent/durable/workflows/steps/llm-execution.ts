@@ -368,7 +368,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra);
+          await ensureRemoteAbortListener(pubsub, agentId, runId, mastra);
         } catch (error) {
           ownership?.throwIfLost();
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {
@@ -411,7 +411,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
         // Emit the deferred error chunk so consumers see it
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
+          await emitChunkEvent(pubsub, agentId, runId, {
             type: 'error',
             runId,
             from: ChunkFrom.AGENT,
@@ -424,7 +424,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
           if (!signalPreempted) {
             // Emit step-finish so MastraModelOutput resolves finishReason to 'error'.
-            await emitChunkEvent(pubsub, runId, {
+            await emitChunkEvent(pubsub, agentId, runId, {
               type: 'step-finish',
               runId,
               from: ChunkFrom.AGENT,
@@ -512,7 +512,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         });
 
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
+          await emitChunkEvent(pubsub, agentId, runId, {
             type: 'tripwire',
             runId,
             from: ChunkFrom.AGENT,
@@ -627,6 +627,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           for (const id of openReasoningIds) {
             await emitChunkEvent(
               pubsub,
+              agentId,
               runId,
               { type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } },
               true,
@@ -677,7 +678,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           }),
         );
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, feedbackSignal.toDataPart());
+          await emitChunkEvent(pubsub, agentId, runId, feedbackSignal.toDataPart());
         }
       }
       const initialEchoes = signalRegistry?.initialSignalEchoes?.splice(0) ?? [];
@@ -699,7 +700,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       );
       if (pubsub) {
         for (const signal of [...initialEchoes, ...admittedSignals]) {
-          await emitChunkEvent(pubsub, runId, signal.toDataPart());
+          await emitChunkEvent(pubsub, agentId, runId, signal.toDataPart());
         }
       }
       // Mirror Agent: later iterations continue the same assistant message behind a step-start
@@ -986,7 +987,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {
-                      await emitChunkEvent(pubsub, runId, data as any);
+                      await emitChunkEvent(pubsub, agentId, runId, data as any);
                     },
                   }
                 : undefined;
@@ -1085,7 +1086,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           // matching how the durable tool-call step builds its writer.
                           outputWriter: pubsub
                             ? async (chunk: any) => {
-                                await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+                                await emitChunkEvent(pubsub, agentId, runId, chunk as ChunkType);
                               }
                             : undefined,
                         },
@@ -1141,7 +1142,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     retry: error.options?.retry,
                   });
                   if (pubsub) {
-                    await emitChunkEvent(pubsub, runId, {
+                    await emitChunkEvent(pubsub, agentId, runId, {
                       type: 'tripwire',
                       runId,
                       from: ChunkFrom.AGENT,
@@ -1265,7 +1266,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const requestStepWriter = pubsub
               ? {
                   custom: async (data: { type: string }) => {
-                    await emitChunkEvent(pubsub, runId, data as any);
+                    await emitChunkEvent(pubsub, agentId, runId, data as any);
                   },
                 }
               : undefined;
@@ -1300,7 +1301,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   // Emit a tripwire chunk and return a bail response so the
                   // dowhile loop stops gracefully with reason: 'tripwire'.
                   if (pubsub) {
-                    await emitChunkEvent(pubsub, runId, {
+                    await emitChunkEvent(pubsub, agentId, runId, {
                       type: 'tripwire',
                       runId,
                       from: ChunkFrom.AGENT,
@@ -1817,7 +1818,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ) => {
                     ownership?.throwIfLost();
                     persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
-                    await emitChunkEvent(pubsub, runId, data as any);
+                    await emitChunkEvent(pubsub, agentId, runId, data as any);
                   },
                 }
               : undefined;
@@ -1830,7 +1831,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     ownership?.throwIfLost();
                     persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
                     try {
-                      await emitChunkEvent(pubsub, runId, data as any, true);
+                      await emitChunkEvent(pubsub, agentId, runId, data as any, true);
                     } catch (error) {
                       ownership?.throwIfLost();
                       throw new DurableChunkPublishError(error);
@@ -1907,9 +1908,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           }
                           try {
                             if (chunk.type === 'step-start') {
-                              await publishStepStartChunk(pubsub, runId, chunk, true);
+                              await publishStepStartChunk(pubsub, agentId, runId, chunk, true);
                             } else {
-                              await emitChunkEvent(pubsub, runId, chunk, true);
+                              await emitChunkEvent(pubsub, agentId, runId, chunk, true);
                             }
                           } catch (error) {
                             ownership?.throwIfLost();
@@ -1938,7 +1939,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       break;
                     }
                   } else {
-                    await publishStepStartChunk(pubsub, runId, stepStartChunk);
+                    await publishStepStartChunk(pubsub, agentId, runId, stepStartChunk);
                   }
                 }
 
@@ -2200,7 +2201,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           recordProcessedChunk(chunk);
                           trackOpenReasoning(chunk, openReasoningIds);
                           try {
-                            await emitChunkEvent(pubsub, runId, chunk, true);
+                            await emitChunkEvent(pubsub, agentId, runId, chunk, true);
                           } catch (error) {
                             ownership?.throwIfLost();
                             throw new DurableChunkPublishError(error);
@@ -2234,7 +2235,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     // none are configured; another worker may own those processors.
                     if (effectiveOutputProcessors.length === 0) recordProcessedChunk(clientChunk);
                     trackOpenReasoning(clientChunk, openReasoningIds);
-                    await emitChunkEvent(pubsub, runId, clientChunk);
+                    await emitChunkEvent(pubsub, agentId, runId, clientChunk);
                   }
                 }
 
@@ -2529,6 +2530,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     });
                     await emitChunkEvent(
                       pubsub,
+                      agentId,
                       runId,
                       {
                         type: 'tripwire',
@@ -2547,7 +2549,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                   if (r.part == null) continue;
                   trackOpenReasoning(r.part, openReasoningIds);
-                  await emitChunkEvent(pubsub, runId, r.part, true);
+                  await emitChunkEvent(pubsub, agentId, runId, r.part, true);
                   if (r.part.type === 'tool-result') releasedToolResultIds.push(r.part.payload.toolCallId);
                   collectedChunks.push({
                     type: r.part.type,
@@ -2570,7 +2572,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                 const kept = await getToolResultRunner().discardHeldParts(registryEntry.processorStates);
                 if (pubsub) {
-                  for (const part of kept) await emitChunkEvent(pubsub, runId, part, true);
+                  for (const part of kept) await emitChunkEvent(pubsub, agentId, runId, part, true);
                 }
               }
               throwIfInterrupted();
@@ -2729,7 +2731,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             if (toolResultTripwire || outputStreamBlocked) {
               if (toolResultTripwire) endTripwireSpans(toolResultTripwire);
               if (toolResultTripwire && pubsub) {
-                await emitChunkEvent(pubsub, runId, {
+                await emitChunkEvent(pubsub, agentId, runId, {
                   type: 'tripwire',
                   runId,
                   from: ChunkFrom.AGENT,
@@ -2796,7 +2798,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     retry: error.options?.retry,
                   });
                   if (pubsub) {
-                    await emitChunkEvent(pubsub, runId, {
+                    await emitChunkEvent(pubsub, agentId, runId, {
                       type: 'tripwire',
                       runId,
                       from: ChunkFrom.AGENT,
@@ -2895,7 +2897,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     ) => {
                       ownership?.throwIfLost();
                       persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
-                      await emitChunkEvent(pubsub, runId, data as any);
+                      await emitChunkEvent(pubsub, agentId, runId, data as any);
                     },
                   }
                 : undefined;

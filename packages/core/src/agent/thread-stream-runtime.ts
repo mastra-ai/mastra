@@ -503,6 +503,7 @@ type ThreadControlSubscription = {
 };
 
 type PreparedThreadRun = {
+  agentId?: string;
   threadKey?: string;
   abortController: AbortController;
   cleanup: () => void;
@@ -3788,6 +3789,7 @@ export class AgentThreadStreamRuntime {
     options: AgentExecutionOptions<OUTPUT>,
     pubsub?: PubSub,
     cleanupAbortedRun?: () => Promise<boolean>,
+    agentId?: string,
   ): AgentExecutionOptions<OUTPUT> {
     if (!options.runId) return options;
     const { threadId, resourceId } = this.#getThreadTarget(options);
@@ -3804,6 +3806,7 @@ export class AgentThreadStreamRuntime {
     }
 
     const preparedRun: PreparedThreadRun = {
+      agentId,
       ...(key ? { threadKey: key } : {}),
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
@@ -3859,10 +3862,15 @@ export class AgentThreadStreamRuntime {
    * `fenceResume: false` is for lifecycle teardowns (detach, thread switch) that
    * stop the local segment but leave its parked suspensions answerable.
    */
-  abortRun(runId: string, pubsub?: PubSub, options: { fenceResume?: boolean } = {}): boolean {
+  abortRun(runId: string, pubsub?: PubSub, options: { fenceResume?: boolean; agentId?: string } = {}): boolean {
     const fenceResume = options.fenceResume ?? true;
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
+    if (options.agentId !== undefined) {
+      const ownerId = preparedRun?.agentId ?? state.threadRunsById.get(runId)?.agent.id;
+      // A foreign local run must not intercept a request for a remote agent.
+      if (ownerId !== options.agentId) return false;
+    }
     if (!preparedRun) {
       state.abortedRunIds.add(runId);
       if (fenceResume) this.#fenceResume(state, runId);

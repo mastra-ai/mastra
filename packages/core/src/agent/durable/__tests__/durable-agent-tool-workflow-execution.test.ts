@@ -163,9 +163,9 @@ function createMultipleToolCallModel(tools: Array<{ name: string; args: Record<s
 /**
  * Collect pubsub events for a given runId
  */
-function collectPubsubEvents(pubsub: EventEmitterPubSub, runId: string) {
+function collectPubsubEvents(pubsub: EventEmitterPubSub, agentId: string, runId: string) {
   const events: AgentStreamEvent[] = [];
-  pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+  pubsub.subscribe(AGENT_STREAM_TOPIC(agentId, runId), event => {
     events.push(event as unknown as AgentStreamEvent);
   });
   return events;
@@ -440,7 +440,7 @@ describe('DurableAgent tool approval workflow execution', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const prep = await durableAgent.prepare('Use the tool', { requireToolApproval: true });
-    const events = collectPubsubEvents(pubsub, prep.runId);
+    const events = collectPubsubEvents(pubsub, durableAgent.id, prep.runId);
 
     const { cleanup } = await durableAgent.stream('Use the tool', {
       runId: prep.runId,
@@ -710,7 +710,7 @@ describe('DurableAgent in-execution tool suspension', () => {
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const prep = await durableAgent.prepare('Use the tool');
-    const events = collectPubsubEvents(pubsub, prep.runId);
+    const events = collectPubsubEvents(pubsub, durableAgent.id, prep.runId);
 
     const { cleanup } = await durableAgent.stream('Use the tool', {
       runId: prep.runId,

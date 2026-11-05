@@ -30,6 +30,7 @@ describe('thread stream: a durable run whose claim generation arrives after it t
     const runId = 'late-generation-run';
     const makeStream = () =>
       createDurableAgentStream({
+        agentId: 'late-generation-agent',
         pubsub,
         runId,
         messageId: crypto.randomUUID(),
@@ -41,7 +42,7 @@ describe('thread stream: a durable run whose claim generation arrives after it t
     await runtime.registerRun(agent, first.output, options, pubsub, { continuation: 'across-suspension' });
     expect(await pubsub.getLeaseOwner(key)).toBe(runId);
 
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'late-generation-agent', runId, {
       type: 'tool-call-approval',
       payload: { toolCallId: 'call-1', toolName: 'one', args: {} },
       runId,
@@ -70,7 +71,7 @@ describe('thread stream: a durable run whose claim generation arrives after it t
       true,
     );
 
-    await emitFinishEvent(pubsub, runId, {
+    await emitFinishEvent(pubsub, 'late-generation-agent', runId, {
       output: { text: 'answer', steps: [] },
       stepResult: { reason: 'stop' },
     } as any);

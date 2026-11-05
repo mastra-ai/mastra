@@ -55,7 +55,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       if (state.lastStepResult?.signalPreempted) return state;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
-        agentId?: string;
+        agentId: string;
         agentName?: string;
         state?: { threadId?: string; resourceId?: string };
         requestContextEntries?: Record<string, unknown>;
@@ -128,7 +128,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         generateId: () => mastra?.generateId?.(),
         emitChunk: chunk => {
           if (!pubsub) return;
-          return emitChunkEvent(pubsub, state.runId, chunk as any);
+          return emitChunkEvent(pubsub, initData.agentId, state.runId, chunk as any);
         },
         logger: mastra?.getLogger?.(),
       });

@@ -805,7 +805,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Verify events were cached - use the correct topic format.
     // Read history before cleanup: the agent now reuses this CachingPubSub
     // instance, so cleanup clears this topic's cached history.
-    const topic = `agent.stream.${runId}`;
+    const topic = AGENT_STREAM_TOPIC(durableAgent.id, runId);
     const cachedEvents = await cachingPubsub.getHistory(topic);
     // Events should be cached (at least the start event)
     expect(cachedEvents.length).toBeGreaterThan(0);
@@ -960,7 +960,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
       expect(snapshot?.status).toBe('suspended');
     });
 
-    await transport.publish(AGENT_STREAM_TOPIC(started.runId), {
+    await transport.publish(AGENT_STREAM_TOPIC('cache-miss-resume-agent', started.runId), {
       type: AgentStreamEventTypes.CHUNK,
       runId: started.runId,
       data: { type: 'text-delta', payload: { id: 'stale', text: 'STALE' } },
@@ -1090,7 +1090,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Subscribe with replay - should get events without duplicates.
     // Replay before cleanup: the agent now reuses this CachingPubSub instance,
     // so cleanup clears this topic's cached history.
-    const topic = `agent.stream.${runId}`;
+    const topic = AGENT_STREAM_TOPIC(durableAgent.id, runId);
     await cachingPubsub.subscribeWithReplay(topic, event => {
       receivedEvents.push(event);
     });
@@ -1346,9 +1346,9 @@ describe('Observe API', () => {
 
         const ownerResult = await producer.observe(runId);
         try {
-          expect(subscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
+          expect(subscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(producer.id, runId), expect.any(Function));
           const fullOutput = ownerResult.output.getFullOutput();
-          await emitFinishEvent(producer.pubsub, runId, {
+          await emitFinishEvent(producer.pubsub, producer.id, runId, {
             output: {
               text: 'Private producer answer',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -1408,13 +1408,13 @@ describe('Observe API', () => {
         const fullOutput = result.output.getFullOutput();
 
         try {
-          await emitChunkEvent(producer.pubsub, runId, {
+          await emitChunkEvent(producer.pubsub, producer.id, runId, {
             type: 'text-delta',
             runId,
             from: 'AGENT',
             payload: { id: 'observed-text', text: 'Live observer answer' },
           });
-          await emitFinishEvent(producer.pubsub, runId, {
+          await emitFinishEvent(producer.pubsub, producer.id, runId, {
             output: {
               text: 'Live observer answer',
               usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -1487,7 +1487,7 @@ describe('Observe API', () => {
         });
         result = await owner.observe(runId);
         const fullOutput = result.output.getFullOutput();
-        await emitFinishEvent(owner.pubsub, runId, {
+        await emitFinishEvent(owner.pubsub, owner.id, runId, {
           output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
           stepResult: { reason: 'stop', warnings: [], isContinued: false },
         });
@@ -1535,7 +1535,7 @@ describe('Observe API', () => {
       try {
         result = await durableAgent.observe(runId);
         const fullOutput = result.output.getFullOutput();
-        await emitFinishEvent(cachingPubsub, runId, {
+        await emitFinishEvent(cachingPubsub, 'partial-observe-agent', runId, {
           output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
           stepResult: { reason: 'stop', warnings: [], isContinued: false },
         });
@@ -1613,13 +1613,13 @@ describe('Observe API', () => {
     const fullOutput = result.output.getFullOutput();
 
     try {
-      await emitChunkEvent(cachingPubsub, runId, {
+      await emitChunkEvent(cachingPubsub, 'observe-failed-processors-agent', runId, {
         type: 'text-delta',
         runId,
         from: 'AGENT',
         payload: { id: 'fallback-text', text: 'Fallback answer' },
       });
-      await emitFinishEvent(cachingPubsub, runId, {
+      await emitFinishEvent(cachingPubsub, 'observe-failed-processors-agent', runId, {
         output: { text: 'Fallback answer', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
         stepResult: { reason: 'stop', warnings: [], isContinued: false },
       });

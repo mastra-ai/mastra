@@ -166,6 +166,7 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     const { pubsub, published } = setup();
     const onError = vi.fn();
     const { output, ready, cleanup } = createDurableAgentStream({
+      agentId: 'test-agent',
       pubsub,
       runId: 'r1',
       messageId: 'm1',

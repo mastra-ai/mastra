@@ -410,6 +410,7 @@ export interface RunLoopScenarioOptions {
    * to enable `subscribeToThread()`, `sendMessage()`, and other signal APIs.
    * Use for testing the signal integration (subscribe → sendMessage → receive response).
    */
+  streams?: import('../../../agent/streams/config').AgentStreamsOption;
   pubsub?: PubSub;
   /** Shared cache for durable/evented pubsub scenarios. */
   cache?: MastraServerCache;

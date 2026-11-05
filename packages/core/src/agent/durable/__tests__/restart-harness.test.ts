@@ -229,7 +229,9 @@ describe('restart harness', () => {
     const recovered = await scenario.restart(await original.checkpoint());
     expect(recovered.finishEvents).toBe(1);
 
-    await recovered.graph.mastra.pubsub.publish(AGENT_STREAM_TOPIC(runId), { type: AgentStreamEventTypes.FINISH });
+    await recovered.graph.mastra.pubsub.publish(AGENT_STREAM_TOPIC('restart-agent', runId), {
+      type: AgentStreamEventTypes.FINISH,
+    });
     expect(recovered.finishEvents).toBe(2);
   }, 30_000);
 

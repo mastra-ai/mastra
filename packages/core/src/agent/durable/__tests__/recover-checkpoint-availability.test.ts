@@ -107,7 +107,7 @@ describe('recovery checkpoint availability (COR-1493)', () => {
       const stream = await h.original.stream('Fetch the record', { runId: `checkpoint-policy-${policy}` });
       const drained = drain(stream.fullStream);
       const published: string[] = [];
-      await h.pubsub.subscribe(AGENT_STREAM_TOPIC(stream.runId), async event => {
+      await h.pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', stream.runId), async event => {
         published.push(event.type);
       });
       try {
@@ -239,7 +239,7 @@ describe('recovery checkpoint availability (COR-1493)', () => {
       } as WorkflowRunState;
       await workflows.persistWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId, snapshot: initial });
       const published: string[] = [];
-      await h.pubsub.subscribe(AGENT_STREAM_TOPIC(runId), async event => {
+      await h.pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), async event => {
         published.push(event.type);
       });
       const claim = workflows.claimRunOwnership.bind(workflows);

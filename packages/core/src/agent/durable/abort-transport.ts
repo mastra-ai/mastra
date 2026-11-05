@@ -33,7 +33,12 @@ export { publishAbortRequest, requestAcknowledgedAbort, subscribeToAbortRequests
  * calls this. The subscription is torn down with the registry entry, whether
  * that happens on explicit cleanup or TTL eviction.
  */
-export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, mastra?: Mastra): Promise<void> {
+export async function ensureRemoteAbortListener(
+  pubsub: PubSub,
+  agentId: string,
+  runId: string,
+  mastra?: Mastra,
+): Promise<void> {
   let entry = getRunRegistryEntry(runId, mastra);
 
   if (!entry) {
@@ -64,7 +69,7 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, m
 
   let unsubscribe: () => Promise<void>;
   try {
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
+    unsubscribe = await subscribeToAbortRequests(pubsub, agentId, runId, () => {
       const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
       if (controller && !controller.signal.aborted) {
         controller.abort(new Error('Aborted'));

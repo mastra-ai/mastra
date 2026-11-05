@@ -1,5 +1,4 @@
 import { expect, it } from 'vitest';
-import { AGENT_STREAM_TOPIC } from '../../../../agent/durable/constants';
 import { EventEmitterPubSub } from '../../../../events';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
@@ -15,7 +14,7 @@ const transportError = new Error('transport closed: connection refused');
 // Redis connection that is gone.
 class BrokenStreamPubSub extends EventEmitterPubSub {
   override async subscribe(...args: Parameters<EventEmitterPubSub['subscribe']>): Promise<void> {
-    if (args[0].startsWith(AGENT_STREAM_TOPIC(''))) throw transportError;
+    if (args[0].startsWith('agent.stream.')) throw transportError;
     return super.subscribe(...args);
   }
 }

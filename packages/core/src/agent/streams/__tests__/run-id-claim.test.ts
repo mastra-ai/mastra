@@ -25,7 +25,7 @@ class RecordingPubSub extends EventEmitterPubSub {
   }
 
   count(runId: string) {
-    return this.published.filter(p => p.topic === AGENT_STREAM_TOPIC(runId)).length;
+    return this.published.filter(p => p.topic === AGENT_STREAM_TOPIC('run-id-agent', runId)).length;
   }
 }
 
@@ -137,7 +137,7 @@ describe('run id ownership', () => {
   it('starts a reused run id on an empty log, so a reader never replays the previous run', async () => {
     const agent = makeAgent();
     new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), logger: false });
-    const topic = AGENT_STREAM_TOPIC('twice-run');
+    const topic = AGENT_STREAM_TOPIC('run-id-agent', 'twice-run');
     const history = async () =>
       (agent.__getStreamBus()!.pubsub as unknown as { getHistory(t: string, o?: number): Promise<Event[]> }).getHistory(
         topic,

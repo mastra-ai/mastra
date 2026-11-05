@@ -3042,7 +3042,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
-      const topic = AGENT_STREAM_TOPIC(runId);
+      const topic = AGENT_STREAM_TOPIC(agent.id, runId);
 
       // A durable agent subscribes for us so the client never sees what an
       // execution that lost the run still publishes. Agents without it, such as

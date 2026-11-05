@@ -125,6 +125,7 @@ export async function createSharedAgent(
     | 'model'
     | 'errorProcessors'
     | 'defaultOptions'
+    | 'streams'
     | 'pubsub'
     | 'cache'
     | 'observability'
@@ -162,6 +163,7 @@ async function buildScenarioAgent({
   errorProcessors,
   defaultOptions,
   pubsub,
+  streams,
   cache,
   observability,
   server,
@@ -188,6 +190,7 @@ async function buildScenarioAgent({
   | 'model'
   | 'errorProcessors'
   | 'defaultOptions'
+  | 'streams'
   | 'pubsub'
   | 'cache'
   | 'observability'
@@ -254,6 +257,7 @@ async function buildScenarioAgent({
       name: 'AIMock Loop Scenario Agent',
       instructions: instructions ?? defaultInstructions,
       model: modelConfig,
+      ...(streams === undefined ? {} : { streams }),
       ...(tools ? { tools } : {}),
       ...(signals ? { signals } : {}),
       ...(memory ? { memory } : {}),

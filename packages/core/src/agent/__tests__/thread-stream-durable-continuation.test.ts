@@ -16,6 +16,7 @@ function setup() {
   const runId = crypto.randomUUID();
   const makeStream = (options?: { closeOnSuspend?: boolean; runId?: string }) =>
     createDurableAgentStream({
+      agentId: 'continuation-agent',
       pubsub,
       runId: options?.runId ?? runId,
       messageId: crypto.randomUUID(),
@@ -23,9 +24,9 @@ function setup() {
       closeOnSuspend: options?.closeOnSuspend,
     });
   const chunk = (type: string, payload: Record<string, unknown>) =>
-    emitChunkEvent(pubsub, runId, { type, payload, runId, from: 'AGENT' } as any);
+    emitChunkEvent(pubsub, 'continuation-agent', runId, { type, payload, runId, from: 'AGENT' } as any);
   const finish = () =>
-    emitFinishEvent(pubsub, runId, {
+    emitFinishEvent(pubsub, 'continuation-agent', runId, {
       output: { text: 'answer', steps: [] },
       stepResult: { reason: 'stop' },
     } as any);
@@ -434,7 +435,7 @@ describe('durable thread continuation', () => {
     await h.runtime.registerRun(h.agent, first.output, h.options, h.pubsub, {
       continuation: 'across-suspension',
     });
-    await emitErrorEvent(h.pubsub, h.runId, new Error('broadcast failed'));
+    await emitErrorEvent(h.pubsub, 'continuation-agent', h.runId, new Error('broadcast failed'));
     await vi.waitFor(() => expect(first.output.status).toBe('failed'));
 
     const resumed = h.makeStream();

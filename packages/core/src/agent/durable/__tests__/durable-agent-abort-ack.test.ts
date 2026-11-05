@@ -63,9 +63,9 @@ describe.each(transports)('requestAcknowledgedAbort over $name', ({ setup }) => 
       entry.cleanup?.();
       globalRunRegistry.delete(runId);
     });
-    await ensureRemoteAbortListener(owner, runId);
+    await ensureRemoteAbortListener(owner, 'abort-ack-agent', runId);
 
-    await expect(requestAcknowledgedAbort(requester, runId)).resolves.toBe(true);
+    await expect(requestAcknowledgedAbort(requester, 'abort-ack-agent', runId)).resolves.toBe(true);
     expect(entry.abortSignal!.aborted).toBe(true);
   });
 
@@ -73,14 +73,14 @@ describe.each(transports)('requestAcknowledgedAbort over $name', ({ setup }) => 
     const { requester } = await setup();
     const runId = `orphaned-run-${globalThis.crypto.randomUUID()}`;
 
-    await expect(requestAcknowledgedAbort(requester, runId, 300)).resolves.toBe(false);
+    await expect(requestAcknowledgedAbort(requester, 'abort-ack-agent', runId, 300)).resolves.toBe(false);
   });
 
   it('rejects when the abort request cannot be published', async () => {
     const { requester } = await setup();
     vi.spyOn(requester, 'publish').mockRejectedValue(new Error('pubsub down'));
 
-    await expect(requestAcknowledgedAbort(requester, 'any-run', 300)).rejects.toThrow('pubsub down');
+    await expect(requestAcknowledgedAbort(requester, 'abort-ack-agent', 'any-run', 300)).rejects.toThrow('pubsub down');
   });
 
   it.each(['subscribe', 'publish'] as const)(
@@ -99,7 +99,7 @@ describe.each(transports)('requestAcknowledgedAbort over $name', ({ setup }) => 
       const unsubscribe = vi.spyOn(requester, 'unsubscribe');
 
       const result = await Promise.race([
-        requestAcknowledgedAbort(requester, `stalled-run-${globalThis.crypto.randomUUID()}`, 200),
+        requestAcknowledgedAbort(requester, 'abort-ack-agent', `stalled-run-${globalThis.crypto.randomUUID()}`, 200),
         new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 1_000)),
       ]);
       expect(result).toBe(false);
@@ -149,7 +149,7 @@ describe('DurableAgent.__abortRunAcknowledged', () => {
     // The executing process unwinds as soon as it is told to abort, which tears
     // down its abort listener: it can answer exactly one request.
     let unsubscribe: (() => Promise<void>) | undefined;
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
+    unsubscribe = await subscribeToAbortRequests(pubsub, 'abort-ack-agent', runId, () => {
       void unsubscribe?.();
       unsubscribe = undefined;
     });
@@ -159,7 +159,8 @@ describe('DurableAgent.__abortRunAcknowledged', () => {
 
     await expect(createAgent(pubsub).__abortRunAcknowledged(runId)).resolves.toBe(true);
     const abortRequests = publish.mock.calls.filter(
-      ([topic, event]) => topic === AGENT_CONTROL_TOPIC(runId) && event.type === AgentControlEventTypes.ABORT_REQUEST,
+      ([topic, event]) =>
+        topic === AGENT_CONTROL_TOPIC('abort-ack-agent', runId) && event.type === AgentControlEventTypes.ABORT_REQUEST,
     );
     expect(abortRequests).toHaveLength(1);
   });

@@ -121,7 +121,7 @@ describe('DurableAgent skill tools under global requireToolApproval', () => {
     const policy = makePolicy();
     const prep = await durableAgent.prepare('Activate find-skills and find Alice', { requireToolApproval: policy });
     const events: AgentStreamEvent[] = [];
-    pubsub.subscribe(AGENT_STREAM_TOPIC(prep.runId), event => {
+    pubsub.subscribe(AGENT_STREAM_TOPIC('skill-approval-agent', prep.runId), event => {
       events.push(event as unknown as AgentStreamEvent);
     });
 

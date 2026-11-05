@@ -267,6 +267,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   hideSignals?: AgentExecutionOptionsBase<OUTPUT>['hideSignals'];
   /** Pubsub instance to subscribe to */
   pubsub: PubSub;
+  agentId: string;
   /** Run identifier */
   runId: string;
   /** Message ID for this execution */
@@ -427,6 +428,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 ): DurableAgentStreamResult<OUTPUT> {
   const {
     pubsub,
+    agentId,
     runId,
     messageId,
     initialToolCalls,
@@ -976,7 +978,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // reached this reader, bounded in case the transport never delivers it.
   const waitForLoggedEvents = async () => {
     if (nextLogIndex === undefined || !isSubscribed) return;
-    const topic = AGENT_STREAM_TOPIC(runId);
+    const topic = AGENT_STREAM_TOPIC(agentId, runId);
     let target = -1;
     try {
       for (const event of await pubsub.getHistory(topic, nextLogIndex)) {
@@ -1021,7 +1023,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       // Subscribe to pubsub with replay support for resumable streams.
       // Use indexed replay when supported. Transports without numeric offsets
       // must live-tail so resume/recovery does not replay pre-resume events.
-      const topic = AGENT_STREAM_TOPIC(runId);
+      const topic = AGENT_STREAM_TOPIC(agentId, runId);
       const subscribePromise =
         offset === undefined
           ? pubsub.subscribeWithReplay(topic, subscribedCallback)
@@ -1073,7 +1075,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     releaseLogIndexWaiters();
     if (isSubscribed) {
       isSubscribed = false;
-      const topic = AGENT_STREAM_TOPIC(runId);
+      const topic = AGENT_STREAM_TOPIC(agentId, runId);
       void pubsub.unsubscribe(topic, subscribedCallback).catch(error => {
         logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
       });

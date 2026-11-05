@@ -317,7 +317,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    */
   protected override emitChunk(runtime: DurableLoopRuntime, chunk: unknown): void | Promise<void> {
     if (!runtime.pubsub) return;
-    return emitChunkEvent(runtime.pubsub, runtime.runId, chunk as any);
+    return emitChunkEvent(runtime.pubsub, runtime.agentId, runtime.runId, chunk as any);
   }
 
   // ── Step factories ─────────────────────────────────────────────────────
@@ -939,7 +939,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // continuation decision.
       if (rt.pubsub) {
         const lastStep = steps[steps.length - 1];
-        await emitIterationCompleteEvent(rt.pubsub, state.runId, {
+        await emitIterationCompleteEvent(rt.pubsub, rt.agentId, state.runId, {
           iteration: state.iterationCount,
           maxIterations: runMaxSteps,
           text: lastStep?.text,
@@ -1099,18 +1099,21 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const tripwire = finishResult.tripwire;
             if (pubsub && !tripwire) {
               for (const chunk of finishResult.structuredOutputChunks ?? []) {
-                await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+                await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
+                  ...chunk,
+                  runId: state.runId,
+                } as any);
               }
             }
 
             if (pubsub) {
               for (const chunk of finishResult.outputResultChunks ?? []) {
-                await emitChunkEvent(pubsub, state.runId, chunk, true);
+                await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, chunk, true);
               }
             }
 
             if (tripwire && pubsub) {
-              await emitChunkEvent(pubsub, state.runId, {
+              await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
                 type: 'tripwire',
                 runId: state.runId,
                 from: ChunkFrom.AGENT,
@@ -1123,7 +1126,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             if (pubsub && !tripwire && finishResult.titleForStream) {
               const title = await finishResult.titleForStream;
               if (title && initData.state?.threadId) {
-                await emitChunkEvent(pubsub, state.runId, {
+                await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
                   type: 'data-thread-title',
                   data: { threadId: initData.state.threadId, title },
                   transient: true,
@@ -1151,7 +1154,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             };
 
             if (pubsub) {
-              await emitFinishEvent(pubsub, state.runId, {
+              await emitFinishEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,

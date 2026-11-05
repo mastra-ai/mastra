@@ -281,7 +281,7 @@ describe('createInngestAgent observe-replay wiring', () => {
     swapInnerToInProcess(durableAgent);
     const pubsub = durableAgent.pubsub;
     const runId = 'inngest-observe-run-late';
-    const topic = AGENT_STREAM_TOPIC(runId);
+    const topic = AGENT_STREAM_TOPIC(durableAgent.id, runId);
     const receivedEvents: any[] = [];
 
     // 1. Publish some events before any subscriber
@@ -395,8 +395,8 @@ describe('createInngestAgent observe-replay wiring', () => {
     const defaultPublish = vi.spyOn(workflowDefault, 'publish');
     const routed = factory(workflowDefault);
     const runId = 'inngest-custom-pubsub-run';
-    const streamTopic = AGENT_STREAM_TOPIC(runId);
-    const controlTopic = AGENT_CONTROL_TOPIC(runId);
+    const streamTopic = AGENT_STREAM_TOPIC(durableAgent.id, runId);
+    const controlTopic = AGENT_CONTROL_TOPIC(durableAgent.id, runId);
 
     await routed.publish(streamTopic, {
       type: AgentStreamEventTypes.CHUNK,
@@ -495,7 +495,7 @@ describe('createInngestAgent observe-replay wiring', () => {
         workflow.getFunction().fn({
           event: {
             data: {
-              inputData: { __workflowKind: 'durable-agent', runId },
+              inputData: { __workflowKind: 'durable-agent', agentId: durableAgent.id, runId },
               runId,
             },
           },
@@ -510,7 +510,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC(runId),
+      AGENT_STREAM_TOPIC(durableAgent.id, runId),
       expect.objectContaining({ type: AgentStreamEventTypes.ERROR, runId }),
       undefined,
     );
@@ -547,7 +547,7 @@ describe('createInngestAgent observe-replay wiring', () => {
         workflow.getFunction().fn({
           event: {
             data: {
-              inputData: { __workflowKind: 'durable-agent', runId },
+              inputData: { __workflowKind: 'durable-agent', agentId: durableAgent.id, runId },
               runId,
             },
           },
@@ -562,7 +562,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC(runId),
+      AGENT_STREAM_TOPIC(durableAgent.id, runId),
       expect.objectContaining({
         type: AgentStreamEventTypes.ERROR,
         runId,
@@ -606,7 +606,7 @@ describe('createInngestAgent observe-replay wiring', () => {
         workflow.getFunction().fn({
           event: {
             data: {
-              inputData: { __workflowKind: 'durable-agent', runId },
+              inputData: { __workflowKind: 'durable-agent', agentId: durableAgent.id, runId },
               runId,
             },
           },
@@ -621,7 +621,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC(runId),
+      AGENT_STREAM_TOPIC(durableAgent.id, runId),
       expect.objectContaining({
         type: AgentStreamEventTypes.ERROR,
         runId,
@@ -639,7 +639,7 @@ describe('createInngestAgent observe-replay wiring', () => {
     swapInnerToInProcess(durableAgent);
     const pubsub = durableAgent.pubsub;
     const runId = 'inngest-observe-run-mixed';
-    const topic = AGENT_STREAM_TOPIC(runId);
+    const topic = AGENT_STREAM_TOPIC(durableAgent.id, runId);
     const receivedEvents: any[] = [];
 
     // 1. Publish cached events
@@ -839,7 +839,7 @@ describe('InngestAgent parity surface', () => {
   }
 
   async function publishStreamEvent(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string, event: any) {
-    await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, ...event } as any);
+    await durableAgent.pubsub.publish(AGENT_STREAM_TOPIC(durableAgent.id, runId), { runId, ...event } as any);
   }
 
   it.each([
@@ -1137,7 +1137,7 @@ describe('InngestAgent parity surface', () => {
     const abortRequests = () =>
       publish.mock.calls.filter(
         ([topic, event]: any[]) =>
-          topic === AGENT_CONTROL_TOPIC(runId) && event?.type === AgentControlEventTypes.ABORT_REQUEST,
+          topic === AGENT_CONTROL_TOPIC(durableAgent.id, runId) && event?.type === AgentControlEventTypes.ABORT_REQUEST,
       );
     const external = new AbortController();
 
@@ -1226,6 +1226,7 @@ describe('InngestAgent parity surface', () => {
       });
 
       const initial = createDurableAgentStream({
+        agentId: durableAgent.id,
         pubsub: durableAgent.pubsub,
         runId,
         messageId: 'initial-message',
@@ -3191,10 +3192,10 @@ describe('thread and run abort (#25156)', () => {
     return durableAgent;
   }
 
-  function abortRequestsFor(publish: ReturnType<typeof vi.spyOn>, runId: string) {
+  function abortRequestsFor(publish: ReturnType<typeof vi.spyOn>, agentId: string, runId: string) {
     return publish.mock.calls.filter(
       ([topic, event]: any[]) =>
-        topic === AGENT_CONTROL_TOPIC(runId) &&
+        topic === AGENT_CONTROL_TOPIC(agentId, runId) &&
         event?.type === AgentControlEventTypes.ABORT_REQUEST &&
         event.runId === runId,
     );
@@ -3228,7 +3229,7 @@ describe('thread and run abort (#25156)', () => {
       expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
 
       expect(controller?.signal.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(publish, durableAgent.id, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -3250,7 +3251,7 @@ describe('thread and run abort (#25156)', () => {
       await expect(durableAgent.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).resolves.toBe(true);
 
       expect(controller?.signal.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(publish, durableAgent.id, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -3268,7 +3269,7 @@ describe('thread and run abort (#25156)', () => {
       await expect(
         durableAgent.__abortThreadStreamAcrossProcesses({ threadId: 'cold-t', resourceId: 'cold-r' }),
       ).resolves.toBe(true);
-      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(1);
+      expect(abortRequestsFor(publish, durableAgent.id, 'run-on-another-server')).toHaveLength(1);
     } finally {
       leaseOwner.mockRestore();
     }
@@ -3288,7 +3289,7 @@ describe('thread and run abort (#25156)', () => {
           expectedRunId: 'an-earlier-run',
         }),
       ).resolves.toBe(false);
-      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(0);
+      expect(abortRequestsFor(publish, durableAgent.id, 'run-on-another-server')).toHaveLength(0);
     } finally {
       leaseOwner.mockRestore();
     }
@@ -3304,7 +3305,7 @@ describe('thread and run abort (#25156)', () => {
     try {
       expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: 'some-other-run' })).toBe(false);
       await new Promise(resolve => setTimeout(resolve, 10));
-      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      expect(abortRequestsFor(publish, durableAgent.id, result.runId)).toHaveLength(0);
       expect(globalRunRegistry.get(result.runId)?.abortController?.signal.aborted).toBe(false);
     } finally {
       result.cleanup();
@@ -3331,10 +3332,10 @@ describe('thread and run abort (#25156)', () => {
     const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], { abortSignal: external.signal });
 
     try {
-      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      expect(abortRequestsFor(publish, durableAgent.id, result.runId)).toHaveLength(0);
       external.abort(new Error('external-cancel'));
       expect(globalRunRegistry.get(result.runId)?.abortSignal?.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(publish, durableAgent.id, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -3347,7 +3348,7 @@ describe('thread and run abort (#25156)', () => {
     const runId = 'abort-run-remote-run';
 
     expect(typeof durableAgent.abortRunStream(runId)).toBe('boolean');
-    await vi.waitFor(() => expect(abortRequestsFor(publish, runId)).toHaveLength(1));
+    await vi.waitFor(() => expect(abortRequestsFor(publish, durableAgent.id, runId)).toHaveLength(1));
   });
 
   it('abortRunStream flips the local controller of a run started here and reports it aborted', async () => {
@@ -3359,7 +3360,7 @@ describe('thread and run abort (#25156)', () => {
       const controller = globalRunRegistry.get(result.runId)?.abortController;
       expect(durableAgent.abortRunStream(result.runId)).toBe(true);
       expect(controller?.signal.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(publish, durableAgent.id, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();

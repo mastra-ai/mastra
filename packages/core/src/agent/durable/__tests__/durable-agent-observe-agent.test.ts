@@ -186,13 +186,13 @@ describe('DurableAgent.observe() passes the inner Agent to output processors', (
 
       const observed = await durableAgent.observe(runId);
       const chunks = drain(observed.fullStream);
-      await emitChunkEvent(pubsub, runId, {
+      await emitChunkEvent(pubsub, 'pinned-observe-agent', runId, {
         type: 'text-delta',
         runId,
         from: 'AGENT',
         payload: { id: 'text-1', text: 'Hi' },
       } as any);
-      await emitFinishEvent(pubsub, runId, {
+      await emitFinishEvent(pubsub, 'pinned-observe-agent', runId, {
         output: { text: 'Hi', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
         stepResult: { reason: 'stop', warnings: [], isContinued: false },
       });

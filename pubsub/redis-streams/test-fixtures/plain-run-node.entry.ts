@@ -39,25 +39,32 @@ function emit(event: Record<string, unknown>) {
 let toolRuns = 0;
 
 /** Blocks until the run is aborted, so only an abort ends it before the test times out. */
-const waitTool = createTool({
-  id: 'wait',
-  description: 'Waits.',
-  inputSchema: z.object({}),
-  execute: async (_input, context) => {
-    toolRuns++;
-    emit({ type: 'tool-started' });
-    const signal = context?.abortSignal;
-    await new Promise<void>(resolve => {
-      const timer = setTimeout(resolve, 30_000);
-      signal?.addEventListener('abort', () => {
-        clearTimeout(timer);
-        resolve();
+const waiting = new Map<string, () => void>();
+const waitTool = (agentId: string) =>
+  createTool({
+    id: 'wait',
+    description: 'Waits.',
+    inputSchema: z.object({}),
+    execute: async (_input, context) => {
+      toolRuns++;
+      emit({ type: 'tool-started', agentId });
+      const signal = context?.abortSignal;
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, 30_000);
+        waiting.set(agentId, () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
+        });
       });
-    });
-    emit({ type: 'tool-finished', aborted: !!signal?.aborted });
-    return { waited: true };
-  },
-});
+      waiting.delete(agentId);
+      emit({ type: 'tool-finished', agentId, aborted: !!signal?.aborted });
+      return { waited: true };
+    },
+  });
 
 const approveTool = createTool({
   id: 'approve',
@@ -79,14 +86,15 @@ async function main() {
 
   const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${LLM_URL}/v1` });
   const cleanupTimeoutMs = CLEANUP_MS ? Number(CLEANUP_MS) : undefined;
-  const agent = new Agent({
-    id: 'plain-agent',
-    name: 'Plain Agent',
-    instructions: 'You are a test agent driven by scripted AIMock responses.',
-    model: openai('gpt-4o-mini'),
-    tools: { wait: waitTool, approve: approveTool },
-    streams: STREAMS_CACHE === 'false' ? { cache: false, cleanupTimeoutMs } : { cleanupTimeoutMs },
-  });
+  const makeAgent = (id: string) =>
+    new Agent({
+      id,
+      name: 'Plain Agent',
+      instructions: 'You are a test agent driven by scripted AIMock responses.',
+      model: openai('gpt-4o-mini'),
+      tools: { wait: waitTool(id), approve: approveTool },
+      streams: STREAMS_CACHE === 'false' ? { cache: false, cleanupTimeoutMs } : { cleanupTimeoutMs },
+    });
 
   const mastra = new Mastra({
     logger: false,
@@ -96,7 +104,7 @@ async function main() {
       { client: cacheClient as any },
       { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache:` },
     ),
-    agents: { 'plain-agent': agent },
+    agents: { 'plain-agent': makeAgent('plain-agent'), 'sibling-agent': makeAgent('sibling-agent') },
     server: {
       port: Number(PORT),
       auth: new SimpleAuth<{ id: string }>({
@@ -125,12 +133,16 @@ async function main() {
   }
 
   async function stream(cmd: any) {
-    const run = await registered.stream(cmd.tool === 'approve' ? 'Ask for approval.' : 'Wait, then reply.', {
-      maxSteps: 3,
-      requestContext: asResource(cmd.resourceId),
-    });
-    emit({ type: 'run', runId: run.runId });
-    emit({ type: 'stream-done', runId: run.runId, ...(await consume(run, run.runId)) });
+    const agentId = cmd.agentId ?? 'plain-agent';
+    const run = await mastra
+      .getAgent(agentId)
+      .stream(cmd.prompt ?? (cmd.tool === 'approve' ? 'Ask for approval.' : 'Wait, then reply.'), {
+        runId: cmd.runId,
+        maxSteps: 3,
+        requestContext: asResource(cmd.resourceId),
+      });
+    emit({ type: 'run', runId: run.runId, agentId });
+    emit({ type: 'stream-done', runId: run.runId, agentId, ...(await consume(run, run.runId)) });
   }
 
   async function approve(cmd: any) {
@@ -143,7 +155,11 @@ async function main() {
     emit({ type: 'approved-done', runId: cmd.runId, toolRuns, ...result });
   }
 
-  const handlers: Record<string, (cmd: any) => Promise<void> | void> = { stream, approve };
+  const handlers: Record<string, (cmd: any) => Promise<void> | void> = {
+    stream,
+    approve,
+    release: cmd => waiting.get(cmd.agentId)?.(),
+  };
 
   createInterface({ input: process.stdin }).on('line', line => {
     if (!line.trim()) return;

@@ -96,7 +96,7 @@ describeForAllEngines(
             await disconnected;
             await entered[1]!.promise;
             // The cache's numeric event index includes lifecycle events, not just chunks.
-            const history = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(run.runId));
+            const history = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(agent.id, run.runId));
             const boundary = history.find(
               event =>
                 event.type === AgentStreamEventTypes.CHUNK &&

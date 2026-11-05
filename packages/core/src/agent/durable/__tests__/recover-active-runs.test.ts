@@ -872,13 +872,13 @@ describe.each(['default', 'evented'] as const)('DurableAgent.recoverActiveRuns (
     const runId = 'run-replay';
     await seed(store, makeSnapshot(runId, 'running', { agentId: 'agent-A', threadId: 't', resourceId: 'r' }), 'r');
     const restart = vi.fn(async () => {
-      await emitChunkEvent(agent.pubsub, runId, {
+      await emitChunkEvent(agent.pubsub, agent.id, runId, {
         type: 'text-delta',
         runId,
         from: 'AGENT',
         payload: { text: 'recovered output' },
       } as any);
-      await emitFinishEvent(agent.pubsub, runId, {
+      await emitFinishEvent(agent.pubsub, agent.id, runId, {
         output: { text: 'recovered output', steps: [] },
         stepResult: { reason: 'stop' },
       } as any);

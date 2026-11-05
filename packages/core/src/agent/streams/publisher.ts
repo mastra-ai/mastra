@@ -40,6 +40,7 @@ export interface AgentStreamPublisher {
 
 export interface CreateAgentStreamPublisherOptions {
   pubsub: PubSub;
+  agentId: string;
   runId: string;
   /** Grace period before a finished run's topic is cleared (0 = never). */
   cleanupTimeoutMs: number;
@@ -69,6 +70,7 @@ export interface CreateAgentStreamPublisherOptions {
  */
 export function createAgentStreamPublisher({
   pubsub,
+  agentId,
   runId,
   cleanupTimeoutMs,
   logger,
@@ -90,7 +92,7 @@ export function createAgentStreamPublisher({
   // request published before the subscription lands is missed, like one sent
   // to a run that already finished.
   let stopListening: (() => Promise<void>) | undefined;
-  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, runId, () => {
+  let listening: Promise<void> | undefined = subscribeToAbortRequests(pubsub, agentId, runId, () => {
     // A request that lands while the subscription is being released has
     // nothing left to stop; leave it unconfirmed.
     if (ended) return false;
@@ -163,7 +165,11 @@ export function createAgentStreamPublisher({
         }
         // The run's control and ack topics end with it too; a transport that keeps
         // streams (Redis Streams) would otherwise hold them until its idle TTL.
-        for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
+        for (const topic of [
+          AGENT_STREAM_TOPIC(agentId, runId),
+          AGENT_CONTROL_TOPIC(agentId, runId),
+          abortAckTopic(agentId, runId),
+        ]) {
           void pubsub.clearTopic(topic).catch(() => {});
         }
         if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
@@ -182,14 +188,14 @@ export function createAgentStreamPublisher({
     if (!finished) {
       if (suspended) {
         const data = suspended;
-        await enqueue(() => emitSuspendedEvent(pubsub, runId, data));
+        await enqueue(() => emitSuspendedEvent(pubsub, agentId, runId, data));
         await enqueue(writeRecord('suspended'));
         // The run resumes on the same topic; keep its history. Its record
         // and log expire with their TTL if it is never resumed.
         return queue;
       }
       const error = toError(lastError ?? fallbackError());
-      await enqueue(() => emitErrorEvent(pubsub, runId, error));
+      await enqueue(() => emitErrorEvent(pubsub, agentId, runId, error));
     }
     await enqueue(writeRecord('finished'));
     scheduleCleanup();
@@ -206,13 +212,15 @@ export function createAgentStreamPublisher({
           return;
         case 'step-start': {
           const payload = chunk.payload;
-          void enqueue(() => emitStepStartEvent(pubsub, runId, payload));
+          void enqueue(() => emitStepStartEvent(pubsub, agentId, runId, payload));
           return;
         }
         case 'finish': {
           finished = true;
           const { output, stepResult, messages } = chunk.payload as any;
-          void enqueue(() => emitFinishEvent(pubsub, runId, { output, stepResult, ...(messages ? { messages } : {}) }));
+          void enqueue(() =>
+            emitFinishEvent(pubsub, agentId, runId, { output, stepResult, ...(messages ? { messages } : {}) }),
+          );
           return;
         }
         case 'tool-call-approval':
@@ -230,11 +238,11 @@ export function createAgentStreamPublisher({
             ...chunk,
             payload: { ...chunk.payload, error: serializeIfError(chunk.payload.error) },
           } as ChunkType<any>;
-          void enqueue(() => emitChunkEvent(pubsub, runId, serialized));
+          void enqueue(() => emitChunkEvent(pubsub, agentId, runId, serialized));
           return;
         }
       }
-      void enqueue(() => emitChunkEvent(pubsub, runId, chunk));
+      void enqueue(() => emitChunkEvent(pubsub, agentId, runId, chunk));
     },
     close() {
       return end(() => new Error('Agent stream ended without a finish event'));

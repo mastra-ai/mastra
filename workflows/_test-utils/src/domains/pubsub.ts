@@ -2,12 +2,12 @@
  * PubSub tests for DurableAgent
  */
 
-import { describe, it, expect } from 'vitest';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '@mastra/core/agent/durable';
 import type { AgentStreamEvent } from '@mastra/core/agent/durable';
-import type { DurableAgentTestContext } from '../types';
+import { describe, it, expect } from 'vitest';
 import { createTextStreamModel } from '../mock-models';
+import type { DurableAgentTestContext } from '../types';
 
 export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableAgentTestContext) {
   describe('pubsub integration', () => {
@@ -17,12 +17,12 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const runId = 'test-run-123';
 
       // Subscribe to events
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
         receivedEvents.push(event as unknown as AgentStreamEvent);
       });
 
       // Publish a test event
-      await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId,
         data: { type: 'text-delta', payload: { text: 'Hello' } },
@@ -40,24 +40,24 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const receivedEvents: AgentStreamEvent[] = [];
       const runId = 'test-run-multi-events';
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
         receivedEvents.push(event as unknown as AgentStreamEvent);
       });
 
       // Publish different event types
-      await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
         type: AgentStreamEventTypes.STEP_START,
         runId,
         data: { stepId: 'step-1' },
       });
 
-      await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId,
         data: { type: 'text-delta', payload: { text: 'Hello' } },
       });
 
-      await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
         type: AgentStreamEventTypes.STEP_FINISH,
         runId,
         data: { stepResult: { reason: 'stop' } },
@@ -90,13 +90,13 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const preparation = await agent.prepare('Test message');
 
       // Subscribe to events for this run
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(preparation.runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(agent.id, preparation.runId), event => {
         receivedEvents.push(event as unknown as AgentStreamEvent);
       });
 
       // Now we need to manually emit events since the workflow isn't actually running
       // In a real integration test, the workflow would emit these
-      await pubsub.publish(AGENT_STREAM_TOPIC(preparation.runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC(agent.id, preparation.runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId: preparation.runId,
         data: { type: 'text-delta', payload: { text: 'test' } },
@@ -125,16 +125,16 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const prep1 = await agent.prepare('Message 1');
       const prep2 = await agent.prepare('Message 2');
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(prep1.runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(agent.id, prep1.runId), event => {
         eventsRun1.push(event as unknown as AgentStreamEvent);
       });
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(prep2.runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(agent.id, prep2.runId), event => {
         eventsRun2.push(event as unknown as AgentStreamEvent);
       });
 
       // Emit event to run1 only
-      await pubsub.publish(AGENT_STREAM_TOPIC(prep1.runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC(agent.id, prep1.runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId: prep1.runId,
         data: { type: 'text-delta', payload: { text: 'for run 1' } },
@@ -154,11 +154,11 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const runId = 'test-emit-chunk';
       const received: any[] = [];
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
         received.push(event);
       });
 
-      await emitChunkEvent(pubsub, runId, { type: 'text-delta', payload: { text: 'test' } } as any);
+      await emitChunkEvent(pubsub, 'test-agent', runId, { type: 'text-delta', payload: { text: 'test' } } as any);
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay / 10));
 
       expect(received.length).toBe(1);
@@ -171,13 +171,13 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const runId = 'test-emit-error';
       const received: any[] = [];
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
         received.push(event);
       });
 
       const error = new Error('Test error');
       error.stack = 'test stack';
-      await emitErrorEvent(pubsub, runId, error);
+      await emitErrorEvent(pubsub, 'test-agent', runId, error);
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay / 10));
 
       expect(received.length).toBe(1);
@@ -193,11 +193,11 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const runId = 'test-emit-suspended';
       const received: any[] = [];
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
         received.push(event);
       });
 
-      await emitSuspendedEvent(pubsub, runId, {
+      await emitSuspendedEvent(pubsub, 'test-agent', runId, {
         type: 'approval',
         toolCallId: 'tc-1',
         toolName: 'myTool',

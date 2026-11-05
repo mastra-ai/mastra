@@ -14,6 +14,7 @@ describe('durable stream adapter suspension ordering', () => {
     const seenAtSuspend: boolean[] = [];
 
     const { output } = createDurableAgentStream({
+      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -35,13 +36,13 @@ describe('durable stream adapter suspension ordering', () => {
 
     // A live transport can deliver a re-suspending segment's only chunk and its SUSPENDED without yielding.
     await Promise.all([
-      emitChunkEvent(pubsub, runId, {
+      emitChunkEvent(pubsub, 'test-agent', runId, {
         type: 'tool-call-suspended',
         runId,
         from: 'AGENT',
         payload: { toolCallId: 'call-1', toolName: 'askTool', suspendPayload: {} },
       } as any),
-      emitSuspendedEvent(pubsub, runId, suspendedData),
+      emitSuspendedEvent(pubsub, 'test-agent', runId, suspendedData),
     ]);
 
     await reading;
@@ -53,6 +54,7 @@ describe('durable stream adapter suspension ordering', () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'open-approval-run';
     const { output, ready, waitForEventDelivery } = createDurableAgentStream({
+      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -72,30 +74,33 @@ describe('durable stream adapter suspension ordering', () => {
     });
     await ready;
 
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'text-delta',
       runId,
       from: 'AGENT',
       payload: { text: 'before ' },
     } as any);
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'tool-call-suspended',
       runId,
       from: 'AGENT',
       payload: suspendedData,
     } as any);
-    await emitSuspendedEvent(pubsub, runId, suspendedData);
+    await emitSuspendedEvent(pubsub, 'test-agent', runId, suspendedData);
     await waitForEventDelivery();
     await suspendedChunkSeen;
     expect(settled).toBe(false);
 
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'text-delta',
       runId,
       from: 'AGENT',
       payload: { text: 'after' },
     } as any);
-    await emitFinishEvent(pubsub, runId, { output: { text: 'before after' }, stepResult: { reason: 'stop' } } as any);
+    await emitFinishEvent(pubsub, 'test-agent', runId, {
+      output: { text: 'before after' },
+      stepResult: { reason: 'stop' },
+    } as any);
     expect(await text).toBe('before after');
     expect((await fullOutput).text).toBe('before after');
     await pubsub.close();
@@ -105,6 +110,7 @@ describe('durable stream adapter suspension ordering', () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'resumed-full-output-run';
     const { output, ready } = createDurableAgentStream({
+      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -113,13 +119,13 @@ describe('durable stream adapter suspension ordering', () => {
     });
     const fullOutput = output.getFullOutput();
     await ready;
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'text-delta',
       runId,
       from: 'AGENT',
       payload: { text: 'C' },
     } as any);
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'step-finish',
       runId,
       from: 'AGENT',
@@ -129,7 +135,10 @@ describe('durable stream adapter suspension ordering', () => {
         metadata: {},
       },
     } as any);
-    await emitFinishEvent(pubsub, runId, { output: { text: 'A B C' }, stepResult: { reason: 'stop' } } as any);
+    await emitFinishEvent(pubsub, 'test-agent', runId, {
+      output: { text: 'A B C' },
+      stepResult: { reason: 'stop' },
+    } as any);
     expect(await output.text).toBe('A B C');
     expect((await fullOutput).text).toBe('A B C');
     await pubsub.close();
@@ -139,6 +148,7 @@ describe('durable stream adapter suspension ordering', () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'sibling-result-run';
     const { output, ready, waitForEventDelivery } = createDurableAgentStream({
+      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -156,7 +166,7 @@ describe('durable stream adapter suspension ordering', () => {
       return results.length;
     });
     await ready;
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'tool-call-suspended',
       runId,
       from: 'AGENT',
@@ -165,13 +175,13 @@ describe('durable stream adapter suspension ordering', () => {
     await waitForEventDelivery();
     await suspendedChunkSeen;
     expect(settled).toBe(false);
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'tool-result',
       runId,
       from: 'AGENT',
       payload: { toolCallId: 'sibling', toolName: 'lookup', result: { found: true } },
     } as any);
-    await emitSuspendedEvent(pubsub, runId, suspendedData);
+    await emitSuspendedEvent(pubsub, 'test-agent', runId, suspendedData);
     expect(await toolResultCount).toBe(1);
     await pubsub.close();
   });
@@ -180,6 +190,7 @@ describe('durable stream adapter suspension ordering', () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'repeated-prefix-run';
     const { output, ready } = createDurableAgentStream({
+      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -188,13 +199,13 @@ describe('durable stream adapter suspension ordering', () => {
     });
     const fullOutput = output.getFullOutput();
     await ready;
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'text-delta',
       runId,
       from: 'AGENT',
       payload: { text: 'Found again' },
     } as any);
-    await emitChunkEvent(pubsub, runId, {
+    await emitChunkEvent(pubsub, 'test-agent', runId, {
       type: 'step-finish',
       runId,
       from: 'AGENT',
@@ -204,7 +215,7 @@ describe('durable stream adapter suspension ordering', () => {
         metadata: {},
       },
     } as any);
-    await emitFinishEvent(pubsub, runId, {
+    await emitFinishEvent(pubsub, 'test-agent', runId, {
       output: { text: 'Found Found again' },
       stepResult: { reason: 'stop' },
     } as any);

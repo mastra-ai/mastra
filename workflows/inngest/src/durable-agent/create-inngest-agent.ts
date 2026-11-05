@@ -850,7 +850,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   async function getPubsubOffset(runId: string): Promise<number> {
-    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
+    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(agentId, runId));
     return history.length;
   }
 
@@ -861,7 +861,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    */
   async function isObservationComplete(runId: string): Promise<boolean> {
     try {
-      const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(agentId, runId), 0);
       const latest = history.at(-1);
       if (latest) {
         const type = latest.type === AgentStreamEventTypes.CHUNK ? latest.data?.type : latest.type;
@@ -902,7 +902,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (snapshot?.status !== 'suspended') return;
       await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
       await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
-      await emitAbortEvent(getPubsub(), runId, { steps: [], text: '' });
+      await emitAbortEvent(getPubsub(), agentId, runId, { steps: [], text: '' });
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to delete snapshot of aborted suspended Inngest run', {
         agentId,
@@ -1134,7 +1134,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    */
   async function emitError(runId: string, error: Error): Promise<void> {
     try {
-      await emitErrorEvent(getPubsub(), runId, error);
+      await emitErrorEvent(getPubsub(), agentId, runId, error);
     } catch (publishError) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent error event', {
         agentId,
@@ -1175,7 +1175,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   async function requestRemoteAbort(runId: string): Promise<void> {
     try {
-      await publishAbortRequest(getPubsub(), runId);
+      await publishAbortRequest(getPubsub(), agentId, runId);
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent abort request', {
         agentId,
@@ -1369,6 +1369,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         fail: failStream,
         ready,
       } = createDurableAgentStream<TOutput>({
+        agentId: agentId,
         pubsub: getPubsub(),
         runId,
         messageId,
@@ -1439,7 +1440,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const workflowExecution = ready
         .then(async () => {
           // Only initial runs open a message; resume continues the existing stream.
-          await emitChunkEvent(getPubsub(), runId, {
+          await emitChunkEvent(getPubsub(), agentId, runId, {
             type: 'start',
             runId,
             from: ChunkFrom.AGENT,
@@ -1809,6 +1810,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         detach: detachStream,
         ready,
       } = createDurableAgentStream<TOutput>({
+        agentId: agentId,
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
@@ -2039,6 +2041,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     async observe(runId, observeOptions) {
       // Create the stream subscription with offset support
       const stream = createDurableAgentStream<TOutput>({
+        agentId: agentId,
         pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
@@ -2486,7 +2489,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Same split as DurableAgent: the thread request also releases a parked run.
       await Promise.all([
         agentThreadStreamRuntime.requestThreadRunAbort(threadPubSub, abortOptions, runId),
-        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
+        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), agentId, runId),
       ]);
       return true;
     },
@@ -2517,7 +2520,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         return true;
       }
       try {
-        return await requestAcknowledgedAbort(getPubsub(), runId);
+        return await requestAcknowledgedAbort(getPubsub(), agentId, runId);
       } finally {
         abortLocalController(runId);
       }

@@ -586,7 +586,7 @@ describe('StepExecutor', () => {
       // `observe({ offset })` could neither skip nor dedupe them.
       expect(stepPubsub).toBeInstanceOf(CachingPubSub);
 
-      const topic = AGENT_STREAM_TOPIC('run-numbered');
+      const topic = AGENT_STREAM_TOPIC('test-agent', 'run-numbered');
       for (const n of [0, 1]) {
         await stepPubsub.publish(topic, {
           type: 'chunk',
@@ -605,7 +605,7 @@ describe('StepExecutor', () => {
       const target = new Mastra({ pubsub, cache });
       const context = await captureStepPubsub(target);
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
-      const topic = AGENT_STREAM_TOPIC('run-prewrapped');
+      const topic = AGENT_STREAM_TOPIC('test-agent', 'run-prewrapped');
       const live: Event[] = [];
       await target.pubsub.subscribe(topic, event => {
         live.push(event);
@@ -644,7 +644,7 @@ describe('StepExecutor', () => {
       const cache = new InMemoryServerCache();
       const context = await captureStepPubsub(new Mastra({ pubsub: new RemoteTransport(), cache }));
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
-      const topic = AGENT_STREAM_TOPIC('run-remote');
+      const topic = AGENT_STREAM_TOPIC('test-agent', 'run-remote');
 
       // Each process would number from its own in-memory counter, and the
       // observer would drop the worker's frames as late duplicates.

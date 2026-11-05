@@ -83,6 +83,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
 
   const makeStream = (runId: string, extra: Partial<Parameters<typeof createDurableAgentStream>[0]>) =>
     createDurableAgentStream({
+      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -101,8 +102,8 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
 
     // A couple of live chunks arrive, then the producer goes silent (crashes).
-    await emitChunkEvent(pubsub, runId, textChunk('a'));
-    await emitChunkEvent(pubsub, runId, textChunk('b'));
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('a'));
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('b'));
 
     // Must terminate well within any reasonable bound (expected ~1×IDLE after
     // the last chunk); the generous ceiling only guards against a hang.
@@ -130,7 +131,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
 
-    await emitChunkEvent(pubsub, runId, textChunk('x'));
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('x'));
 
     // Stay silent across ~3 idle windows. isAlive → true must keep re-arming.
     await delay(IDLE * 3);
@@ -138,7 +139,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
 
     // A real terminal event now closes the stream cleanly.
-    await emitFinishEvent(pubsub, runId, finishData);
+    await emitFinishEvent(pubsub, 'test-agent', runId, finishData);
 
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
@@ -162,7 +163,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     // Publish faster than the idle window a handful of times.
     const n = 5;
     for (let i = 0; i < n; i++) {
-      await emitChunkEvent(pubsub, runId, textChunk(`c${i}`));
+      await emitChunkEvent(pubsub, 'test-agent', runId, textChunk(`c${i}`));
       await delay(IDLE * 0.5); // 30ms < 60ms — each event re-arms the timer
     }
 
@@ -190,7 +191,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
 
-    await emitChunkEvent(pubsub, runId, textChunk('only'));
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('only'));
 
     // Silence across several idle windows must NOT close the stream.
     await delay(IDLE * 4);
@@ -198,7 +199,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
 
     // A terminal FINISH still closes it normally.
-    await emitFinishEvent(pubsub, runId, finishData);
+    await emitFinishEvent(pubsub, 'test-agent', runId, finishData);
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
     expect(reader.isClosed()).toBe(true);
@@ -230,11 +231,11 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
 
-    await emitChunkEvent(pubsub, runId, textChunk('a')); // arms timer (generation G)
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('a')); // arms timer (generation G)
     await firstProbeStarted; // deterministic: the idle timer fired and probe #1 is in flight
 
     aliveResult = true; // later probes report alive
-    await emitChunkEvent(pubsub, runId, textChunk('b')); // re-arms (generation G+1) mid-probe
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('b')); // re-arms (generation G+1) mid-probe
 
     // The stale generation-G probe resolves `false` but must be abandoned; the
     // generation-G+1 timer's probe resolves `true` and re-arms. Stay open.
@@ -243,7 +244,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
 
     // A real terminal event still closes cleanly.
-    await emitFinishEvent(pubsub, runId, finishData);
+    await emitFinishEvent(pubsub, 'test-agent', runId, finishData);
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
     expect(reader.isClosed()).toBe(true);
@@ -266,7 +267,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await ready;
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
-    await emitChunkEvent(pubsub, runId, textChunk('a'));
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('a'));
 
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
@@ -287,7 +288,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await ready;
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
-    await emitChunkEvent(pubsub, runId, textChunk('a'));
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('a'));
 
     expect(await settleWithin(reader.done, IDLE * 20)).toBe('done');
     expect(onError).toHaveBeenCalledTimes(1);
@@ -305,7 +306,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await ready;
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
-    await emitChunkEvent(pubsub, runId, textChunk('a'));
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('a'));
     await delay(10);
 
     detach();
@@ -324,8 +325,8 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     // Assert the probe is NEVER consulted after close.
     const runId = 'idle-finished';
     // Publish a full run terminal BEFORE observing → subscribeWithReplay delivers it.
-    await emitChunkEvent(pubsub, runId, textChunk('answer'));
-    await emitFinishEvent(pubsub, runId, finishData);
+    await emitChunkEvent(pubsub, 'test-agent', runId, textChunk('answer'));
+    await emitFinishEvent(pubsub, 'test-agent', runId, finishData);
 
     const isAlive = vi.fn(() => true);
     const { output, cleanup, ready } = makeStream(runId, { idleTimeoutMs: IDLE, isAlive });
@@ -362,7 +363,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await ready;
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
-    await emitSuspendedEvent(pubsub, runId, { type: 'suspension' });
+    await emitSuspendedEvent(pubsub, 'test-agent', runId, { type: 'suspension' });
 
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
@@ -383,7 +384,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await ready;
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
-    await emitAbortEvent(pubsub, runId, { steps: [] });
+    await emitAbortEvent(pubsub, 'test-agent', runId, { steps: [] });
 
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');

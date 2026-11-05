@@ -285,9 +285,9 @@ export async function consume(
  * re-export the constants, so they come from the static import above — safe
  * because they are plain strings/enums, not module singletons.
  */
-export async function trackFinish(pubsub: any, runId: string) {
+export async function trackFinish(pubsub: any, agentId: string, runId: string) {
   let count = 0;
-  const topic = AGENT_STREAM_TOPIC(runId);
+  const topic = AGENT_STREAM_TOPIC(agentId, runId);
   await pubsub.subscribe(topic, async (event: { type: string }, ack?: () => Promise<void>) => {
     if (event.type === AgentStreamEventTypes.FINISH) count++;
     await ack?.();
