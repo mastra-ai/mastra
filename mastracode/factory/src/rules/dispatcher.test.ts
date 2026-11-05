@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
+import { publishReviewStatus } from '../integrations/github/review-status.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
@@ -15,6 +16,7 @@ import { Cards } from '../storage/domains/work-items/cards.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
+import type { FactoryReviewStatusEvent } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
@@ -7529,5 +7531,277 @@ describe('board phase automation', () => {
         expect(session.respondToToolSuspension).not.toHaveBeenCalled();
       }
     }
+  });
+});
+
+describe('review status comment lifecycle', () => {
+  const BOT = 'factory[bot]';
+  const ref = {
+    connection: { type: 'app-installation' as const, installationId: 1 },
+    sourceId: 'acme/app',
+    pullRequestId: '7',
+  };
+
+  /** One pull request's conversation, fed by the real publisher from the dispatcher's own events. */
+  function pullRequestConversation() {
+    let comments: Array<{
+      id: string;
+      url: string;
+      author: string;
+      body: string;
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
+    let nextId = 1;
+    const writes = { created: 0, updated: 0 };
+    const versionControl = {
+      async listComments() {
+        return { comments: [...comments], nextCursor: null };
+      },
+      async createComment({ body }: { body: string }) {
+        writes.created++;
+        const now = new Date().toISOString();
+        const comment = {
+          id: String(nextId++),
+          url: 'https://github.test/c',
+          author: BOT,
+          body,
+          createdAt: now,
+          updatedAt: now,
+        };
+        comments.push(comment);
+        return comment;
+      },
+      async updateComment({ commentId, body }: { commentId: string; body: string }) {
+        writes.updated++;
+        comments = comments.map(comment => (comment.id === commentId ? { ...comment, body } : comment));
+        return comments.find(comment => comment.id === commentId)!;
+      },
+      async deleteComment({ commentId }: { commentId: string }) {
+        comments = comments.filter(comment => comment.id !== commentId);
+      },
+    };
+    const events: FactoryReviewStatusEvent[] = [];
+    const publish = (event: FactoryReviewStatusEvent) =>
+      publishReviewStatus(
+        versionControl as never,
+        ref,
+        {
+          state: {
+            run: event.run,
+            requestedAt: event.requestedAt.toISOString(),
+            generation: event.generation,
+            attempt: event.attempt,
+            phase: event.phase,
+            ...(event.startedAt ? { startedAt: event.startedAt.toISOString() } : {}),
+          },
+          reviewerName: 'Shipyard',
+          gifUrl: 'https://assets.test/reviewing.gif',
+          ...(event.reason ? { reason: event.reason } : {}),
+          stats: async state =>
+            state.startedAt && event.endedAt
+              ? { durationMs: event.endedAt.getTime() - Date.parse(state.startedAt) }
+              : {},
+        },
+        login => login === BOT,
+      );
+    const reportReviewStatus = vi.fn(async (event: FactoryReviewStatusEvent) => {
+      events.push(event);
+      await publish(event);
+    });
+    return { reportReviewStatus, events, writes, publish, comments: () => comments };
+  }
+
+  async function bindReviewRun(storage: WorkItemsStorage, workItemId: string) {
+    const prepared = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: workItemId,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'review',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: `kickoff-review-${workItemId}`,
+      kickoffMessage: null,
+    });
+    await storage.markPendingStart(prepared.binding.id, 'sent');
+  }
+
+  async function reviewRun(key: string, sessionOptions: Parameters<typeof createSession>[1] = {}) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const queued = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'review',
+      prompt: 'Review this pull request.',
+      idempotencyKey: key,
+    });
+    await bindReviewRun(storage, queued.item.id);
+    const conversation = pullRequestConversation();
+    const dispatch = async (options: Parameters<typeof createSession>[1], at: Date) => {
+      const { controller } = createSession(undefined, options);
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService: queued.transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        reportReviewStatus: conversation.reportReviewStatus,
+      }).runOnce(at);
+    };
+    await dispatch(sessionOptions, new Date('2030-01-01T00:00:00Z'));
+    return { storage, ...queued, ...conversation, dispatch };
+  }
+
+  it('creates one comment when the review is accepted and edits it in place through completion', async () => {
+    const { events, writes, comments } = await reviewRun('review-status-success', { agentEndReason: 'complete' });
+
+    expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
+    expect(events[0]).not.toHaveProperty('startedAt');
+    expect(events[1]!.startedAt).toBeInstanceOf(Date);
+    expect(writes).toEqual({ created: 1, updated: 2 });
+    expect(comments()).toHaveLength(1);
+    const body = comments()[0]!.body;
+    expect(body).toContain('Review finished');
+    expect(body).toMatch(/\| Duration \| \d+s \|/);
+    expect(body).not.toContain('reviewing.gif');
+  });
+
+  it('ends the progress display with a failure when the run fails for good', async () => {
+    const { storage, events, comments } = await reviewRun('review-status-terminal', {
+      agentEndReason: 'aborted',
+      omObservationError: 'HTTP 400: model not supported with ChatGPT account',
+    });
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
+    expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'failed']);
+    expect(comments()).toHaveLength(1);
+    expect(comments()[0]!.body).toContain('Review failed');
+    expect(comments()[0]!.body).not.toContain('ChatGPT account');
+    expect(comments()[0]!.body).not.toContain('reviewing.gif');
+  });
+
+  it('shows a retryable failure as queued again, then the retry finishes the same comment', async () => {
+    const run = await reviewRun('review-status-retry', { agentEndReason: 'error' });
+    expect((await run.storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'retry' });
+    expect(run.comments()[0]!.body).toContain('queued for retry');
+
+    await run.dispatch({ agentEndReason: 'complete' }, new Date('2030-01-01T01:00:00Z'));
+
+    expect(run.events.map(event => event.phase)).toEqual([
+      'queued',
+      'reviewing',
+      'retrying',
+      'queued',
+      'reviewing',
+      'completed',
+    ]);
+    expect(run.writes.created).toBe(1);
+    expect(run.comments()).toHaveLength(1);
+    expect(run.comments()[0]!.body).toContain('Review finished');
+    expect(run.comments()[0]!.body).toContain('| Attempts | 2 |');
+  });
+
+  it('cancels the status when the card moves on before the review starts', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'review',
+      prompt: 'Review this pull request.',
+      idempotencyKey: 'review-status-cancelled',
+    });
+    await bindReviewRun(storage, item.id);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    const { reportReviewStatus, events, comments } = pullRequestConversation();
+    const { controller } = createSession();
+    await new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      reportReviewStatus,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'superseded' });
+    expect(events.map(event => event.phase)).toEqual(['queued', 'cancelled']);
+    expect(comments()).toHaveLength(1);
+    expect(comments()[0]!.body).toContain('Review cancelled');
+  });
+
+  it('ignores redelivered and late events from an older review run', async () => {
+    const first = await reviewRun('review-status-replay', { agentEndReason: 'complete' });
+    const finished = first.comments()[0]!.body;
+
+    for (const event of first.events) {
+      expect(await first.publish(event)).toMatchObject({ action: 'stale' });
+    }
+    expect(first.comments()[0]!.body).toBe(finished);
+
+    // A re-review takes the comment over; the old run's completion arriving late cannot overwrite it.
+    const later = new Date(first.events[0]!.requestedAt.getTime() + 60_000);
+    const rereview = { ...first.events[1]!, run: 'rereview-run', requestedAt: later, generation: 0, attempt: 1 };
+    expect(await first.publish(rereview)).toMatchObject({ action: 'updated' });
+    expect(await first.publish(first.events[2]!)).toMatchObject({ action: 'stale' });
+    expect(first.comments()).toHaveLength(1);
+    expect(first.comments()[0]!.body).toContain('Reviewing…');
+    expect(first.writes.created).toBe(1);
+  });
+
+  it('leaves non-review runs alone and never lets a status failure fail the review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      prompt: 'Continue work.',
+      idempotencyKey: 'review-status-work-role',
+    });
+    await bindWorkRun(storage, item.id);
+    const reportReviewStatus = vi.fn(async () => {});
+    const { controller } = createSession(undefined, { agentEndReason: 'complete' });
+    await new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      reportReviewStatus,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+    expect(reportReviewStatus).not.toHaveBeenCalled();
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const failing = await (async () => {
+      const store = (await createFactoryStorageForTests()).workItems;
+      const queued = await queueDecision(store, {
+        type: 'invokeSkill',
+        role: 'review',
+        prompt: 'Review this pull request.',
+        idempotencyKey: 'review-status-port-down',
+      });
+      await bindReviewRun(store, queued.item.id);
+      const session = createSession(undefined, { agentEndReason: 'complete' });
+      await new FactoryDecisionDispatcher({
+        controller: session.controller as never,
+        transitionService: queued.transitionService,
+        storage: store,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        reportReviewStatus: async () => {
+          throw new Error('GitHub is down');
+        },
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+      return store;
+    })();
+    expect((await failing.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    warn.mockRestore();
   });
 });

@@ -1,0 +1,160 @@
+import { describe, expect, it } from 'vitest';
+import {
+  formatDuration,
+  parseReviewStatusState,
+  renderReviewStatusComment,
+  REVIEW_STATUS_COMMENT_MARKER,
+  supersedesReviewStatus,
+} from './review-status-comment.js';
+import type { ReviewStatusState, ReviewStatusView } from './review-status-comment.js';
+
+const HEAD = 'a'.repeat(40);
+const GIF = 'https://example.test/reviewing.gif';
+
+function state(overrides: Partial<ReviewStatusState> = {}): ReviewStatusState {
+  return {
+    run: 'decision-1',
+    requestedAt: '2026-11-05T10:00:00.000Z',
+    generation: 0,
+    attempt: 1,
+    phase: 'queued',
+    ...overrides,
+  };
+}
+
+function view(overrides: Partial<ReviewStatusView> = {}): ReviewStatusView {
+  return { state: state(), reviewerName: 'Shipyard', gifUrl: GIF, ...overrides };
+}
+
+describe('renderReviewStatusComment', () => {
+  it('round-trips the hidden state', () => {
+    const recorded = state({ phase: 'reviewing', startedAt: '2026-11-05T10:01:00.000Z', head: HEAD });
+    const body = renderReviewStatusComment(view({ state: recorded }));
+    expect(body.startsWith(REVIEW_STATUS_COMMENT_MARKER)).toBe(true);
+    expect(parseReviewStatusState(body)).toEqual(recorded);
+  });
+
+  it('does not show the animation or claim work is running while queued', () => {
+    const body = renderReviewStatusComment(view());
+    expect(body).toContain('Review queued');
+    expect(body).toContain('has not started yet');
+    expect(body).not.toContain(GIF);
+    expect(body).not.toContain('Reviewing…');
+  });
+
+  it('shows the animation with alt text and a text fallback while reviewing', () => {
+    const body = renderReviewStatusComment(
+      view({ state: state({ phase: 'reviewing', startedAt: '2026-11-05T10:01:00.123Z', head: HEAD }) }),
+    );
+    expect(body).toContain(`![Animated ASCII spinner: Shipyard is reviewing this pull request](${GIF})`);
+    expect(body).toContain('Shipyard is reviewing this pull request on `aaaaaaa` since 2026-11-05T10:01:00Z.');
+  });
+
+  it('replaces the animation with measured stats on completion', () => {
+    const body = renderReviewStatusComment(
+      view({
+        state: state({ phase: 'completed', head: HEAD }),
+        stats: {
+          verdict: 'request changes',
+          reviewedHeadSha: 'b'.repeat(40),
+          durationMs: 125_000,
+          inlineFindings: 3,
+          filesWithFindings: 2,
+        },
+      }),
+    );
+    expect(body).not.toContain(GIF);
+    expect(body).toContain('### 🔁 Review complete: changes requested');
+    expect(body).toContain('| Reviewed commit | `bbbbbbb` |');
+    expect(body).toContain('| Duration | 2m 5s |');
+    expect(body).toContain('| Inline comments | 3 across 2 files |');
+    expect(body).not.toContain('Head when the review started');
+  });
+
+  it('omits stats it does not have instead of inventing them', () => {
+    const body = renderReviewStatusComment(view({ state: state({ phase: 'completed' }) }));
+    expect(body).toContain('### ☑️ Review finished');
+    expect(body).toContain('without recording a verdict');
+    expect(body).not.toContain('| Duration');
+    expect(body).not.toContain('| Inline comments');
+  });
+
+  it('ends failed runs with a sanitized single-line reason', () => {
+    const body = renderReviewStatusComment(
+      view({ state: state({ phase: 'failed', attempt: 5 }), reason: 'boom\n```\n<script>' }),
+    );
+    expect(body).toContain('### ❌ Review failed');
+    expect(body).toContain("The review did not finish: `boom ''' <script>`");
+    expect(body).toContain('| Attempts | 5 |');
+    expect(body).not.toContain(GIF);
+  });
+
+  it('ends cancelled runs without the animation', () => {
+    const body = renderReviewStatusComment(view({ state: state({ phase: 'cancelled' }) }));
+    expect(body).toContain('### ⏹️ Review cancelled');
+    expect(body).not.toContain(GIF);
+  });
+
+  it('does not claim a retry is running', () => {
+    const body = renderReviewStatusComment(
+      view({ state: state({ phase: 'retrying', attempt: 2 }), reason: 'timeout' }),
+    );
+    expect(body).toContain('Review queued for retry');
+    expect(body).toContain('Attempt 2 did not finish: `timeout`');
+    expect(body).not.toContain(GIF);
+  });
+});
+
+describe('parseReviewStatusState', () => {
+  it('reads malformed or hostile state as no state', () => {
+    expect(parseReviewStatusState(undefined)).toBeUndefined();
+    expect(parseReviewStatusState('no marker')).toBeUndefined();
+    expect(parseReviewStatusState('<!-- mastra-factory-review-status:state {not json} -->')).toBeUndefined();
+    const bad = (value: object) =>
+      parseReviewStatusState(`<!-- mastra-factory-review-status:state ${JSON.stringify(value)} -->`);
+    expect(bad({ ...state(), run: 'has space' })).toBeUndefined();
+    expect(bad({ ...state(), phase: 'done' })).toBeUndefined();
+    expect(bad({ ...state(), generation: -1 })).toBeUndefined();
+    expect(bad({ ...state(), requestedAt: 'yesterday' })).toBeUndefined();
+    expect(bad({ ...state(), head: 'not-a-sha' })).toEqual(state());
+  });
+});
+
+describe('supersedesReviewStatus', () => {
+  it('lets the first write through', () => {
+    expect(supersedesReviewStatus(undefined, state())).toBe(true);
+  });
+
+  it('moves forward through the phases of one run and never back', () => {
+    expect(supersedesReviewStatus(state(), state({ phase: 'reviewing' }))).toBe(true);
+    expect(supersedesReviewStatus(state({ phase: 'reviewing' }), state({ phase: 'completed' }))).toBe(true);
+    expect(supersedesReviewStatus(state({ phase: 'reviewing' }), state({ phase: 'queued' }))).toBe(false);
+    expect(supersedesReviewStatus(state({ phase: 'reviewing' }), state({ phase: 'reviewing' }))).toBe(false);
+    expect(supersedesReviewStatus(state({ phase: 'completed' }), state({ phase: 'failed' }))).toBe(false);
+  });
+
+  it('lets the next attempt or a manual retry take over the same run', () => {
+    expect(supersedesReviewStatus(state({ phase: 'retrying' }), state({ attempt: 2 }))).toBe(true);
+    expect(supersedesReviewStatus(state({ phase: 'failed', attempt: 5 }), state({ generation: 1, attempt: 1 }))).toBe(
+      true,
+    );
+    expect(supersedesReviewStatus(state({ generation: 1, attempt: 1 }), state({ phase: 'failed', attempt: 5 }))).toBe(
+      false,
+    );
+  });
+
+  it('lets a newer run take over and drops late writes from an older one', () => {
+    const older = state({ phase: 'reviewing' });
+    const newer = state({ run: 'decision-2', requestedAt: '2026-11-05T11:00:00.000Z' });
+    expect(supersedesReviewStatus(older, newer)).toBe(true);
+    expect(supersedesReviewStatus(newer, { ...older, phase: 'completed' })).toBe(false);
+  });
+});
+
+describe('formatDuration', () => {
+  it('formats seconds, minutes and hours', () => {
+    expect(formatDuration(4_400)).toBe('4s');
+    expect(formatDuration(61_000)).toBe('1m 1s');
+    expect(formatDuration(3_725_000)).toBe('1h 2m');
+  });
+});

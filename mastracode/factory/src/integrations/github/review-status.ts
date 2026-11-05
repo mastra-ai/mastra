@@ -1,0 +1,133 @@
+import type { PullRequestComment, PullRequestRef, VersionControl } from '../../capabilities/version-control.js';
+import {
+  parseReviewStatusState,
+  renderReviewStatusComment,
+  REVIEW_STATUS_COMMENT_MARKER,
+  supersedesReviewStatus,
+} from './review-status-comment.js';
+import type {
+  ReviewStatusPhase,
+  ReviewStatusState,
+  ReviewStatusStats,
+  ReviewStatusView,
+} from './review-status-comment.js';
+
+type CommentPort = Pick<VersionControl, 'listComments' | 'createComment' | 'updateComment' | 'deleteComment'>;
+type ReviewCommentPort = Pick<VersionControl, 'listReviewComments'>;
+
+export type ReviewStatusPublishResult =
+  | { action: 'created' | 'updated'; commentId: string; url: string }
+  | { action: 'stale'; commentId: string }
+  | { action: 'skipped' };
+
+const CREATING_PHASES = new Set<ReviewStatusPhase>(['queued', 'reviewing', 'retrying', 'failed']);
+
+export interface ReviewStatusStep extends Omit<ReviewStatusView, 'stats'> {
+  /** Stats for a final step, read once the start time and head of the run are known. */
+  stats?: (state: ReviewStatusState) => Promise<ReviewStatusStats>;
+}
+
+async function listAll<T>(page: (cursor?: string) => Promise<{ items: T[]; nextCursor: string | null }>): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+  do {
+    const next = await page(cursor);
+    items.push(...next.items);
+    cursor = next.nextCursor ?? undefined;
+  } while (cursor);
+  return items;
+}
+
+function byId(left: PullRequestComment, right: PullRequestComment): number {
+  const a = Number(left.id);
+  const b = Number(right.id);
+  if (Number.isFinite(a) && Number.isFinite(b)) return a - b;
+  return left.id.localeCompare(right.id);
+}
+
+/**
+ * Writes one lifecycle step into the pull request's Factory review-status
+ * comment: edits the oldest one Factory authored, or creates it. A step older
+ * than what the comment already shows is dropped. Extra marked comments left by
+ * a creation race are deleted so the pull request settles on one.
+ */
+export async function publishReviewStatus(
+  versionControl: CommentPort,
+  ref: PullRequestRef,
+  step: ReviewStatusStep,
+  isFactoryAuthor: (login: string | null | undefined) => boolean,
+): Promise<ReviewStatusPublishResult> {
+  const comments = await listAll(async cursor => {
+    const page = await versionControl.listComments({ ...ref, ...(cursor ? { cursor } : {}) });
+    return { items: page.comments, nextCursor: page.nextCursor };
+  });
+  const marked = comments
+    .filter(comment => comment.body.includes(REVIEW_STATUS_COMMENT_MARKER) && isFactoryAuthor(comment.author))
+    .sort(byId);
+  const [canonical, ...duplicates] = marked;
+  for (const duplicate of duplicates) {
+    try {
+      await versionControl.deleteComment({
+        connection: ref.connection,
+        sourceId: ref.sourceId,
+        commentId: duplicate.id,
+      });
+    } catch (error) {
+      console.warn(`[factory] could not delete duplicate review-status comment ${duplicate.id}:`, error);
+    }
+  }
+  const existing = canonical ? parseReviewStatusState(canonical.body) : undefined;
+  if (canonical && !supersedesReviewStatus(existing, step.state)) {
+    return { action: 'stale', commentId: canonical.id };
+  }
+  // Later steps of a run carry only what changed; the start time and head come
+  // from the step that recorded them.
+  const state =
+    existing?.run === step.state.run
+      ? {
+          ...step.state,
+          ...((step.state.startedAt ?? existing.startedAt)
+            ? { startedAt: step.state.startedAt ?? existing.startedAt }
+            : {}),
+          ...((step.state.head ?? existing.head) ? { head: step.state.head ?? existing.head } : {}),
+        }
+      : step.state;
+  // A run only ends a comment it opened: a run cancelled or finished before it
+  // ever showed progress leaves no trace, and never replaces another run's result.
+  if (!CREATING_PHASES.has(state.phase) && existing?.run !== state.run) return { action: 'skipped' };
+  const { stats: readStats, ...view } = step;
+  const stats = readStats ? await readStats(state) : undefined;
+  const body = renderReviewStatusComment({ ...view, state, ...(stats ? { stats } : {}) });
+  if (!canonical) {
+    const created = await versionControl.createComment({ ...ref, body });
+    return { action: 'created', commentId: created.id, url: created.url };
+  }
+  const updated = await versionControl.updateComment({
+    connection: ref.connection,
+    sourceId: ref.sourceId,
+    commentId: canonical.id,
+    body,
+  });
+  return { action: 'updated', commentId: updated.id, url: updated.url };
+}
+
+/**
+ * Inline comments Factory left on the diff since the run started. Replies in
+ * existing threads are answers, not findings, so only thread roots count.
+ */
+export async function countFactoryInlineFindings(
+  versionControl: ReviewCommentPort,
+  ref: PullRequestRef,
+  since: string,
+  isFactoryAuthor: (login: string | null | undefined) => boolean,
+): Promise<Pick<ReviewStatusStats, 'inlineFindings' | 'filesWithFindings'>> {
+  const sinceMs = Date.parse(since);
+  const comments = await listAll(async cursor => {
+    const page = await versionControl.listReviewComments({ ...ref, ...(cursor ? { cursor } : {}) });
+    return { items: page.comments, nextCursor: page.nextCursor };
+  });
+  const findings = comments.filter(
+    comment => !comment.replyToId && isFactoryAuthor(comment.author) && Date.parse(comment.createdAt) >= sinceMs,
+  );
+  return { inlineFindings: findings.length, filesWithFindings: new Set(findings.map(comment => comment.path)).size };
+}

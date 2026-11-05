@@ -154,6 +154,13 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
 }
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
+/** A pull request review run: the only runs that keep a status comment on the pull request. */
+function isReviewRun(decision: unknown): boolean {
+  if (!decision || typeof decision !== 'object') return false;
+  const value = decision as { type?: unknown; role?: unknown };
+  return value.type === 'invokeSkill' && value.role === 'review';
+}
+
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
   return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
 }
@@ -409,6 +416,28 @@ export interface FactoryBindingPreparationInput {
   role: string;
 }
 
+export type FactoryReviewStatusPhase = 'queued' | 'reviewing' | 'retrying' | 'completed' | 'failed' | 'cancelled';
+
+/** One step of a review run, identified by the decision that started it. */
+export interface FactoryReviewStatusEvent {
+  orgId: string;
+  factoryProjectId: string;
+  workItemId: string;
+  run: string;
+  requestedAt: Date;
+  generation: number;
+  attempt: number;
+  phase: FactoryReviewStatusPhase;
+  /** When the agent was handed the review; set on the 'reviewing' step. */
+  startedAt?: Date;
+  /** When the run ended; set on final steps. */
+  endedAt?: Date;
+  /** Why the run failed or will retry, already sanitized. */
+  reason?: string;
+}
+
+export type FactoryReviewStatusReporter = (event: FactoryReviewStatusEvent) => Promise<void>;
+
 export interface FactoryDecisionDispatcherOptions {
   audit?: AuditRecorder;
   controller: FactoryController;
@@ -432,6 +461,12 @@ export interface FactoryDecisionDispatcherOptions {
   reportRunEnd?: FactoryRunEndReporter;
   /** Injects the work item's recent comments into skill-invocation kickoffs. */
   feedReader?: FactoryFeedReader;
+  /**
+   * Told each step of a pull request review run: accepted, started, retrying,
+   * and how it ended. Driven by the dispatcher rather than the agent, so a run
+   * that crashes or is cancelled still reports its end. Must not throw.
+   */
+  reportReviewStatus?: FactoryReviewStatusReporter;
   /** Dismisses superseded Factory change requests on a GitHub pull request. */
   dismissStaleReviews?: (decision: Extract<FactoryCommitDecision, { type: 'dismissStaleReviews' }>) => Promise<void>;
   resolveLinkedWorkItemParentId?: (input: {
@@ -632,6 +667,7 @@ export class FactoryDecisionDispatcher {
   readonly #reportRunEnd?: FactoryRunEndReporter;
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
+  readonly #reportReviewStatus?: FactoryReviewStatusReporter;
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
@@ -675,6 +711,7 @@ export class FactoryDecisionDispatcher {
     this.#reportRunEnd = options.reportRunEnd;
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
+    this.#reportReviewStatus = options.reportReviewStatus;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
     this.#factoryProjectExists = options.factoryProjectExists;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
@@ -962,6 +999,7 @@ export class FactoryDecisionDispatcher {
         return;
       }
       await this.#supersedeProposals(record, decision);
+      await this.#reviewStatus(record, decision, { phase: 'queued' });
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
@@ -970,9 +1008,11 @@ export class FactoryDecisionDispatcher {
       executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
+      await this.#reviewStatus(record, decision, { phase: 'completed', endedAt: new Date() });
     } catch (error) {
       if (error instanceof FactoryDecisionSuperseded) {
         await this.#storage.supersedeLeasedDecision(leaseIdentity(record, this.#ownerId), new Date());
+        await this.#reviewStatus(record, record.decision, { phase: 'cancelled', endedAt: new Date() });
         return;
       }
       const failureCode = factoryDispatchFailureCode(error);
@@ -987,6 +1027,35 @@ export class FactoryDecisionDispatcher {
         advanceDeliveryGeneration: !executionCompleted,
       });
       if (terminal && failed) await this.#supersedeFailureOnSettledCard(failed);
+      await this.#reviewStatus(failed ?? record, record.decision, {
+        phase: terminal ? 'failed' : 'retrying',
+        endedAt: new Date(),
+        reason: factoryDispatchFailureMetadata(failureCode).label,
+      });
+    }
+  }
+
+  /** Best-effort: a status comment is never worth failing or delaying the review it describes. */
+  async #reviewStatus(
+    record: FactoryDeferredDecisionRecord,
+    decision: unknown,
+    step: Pick<FactoryReviewStatusEvent, 'phase' | 'startedAt' | 'endedAt' | 'reason'>,
+  ): Promise<void> {
+    const report = this.#reportReviewStatus;
+    if (!report || !record.workItemId || !isReviewRun(decision)) return;
+    try {
+      await report({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: record.workItemId,
+        run: record.id,
+        requestedAt: record.createdAt,
+        generation: record.deliveryGeneration,
+        attempt: record.attempts,
+        ...step,
+      });
+    } catch (error) {
+      console.warn('Factory review status update failed', sanitizeDispatchError(error));
     }
   }
 
@@ -1344,6 +1413,7 @@ export class FactoryDecisionDispatcher {
               run.endReason,
               item?.title,
             );
+            await this.#reviewStatus(record, decision, { phase: 'reviewing', startedAt: since });
             // A landed `deliver` still runs on the in-flight session, so the run's
             // terminal outcome matters as much as a fresh wake's: a run that ends
             // in error after accepting the prompt has still failed this decision.
@@ -1368,6 +1438,7 @@ export class FactoryDecisionDispatcher {
               // terminal event arrives so a later hand-on cannot erase our failure.
               const superseded = (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role));
               if (!superseded) throw error;
+              await this.#reviewStatus(record, decision, { phase: 'cancelled', endedAt: new Date() });
             }
           } finally {
             run.close();

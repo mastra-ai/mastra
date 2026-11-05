@@ -1,0 +1,9 @@
+---
+'@mastra/factory': minor
+---
+
+Factory now keeps one status comment on a GitHub pull request while it reviews it, the way review bots do. The comment says the review is queued, switches to an animated "Reviewing…" display once the run has really started, and is edited in place when the run ends. The final version shows the result: approved, changes requested, failed or cancelled. It also lists what Factory measured: how long the review took, the commit it reviewed, how many inline comments it left and across how many files, and the number of attempts when there was a retry. A stat Factory did not measure is left out. Formal reviews and inline comments are not affected.
+
+The comment is updated by Factory's dispatcher rather than by the review agent, so it still resolves when a run crashes, times out or is replaced. Retries, redelivered events and re-reviews update the same comment, and a late result from an older run cannot overwrite a newer one.
+
+Set `FACTORY_REVIEW_STATUS_NAME` to choose how the comment names the reviewer (default `Factory`). Set `FACTORY_REVIEW_STATUS_GIF_URL` to serve the animation from your own host.
