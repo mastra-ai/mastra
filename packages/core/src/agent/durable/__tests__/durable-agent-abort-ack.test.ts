@@ -10,6 +10,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
 import { Agent } from '../../agent';
+import { bindAgentPubSub } from '../../streams/agent-pubsub';
 import { ensureRemoteAbortListener, requestAcknowledgedAbort, subscribeToAbortRequests } from '../abort-transport';
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
@@ -149,7 +150,7 @@ describe('DurableAgent.__abortRunAcknowledged', () => {
     // The executing process unwinds as soon as it is told to abort, which tears
     // down its abort listener: it can answer exactly one request.
     let unsubscribe: (() => Promise<void>) | undefined;
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
+    unsubscribe = await subscribeToAbortRequests(bindAgentPubSub(pubsub, 'abort-ack-agent'), runId, () => {
       void unsubscribe?.();
       unsubscribe = undefined;
     });
@@ -159,7 +160,9 @@ describe('DurableAgent.__abortRunAcknowledged', () => {
 
     await expect(createAgent(pubsub).__abortRunAcknowledged(runId)).resolves.toBe(true);
     const abortRequests = publish.mock.calls.filter(
-      ([topic, event]) => topic === AGENT_CONTROL_TOPIC(runId) && event.type === AgentControlEventTypes.ABORT_REQUEST,
+      ([topic, event]) =>
+        topic === `agent.control.v2.${JSON.stringify(['abort-ack-agent', runId])}` &&
+        event.type === AgentControlEventTypes.ABORT_REQUEST,
     );
     expect(abortRequests).toHaveLength(1);
   });

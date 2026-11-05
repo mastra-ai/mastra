@@ -3,6 +3,7 @@ import { InMemoryServerCache } from '../../cache/inmemory';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import { bindAgentPubSub } from './agent-pubsub';
 import { DEFAULT_STREAM_CLEANUP_TIMEOUT_MS } from './constants';
 import { resolveAgentStreamBus, resolveRunBus } from './resolve';
 import type { AgentStreamsConfig } from './types';
@@ -13,6 +14,7 @@ import type { AgentStreamsConfig } from './types';
  */
 export interface AgentStreamBusHooks {
   /** The Mastra-level bus and cache, once the owner is registered. */
+  getAgentId: () => string;
   getMastra: () => { pubsub: PubSub; serverCache?: MastraServerCache } | undefined;
   /**
    * Whether run frames must live on the Mastra bus and its cache because the
@@ -54,6 +56,7 @@ export class AgentStreamBus {
   readonly #cleanupTimeoutMs: number;
   /** Resolved bus (lazily initialized) */
   #pubsub: PubSub | null = null;
+  #deliveryPubsub: PubSub | null = null;
   /** Resolved cache instance (lazily initialized) */
   #cache: MastraServerCache | null = null;
   /** Record cache for an unregistered agent with replay off. */
@@ -74,7 +77,7 @@ export class AgentStreamBus {
    */
   get pubsub(): PubSub {
     this.#ensureResolved();
-    return this.#pubsub!;
+    return this.#deliveryPubsub!;
   }
 
   /** The replay cache, or `null` when replay is disabled. */
@@ -150,6 +153,7 @@ export class AgentStreamBus {
 
   #reset(): void {
     this.#pubsub = null;
+    this.#deliveryPubsub = null;
     this.#cache = null;
   }
 
@@ -165,6 +169,7 @@ export class AgentStreamBus {
       warn: this.#hooks.warn,
     });
     this.#pubsub = resolved.pubsub;
+    this.#deliveryPubsub = bindAgentPubSub(resolved.pubsub, this.#hooks.getAgentId());
     this.#cache = resolved.cache;
   }
 

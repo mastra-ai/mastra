@@ -1795,6 +1795,7 @@ export class Agent<
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
+          getAgentId: () => this.id,
           getMastra: () => this.#mastra,
           // Plain agent runs execute and publish in this process.
           usesSharedRunLog: () => false,
@@ -10154,6 +10155,7 @@ export class Agent<
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<any>,
       threadStreamPubSub,
       () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
+      this.id,
     );
 
     const executeOptions = {
@@ -10576,7 +10578,7 @@ export class Agent<
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
-    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub(), { agentId: this.id });
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
     return aborted;
   }
@@ -11158,6 +11160,7 @@ export class Agent<
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
       () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
+      this.id,
     );
 
     const executeOptions = {
@@ -11555,6 +11558,7 @@ export class Agent<
         { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
         () => this.#deleteAbortedSuspendedRun(runId),
+        this.id,
       );
 
       const result = await this.#execute({

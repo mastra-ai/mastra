@@ -9,6 +9,7 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC } from '../constants';
@@ -50,14 +51,14 @@ describe('DurableAgent workflow.events.v2 topic cleanup (#20786)', () => {
 
     // Spy the agent-facing pubsub (CachingPubSub wrapper), which is what
     // #clearPubsubTopic calls — not the inner EventEmitterPubSub alone.
-    const clearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+    const clearTopic = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'clearTopic');
 
     const { runId, cleanup, output } = await durableAgent.stream('hi');
     await output.consumeStream();
     // cleanup() is what #clearPubsubTopic is wired through.
     cleanup();
 
-    expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+    expect(clearTopic).toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
     expect(clearTopic).toHaveBeenCalledWith(`workflow.events.v2.${runId}`);
 
     await pubsub.close();

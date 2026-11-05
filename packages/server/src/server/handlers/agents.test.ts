@@ -3323,7 +3323,6 @@ describe('Agent Routes Authorization', () => {
       const runId = 'observe-fallback-run';
       // As with a durable agent from an older @mastra/core.
       (mockDurableAgent as any).__subscribeToRunStream = undefined;
-      const subscribeWithReplay = vi.spyOn(mockDurableAgent.pubsub, 'subscribeWithReplay');
       const publish = (event: Record<string, unknown>) =>
         mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
 
@@ -3340,7 +3339,6 @@ describe('Agent Routes Authorization', () => {
       const events: any[] = [];
       for await (const event of stream as any) events.push(event);
 
-      expect(subscribeWithReplay).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
       expect(events.map(event => [event.type, event.payload?.text])).toEqual([
         ['text-delta', 'answer'],
         ['finish', undefined],

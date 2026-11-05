@@ -75,7 +75,10 @@ describeForAllEngines('AIMock loop scenario: observe frames', engine => {
           observation.detach();
         }
 
-        const events = (await cache.listFromTo(`pubsub:${AGENT_STREAM_TOPIC(run.runId)}`, 0)) as {
+        const events = (await cache.listFromTo(
+          `pubsub:agent.stream.v2.${JSON.stringify([agent.id, run.runId])}`,
+          0,
+        )) as {
           type: string;
           data?: { type?: string; payload?: { text?: string } };
         }[];

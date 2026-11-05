@@ -5,6 +5,7 @@ import { createRunScopeKey } from '../../mastra/run-scope';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import { RequestContext } from '../../request-context';
 import { matchesRunFence } from '../../storage/run-fencing';
+import { bindAgentPubSub } from '../streams/agent-pubsub';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds } from './constants';
 import {
@@ -215,7 +216,13 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
     const error = getErrorFromUnknown(failure ?? 'Workflow execution failed');
     const delivery =
       failure?.code === DURABLE_STOP_WHEN_ERROR_ID || failure?.id === DURABLE_STOP_WHEN_ERROR_ID ? 'reject' : undefined;
-    await emitErrorEvent(mastra.pubsub, event.runId, error, claim.generation, delivery);
+    await emitErrorEvent(
+      bindAgentPubSub(mastra.pubsub, claim.agentId!),
+      event.runId,
+      error,
+      claim.generation,
+      delivery,
+    );
   }
   // Storage-backed deletes are fenced; lease-only stores retain their existing best-effort write guarantees.
   if (event.type !== 'workflow.suspend') {

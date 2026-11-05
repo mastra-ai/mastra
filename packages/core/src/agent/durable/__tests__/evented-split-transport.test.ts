@@ -28,6 +28,7 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { bindAgentPubSub } from '../../streams/agent-pubsub';
 import { AGENT_STREAM_TOPIC } from '../constants';
 import { createEventedAgent } from '../create-evented-agent';
 import type { EventedAgent } from '../evented-agent';
@@ -315,7 +316,11 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
 
     const topic = AGENT_STREAM_TOPIC('reused-run');
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'reused-run', data: {} });
-    expect(await sharedCache.listLength(`pubsub:${topic}`)).toBe(1);
+    expect(
+      await sharedCache.listLength(
+        `pubsub:agent.stream.v2.${JSON.stringify([agent.id, topic.slice('agent.stream.'.length)])}`,
+      ),
+    ).toBe(1);
 
     await transport.close();
   });
@@ -347,7 +352,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     });
 
     const delivered: unknown[] = [];
-    await runTransport.subscribe(AGENT_STREAM_TOPIC('moved-run'), event => {
+    await bindAgentPubSub(runTransport, agent.id).subscribe(AGENT_STREAM_TOPIC('moved-run'), event => {
       delivered.push(event);
     });
 
@@ -355,8 +360,16 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'moved-run', data: {} });
 
     expect(delivered).toHaveLength(1);
-    expect(await serverCache.listLength(`pubsub:${topic}`)).toBe(1);
-    expect(await agentCache.listLength(`pubsub:${topic}`)).toBe(0);
+    expect(
+      await serverCache.listLength(
+        `pubsub:agent.stream.v2.${JSON.stringify([agent.id, topic.slice('agent.stream.'.length)])}`,
+      ),
+    ).toBe(1);
+    expect(
+      await agentCache.listLength(
+        `pubsub:agent.stream.v2.${JSON.stringify([agent.id, topic.slice('agent.stream.'.length)])}`,
+      ),
+    ).toBe(0);
 
     await runTransport.close();
     await agentTransport.close();
@@ -387,10 +400,10 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     const onRunBus: unknown[] = [];
     const onAgentBus: unknown[] = [];
     const topic = AGENT_STREAM_TOPIC('no-cache-run');
-    await runTransport.subscribe(topic, event => {
+    await bindAgentPubSub(runTransport, agent.id).subscribe(topic, event => {
       onRunBus.push(event);
     });
-    await agentPubsub.subscribe(topic, event => {
+    await bindAgentPubSub(agentPubsub, agent.id).subscribe(topic, event => {
       onAgentBus.push(event);
     });
 
@@ -429,10 +442,10 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     const onRunBus: unknown[] = [];
     const onAgentBus: unknown[] = [];
     const topic = AGENT_STREAM_TOPIC('early-no-cache-run');
-    await runTransport.subscribe(topic, event => {
+    await bindAgentPubSub(runTransport, agent.id).subscribe(topic, event => {
       onRunBus.push(event);
     });
-    await agentPubsub.subscribe(topic, event => {
+    await bindAgentPubSub(agentPubsub, agent.id).subscribe(topic, event => {
       onAgentBus.push(event);
     });
 

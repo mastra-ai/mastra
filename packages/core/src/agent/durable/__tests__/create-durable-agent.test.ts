@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
-import { CachingPubSub } from '../../../events/caching-pubsub';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { RequestContext } from '../../../request-context';
 import { Agent } from '../../agent';
@@ -131,14 +131,14 @@ describe('createDurableAgent factory', () => {
     it('should wrap pubsub with CachingPubSub', () => {
       const durableAgent = createDurableAgent({ agent });
 
-      expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+      expect((durableAgent.pubsub as CachingPubSub).getInner()).toBeInstanceOf(EventEmitterPubSub);
     });
 
     it('should use custom pubsub wrapped with CachingPubSub', () => {
       const customPubsub = new EventEmitterPubSub();
       const durableAgent = createDurableAgent({ agent, pubsub: customPubsub });
 
-      expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+      expect((durableAgent.pubsub as CachingPubSub).getCache()).toBe(durableAgent.cache);
       // The inner pubsub should be our custom one
       expect((durableAgent.pubsub as CachingPubSub).getInner()).toBe(customPubsub);
     });

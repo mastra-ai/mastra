@@ -880,6 +880,7 @@ export class DurableAgent<
     this.#streams = new AgentStreamBus(
       { pubsub, cache, cleanupTimeoutMs, shouldCache },
       {
+        getAgentId: () => this.id,
         getMastra: () => this.#mastra,
         usesSharedRunLog: () => this.resolveWorkflowEngine() === 'evented',
         warn: message => this.logger.warn(`[DurableAgent:${this.id}] ${message}`),

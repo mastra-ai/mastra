@@ -30,7 +30,7 @@ export async function publishAbortRequest(pubsub: PubSub, runId: string): Promis
  * carried a `requestId`. Kept apart from the control topic so a requester never
  * has to read (or replay) the control history to wait for its own reply.
  */
-export const abortAckTopic = (runId: string): string => `agent.control.${runId}.ack`;
+export const abortAckTopic = (runId: string): string => `agent.abort-ack.${runId}`;
 const ABORT_ACK = 'abort-ack';
 
 /** How long `requestAcknowledgedAbort` waits for the executing process to answer. */

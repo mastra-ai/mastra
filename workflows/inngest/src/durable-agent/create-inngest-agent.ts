@@ -39,6 +39,7 @@
 import type { Agent, AgentExecutionOptions, StructuredOutputOptions } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
+  bindAgentPubSub,
   AgentStreamEventTypes,
   agentThreadStreamRuntime,
   applyReservedMemoryContextKeys,
@@ -111,7 +112,11 @@ class InngestAgentPubSubRouter extends PubSub {
   }
 
   private resolve(topic: string): PubSub {
-    if (topic.startsWith('agent.stream.') || topic.startsWith('agent.control.')) {
+    if (
+      topic.startsWith('agent.stream.') ||
+      topic.startsWith('agent.control.') ||
+      topic.startsWith('agent.abort-ack.')
+    ) {
       return this.getAgentPubsub();
     }
     return this.defaultPubsub;
@@ -813,6 +818,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   const streamBus = new AgentStreamBus(
     { pubsub: innerPubsub, cache },
     {
+      getAgentId: () => agentId,
       getMastra: () => mastra,
       usesSharedRunLog: () => false,
       warn: message => mastra?.getLogger()?.warn(message),
@@ -2498,6 +2504,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       return createInngestAgent<TOutput>({
         ...forkOptions,
         agent: agent.__fork(),
+        // Editor forks are versions of the same registered agent, not new transport owners.
+        id: agentId,
         pubsub: innerPubsub,
         cache: streamBus.cache ?? undefined,
         mastra,

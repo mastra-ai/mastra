@@ -3041,22 +3041,30 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       await authorizeRunObservation({ mastra, agent, runId, requestContext });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
-      const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
+      const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent);
       const topic = AGENT_STREAM_TOPIC(runId);
 
       // A durable agent subscribes for us so the client never sees what an
       // execution that lost the run still publishes. Agents without it, such as
-      // those from an older @mastra/core, are observed through the topic directly.
-      const subscribe = (onEvent: (event: any) => void, onComplete: () => void): Promise<() => Promise<void>> => {
-        if (typeof durableAgent?.__subscribeToRunStream === 'function') {
-          return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
+      // those from an older @mastra/core, are observed through their publishing bus.
+      let subscribe: (onEvent: (event: any) => void, onComplete: () => void) => Promise<() => Promise<void>>;
+      const subscribeToRunStream = durableAgent?.__subscribeToRunStream?.bind(durableAgent);
+      if (subscribeToRunStream) {
+        subscribe = (onEvent, onComplete) => subscribeToRunStream(runId, { offset, onComplete }, onEvent);
+      } else {
+        if (!pubsub) {
+          throw new HTTPException(501, {
+            message: 'This agent does not expose a stream subscription hook or publishing bus for observation.',
+          });
         }
-        const subscribed =
-          offset !== undefined
-            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
-            : pubsub.subscribeWithReplay(topic, onEvent);
-        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
-      };
+        subscribe = onEvent => {
+          const subscribed =
+            offset !== undefined
+              ? pubsub.subscribeFromOffset(topic, offset, onEvent)
+              : pubsub.subscribeWithReplay(topic, onEvent);
+          return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+        };
+      }
 
       let closed = false;
       let pendingRejection: Error | undefined;

@@ -88,17 +88,17 @@ class Node {
     return { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) };
   }
 
-  async abort(runId: string, token?: string) {
-    const res = await fetch(`${this.url}/api/agents/${AGENT_ID}/runs/${runId}/abort`, {
+  async abort(runId: string, token?: string, agentId = AGENT_ID) {
+    const res = await fetch(`${this.url}/api/agents/${agentId}/runs/${runId}/abort`, {
       method: 'POST',
       headers: this.headers(token),
     });
     return { status: res.status, body: await res.json().catch(() => undefined) };
   }
 
-  async observe(runId: string, token?: string, offset?: number): Promise<Observation> {
+  async observe(runId: string, token?: string, offset?: number, agentId = AGENT_ID): Promise<Observation> {
     const controller = new AbortController();
-    const res = await fetch(`${this.url}/api/agents/${AGENT_ID}/observe`, {
+    const res = await fetch(`${this.url}/api/agents/${agentId}/observe`, {
       method: 'POST',
       headers: this.headers(token),
       body: JSON.stringify({ runId, offset }),
@@ -295,6 +295,93 @@ describe('plain Agent runs across two servers (LibSQL file + Redis)', () => {
     cleanupStorage = undefined;
   });
 
+  describe('different agents using the same run id (#29487)', () => {
+    const runId = 'shared-conversation';
+    const sibling = 'sibling-agent';
+
+    beforeEach(async () => {
+      llm.clearFixtures();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        {
+          toolCalls: [{ id: 'call-wait', name: 'wait', arguments: '{}' }],
+        },
+      );
+      llm.on(
+        { endpoint: 'chat', hasToolResult: true, predicate: req => JSON.stringify(req.messages).includes('private A') },
+        { content: 'Private answer A.' },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Public answer B.' });
+      await startNodes({ CLEANUP_MS: '500' });
+      owner.send({ cmd: 'stream', agentId: AGENT_ID, runId, prompt: 'private A', resourceId: 'user-a' });
+      await owner.next(e => e.type === 'tool-started' && e.agentId === AGENT_ID);
+      other.send({ cmd: 'stream', agentId: sibling, runId, prompt: 'public B', resourceId: 'user-a' });
+      await other.next(e => e.type === 'tool-started' && e.agentId === sibling);
+    });
+
+    it('keeps sibling replay intact when another agent finishes, reuses the run id, and cleans up', async () => {
+      const live = await owner.observe(runId, OWNER, undefined, sibling);
+      expect(live.status).toBe(200);
+      try {
+        owner.send({ cmd: 'release', agentId: AGENT_ID });
+        await owner.next(e => e.type === 'stream-done' && e.agentId === AGENT_ID);
+        // Wait for actual cleanup, not merely for the publisher to finish.
+        await within(
+          (async () => {
+            while (await redis.exists(recordKey(runId))) await new Promise(r => setTimeout(r, 25));
+          })(),
+          5000,
+          'agent A cleanup',
+        );
+        expect(types(live.frames)).not.toContain('finish');
+        expect(text(live.frames)).toBe('');
+        owner.events.length = 0;
+        owner.send({ cmd: 'stream', agentId: AGENT_ID, runId, prompt: 'private A again', resourceId: 'user-a' });
+        await owner.next(e => e.type === 'tool-started' && e.agentId === AGENT_ID);
+        owner.send({ cmd: 'release', agentId: AGENT_ID });
+        await owner.next(e => e.type === 'stream-done' && e.agentId === AGENT_ID);
+        await within(
+          (async () => {
+            while (await redis.exists(recordKey(runId))) await new Promise(r => setTimeout(r, 25));
+          })(),
+          5000,
+          'reused agent A cleanup',
+        );
+        expect(types(live.frames)).not.toContain('finish');
+        expect(text(live.frames)).toBe('');
+        const replay = await owner.observe(runId, OWNER, 0, sibling);
+        expect(replay.status).toBe(200);
+        try {
+          other.send({ cmd: 'release', agentId: sibling });
+          await within(Promise.all([live.done, replay.done]), 10000, 'sibling observations');
+          expect(text(live.frames)).toBe('Public answer B.');
+          expect(text(replay.frames)).toBe('Public answer B.');
+          expect(types(replay.frames)).toContain('tool-call');
+        } finally {
+          await replay.cancel();
+        }
+      } finally {
+        await live.cancel();
+      }
+    });
+
+    it('acknowledges a remote abort without stopping the sibling agent', async () => {
+      expect(await other.abort(runId, OWNER)).toEqual({ status: 200, body: { aborted: true } });
+      await owner.next(e => e.type === 'stream-done' && e.agentId === AGENT_ID);
+      expect(other.events.some(e => e.type === 'stream-done' && e.agentId === sibling)).toBe(false);
+      const live = await owner.observe(runId, OWNER, undefined, sibling);
+      expect(live.status).toBe(200);
+      try {
+        other.send({ cmd: 'release', agentId: sibling });
+        await within(live.done, 10000, 'unaborted sibling');
+        expect(text(live.frames)).toBe('Public answer B.');
+        expect(types(live.frames)).not.toContain('abort');
+      } finally {
+        await live.cancel();
+      }
+    });
+  });
+
   describe('with replay caching', () => {
     beforeEach(() => startNodes());
 
@@ -423,7 +510,9 @@ describe('plain Agent runs across two servers (LibSQL file + Redis)', () => {
 
       // No replay cache is written; whatever history the observer gets comes
       // from the transport itself (Redis Streams keeps its entries).
-      expect(await redis.exists(`${keyPrefix}:cache:pubsub:agent.stream.${runId}`)).toBe(0);
+      expect(await redis.exists(`${keyPrefix}:cache:pubsub:agent.stream.v2.${JSON.stringify([AGENT_ID, runId])}`)).toBe(
+        0,
+      );
       expect(text(live.frames)).toBe('Approved and done.');
       expect(types(live.frames).at(-1)).toBe('finish');
     });

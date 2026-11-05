@@ -247,7 +247,7 @@ describe('createInngestAgent observe-replay wiring', () => {
     // (mirroring the in-memory DurableAgent), falling back to InMemoryServerCache.
     const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-default'), inngest });
 
-    expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+    expect((durableAgent.pubsub as CachingPubSub).getCache()).toBe(durableAgent.cache);
     expect(durableAgent.cache).toBeInstanceOf(InMemoryServerCache);
   });
 
@@ -260,7 +260,7 @@ describe('createInngestAgent observe-replay wiring', () => {
     });
 
     expect(durableAgent.cache).toBe(customCache);
-    expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+    expect((durableAgent.pubsub as CachingPubSub).getCache()).toBe(durableAgent.cache);
   });
 
   it.each([false, true])('keeps Inngest transport after registration (resolved first: %s)', resolvedFirst => {
@@ -305,7 +305,7 @@ describe('createInngestAgent observe-replay wiring', () => {
       data: { chunk: 'once' },
     });
 
-    expect(durableAgent.pubsub).toBe(pubsub);
+    expect((durableAgent.pubsub as CachingPubSub).getInner()).toBe(inner);
     expect(durableAgent.cache).toBe(cache);
     expect(publish).toHaveBeenCalledOnce();
     const history = await durableAgent.pubsub.getHistory(topic);
@@ -319,17 +319,13 @@ describe('createInngestAgent observe-replay wiring', () => {
   // both fail: bare InngestPubSub has no history and a late observer would miss every chunk
   // emitted before its subscribe call.
   //
-  // Replace the inner InngestPubSub with an in-process EventEmitterPubSub. The wrapper's
-  // history-replay path is the code under test; we just need a live-event broker that
-  // doesn't try to hit Inngest realtime. This mirrors the inner used by the in-memory
-  // resumable-streams test in packages/core/src/agent/durable/__tests__.
-  function swapInnerToInProcess(durableAgent: any) {
-    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
-  }
-
+  // Exercise replay with an in-process live transport supplied at construction.
   it('should replay all events to a late subscriber', async () => {
-    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-late'), inngest });
-    swapInnerToInProcess(durableAgent);
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-late'),
+      inngest,
+      pubsub: new EventEmitterPubSub(),
+    });
     const pubsub = durableAgent.pubsub;
     const runId = 'inngest-observe-run-late';
     const topic = AGENT_STREAM_TOPIC(runId);
@@ -461,8 +457,18 @@ describe('createInngestAgent observe-replay wiring', () => {
     } as any);
 
     expect(customPublish).toHaveBeenCalledTimes(2);
-    expect(customPublish).toHaveBeenNthCalledWith(1, streamTopic, expect.any(Object), undefined);
-    expect(customPublish).toHaveBeenNthCalledWith(2, controlTopic, expect.any(Object), undefined);
+    expect(customPublish).toHaveBeenNthCalledWith(
+      1,
+      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
+      expect.any(Object),
+      undefined,
+    );
+    expect(customPublish).toHaveBeenNthCalledWith(
+      2,
+      `agent.control.v2.${JSON.stringify([durableAgent.id, runId])}`,
+      expect.any(Object),
+      undefined,
+    );
     expect(defaultPublish).not.toHaveBeenCalled();
 
     const replayed: any[] = [];
@@ -482,12 +488,12 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(defaultPublish).toHaveBeenCalledWith(workflowTopic, expect.any(Object), undefined);
     expect(customPublish).toHaveBeenCalledTimes(2);
 
-    const customClearTopic = vi.spyOn(durableAgent.pubsub, 'clearTopic');
+    const customClearTopic = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'clearTopic');
     const defaultClearTopic = vi.spyOn(workflowDefault, 'clearTopic');
     await routed.clearTopic(streamTopic);
     await routed.clearTopic(workflowTopic);
     expect(customClearTopic).toHaveBeenCalledOnce();
-    expect(customClearTopic).toHaveBeenCalledWith(streamTopic);
+    expect(customClearTopic).toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
     expect(defaultClearTopic).toHaveBeenCalledOnce();
     expect(defaultClearTopic).toHaveBeenCalledWith(workflowTopic);
 
@@ -561,7 +567,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC(runId),
+      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
       expect.objectContaining({ type: AgentStreamEventTypes.ERROR, runId }),
       undefined,
     );
@@ -613,7 +619,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC(runId),
+      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
       expect.objectContaining({
         type: AgentStreamEventTypes.ERROR,
         runId,
@@ -672,7 +678,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC(runId),
+      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
       expect.objectContaining({
         type: AgentStreamEventTypes.ERROR,
         runId,
@@ -686,8 +692,11 @@ describe('createInngestAgent observe-replay wiring', () => {
   });
 
   it('should receive both cached and live events', async () => {
-    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-mixed'), inngest });
-    swapInnerToInProcess(durableAgent);
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-mixed'),
+      inngest,
+      pubsub: new EventEmitterPubSub(),
+    });
     const pubsub = durableAgent.pubsub;
     const runId = 'inngest-observe-run-mixed';
     const topic = AGENT_STREAM_TOPIC(runId);
@@ -864,14 +873,9 @@ describe('InngestAgent parity surface', () => {
     });
   }
 
-  // The agent's CachingPubSub wraps an InngestPubSub. Without a real Inngest
-  // dev server, terminal stream events (finish/error/abort) try to publish
-  // over inngest realtime and produce unhandled fetch rejections. Swap the
-  // inner with an in-process broker so the surface tests stay self-contained.
+  // Supply an in-process live transport before the agent-scoped view is resolved.
   function makeIsolatedAgent(id: string) {
-    const durableAgent = createInngestAgent({ agent: makeAgent(id), inngest });
-    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
-    return durableAgent;
+    return createInngestAgent({ agent: makeAgent(id), inngest, pubsub: new EventEmitterPubSub() });
   }
 
   function setSuspendedSnapshot(durableAgent: ReturnType<typeof makeIsolatedAgent>) {
@@ -938,8 +942,8 @@ describe('InngestAgent parity surface', () => {
           },
         }),
         inngest,
+        pubsub: new EventEmitterPubSub(),
       });
-      (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
       return durableAgent;
     }
 
@@ -1012,8 +1016,8 @@ describe('InngestAgent parity surface', () => {
       const durableAgent = createInngestAgent({
         agent: new Agent({ id, name: id, instructions: 'Test', model: createMockModel() as any, defaultOptions }),
         inngest,
+        pubsub: new EventEmitterPubSub(),
       });
-      (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
       return durableAgent;
     }
 
@@ -1183,12 +1187,15 @@ describe('InngestAgent parity surface', () => {
     const durableAgent = makeIsolatedAgent('resume-external-abort');
     setSuspendedSnapshot(durableAgent);
     const sendSpy = stubInngestSend();
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish').mockResolvedValue(undefined as any);
+    const publish = vi
+      .spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish')
+      .mockResolvedValue(undefined as any);
     const runId = 'resume-external-abort-run';
     const abortRequests = () =>
       publish.mock.calls.filter(
         ([topic, event]: any[]) =>
-          topic === AGENT_CONTROL_TOPIC(runId) && event?.type === AgentControlEventTypes.ABORT_REQUEST,
+          topic === `agent.control.v2.${JSON.stringify([durableAgent.id, runId])}` &&
+          event?.type === AgentControlEventTypes.ABORT_REQUEST,
       );
     const external = new AbortController();
 
@@ -1565,11 +1572,7 @@ describe('InngestAgent parity surface', () => {
     setSuspendedSnapshot(durableAgent);
     const runId = 'resume-stream-boundary-failure-run';
     const historyError = new Error('history unavailable');
-    const originalGetHistory = durableAgent.pubsub.getHistory.bind(durableAgent.pubsub);
-    const historySpy = vi
-      .spyOn(durableAgent.pubsub, 'getHistory')
-      .mockRejectedValueOnce(historyError)
-      .mockImplementation(originalGetHistory);
+    const historySpy = vi.spyOn(durableAgent.cache, 'listFromTo').mockRejectedValueOnce(historyError);
     const sendSpy = stubInngestSend();
     let result: Awaited<ReturnType<typeof durableAgent.resume>> | undefined;
 
@@ -2179,7 +2182,7 @@ describe('InngestAgent parity surface', () => {
         requestContext: { mastra__scopes: ['org:a'] },
       });
       const sendSpy = stubInngestSend();
-      const publishSpy = vi.spyOn(durableAgent.pubsub, 'publish');
+      const publishSpy = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
       const runId = 'resume-scope-conflict-run';
 
       try {
@@ -2289,8 +2292,6 @@ describe('InngestAgent parity surface', () => {
         resumeLabels: {},
       });
       const fork = (durableAgent as any).__fork();
-      // The fork re-wraps the original InngestPubSub; isolate it like makeIsolatedAgent does.
-      (fork.pubsub as any).inner = new EventEmitterPubSub();
       const sendSpy = stubInngestSend();
       const runId = 'resume-forked-approve-run';
 
@@ -2566,8 +2567,7 @@ describe('InngestAgent observability tracing', () => {
       model: createMockModel() as any,
       ...(inputProcessors.length > 0 ? { inputProcessors } : {}),
     });
-    const durableAgent = createInngestAgent({ agent, inngest });
-    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    const durableAgent = createInngestAgent({ agent, inngest, pubsub: new EventEmitterPubSub() });
     return durableAgent;
   }
 
@@ -2766,7 +2766,7 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
 
   function makeDurable(id: string) {
     const agent = new Agent({ id, name: id, instructions: 'Original', model: createMockModel() as any });
-    return createInngestAgent({ agent, inngest });
+    return createInngestAgent({ agent, inngest, pubsub: new EventEmitterPubSub() });
   }
 
   function spyResume(durableAgent: ReturnType<typeof makeDurable>) {
@@ -3229,13 +3229,70 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     expect(durableAgent.agent.getInstructions()).toBe('Original');
   });
 
+  it.each([false, true])(
+    '__fork preserves replay, control and abort acknowledgements with id override=%s',
+    async override => {
+      const transport = new EventEmitterPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = new Agent({
+        id: 'inner-agent',
+        name: 'Inner',
+        instructions: 'Original',
+        model: createMockModel() as any,
+      });
+      const parent = createInngestAgent({
+        agent,
+        inngest,
+        pubsub: transport,
+        cache,
+        ...(override ? { id: 'registered-agent' } : {}),
+      });
+      const sibling = createInngestAgent({ agent, inngest, pubsub: transport, cache, id: 'different-agent' });
+      const fork = parent.__fork();
+      expect(fork.id).toBe(override ? 'registered-agent' : agent.id);
+      expect(fork.agent).not.toBe(parent.agent);
+      const topic = AGENT_STREAM_TOPIC('same-run');
+      const event = { type: 'fork-marker', data: { text: 'fork-output' } };
+      await fork.pubsub.publish(topic, event);
+      expect(await parent.pubsub.getHistory(topic)).toEqual([expect.objectContaining(event)]);
+      expect(await sibling.pubsub.getHistory(topic)).toEqual([]);
+      const replay: unknown[] = [];
+      const onReplay = async (frame: unknown) => {
+        replay.push(frame);
+      };
+      await parent.pubsub.subscribeWithReplay(topic, onReplay);
+      expect(replay).toEqual([expect.objectContaining(event)]);
+      await parent.pubsub.unsubscribe(topic, onReplay);
+      for (const controlTopic of [AGENT_CONTROL_TOPIC('same-run'), 'agent.abort-ack.same-run']) {
+        const parentEvents: unknown[] = [];
+        const siblingEvents: unknown[] = [];
+        const onParent = async (frame: unknown) => {
+          parentEvents.push(frame);
+        };
+        const onSibling = async (frame: unknown) => {
+          siblingEvents.push(frame);
+        };
+        await parent.pubsub.subscribe(controlTopic, onParent);
+        await sibling.pubsub.subscribe(controlTopic, onSibling);
+        try {
+          await fork.pubsub.publish(controlTopic, event);
+          await fork.pubsub.flush();
+          expect(parentEvents).toEqual([expect.objectContaining(event)]);
+          expect(siblingEvents).toEqual([]);
+        } finally {
+          await parent.pubsub.unsubscribe(controlTopic, onParent);
+          await sibling.pubsub.unsubscribe(controlTopic, onSibling);
+        }
+      }
+    },
+  );
+
   it('__fork keeps the registered Mastra instance and dispatches streams to Inngest', async () => {
     const durableAgent = makeDurable('fork-dispatch');
     const mastra = new Mastra({ agents: { forkDispatch: durableAgent as any }, logger: false });
     void mastra;
 
     const fork = durableAgent.__fork();
-    (fork.pubsub as any).inner = new EventEmitterPubSub();
     const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
     const doStream = (fork.agent as any).model?.doStream;
 
@@ -3264,16 +3321,20 @@ describe('thread and run abort (#25156)', () => {
     const durableAgent = createInngestAgent({
       agent: new Agent({ id, name: id, instructions: 'Test', model: createMockModel() as any }),
       inngest,
+      pubsub: new EventEmitterPubSub(),
     });
     // Keep publishes in-process; the Inngest realtime transport is not under test.
-    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
     return durableAgent;
   }
 
-  function abortRequestsFor(publish: ReturnType<typeof vi.spyOn>, runId: string) {
+  function abortRequestsFor(
+    durableAgent: ReturnType<typeof makeDurable>,
+    publish: ReturnType<typeof vi.spyOn>,
+    runId: string,
+  ) {
     return publish.mock.calls.filter(
       ([topic, event]: any[]) =>
-        topic === AGENT_CONTROL_TOPIC(runId) &&
+        topic === `agent.control.v2.${JSON.stringify([durableAgent.id, runId])}` &&
         event?.type === AgentControlEventTypes.ABORT_REQUEST &&
         event.runId === runId,
     );
@@ -3293,7 +3354,7 @@ describe('thread and run abort (#25156)', () => {
 
   it('abortThreadStream stops the active Inngest run and asks the worker to abort it', async () => {
     const durableAgent = makeDurable('abort-thread');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const threadId = 'abort-thread-t';
     const resourceId = 'abort-thread-r';
     const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
@@ -3307,7 +3368,7 @@ describe('thread and run abort (#25156)', () => {
       expect(durableAgent.abortThreadStream({ threadId, resourceId })).toBe(true);
 
       expect(controller?.signal.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(durableAgent, publish, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -3317,7 +3378,7 @@ describe('thread and run abort (#25156)', () => {
   // The server's thread-abort route calls this entry point (#28310).
   it('the thread-abort route entry point stops the active Inngest run and asks the worker to abort it', async () => {
     const durableAgent = makeDurable('abort-thread-route');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const threadId = 'abort-thread-route-t';
     const resourceId = 'abort-thread-route-r';
     const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
@@ -3329,7 +3390,7 @@ describe('thread and run abort (#25156)', () => {
       await expect(durableAgent.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).resolves.toBe(true);
 
       expect(controller?.signal.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(durableAgent, publish, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -3339,7 +3400,7 @@ describe('thread and run abort (#25156)', () => {
   // A server that never saw the run finds it through the thread lease (#28310).
   it('the thread-abort route asks the Inngest worker to stop the thread lease owner on a server that never saw the run', async () => {
     const durableAgent = makeDurable('abort-thread-cold');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const leaseOwner = vi
       .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
       .mockResolvedValue('run-on-another-server');
@@ -3347,7 +3408,7 @@ describe('thread and run abort (#25156)', () => {
       await expect(
         durableAgent.__abortThreadStreamAcrossProcesses({ threadId: 'cold-t', resourceId: 'cold-r' }),
       ).resolves.toBe(true);
-      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(1);
+      expect(abortRequestsFor(durableAgent, publish, 'run-on-another-server')).toHaveLength(1);
     } finally {
       leaseOwner.mockRestore();
     }
@@ -3355,7 +3416,7 @@ describe('thread and run abort (#25156)', () => {
 
   it('the thread-abort route leaves the lease owner alone when expectedRunId names another run', async () => {
     const durableAgent = makeDurable('abort-thread-cold-stale');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const leaseOwner = vi
       .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
       .mockResolvedValue('run-on-another-server');
@@ -3367,7 +3428,7 @@ describe('thread and run abort (#25156)', () => {
           expectedRunId: 'an-earlier-run',
         }),
       ).resolves.toBe(false);
-      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(0);
+      expect(abortRequestsFor(durableAgent, publish, 'run-on-another-server')).toHaveLength(0);
     } finally {
       leaseOwner.mockRestore();
     }
@@ -3375,7 +3436,7 @@ describe('thread and run abort (#25156)', () => {
 
   it('abortThreadStream publishes nothing when expectedRunId does not match the active run', async () => {
     const durableAgent = makeDurable('abort-thread-stale');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const threadId = 'abort-thread-stale-t';
     const resourceId = 'abort-thread-stale-r';
     const { result, sendSpy } = await startThreadRun(durableAgent, threadId, resourceId);
@@ -3383,7 +3444,7 @@ describe('thread and run abort (#25156)', () => {
     try {
       expect(durableAgent.abortThreadStream({ threadId, resourceId, expectedRunId: 'some-other-run' })).toBe(false);
       await new Promise(resolve => setTimeout(resolve, 10));
-      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      expect(abortRequestsFor(durableAgent, publish, result.runId)).toHaveLength(0);
       expect(globalRunRegistry.get(result.runId)?.abortController?.signal.aborted).toBe(false);
     } finally {
       result.cleanup();
@@ -3393,7 +3454,7 @@ describe('thread and run abort (#25156)', () => {
 
   it('abortThreadStream returns false and publishes nothing for a thread without an active run', async () => {
     const durableAgent = makeDurable('abort-thread-idle');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
 
     expect(durableAgent.abortThreadStream({ threadId: 'idle-t', resourceId: 'idle-r' })).toBe(false);
     await new Promise(resolve => setTimeout(resolve, 10));
@@ -3404,16 +3465,16 @@ describe('thread and run abort (#25156)', () => {
   // must publish the abort request just like result.abort().
   it('an external abortSignal asks the worker to abort the run', async () => {
     const durableAgent = makeDurable('abort-external-signal');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const sendSpy = vi.spyOn(inngest as any, 'send').mockResolvedValue(undefined as any);
     const external = new AbortController();
     const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], { abortSignal: external.signal });
 
     try {
-      expect(abortRequestsFor(publish, result.runId)).toHaveLength(0);
+      expect(abortRequestsFor(durableAgent, publish, result.runId)).toHaveLength(0);
       external.abort(new Error('external-cancel'));
       expect(globalRunRegistry.get(result.runId)?.abortSignal?.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(durableAgent, publish, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -3422,23 +3483,23 @@ describe('thread and run abort (#25156)', () => {
 
   it('abortRunStream asks the worker to abort a run this process does not know', async () => {
     const durableAgent = makeDurable('abort-run-remote');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const runId = 'abort-run-remote-run';
 
     expect(typeof durableAgent.abortRunStream(runId)).toBe('boolean');
-    await vi.waitFor(() => expect(abortRequestsFor(publish, runId)).toHaveLength(1));
+    await vi.waitFor(() => expect(abortRequestsFor(durableAgent, publish, runId)).toHaveLength(1));
   });
 
   it('abortRunStream flips the local controller of a run started here and reports it aborted', async () => {
     const durableAgent = makeDurable('abort-run-local');
-    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const publish = vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish');
     const { result, sendSpy } = await startThreadRun(durableAgent, 'abort-run-local-t', 'abort-run-local-r');
 
     try {
       const controller = globalRunRegistry.get(result.runId)?.abortController;
       expect(durableAgent.abortRunStream(result.runId)).toBe(true);
       expect(controller?.signal.aborted).toBe(true);
-      await vi.waitFor(() => expect(abortRequestsFor(publish, result.runId)).toHaveLength(1));
+      await vi.waitFor(() => expect(abortRequestsFor(durableAgent, publish, result.runId)).toHaveLength(1));
     } finally {
       result.cleanup();
       sendSpy.mockRestore();
@@ -3462,7 +3523,9 @@ describe('thread and run abort (#25156)', () => {
 
   it('does not throw when publishing the abort request fails', async () => {
     const durableAgent = makeDurable('abort-run-publish-fails');
-    vi.spyOn(durableAgent.pubsub, 'publish').mockRejectedValue(new Error('transport down'));
+    vi.spyOn((durableAgent.pubsub as CachingPubSub).getInner(), 'publish').mockRejectedValue(
+      new Error('transport down'),
+    );
 
     expect(() => durableAgent.abortRunStream('abort-run-publish-fails-run')).not.toThrow();
     await new Promise(resolve => setTimeout(resolve, 10));
