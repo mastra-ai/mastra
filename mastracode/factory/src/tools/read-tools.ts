@@ -31,7 +31,7 @@ const DEFAULT_LIST = 25;
 export interface FactoryReadToolDependencies {
   workItems: Pick<
     WorkItemsStorage,
-    | 'list'
+    | 'listShared'
     | 'getForProject'
     | 'listRunBindings'
     | 'listDeferredDecisions'
@@ -83,17 +83,18 @@ export const workItemRefSchema = z
 
 /** Resolve `<uuid>` or `#123` to an item in this Factory only. Pass a ref validated by `workItemRefSchema`. */
 export async function findWorkItem(
-  workItems: Pick<WorkItemsStorage, 'list' | 'getForProject'>,
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'getForProject'>,
   scope: Pick<FactoryToolScope, 'orgId' | 'factoryProjectId'>,
   ref: string,
 ): Promise<Card | null> {
   const trimmed = ref.trim();
   const number = /^#?(\d+)$/.exec(trimmed)?.[1];
   if (number === undefined) return workItems.getForProject(scope.orgId, scope.factoryProjectId, trimmed);
-  const items = await workItems.list(scope);
+  const items = await workItems.listShared(scope);
   const matches = items.filter(item => workItemNumber(item) === Number(number));
   // Issue and PR numbers share a space on GitHub; prefer the Work-board card.
-  return matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0] ?? null;
+  const match = matches.find(item => item.externalSource?.type !== 'pull-request') ?? matches[0];
+  return match ? structuredClone(match) : null;
 }
 
 export function workItemNotFound(ref: string): Error {
@@ -195,7 +196,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
       inputSchema: listInputSchema,
       execute: async input => {
         const [items, bindings, followed] = await Promise.all([
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
           input.subscribed === undefined
             ? undefined
@@ -245,7 +246,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.audit.list({ ...project, limit: 200 }),
           deps.comments.listRecent({ ...project, workItemId: item.id, limit: 10 }),
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
           deps.workItems.listWorkItemSubscribers({ orgId: scope.orgId, workItemId: item.id }),
         ]);
         const itemDecisions = decisions.slice(-MAX_LIST);
@@ -337,7 +338,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
             statuses: ['failed', 'proposed'],
           }),
-          deps.workItems.list(project),
+          deps.workItems.listShared(project),
         ]);
         const itemsById = new Map(items.map(item => [item.id, item]));
         const failed = decisions.filter(decision => decision.status === 'failed');
