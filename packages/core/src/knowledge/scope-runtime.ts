@@ -63,30 +63,43 @@ export class KnowledgeScopeRuntime {
     if (key === this.#resolved.stored) return this.#resolved.compiled;
     let merged = this.#config;
     let compiled = this.#configCompiled;
-    // A declaration can name a type the store declares after it, so skipped ones are retried until
-    // a pass adds none.
+    // Declarations can name types declared after them, or each other, so the whole record is tried
+    // first. When that fails, ones that compile on their own are added until a pass adds none, then
+    // the rest without each one in turn, which keeps a group that only compiles together next to one
+    // that doesn't compile.
     let pending = Object.entries(stored).filter(([name]) => !Object.hasOwn(this.#config, name));
-    let failures = new Map<string, unknown>();
-    while (pending.length) {
-      const skipped: typeof pending = [];
-      failures = new Map();
-      for (const [name, declaration] of pending) {
-        const next = { ...merged, [name]: declaration };
-        try {
-          compiled = compileKnowledgeScopes(structuredClone(next));
-          merged = next;
-        } catch (error) {
-          skipped.push([name, declaration]);
-          failures.set(name, error);
-        }
+    const failures = new Map<string, unknown>();
+    const add = (entries: typeof pending, failed?: string) => {
+      const next = { ...merged, ...Object.fromEntries(entries) };
+      try {
+        compiled = compileKnowledgeScopes(structuredClone(next));
+        merged = next;
+        return true;
+      } catch (error) {
+        if (failed) failures.set(failed, error);
+        return false;
       }
-      if (skipped.length === pending.length) break;
-      pending = skipped;
-    }
-    for (const [name, error] of failures) {
-      this.warn(
-        `Knowledge skipped the store's scope declaration "${name}": ${error instanceof Error ? error.message : String(error)}`,
-      );
+    };
+    if (!add(pending)) {
+      while (pending.length) {
+        const skipped = pending.filter(entry => !add([entry], entry[0]));
+        if (skipped.length < pending.length) {
+          pending = skipped;
+          continue;
+        }
+        const left = skipped.findIndex((_, i) => skipped.length > 1 && add(skipped.filter((__, j) => j !== i)));
+        if (left !== -1) {
+          pending = [skipped[left]!];
+          continue;
+        }
+        for (const [name] of skipped) {
+          const error = failures.get(name);
+          this.warn(
+            `Knowledge skipped the store's scope declaration "${name}": ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        break;
+      }
     }
     this.#resolved = { stored: key, compiled };
     this.#declarationsChecked = undefined;

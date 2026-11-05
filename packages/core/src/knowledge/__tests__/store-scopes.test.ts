@@ -109,6 +109,34 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('keeps store declarations that only compile together, next to one that never does', async () => {
+    const { knowledge, call } = await setup({
+      'linear:$account:$connection': {
+        access: [{ principal: 'crew:$account', role: 'viewer' }, ...everyone],
+        children: [{ name: 'archive', access: everyone }],
+      },
+      'crew:$account': { access: [{ principal: 'team:$account', role: 'viewer' }] },
+      'team:$account': { access: [{ principal: 'crew:$account', role: 'viewer' }] },
+      'ticket:$id': { access: [{ principal: 'nowhere:$id', role: 'viewer' }] },
+    });
+    const warn = vi.spyOn((knowledge as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
+    expect(names(await call('knowledge_search', { query: 'Roadmap' }))).toEqual(['Roadmap']);
+    expect(warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('"ticket:$id"'));
+  });
+
+  it('keeps a pair of store declarations that name each other', async () => {
+    const { knowledge } = await setup({
+      ...LINEAR,
+      'crew:$account': { access: [{ principal: 'team:$account', role: 'viewer' }] },
+      'team:$account': { access: [{ principal: 'crew:$account', role: 'viewer' }] },
+    });
+    const warn = vi.spyOn((knowledge as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
+    await expect(knowledge.readScopeFor(['crew:acme', 'team:acme'])).resolves.toMatchObject({
+      addresses: expect.arrayContaining(['crew:acme', 'team:acme']),
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("lists no open root scope a store returns that the run can't read", async () => {
     const { storage, call } = await setup();
     const { scope: secret } = await storage.materializeScope({
