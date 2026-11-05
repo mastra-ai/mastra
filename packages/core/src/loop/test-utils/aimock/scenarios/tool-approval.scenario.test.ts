@@ -282,6 +282,67 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
     expect(llm.getRequests()).toHaveLength(2);
   });
 
+  // Technical: Inngest cancelling a resumed segment never reaches the finalize step that releases its
+  // claim. The `resume-claim-release` function releases it, parks the run again and ends the stream.
+  (engine === 'inngest' ? it : it.skip)(
+    'can approve again after Inngest cancels the resumed run',
+    async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      let executions = 0;
+      const archiveTool = createTool({
+        id: 'archive',
+        description: 'Archive an item',
+        inputSchema: z.object({ item: z.string() }),
+        requireApproval: true,
+        execute: async () => {
+          executions += 1;
+          if (executions === 1) await gate;
+          return { archived: true };
+        },
+      });
+      const llm = getMock();
+      const memory = new MockMemory();
+      const shared = await createSharedAgent(llm, { tools: { archive: archiveTool }, memory, engine });
+      const { output } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Archive a',
+        memory,
+        threadId: 'cancelled-resume-thread',
+        resourceId: 'cancelled-resume-resource',
+        collectChunks: true,
+        fixtures: mock => {
+          mock.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_archive', name: 'archive', arguments: { item: 'a' } }] },
+          );
+          mock.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Archived.' });
+        },
+      });
+      const inngest = (shared.agent as unknown as { inngest: { send: (payload: any) => Promise<unknown> } }).inngest;
+
+      try {
+        const first = await shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
+        await vi.waitFor(() => expect(executions).toBe(1));
+        await inngest.send({ name: 'cancel.workflow.inngest:durable-agentic-loop', data: { runId: output.runId } });
+        const firstTypes: string[] = [];
+        for await (const chunk of first.fullStream) firstTypes.push(chunk.type);
+        expect(firstTypes).toContain('abort');
+      } finally {
+        release();
+      }
+
+      const second = await shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
+      for await (const _ of second.fullStream) {
+        // drain
+      }
+      expect(await second.text).toBe('Archived.');
+    },
+    40_000,
+  );
+
   it('requireToolApproval in agent defaultOptions gates tool calls', async () => {
     let executions = 0;
     const archiveTool = createTool({

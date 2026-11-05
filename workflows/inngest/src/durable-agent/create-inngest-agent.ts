@@ -96,12 +96,18 @@ import {
   buildDurableResumeEventData,
   buildDurableTriggerEventData,
   mergeResumeRequestContext,
-  RESUME_CLAIM_LEASE_MS,
+  RESUME_CLAIM_DISPATCH_LEASE_MS,
 } from '../durable-event-payload';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
-import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+import {
+  createInngestDurableAgenticWorkflow,
+  InngestDurableStepIds,
+  resumeClaimKey,
+  resumeClaimStore,
+  setLoopStatus,
+} from './create-inngest-agentic-workflow';
 import { keepSuspendedRunScopes } from './resume-scopes';
 
 class InngestAgentPubSubRouter extends PubSub {
@@ -179,6 +185,9 @@ const RESUME_SNAPSHOT_POLL_MS = 100;
 
 /** runId -> toolCallId -> token of the resume of that tool call in flight in this process. */
 const inFlightToolCallResumes = new Map<string, Map<string, symbol>>();
+
+/** Names this process in resume claim owner ids, to recognize its own claims. */
+const RESUME_CLAIM_PROCESS_ID = crypto.randomUUID();
 
 /**
  * Marks a resume of `toolCallId` as in flight. Returns `undefined` when another resume already
@@ -939,14 +948,23 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         workflowName: InngestDurableStepIds.AGENTIC_LOOP,
       });
-      // A resume claim whose lease lapsed left the run as parked as a suspended one. A live claim's
-      // segment stops on the abort request itself, so its rows stay.
+      // A resume claim whose event never started leaves the run as parked as a suspended one. A live
+      // claim's segment stops on the abort request itself, so its rows stay.
+      const store = await resumeClaimStore(mastra);
+      const owner = await store?.getRunOwnership({ runId: resumeClaimKey(runId) });
       const parked =
-        snapshot?.status === 'suspended' ||
-        (snapshot?.status === 'running' &&
-          Object.keys(snapshot.suspendedPaths ?? {}).length > 0 &&
-          !(await liveResumeClaim(runId)));
+        !owner?.live &&
+        (snapshot?.status === 'suspended' ||
+          (snapshot?.status === 'running' && Object.keys(snapshot.suspendedPaths ?? {}).length > 0));
       if (parked) {
+        // Supersede a resume event that was sent but has not run, so it does not run on deleted rows.
+        const fence = await store?.claimRunOwnership({
+          runId: resumeClaimKey(runId),
+          ownerId: `${RESUME_CLAIM_PROCESS_ID}/${crypto.randomUUID()}/`,
+          leaseMs: RESUME_CLAIM_DISPATCH_LEASE_MS,
+          expectedGeneration: owner?.generation ?? 0,
+        });
+        if (fence?.acquired) await store?.releaseRunOwnership(fence.record);
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
       }
@@ -1056,73 +1074,68 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     }
   }
 
-  const resumeClaimKey = (runId: string) => `${InngestDurableStepIds.AGENTIC_LOOP}:resume-claim:${runId}`;
-
-  /**
-   * The store a resume claim lives in. A claim needs an atomic status change and a lease, so a
-   * claim whose resume died can be taken over; without both, resumes are not claimed at all.
-   */
-  async function resumeClaimStore() {
-    const store = await mastra?.getStorage()?.getStore('workflows');
-    if (!store?.supportsConcurrentUpdates?.()) return undefined;
-    const fencing = await Promise.resolve()
-      .then(() => store.supportsRunFencing())
-      .catch(() => false);
-    return fencing ? store : undefined;
-  }
-
   /** The live lease of the resume holding the run's claim, if any. */
   async function liveResumeClaim(runId: string) {
-    const owner = await (await resumeClaimStore())?.getRunOwnership({ runId: resumeClaimKey(runId) });
+    const owner = await (await resumeClaimStore(mastra))?.getRunOwnership({ runId: resumeClaimKey(runId) });
     return owner?.live ? owner : undefined;
   }
 
   /**
    * Claims a suspension read by `resume()` (`suspended` -> `running`) so no other resume, in this
-   * process or another, dispatches it again (#27485, #27925). The claim holds a lease the worker
-   * renews while it runs the resumed segment; a `running` snapshot here is a claim whose lease
-   * lapsed, which this resume takes over. Returns `undefined` when another resume got there first.
+   * process or another, dispatches it again (#27485, #27925). The lease is taken first and is the
+   * mutex: a `running` snapshot without a live lease is a claim whose event never started, which
+   * this resume takes over. Returns `undefined` when another resume got there first.
    */
   async function claimSuspension(
     runId: string,
-    snapshot: { status?: string; timestamp?: number },
+    snapshot: { status?: WorkflowRunState['status']; timestamp?: number },
+    toolCallId: string | undefined,
   ): Promise<{ fence?: RunFence; release: () => Promise<void> } | undefined> {
-    const store = await resumeClaimStore();
-    if (!store) return { release: async () => {} };
+    const store = await resumeClaimStore(mastra);
+    if (!store || !snapshot.status) return { release: async () => {} };
     const key = resumeClaimKey(runId);
-    const takeover = snapshot.status === 'running';
-    const setStatus = (status: 'running' | 'suspended', expectedStatus: string | undefined) =>
-      store.updateWorkflowState({
-        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
-        runId,
-        opts: { status, expectedStatus: expectedStatus as 'running' | 'suspended' },
-      });
-    const deadOwner = takeover ? await store.getRunOwnership({ runId: key }) : undefined;
-    const claimed = await setStatus('running', snapshot.status);
-    if (claimed?.timestamp !== snapshot.timestamp) {
-      // Every suspension persist rewrites the timestamp, so another resume ran and suspended the run
-      // again after `snapshot` was read. That newer suspension is not ours to claim.
-      if (claimed && !takeover) await setStatus('suspended', 'running');
-      return undefined;
-    }
-    const ownerId = crypto.randomUUID();
+    const owner = await store.getRunOwnership({ runId: key });
+    if (owner?.live) return undefined;
+    const ownerId = `${RESUME_CLAIM_PROCESS_ID}/${crypto.randomUUID()}/${toolCallId ?? ''}`;
     const lease = await store.claimRunOwnership({
       runId: key,
       ownerId,
-      leaseMs: RESUME_CLAIM_LEASE_MS,
-      // Racing takers read the same generation, so only one of them gets the lease.
-      ...(takeover ? { expectedGeneration: deadOwner?.generation ?? 0 } : { force: true }),
+      leaseMs: RESUME_CLAIM_DISPATCH_LEASE_MS,
+      // Racing claimers read the same generation, so only one of them gets the lease.
+      expectedGeneration: owner?.generation ?? 0,
     });
     if (!lease.acquired) return undefined;
     const fence = { runId: key, generation: lease.record.generation, ownerId };
+    const claimed = await setLoopStatus(store, runId, 'running', snapshot.status);
+    if (claimed?.timestamp !== snapshot.timestamp) {
+      // Every suspension persist rewrites the timestamp, so another resume ran and suspended the run
+      // again after `snapshot` was read. That newer suspension is not ours to claim.
+      if (claimed && snapshot.status !== 'running') await setLoopStatus(store, runId, 'suspended', 'running');
+      await store.releaseRunOwnership(fence);
+      return undefined;
+    }
     return {
       fence,
       release: async () => {
         if (!matchesRunFence(await store.getRunOwnership({ runId: key }), fence)) return;
-        await setStatus('suspended', 'running');
+        await setLoopStatus(store, runId, 'suspended', 'running');
         await store.releaseRunOwnership(fence);
       },
     };
+  }
+
+  /**
+   * Throws unless this resume may wait for the live one holding the run: one resuming a different
+   * call, or any resume once the holder's segment parked again in this process. Any other resume is a
+   * duplicate, and waiting would hand its resume data to whatever the run suspends on next.
+   */
+  function assertMayWaitFor(owner: { ownerId: string }, runId: string, toolCallId: string | undefined) {
+    const [ownerProcess, , ...label] = owner.ownerId.split('/');
+    const ownerToolCallId = label.join('/');
+    const parkedAgain =
+      ownerProcess === RESUME_CLAIM_PROCESS_ID && !inFlightToolCallResumes.get(runId)?.has(ownerToolCallId);
+    if (parkedAgain || (toolCallId && ownerToolCallId !== toolCallId)) return;
+    throw resumeAlreadyClaimedError(agent.name, runId, toolCallId);
   }
 
   /**
@@ -1671,7 +1684,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
-      assertToolCallResumeNotInFlight(agent.name, runId, resumeOptions?.toolCallId);
+      const markedToolCallId = resumeOptions?.toolCallId ?? '';
+      if (inFlightToolCallResumes.get(runId)?.has(markedToolCallId)) {
+        // A mark outlives its resume when the segment died without a terminal event reaching this
+        // process; its claim is no longer live then.
+        if (!(await resumeClaimStore(mastra)) || (await liveResumeClaim(runId))) {
+          throw resumeAlreadyClaimedError(agent.name, runId, resumeOptions?.toolCallId);
+        }
+        inFlightToolCallResumes.get(runId)?.delete(markedToolCallId);
+      }
 
       const existingRegistryEntry = getRunRegistryEntry(runId, mastra);
       const priorExecution = existingRegistryEntry?.workflowExecution;
@@ -1694,6 +1715,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         snapshot?: any;
         nestedSnapshot?: any;
         ready?: boolean;
+        held?: boolean;
       }> => {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
         if (!workflowsStore) return { hasStore: false };
@@ -1702,16 +1724,25 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         const toolCallId = resumeOptions?.toolCallId;
         // Kept so loadSuspendedIteration reuses the nested read of the accepted snapshot.
         let nestedSnapshot: any;
+        // Whether a live resume held the run at the last check.
+        let held = false;
         // After a second suspension the nested execution snapshot can persist
         // before the outer one, leaving the outer snapshot `suspended` on the
         // previous call. Wait until the nested snapshot carries the outer labels.
         const isReady = async (s: any) => {
           nestedSnapshot = undefined;
-          if (s?.status === 'running' && Object.keys(s.suspendedPaths ?? {}).length) {
-            // Another resume's claim, which keeps the suspension paths. Wait while its lease is live,
-            // since the call may park again and be approved again, and take it over once it lapses.
-            if (!(await resumeClaimStore()) || (await liveResumeClaim(runId))) return false;
-          } else if (s?.status !== 'suspended') return false;
+          held = false;
+          // A claim keeps the suspension paths it was taken on.
+          const claimed = s?.status === 'running' && Object.keys(s.suspendedPaths ?? {}).length > 0;
+          if (s?.status !== 'suspended' && !claimed) return false;
+          const owner = await liveResumeClaim(runId);
+          if (owner) {
+            held = true;
+            assertMayWaitFor(owner, runId, toolCallId);
+            return false;
+          }
+          // A claim with no live lease never started its event, so this resume takes it over.
+          if (claimed && !(await resumeClaimStore(mastra))) return false;
           if (toolCallId && !s.resumeLabels?.[toolCallId]) return false;
           // The engine persists a suspension more than once before the finalize step writes it last
           // with `activePaths: []`. A claim taken on an earlier write would be overwritten (#27925).
@@ -1734,7 +1765,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
           snapshot = await loadSnapshot();
         }
-        return { hasStore: true, snapshot, nestedSnapshot, ready };
+        return { hasStore: true, snapshot, nestedSnapshot, ready, held };
       })();
       // Storage failures surface through dispatch; don't let them go unhandled meanwhile.
       resumableSnapshot.catch(() => {});
@@ -1755,15 +1786,22 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ]),
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
-      const { hasStore, snapshot: suspendedSnapshot, nestedSnapshot, ready: snapshotReady } = await resumableSnapshot;
-      // A ready `running` snapshot is a claim whose resume died, which this resume takes over.
+      const {
+        hasStore,
+        snapshot: suspendedSnapshot,
+        nestedSnapshot,
+        ready: snapshotReady,
+        held,
+      } = await resumableSnapshot;
+      // A ready `running` snapshot is a claim whose event never started, which this resume takes over.
       const takeover = snapshotReady && suspendedSnapshot?.status === 'running';
       // Another resume's claim keeps the suspension paths; a run that never suspended has none. A
       // claim still held after the wait belongs to a live resume, so retrying later succeeds.
       if (
-        !takeover &&
-        suspendedSnapshot?.status === 'running' &&
-        Object.keys(suspendedSnapshot.suspendedPaths ?? {}).length
+        held ||
+        (!takeover &&
+          suspendedSnapshot?.status === 'running' &&
+          Object.keys(suspendedSnapshot.suspendedPaths ?? {}).length)
       ) {
         throw resumeAlreadyClaimedError(agent.name, runId, resumeOptions?.toolCallId);
       }
@@ -1818,17 +1856,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       );
 
       // Claimed before this resume touches the run's registry entry, which a concurrent winner uses.
-      const claim = await claimSuspension(runId, suspendedSnapshot ?? {});
+      // Marked before claiming, so a resume in this process that sees the claim also sees the mark.
+      const releaseToolCallMarker = markToolCallResume(runId, toolCallId ?? '');
+      if (!releaseToolCallMarker) throw resumeAlreadyClaimedError(agent.name, runId, toolCallId);
+      const claim = await claimSuspension(runId, suspendedSnapshot ?? {}, toolCallId);
       if (!claim) {
+        releaseToolCallMarker();
         // Unless the winner resumes this same tool call, wait for the run to suspend again.
         assertToolCallResumeNotInFlight(agent.name, runId, toolCallId);
         return proxyRef!.resume(runId, resumeData, resumeOptions);
-      }
-      const releaseToolCallMarker = toolCallId ? markToolCallResume(runId, toolCallId) : () => {};
-      if (!releaseToolCallMarker) {
-        // Only reachable when resumes are not claimed and the same call was approved twice.
-        await claim.release();
-        throw resumeAlreadyClaimedError(agent.name, runId, toolCallId);
       }
 
       // Install a fresh abort controller scoped to the resumed segment and
@@ -1995,7 +2031,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             stopForwardingAbort?.();
             // The call parked again, so approving it again is not a duplicate. This runs before the
             // caller reads the chunk.
-            if (chunk.payload.toolCallId === toolCallId) releaseToolCallMarker();
+            if (!toolCallId || chunk.payload.toolCallId === toolCallId) releaseToolCallMarker();
           }
           return callbackOptions.onChunk?.(chunk);
         },
@@ -2069,8 +2105,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         await inngest.send({
           // The id names the suspension and the claim on it, so Inngest accepts one resume event per
           // claim even when a send is retried. A takeover is a new claim, so its event runs.
-          ...(snapshot?.timestamp
-            ? { id: `${runId}:resume:${snapshot.timestamp}:${claim.fence?.generation ?? 0}` }
+          ...(snapshot?.timestamp && claim.fence
+            ? { id: `${runId}:resume:${snapshot.timestamp}:${claim.fence.generation}` }
             : {}),
           name: eventName,
           data: buildDurableResumeEventData({

@@ -9,7 +9,9 @@ import {
   DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
+  emitAbortEvent,
   emitChunkEvent,
+  emitErrorEvent,
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
@@ -34,16 +36,22 @@ import type {
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
+import type { Mastra } from '@mastra/core/mastra';
 import { InternalSpans } from '@mastra/core/observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
+import { matchesRunFence } from '@mastra/core/storage';
+import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { init } from '../index';
 import { agentLoopTermination, generationUsage } from '../observability-compat';
+import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
+import type { InngestWorkflow } from '../workflow';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
 // persisted so a finished run's snapshot replaces its stale suspended one and
@@ -143,7 +151,83 @@ export const InngestDurableStepIds = {
   AGENTIC_LOOP: `${INNGEST_ENGINE_PREFIX}:${DurableStepIds.AGENTIC_LOOP}`,
 } as const;
 
+/** Run ownership key of the claim an InngestAgent resume holds on the loop run. */
+export const resumeClaimKey = (runId: string) => `${InngestDurableStepIds.AGENTIC_LOOP}:resume-claim:${runId}`;
+
+/**
+ * The store a resume claim lives in. A claim needs an atomic status change and a lease, so a
+ * claim whose resume died can be taken over; without both, resumes are not claimed at all.
+ */
+export async function resumeClaimStore(mastra: Mastra | undefined) {
+  const store = await mastra?.getStorage()?.getStore('workflows');
+  if (!store?.supportsConcurrentUpdates?.()) return undefined;
+  const fencing = await Promise.resolve()
+    .then(() => store.supportsRunFencing())
+    .catch(() => false);
+  return fencing ? store : undefined;
+}
+
+export const setLoopStatus = (
+  store: NonNullable<Awaited<ReturnType<typeof resumeClaimStore>>>,
+  runId: string,
+  status: 'running' | 'suspended',
+  expectedStatus: WorkflowRunState['status'],
+) =>
+  store.updateWorkflowState({
+    workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+    runId,
+    opts: { status, expectedStatus },
+  });
+
+/**
+ * Releases the claim of a resumed segment Inngest failed or cancelled, which never reaches the
+ * finalize step that releases it otherwise, parks the run again and ends its stream.
+ */
+function createResumeClaimReleaseFunction(inngest: Inngest, workflow: InngestWorkflow) {
+  const loopEvent = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
+  return inngest.createFunction(
+    {
+      id: `${InngestDurableStepIds.AGENTIC_LOOP}.resume-claim-release`,
+      triggers: [
+        { event: 'inngest/function.failed', if: `event.data.event.name == '${loopEvent}'` },
+        { event: 'inngest/function.cancelled', if: `event.data.event.name == '${loopEvent}'` },
+      ],
+    },
+    async ({ event }) => {
+      const original = (event.data as { event?: { data?: Record<string, any> } }).event?.data;
+      const claim: RunFence | undefined = original?.resume?.claim;
+      const mastra = workflow.mastra;
+      const store = await resumeClaimStore(mastra);
+      if (!original?.runId || !claim || !store) return;
+      if (!matchesRunFence(await store.getRunOwnership({ runId: claim.runId }), claim)) return;
+      await setLoopStatus(store, original.runId, 'suspended', 'running');
+      const defaultPubsub = new InngestPubSub(inngest, workflow.id);
+      const pubsub = workflow.__getPubsubFactory()?.(defaultPubsub) ?? defaultPubsub;
+      // Published while the claim still holds, so a resume that claims the run next never sees it.
+      try {
+        if (event.name === 'inngest/function.cancelled') {
+          await emitAbortEvent(pubsub, original.runId, { steps: [], text: '' });
+        } else {
+          const message = (event.data as { error?: { message?: string } }).error?.message;
+          await emitErrorEvent(pubsub, original.runId, new Error(message ?? 'The resumed agent run failed.'));
+        }
+      } catch (error) {
+        mastra?.getLogger?.()?.warn?.(`[InngestAgent] run ${original.runId} failed to publish its end`, error);
+      }
+      await store.releaseRunOwnership(claim);
+    },
+  );
+}
+
 export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
+  const workflow = createAgenticLoopWorkflow(options);
+  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
+  const inngestWorkflow = workflow as unknown as InngestWorkflow;
+  inngestWorkflow.__addHostFunctions([createResumeClaimReleaseFunction(options.inngest, inngestWorkflow)]);
+  return workflow;
+}
+
+function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions) {
   const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS, retries } = options;
   const { createWorkflow } = init(inngest);
 

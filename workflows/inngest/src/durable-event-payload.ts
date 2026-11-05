@@ -5,10 +5,17 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { RunFence } from '@mastra/core/storage';
 
 /**
- * Lease on an InngestAgent resume claim. The worker running the resumed segment renews it, so a
- * claim whose segment died lapses and a later resume can take the run over.
+ * Lease on an InngestAgent resume claim until its event starts. A claim whose event never started
+ * (its resume died before sending, or the send failed) lapses, and a later resume takes it over.
  */
-export const RESUME_CLAIM_LEASE_MS = 60_000;
+export const RESUME_CLAIM_DISPATCH_LEASE_MS = 60_000;
+
+/**
+ * Lease on an InngestAgent resume claim once its event runs. The segment releases the claim when it
+ * ends, and the `resume-claim-release` function when Inngest fails or cancels the run, so this only
+ * bounds a release that never arrives.
+ */
+export const RESUME_CLAIM_RUN_LEASE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Single source of truth for the `data` payload of the `workflow.<id>` events
@@ -112,7 +119,7 @@ export function buildDurableResumeEventData(
       resumePath?: any;
       /** Resume label (the tool call id for agent runs) that picks one parked step. */
       label?: string;
-      /** The InngestAgent resume claim the worker renews while it runs the resumed segment. */
+      /** The InngestAgent resume claim the resumed segment holds until it ends. */
       claim?: RunFence;
     };
     tracingOptions?: TracingOptions;

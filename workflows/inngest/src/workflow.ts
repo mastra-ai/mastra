@@ -19,7 +19,7 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
-import { RESUME_CLAIM_LEASE_MS } from './durable-event-payload';
+import { RESUME_CLAIM_RUN_LEASE_MS } from './durable-event-payload';
 import { InngestExecutionEngine } from './execution-engine';
 import {
   compactNestedWorkflowResult,
@@ -179,6 +179,8 @@ export class InngestWorkflow<
    */
   #pubsubFactory?: (defaultPubsub: PubSub) => PubSub;
   #emitWorkflowEvents = true;
+  /** Functions a host (e.g. the durable agent loop) serves alongside this workflow's own. */
+  #hostFunctions: ReturnType<Inngest['createFunction']>[] = [];
 
   constructor(
     params: InngestWorkflowConfig<
@@ -276,6 +278,10 @@ export class InngestWorkflow<
     }
     this.__setEmitWorkflowEvents(this.#emitWorkflowEvents);
     return committed;
+  }
+
+  __addHostFunctions(functions: ReturnType<Inngest['createFunction']>[]) {
+    this.#hostFunctions.push(...functions);
   }
 
   __setEmitWorkflowEvents(enabled: boolean) {
@@ -502,15 +508,17 @@ export class InngestWorkflow<
           );
         }
 
-        // An InngestAgent resume runs under a claim on the run. Renew it on every invocation, and stop
-        // before any step when a later resume took the run over after this one's lease lapsed.
+        // An InngestAgent resume runs under a claim on the run, held for the whole segment once it starts.
+        // A claim a later resume took over before this event ran leaves nothing to run. Checked once, in
+        // a step, because the segment releases the claim before its last invocation replays.
         const resumeClaim: RunFence | undefined = resume?.claim;
         if (resumeClaim) {
-          const store = await this.#mastra?.getStorage()?.getStore('workflows');
-          const lease = await store?.renewRunOwnership({ ...resumeClaim, leaseMs: RESUME_CLAIM_LEASE_MS });
-          if (!lease?.renewed) {
-            throw new NonRetriableError(`Workflow "${this.id}" run ${runId} was taken over by a later resume.`);
-          }
+          const held = await step.run(`workflow.${this.id}.resume-claim`, async () => {
+            const store = await this.#mastra?.getStorage()?.getStore('workflows');
+            const lease = await store?.renewRunOwnership({ ...resumeClaim, leaseMs: RESUME_CLAIM_RUN_LEASE_MS });
+            return lease?.renewed ?? true;
+          });
+          if (!held) return { result: undefined, runId };
         }
 
         if (resume && (initialState === undefined || resume.stepResults === undefined)) {
@@ -572,7 +580,7 @@ export class InngestWorkflow<
           return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream, resumeClaim);
+        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -763,6 +771,11 @@ export class InngestWorkflow<
               }
             }
 
+            // The run is parked or finished again, so the next resume may claim it.
+            if (resumeClaim) {
+              await (await mastra?.getStorage()?.getStore('workflows'))?.releaseRunOwnership(resumeClaim);
+            }
+
             // Publish workflow-finish event for realtime subscribers (best-effort)
             try {
               await pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -835,6 +848,7 @@ export class InngestWorkflow<
       this.getFunction(),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),
       ...this.getNestedFunctions(this.executionGraph.steps),
+      ...this.#hostFunctions,
     ];
   }
 }
