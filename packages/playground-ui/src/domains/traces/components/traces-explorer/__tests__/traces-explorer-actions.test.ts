@@ -239,14 +239,60 @@ describe('sanitizeTracesFilters', () => {
         ],
       };
 
-      expect(sanitizeTracesFilters(filters, false).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
     });
   });
 
   describe('when the server supports root duration', () => {
     it('keeps the duration token', () => {
       const filters: TracesFilters = { ...baseFilters, tokens: [{ fieldId: 'durationMs', value: '100' }] };
-      expect(sanitizeTracesFilters(filters, true)).toBe(filters);
+      expect(sanitizeTracesFilters(filters, { withRootDuration: true })).toBe(filters);
+    });
+  });
+  describe('when the server does not record time to first chunk or token', () => {
+    it('drops root and span time to first chunk and token tokens', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'threadId', value: 'thread-1' },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, {}).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
+    });
+  });
+
+  describe('when the server records time to first chunk but not token', () => {
+    it('keeps only the chunk tokens', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, { withTimeToFirstChunk: true }).tokens).toEqual([
+        { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+      ]);
+    });
+  });
+
+  describe('when the server records both', () => {
+    it('keeps every time to first chunk and token token', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'timeToFirstChunkMs', value: '100', operatorId: 'gt' },
+          { fieldId: 'spans.timeToFirstTokenMs', value: '100', operatorId: 'gt' },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, { withTimeToFirstChunk: true, withTimeToFirstToken: true })).toBe(filters);
     });
   });
 });
@@ -339,6 +385,30 @@ describe('buildTracesQueryRequest', () => {
       const body = JSON.stringify(buildTracesQueryRequest({ filters, withRootDuration: true, now }));
 
       expect(body.match(/durationMs/g)).toHaveLength(2);
+    });
+  });
+
+  describe('when the server lacks time to first token', () => {
+    it('leaves time to first token conditions out of groups, keeping time to first chunk ones', () => {
+      const streamedFilters: TracesFilters = {
+        ...baseFilters,
+        groups: [
+          {
+            id: 'group-streaming',
+            logic: 'or',
+            nodes: [
+              { fieldId: 'spans.timeToFirstTokenMs', operatorId: 'gt', value: '900' },
+              { fieldId: 'timeToFirstChunkMs', operatorId: 'gt', value: '700' },
+            ],
+          },
+        ],
+      };
+      const body = JSON.stringify(
+        buildTracesQueryRequest({ filters: streamedFilters, withTimeToFirstChunk: true, now }),
+      );
+
+      expect(body).not.toContain('timeToFirstTokenMs');
+      expect(body).toContain('timeToFirstChunkMs');
     });
   });
 

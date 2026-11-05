@@ -3,7 +3,6 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { TRACE_TIME_RANGE_FIELD_ID, TraceTimeRangeChip } from '../../../traces/components/trace-time-range-chip';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
 import {
@@ -17,6 +16,7 @@ import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } f
 import { SpansFilterBar } from '../spans-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -32,7 +32,10 @@ const setDiscoveryHandlers = (capabilities: GetObservabilityCapabilitiesResponse
 const settle = async (queryClient: { isFetching: () => number }) =>
   waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
+// The bar's items in order: the time range, then the chips.
+const getBarItems = () => [
+  ...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-time-range"], [data-slot="filter-bar-chip"]'),
+];
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
 const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
 const pressFilterKey = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
@@ -62,8 +65,8 @@ function HostSpansFilterBar({
     >
       <FilterBar.Chips
         renderChip={item =>
-          item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-            <TraceTimeRangeChip
+          item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
+            <FilterBar.TimeRange
               preset="last-24h"
               onPresetChange={() => {}}
               onDateChange={() => {}}
@@ -94,7 +97,7 @@ describe('spans filter bar composition', () => {
     it('renders the host field next to the span chips', async () => {
       await renderHostBar();
 
-      expect(getFilterChips().map(chip => chip.textContent)).toEqual([
+      expect(getBarItems().map(chip => chip.textContent)).toEqual([
         expect.stringContaining('Region'),
         expect.stringContaining('Last 24 hours'),
         expect.stringContaining('Status'),

@@ -103,7 +103,9 @@ export function SkillEditDialog({
     workspaceId: workspaceId || undefined,
     queryOptions: { enabled: !!workspaceId },
   });
-  const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? true;
+  // Skill files are written through the /fs routes, which cannot reach a filesystem that comes from a resolver.
+  const hasDynamicFilesystem = !!workspaceInfo?.capabilities?.hasDynamicFilesystem;
+  const hasFilesystem = (workspaceInfo?.capabilities?.hasFilesystem ?? true) && !hasDynamicFilesystem;
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = builderSettings?.configuration?.agent?.workspace as { type: string; workspaceId?: string } | undefined;
@@ -384,7 +386,9 @@ export function SkillEditDialog({
                     <Txt as="span" variant="caption">
                       {!workspaceId
                         ? 'No workspace available. The skill will be saved to the database only.'
-                        : 'No workspace filesystem configured. The skill will be saved to the database only.'}
+                        : hasDynamicFilesystem
+                          ? "This workspace resolves its filesystem per request, so skill files can't be written to it. The skill will be saved to the database only."
+                          : 'No workspace filesystem configured. The skill will be saved to the database only.'}
                     </Txt>
                   </div>
                 )}

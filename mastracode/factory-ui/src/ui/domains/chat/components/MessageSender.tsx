@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
@@ -10,14 +11,24 @@ const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
   slack: 'Slack',
 };
 
-export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
+export function ChannelOriginBadge({ origin, author }: { origin: ChannelOrigin; author?: MessageAuthor }) {
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
+  const authorName = origin.authorName ?? author?.name;
   return (
     <div aria-label={`Sent from ${label}`} className="text-muted-foreground mt-1 flex items-center gap-1">
       {origin.platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
       <Txt as="span" variant="meta">
-        via {label}
-        {origin.authorName ? ` · ${origin.authorName}` : ''}
+        <Metadata>
+          <Metadata.Item>via {label}</Metadata.Item>
+          {authorName && (
+            <Metadata.Item>
+              <span aria-hidden="true">
+                <Avatar name={authorName} src={author?.avatarUrl} size="xs" />
+              </span>
+              {authorName}
+            </Metadata.Item>
+          )}
+        </Metadata>
       </Txt>
     </div>
   );

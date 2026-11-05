@@ -7,6 +7,7 @@ import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/serv
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -95,6 +96,19 @@ function normalizeRouteParams(path: string): { normalizedPath: string; paramName
     return `:p${paramNames.length - 1}`;
   });
   return { normalizedPath, paramNames };
+}
+
+/**
+ * Reads query params keeping every value of a repeated key (`?tag=a&tag=b` -> `{ tag: ['a', 'b'] }`), as the
+ * other adapters do; Elysia's `ctx.query` and `Object.fromEntries` keep only one.
+ */
+function searchParamsToQuery(searchParams: URLSearchParams): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
+  for (const key of new Set(searchParams.keys())) {
+    const values = searchParams.getAll(key);
+    query[key] = values.length === 1 ? (values[0] as string) : values;
+  }
+  return query;
 }
 
 /**
@@ -374,7 +388,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     const urlParams = paramNames.length > 0 ? remapParams(rawUrlParams, paramNames) : rawUrlParams;
 
     // Query params - parse from URL
-    const queryParams = normalizeQueryParams(Object.fromEntries(url.searchParams));
+    const queryParams = normalizeQueryParams(searchParamsToQuery(url.searchParams));
 
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
@@ -508,7 +522,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const forwardRequest = await createForwardRequest(request);
       const { req, res } = toReqRes(forwardRequest);
 
-      const options = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+
+      // `toReqRes` builds a fresh IncomingMessage, so bridge the principal auth resolved.
+      await applyMcpRequestAuth({ req, requestContext: request.requestContext, setRequestAuth });
 
       // Do NOT await startHTTP — let it run in the background so SSE
       // notifications stream to the client as they are written.
@@ -544,6 +561,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const request = response as any; // Elysia context
       const forwardRequest = await createForwardRequest(request);
       const { req, res } = toReqRes(forwardRequest);
+
+      await applyMcpRequestAuth({
+        req,
+        requestContext: request.requestContext,
+        setRequestAuth: this.mcpOptions?.setRequestAuth,
+      });
 
       server
         .startSSE({
@@ -634,7 +657,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       // Extract params - remap from normalized param names back to original
       const rawParams = ctx.params || {};
       const urlParams = paramNames.length > 0 ? remapParams(rawParams, paramNames) : rawParams;
-      const queryParams = normalizeQueryParams(ctx.query || {});
+      const queryParams = normalizeQueryParams(searchParamsToQuery(new URL(ctx.request.url).searchParams));
       let body: unknown;
       let bodyParseError: { message: string } | undefined;
 

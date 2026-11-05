@@ -15,6 +15,7 @@ export interface ScorerComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -22,13 +23,14 @@ export interface ScorerComboboxProps {
 export function ScorerCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a scorer...',
-  searchPlaceholder = 'Search scorers...',
+  placeholder = 'Select a scorer',
+  searchPlaceholder = 'Search scorers',
   emptyText = 'No scorers found.',
   className,
   disabled = false,
   variant,
   size,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
 }: ScorerComboboxProps) {
@@ -67,6 +69,7 @@ export function ScorerCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />

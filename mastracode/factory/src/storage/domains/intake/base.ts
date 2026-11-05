@@ -10,6 +10,19 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+export class FactoryProjectNotFoundError extends Error {
+  constructor() {
+    super('Factory project not found for this organization.');
+    this.name = 'FactoryProjectNotFoundError';
+  }
+}
+
+async function assertFactoryProject(ops: FactoryStorageOps, orgId: string, factoryProjectId: string): Promise<void> {
+  if (!(await ops.findOne('factory_projects', { org_id: orgId, id: factoryProjectId }))) {
+    throw new FactoryProjectNotFoundError();
+  }
+}
+
 export interface IntakeSelection {
   enabled: boolean;
   /** Provider-owned source ids; `null` means nothing is selected. */
@@ -367,39 +380,45 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   /**
    * Copy `intake_source_bindings` into `intake_source_subscriptions` as
-   * all-issues bindings, once. The migration marker stops a later boot from
-   * resurrecting bindings users removed after the copy. Concurrent boots both
-   * copy; the unique index keeps one row per binding.
+   * all-issues bindings, once. The marker and the copy commit together, so a
+   * boot racing another cannot re-copy a binding removed after the first
+   * boot finished.
    */
   async #copyLegacyBindings(): Promise<void> {
-    if (await this.ops.findOne('intake_data_migrations', { name: COPY_LEGACY_BINDINGS_MIGRATION })) return;
-    const legacyRows = await this.ops.findMany<IntakeSourceBindingRow & { updated_at: Date }>(
-      'intake_source_bindings',
-      {},
-    );
-    for (const row of legacyRows) {
-      try {
-        await this.ops.insertOne('intake_source_subscriptions', {
-          org_id: row.org_id,
-          integration_id: row.integration_id,
-          source_id: row.source_id,
-          factory_project_id: row.factory_project_id,
-          board: row.board ?? null,
-          labels: null,
-          created_by_user_id: row.created_by_user_id ?? null,
-          created_at: row.created_at,
-          updated_at: row.updated_at,
-        });
-      } catch (error) {
-        if (!(error instanceof UniqueViolationError)) throw error;
-      }
-    }
     try {
-      await this.ops.insertOne('intake_data_migrations', {
-        name: COPY_LEGACY_BINDINGS_MIGRATION,
-        completed_at: new Date(),
-      });
+      await this.storage.withTransaction(
+        async ops => {
+          if (await ops.findOne('intake_data_migrations', { name: COPY_LEGACY_BINDINGS_MIGRATION })) return;
+          const legacyRows = await ops.findMany<IntakeSourceBindingRow & { updated_at: Date }>(
+            'intake_source_bindings',
+            {},
+          );
+          for (const row of legacyRows) {
+            const key = {
+              org_id: row.org_id,
+              integration_id: row.integration_id,
+              source_id: row.source_id,
+              factory_project_id: row.factory_project_id,
+            };
+            if (await ops.findOne('intake_source_subscriptions', key)) continue;
+            await ops.insertOne('intake_source_subscriptions', {
+              ...key,
+              board: row.board ?? null,
+              labels: null,
+              created_by_user_id: row.created_by_user_id ?? null,
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+            });
+          }
+          await ops.insertOne('intake_data_migrations', {
+            name: COPY_LEGACY_BINDINGS_MIGRATION,
+            completed_at: new Date(),
+          });
+        },
+        { isolationLevel: 'serializable' },
+      );
     } catch (error) {
+      // Postgres can report the boot that lost the race as a unique violation instead of a serialization failure.
       if (!(error instanceof UniqueViolationError)) throw error;
     }
   }
@@ -567,9 +586,15 @@ export class IntakeStorage extends FactoryStorageDomain {
     );
   }
 
-  /** Release every source a deleted Factory project was bound to, so the others can take them. */
-  async clearProjectBindings({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<void> {
-    await this.#db.deleteMany('intake_source_subscriptions', { org_id: orgId, factory_project_id: factoryProjectId });
+  /**
+   * Release every source a Factory project was bound to, so the others can take
+   * them. Pass the transaction deleting the project, so no binding lands in between.
+   */
+  async clearProjectBindings(
+    { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
+    ops: FactoryStorageOps = this.#db,
+  ): Promise<void> {
+    await ops.deleteMany('intake_source_subscriptions', { org_id: orgId, factory_project_id: factoryProjectId });
   }
 
   /**
@@ -594,6 +619,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     const source = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
     await this.storage.withTransaction(
       async ops => {
+        await assertFactoryProject(ops, orgId, factoryProjectId);
         const rows = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', source);
         for (const row of rows) {
           if (row.factory_project_id === factoryProjectId) continue;
@@ -636,6 +662,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     const kept = labels === null ? null : normalizeBindingLabels(labels);
     return this.storage.withTransaction(
       async ops => {
+        await assertFactoryProject(ops, orgId, factoryProjectId);
         const rows = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', source);
         const conflicts = bindingConflicts(factoryProjectId, kept, rows);
         if (conflicts.length > 0) return { conflicts };

@@ -6,6 +6,7 @@ import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
+import { withoutNestedRunStartState } from './nested-state';
 import type { Step } from './step';
 import { getEntryId } from './step-entry';
 import type {
@@ -188,7 +189,7 @@ export async function validateStepRequestContext({
   validateInputs,
 }: {
   requestContext?: RequestContext;
-  step: Step<string, any, any>;
+  step: Pick<Step<string, any, any>, 'id' | 'requestContextSchema'>;
   validateInputs: boolean;
 }) {
   let validationError: Error | undefined;
@@ -711,6 +712,8 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
   const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
+  let cleaned: Record<string, unknown> = rest;
+
   // Strip nested run identities from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
     const {
@@ -719,11 +722,11 @@ function cleanSingleResult(result: Record<string, unknown>): Record<string, unkn
       ...userMetadata
     } = metadata as Record<string, unknown>;
     if (Object.keys(userMetadata).length > 0) {
-      return { ...rest, metadata: userMetadata };
+      cleaned = { ...rest, metadata: userMetadata };
     }
   }
 
-  return rest;
+  return withoutNestedRunStartState(cleaned);
 }
 
 /**

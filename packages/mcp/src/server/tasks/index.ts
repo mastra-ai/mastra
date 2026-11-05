@@ -1,5 +1,11 @@
+export { isMCPTaskStoreAdmin, principalKeyOf, taskKeyOf } from './store';
 export type {
   MCPTaskAccess,
+  MCPTaskAdminOutcome,
+  MCPTaskListing,
+  MCPTaskListOptions,
+  MCPTaskListPage,
+  MCPTaskStoreAdmin,
   MCPTaskAttempt,
   MCPTaskAttemptTrace,
   MCPTaskTrace,

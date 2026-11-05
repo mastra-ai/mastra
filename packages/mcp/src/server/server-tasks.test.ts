@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -470,6 +471,97 @@ describe.each([
     expect((await unknown.get(result.taskId)).status).toBe('working');
   });
 
+  it('describes its task surfaces for Studio without changing tools/list', async () => {
+    const { server } = await start({
+      default: 'off',
+      tools: { echo: 'always', quick: { mode: 'auto', ttlMs: 5_000, recover: true } },
+      required: ['echo'],
+    });
+    expect(server.getTasksInfo()).toEqual({
+      enabled: true,
+      listable: true,
+      surfaces: [
+        { name: 'echo', type: 'tool', mode: 'always', recover: false, required: true, ttlMs: 86_400_000 },
+        { name: 'quick', type: 'tool', mode: 'auto', recover: true, required: false, ttlMs: 5_000 },
+      ],
+    });
+    const listed = await rawRequest(served!.url, { method: 'tools/list', params: {}, capabilities: TASKS_CLIENT });
+    expect(JSON.stringify(await listed.json())).not.toMatch(/"(mode|recover|surfaces)"/);
+  });
+
+  it('has no task info or inspector without a tasks config', async () => {
+    const { server } = await start(undefined);
+    expect(server.getTasksInfo()).toBeUndefined();
+    expect(server.getTasksInspector()).toBeUndefined();
+  });
+
+  it("lets Studio list every principal's tasks by key and answer or cancel them like tasks/update and tasks/cancel", async () => {
+    const { server } = await start({ tools: { approve: 'always', hang: 'always' } });
+    const asking = (await call('approve', { item: 'invoice' }, { user: 'alice' })).result.taskId;
+    const hanging = (await call('hang', {}, { user: 'bob' })).result.taskId;
+    const alice = await requester('alice');
+    await waitFor(alice, asking, 'input_required');
+
+    const inspector = server.getTasksInspector()!;
+    const { tasks } = await inspector.list({});
+    const serialized = JSON.stringify(tasks);
+    const tokenHash = (token: string) => createHash('sha256').update(token).digest('base64url');
+    for (const secret of [
+      asking,
+      hanging,
+      'alice-token',
+      'bob-token',
+      tokenHash('alice-token'),
+      tokenHash('bob-token'),
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+    const bySurface = Object.fromEntries(tasks.map(task => [task.surface, task]));
+    expect(bySurface.hang).toMatchObject({ status: 'working', expiresAt: expect.any(String) });
+    expect(bySurface.approve).toMatchObject({
+      status: 'input_required',
+      inputRequests: { [Object.keys(bySurface.approve!.inputRequests!)[0]!]: { method: 'elicitation/create' } },
+    });
+    expect(bySurface.approve!.principalKey).not.toBe(bySurface.hang!.principalKey);
+    // Token callers are labelled with their client id and a short prefix of the token's hash.
+    expect(bySurface.approve!.clientLabel).toBe(`alice:token:${tokenHash('alice-token').slice(0, 8)}`);
+    expect(bySurface.hang!.clientLabel).toBe(`bob:token:${tokenHash('bob-token').slice(0, 8)}`);
+
+    const [key] = Object.keys(bySurface.approve!.inputRequests!);
+    const answer = { [key!]: { action: 'accept', content: { approver: 'studio' } } };
+    expect(await inspector.answer(bySurface.approve!.taskKey, answer)).toBe(true);
+    const done = await waitFor(alice, asking, 'completed');
+    expect(JSON.stringify(done.result)).toContain('invoice approved by studio');
+    expect(await inspector.answer(bySurface.approve!.taskKey, answer)).toBe(false);
+
+    expect(await inspector.cancel(bySurface.hang!.taskKey)).toBe(true);
+    await waitFor(await requester('bob'), hanging, 'cancelled');
+    expect(await inspector.cancel(bySurface.hang!.taskKey)).toBe(false);
+    expect(await inspector.cancel(hanging)).toBe(false);
+
+    // A raw task id finds its task (hashed before the lookup); a task key or unknown id finds nothing.
+    expect(await inspector.find(asking)).toMatchObject({ taskKey: bySurface.approve!.taskKey, status: 'completed' });
+    expect(await inspector.find(bySurface.approve!.taskKey)).toBeUndefined();
+    expect(await inspector.find('not-a-task')).toBeUndefined();
+    const { tasks: bobs } = await inspector.list({ principalKey: bySurface.hang!.principalKey });
+    expect(bobs.map(task => task.surface)).toEqual(['hang']);
+  });
+
+  it('reports a custom store without the admin view as not listable', async () => {
+    const custom = new InMemoryMCPTaskStore();
+    const store: MCPTaskStore = {
+      create: params => custom.create(params),
+      get: (id, access) => custom.get(id, access),
+      update: (id, responses, access) => custom.update(id, responses, access),
+      cancel: (id, access) => custom.cancel(id, access),
+      run: (id, work, options) => custom.run(id, work, options),
+    };
+    const { server } = await start({ tools: { echo: 'always' }, store });
+    expect(server.getTasksInfo()).toMatchObject({ enabled: true, listable: false });
+    expect(server.getTasksInspector()).toBeUndefined();
+    custom.close();
+  });
+
   it('fails a task whose TTL elapses and aborts its work', async () => {
     const { probe } = await start({ tools: { expiring: { mode: 'always', ttlMs: 200 } } });
     const { result } = await call('expiring');
@@ -533,6 +625,30 @@ describe.each([
       expect((await call('hang')).result).toMatchObject({ isError: true });
       await waitFor(tasks, quick.taskId, 'completed');
       expect((await call('hang')).result).toMatchObject({ resultType: 'task' });
+    });
+
+    it('frees a slot when Studio cancels a task or answers it to completion, and lists no refused task', async () => {
+      const { server } = await start({ tools: { approve: 'always', hang: 'always' }, maxOpenTasksPerClient: 1 });
+      const inspector = server.getTasksInspector()!;
+      const alice = await requester('alice');
+      const keyOf = async (surface: string) =>
+        (await inspector.list({})).tasks.find(task => task.surface === surface && task.status !== 'cancelled')!.taskKey;
+
+      const hanging = (await call('hang', {}, { user: 'alice' })).result.taskId;
+      expect((await call('approve', { item: 'invoice' }, { user: 'alice' })).result).toMatchObject({ isError: true });
+      expect((await inspector.list({})).tasks.map(task => task.surface)).toEqual(['hang']);
+      expect(await inspector.cancel(await keyOf('hang'))).toBe(true);
+      await waitFor(alice, hanging, 'cancelled');
+
+      const asking = (await call('approve', { item: 'invoice' }, { user: 'alice' })).result.taskId;
+      const waiting = await waitFor(alice, asking, 'input_required');
+      // Waiting for input still holds the slot.
+      expect((await call('hang', {}, { user: 'alice' })).result).toMatchObject({ isError: true });
+      const [key] = Object.keys(waiting.inputRequests!);
+      const answer = { [key!]: { action: 'accept', content: { approver: 'studio' } } };
+      expect(await inspector.answer(await keyOf('approve'), answer)).toBe(true);
+      await waitFor(alice, asking, 'completed');
+      expect((await call('hang', {}, { user: 'alice' })).result).toMatchObject({ resultType: 'task' });
     });
 
     it('refuses a task past the server-wide cap for every client', async () => {

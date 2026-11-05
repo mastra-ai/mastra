@@ -8,6 +8,7 @@ import themeCss from '../../../theme.css?raw';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/Popover';
 import { Txt } from '../components/Txt/Txt';
 import { FoundationPage, FoundationSection } from './foundations-layout';
+import { SERIES_HUES } from '@/domains/metrics/lib/series-colors';
 import { cn } from '@/lib/utils';
 
 const meta = {
@@ -329,6 +330,14 @@ const textRows: TokenRow[] = [
   { token: 'foreground', use: <span className="text-foreground">Values, names, prose</span> },
   { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, timestamps, descriptions</span> },
   { token: 'placeholder', use: <span className="text-placeholder">Text not written yet</span> },
+  {
+    token: 'control-icon-rest',
+    use: <span className="text-(color:--control-icon-rest)">Icons inside a control, at rest</span>,
+  },
+  {
+    token: 'control-icon-hover',
+    use: <span className="text-(color:--control-icon-hover)">Icons inside a control, while hovered</span>,
+  },
 ];
 
 const productRoles = ['studio', 'server', 'observability', 'factory', 'workers', 'persistent-server'];
@@ -353,6 +362,11 @@ const chartRows: TokenRow[] = [
     use: step === 1 ? 'Share list rows, in rank order: green, sky, violet, teal, indigo' : '',
   })),
   { token: 'chart-share-rest', use: 'Share list rows past the colored ones, folded into one gray' },
+  ...SERIES_HUES.map((hue, i) => ({
+    token: `chart-series-${hue}`,
+    use: i === 0 ? 'Series by model, provider or key: each lab reserves one hue (seriesColors)' : '',
+  })),
+  { token: 'chart-series-neutral', use: 'xAI, and a white series in dark mode (black in light)' },
 ];
 
 const spanRows: TokenRow[] = [

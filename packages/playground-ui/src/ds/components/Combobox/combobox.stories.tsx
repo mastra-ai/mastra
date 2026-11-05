@@ -24,6 +24,10 @@ const meta: Meta<typeof Combobox> = {
     iconOnlyValue: {
       control: { type: 'boolean' },
     },
+    popupWidth: {
+      control: { type: 'select' },
+      options: [undefined, 'sm', 'md', 'lg', 'xl'],
+    },
   },
 };
 
@@ -106,7 +110,7 @@ const capabilityOptions = [
 export const Default: Story = {
   args: {
     options: frameworkOptions,
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     className: 'w-[200px]',
   },
 };
@@ -114,7 +118,7 @@ export const Default: Story = {
 export const WithError: Story = {
   args: {
     options: frameworkOptions,
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     className: 'w-[200px]',
   },
   render: args => (
@@ -130,7 +134,7 @@ export const WithValue: Story = {
   args: {
     options: frameworkOptions,
     value: 'react',
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     className: 'w-[200px]',
   },
 };
@@ -138,16 +142,34 @@ export const WithValue: Story = {
 export const ModelSelector: Story = {
   args: {
     options: modelOptions,
-    placeholder: 'Select a model...',
-    searchPlaceholder: 'Search models...',
+    placeholder: 'Select a model',
+    searchPlaceholder: 'Search models',
     className: 'w-[220px]',
+  },
+};
+
+/** `popupWidth` gives a compact trigger a wider, fixed popup; labels past it wrap and clamp at two lines. */
+export const PopupWidth: Story = {
+  args: {
+    options: [
+      'moonshotai/kimi-k2',
+      'moonshotai/kimi-k2-0905',
+      'moonshotai/kimi-k2-thinking',
+      'moonshotai/kimi-k3.1-pro',
+      'cognitivecomputations/dolphin-mistral-24b-venice-edition',
+    ].map(id => ({ label: id, value: id })),
+    placeholder: 'Select model',
+    searchPlaceholder: 'Search models',
+    variant: 'ghost',
+    popupWidth: 'lg',
+    className: 'w-auto max-w-40',
   },
 };
 
 export const Disabled: Story = {
   args: {
     options: frameworkOptions,
-    placeholder: 'Select a framework...',
+    placeholder: 'Select a framework',
     disabled: true,
     className: 'w-[200px]',
   },
@@ -156,7 +178,7 @@ export const Disabled: Story = {
 export const CustomEmptyText: Story = {
   args: {
     options: [],
-    placeholder: 'Select an option...',
+    placeholder: 'Select an option',
     emptyText: 'No options available',
     className: 'w-[200px]',
   },
@@ -173,7 +195,7 @@ export const ManyOptions: Story = {
   },
   args: {
     options: Array.from({ length: 40 }, (_, index) => ({ label: `Option ${index + 1}`, value: `${index + 1}` })),
-    placeholder: 'Select an option...',
+    placeholder: 'Select an option',
     className: 'w-[200px]',
   },
 };
@@ -228,7 +250,7 @@ export const WithDescriptions: Story = {
       { label: 'Claude 3 Opus', value: 'claude-3-opus', description: "Anthropic's most powerful" },
     ],
     value: 'gpt-4-turbo',
-    placeholder: 'Select a model...',
+    placeholder: 'Select a model',
     className: 'w-[280px]',
   },
 };
@@ -257,8 +279,8 @@ export const Multiple: Story = {
           options={capabilityOptions}
           value={value}
           onValueChange={setValue}
-          placeholder="Select capabilities..."
-          searchPlaceholder="Search capabilities..."
+          placeholder="Select capabilities"
+          searchPlaceholder="Search capabilities"
           emptyText="No capabilities found."
           className="w-full"
         />

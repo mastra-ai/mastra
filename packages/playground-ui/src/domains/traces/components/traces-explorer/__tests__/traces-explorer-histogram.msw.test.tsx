@@ -218,7 +218,7 @@ describe('TracesExplorer.Histogram', () => {
       await renderExplorer();
 
       const region = await screen.findByRole('region', { name: 'Traces over time' });
-      await waitFor(() => expect(within(region).getByText('8 traces · 2 errors')).toBeTruthy());
+      await waitFor(() => expect(within(region).getByText('8 traces, 2 errors')).toBeTruthy());
     });
 
     it('sends the same time range and filters as the list query', async () => {
@@ -334,12 +334,12 @@ describe('TracesExplorer.Histogram', () => {
       });
       await dragAcross(12, 23);
       await settle(queryClient);
-      expect(screen.queryByRole('button', { name: 'Value: Last 14 days' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Last 14 days' })).toBeNull();
 
       resetTimeRange();
       await settle(queryClient);
 
-      expect(screen.getByRole('button', { name: 'Value: Last 14 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 14 days' })).toBeTruthy();
       const from = lastBody(onTraceQuery)?.timeRange?.from ?? '';
       expect(Math.round((Date.now() - Date.parse(from)) / (24 * 60 * 60 * 1000))).toBe(14);
     });
@@ -355,23 +355,12 @@ describe('TracesExplorer.Histogram', () => {
       resetTimeRange();
       await settle(queryClient);
 
-      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
 
     describe('when the user picked a range by hand after zooming', () => {
-      const openRangeEditor = () =>
-        fireEvent.click(screen.getByRole('button', { name: /^Value: Oct 21/, hidden: true }));
-      const pickTimePart = async (time: string, part: string, value: string) => {
-        const group = screen.getByRole('group', { name: time, hidden: true });
-        const select = within(group).getByRole('combobox', { name: part, hidden: true });
-        fireEvent.click(select);
-        // Base UI only commits a pick on a real press: pointerdown followed by click.
-        const option = await screen.findByRole('option', { name: value, hidden: true });
-        fireEvent.pointerDown(option);
-        fireEvent.click(option);
-        await waitFor(() => expect(select.textContent).toBe(value));
-      };
+      const openRangeEditor = () => fireEvent.click(screen.getByRole('button', { name: /^Oct 21/, hidden: true }));
       const apply = () => fireEvent.click(screen.getByRole('button', { name: /apply/i, hidden: true }));
 
       it('resets to the default preset even when that range matches the zoom', async () => {
@@ -381,17 +370,16 @@ describe('TracesExplorer.Histogram', () => {
         await dragAcross(12, 23);
         await settle(queryClient);
 
-        // The editor opens on the zoomed days, ending at 11:59 PM: another range.
+        // Ending the zoomed days at 11:59 PM: another range.
         openRangeEditor();
+        fireEvent.change(screen.getByLabelText('End time'), { target: { value: '23:59' } });
         apply();
         await settle(queryClient);
         expect(lastBody(onTraceQuery)?.timeRange).toEqual({ ...zoomed, to: '2026-10-22T23:59:00.000Z' });
 
         // Ending at 12:00 AM instead picks the zoomed bounds again.
         openRangeEditor();
-        await pickTimePart('End time', 'Hour', '12');
-        await pickTimePart('End time', 'Minute', '00');
-        await pickTimePart('End time', 'AM or PM', 'AM');
+        fireEvent.change(screen.getByLabelText('End time'), { target: { value: '00:00' } });
         apply();
         await settle(queryClient);
         expect(lastBody(onTraceQuery)?.timeRange).toEqual(zoomed);
@@ -399,7 +387,7 @@ describe('TracesExplorer.Histogram', () => {
         resetTimeRange();
         await settle(queryClient);
 
-        expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       });
     });
   });

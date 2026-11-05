@@ -2,6 +2,7 @@ import { EntityType } from '@mastra/core/observability';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
+import type { FeedbackOptions } from '../feedback-options';
 import {
   applyDate,
   applyDatePreset,
@@ -60,6 +61,8 @@ export type TracesExplorerRootProps = {
   metricsSupport: TracesMetricsSupport;
   /** Host switches combined with the server capabilities; a feature runs only when both allow it. */
   features?: TracesExplorerFeatures;
+  /** Write context and action support for feedback in trace, span and thread panels. */
+  feedbackOptions?: FeedbackOptions;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
   children: ReactNode;
@@ -90,6 +93,7 @@ export function TracesExplorerRoot({
   scope,
   metricsSupport,
   features,
+  feedbackOptions,
   initialFilters = DEFAULT_TRACES_FILTERS,
   children,
 }: TracesExplorerRootProps) {
@@ -109,12 +113,21 @@ export function TracesExplorerRoot({
   const withTimeToFirstChunk = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
   const withTimeToFirstChunkSort =
     withTimeToFirstChunk && (capabilities?.capabilities.traceQueryTimeToFirstChunkSort ?? false);
+  const withTimeToFirstToken = withQueryTrace && (capabilities?.capabilities.traceQueryTimeToFirstToken ?? false);
+  const withTimeToFirstTokenSort =
+    withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
   const filters = useMemo(
-    () => sanitizeTracesFilters(rawFilters, withRootDuration, withOutcomeFields),
-    [rawFilters, withRootDuration, withOutcomeFields],
+    () =>
+      sanitizeTracesFilters(rawFilters, {
+        withRootDuration,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+        withOutcomeFields,
+      }),
+    [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields],
   );
 
   const isScoped = !!scope;
@@ -214,6 +227,8 @@ export function TracesExplorerRoot({
   );
 
   const listId = listIdForScope(scope);
+  const hasFeedbackOptions = feedbackOptions !== undefined;
+  const { contextMode, feedbackUserId, allowDelete, allowReview } = feedbackOptions ?? {};
   const configValue = useMemo<TracesConfigContextValue>(
     () => ({
       listId,
@@ -221,12 +236,15 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
       withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
+      withTimeToFirstToken,
+      withTimeToFirstTokenSort,
       withDeltaPolling,
       withDiscovery,
       isCapabilitiesLoading: traceQuery.isLoading,
@@ -239,12 +257,19 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
+      hasFeedbackOptions,
+      contextMode,
+      feedbackUserId,
+      allowDelete,
+      allowReview,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
       withOutcomeFields,
       withTimeToFirstChunk,
       withTimeToFirstChunkSort,
+      withTimeToFirstToken,
+      withTimeToFirstTokenSort,
       withDeltaPolling,
       withDiscovery,
       traceQuery.isLoading,

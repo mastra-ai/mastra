@@ -65,6 +65,16 @@ describe('waitForTask near the task TTL', () => {
 });
 
 describe('waitForTask during a server outage', () => {
+  it('reports the created task and each later status change once', async () => {
+    const working = { ...created, statusMessage: 'still going' } as MCPDetailedTask;
+    const { port, options } = scripted([working, working, completed]);
+    const statuses: string[] = [];
+
+    await waitForTask(port, created, { ...options, onStatus: task => statuses.push(task.status) });
+
+    expect(statuses).toEqual(['working', 'completed']);
+  });
+
   it('keeps polling through a run of connection failures and backs off', async () => {
     const { port, options, sleeps } = scripted([...Array.from({ length: 8 }, refused), completed]);
 
@@ -269,5 +279,65 @@ describe('waitForTask with an operation that never settles', () => {
     release();
     await new Promise(resolve => setTimeout(resolve, 10));
     expect(blocked.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('waitForTask handing input requests back to the caller', () => {
+  const ask = (message: string) => ({ method: 'elicitation/create', params: { message } });
+  const needs = (requests: Record<string, ReturnType<typeof ask>>) =>
+    ({ ...created, status: 'input_required', inputRequests: requests }) as MCPDetailedTask;
+
+  it('returns the task needing input instead of failing, and leaves the task open', async () => {
+    const { port, options } = scripted([needs({ approve: ask('Send it?') })]);
+
+    const task = await waitForTask(port, created, { ...options, stopAtInput: true });
+
+    expect(task).toMatchObject({ status: 'input_required', inputRequests: { approve: ask('Send it?') } });
+    expect(port.cancel).not.toHaveBeenCalled();
+    expect(port.update).not.toHaveBeenCalled();
+  });
+
+  it('lets a configured handler answer even when asked to stop at input', async () => {
+    const { port, options } = scripted([needs({ approve: ask('Send it?') }), completed]);
+    const inputRequests = vi.fn(async () => ({ action: 'accept' as const }));
+
+    await expect(waitForTask(port, created, { ...options, stopAtInput: true, inputRequests })).resolves.toMatchObject({
+      status: 'completed',
+    });
+    expect(inputRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends answers supplied up front once, then keeps polling the same task to its result', async () => {
+    const waiting = needs({ approve: ask('Send it?') });
+    // A stale poll can still list the answered key before the server applies the update.
+    const { port, options } = scripted([waiting, completed]);
+
+    const task = await waitForTask(port, waiting, {
+      ...options,
+      stopAtInput: true,
+      inputResponses: { approve: { action: 'accept', content: { ok: true } } },
+    });
+
+    expect(task).toMatchObject({ status: 'completed' });
+    expect(port.update).toHaveBeenCalledTimes(1);
+    expect(port.update).toHaveBeenCalledWith(
+      'task-1',
+      { approve: { action: 'accept', content: { ok: true } } },
+      expect.anything(),
+    );
+  });
+
+  it('returns only the new requests when the server asks again after the supplied answers', async () => {
+    const waiting = needs({ approve: ask('Send it?') });
+    const { port, options } = scripted([needs({ approve: ask('Send it?'), confirm: ask('Sure?') })]);
+
+    const task = await waitForTask(port, waiting, {
+      ...options,
+      stopAtInput: true,
+      inputResponses: { approve: { action: 'accept' } },
+    });
+
+    expect(task).toMatchObject({ status: 'input_required', inputRequests: { confirm: ask('Sure?') } });
+    expect(Object.keys((task as { inputRequests: object }).inputRequests)).toEqual(['confirm']);
   });
 });

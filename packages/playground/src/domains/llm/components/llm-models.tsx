@@ -61,9 +61,11 @@ export const LLMModels = ({
       options={modelOptions}
       value={value}
       onValueChange={onValueChange}
-      placeholder="Select model..."
-      searchPlaceholder="Search models..."
+      placeholder="Select model"
+      searchPlaceholder="Search models"
       emptyText="No models found"
+      // Model ids are long and look alike past the provider prefix, so give them room.
+      popupWidth="lg"
       variant={variant}
       className={className}
       open={open}

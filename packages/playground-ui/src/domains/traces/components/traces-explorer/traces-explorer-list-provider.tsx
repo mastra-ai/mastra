@@ -31,22 +31,40 @@ export const TracesListProvider = memo(function TracesListProvider({
   const {
     withQueryTrace,
     withRootDuration,
-    withOutcomeFields,
+    withTimeToFirstChunk,
+    withTimeToFirstToken,
     withTimeToFirstChunkSort,
+    withTimeToFirstTokenSort,
+    withOutcomeFields,
     withDeltaPolling,
     isCapabilitiesLoading,
   } = useTracesConfig();
   const { filters, dateFrom, dateTo } = useTracesFilters();
   const { displayedPreferences } = useTraceUsageColumns();
-  // A TTFC sort the store can't run, or on a column that isn't shown, lists newest first instead.
+  // A TTFC/TTFT sort the store can't run, or on a column that isn't shown, lists newest first instead.
   // The host keeps its raw value, like filters the server can't query.
   const sortable =
-    hostSort.field !== 'timeToFirstChunkMs' ||
-    (withTimeToFirstChunkSort && hasTraceColumn(displayedPreferences, 'timeToFirstChunk'));
+    hostSort.field === 'startedAt' ||
+    (hostSort.field === 'timeToFirstChunkMs' &&
+      withTimeToFirstChunkSort &&
+      hasTraceColumn(displayedPreferences, 'timeToFirstChunk')) ||
+    (hostSort.field === 'timeToFirstTokenMs' &&
+      withTimeToFirstTokenSort &&
+      hasTraceColumn(displayedPreferences, 'timeToFirstToken'));
   const sort = sortable ? hostSort : DEFAULT_TRACES_SORT;
   const list = useTracesListSource({
     rolling: !dateTo,
-    query: now => buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, withOutcomeFields, now }),
+    query: now =>
+      buildTracesQueryRequest({
+        filters,
+        dateFrom,
+        dateTo,
+        withRootDuration,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+        withOutcomeFields,
+        now,
+      }),
     orderBy: [sort],
     withQueryTrace,
     withDeltaPolling,

@@ -66,7 +66,8 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Test User · Example Workspace')).toBeInTheDocument();
+    const workspace = await screen.findByText('Example Workspace');
+    expect(workspace.closest('[data-slot="metadata"]')).toHaveTextContent('Test User');
     expect(screen.getByRole('link', { name: 'Configure Slack' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/connections/slack',
@@ -82,8 +83,11 @@ describe('ConnectedAccountsSection', () => {
 
     renderSection();
 
-    expect(await screen.findByText('Test User · Example Workspace')).toBeInTheDocument();
-    expect(screen.getByText('Test User · Other Workspace')).toBeInTheDocument();
+    expect((await screen.findByText('Example Workspace')).closest('[data-slot="metadata"]')).toHaveTextContent(
+      'Test User',
+    );
+    expect(screen.getByText('Other Workspace').closest('[data-slot="metadata"]')).toHaveTextContent('Test User');
+    expect(screen.getAllByText('Test User')).toHaveLength(2);
     expect(screen.getAllByRole('link', { name: 'Configure Slack' })).toHaveLength(1);
   });
 

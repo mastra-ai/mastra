@@ -1,5 +1,4 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -11,6 +10,7 @@ import type { TimelineEntry, ToolCall } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
+const PART_AT = new Date('2026-07-15T10:03:42.000Z');
 const ROW_HEIGHT = 40;
 
 function panelOf(element: Element): HTMLElement {
@@ -83,6 +83,32 @@ function assistantMessage(
   };
 }
 
+function environmentSignal(workingDirectory: string, id = 'environment'): TimelineEntry {
+  return {
+    kind: 'message',
+    id,
+    message: {
+      id,
+      role: 'signal',
+      createdAt: CREATED_AT,
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: `Factory environment: 1 repository at ${workingDirectory}, your working directory.` },
+        ],
+        metadata: {
+          signal: {
+            id: 'environment',
+            type: 'state',
+            tagName: 'factory-environment',
+            attributes: { workingDirectory, repositories: 1 },
+          },
+        },
+      },
+    },
+  };
+}
+
 function userMessage(id: string, text: string): TimelineEntry {
   return {
     kind: 'message',
@@ -151,7 +177,7 @@ describe('TranscriptEntries tool rows', () => {
 
     const line = screen.getByRole('group', { name: 'Read a file, ran a command, wrote a file' });
     expect(within(line).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
-    expect(within(line).getByText('1 failed · 1 incomplete')).toBeInTheDocument();
+    expect(within(line).getByText('1 failed and 1 incomplete')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Tool: view' })).not.toBeInTheDocument();
 
     await expand(line);
@@ -168,7 +194,7 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(failedRow).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
   });
 
-  it('keeps a live stretch on screen when it opens with a thought that has no text yet', () => {
+  it('keeps a live stretch on screen when it opens with a thought that has no text yet, reading its running call', () => {
     renderEntries(
       [
         assistantMessage(
@@ -185,6 +211,18 @@ describe('TranscriptEntries tool rows', () => {
       true,
     );
 
+    expect(screen.getByRole('group', { name: 'Running pnpm test' })).toBeInTheDocument();
+  });
+
+  it('keeps the run thinking on screen while its reply has opened a thought with no text yet', () => {
+    renderEntries(
+      [
+        userMessage('user-1', 'again please'),
+        assistantMessage('msg-1', [{ type: 'reasoning', reasoning: '', details: [] }], undefined, true),
+      ],
+      true,
+    );
+
     expect(screen.getByRole('group', { name: 'Thinking' })).toBeInTheDocument();
   });
 
@@ -195,6 +233,33 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(line).getByText('Ran')).toBeInTheDocument();
     expect(within(line).getByText('pnpm build')).toBeInTheDocument();
     expect(within(line).queryByText('execute_command')).not.toBeInTheDocument();
+  });
+
+  it('reads a path inside the working directory the environment gave the agent relative to it', () => {
+    renderEntries([
+      environmentSignal('/sandboxes/7b45/mastra'),
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view', { path: '/sandboxes/7b45/mastra/packages/core/package.json' }),
+      ]),
+    ]);
+
+    expect(screen.getByText('packages/core/package.json')).toBeInTheDocument();
+    expect(screen.queryByText('/sandboxes/7b45/mastra/packages/core/package.json')).not.toBeInTheDocument();
+  });
+
+  it('reads each turn relative to the working directory it had, after an environment edit moves it', () => {
+    renderEntries([
+      environmentSignal('/sandboxes/7b45/mastra', 'environment-1'),
+      assistantMessage('msg-1', [
+        doneTool('call-1', 'view', { path: '/sandboxes/7b45/mastra/packages/core/package.json' }),
+      ]),
+      userMessage('user-2', 'now the docs repo too'),
+      environmentSignal('/sandboxes/7b45', 'environment-2'),
+      assistantMessage('msg-2', [doneTool('call-2', 'view', { path: '/sandboxes/7b45/docs/README.md' })]),
+    ]);
+
+    expect(screen.getByText('packages/core/package.json')).toBeInTheDocument();
+    expect(screen.getByText('docs/README.md')).toBeInTheDocument();
   });
 
   it("reads a running shell command's description alone, and shows the command when expanded", async () => {
@@ -276,7 +341,7 @@ describe('TranscriptEntries tool rows', () => {
     ]);
 
     const line = screen.getByRole('group', { name: 'Read a.ts, 1m 12s' });
-    expect(within(line).getByText('· 1m 12s')).toBeVisible();
+    expect(within(line).getByText('1m 12s')).toBeVisible();
   });
 
   it('keeps calls the reader opened in view, on the row they scrolled to, when a thought joins them', async () => {
@@ -700,54 +765,28 @@ describe('TranscriptEntries tool rows', () => {
     expect(assistantProse).toHaveClass('my-3');
   });
 
-  describe('local timestamps', () => {
-    const PART_AT = new Date('2026-07-15T10:03:42.000Z');
+  // The time a reader looks for lives in the message's action bar, so a call's line carries none of its own.
+  it.each([
+    {
+      line: 'Ran pnpm build',
+      parts: [{ ...doneTool('call-1', 'execute_command', { command: 'pnpm build' }), createdAt: PART_AT.getTime() }],
+    },
+    {
+      line: 'Read files, searched code',
+      parts: [
+        { ...doneTool('call-1', 'view'), createdAt: PART_AT.getTime() },
+        { ...doneTool('call-2', 'search_content'), createdAt: PART_AT.getTime() + 1000 },
+        { ...doneTool('call-3', 'view'), createdAt: PART_AT.getTime() + 2000 },
+      ],
+    },
+  ])('shows no time on the “$line” line, even when the reader hovers it', async ({ line: name, parts }) => {
+    const user = userEvent.setup();
+    renderEntries([assistantMessage('msg-1', parts)]);
 
-    function clockTime(line: HTMLElement, at: Date): HTMLElement {
-      const time = line.querySelector<HTMLElement>(`time[datetime="${at.toISOString()}"]`);
-      if (!time) throw new Error(`no clock for ${at.toISOString()}`);
-      return time;
-    }
+    const line = screen.getByRole('group', { name });
+    expect(line.querySelector('time')).toBeNull();
 
-    function localClock(date: Date): string {
-      const text = formatDate(date, 'time-seconds');
-      if (text === undefined) throw new Error(`${date.toISOString()} is not a valid date`);
-      return text;
-    }
-
-    it('names the moment core stamped on the call, in local time, when the reader hovers the line', async () => {
-      renderEntries([
-        assistantMessage('msg-1', [
-          { ...doneTool('call-1', 'execute_command', { command: 'pnpm build' }), createdAt: PART_AT.getTime() },
-        ]),
-      ]);
-
-      const line = screen.getByRole('group', { name: 'Ran pnpm build' });
-      const time = clockTime(line, PART_AT);
-      expect(time.textContent).toContain(localClock(PART_AT));
-
-      await userEvent.hover(within(line).getAllByRole('button')[0]);
-      expect(await screen.findByText(time.textContent ?? '', { selector: ':not(time)' })).toBeVisible();
-    });
-
-    it('falls back to the message time for calls core never stamped', () => {
-      renderEntries([assistantMessage('msg-1', [doneTool('call-1', 'view')])]);
-
-      expect(clockTime(screen.getByRole('group', { name: 'Read src/index.ts' }), CREATED_AT)).toBeInTheDocument();
-    });
-
-    it('leads a line of several calls with the time its first call began', () => {
-      renderEntries([
-        assistantMessage('msg-1', [
-          { ...doneTool('call-1', 'view'), createdAt: PART_AT.getTime() },
-          { ...doneTool('call-2', 'search_content'), createdAt: PART_AT.getTime() + 1000 },
-          { ...doneTool('call-3', 'view'), createdAt: PART_AT.getTime() + 2000 },
-        ]),
-      ]);
-
-      const line = screen.getByRole('group', { name: 'Read files, searched code' });
-      expect(clockTime(line, PART_AT)).toBeInTheDocument();
-      expect(line.querySelector(`time[datetime="${new Date(PART_AT.getTime() + 2000).toISOString()}"]`)).toBeNull();
-    });
+    await user.hover(within(line).getAllByRole('button')[0]);
+    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 });

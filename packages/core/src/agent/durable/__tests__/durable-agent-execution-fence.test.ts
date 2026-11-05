@@ -52,6 +52,7 @@ import {
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
+import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -445,7 +446,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         model: model.model as LanguageModelV2,
         memory,
       });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
+      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -984,6 +986,31 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
       expect(await foreign.owner(durableAgent.id, runId)).toBeUndefined();
       next.release();
+    });
+
+    describe.each(['default', 'evented'] as const)('%s custom run IDs', engine => {
+      it.each(['stream', 'generate'] as const)(
+        '%s accepts custom run IDs containing the former lease delimiter',
+        async method => {
+          const storage = createStorage(backend);
+          const model = gatedModel('Custom run completed.');
+          model.release();
+          const agent = new Agent({
+            id: 'custom-run-id-agent',
+            name: 'Custom run ID agent',
+            instructions: 'Answer the request.',
+            model: model.model as LanguageModelV2,
+          });
+          const durableAgent =
+            engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+          new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+
+          const result = await durableAgent[method]('hello', { runId: 'custom\u0000retake\u000042' });
+          expect(await ('output' in result ? result.output.text : result.text)).toBe('Custom run completed.');
+          expect(model.calls()).toBe(1);
+          if ('cleanup' in result) result.cleanup();
+        },
+      );
     });
 
     it('stream({ runId }) rejects with CONFLICT while another execution holds the run', async () => {
@@ -1842,7 +1869,14 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     const workflows = storage.stores.workflows!;
     let segment = 0;
     const writes: Array<{ segment: number; workflowName: string; runId: string; fence: unknown }> = [];
-    for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState'] as const) {
+    for (const method of [
+      'persistWorkflowSnapshot',
+      'updateWorkflowResults',
+      'updateWorkflowState',
+      'appendWorkflowRunEntries',
+      'writeWorkflowRunCheckpoint',
+      'updateWorkflowRunHeader',
+    ] as const) {
       const write = workflows[method].bind(workflows) as (args: any) => Promise<any>;
       vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
         writes.push({

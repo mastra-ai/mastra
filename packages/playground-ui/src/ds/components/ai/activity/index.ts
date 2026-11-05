@@ -4,3 +4,4 @@ export * from './presets/reasoning-activity';
 export * from './presets/reasoning-text';
 export * from './presets/reasoning-visibility';
 export * from './presets/signal-activity';
+export { useRelativePaths } from './use-relative-paths';

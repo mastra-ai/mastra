@@ -17,7 +17,7 @@ export const StartOnly: Story = {
   render: () => (
     <ActionRow>
       <ActionRow.Start>
-        <Input placeholder="Search…" className="max-w-120" />
+        <Input placeholder="Search" className="max-w-120" />
       </ActionRow.Start>
     </ActionRow>
   ),
@@ -27,7 +27,7 @@ export const StartAndEnd: Story = {
   render: () => (
     <ActionRow>
       <ActionRow.Start>
-        <Input placeholder="Search…" className="max-w-120" />
+        <Input placeholder="Search" className="max-w-120" />
         <Button>Status</Button>
         <Button>Tags</Button>
       </ActionRow.Start>

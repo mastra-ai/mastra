@@ -226,6 +226,35 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     expect(live.restart).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps restarting other runs when one run has an unparseable snapshot', async () => {
+    const corruptWorkflow = createWorkflow({
+      id: 'corrupt-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    }).commit();
+    const liveWorkflow = createWorkflow({
+      id: 'live-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    }).commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { corruptWorkflow, liveWorkflow },
+    });
+    const corrupt = stubActiveRun(corruptWorkflow, 'corrupt-run');
+    const live = stubActiveRun(liveWorkflow, 'live-run');
+    // Stores hand back a snapshot they fail to parse as the raw string, e.g. a truncated row.
+    vi.mocked(corruptWorkflow.listActiveWorkflowRuns).mockResolvedValue({
+      runs: [{ ...createWorkflowRun('corrupt-wf', 'corrupt-run', 'running'), snapshot: '{"status":"running","value"' }],
+      total: 1,
+    });
+
+    await expect(mastra.restartAllActiveWorkflowRuns()).resolves.toBeUndefined();
+    expect(live.restart).toHaveBeenCalledTimes(1);
+    expect(corrupt.restart).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves recovery defaults', () => {
     expect(new Mastra({ logger: false }).recoveryConfig).toEqual({
       workflows: 'auto',

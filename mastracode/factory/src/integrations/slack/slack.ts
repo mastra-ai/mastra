@@ -41,8 +41,9 @@ import type { CommentsDomain } from '../../storage/domains/comments/domain.js';
 import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource, Card as FactoryCard, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
+import type { VoiceFactory } from '../../voice/transcription.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
 import { markNewChannelSession } from './channel-session-link-processor.js';
@@ -50,6 +51,8 @@ import { markNewChannelSession } from './channel-session-link-processor.js';
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
 import { slackRunErrorCard } from './run-error-card.js';
+import { transcribeVoiceClips } from './voice-clips.js';
+import type { VoiceClipDeps } from './voice-clips.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -64,7 +67,7 @@ const SLACK_REQUEST_TIMEOUT_MS = 15_000;
 class SlackSessionStartError extends Error {}
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
-interface SlackChannelDeps {
+interface SlackChannelDeps extends VoiceClipDeps {
   /**
    * The factory's reverse-index store mapping a Slack sender to a Mastra
    * tenant. When provided, inbound messages from an unlinked sender are not
@@ -73,15 +76,6 @@ interface SlackChannelDeps {
    * get an ephemeral "connect your account" card instead.
    */
   accountLinks?: ChannelIdentityStorage;
-  /**
-   * Factory projects domain. When provided (alongside `accountLinks`), a
-   * linked sender's run must also resolve to a Factory project before it
-   * dispatches: their link's default factory, else their tenant's only
-   * factory (stamped back onto the link), else a "pick a default factory"
-   * card posted in the thread and no run. Unset → no factory routing (runs
-   * dispatch as before).
-   */
-  projects?: FactoryProjectsStorage;
   /**
    * Storage handle of the integration that owns source control
    * (`IntegrationContext.storage.sourceControlOwner`). Used to make new Slack
@@ -108,6 +102,16 @@ interface SlackChannelDeps {
    * has so an `aside` can land on it. New threads never create cards.
    */
   workItems?: WorkItemsStorage;
+  /**
+   * Factory projects domain. When provided (alongside `accountLinks`), a
+   * linked sender's run must also resolve to a Factory project before it
+   * dispatches: their link's default factory, else their tenant's only
+   * factory (stamped back onto the link), else a "pick a default factory"
+   * card posted in the thread and no run. Unset → no factory routing (runs
+   * dispatch as before). The run's Factory also decides whose model and key
+   * transcribe a voice clip.
+   */
+  projects?: FactoryProjectsStorage;
   /**
    * Work-item feed. With it (and `workItems`), an `aside` lands as a comment on
    * the card the thread already has. Unset → asides stay ignored, as before.
@@ -528,6 +532,24 @@ async function slackThreadSessionId(
   return thread.id;
 }
 
+/** The Factory a session's thread runs under: its card's run binding, else the session's own Factory. */
+async function sessionRunFactory(
+  workItems: WorkItemsStorage | undefined,
+  session: { orgId: string; factoryProjectId: string; resourceId: string; sessionId: string; threadId: string | null },
+): Promise<{ factoryProjectId: string; bound: boolean }> {
+  const binding =
+    session.threadId && workItems
+      ? await workItems.findRunBindingByThread({
+          orgId: session.orgId,
+          resourceId: session.resourceId,
+          sessionId: session.sessionId,
+          threadId: session.threadId,
+          rejectAmbiguous: true,
+        })
+      : null;
+  return { factoryProjectId: binding?.factoryProjectId ?? session.factoryProjectId, bound: binding !== null };
+}
+
 /** Create channel sessions with their Factory ownership present in initial controller state. */
 export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSessionResolve {
   const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
@@ -613,22 +635,14 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!sourceControl) return;
     const sourceSession = await sourceControl.sessions.getBySessionId(sessionId);
     if (!sourceSession?.factoryProjectId) return;
-    const threadId = session.thread.getId();
-    const binding =
-      threadId && deps.workItems
-        ? await deps.workItems.findRunBindingByThread({
-            orgId: sourceSession.orgId,
-            resourceId: session.identity.getResourceId(),
-            sessionId,
-            threadId,
-            rejectAmbiguous: true,
-          })
-        : null;
-    const owner = {
-      factoryProjectId: binding?.factoryProjectId ?? sourceSession.factoryProjectId,
+    const { factoryProjectId, bound } = await sessionRunFactory(deps.workItems, {
       orgId: sourceSession.orgId,
-      userId: sourceSession.userId,
-    };
+      factoryProjectId: sourceSession.factoryProjectId,
+      resourceId: session.identity.getResourceId(),
+      sessionId,
+      threadId: session.thread.getId(),
+    });
+    const owner = { factoryProjectId, orgId: sourceSession.orgId, userId: sourceSession.userId };
 
     const sessionModel = await resolveFactorySessionModel({
       projects,
@@ -636,7 +650,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       factoryProjectId: owner.factoryProjectId,
       orgId: owner.orgId,
       ownerUserId: owner.userId,
-      context: binding ? 'run' : 'session',
+      context: bound ? 'run' : 'session',
     });
 
     // Repo-backed Slack sessions use the source-control row's durable owner,
@@ -748,6 +762,17 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
 
 type InternalThread = Awaited<ReturnType<typeof findInternalThread>>;
 
+/**
+ * The Factory a run belongs to: none for a chat-only thread, the routed one for
+ * a thread the session resolver has yet to create, else the existing session's.
+ */
+type RunFactory = { kind: 'none' } | { kind: 'new-thread' } | { kind: 'session'; resolve: () => Promise<string> };
+
+type ExistingSessionOwnerContext =
+  | { status: 'ready'; runFactory: RunFactory }
+  | { status: 'organization-mismatch' }
+  | { status: 'access-denied' };
+
 async function prepareExistingSessionOwnerContext(
   thread: HandlerThread,
   deps: SlackChannelDeps,
@@ -759,9 +784,11 @@ async function prepareExistingSessionOwnerContext(
     /** Already looked up by the caller; `null` means it doesn't exist. */
     internalThread?: InternalThread;
   },
-): Promise<'ready' | 'organization-mismatch' | 'access-denied'> {
+): Promise<ExistingSessionOwnerContext> {
   const sourceControls = configuredSourceControls(deps);
-  if (sourceControls.length === 0 && !options.requireInternalThread) return 'ready';
+  if (sourceControls.length === 0 && !options.requireInternalThread) {
+    return { status: 'ready', runFactory: { kind: 'none' } };
+  }
 
   const internalThread =
     options.internalThread !== undefined ? options.internalThread : await findInternalThread(ctx.mastra, thread);
@@ -769,9 +796,11 @@ async function prepareExistingSessionOwnerContext(
     if (options.requireInternalThread) {
       throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
     }
-    return 'ready';
+    return { status: 'ready', runFactory: sourceControls.length === 0 ? { kind: 'none' } : { kind: 'new-thread' } };
   }
-  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
+  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) {
+    return { status: 'ready', runFactory: { kind: 'none' } };
+  }
   const sessions = createSourceControlSessionLookup(sourceControls);
   const memory = await ctx.mastra?.getStorage()?.getStore('memory');
   const resolved = await slackThreadSessionId(
@@ -780,7 +809,7 @@ async function prepareExistingSessionOwnerContext(
     async threadId => memory?.getThreadById({ threadId }),
     deps.workItems,
   );
-  if (resolved === UNCLAIMED_SESSION) return 'access-denied';
+  if (resolved === UNCLAIMED_SESSION) return { status: 'access-denied' };
   const sessionId = resolved ?? internalThread.resourceId;
   const sessionRow = await sessions.getBySessionId(sessionId);
   if (
@@ -789,7 +818,7 @@ async function prepareExistingSessionOwnerContext(
     sessionRow.visibility === 'private' &&
     sessionRow.userId !== options.senderUserId
   ) {
-    return 'access-denied';
+    return { status: 'access-denied' };
   }
   if (!options.expectedOrgId) {
     throw new Error(
@@ -803,7 +832,7 @@ async function prepareExistingSessionOwnerContext(
     { sessions },
     { expectedOrgId: options.expectedOrgId },
   );
-  if (preparation === 'organization-mismatch') return preparation;
+  if (preparation === 'organization-mismatch') return { status: preparation };
   if (preparation !== 'prepared') {
     const reason =
       preparation === 'session-not-found'
@@ -811,7 +840,20 @@ async function prepareExistingSessionOwnerContext(
         : 'its source-control session row has no organization';
     throw new Error(`Could not authorize the owner of Slack Factory session ${sessionId}: ${reason}.`);
   }
-  return 'ready';
+  const sessionFactoryId = sessionRow?.factoryProjectId;
+  if (!sessionFactoryId) return { status: 'ready', runFactory: { kind: 'none' } };
+  const expectedOrgId = options.expectedOrgId;
+  const resolve = async () => {
+    const { factoryProjectId } = await sessionRunFactory(deps.workItems, {
+      orgId: expectedOrgId,
+      factoryProjectId: sessionFactoryId,
+      resourceId: internalThread.resourceId,
+      sessionId,
+      threadId: internalThread.id,
+    });
+    return factoryProjectId;
+  };
+  return { status: 'ready', runFactory: { kind: 'session', resolve } };
 }
 
 /**
@@ -822,8 +864,8 @@ async function prepareExistingSessionOwnerContext(
 /**
  * Run the account-link + factory-routing gates for one inbound message.
  * Returns `null` when the run must not dispatch (a prompt card was posted
- * where possible); otherwise the dispatch context — with `routed` present
- * only when a linked sender resolved to a factory.
+ * where possible); otherwise the linked sender, if any, and a lookup of the
+ * Factory the run belongs to (see {@link RunFactory}).
  */
 async function gateDispatch(
   thread: HandlerThread,
@@ -831,9 +873,7 @@ async function gateDispatch(
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
   options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
-): Promise<{
-  routed?: { link: ChannelAccountLink; factoryProjectId: string };
-} | null> {
+): Promise<{ link?: ChannelAccountLink; voiceFactory?: () => Promise<VoiceFactory | undefined> } | null> {
   const { accountLinks, projects } = deps;
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
@@ -852,11 +892,11 @@ async function gateDispatch(
       requireInternalThread: options.requireInternalThread,
       internalThread: options.internalThread,
     });
-    if (ownerContext === 'access-denied') {
+    if (ownerContext.status === 'access-denied') {
       await thread.post('This private Factory session belongs to another user.');
       return null;
     }
-    if (ownerContext === 'organization-mismatch') {
+    if (ownerContext.status === 'organization-mismatch') {
       await thread.post('This thread belongs to a Factory session in another organization.');
       return null;
     }
@@ -868,15 +908,25 @@ async function gateDispatch(
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
-    if (route.status === 'resolved') {
+    if (route.status === 'resolved' && sender.link.orgId) {
       // The model runs with the session owner's credentials, but Factory tools
       // must act as the authenticated Slack sender, not the session owner.
-      if (sender.link.orgId) {
-        ctx.requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: sender.link.userId, orgId: sender.link.orgId });
-        ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
-      }
-      return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
+      ctx.requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: sender.link.userId, orgId: sender.link.orgId });
+      ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
     }
+    const { runFactory } = ownerContext;
+    const factoryId =
+      runFactory.kind === 'session'
+        ? runFactory.resolve
+        : runFactory.kind === 'new-thread' && route.status === 'resolved'
+          ? async () => route.factoryProjectId
+          : undefined;
+    const orgId = sender.link.orgId ?? '';
+    const voiceFactory =
+      factoryId && projects
+        ? async () => (await projects.get({ orgId, id: await factoryId() })) ?? undefined
+        : undefined;
+    return { link: sender.link, voiceFactory };
   }
   return {};
 }
@@ -900,7 +950,7 @@ async function findThreadWorkItem(
   workItems: WorkItemsStorage,
   thread: HandlerThread,
   teamId?: string,
-): Promise<WorkItemRow | null> {
+): Promise<FactoryCard | null> {
   const scoped = await workItems.getBySource(slackThreadSource(thread, teamId));
   if (scoped || !teamId) return scoped;
   return workItems.getBySource(slackThreadSource(thread));
@@ -984,7 +1034,8 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
     try {
-      if (!(await gateDispatch(thread, message, deps, ctx))) return;
+      const gate = await gateDispatch(thread, message, deps, ctx);
+      if (!gate) return;
       // A mention on a not-yet-subscribed thread is a NEW session. The default
       // handler auto-subscribes, so once subscribed this is a follow-up — the
       // thread already carries its link. Factory posts nothing of its own:
@@ -992,6 +1043,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       // after the agent's first reply.
       if (!(await thread.isSubscribed())) markNewChannelSession(ctx.requestContext);
       acknowledgeReceipt(thread, deps);
+      await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.voiceFactory);
     } catch (error) {
       await reportPreDispatchError(thread, message, ctx, error);
       return;
@@ -1073,16 +1125,22 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation). Mute and unmute pass the same gate, so only
       // someone allowed to prompt this session can change what it listens to.
+      const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true, internalThread }).catch(
+        async (error: unknown) => {
+          await reportPreDispatchError(thread, message, ctx, error);
+          return null;
+        },
+      );
+      if (!gate) return;
+      const command = message.isMention ? muteCommand(message) : undefined;
+      if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
+      acknowledgeReceipt(thread, deps);
       try {
-        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true, internalThread });
-        if (!gate) return;
+        await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.voiceFactory);
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);
         return;
       }
-      const command = message.isMention ? muteCommand(message) : undefined;
-      if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
-      acknowledgeReceipt(thread, deps);
       await defaultHandler(thread, message);
     },
     onMention: async (thread, message, defaultHandler, ctx) => {

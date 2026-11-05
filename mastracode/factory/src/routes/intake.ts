@@ -4,12 +4,14 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 
 import type { BoardRegistry } from '../boards/index.js';
+import { placedByIntakeRoute } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { cardLabels, moveCardToBoard } from '../boards/relocate.js';
 import type { Intake, IntakeItem } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import {
+  FactoryProjectNotFoundError,
   normalizeBindingLabels,
   normalizeIntakeLabel,
   resolveIntakeLabelRoute,
@@ -21,7 +23,7 @@ import type {
   IntakeStorage,
 } from '../storage/domains/intake/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -138,6 +140,11 @@ async function relocateSourceCards({
   for (const item of items) {
     const source = item.externalSource;
     if (!source || source.integrationId !== integration.id || !sourceKeys.has(source.externalId)) continue;
+    // An intake route chose this card's board; a rebind doesn't override it.
+    if (placedByIntakeRoute(item)) {
+      skipped += 1;
+      continue;
+    }
     const outcome = await moveCardToBoard({ workItems, boardRegistry, userId, item, targetBoard });
     if (outcome === 'moved') moved += 1;
     else if (outcome === 'skipped') skipped += 1;
@@ -185,6 +192,11 @@ async function relocateLabeledCards({
     if (!source || source.integrationId !== integrationId || source.type !== 'issue') continue;
     const labels = cardLabels(item);
     if (!labels.some(candidate => normalizeIntakeLabel(candidate) === changed)) continue;
+    // An intake route chose this card's board; a label route change doesn't override it.
+    if (placedByIntakeRoute(item)) {
+      skipped += 1;
+      continue;
+    }
     const targetBoard =
       resolveIntakeLabelRoute(routes, labels)?.board ??
       repositoryBoards.find(candidate => cardInRepository(item, candidate))?.board ??
@@ -233,11 +245,8 @@ async function githubRepositoryBoards({
   return boards;
 }
 
-function cardInRepository(
-  item: { metadata?: Record<string, unknown> | null; externalSource?: { url?: string } | null },
-  repository: GithubRepositoryBoard,
-): boolean {
-  const repositoryId = item.metadata?.githubRepositoryId;
+function cardInRepository(item: Card, repository: GithubRepositoryBoard): boolean {
+  const repositoryId = item.workItem.metadata?.githubRepositoryId;
   if (
     repository.externalId !== undefined &&
     repositoryId !== undefined &&
@@ -623,18 +632,25 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               factoryProjectId: binding.factoryProjectId,
               board: binding.board,
             };
-            if (shared) {
-              // Omitted labels keep the filter, so changing only the board never widens what the binding takes.
-              labels = binding.labels === undefined ? (previousBinding?.labels ?? null) : binding.labels;
-              const { conflicts } = await intake.setSharedBinding({ ...target, labels });
-              if (conflicts.length > 0) {
-                return c.json(
-                  { error: 'binding_conflict', message: bindingConflictMessage(conflicts), conflicts },
-                  409,
-                );
+            try {
+              if (shared) {
+                // Omitted labels keep the filter, so changing only the board never widens what the binding takes.
+                labels = binding.labels === undefined ? (previousBinding?.labels ?? null) : binding.labels;
+                const { conflicts } = await intake.setSharedBinding({ ...target, labels });
+                if (conflicts.length > 0) {
+                  return c.json(
+                    { error: 'binding_conflict', message: bindingConflictMessage(conflicts), conflicts },
+                    409,
+                  );
+                }
+              } else {
+                await intake.setBinding(target);
               }
-            } else {
-              await intake.setBinding(target);
+            } catch (error) {
+              if (error instanceof FactoryProjectNotFoundError) {
+                return c.json({ error: 'factory_project_not_found' }, 404);
+              }
+              throw error;
             }
             // A source that stays in the same project but is pointed at a different board
             // takes its resting cards along. Bindings that predate persisted boards have a

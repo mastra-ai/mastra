@@ -613,4 +613,56 @@ describe('InMemoryMCPTaskStore', () => {
       await expect(finished('alice')).resolves.toMatchObject({ status: 'working' });
     });
   });
+
+  describe('Studio admin view', () => {
+    const keys = async () => (await store.list()).listings.map(listing => listing.taskKey);
+
+    it('drops a task once its retention passes, before the purge timer fires, and frees its retained slot', async () => {
+      vi.useFakeTimers({ now: 0 });
+      store = new InMemoryMCPTaskStore({ expiredRetentionMs: 500 });
+      const limits = { perPrincipal: 10, total: 10, retainedPerPrincipal: 1, retainedTotal: 10 };
+      const task = await store.create({ ttlMs: 1_000, principal: 'alice', limits });
+      store.handle(task.taskId).complete(text('done'));
+      const key = taskKeyOf(task.taskId);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await keys()).toEqual([key]);
+
+      // The clock passes the retention, but the purge timer hasn't run.
+      vi.setSystemTime(1_600);
+      expect(await keys()).toEqual([]);
+      expect(await store.cancelByKey(key)).toBe('not_found');
+      expect(await store.updateByKey(key, {})).toBe('not_found');
+      await expect(store.create({ ttlMs: null, principal: 'alice', limits })).resolves.toMatchObject({
+        status: 'working',
+      });
+    });
+
+    it('lists nothing and acts on nothing after close', async () => {
+      store = new InMemoryMCPTaskStore();
+      const task = await store.create({ ttlMs: null, principal: 'alice' });
+      const { signal } = store.handle(task.taskId);
+      const key = taskKeyOf(task.taskId);
+      store.close();
+
+      expect(signal.aborted).toBe(true);
+      expect(await keys()).toEqual([]);
+      expect(await store.cancelByKey(key)).toBe('not_found');
+      expect(await store.updateByKey(key, { a: { action: 'decline' } })).toBe('not_found');
+    });
+
+    it('answers by key, reporting whether any new answer was taken', async () => {
+      store = new InMemoryMCPTaskStore();
+      const task = await store.create({ ttlMs: null, principal: 'alice' });
+      const answered = store.handle(task.taskId).requireInput({ a: elicit('a?'), b: elicit('b?') });
+      const key = taskKeyOf(task.taskId);
+
+      expect(await store.updateByKey(key, { a: { action: 'decline' } })).toBe('done');
+      expect(await store.updateByKey(key, { a: { action: 'accept', content: {} } })).toBe('ignored');
+      expect(await store.updateByKey(key, { other: { action: 'decline' } })).toBe('ignored');
+      expect(await store.updateByKey(key, { b: { action: 'decline' } })).toBe('done');
+      await expect(answered).resolves.toEqual({ a: { action: 'decline' }, b: { action: 'decline' } });
+      expect(await store.get(task.taskId, alice)).toMatchObject({ status: 'working' });
+    });
+  });
 });

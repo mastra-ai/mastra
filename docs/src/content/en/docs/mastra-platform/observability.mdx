@@ -132,9 +132,34 @@ npx mastra api trace query '{
 }'
 ```
 
-Choose a time range containing your exported traces. Any range works as long as `from` is earlier than `to`, with no maximum duration. Results appear in `data.traces`.
+Choose a time range containing your exported traces within your plan's data retention period, with `from` earlier than `to`. Results appear in `data.traces`.
 
-Mastra Platform uses the same trace-query endpoints and request format as Mastra Server. Use the [Advanced trace queries reference](/reference/observability/tracing/advanced-queries#send-an-http-request) for HTTP requests, supported filters, pagination, polling, and field discovery.
+Mastra Platform follows the same query and aggregate request structure as Mastra Server. Use the [Query traces and spans reference](/reference/observability/tracing/advanced-queries) for HTTP endpoints, filters, response shapes, pagination, and discovery:
+
+| Task | CLI command | Reference |
+| - | - | - |
+| Find matching traces | `mastra api trace query` | [Query traces](/reference/observability/tracing/advanced-queries#query-traces) |
+| Find individual spans, including nested runs | `mastra api span query` | [Query spans](/reference/observability/tracing/advanced-queries#query-spans) |
+| Measure matching traces | `mastra api trace aggregate` | [Aggregate traces](/reference/observability/tracing/advanced-queries#aggregate-traces) |
+| Measure individual spans | `mastra api span aggregate` | [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) |
+
+Pass the request as one JSON argument to each command. Responses are nested under `data`.
+
+### Platform scope and differences
+
+Use the `X-Mastra-Project-Id` HTTP header to select one project. The CLI sets it from `MASTRA_PROJECT_ID`, an explicit header, or your project configuration. Without a project scope, credentials authorized for organization-wide access can query across projects. Project-bound credentials remain restricted to their project. Project scoping is separate from predicates: don't put `projectId` in `where`.
+
+Platform adds these fields and grouping options:
+
+| Operation | Platform addition |
+| - | - |
+| `queryTraces()` and `querySpans()` | Each result includes `projectId`. |
+| `aggregateTraces()` | Supports `groupBy: ['projectId']` and `countDistinct.projectId`. |
+| `aggregateSpans()` | Supports `groupBy: ['projectId']`, but not `countDistinct.projectId`. |
+
+Data retention depends on your plan: 15 days for Starter, 6 months for Teams, and custom retention for Enterprise. See [pricing](https://mastra.ai/pricing) for current plan limits.
+
+### Other observability data
 
 You can query exported feedback over HTTP. See the [Feedback API](/docs/mastra-platform/api#feedback-api) for its current status, regional endpoints, authentication, project scoping, and supported query parameters such as `traceId` and `environment`.
 
@@ -244,10 +269,12 @@ npx mastra traces import langfuse \
 
 Set `SINCE` and `UNTIL` to ISO 8601 dates or timestamps. The following rules apply:
 
-- `--until` can't be in the future or outside the current 30-day Platform retention period.
-- `--since` must be earlier than `--until` and inside the current retention period.
+- `--until` must be within the last 30 days and can't be in the future.
+- `--since` must be earlier than `--until` and within the last 30 days.
 - The selected window can't exceed 30 days.
-- If only `--until` is set, the default start is the later of 30 days before `--until` and the current retention boundary.
+- If only `--until` is set, the default start is 30 days before the current time.
+
+This 30-day import window is separate from your plan's data retention period.
 
 The earlier `--from` and `--to` names still work, but they're deprecated hidden aliases of `--since` and `--until` and don't appear in the command help. Use `--since` and `--until` in new commands.
 
