@@ -360,6 +360,7 @@ export const ToolCardInner = ({
             appInfo={mcpAppInfo}
             toolArgs={input}
             toolResult={output}
+            toolCallId={toolCallId}
             onSendMessage={handleMcpAppSendMessage}
             onUpdateModelContext={handleMcpAppModelContext}
             readOnly={readOnly}
