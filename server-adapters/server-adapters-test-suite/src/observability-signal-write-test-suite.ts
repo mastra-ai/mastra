@@ -140,6 +140,16 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
             }
           },
         );
+
+        it('returns 501 when an older Core store lacks single-feedback reads', async () => {
+          // Reproduce the method surface of Core versions predating this endpoint.
+          Object.defineProperty(store, 'getFeedbackById', { value: undefined, configurable: true });
+          const response = await server.request(`${path}/existing-id`, {
+            headers: { authorization: 'Bearer test-token' },
+          });
+          expect(response.status).toBe(501);
+          expect(await response.json()).toMatchObject({ error: expect.stringContaining('single-feedback reads') });
+        });
       });
     }
 

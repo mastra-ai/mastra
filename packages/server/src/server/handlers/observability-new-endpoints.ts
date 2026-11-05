@@ -1286,6 +1286,11 @@ export const GET_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK, {
   responseSchema: z.object({ feedback: feedbackResponseSchema.nullable() }),
   handler: async ({ mastra, requestContext, request, feedbackId }) => {
     const observabilityStore = await getObservabilityStore(mastra);
+    if (typeof observabilityStore.getFeedbackById !== 'function') {
+      throw new HTTPException(501, {
+        message: 'This storage provider does not support single-feedback reads; please upgrade @mastra/core.',
+      });
+    }
     const feedback = await observabilityStore.getFeedbackById(feedbackId);
     if (!feedback) return { feedback: null };
     const authors = await prepareAuthorEnrichment(
