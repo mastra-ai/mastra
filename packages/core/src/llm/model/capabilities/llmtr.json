@@ -63,20 +63,31 @@
     "upstage/solar-pro4"
   ],
   "reasoning": {
-    "gemma-4": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3-6-35b": [
       {
         "type": "toggle"
       }
     ],
-    "upstage/solar-pro4": [
+    "gemma-4": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "sakana/fugu-ultra": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["high", "xhigh"]
+      }
+    ],
+    "meta/muse-spark-1.2-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "poolside/laguna-xs-2.1": [
+      {
+        "type": "toggle"
       }
     ],
     "upstage/solar-pro2": [
@@ -91,13 +102,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "meta/muse-spark-1.2-contributor": [
+    "upstage/solar-pro4": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen/qwen3.5-plus": [
+    "qwen/qwen3-max": [
       {
         "type": "toggle"
       },
@@ -105,15 +116,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-flash": [
+    "qwen/qwen3.7-plus": [
       {
         "type": "toggle"
       },
@@ -129,7 +132,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-max": [
+    "qwen/qwen-flash": [
       {
         "type": "toggle"
       },
@@ -137,15 +140,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3-vl-plus": [
+    "qwen/qwen3.5-plus": [
       {
         "type": "toggle"
       },
@@ -161,7 +156,23 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.7-plus": [
+    "qwen/qwen3-vl-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-flash": [
       {
         "type": "toggle"
       },
@@ -179,17 +190,6 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "sakana/fugu-ultra": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh"]
-      }
-    ],
-    "poolside/laguna-xs-2.1": [
-      {
-        "type": "toggle"
       }
     ]
   }

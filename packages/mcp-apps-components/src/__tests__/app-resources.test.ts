@@ -167,4 +167,68 @@ describe('dashboardRendererApp', () => {
       }
     });
   });
+
+  describe('when a host that answers the data tool itself has no @mastra/server', () => {
+    // Hosts like Mastra's platform answer `dashboardDataTool` from their own store, and may pin an
+    // @mastra/server too old to run the in-process tool. Bundle what they import with
+    // @mastra/server unresolvable: loading it would fail the build, as it fails their server.
+    let outDir: string;
+    const reached: string[] = [];
+
+    beforeAll(async () => {
+      const packageDir = fileURLToPath(new URL('../..', import.meta.url));
+      outDir = await mkdtemp(join(packageDir, 'node_modules', '.contract-consumer-'));
+      const entry = join(outDir, 'entry.ts');
+      await writeFile(
+        entry,
+        [
+          'export {',
+          '  dashboardRendererApp,',
+          '  DASHBOARD_DATA_TOOL_NAME,',
+          '  DASHBOARD_DATA_OPERATIONS,',
+          '  dashboardDataInputSchema,',
+          "} from '@mastra/mcp-apps-components/dashboard-renderer';\n",
+        ].join('\n'),
+      );
+      await build({
+        configFile: false,
+        logLevel: 'silent',
+        root: packageDir,
+        ssr: { noExternal: true },
+        plugins: [
+          {
+            name: 'no-mastra-server',
+            enforce: 'pre',
+            resolveId(source) {
+              if (!source.startsWith('@mastra/server')) return null;
+              reached.push(source);
+              return { id: source, external: true };
+            },
+          },
+        ],
+        build: {
+          ssr: entry,
+          outDir: join(outDir, 'out'),
+          rollupOptions: { external: [/^@mastra\/core/, 'zod'] },
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await rm(outDir, { recursive: true, force: true });
+    });
+
+    it('serves the app and the data contract without loading it', async () => {
+      const bundled: typeof import('@mastra/mcp-apps-components/dashboard-renderer') = await import(
+        pathToFileURL(join(outDir, 'out', 'entry.js')).href
+      );
+
+      expect(reached).toEqual([]);
+      expect(bundled.dashboardRendererApp().html).toBe(dashboardRendererApp().html);
+      expect(bundled.dashboardDataInputSchema.parse({ operation: 'getMetricAggregate', body: {} })).toEqual({
+        operation: 'getMetricAggregate',
+        body: {},
+      });
+    });
+  });
 });

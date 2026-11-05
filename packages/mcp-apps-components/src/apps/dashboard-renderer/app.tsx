@@ -2,45 +2,39 @@ import { DashboardRenderer, dashboardDefaults } from '@mastra/playground-ui/doma
 import type { DashboardRendererProps, OnDashboardDrilldown } from '@mastra/playground-ui/domains/dashboards';
 import { MetricsProvider } from '@mastra/playground-ui/domains/metrics';
 import type { DatePreset } from '@mastra/playground-ui/domains/metrics';
-import type { App } from '@modelcontextprotocol/ext-apps';
-import { useState, useSyncExternalStore } from 'react';
+import { useRef, useState } from 'react';
 import { defineMcpApp } from '../../runtime/define-mcp-app';
 import { MastraServerProvider } from '../../runtime/mastra-server-provider';
 import { useMcpApp } from '../../runtime/mcp-app-context';
+import { createDashboardDataFetch } from './data-fetch';
 import { drilldownContext, drilldownMessage, drilldownPrompt } from './drilldown';
 import { dashboardRendererInputSchema } from './input';
 import type { DashboardRendererInput } from './input';
-import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, DASHBOARD_WIDGET_PIN_NOTIFICATION } from './pin';
-import type { DashboardWidgetPinNotificationParams } from './pin';
+import { dashboardModelContext } from './model-context';
+import type { DrilldownModelContext } from './model-context';
+import { useDashboardPins } from './use-dashboard-pins';
 import './dashboard.css';
-
-const isStringArray = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every(item => typeof item === 'string');
-
-/**
- * The ids of the widgets the host has pinned, from its context; `undefined` when it can't pin.
- * The snapshot is the context's own array, so it only changes when the host sends a new one.
- */
-function useHostPinnedWidgets(app: App): readonly string[] | undefined {
-  return useSyncExternalStore(
-    onChange => {
-      app.addEventListener('hostcontextchanged', onChange);
-      return () => app.removeEventListener('hostcontextchanged', onChange);
-    },
-    () => {
-      const pinned = app.getHostContext()?.[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY];
-      return isStringArray(pinned) ? pinned : undefined;
-    },
-  );
-}
 
 function Dashboard({ input }: { input: DashboardRendererInput }) {
   const app = useMcpApp();
   const [defaults] = useState(() => dashboardDefaults(input.definition));
   const [preset, setPreset] = useState<DatePreset>(defaults.preset ?? '24h');
   const [filterTokens, setFilterTokens] = useState(defaults.filterTokens);
+  const pins = useDashboardPins(app, input, { datePreset: preset, filters: filterTokens });
 
   const capabilities = app.getHostCapabilities();
+  // Each model context update replaces the last, so pins re-send the last drilldown and drilldowns the pins.
+  const lastDrilldown = useRef<DrilldownModelContext | undefined>(undefined);
+  const updateModelContext = async () => {
+    const pinState = pins.report();
+    try {
+      await app.updateModelContext(dashboardModelContext({ pins: pinState, drilldown: lastDrilldown.current }));
+    } catch (error) {
+      if (pinState) pins.rejected(pinState.request);
+      throw error;
+    }
+  };
+
   // Drilldowns continue the conversation, so they only show on hosts that accept messages.
   // Hosts that take model context get the exact filters as data; the rest get them spelled out.
   const onDrilldown: OnDashboardDrilldown | undefined = capabilities?.message
@@ -48,7 +42,8 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
         const send = async () => {
           let text = drilldownMessage(page, scope, preset);
           if (capabilities.updateModelContext) {
-            await app.updateModelContext(drilldownContext(page, scope, preset));
+            lastDrilldown.current = drilldownContext(page, scope, preset);
+            await updateModelContext();
             text = drilldownPrompt(page);
           }
           await app.sendMessage({ role: 'user', content: [{ type: 'text', text }] });
@@ -58,23 +53,15 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
       }
     : undefined;
 
-  // The host owns the pinned widgets: the app asks it to change, and shows what it sends back.
-  const pinnedWidgets = useHostPinnedWidgets(app);
+  const pinState = pins.pin;
   const onPin: NonNullable<DashboardRendererProps['onPin']> = (widget, next) => {
-    const params: DashboardWidgetPinNotificationParams = {
-      widget,
-      scope: input.scope,
-      defaults: { datePreset: preset, filters: filterTokens },
-      isPinned: next,
-    };
-    app
-      .notification({ method: DASHBOARD_WIDGET_PIN_NOTIFICATION, params })
-      .catch(error => console.error('[Mastra dashboard] Pin failed', error));
+    pinState?.request(widget.id, next);
+    updateModelContext().catch(error => console.error('[Mastra dashboard] Pin failed', error));
   };
-  const pin = pinnedWidgets ? { onPin, isPinned: (widgetId: string) => pinnedWidgets.includes(widgetId) } : {};
+  const pin = pinState ? { onPin, isPinned: pinState.isPinned } : {};
 
   return (
-    <MastraServerProvider>
+    <MastraServerProvider createFetch={hostApp => createDashboardDataFetch(hostApp, { projectId: input.projectId })}>
       <MetricsProvider
         preset={preset}
         onPresetChange={setPreset}
