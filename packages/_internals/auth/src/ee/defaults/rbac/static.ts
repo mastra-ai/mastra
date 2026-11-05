@@ -104,7 +104,7 @@ export class StaticRBACProvider<TUser = unknown> implements IRBACProvider<TUser>
     const roleIds = await this.getRoles(user);
 
     // Check cache
-    const cacheKey = roleIds.sort().join(',');
+    const cacheKey = [...roleIds].sort().join(',');
     const cached = this.permissionCache.get(cacheKey);
     if (cached) return cached;
 

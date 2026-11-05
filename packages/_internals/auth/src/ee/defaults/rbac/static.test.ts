@@ -80,4 +80,42 @@ describe('StaticRBACProvider', () => {
       expect(await provider.getPermissionsForRole('unknown')).toEqual([]);
     });
   });
+
+  describe('getPermissions', () => {
+    it('does not reorder the roles array returned by getUserRoles', async () => {
+      const user = { roles: ['viewer', 'admin'] };
+      const provider = new StaticRBACProvider<typeof user>({
+        roleMapping: { admin: ['*'], viewer: ['*:read'] },
+        getUserRoles: u => u.roles,
+      });
+
+      await provider.getPermissions(user);
+
+      expect(user.roles).toEqual(['viewer', 'admin']);
+    });
+
+    it('accepts a frozen roles array from getUserRoles', async () => {
+      const roles = Object.freeze(['viewer', 'admin']) as string[];
+      const provider = new StaticRBACProvider({
+        roleMapping: { admin: ['*'], viewer: ['*:read'] },
+        getUserRoles: () => roles,
+      });
+
+      await expect(provider.getPermissions({})).resolves.toEqual(expect.arrayContaining(['*', '*:read']));
+    });
+
+    it('shares the cache across role orderings', async () => {
+      let roles = ['viewer', 'admin'];
+      const provider = new StaticRBACProvider({
+        roleMapping: { admin: ['*'], viewer: ['*:read'] },
+        getUserRoles: () => roles,
+      });
+
+      const first = await provider.getPermissions({});
+      roles = ['admin', 'viewer'];
+      const second = await provider.getPermissions({});
+
+      expect(second).toBe(first);
+    });
+  });
 });
