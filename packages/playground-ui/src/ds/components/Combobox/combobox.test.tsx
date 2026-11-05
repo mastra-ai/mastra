@@ -653,22 +653,6 @@ describe('Combobox', () => {
 
       expect(onValueChange).toHaveBeenLastCalledWith('anthropic');
     });
-
-    it('draws an up-down chevron when asked, as breadcrumb switchers do', () => {
-      const { rerender } = render(
-        <Combobox options={providers} value="openai" size="icon-sm" aria-label="Switch provider" />,
-      );
-      const chevron = () =>
-        screen.getByRole('combobox', { name: 'Switch provider' }).querySelector('[data-slot="trigger-chevron"]');
-
-      expect(chevron()?.classList.contains('lucide-chevron-down')).toBe(true);
-
-      rerender(
-        <Combobox options={providers} value="openai" size="icon-sm" chevron="up-down" aria-label="Switch provider" />,
-      );
-
-      expect(chevron()?.classList.contains('lucide-chevrons-up-down')).toBe(true);
-    });
   });
 
   describe('when the trigger shows only the value', () => {

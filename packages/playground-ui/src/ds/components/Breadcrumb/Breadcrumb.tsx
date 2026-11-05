@@ -38,6 +38,44 @@ const CrumbSeparatorIcon = () => (
   </svg>
 );
 
+/**
+ * A control after the label (the switcher, or an icon-button action like copy): a 14px glyph in a
+ * box trimmed to its ink (`--crumb-control-ink`), so the gaps around it are exact; the glyph
+ * overflows the box, centered. A text action just takes the gap.
+ */
+const crumbControlClass = cn(
+  'flex h-control-sm shrink-0 items-center',
+  '[&_button]:w-(--crumb-control-ink) [&_button]:min-w-0 [&_button]:overflow-visible [&_button]:bg-transparent! [&_button]:p-0',
+  '[&_button_svg]:m-0 [&_button_svg]:size-3.5 [&_button_svg]:shrink-0',
+);
+
+/** A control that is its own click target hovers as a 20px circle behind the glyph. */
+const crumbControlHoverClass = cn(
+  '[&_button]:relative [&_button]:isolate',
+  '[&_button]:before:absolute [&_button]:before:top-1/2 [&_button]:before:left-1/2 [&_button]:before:-z-10',
+  '[&_button]:before:size-5 [&_button]:before:-translate-x-1/2 [&_button]:before:-translate-y-1/2 [&_button]:before:rounded-full',
+  '[&_button]:before:transition-colors [&_button]:before:duration-normal [&_button]:before:ease-out-custom',
+  '[&_button:enabled:hover]:before:bg-fill-subtle [&_button[data-popup-open]]:before:bg-fill-subtle',
+);
+
+/** The label's color, hover and width, by what clicking it does. */
+function crumbLabelStateClass({
+  isCurrent,
+  switcherCoversCrumb,
+  switcherBesideLink,
+}: {
+  isCurrent?: boolean;
+  switcherCoversCrumb: boolean;
+  switcherBesideLink: boolean;
+}) {
+  // Long labels truncate: the current crumb gets more room than nav crumbs.
+  if (isCurrent) return 'max-w-xs cursor-default text-foreground';
+  if (switcherCoversCrumb) return cn(quietTextHoverInGroup, 'max-w-48');
+  // Beside its own switcher, the link only brightens: two hover pills side by side would merge.
+  if (switcherBesideLink) return cn(quietTextHover, 'max-w-48 cursor-pointer');
+  return cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill');
+}
+
 export interface CrumbProps {
   isCurrent?: boolean;
   as: React.ElementType;
@@ -81,6 +119,7 @@ export const Crumb = ({
   // A navigating crumb with a switcher has two targets (the name, the icon), so only the icon gets
   // a hover background: two pills side by side would read as one lumpy shape.
   const switcherBesideLink = Boolean(switcher && !switcherCoversCrumb);
+  const hasControl = Boolean(switcher || action);
   const crumbRef = React.useRef<HTMLLIElement>(null);
 
   return (
@@ -90,8 +129,8 @@ export const Crumb = ({
         className={cn(
           'group flex h-control-sm min-w-0 items-center',
           isCurrent ? 'shrink' : 'shrink-0',
-          // The crumb ends 8px after the switcher glyph, as it does after a plain label.
-          switcher && 'pr-2',
+          // The crumb ends 8px after its last control, as it does after a plain label.
+          hasControl && 'pr-2',
           switcherCoversCrumb &&
             'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
         )}
@@ -106,16 +145,9 @@ export const Crumb = ({
             '[li:first-child>&]:ml-[calc(.9em-var(--spacing)*2)]',
             controlSizeClasses.sm,
             controlStateColorTransition,
-            // The switcher glyph follows the text directly; its own margin sets the gap.
-            switcher && 'pr-0',
-            // Long labels truncate: the current crumb gets more room than nav crumbs.
-            isCurrent
-              ? 'max-w-xs cursor-default text-foreground'
-              : switcherCoversCrumb
-                ? cn(quietTextHoverInGroup, 'max-w-48')
-                : switcherBesideLink
-                  ? cn(quietTextHover, 'max-w-48 cursor-pointer')
-                  : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
+            // A control follows the text directly; its own margin sets the gap.
+            hasControl && 'pr-0',
+            crumbLabelStateClass({ isCurrent, switcherCoversCrumb, switcherBesideLink }),
             className,
           )}
           to={to}
@@ -148,29 +180,25 @@ export const Crumb = ({
           <span
             data-slot="crumb-switcher"
             className={cn(
-              'flex h-control-sm shrink-0 items-center',
-              // The trigger is trimmed to its 14px glyph's ink (~7px) so the gaps on both sides
-              // are exact; the glyph overflows the box, centered.
-              '[&_button]:w-[7px] [&_button]:min-w-0 [&_button]:overflow-visible [&_button]:bg-transparent! [&_button]:p-0',
-              '[&_button_svg]:m-0 [&_button_svg]:size-3.5 [&_button_svg]:shrink-0',
+              crumbControlClass,
+              // The up-down chevron's ink is ~7px wide at 14px.
+              '[--crumb-control-ink:7px]',
               switcherCoversCrumb &&
                 'ml-2 [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
-              // Beside a link, a 20px circle behind the glyph; 2px more gap keeps it off the text.
-              switcherBesideLink &&
-                cn(
-                  'ml-2.5 [&_button]:relative [&_button]:isolate',
-                  '[&_button]:before:absolute [&_button]:before:top-1/2 [&_button]:before:left-1/2 [&_button]:before:-z-10',
-                  '[&_button]:before:size-5 [&_button]:before:-translate-x-1/2 [&_button]:before:-translate-y-1/2 [&_button]:before:rounded-full',
-                  '[&_button]:before:transition-colors [&_button]:before:duration-normal [&_button]:before:ease-out-custom',
-                  '[&_button:enabled:hover]:before:bg-fill-subtle [&_button[data-popup-open]]:before:bg-fill-subtle',
-                ),
+              // Beside a link the switcher is its own target; 2px more gap keeps its circle off the text.
+              switcherBesideLink && cn('ml-2.5', crumbControlHoverClass),
             )}
           >
             {/* The switcher's popup opens from the crumb's start, like a menu on the whole crumb. */}
             <PopupAnchorProvider value={crumbRef}>{switcher}</PopupAnchorProvider>
           </span>
         )}
-        {action && <span className="-ml-1 flex h-control-sm shrink-0 items-center">{action}</span>}
+        {action && (
+          // A Lucide glyph's ink is ~12px wide at 14px.
+          <span className={cn(crumbControlClass, crumbControlHoverClass, 'ml-2 [--crumb-control-ink:12px]')}>
+            {action}
+          </span>
+        )}
       </li>
       {!isCurrent && (
         // The box is trimmed to the chevron's ink, so the 14px gap on each side (6px margin plus
