@@ -1973,7 +1973,8 @@ export class InternalMastraMCPClient extends MastraBase {
                   this.log('debug', `Retrying replay-safe tool ${tool.name} after a transport error`, {
                     error: errorKind(e),
                   });
-                  if (this.transport !== failedTransport) {
+                  // A reconnect already in flight is closing this transport, so wait for its replacement.
+                  if (this.transport !== failedTransport || this.reconnectPromise) {
                     await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
                   }
                   return await executeToolCall();

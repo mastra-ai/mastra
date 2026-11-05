@@ -3690,6 +3690,42 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     expect((client as any).transport).toBe(replacementTransport);
   });
 
+  it('retries a read-only tool on the replacement when another call is already reconnecting', async () => {
+    const { client, sdkClient } = createToolClient();
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'lookup', description: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
+      ],
+    });
+    const tool = (await client.tools())['lookup'];
+
+    let finishClose!: () => void;
+    const closing = new Promise<void>(resolve => (finishClose = resolve));
+    const staleTransport = { close: vi.fn(() => closing) };
+    const replacementTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    (client as any).transport = staleTransport;
+    vi.spyOn(client, 'connect').mockImplementation(async () => {
+      (client as any).transport = replacementTransport;
+      return true;
+    });
+    const usedTransports: unknown[] = [];
+    vi.spyOn(sdkClient, 'callTool')
+      .mockRejectedValueOnce(new Error('TypeError: terminated'))
+      .mockImplementation(async () => {
+        usedTransports.push((client as any).transport);
+        return { content: [{ type: 'text', text: 'pong' }] };
+      });
+
+    const reconnect = client.forceReconnect();
+    const result = tool.execute?.({});
+    await vi.waitFor(() => expect(sdkClient.callTool).toHaveBeenCalledOnce());
+    finishClose();
+
+    await expect(result).resolves.toEqual({ content: [{ type: 'text', text: 'pong' }] });
+    await reconnect;
+    expect(usedTransports).toEqual([replacementTransport]);
+  });
+
   it('does not replace a healthy transport after a late failure from an older one', async () => {
     const { client, sdkClient } = createToolClient();
     const staleTransport = { close: vi.fn().mockResolvedValue(undefined) };

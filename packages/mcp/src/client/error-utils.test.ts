@@ -157,6 +157,18 @@ describe('isUnsentRequestError', () => {
     ['transport closed', new Error('Connection closed'), false],
     ['not reconnectable', new Error('Validation failed'), false],
     ['JSON-RPC error quoting a refused connection', new ProtocolError(-32603, 'connect ECONNREFUSED 10.0.0.2:5432'), false],
+    [
+      'HTTP 500 whose body quotes a refused connection',
+      new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint: connect ECONNREFUSED 10.0.0.2:5432', {
+        status: 500,
+      }),
+      false,
+    ],
+    [
+      'HTTP 404 with structured status',
+      new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint (HTTP 404)', { status: 404 }),
+      true,
+    ],
   ])('%s -> %s', (_label, error, unsent) => {
     expect(isUnsentRequestError(error)).toBe(unsent);
   });

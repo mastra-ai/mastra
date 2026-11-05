@@ -42,10 +42,11 @@ const REJECTED_BEFORE_DISPATCH_STATUSES = new Set([400, 401, 403, 404]);
 export function isUnsentRequestError(error: unknown): boolean {
   if (!isReconnectableMCPError(error)) return false;
 
+  // A JSON-RPC error (numeric code) or an HTTP response came from the server, so its
+  // structured status decides, whatever the message text quotes.
   const { httpStatus, code } = getMCPDiscoveryErrorDetails(error);
-  // A numeric code comes from a JSON-RPC error response: the server received the call,
-  // whatever its message text says.
   if (typeof code === 'number') return false;
+  if (httpStatus !== undefined) return REJECTED_BEFORE_DISPATCH_STATUSES.has(httpStatus);
 
   const message = (error as Error).message.toLowerCase();
   if (
@@ -57,7 +58,6 @@ export function isUnsentRequestError(error: unknown): boolean {
     return true;
   }
 
-  if (httpStatus !== undefined) return REJECTED_BEFORE_DISPATCH_STATUSES.has(httpStatus);
   return typeof code === 'string' && CONNECTION_NOT_ESTABLISHED_CODES.has(code);
 }
 
