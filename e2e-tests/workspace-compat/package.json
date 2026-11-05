@@ -7,11 +7,11 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "execa": "^9.6.1",
+    "execa": "^10.2.1",
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",
     "typescript": "catalog:",
-    "verdaccio": "^6.11.1",
+    "verdaccio": "^7.0.2",
     "verdaccio-auth-memory": "^13.1.7",
     "vitest": "catalog:"
   }
