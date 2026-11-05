@@ -47,8 +47,8 @@ function gate() {
 describeForAllEngines('AIMock: agent run topic isolation', engine => {
   const getMock = useLoopScenarioAimock();
   // Concurrent evented hosts sharing the workflow bus reach undefined initData
-  // before these assertions. Reproduced repeatedly; baseline attribution is
-  // unverified, and expected failures are not transport-isolation proof.
+  // before these assertions, including on baseline ccde1973. These expected
+  // failures are not transport-isolation proof.
   // Inngest also fails before isolation assertions: fullStream accesses #options
   // through a Proxy receiver. Reproduced against the real dev server.
   const test = engine === 'evented' || engine === 'inngest' ? it.fails : it;

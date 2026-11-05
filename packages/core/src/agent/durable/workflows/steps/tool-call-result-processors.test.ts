@@ -123,7 +123,7 @@ function runToolCallStep(
 function emittedChunksOfType(type: string) {
   return vi
     .mocked(emitChunkEvent)
-    .mock.calls.map(([, , chunk]) => chunk as any)
+    .mock.calls.map(([, , , chunk]) => chunk as any)
     .filter(chunk => chunk?.type === type);
 }
 
@@ -191,6 +191,7 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
       expect(globalRunRegistry.get(RUN_ID)?.processorStates).toBeInstanceOf(Map);
       expect(vi.mocked(emitChunkEvent)).toHaveBeenCalledWith(
         expect.anything(),
+        AGENT_ID,
         RUN_ID,
         expect.objectContaining({ type: 'tool-result', payload: expect.objectContaining({ result: REDACTED_RESULT }) }),
         true,

@@ -1076,6 +1076,7 @@ describe('durable tool-call background task dispatch', () => {
 
     expect(vi.mocked(emitChunkEvent)).toHaveBeenCalledWith(
       pubsub,
+      AGENT_ID,
       RUN_ID,
       expect.objectContaining({
         type: 'background-task-started',
@@ -1309,10 +1310,10 @@ describe('durable tool-call background task dispatch', () => {
     });
 
     const calls = vi.mocked(emitChunkEvent).mock.calls;
-    const types = calls.map(c => c[2].type);
+    const types = calls.map(c => c[3].type);
     expect(types).toContain('tool-call');
     expect(types).toContain('tool-result');
-    expect(calls.find(c => c[2].type === 'tool-result')?.[2]).toMatchObject({
+    expect(calls.find(c => c[3].type === 'tool-result')?.[3]).toMatchObject({
       payload: { providerMetadata: { mastra: { backgroundTask: { taskId: 't-c', status: 'completed' } } } },
     });
   });
@@ -1356,10 +1357,10 @@ describe('durable tool-call background task dispatch', () => {
     });
 
     const calls = vi.mocked(emitChunkEvent).mock.calls;
-    const types = calls.map(c => c[2].type);
+    const types = calls.map(c => c[3].type);
     expect(types).toContain('tool-call');
     expect(types).toContain('tool-error');
-    expect(calls.find(c => c[2].type === 'tool-error')?.[2]).toMatchObject({
+    expect(calls.find(c => c[3].type === 'tool-error')?.[3]).toMatchObject({
       payload: { providerMetadata: { mastra: { backgroundTask: { taskId: 't-f', status: 'failed' } } } },
     });
   });

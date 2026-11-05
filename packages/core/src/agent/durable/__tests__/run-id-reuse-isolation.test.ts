@@ -136,12 +136,12 @@ describe('ownerless registry entries', () => {
   it("a remote-abort placeholder never hands one instance's controller to another", async () => {
     const runId = 'abort-placeholder-run';
     const pubsub = new EventEmitterPubSub();
-    await ensureRemoteAbortListener(pubsub, runId, alice);
+    await ensureRemoteAbortListener(pubsub, 'test-agent', runId, alice);
     const aliceController = globalRunRegistry.get(runId)?.abortController;
     expect(aliceController).toBeDefined();
 
     expect(getRunRegistryEntry(runId, bob)).toBeUndefined();
-    await ensureRemoteAbortListener(pubsub, runId, bob);
+    await ensureRemoteAbortListener(pubsub, 'test-agent', runId, bob);
     expect(globalRunRegistry.get(runId)?.abortController).toBe(aliceController);
     globalRunRegistry.delete(runId);
   });

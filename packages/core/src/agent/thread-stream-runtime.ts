@@ -3869,7 +3869,7 @@ export class AgentThreadStreamRuntime {
     if (options.agentId !== undefined) {
       const ownerId = preparedRun?.agentId ?? state.threadRunsById.get(runId)?.agent.id;
       // A foreign local run must not intercept a request for a remote agent.
-      if (ownerId !== options.agentId) return false;
+      if (ownerId !== undefined && ownerId !== options.agentId) return false;
     }
     if (!preparedRun) {
       state.abortedRunIds.add(runId);
