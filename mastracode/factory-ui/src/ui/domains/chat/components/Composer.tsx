@@ -44,6 +44,7 @@ import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { mergeDictation } from '../services/dictation';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
@@ -119,9 +120,9 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const updateDraft = setComposerDraft;
 
-  const appendTranscript = (text: string) => {
-    updateDraft(draft.trim() ? `${draft.trimEnd()} ${text}` : text);
-    inputRef.current?.focus();
+  const insertTranscript = (transcript: string, replacing: string) => {
+    updateDraft(current => mergeDictation(current, replacing, transcript));
+    if (!replacing) inputRef.current?.focus();
   };
 
   const createThread = async () => {
@@ -328,7 +329,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 <ComposerVoiceButton
                   factoryId={factoryId}
                   disabled={textareaDisabled || preview !== undefined}
-                  onTranscript={appendTranscript}
+                  onTranscript={insertTranscript}
                   onError={message => pushNotice(message, 'error')}
                 />
               )}

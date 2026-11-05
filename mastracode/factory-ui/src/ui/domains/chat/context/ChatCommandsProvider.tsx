@@ -1,5 +1,5 @@
 import { createContext, useContext, useRef, useState } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { Dispatch, ReactNode, RefObject, SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 
 import type { SlashCommand } from '../services/commands';
@@ -14,7 +14,7 @@ export interface ChatCommandsApi {
   composerDraft: string;
   composerPreview: ComposerPreview | undefined;
   composerInputRef: RefObject<HTMLTextAreaElement | null>;
-  setComposerDraft: (draft: string) => void;
+  setComposerDraft: Dispatch<SetStateAction<string>>;
   showComposerPreview: (text: string) => void;
   clearComposerPreview: (text: string) => void;
   prefillComposer: (draft: string) => void;

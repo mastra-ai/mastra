@@ -17,7 +17,7 @@ const TOOLTIPS: Record<VoiceDictationState, string> = {
 interface ComposerVoiceButtonProps {
   factoryId: string;
   disabled: boolean;
-  onTranscript: (text: string) => void;
+  onTranscript: (transcript: string, replacing: string) => void;
   onError: (message: string) => void;
 }
 
