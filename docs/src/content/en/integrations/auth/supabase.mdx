@@ -1,20 +1,35 @@
 ---
 title: "Supabase | Auth"
-description: "Authenticate Mastra server requests with Supabase Auth, configure the provider, retrieve user access tokens, and connect MastraClient securely."
+description: "Give Mastra agents Supabase tools through Mastra Connect, and authenticate Mastra server requests with Supabase Auth and MastraClient."
 packages:
   - "@mastra/auth-supabase"
   - "@mastra/client-js"
+  - "@mastra/connect"
   - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import SupabaseConnectTools from "@site/src/components/connect/generated/supabase.mdx";
 
 # Supabase
 
+Use Supabase with Mastra in two ways:
+
+- **Agent tools** let an agent query tables, call database functions, and manage storage and auth users in Supabase through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Server authentication](#server-authentication)** verifies requests to your Mastra server with Supabase, using the `@mastra/auth-supabase` package.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<SupabaseConnectTools />
+
+## Server authentication
+
 The `@mastra/auth-supabase` package provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `auth` option.
 
-## Prerequisites
+### Prerequisites
 
 This example uses Supabase Auth. Make sure to add your Supabase credentials to your `.env` file and ensure your Supabase project is properly configured.
 
@@ -29,7 +44,7 @@ Review your Supabase Row Level Security (RLS) settings to ensure proper data acc
 
 :::
 
-## Installation
+### Installation
 
 Before you can use the `MastraAuthSupabase` class you have to install the `@mastra/auth-supabase` package.
 
@@ -37,7 +52,7 @@ Before you can use the `MastraAuthSupabase` class you have to install the `@mast
 npm install @mastra/auth-supabase@latest
 ```
 
-## Usage example
+### Usage example
 
 ```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -61,11 +76,11 @@ Visit [MastraAuthSupabase](/reference/auth/supabase) for all available configura
 
 :::
 
-## Client-side setup
+### Client-side setup
 
 When using Supabase auth, you'll need to retrieve the access token from Supabase on the client side and pass it to your Mastra requests.
 
-### Retrieving the access token
+#### Retrieving the access token
 
 Use the Supabase client to authenticate users and retrieve their access token:
 
@@ -88,7 +103,7 @@ Refer to the [Supabase documentation](https://supabase.com/docs/guides/auth) for
 
 :::
 
-## Configuring `MastraClient`
+### Configuring `MastraClient`
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
 
@@ -111,7 +126,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 
 :::
 
-### Making authenticated requests
+#### Making authenticated requests
 
 Once `MastraClient` is configured with the Supabase access token, you can send authenticated requests:
 
