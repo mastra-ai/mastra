@@ -69,8 +69,9 @@ export function knowledgePageRefIndex(
 
 /**
  * The page a note's `[[ref]]` links to: only one the server resolved the note's mentions to. When the index
- * can't walk the ref's path (pages on the way aren't loaded), the mentioned page whose key ends the path
- * stands for it, if just one does.
+ * can't walk the ref's path (pages on the way aren't loaded), a mentioned page stands for it if it is the only
+ * one in the ref's scope (which must be loaded) whose key ends the path and whose loaded parents match the
+ * keys before it.
  */
 export function noteMentionTarget(
   index: KnowledgePageRefIndex,
@@ -80,18 +81,37 @@ export function noteMentionTarget(
 ): KnowledgePagePayload | undefined {
   const resolved = index.resolve(ref);
   if (resolved) return mentions.includes(resolved.id) ? resolved : undefined;
-  const hash = ref.indexOf('#');
+  const trimmed = ref.trim();
+  const hash = trimmed.indexOf('#');
   if (hash <= 0) return undefined;
-  const key = ref
-    .slice(hash + 1)
-    .trim()
-    .split('/')
-    .at(-1);
+  const address = trimmed.slice(0, hash);
+  const scope = [...pagesById.values()].find(candidate => candidate.isScope && candidate.address === address);
+  if (!scope) return undefined;
+  const keys = trimmed.slice(hash + 1).split('/');
   const candidates = mentions.flatMap(id => {
     const page = pagesById.get(id);
-    return page && !page.isScope && page.key === key ? [page] : [];
+    return page && onPath(page, scope, keys, pagesById) ? [page] : [];
   });
   return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+/** Whether `page` can sit at `keys` under `scope`: its key and every loaded parent's key match, in that scope. */
+function onPath(
+  page: KnowledgePagePayload,
+  scope: KnowledgePagePayload,
+  keys: string[],
+  pagesById: ReadonlyMap<string, KnowledgePagePayload>,
+): boolean {
+  if (page.isScope || page.deletedAt || page.mergedInto || page.scopeId !== scope.id) return false;
+  let current = page;
+  for (let depth = keys.length - 1; depth >= 0; depth--) {
+    if (current.key !== keys[depth]) return false;
+    if (current.parentId === scope.id) return depth === 0;
+    const parent = current.parentId ? pagesById.get(current.parentId) : undefined;
+    if (!parent) return true;
+    current = parent;
+  }
+  return false;
 }
 
 const WIKILINK = /\[\[([^\]]+)\]\]/g;

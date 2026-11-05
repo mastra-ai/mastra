@@ -82,10 +82,12 @@ describe('knowledgePageRefIndex with pages fetched by ref', () => {
 });
 
 describe('noteMentionTarget', () => {
+  const notion = page('notion', null, { name: 'Notion', address: 'notion:acme:conn' });
   const plan = page('plan', 'parent', { scopeId: 'notion', name: 'Q3 launch plan', key: 'abc123' });
   const twin = page('twin', 'elsewhere', { scopeId: 'notion', name: 'Twin', key: 'abc123' });
-  const byId = (...pages: KnowledgePagePayload[]) => new Map(pages.map(candidate => [candidate.id, candidate]));
-  const index = knowledgePageRefIndex([docs, workflows, suspend]);
+  const byId = (...pages: KnowledgePagePayload[]) =>
+    new Map([notion, ...pages].map(candidate => [candidate.id, candidate]));
+  const index = knowledgePageRefIndex([docs, workflows, suspend, notion]);
 
   it('links a ref the index resolves only to a page the note mentions', () => {
     expect(noteMentionTarget(index, byId(suspend), ['suspend'], 'docs:mastra#workflows/suspend-and-resume')?.id).toBe(
@@ -96,6 +98,34 @@ describe('noteMentionTarget', () => {
 
   it('links a ref whose path is not loaded to the mentioned page its last key names', () => {
     expect(noteMentionTarget(index, byId(plan), ['plan'], 'notion:acme:conn#parent/abc123')?.id).toBe('plan');
+  });
+
+  it("links nothing to a mentioned page in another scope that shares the ref's last key", () => {
+    // [[x#foo]] is loaded and mentioned; [[y#bar/foo]] is mentioned but not loaded.
+    const x = page('x', null, { name: 'X', address: 'x' });
+    const y = page('y', null, { name: 'Y', address: 'y' });
+    const xFoo = page('x-foo', 'x', { scopeId: 'x', name: 'X foo', key: 'foo' });
+    const pages = byId(x, y, xFoo);
+    const refs = knowledgePageRefIndex(pages.values());
+    expect(noteMentionTarget(refs, pages, ['x-foo', 'y-foo'], 'y#bar/foo')).toBeUndefined();
+    expect(noteMentionTarget(refs, pages, ['x-foo', 'y-foo'], 'x#foo')?.id).toBe('x-foo');
+    // Same path shape in the other scope, with its parent unloaded: only the scope tells them apart.
+    const xBarFoo = page('x-bar-foo', 'x-bar', { scopeId: 'x', name: 'X bar foo', key: 'foo' });
+    const nested = byId(x, y, xBarFoo);
+    expect(
+      noteMentionTarget(knowledgePageRefIndex(nested.values()), nested, ['x-bar-foo'], 'y#bar/foo'),
+    ).toBeUndefined();
+  });
+
+  it("links nothing when the ref's scope isn't loaded, or a loaded parent on the way has another key", () => {
+    const y = page('y', null, { name: 'Y', address: 'y' });
+    const baz = page('baz', 'y', { scopeId: 'y', name: 'Baz', key: 'baz' });
+    const yFoo = page('y-foo', 'baz', { scopeId: 'y', name: 'Y foo', key: 'foo' });
+    expect(noteMentionTarget(index, byId(yFoo), ['y-foo'], 'y#bar/foo')).toBeUndefined();
+    const pages = byId(y, baz, yFoo);
+    const refs = knowledgePageRefIndex([y, yFoo]);
+    expect(noteMentionTarget(refs, pages, ['y-foo'], 'y#bar/foo')).toBeUndefined();
+    expect(noteMentionTarget(refs, byId(y, yFoo), ['y-foo'], 'y#bar/foo')?.id).toBe('y-foo');
   });
 
   it('links nothing when no mentioned page, or more than one, has that key', () => {
