@@ -361,6 +361,52 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     ).toHaveLength(1);
   }, 20_000);
 
+  it('lets a response already streaming finish when a total timeout also derives the run signal', async () => {
+    const thread = 'lease-lost-total-timeout-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    const prompt = 'total timeout run';
+    const answer = Array.from({ length: 40 }, (_, index) => `word${index}`).join(' ');
+    llm.on({ userMessage: prompt, sequenceIndex: 0 }, { content: answer }, { streamingProfile: { tps: 30 } });
+    llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'must not be asked for' });
+
+    const shared = new SharedLeases();
+    const agent = replica(shared, new MockMemory());
+    const subscription = await agent.subscribeToThread({ resourceId: RESOURCE, threadId: thread });
+    let streamed = '';
+    const aborts: unknown[] = [];
+    const watching = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<any>) {
+        if (chunk?.type === 'text-delta') streamed += chunk.payload?.text ?? '';
+        if (chunk?.type === 'abort') {
+          aborts.push(chunk.payload);
+          break;
+        }
+      }
+    })();
+
+    const { output, drain } = await startStream(agent, prompt, {
+      maxSteps: 4,
+      memory: { thread, resource: RESOURCE },
+      // A total timeout replaces the run's abort signal with one derived from it, below the publisher's. Steps have
+      // to keep reporting under the run's own object, or a lease loss reads the run as idle and kills the response.
+      modelSettings: { timeout: { totalMs: 60_000 } },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(streamed.length).toBeGreaterThan(0), { timeout: 5_000 });
+
+    shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+    await done;
+    await watching;
+    subscription.unsubscribe();
+
+    expect(streamed).toBe(answer);
+    expect(await output.finishReason).toBe('aborted');
+    expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
+    expect(
+      llm.getRequests().filter(request => JSON.stringify(request.body?.messages ?? []).includes(prompt)),
+    ).toHaveLength(1);
+  }, 20_000);
+
   it('lets a request already sent fail after the lease is lost, without retrying it or trying a fallback model', async () => {
     const thread = 'lease-lost-failed-request-thread';
     const key = [RESOURCE, thread].join('\u0000');
