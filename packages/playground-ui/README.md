@@ -609,28 +609,3 @@ See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packag
 ## Support
 
 We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
-
-## Host feedback configuration
-
-The existing trace and span feedback composers can use host-selected write context
-and hide actions unsupported by that host:
-
-```tsx
-<TracesExplorer
-  {...explorerProps}
-  feedbackOptions={{
-    contextMode: 'resolve',
-    feedbackUserId: null,
-    allowDelete: false,
-    allowReview: false,
-  }}
->
-  {children}
-</TracesExplorer>
-```
-
-`feedbackOptions` also works on standalone `TraceFeedbackTab`, `SpanFeedbackTab`,
-`TraceThreadPanel`, and `ThreadViewByTrace` components. The explorer forwards it
-through its trace/span panels and full-thread drilldown. Omitted options retain
-existing server defaults and actions. These options do not bypass the explorer's
-frontend feature switch or server feedback capability check.
