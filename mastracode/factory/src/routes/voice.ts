@@ -265,8 +265,11 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
             const body: LiveSessionResponse = { mode: 'live', ...session };
             return c.json(body, 200, { 'Cache-Control': 'no-store' });
           } catch (error) {
-            console.warn('[voice] realtime session request failed', { provider: chosen.entry.provider, error });
-            return c.json({ error: `Transcription failed: ${transcriptionFailureReason(error)}.` }, 502);
+            console.warn('[voice] realtime session request failed, recording instead', {
+              provider: chosen.entry.provider,
+              error,
+            });
+            return c.json({ mode: 'batch' } satisfies LiveSessionResponse);
           }
         },
       }),

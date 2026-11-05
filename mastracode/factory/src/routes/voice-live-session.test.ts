@@ -149,30 +149,37 @@ describe('POST /web/voice/live-session', () => {
     expect(mints).toEqual([]);
   });
 
-  it('explains a rejected key without echoing what Mistral said', async () => {
+  it("records the clip with the same key instead when Mistral won't start a live session", async () => {
+    const batchKeys: (string | null)[] = [];
     server.use(
       http.post(CLIENT_SESSIONS_URL, () =>
-        HttpResponse.json({ message: 'Unauthorized: key personal-mistral is revoked', code: '1000' }, { status: 401 }),
+        HttpResponse.json({ message: 'Missing permission: create_client_session', code: '1000' }, { status: 403 }),
       ),
+      http.post('https://api.mistral.ai/v1/audio/transcriptions', ({ request }) => {
+        batchKeys.push(request.headers.get('authorization'));
+        return HttpResponse.json({ model: 'voxtral-mini-latest', text: 'recorded instead', language: 'en', usage: {} });
+      }),
     );
     const { app } = await tenantWithPersonalMistralKey();
 
-    const res = await liveSession(app);
+    const live = await liveSession(app);
+    const recorded = await transcribe(app);
 
-    expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({
-      error: 'Transcription failed: the speech-to-text provider rejected the API key.',
-    });
+    expect(live.status).toBe(200);
+    expect(await live.json()).toEqual({ mode: 'batch' });
+    expect(recorded.status).toBe(200);
+    expect(await recorded.json()).toMatchObject({ text: 'recorded instead' });
+    expect(batchKeys).toEqual(['Bearer personal-mistral']);
   });
 
-  it('says the provider returned an error when the token response is malformed', async () => {
+  it('records the clip instead when the token response is malformed', async () => {
     server.use(http.post(CLIENT_SESSIONS_URL, () => HttpResponse.json({ client_secret: null }, { status: 201 })));
     const { app } = await tenantWithPersonalMistralKey();
 
     const res = await liveSession(app);
 
-    expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({ error: 'Transcription failed: the speech-to-text provider returned an error.' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ mode: 'batch' });
   });
 });
 

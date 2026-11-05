@@ -1,7 +1,4 @@
 ---
-'@mastra/factory': patch
-'@mastra/react': patch
-'@mastra/code-sdk': patch
 '@mastra/voice-deepgram': patch
 ---
 
