@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { ObservabilityContext, TracingOptions } from '@mastra/core/observability';
-import { createTimeTravelExecutionParams, Run } from '@mastra/core/workflows';
+import { createTimeTravelExecutionParams, getStepIds, Run } from '@mastra/core/workflows';
 import type {
   Step,
   TimeTravelContext,
@@ -442,6 +442,13 @@ export class TemporalRun<
     if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
+    const newStepParam = typeof stepParam === 'string' ? stepParam.split('.') : stepParam;
+    const steps = (Array.isArray(newStepParam) ? newStepParam : [newStepParam]).map(step =>
+      typeof step === 'string' ? step : step.id,
+    );
+    if (steps.length !== 1) {
+      throw new Error('Temporal time travel currently supports only top-level sequential step targets.');
+    }
 
     const sourceHandle = this.client.workflow.getHandle(this.runId);
     let sourceStatus: unknown;
@@ -458,10 +465,6 @@ export class TemporalRun<
       throw new Error('This workflow run is still running, cannot time travel');
     }
 
-    const newStepParam = typeof stepParam === 'string' ? stepParam.split('.') : stepParam;
-    const steps = (Array.isArray(newStepParam) ? newStepParam : [newStepParam]).map(step =>
-      typeof step === 'string' ? step : step.id,
-    );
     const inputData = args.inputData;
     const snapshot: WorkflowRunState = {
       runId: this.runId,
@@ -503,19 +506,29 @@ export class TemporalRun<
       throw new Error('Temporal time travel currently supports only top-level sequential step targets.');
     }
     for (const entry of this.executionGraph.steps.slice(0, targetIndex)) {
-      if (entry.type !== 'step') continue;
-      const sourceStepResult = status.steps?.[entry.step.id];
-      if (!sourceStepResult) {
-        throw new Error(
-          `Cannot time travel to step "${steps[0]}" because preceding step "${entry.step.id}" is missing from the source execution.`,
-        );
+      const stepIds = getStepIds(entry);
+      const allowsMissingResults =
+        entry.type === 'sleep' ||
+        entry.type === 'sleepUntil' ||
+        entry.type === 'foreach' ||
+        entry.type === 'loop' ||
+        entry.type === 'conditional';
+      for (const stepId of stepIds) {
+        const sourceStepResult = status.steps?.[stepId];
+        if (!sourceStepResult) {
+          if (allowsMissingResults) continue;
+          throw new Error(
+            `Cannot time travel to step "${steps[0]}" because preceding step "${stepId}" is missing from the source execution.`,
+          );
+        }
+        if (entry.type === 'conditional' && sourceStepResult.status === 'skipped') continue;
+        if (sourceStepResult.status !== 'success') {
+          throw new Error(
+            `Cannot time travel to step "${steps[0]}" because preceding step "${stepId}" did not succeed in the source execution.`,
+          );
+        }
+        timeTravel.stepResults[stepId] ??= sourceStepResult;
       }
-      if (sourceStepResult.status !== 'success') {
-        throw new Error(
-          `Cannot time travel to step "${steps[0]}" because preceding step "${entry.step.id}" did not succeed in the source execution.`,
-        );
-      }
-      timeTravel.stepResults[entry.step.id] ??= sourceStepResult;
     }
     const previousTemporalRunId = (await sourceHandle.describe()).runId;
     const requestContext = args.requestContext ?? new RequestContext<TRequestContext>();

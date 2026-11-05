@@ -165,6 +165,88 @@ describe('TemporalRun', () => {
     expect(start).not.toHaveBeenCalled();
   });
 
+  it('rejects nested time-travel targets before starting a replacement execution', async () => {
+    const schema = z.object({ value: z.number() });
+    const target = createStep({
+      id: 'target',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const query = vi.fn().mockResolvedValue({
+      status: 'success',
+      input: { value: 1 },
+      state: {},
+      steps: {
+        target: { status: 'success', payload: { value: 1 }, output: { value: 1 }, startedAt: 1, endedAt: 2 },
+      },
+      result: { value: 1 },
+    });
+    const describe = vi.fn().mockResolvedValue({ runId: 'temporal-run-1' });
+    const start = vi.fn();
+    const getHandle = vi.fn().mockReturnValue({ query, describe });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .then(target)
+      .commit();
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: 'target.nested' })).rejects.toThrow(
+      'Temporal time travel currently supports only top-level sequential step targets.',
+    );
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsuccessful parallel predecessors before starting a replacement execution', async () => {
+    const schema = z.object({ value: z.number() });
+    const failed = createStep({
+      id: 'failed',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const succeeded = createStep({
+      id: 'succeeded',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData,
+    });
+    const target = createStep({
+      id: 'target',
+      inputSchema: z.record(z.string(), schema),
+      outputSchema: schema,
+      execute: async ({ inputData }) => inputData.succeeded,
+    });
+    const query = vi.fn().mockResolvedValue({
+      status: 'failed',
+      input: { value: 1 },
+      state: {},
+      steps: {
+        failed: { status: 'failed', payload: { value: 1 }, error: new Error('failed'), startedAt: 1, endedAt: 2 },
+        succeeded: { status: 'success', payload: { value: 1 }, output: { value: 2 }, startedAt: 1, endedAt: 2 },
+      },
+      error: new Error('failed'),
+    });
+    const describe = vi.fn().mockResolvedValue({ runId: 'temporal-run-1' });
+    const start = vi.fn();
+    const getHandle = vi.fn().mockReturnValue({ query, describe });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { getHandle, start } } as unknown as Client, taskQueue: 'test-queue' },
+    )
+      .parallel([failed, succeeded])
+      .then(target)
+      .commit();
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.timeTravel({ step: 'target' })).rejects.toThrow(
+      'Cannot time travel to step "target" because preceding step "failed" did not succeed in the source execution.',
+    );
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it('validates graph divergence before starting a replacement execution', async () => {
     const schema = z.object({ value: z.number() });
     const first = createStep({
