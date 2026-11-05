@@ -2,6 +2,10 @@
 '@mastra/core': patch
 ---
 
-Faster model lists from `AgentController.listAvailableModels()`. The models.dev and Netlify catalogs (models.dev's is about 6 MB) are no longer downloaded again on the first call after 10 seconds. A call waits for a catalog only until it has downloaded once. After that, calls answer from the last downloaded catalog and keep it if a download fails. Once it's 5 minutes old, the next call refreshes it in the background without waiting. Calls made at the same time share each download, and a slow or unreachable catalog doesn't hold back the other.
+Improved how fast `AgentController.listAvailableModels()` answers. After the first call, model lists come back right away instead of downloading the models.dev and Netlify catalogs again every 10 seconds.
 
-Credential and custom provider changes still show up within 10 seconds, or on the next call after `invalidateAvailableModelsCache()`. That call no longer waits for the catalogs to download again: it starts the download in the background. Use counts are now current on every call.
+- Model lists stay complete when a catalog download fails. The last downloaded models are kept.
+- Catalogs older than 5 minutes refresh in the background, so calls never wait for them.
+- A slow or unreachable catalog no longer delays the other one.
+- Saved or removed API keys and custom providers still show up within 10 seconds, or on the next call after `invalidateAvailableModelsCache()`. That call no longer waits for the catalogs to download again.
+- Use counts are up to date on every call.
