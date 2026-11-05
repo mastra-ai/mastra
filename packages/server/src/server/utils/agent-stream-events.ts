@@ -32,8 +32,11 @@ export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame
   const logIndex = typeof event.index === 'number' ? { index: event.index } : undefined;
   const abort = { type: 'abort' as const, runId, from: ChunkFrom.AGENT, ...logIndex, payload: {} };
   switch (event.type) {
-    case 'chunk':
-      return [(logIndex ? { ...(event.data as AgentChunkEventData), ...logIndex } : event.data) as AgentChunkEventData];
+    case 'chunk': {
+      // The envelope index is authoritative: drop any index a forwarded sub-agent chunk carried.
+      const { index: _nestedIndex, ...data } = event.data as AgentChunkEventData;
+      return [{ ...data, ...logIndex } as AgentChunkEventData];
+    }
     case 'step-start': {
       const chunk = event.data as AgentChunkEventData;
       return chunk && 'type' in chunk ? [logIndex ? { ...chunk, ...logIndex } : chunk] : [];

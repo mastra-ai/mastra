@@ -683,9 +683,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     try {
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
-          const chunk = (
-            logIndex ? { ...(streamEvent.data as AgentChunkEventData), ...logIndex } : streamEvent.data
-          ) as AgentChunkEventData;
+          // The envelope index is authoritative: drop any index a forwarded sub-agent chunk carried.
+          const { index: _nestedIndex, ...data } = streamEvent.data as AgentChunkEventData;
+          const chunk = { ...data, ...logIndex } as AgentChunkEventData;
           if (chunk.type === 'agent-execution-suspended' || chunk.type === 'tripwire') readLocalRequest = undefined;
           if (typeof streamEvent.producedAt === 'number') stampChunkProducedAt(chunk, streamEvent.producedAt);
           if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);

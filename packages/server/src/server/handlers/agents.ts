@@ -3058,7 +3058,11 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           // Resuming past the run's last entry replays nothing; if that entry ended the
           // run, nothing more will arrive, so close instead of waiting for the idle timeout.
           // Read only after subscribing so a terminal entry racing attachment is not lost.
-          const last = (await pubsub.getHistory(topic, 0)).at(-1);
+          // A failed read only means we can't close early; the idle timer still bounds the stream.
+          const last = await pubsub
+            .getHistory(topic, 0)
+            .then(history => history.at(-1))
+            .catch(() => undefined);
           const type = last?.type === 'chunk' ? last.data?.type : last?.type;
           if (
             typeof last?.index === 'number' &&
