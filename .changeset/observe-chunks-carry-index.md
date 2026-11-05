@@ -21,7 +21,7 @@ const resumed = await agent.observe({ runId, offset });
 await resumed.processDataStream({ onChunk: async chunk => console.log(chunk) });
 ```
 
-Chunks built locally from the stream, such as structured-output `object` and `object-result` chunks, carry no `index` and aren't in the run log, so an offset can only resume from the last chunk that has one.
+Some chunks carry no `index`: structured-output `object` and `object-result` chunks are built locally, and an `abort` chunk is sent beside the `finish` of the same run-log entry, which carries the index. Resume from the last chunk that has an `index`. Indexed chunks are never repeated. A client that reconnects between an `abort` and its `finish` gets the `abort` again.
 
 Resuming a finished plain (non-durable) agent run past its last chunk over HTTP `/observe` now closes the stream right away instead of waiting for the idle timeout.
 

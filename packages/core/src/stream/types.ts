@@ -99,8 +99,8 @@ interface BaseChunkType {
    * Position of the run-log entry this chunk came from, on durable and evented agent streams and
    * on `observe()` for any agent, when the transport numbers its entries. To resume after a dropped connection, observe the run
    * from the last received chunk's `index + 1`. Entries that send no chunk leave gaps. Chunks built locally from the stream, such as
-   * structured-output `object` and `object-result` chunks, carry no index: resume from the last
-   * chunk that has one.
+   * structured-output `object` and `object-result` chunks, carry no index, and neither does an `abort`
+   * chunk, whose index is on the `finish` sent beside it: resume from the last chunk that has one.
    */
   index?: number;
 }

@@ -715,7 +715,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Step start - enqueue if it's a chunk type
           const data = streamEvent.data as ChunkType<OUTPUT>;
           if (data && 'type' in data) {
-            const chunk = logIndex ? { ...data, ...logIndex } : data;
+            const { index: _nestedIndex, ...withoutNestedIndex } = data;
+            const chunk = { ...withoutNestedIndex, ...logIndex } as ChunkType<OUTPUT>;
             if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);
             safeEnqueue(controller, chunk);
           }

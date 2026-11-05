@@ -3415,8 +3415,8 @@ export class Agent extends BaseResource {
    *
    * @param params.runId - The run ID to observe
    * @param params.offset - Run-log position to resume from. Chunks from `observe()`, and from `stream()` on
-   *   durable and evented agents, carry an `index`; pass the last received chunk's `index + 1`. Chunks without an `index`
-   *   (such as structured-output `object` chunks) are skipped when choosing the offset. If omitted,
+   *   durable and evented agents, carry an `index`; pass the `index + 1` of the last chunk that has one. Chunks without an `index`
+   *   (`abort` and structured-output `object` chunks) are skipped when choosing the offset. If omitted,
    *   replays the chunks still cached for the run, or only live chunks if the server's transport can't replay.
    * @returns Promise containing a streaming Response
    *

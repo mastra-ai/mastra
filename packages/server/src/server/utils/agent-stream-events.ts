@@ -40,7 +40,9 @@ export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame
     }
     case 'step-start': {
       const chunk = event.data as AgentChunkEventData;
-      return chunk && 'type' in chunk ? [logIndex ? { ...chunk, ...logIndex } : chunk] : [];
+      if (!chunk || !('type' in chunk)) return [];
+      const { index: _nestedIndex, ...data } = chunk;
+      return [{ ...data, ...logIndex } as AgentChunkEventData];
     }
     case 'finish': {
       const data = event.data as AgentFinishEventData;

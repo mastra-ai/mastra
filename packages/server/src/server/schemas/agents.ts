@@ -744,7 +744,7 @@ export const observeAgentBodySchema = z.object({
     .number()
     .optional()
     .describe(
-      'Run-log position to resume from. Every /observe frame, and every /stream frame from a durable or evented agent, carries an `index`; pass the last received index + 1. If omitted, replays all frames.',
+      'Run-log position to resume from. Every /observe frame, and every /stream frame from a durable or evented agent, carries an `index` except abort frames; pass the index + 1 of the last frame that has one. A client that reconnects between an abort frame and its finish frame gets the abort frame again. If omitted, replays all frames.',
     ),
 });
 
