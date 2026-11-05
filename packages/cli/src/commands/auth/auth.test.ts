@@ -167,11 +167,13 @@ describe('loginAction', () => {
 
     beforeEach(() => {
       mockIsInteractive.mockReturnValue(false);
+      vi.stubEnv('MASTRA_API_TOKEN', '');
       warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     });
 
     afterEach(() => {
+      vi.unstubAllEnvs();
       warnSpy.mockRestore();
       infoSpy.mockRestore();
     });
@@ -226,19 +228,60 @@ describe('loginAction', () => {
       expect(warnSpy.mock.invocationCallOrder[hintIndex]).toBeLessThan(mockLogin.mock.invocationCallOrder[0]!);
     });
 
-    it('skips browser sign-in when MASTRA_API_TOKEN is already set', async () => {
-      mockLoadCredentials.mockResolvedValue(null);
-      vi.stubEnv('MASTRA_API_TOKEN', 'env-token');
-      try {
+    describe('with MASTRA_API_TOKEN set', () => {
+      beforeEach(() => {
+        mockLoadCredentials.mockResolvedValue(null);
+        vi.stubEnv('MASTRA_API_TOKEN', 'env-token');
+      });
+
+      it('skips browser sign-in when the token verifies and an organization resolves', async () => {
+        mockVerifyToken.mockResolvedValue(true);
+        mockGetCurrentOrgId.mockResolvedValue('org-env');
         const { loginAction } = await import('./login.js');
         await loginAction();
 
+        expect(mockVerifyToken).toHaveBeenCalledWith('env-token');
         expect(mockLogin).not.toHaveBeenCalled();
         expect(tokenHintCallIndex()).toBe(-1);
-        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('MASTRA_API_TOKEN is set'));
-      } finally {
-        vi.unstubAllEnvs();
-      }
+        expect(infoSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Authenticated via MASTRA_API_TOKEN (org org-env)'),
+        );
+        expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('env-token'));
+      });
+
+      it('fails without browser sign-in when the token does not verify', async () => {
+        mockVerifyToken.mockResolvedValue(false);
+        const { loginAction } = await import('./login.js');
+
+        await expect(loginAction()).rejects.toThrow(/MASTRA_API_TOKEN is set but could not be verified/);
+        expect(mockLogin).not.toHaveBeenCalled();
+        expect(mockGetCurrentOrgId).not.toHaveBeenCalled();
+      });
+
+      it('fails without browser sign-in when no organization resolves', async () => {
+        mockVerifyToken.mockResolvedValue(true);
+        mockGetCurrentOrgId.mockResolvedValue(null);
+        const { loginAction } = await import('./login.js');
+
+        await expect(loginAction()).rejects.toThrow(/no organization is selected\. Set MASTRA_ORG_ID/);
+        expect(mockLogin).not.toHaveBeenCalled();
+      });
+
+      it('exits 1 through wrapAction when the token does not verify', async () => {
+        mockVerifyToken.mockResolvedValue(false);
+        const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+          const { loginAction } = await import('./login.js');
+          const { wrapAction } = await import('../utils.js');
+          wrapAction(loginAction)();
+          await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(1));
+          expect(errorSpy).toHaveBeenCalledWith(expect.stringMatching(/^Error: MASTRA_API_TOKEN is set/));
+        } finally {
+          exitSpy.mockRestore();
+          errorSpy.mockRestore();
+        }
+      });
     });
 
     it('fails with the MASTRA_API_TOKEN fallback when browser sign-in does not complete', async () => {

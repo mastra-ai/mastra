@@ -4,6 +4,7 @@ import {
   loadCredentials,
   verifyToken,
   tryRefreshToken,
+  getCurrentOrgId,
   isInteractive,
   LoginCancelledError,
 } from './credentials.js';
@@ -18,8 +19,20 @@ export async function loginAction() {
     }
   }
   const interactive = isInteractive();
-  if (!interactive && process.env.MASTRA_API_TOKEN) {
-    console.info('\nMASTRA_API_TOKEN is set, so commands here already use it. Browser sign-in is not needed.\n');
+  const envToken = process.env.MASTRA_API_TOKEN;
+  if (!interactive && envToken) {
+    if (!(await verifyToken(envToken))) {
+      throw new Error(
+        "MASTRA_API_TOKEN is set but could not be verified (the token is invalid or revoked, or the Mastra platform is unreachable). Create a new token with `mastra auth tokens create <NAME>` where you're signed in, or in the dashboard.",
+      );
+    }
+    const orgId = await getCurrentOrgId();
+    if (!orgId) {
+      throw new Error(
+        'MASTRA_API_TOKEN is valid, but no organization is selected. Set MASTRA_ORG_ID to the token’s organization ID.',
+      );
+    }
+    console.info(`\nAuthenticated via MASTRA_API_TOKEN (org ${orgId}). Browser sign-in is not needed.\n`);
     return;
   }
   if (!interactive) {
