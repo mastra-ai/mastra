@@ -424,7 +424,62 @@ describe('Agent client-side tools', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
       const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
       const toolMessage = secondCallBody.messages.find((m: any) => m.role === 'tool');
-      expect(toolMessage.content.map((c: any) => c.toolCallId)).toEqual(['call_1', 'call_2']);
+      expect(toolMessage.content.map((c: any) => ({ toolCallId: c.toolCallId, result: c.result }))).toEqual([
+        { toolCallId: 'call_1', result: { sunny: true } },
+        { toolCallId: 'call_2', result: { time: '12:00' } },
+      ]);
+    });
+  }
+
+  for (const legacy of [false, true]) {
+    it(`${legacy ? 'generateLegacy' : 'generate'}: stops running parallel client tools once aborted`, async () => {
+      const controller = new AbortController();
+      const calls = [
+        { toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } },
+        { toolCallId: 'call_2', toolName: 'timeTool', args: { zone: 'UTC' } },
+      ];
+      const firstResponse = {
+        finishReason: 'tool-calls',
+        toolCalls: legacy ? calls : calls.map(payload => ({ payload })),
+        response: { messages: [{ role: 'assistant', content: [] }] },
+        usage: { totalTokens: 2 },
+      };
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+      const executeWeather = vi.fn(async () => {
+        controller.abort();
+        return { sunny: true };
+      });
+      const executeTime = vi.fn(async () => ({ time: '12:00' }));
+      const clientTools = {
+        weatherTool: createTool({
+          id: 'weatherTool',
+          description: 'Weather',
+          inputSchema: z.object({ location: z.string() }),
+          execute: executeWeather,
+        }),
+        timeTool: createTool({
+          id: 'timeTool',
+          description: 'Time',
+          inputSchema: z.object({ zone: z.string() }),
+          execute: executeTime,
+        }),
+      };
+
+      const run = legacy
+        ? agent.generateLegacy({
+            messages: [{ role: 'user', content: 'hi' }],
+            clientTools,
+            abortSignal: controller.signal,
+          })
+        : agent.generate('hi', { clientTools, abortSignal: controller.signal });
+
+      await expect(run).rejects.toMatchObject({ name: 'AbortError' });
+      expect(executeWeather).toHaveBeenCalledTimes(1);
+      expect(executeTime).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   }
 

@@ -228,6 +228,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId,
   requestContext,
   respondFn,
+  abortSignal,
 }: {
   params: StreamParams<OUTPUT>;
   response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
@@ -236,6 +237,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   threadId?: string;
   requestContext?: RequestContext<any>;
   respondFn: ToolCallRespondFn<OUTPUT>;
+  abortSignal?: AbortSignal;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -259,6 +261,10 @@ async function executeToolCallAndRespond<OUTPUT>({
     // Run every client tool the model called, then send all results back in one turn.
     const toolResults: Record<string, unknown>[] = [];
     for (const toolCall of toolCalls) {
+      // Don't start more client tools once the caller has cancelled.
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+      }
       const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
@@ -1307,6 +1313,10 @@ export class Agent extends BaseResource {
 
       const toolResults: Record<string, unknown>[] = [];
       for (const toolCall of toolCalls) {
+        // Don't start more client tools once the caller has cancelled.
+        if (abortSignal?.aborted) {
+          throw abortSignal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+        }
         const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
@@ -1422,6 +1432,7 @@ export class Agent extends BaseResource {
         threadId,
         requestContext: requestContext as RequestContext<any>,
         respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
+        abortSignal,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
