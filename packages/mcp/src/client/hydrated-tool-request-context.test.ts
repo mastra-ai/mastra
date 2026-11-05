@@ -36,20 +36,26 @@ type ReceivedRequest = { method: string; user: string; text?: string };
 
 const echoCallBody = z.object({ params: z.object({ arguments: z.object({ text: z.string() }) }) });
 
+type LoggingOptions = { logOnEventStream?: boolean; logOnResponse?: boolean };
+
 /**
  * With `logOnEventStream`, the echo tool also sends a server log that belongs to no request, so a
- * 2025-11-25 server delivers it on the client's long-lived event stream (the GET request).
+ * 2025-11-25 server delivers it on the client's long-lived event stream (the GET request). With
+ * `logOnResponse`, it sends the log as part of the `tools/call`, on that request's response stream.
  */
-function buildMcpServer({ logOnEventStream = false } = {}) {
+function buildMcpServer({ logOnEventStream = false, logOnResponse = false }: LoggingOptions = {}) {
   const mcpServer = new McpServer(
     { name: 'per-user-server', version: '1.0.0' },
-    { capabilities: { tools: {}, ...(logOnEventStream ? { logging: {} } : {}) } },
+    { capabilities: { tools: {}, ...(logOnEventStream || logOnResponse ? { logging: {} } : {}) } },
   );
   mcpServer.registerTool(
     'echo',
     { description: 'Echoes the text back', inputSchema: z.object({ text: z.string() }) },
-    async ({ text }): Promise<CallToolResult> => {
+    async ({ text }, ctx): Promise<CallToolResult> => {
       if (logOnEventStream) await mcpServer.sendLoggingMessage({ level: 'info', data: `echo ${text}` });
+      if (logOnResponse) {
+        await ctx.mcpReq.notify({ method: 'notifications/message', params: { level: 'info', data: `echo ${text}` } });
+      }
       return { content: [{ type: 'text', text: `echo: ${text}` }] };
     },
   );
@@ -71,7 +77,7 @@ function modernHandler() {
  * With `logDuringHandshake`, the server sends a log on the `initialize` response, before the
  * client's connect() returns.
  */
-function legacyHandler(options: { logOnEventStream?: boolean; logDuringHandshake?: boolean } = {}) {
+function legacyHandler(options: LoggingOptions & { logDuringHandshake?: boolean } = {}) {
   const sessions = new Map<string, NodeStreamableHTTPServerTransport>();
   const mcpServers: McpServer[] = [];
   const handler = async (req: IncomingMessage, res: ServerResponse, body: unknown) => {
@@ -84,7 +90,10 @@ function legacyHandler(options: { logOnEventStream?: boolean; logDuringHandshake
           sessions.set(id, created);
         },
       });
-      const mcpServer = buildMcpServer({ logOnEventStream: options.logOnEventStream || options.logDuringHandshake });
+      const mcpServer = buildMcpServer({
+        logOnEventStream: options.logOnEventStream || options.logDuringHandshake,
+        logOnResponse: options.logOnResponse,
+      });
       await mcpServer.connect(created);
       mcpServers.push(mcpServer);
       const deliver = created.onmessage;
@@ -380,6 +389,67 @@ describe('hydrated MCP tool on a 2025-11-25 server event stream (issue #29531)',
       ]),
     );
     expect(fromLog).toHaveLength(2);
+  });
+
+  it('sends replies on a connection that a server log reconnects as no call', async () => {
+    const handler = legacyHandler({ logOnEventStream: true });
+    server = await startServer(handler);
+    const catalog = await cachedCatalog(server.url);
+    let reconnect: Promise<void> | undefined;
+    const client = new MCPClient({
+      id: `per-user-reconnect-from-log-${++clientId}`,
+      servers: {
+        demo: {
+          url: server.url,
+          inputRequests: async () => ({ action: 'accept', content: { approved: true } }),
+          fetch: perUserFetch,
+          logger: entry => {
+            if (!reconnect && JSON.stringify(entry.details ?? {}).includes('reconnect now')) {
+              reconnect = client.reconnectServer('demo');
+            }
+          },
+        },
+      },
+    });
+    clients.push(client);
+    const tools = await client.toolsFromDefinitions({ definitions: catalog });
+
+    await tools.demo_echo!.execute!({ text: 'first' }, callAs('alice'));
+    const { received } = server;
+    await vi.waitFor(() => expect(received.some(request => request.method === EVENT_STREAM)).toBe(true));
+    const serversBefore = handler.mcpServers.length;
+    received.length = 0;
+    // A log on the event stream alice's call opened; its callback reconnects, as no call.
+    await handler.mcpServers.at(-1)!.sendLoggingMessage({ level: 'info', data: 'reconnect now' });
+    await vi.waitFor(() => expect(reconnect).toBeDefined());
+    await reconnect;
+    expect(handler.mcpServers.length).toBeGreaterThan(serversBefore);
+    await vi.waitFor(() => expect(received.some(request => request.method === EVENT_STREAM)).toBe(true));
+    expect(new Set(received.map(request => request.user))).toEqual(new Set([NO_REQUEST_CONTEXT]));
+    received.length = 0;
+    const result = await handler.mcpServers.at(-1)!.server.elicitInput({
+      mode: 'form',
+      message: 'Approve?',
+      requestedSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+    });
+
+    expect(result).toMatchObject({ action: 'accept', content: { approved: true } });
+    expect(received.map(({ method, user }) => ({ method, user }))).toEqual([
+      { method: 'POST (no JSON-RPC method)', user: NO_REQUEST_CONTEXT },
+    ]);
+  });
+
+  it("labels a server log on a call's own response stream with that call's requestContext", async () => {
+    server = await startServer(legacyHandler({ logOnResponse: true }));
+    const catalog = await cachedCatalog(server.url);
+    const serverLogs = recordServerLogs();
+    const tools = await perUserClient(server.url, serverLogs.logger).toolsFromDefinitions({ definitions: catalog });
+
+    await tools.demo_echo!.execute!({ text: 'first' }, callAs('alice'));
+    await tools.demo_echo!.execute!({ text: 'second' }, callAs('bob'));
+
+    expect(serverLogs.find('echo first')?.user).toBe('alice');
+    expect(serverLogs.find('echo second')?.user).toBe('bob');
   });
 });
 

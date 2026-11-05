@@ -505,8 +505,8 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   private connectionContextStore = new AsyncLocalStorage<RequestContext | null>();
   /**
-   * The connection context of the stream a server message arrived on, set while that message is
-   * delivered. The transport's fetch reads it only for the client's replies to server requests,
+   * The connection context of the transport a server message arrived on, as it was when that
+   * transport was created, set while the message is delivered. The transport's fetch reads it only for the client's replies to server requests,
    * which belong to the connection rather than to the handler that produced them.
    */
   private replyContextStore = new AsyncLocalStorage<RequestContext | null>();
@@ -812,11 +812,16 @@ export class InternalMastraMCPClient extends MastraBase {
    * no call, so a request its handler sends must not be sent as that call. The client's reply to a
    * server request still is, through `replyContextStore`.
    *
+   * The reply context is the connection context this transport was created in, captured once. Read
+   * at delivery time, it would carry over to a connection that a handler of an older connection's
+   * message opens, such as a `reconnectServer()` from a server log callback.
+   *
    * The SDK assigns `onmessage` during `connect()` and swaps it while probing the server, so every
-   * assignment is wrapped. The wrapper is idempotent: a handler that wraps an already wrapped one
-   * (`interceptTaskResults`, or the probe restoring its saved handler) keeps the reply context.
+   * assignment is wrapped. A handler that wraps an already wrapped one (`interceptTaskResults`, or
+   * the probe restoring its saved handler) runs with the same reply context.
    */
   private deliverOutsideConnectionContext(transport: Transport): void {
+    const replyContext = this.connectionContextStore.getStore() ?? null;
     let deliver: Transport['onmessage'];
     Object.defineProperty(transport, 'onmessage', {
       configurable: true,
@@ -826,11 +831,8 @@ export class InternalMastraMCPClient extends MastraBase {
         deliver =
           handler &&
           ((message, extra) => {
-            const replyContext = this.connectionContextStore.getStore() ?? this.replyContextStore.getStore();
             const dispatch = () => handler.call(transport, message, extra);
-            this.connectionContextStore.exit(() =>
-              replyContext === undefined ? dispatch() : this.replyContextStore.run(replyContext, dispatch),
-            );
+            this.connectionContextStore.exit(() => this.replyContextStore.run(replyContext, dispatch));
           });
       },
     });
