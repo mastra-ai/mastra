@@ -168,7 +168,7 @@ describe('VoiceInputSettings', () => {
     const [picker] = await screen.findAllByRole('combobox', { name: 'Your voice model' });
     await waitFor(() => expect(requested).toEqual(expect.arrayContaining([FACTORY_ID, 'factory-2'])));
     const before = requested.filter(id => id === 'factory-2').length;
-    await user.click(picker!);
+    await user.click(picker);
     await user.click(await screen.findByRole('option', { name: 'Mistral Voxtral Mini' }));
 
     await waitFor(() => expect(requested.filter(id => id === 'factory-2').length).toBe(before + 1));
