@@ -1,5 +1,50 @@
 # mastra
 
+## 1.39.0-alpha.0
+
+### Minor Changes
+
+- Include the required traceId in the score-create CLI help example. ([#29287](https://github.com/mastra-ai/mastra/pull/29287))
+
+- Added the optional `contextMode` argument to score creation. ([#29289](https://github.com/mastra-ai/mastra/pull/29289))
+
+  ```bash
+  mastra api score create '{"contextMode":"resolve","score":{"traceId":"trace_123","scorerId":"quality","score":0.95}}'
+  ```
+
+### Patch Changes
+
+- Fixed Studio dictation replacing your edits: text typed into the chat composer after dictating no longer snaps back to the dictated text. ([#29310](https://github.com/mastra-ai/mastra/pull/29310))
+
+- Studio shows metadata such as dataset versions, experiment details, trace rows, and connection details as separate fields instead of joining them with `·` or `—` separators. Tooltips and status messages read as plain sentences. ([#29312](https://github.com/mastra-ai/mastra/pull/29312))
+
+- Added annotations to Studio and Factory chat, so you can point the agent at parts of a reply and comment on them. ([#29310](https://github.com/mastra-ai/mastra/pull/29310))
+
+  - Select text in a message and choose **Add to chat**, or press Tab to reach it from the keyboard.
+  - The passage gets a numbered bubble that stays with the text as you scroll. Select the bubble to comment on the passage or remove it.
+  - The composer counts what you added, for example **2 annotations**. Open the count to jump to a passage.
+  - When you send, the agent receives a numbered list of the passages, each quoted with its comment, ahead of what you typed. You can send annotations without typing anything.
+  - If a message fails to send, its annotations come back.
+
+- Fixed new projects getting an organization (v2) Gateway key, which broke Studio threads with `Gateway API error 404`. New projects now get a Gateway project key, so Studio memory and threads work again. ([#29369](https://github.com/mastra-ai/mastra/pull/29369))
+
+- Fixed CLI sign-in when the terminal runs on another machine (SSH, containers, cloud dev boxes). The CLI now always prints the sign-in link, and if the browser can't reach the CLI after you sign in, you can paste the page's URL into the terminal to finish. ([#29182](https://github.com/mastra-ai/mastra/pull/29182))
+
+- MCP Apps in Studio chat can now hand context to the agent. Studio keeps the latest context from each app and adds it to your next message only, as a clearly marked block of untrusted app data. The context never reaches the agent's instructions, so an app cannot give the model orders with system-level authority, and you can see what the app shared in the chat. For example, a dashboard drilldown passes the exact filters you clicked and posts a short message. If the message fails to send, the context is kept for the retry. ([#29321](https://github.com/mastra-ai/mastra/pull/29321))
+
+- Factory chats now show how a tool call failed and what it reported: ([#29314](https://github.com/mastra-ai/mastra/pull/29314))
+
+  - A failed command's row shows how it ended: `exit N`, `killed`, `timed out`, or `error` when the sandbox could not run it. Its output keeps everything it printed and ends with the exit code, plus the full error when the command could not run. Before, a command that printed something before failing showed only that output.
+  - Failed results are shown in red, and results are no longer cut off at 800 characters.
+  - A successful file edit shows what the edit reported, such as diagnostics, next to the change.
+  - While a command runs, you can scroll up through its output without it jumping back to the latest line on every update.
+
+- Updated the Factory API metadata so `mastra api` describes the linked repositories that the Factory project list now returns with each project. ([#29322](https://github.com/mastra-ai/mastra/pull/29322))
+
+- Updated dependencies [[`1a078af`](https://github.com/mastra-ai/mastra/commit/1a078afbb1cb4ac73eca047e80d366c57e83e5e8), [`a3caf25`](https://github.com/mastra-ai/mastra/commit/a3caf25629671bb76fdfdef77189443b02f550b8), [`eaa3b5c`](https://github.com/mastra-ai/mastra/commit/eaa3b5ce1ea71e484666eb096a0db8b96bfd2c0b), [`49eaabb`](https://github.com/mastra-ai/mastra/commit/49eaabb19b1a28e3614cc79e82a30ab342530f85), [`4afecea`](https://github.com/mastra-ai/mastra/commit/4afeceaf2de5ae85e9c14d25227805ebaf3eaace), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0893940`](https://github.com/mastra-ai/mastra/commit/0893940ca2f2017ccb59432fdd93f63748561e3b), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f2df1f`](https://github.com/mastra-ai/mastra/commit/0f2df1f3d69c25a5bbb6f1f046df30e5a83b8e2b), [`b5acfcd`](https://github.com/mastra-ai/mastra/commit/b5acfcdff695b5c3f42512e4939b3b0eed71ac44), [`aa67776`](https://github.com/mastra-ai/mastra/commit/aa6777693de4d78758e8c4f57e5592fe10bb0b03), [`f611832`](https://github.com/mastra-ai/mastra/commit/f611832d661439f6b2aada795dcc16efdc2b12c3), [`52af646`](https://github.com/mastra-ai/mastra/commit/52af6465245b1d09c520be19fff88ba34a12e0e4), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`0f8a26f`](https://github.com/mastra-ai/mastra/commit/0f8a26f9112f5946b3c5a3152e79003daaa4cdde), [`b4fdcf5`](https://github.com/mastra-ai/mastra/commit/b4fdcf59a5df1baeb0c4683bb1e6e0175a37df6d), [`742b37d`](https://github.com/mastra-ai/mastra/commit/742b37dc32d863a116821acf92c07a26d2b926fc), [`a5d56cd`](https://github.com/mastra-ai/mastra/commit/a5d56cd4aaec46f84a1217ab2dd62375b6b5e354), [`c351978`](https://github.com/mastra-ai/mastra/commit/c3519781275689a562e9347121b6316c909c5cdb), [`f9feb98`](https://github.com/mastra-ai/mastra/commit/f9feb98ba33a362ace4db6ad8ec6ac01ca933ca5), [`33d1dc2`](https://github.com/mastra-ai/mastra/commit/33d1dc21107c402d244b3ac372d309e0d8e73199), [`8ad7773`](https://github.com/mastra-ai/mastra/commit/8ad7773cd4f50dd344f047547074607f5bb81ff6), [`a7c4069`](https://github.com/mastra-ai/mastra/commit/a7c4069df2d7207a74916e2ced5cc35dc42bf3b6)]:
+  - @mastra/core@1.83.0-alpha.0
+  - @mastra/deployer@1.83.0-alpha.0
+
 ## 1.38.0
 
 ### Minor Changes
