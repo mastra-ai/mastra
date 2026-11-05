@@ -358,11 +358,7 @@ export function McpServerDrawer({
                     ))}
                   </ul>
                   <div>
-                    <Button
-                      size="sm"
-                      type="button"
-                      onClick={() => update({ replaceHeaders: true })}
-                    >
+                    <Button size="sm" type="button" onClick={() => update({ replaceHeaders: true })}>
                       Replace headers
                     </Button>
                   </div>
