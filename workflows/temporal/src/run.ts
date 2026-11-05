@@ -228,7 +228,7 @@ export class TemporalRun<
       input: input as TInput,
       error: error instanceof Error ? error : new Error(String(error)),
       state: initialState,
-      steps: {},
+      steps: toStepResults(input, {}),
     } as WorkflowResult<TState, TInput, TOutput, TSteps>;
   }
 

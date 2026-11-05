@@ -572,6 +572,7 @@ describe('TemporalRun', () => {
       const result = await run.start({ inputData: { value: 1 } });
 
       expect(result.status).toBe('failed');
+      expect(result.steps).toEqual({ input: { value: 1 } });
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', error: failure }));
     });
 
