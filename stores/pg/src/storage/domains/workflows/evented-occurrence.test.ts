@@ -982,4 +982,75 @@ describe('Postgres evented occurrence replay', () => {
       driver.dispose();
     }
   }, 20_000);
+
+  it('reuses a saved foreach iteration and its request context when step.end publish was lost', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const calls: number[] = [];
+    const seen: unknown[] = [];
+    const tag = createStep({
+      id: 'tag',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData, requestContext }) => {
+        calls.push(inputData.n);
+        requestContext.set('tagged', inputData.n);
+        return inputData;
+      },
+    });
+    const read = createStep({
+      id: 'read',
+      inputSchema: z.array(schema),
+      outputSchema: z.object({ tagged: z.unknown() }),
+      execute: async ({ requestContext }) => {
+        seen.push(requestContext.get(MASTRA_AUTH_TOKEN_KEY));
+        return { tagged: requestContext.get('tagged') };
+      },
+    });
+    const workflow = createWorkflow({
+      id: `foreach-lost-end-${randomUUID()}`,
+      inputSchema: z.array(schema),
+      outputSchema: z.object({ tagged: z.unknown() }),
+    })
+      .foreach(tag)
+      .then(read)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+    const publish = driver.pubsub.publish.bind(driver.pubsub);
+    let dropped!: () => void;
+    const lost = new Promise<void>(resolve => {
+      dropped = resolve;
+    });
+    const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (topic === 'workflows' && event.type === 'workflow.step.end' && event.data.stepResults?.tag) {
+        dropped();
+        return;
+      }
+      return publish(topic, event, options);
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-foreach-token');
+      const result = run.start({ inputData: [{ n: 7 }], requestContext });
+      await lost;
+      interrupted.mockRestore();
+      const original = driver.events.find(
+        event =>
+          event.type === 'workflow.step.run' && event.runId === run.runId && event.data.executionPath?.length === 2,
+      )!;
+      const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
+      const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+      if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+      await driver.redeliverEvent(original);
+      expect(await result).toMatchObject({ status: 'success', result: { tagged: 7 } });
+      expect(calls).toEqual([7]);
+      expect(seen).toEqual(['live-foreach-token']);
+    } finally {
+      interrupted.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 20_000);
 });

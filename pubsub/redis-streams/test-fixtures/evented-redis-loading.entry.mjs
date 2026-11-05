@@ -2,6 +2,7 @@
 // API or worker process for evented-redis-loading.test.ts (COR-1502) and
 // evented-step-end-fault.test.ts (#29504). Both talk to Redis (through the
 // test's LOADING proxy for COR-1502) and to Postgres directly.
+import { writeSync } from 'node:fs';
 import { Agent } from '@mastra/core/agent';
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { ConsoleLogger } from '@mastra/core/logger';
@@ -48,7 +49,8 @@ if (stepEndFault) {
       prevResult.output?.toolCallId === 'operation-0'
     ) {
       faulted = true;
-      console.info('step-end-fault');
+      // Written synchronously so process.exit below cannot drop it.
+      writeSync(1, 'step-end-fault\n');
       if (stepEndFault === 'exit') process.exit(1);
       throw new Error('read ECONNRESET');
     }

@@ -2344,6 +2344,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       !resumeSteps?.length &&
       step.type === 'foreach' &&
       !nestedWorkflowStep;
+    let reusedIterationContext: Record<string, unknown> | undefined;
     let nestedRunId = '';
     let authorizedEventId: string | undefined;
     let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
@@ -2672,7 +2673,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (guardIteration) {
       const snapshot = await workflowsStore!.loadWorkflowSnapshot({ workflowName: workflowId, runId });
       const saved = snapshot?.context[leafId]?.metadata?.foreachCompletedIterations?.[executionPath[1]!];
-      if (saved?.eventId === args.eventId) completedResult = saved.result;
+      if (saved?.eventId === args.eventId) {
+        completedResult = saved.result;
+        reusedIterationContext = saved.requestContext;
+      }
     }
 
     // Run nested workflow - only a plain `step` entry can wrap a live Workflow
@@ -3232,7 +3236,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     } finally {
       releaseControl?.();
     }
-    requestContext = Object.fromEntries(rc.entries());
+    // A reused iteration skipped its body, so forward the context that body produced.
+    requestContext = reusedIterationContext
+      ? restoreLiveRequestContext(reusedIterationContext, Object.fromEntries(rc.entries()))
+      : Object.fromEntries(rc.entries());
     if (guardStart) {
       stepResult.metadata = { ...stepResult.metadata, startedBy: args.eventId };
     }
@@ -3433,7 +3440,13 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...(Array.isArray(storedResult?.output) ? { output: storedResult.output.map(() => null) } : {}),
             metadata: {
               ...(storedResult?.metadata as Record<string, unknown> | undefined),
-              foreachCompletedIterations: { [executionPath[1]!]: { eventId: args.eventId, result: stepResult } },
+              foreachCompletedIterations: {
+                [executionPath[1]!]: {
+                  eventId: args.eventId,
+                  result: stepResult,
+                  requestContext: withoutAuthToken(requestContext),
+                },
+              },
             },
           },
         });
