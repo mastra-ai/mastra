@@ -41,6 +41,9 @@ type Call = { method: string; path: string; body?: unknown };
  * A stateful stand-in for the Factory's MCP server routes: mutations change
  * what the next list returns, like the real ones.
  */
+// Deliberately not the UI's API origin: the Factory reports the redirect URI its callback is served on.
+const REDIRECT_URI = 'https://factory.example.com/auth/mcp-servers/callback';
+
 function mockMcpServersApi({
   servers: initial = [docsServer, crmServer],
   canManage = true,
@@ -61,7 +64,11 @@ function mockMcpServersApi({
     http.get(`${TEST_BASE_URL}/web/config/features`, () => HttpResponse.json(features)),
     http.get(API, () => {
       record('GET', '');
-      return HttpResponse.json<McpServersResponse>({ servers, canManage, oauth: { metadataDocument } });
+      return HttpResponse.json<McpServersResponse>({
+        servers,
+        canManage,
+        oauth: { metadataDocument, redirectUri: REDIRECT_URI },
+      });
     }),
     http.post<never, CreateMcpServerRequest>(API, async ({ request }) => {
       const body = await request.json();
@@ -311,7 +318,7 @@ describe('McpServersSection', () => {
       await user.type(screen.getByRole('textbox', { name: 'Server URL' }), 'https://id.example.com/mcp');
       await user.click(screen.getByRole('radio', { name: 'OAuth' }));
       expect(screen.getByText(/register it with the authorization server/)).toBeInTheDocument();
-      expect(screen.getByText(`${TEST_BASE_URL}/auth/mcp-servers/callback`)).toBeInTheDocument();
+      expect(screen.getByText(REDIRECT_URI)).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Add and sign in' }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -413,10 +420,26 @@ describe('McpServersSection', () => {
       const url = screen.getByRole('textbox', { name: 'Server URL' });
       await user.clear(url);
       await user.type(url, 'https://docs.example.com/v2/mcp');
-      expect(screen.queryByText(/removes its saved credentials/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Changing the server address/)).not.toBeInTheDocument();
       await user.clear(url);
       await user.type(url, 'https://docs.example.org/mcp');
-      expect(screen.getByText(/removes its saved credentials, sign-in, and tools/)).toBeInTheDocument();
+      expect(
+        screen.getByText('Changing the server address removes its saved token and tools. Enter the token again.'),
+      ).toBeInTheDocument();
+      // New credentials of another kind have nothing saved to re-enter.
+      await user.click(screen.getByRole('radio', { name: 'Custom headers' }));
+      expect(screen.getByText('Changing the server address removes its tools.')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      await user.click(within(await row('CRM')).getByRole('button', { name: 'Edit' }));
+      const crmUrl = await screen.findByRole('textbox', { name: 'Server URL' });
+      await user.clear(crmUrl);
+      await user.type(crmUrl, 'https://crm.example.org/mcp');
+      expect(
+        screen.getByText(
+          'Changing the server address signs it out and removes its client secret and tools. Enter the client secret again, then sign in after saving.',
+        ),
+      ).toBeInTheDocument();
     });
 
     it('warns that changing the URL of an OAuth server signs it out', async () => {
@@ -490,6 +513,27 @@ describe('McpServersSection', () => {
         { method: 'POST', path: `/${CRM_ID}/oauth/start`, body: { factoryProjectId: 'fp-1' } },
       ]);
       expect(within(await row('CRM')).getByRole('button', { name: 'Sign in' })).toBeDisabled();
+    });
+
+    it('offers to sign in again when the server refused the saved sign-in', async () => {
+      const refused: McpServerInfo = {
+        ...crmServer,
+        oauth: { ...crmServer.oauth!, connected: true },
+        lastError: 'Sign in to connect this server.',
+      };
+      const api = mockMcpServersApi({ servers: [refused] });
+      const user = userEvent.setup();
+      renderSection();
+
+      const crm = await row('CRM');
+      expect(within(crm).getByText('OAuth, not signed in')).toBeInTheDocument();
+      expect(within(crm).queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
+      await user.click(within(crm).getByRole('button', { name: 'Sign in' }));
+
+      await waitFor(() => expect(goToMcpServerSignIn).toHaveBeenCalledWith(AUTHORIZATION_URL));
+      expect(api.mutations()).toEqual([
+        { method: 'POST', path: `/${CRM_ID}/oauth/start`, body: { factoryProjectId: 'fp-1' } },
+      ]);
     });
 
     it("reports a failed connection on that server's row", async () => {
@@ -574,7 +618,7 @@ describe('McpServersSection', () => {
             : HttpResponse.json<McpServersResponse>({
                 servers: [docsServer],
                 canManage: true,
-                oauth: { metadataDocument: true },
+                oauth: { metadataDocument: true, redirectUri: REDIRECT_URI },
               }),
         ),
       );

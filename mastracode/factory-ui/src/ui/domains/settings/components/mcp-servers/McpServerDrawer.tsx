@@ -21,7 +21,6 @@ import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { useApiConfig } from '../../../../../api/config';
 import type {
   CreateMcpServerRequest,
   McpServerAuthType,
@@ -56,8 +55,6 @@ const AUTH_TYPE: Record<AuthChoice, McpServerAuthType> = {
   oauth: 'oauth',
 };
 
-const CALLBACK_PATH = '/auth/mcp-servers/callback';
-
 function savedAuth(server: McpServerInfo): AuthChoice {
   if (server.authType === 'headers') {
     const [only, ...rest] = server.headerNames;
@@ -78,6 +75,23 @@ function initialDraft(server: McpServerInfo | undefined): Draft {
     clientSecret: '',
     scopes: server?.oauth?.scopes.join(' ') ?? '',
   };
+}
+
+/** What moving a server to another origin discards: credentials never follow it there. */
+function originChangeNotice(server: McpServerInfo, auth: AuthChoice): string {
+  if (auth === savedAuth(server)) {
+    if (auth === 'bearer')
+      return 'Changing the server address removes its saved token and tools. Enter the token again.';
+    if (auth === 'headers') {
+      return 'Changing the server address removes its saved headers and tools. Enter the headers again.';
+    }
+    if (auth === 'oauth') {
+      return server.oauth?.hasClientSecret
+        ? 'Changing the server address signs it out and removes its client secret and tools. Enter the client secret again, then sign in after saving.'
+        : 'Changing the server address signs it out and removes its tools. Sign in again after saving.';
+    }
+  }
+  return 'Changing the server address removes its tools.';
 }
 
 function parsedUrl(url: string): URL | null {
@@ -164,6 +178,7 @@ export function McpServerDrawer({
   open,
   server,
   metadataDocument,
+  redirectUri,
   onClose,
   onSaved,
 }: {
@@ -172,11 +187,12 @@ export function McpServerDrawer({
   server?: McpServerInfo;
   /** The Factory can sign in without a client ID. */
   metadataDocument: boolean;
+  /** Where the authorization server sends the browser back, for registering a client. */
+  redirectUri: string;
   onClose: () => void;
   onSaved: (server: McpServerInfo) => void;
 }) {
   const isMobile = useIsMobile();
-  const { baseUrl } = useApiConfig();
   const createMutation = useCreateMcpServer();
   const updateMutation = useUpdateMcpServer();
   const [draft, setDraft] = useState(() => initialDraft(server));
@@ -193,7 +209,6 @@ export function McpServerDrawer({
     server?.authType === 'headers' && draft.auth === savedAuth(server) && !draft.replaceHeaders
       ? server.headerNames
       : null;
-  const redirectUri = new URL(CALLBACK_PATH, baseUrl || window.location.origin).toString();
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -266,10 +281,7 @@ export function McpServerDrawer({
               <FieldDescription>Every member can see this address. Put keys in headers, not the URL.</FieldDescription>
             </Field>
             {originChanged ? (
-              <Notice variant="warning">
-                Changing the server address removes its saved credentials, sign-in, and tools. Enter the credentials
-                again.
-              </Notice>
+              <Notice variant="warning">{originChangeNotice(server, draft.auth)}</Notice>
             ) : (
               signsOut && (
                 <Notice variant="warning">Changing the server URL signs it out. Sign in again after saving.</Notice>

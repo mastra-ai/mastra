@@ -107,6 +107,30 @@ describe('McpServersRuntime.discover', () => {
     });
     expect(server.methods).toEqual([]);
   });
+
+  it('leaves out tools whose names are too long to select, and refuses a catalog too large to store', async () => {
+    const tooLong = 'x'.repeat(257);
+    const named = await startTestMcpServer({ bearerToken: TOKEN, extraToolNames: [tooLong, 'y'.repeat(256)] });
+    const huge = await startTestMcpServer({
+      bearerToken: TOKEN,
+      extraToolNames: ['first', 'second', 'third'],
+      extraToolDescription: 'd'.repeat(800 * 1024),
+    });
+    const ctx = await setup();
+    const store = (url: string, slug: string) =>
+      ctx.storage.create({ orgId: 'org-a', userId: 'admin', input: bearerServer(url, TOKEN, slug) });
+
+    const listed = await ctx.runtime.discover(await store(named.url, 'named'));
+    expect(listed.status === 'connected' && listed.tools.map(tool => tool.name).sort()).toEqual([
+      'add',
+      'echo',
+      'y'.repeat(256),
+    ]);
+    expect(await ctx.runtime.discover(await store(huge.url, 'huge'))).toEqual({
+      status: 'error',
+      error: "The server's tool descriptions are larger than the 2 MB supported.",
+    });
+  });
 });
 
 describe('McpServersRuntime.toolsFor', () => {

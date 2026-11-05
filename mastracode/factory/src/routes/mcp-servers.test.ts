@@ -95,7 +95,11 @@ describe('MCP server routes', () => {
     });
 
     const listed = await json(await ctx.request(admin, 'GET', ''));
-    expect(listed).toEqual({ servers: [server], canManage: true, oauth: { metadataDocument: true } });
+    expect(listed).toEqual({
+      servers: [server],
+      canManage: true,
+      oauth: { metadataDocument: true, redirectUri: 'https://factory.example.com/auth/mcp-servers/callback' },
+    });
 
     const renamed = await ctx.request(admin, 'PATCH', `/${server.id}`, { name: 'Docs search' });
     expect(renamed.status).toBe(200);
@@ -276,7 +280,11 @@ describe('MCP server routes', () => {
     const server = await createServer(ctx, null, bearerBody('http://127.0.0.1:9/mcp'));
 
     const listed = await (await ctx.request(null, 'GET', '')).json();
-    expect(listed).toEqual({ servers: [server], canManage: true, oauth: { metadataDocument: false } });
+    expect(listed).toEqual({
+      servers: [server],
+      canManage: true,
+      oauth: { metadataDocument: false, redirectUri: 'http://localhost:4111/auth/mcp-servers/callback' },
+    });
     expect(await ctx.storage.list({ orgId: 'local' })).toHaveLength(1);
     expect((await ctx.request(null, 'DELETE', `/${server.id}`)).status).toBe(200);
   });
@@ -342,6 +350,34 @@ describe('MCP server routes', () => {
     expect(await ctx.storage.list({ orgId: 'org-a' })).toEqual([]);
   });
 
+  it("refuses an edit whose credentials don't match the server's authentication instead of dropping them", async () => {
+    const ctx = await setup();
+    const bearer = await createServer(ctx, admin, bearerBody('https://mcp.example.com/mcp'));
+    const oauth = await createServer(ctx, admin, {
+      name: 'Identity',
+      url: 'https://id.example.com/mcp',
+      authType: 'oauth',
+      oauth: { clientId: 'factory' },
+    });
+
+    const scopesOnBearer = await ctx.request(admin, 'PATCH', `/${bearer.id}`, { oauth: { scopes: ['read'] } });
+    const headersOnOAuth = await ctx.request(admin, 'PATCH', `/${oauth.id}`, {
+      headers: [{ name: 'X-Api-Key', value: 'key-that-would-be-lost' }],
+    });
+
+    expect(scopesOnBearer.status).toBe(400);
+    expect(await scopesOnBearer.json()).toEqual({
+      error: 'invalid_mcp_server',
+      message: 'OAuth settings are only used with OAuth.',
+    });
+    expect(headersOnOAuth.status).toBe(400);
+    expect(await headersOnOAuth.json()).toEqual({
+      error: 'invalid_mcp_server',
+      message: 'Headers are only used with header authentication.',
+    });
+    expect(await ctx.storage.get({ orgId: 'org-a', id: oauth.id })).toMatchObject({ authType: 'oauth', headers: null });
+  });
+
   it('treats unknown or malformed server ids as not found', async () => {
     const ctx = await setup();
 
@@ -381,5 +417,60 @@ describe('MCP server routes', () => {
 
     expect(disconnect).toHaveBeenCalledTimes(1);
     expect((await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools).toEqual({});
+  });
+
+  it('stops the tools a turn already has from calling a server once it is edited or removed', async () => {
+    const mcp = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    const server = await createServer(ctx, admin, bearerBody(mcp.url));
+    await ctx.request(admin, 'POST', `/${server.id}/discover`);
+    const turn = async () => (await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools;
+    const changed = `MCP server "Docs" was changed or removed after this turn started; its tools can no longer be called in this turn.`;
+
+    const first = await turn();
+    await first.docs_echo!.execute!({ text: 'before the edit' }, {} as never);
+    expect((await ctx.request(admin, 'PATCH', `/${server.id}`, { name: 'Docs search' })).status).toBe(200);
+    await expect(first.docs_echo!.execute!({ text: 'after the edit' }, {} as never)).rejects.toThrow(changed);
+
+    // The next turn gets the edited server's tools again.
+    const second = await turn();
+    await second.docs_echo!.execute!({ text: 'next turn' }, {} as never);
+    expect((await ctx.request(admin, 'DELETE', `/${server.id}`)).status).toBe(200);
+    await expect(second.docs_echo!.execute!({ text: 'after removal' }, {} as never)).rejects.toThrow(
+      changed.replace('"Docs"', '"Docs search"'),
+    );
+
+    expect(mcp.calls.map(call => call.args)).toEqual([{ text: 'before the edit' }, { text: 'next turn' }]);
+    // Nothing reconnected behind the runtime's back.
+    expect(mcp.methods.filter(method => method === 'server/discover' || method === 'initialize')).toHaveLength(3);
+  });
+
+  it('does not mark a server as needing sign-in when another replica just replaced the refused credentials', async () => {
+    const mcp = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    const server = await createServer(ctx, admin, bearerBody(mcp.url));
+    await ctx.request(admin, 'POST', `/${server.id}/discover`);
+    // A session on another replica, sharing only the database.
+    const replica = new McpServersRuntime({ storage: ctx.storage, allowPrivateNetwork: true });
+    onTestFinished(() => replica.close());
+    const { tools } = await replica.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+
+    // Its call is on the way with the old token while an admin rotates it.
+    const held = mcp.holdNextRequest();
+    const call = tools.docs_echo!.execute!({ text: 'old token' }, {} as never).catch((error: unknown) => error);
+    await held.arrived;
+    const rotated = await ctx.request(admin, 'PATCH', `/${server.id}`, {
+      headers: [{ name: 'Authorization', value: 'Bearer rotated-token-8d2f' }],
+    });
+    expect(rotated.status).toBe(200);
+    mcp.acceptToken('rotated-token-8d2f');
+    held.release();
+
+    expect(await call).toBeInstanceOf(Error);
+    expect(mcp.calls).toEqual([]);
+    expect(await ctx.storage.get({ orgId: 'org-a', id: server.id })).toMatchObject({
+      status: 'unknown',
+      lastError: null,
+    });
   });
 });

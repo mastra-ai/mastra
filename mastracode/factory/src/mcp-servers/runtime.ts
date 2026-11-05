@@ -85,7 +85,11 @@ export class McpServersRuntime {
     const url = new URL(record.url);
     const authProvider =
       record.authType === 'oauth' && signedIn && this.#oauthEndpoints
-        ? createMcpOAuthProvider(record, { storage: this.#storage, endpoints: this.#oauthEndpoints })
+        ? createMcpOAuthProvider(record, {
+            storage: this.#storage,
+            endpoints: this.#oauthEndpoints,
+            forSessions: true,
+          })
         : undefined;
     return {
       url,
@@ -122,11 +126,20 @@ export class McpServersRuntime {
       const { definitions, errorDetails } = await client.listToolDefinitionsWithErrors();
       const failure = errorDetails[record.slug];
       if (failure) return classifyFailure(record, failure, policyError);
-      const tools = Object.values(definitions[record.slug] ?? {});
+      // A name longer than a tool selection may carry could never be chosen.
+      const tools = Object.values(definitions[record.slug] ?? {}).filter(
+        tool => tool.name.length <= MCP_SERVER_LIMITS.toolNameLength,
+      );
       if (tools.length > MCP_SERVER_LIMITS.tools) {
         return {
           status: 'error',
           error: `The server offers ${tools.length} tools; at most ${MCP_SERVER_LIMITS.tools} are supported.`,
+        };
+      }
+      if (Buffer.byteLength(JSON.stringify(tools)) > MCP_SERVER_LIMITS.catalogBytes) {
+        return {
+          status: 'error',
+          error: `The server's tool descriptions are larger than the ${MCP_SERVER_LIMITS.catalogBytes / (1024 * 1024)} MB supported.`,
         };
       }
       return { status: 'connected', tools };
@@ -176,7 +189,7 @@ export class McpServersRuntime {
         }
         try {
           const tool = await client.toolFromDefinition({ serverName: record.slug, definition: entry.definition });
-          this.#watchForRefusedCredentials(record, tool);
+          this.#guardTool(record, client, tool);
           tools[entry.exposedName] = tool;
           taken.add(entry.exposedName);
         } catch (error) {
@@ -207,14 +220,24 @@ export class McpServersRuntime {
   }
 
   /**
-   * A tool call the server refuses with a 401 means the saved credentials or
-   * tokens stopped working (an OAuth refresh was already attempted): mark the
-   * server as needing sign-in so sessions stop getting its tools.
+   * Calls only go through the server's current connection: once the server is
+   * edited, removed, or signed out, a tool a turn already holds refuses instead
+   * of reconnecting with the old address and credentials.
+   *
+   * A call the server refuses with a 401 means the saved credentials or tokens
+   * stopped working (an OAuth refresh was already attempted): mark the server
+   * as needing sign-in so sessions stop getting its tools.
    */
-  #watchForRefusedCredentials(record: McpServerRecord, tool: Tool<any, any, any, any>): void {
+  #guardTool(record: McpServerRecord, client: MCPClient, tool: Tool<any, any, any, any>): void {
     const execute = tool.execute;
     if (!execute) return;
+    const current = () => this.#clients.get(record.id)?.client === client;
     tool.execute = async (input, context) => {
+      if (!current()) {
+        throw new Error(
+          `MCP server "${record.name}" was changed or removed after this turn started; its tools can no longer be called in this turn.`,
+        );
+      }
       try {
         return await execute(input, context);
       } catch (error) {
@@ -226,7 +249,8 @@ export class McpServersRuntime {
               id: record.id,
               status: 'needs_auth',
               lastError: needsAuthMessage(record.authType),
-              ifUrl: record.url,
+              // A refusal of credentials an admin has since replaced (on any replica) says nothing about the new ones.
+              ifUpdatedAt: record.updatedAt,
             })
             .catch(() => undefined);
           this.invalidate(record.id);

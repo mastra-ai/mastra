@@ -34,13 +34,14 @@ const STATUS: Record<McpServerStatus, { label: string; variant: BadgeVariant }> 
 
 const errorText = (caught: unknown) => (caught instanceof Error ? caught.message : String(caught));
 
+/** No tokens yet, or the server refused the saved ones. */
 function needsSignIn(server: McpServerInfo): boolean {
-  return server.authType === 'oauth' && server.oauth?.connected !== true;
+  return server.authType === 'oauth' && (server.oauth?.connected !== true || server.status === 'needs_auth');
 }
 
 function authSummary(server: McpServerInfo): string {
   if (server.authType === 'none') return 'No authentication';
-  if (server.authType === 'oauth') return server.oauth?.connected ? 'OAuth, signed in' : 'OAuth, not signed in';
+  if (server.authType === 'oauth') return needsSignIn(server) ? 'OAuth, not signed in' : 'OAuth, signed in';
   return `Headers: ${server.headerNames.join(', ')}`;
 }
 
@@ -243,6 +244,7 @@ export function McpServersSection() {
           open={drawer.open}
           server={drawer.server}
           metadataDocument={data?.oauth.metadataDocument === true}
+          redirectUri={data?.oauth.redirectUri ?? ''}
           onClose={closeDrawer}
           onSaved={saved}
         />

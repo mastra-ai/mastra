@@ -18,6 +18,8 @@ export const MCP_SERVER_LIMITS = {
   serversPerOrg: 50,
   tools: 500,
   toolNameLength: 256,
+  /** Stored tool definitions (descriptions and schemas) per server, as JSON. */
+  catalogBytes: 2 * 1024 * 1024,
 } as const;
 
 export const MCP_SERVER_AUTH_TYPES = ['none', 'headers', 'oauth'] as const;

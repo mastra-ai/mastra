@@ -419,6 +419,20 @@ describe('MCP server OAuth tokens in sessions', () => {
     expect((await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools).toEqual({});
   });
 
+  it("never lets a session whose tokens stopped working break an admin's sign-in in progress", async () => {
+    const ctx = await signedIn();
+    await revokeAccessTokens(ctx.authorizationServer);
+    ctx.authorizationServer.refreshTokens.clear();
+
+    // The admin signs in again while a session still tries to use the server.
+    const callback = await authorize(await startSignIn(ctx, ctx.server.id));
+    const { tools } = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    await expect(tools.orders_echo!.execute!({ text: 'refused' }, {} as never)).rejects.toThrow();
+
+    expect(await deliverCallback(ctx, callback)).toContain('oauth=connected');
+    expect(await getServer(ctx, ctx.server.id)).toMatchObject({ status: 'connected', oauth: { connected: true } });
+  });
+
   it("keeps a refused token refresh's description, which can echo the refresh token, out of sessions and statuses", async () => {
     const ctx = await signedIn();
     const [refreshToken] = ctx.authorizationServer.refreshTokens;

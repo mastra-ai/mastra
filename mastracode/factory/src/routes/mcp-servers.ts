@@ -77,8 +77,12 @@ export interface McpServersResponse {
   servers: McpServerInfo[];
   /** Whether the caller may add, edit, connect, and remove servers (organization admins). */
   canManage: boolean;
-  /** Whether the Factory can sign in to OAuth servers without a client ID (served over https). */
-  oauth: { metadataDocument: boolean };
+  oauth: {
+    /** Whether the Factory can sign in to OAuth servers without a client ID (served over https). */
+    metadataDocument: boolean;
+    /** The redirect URI to register with an authorization server for a pre-registered client. */
+    redirectUri: string;
+  };
 }
 
 /** A single server after a create, edit, connect, tool selection, or sign-out. */
@@ -324,7 +328,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
           return c.json({
             servers: await Promise.all(records.map(record => toMcpServerInfo(ctx.storage, record))),
             canManage: await this.#canManage(c, ctx),
-            oauth: { metadataDocument: Boolean(clientMetadataDocument) },
+            oauth: { metadataDocument: Boolean(clientMetadataDocument), redirectUri: endpoints.redirectUrl },
           } satisfies McpServersResponse);
         }),
       }),

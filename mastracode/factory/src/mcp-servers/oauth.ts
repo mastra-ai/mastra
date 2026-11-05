@@ -1,5 +1,5 @@
 import { auth, MCPOAuthClientProvider } from '@mastra/mcp';
-import type { OAuthClientInformation, OAuthDiscoveryState } from '@mastra/mcp';
+import type { OAuthClientInformation, OAuthDiscoveryState, OAuthStorage } from '@mastra/mcp';
 
 import type { McpServerRecord, McpServersStorage } from '../storage/domains/mcp-servers/base.js';
 import { findOAuthFailure, safeErrorText } from './errors.js';
@@ -74,11 +74,18 @@ export function createMcpOAuthProvider(
     endpoints,
     stateGenerator,
     onRedirectToAuthorization,
+    forSessions = false,
   }: {
     storage: McpServersStorage;
     endpoints: McpOAuthEndpoints;
     stateGenerator?: () => string;
     onRedirectToAuthorization?: (url: URL) => void;
+    /**
+     * Sessions and discovery only use and refresh tokens. When a refresh fails
+     * the SDK starts an authorization nobody will finish; its PKCE verifier and
+     * discovery state must not replace those of an admin's sign-in in progress.
+     */
+    forSessions?: boolean;
   },
 ): MCPOAuthClientProvider | undefined {
   if (!canSignIn(record, endpoints)) return undefined;
@@ -99,11 +106,25 @@ export function createMcpOAuthProvider(
       ...(record.oauthScopes.length > 0 ? { scope: record.oauthScopes.join(' ') } : {}),
     },
     ...(clientInformation ? { clientInformation } : { clientMetadataUrl: endpoints.clientMetadataUrl }),
-    storage: storage.oauthStorage(record.id),
+    storage: forSessions ? withoutSignInWrites(storage.oauthStorage(record.id)) : storage.oauthStorage(record.id),
     // Sessions never send anyone to sign in; a refused token surfaces as `needs_auth`.
     onRedirectToAuthorization: onRedirectToAuthorization ?? (() => undefined),
     ...(stateGenerator ? { stateGenerator } : {}),
   });
+}
+
+const SIGN_IN_KEYS = new Set(['code_verifier', 'discovery_state']);
+
+function withoutSignInWrites(storage: OAuthStorage): OAuthStorage {
+  return {
+    get: key => storage.get(key),
+    set: async (key, value) => {
+      if (!SIGN_IN_KEYS.has(key)) await storage.set(key, value);
+    },
+    delete: async key => {
+      if (!SIGN_IN_KEYS.has(key)) await storage.delete(key);
+    },
+  };
 }
 
 export type McpOAuthStartResult =

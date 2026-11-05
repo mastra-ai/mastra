@@ -23,12 +23,17 @@ export interface TestMcpServer {
   calls: TestMcpServerCall[];
   /** JSON-RPC methods received, in order (`server/discover`, `tools/list`, `tools/call`, ...). */
   methods: string[];
+  /** Accept only this bearer token from now on, as after a credential rotation. */
+  acceptToken(token: string): void;
+  /** Hold the next request until `release()`; `arrived` resolves once it has come in. */
+  holdNextRequest(): { arrived: Promise<void>; release(): void };
   close(): Promise<void>;
 }
 
 /**
  * Starts a real `@mastra/mcp` server over Streamable HTTP on `127.0.0.1:0` with
- * `echo` and `add` tools, plus an echo-like tool for each of `extraToolNames`.
+ * `echo` and `add` tools, plus an echo-like tool for each of `extraToolNames`
+ * (described by `extraToolDescription` when given).
  * With `bearerToken`, requests without
  * `Authorization: Bearer <token>` get a 401. With `authorizationServer`, the
  * server is an OAuth protected resource (RFC 9728) that accepts the access
@@ -38,10 +43,12 @@ export async function startTestMcpServer({
   bearerToken,
   authorizationServer,
   extraToolNames = [],
+  extraToolDescription,
 }: {
   bearerToken?: string;
   authorizationServer?: TestAuthorizationServer;
   extraToolNames?: string[];
+  extraToolDescription?: string;
 } = {}): Promise<TestMcpServer> {
   const calls: TestMcpServerCall[] = [];
   const methods: string[] = [];
@@ -73,7 +80,7 @@ export async function startTestMcpServer({
           name,
           createTool({
             id: name,
-            description: `Echo text back as ${name}.`,
+            description: extraToolDescription ?? `Echo text back as ${name}.`,
             inputSchema: z.object({ text: z.string() }),
             execute: async ({ text }) => {
               calls.push({ tool: name, args: { text } });
@@ -87,7 +94,14 @@ export async function startTestMcpServer({
 
   let origin = '';
   let oauth: ReturnType<typeof createOAuthMiddleware> | undefined;
+  let held: { arrived: () => void; released: Promise<void> } | undefined;
   const http = createServer(async (req, res) => {
+    if (held) {
+      const { arrived, released } = held;
+      held = undefined;
+      arrived();
+      await released;
+    }
     if (oauth && !(await oauth(req, res, new URL(req.url ?? '/', origin))).proceed) return;
     if (bearerToken && req.headers.authorization !== `Bearer ${bearerToken}`) {
       res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unauthorized' }));
@@ -128,7 +142,23 @@ export async function startTestMcpServer({
     await mcp.close();
   };
   onTestFinished(close);
-  return { url: `${origin}/mcp`, host: `127.0.0.1:${port}`, calls, methods, close };
+  return {
+    url: `${origin}/mcp`,
+    host: `127.0.0.1:${port}`,
+    calls,
+    methods,
+    acceptToken: token => {
+      bearerToken = token;
+    },
+    holdNextRequest: () => {
+      let arrived!: () => void;
+      let release!: () => void;
+      const arrival = new Promise<void>(resolve => (arrived = resolve));
+      held = { arrived, released: new Promise<void>(resolve => (release = resolve)) };
+      return { arrived: arrival, release };
+    },
+    close,
+  };
 }
 
 export interface TestAuthorizationServer {

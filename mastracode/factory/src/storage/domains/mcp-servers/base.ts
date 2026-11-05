@@ -417,6 +417,12 @@ export class McpServersStorage extends FactoryStorageDomain {
         const authType = input.authType ?? current.auth_type;
         const urlChanged = url !== current.url;
         const originChanged = new URL(url).origin !== new URL(current.url).origin;
+        if (input.headers && authType !== 'headers') {
+          throw new McpServerInputError('Headers are only used with header authentication.');
+        }
+        if (input.oauth && authType !== 'oauth') {
+          throw new McpServerInputError('OAuth settings are only used with OAuth.');
+        }
 
         let headers = current.headers;
         if (authType !== 'headers') {
@@ -580,16 +586,20 @@ export class McpServersStorage extends FactoryStorageDomain {
     status,
     lastError = null,
     ifUrl,
+    ifUpdatedAt,
   }: {
     orgId: string;
     id: string;
     status: McpServerStatus;
     lastError?: string | null;
     ifUrl?: string;
+    /** Only when the server has not changed since this version was read. */
+    ifUpdatedAt?: Date;
   }): Promise<McpServerRecord | null> {
     let applied = false;
     const row = await this.#db.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, current => {
       if (ifUrl !== undefined && current.url !== ifUrl) return null;
+      if (ifUpdatedAt !== undefined && new Date(current.updated_at).getTime() !== ifUpdatedAt.getTime()) return null;
       applied = true;
       return { status, last_error: lastError, updated_at: new Date() };
     });
