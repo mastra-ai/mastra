@@ -267,6 +267,38 @@ describe('loginAction', () => {
         expect(mockLogin).not.toHaveBeenCalled();
       });
 
+      it('rejects an unverifiable token even when saved credentials are still valid', async () => {
+        mockLoadCredentials.mockResolvedValue({
+          token: 'saved-token',
+          user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
+          organizationId: 'org-1',
+        });
+        mockVerifyToken.mockImplementation(async (token: string) => token === 'saved-token');
+        const { loginAction } = await import('./login.js');
+
+        await expect(loginAction()).rejects.toThrow(/MASTRA_API_TOKEN is set but could not be verified/);
+        expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('Already logged in'));
+        expect(mockLogin).not.toHaveBeenCalled();
+      });
+
+      it('reports the env token, not saved credentials, when both are valid', async () => {
+        mockLoadCredentials.mockResolvedValue({
+          token: 'saved-token',
+          user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
+          organizationId: 'org-1',
+        });
+        mockVerifyToken.mockResolvedValue(true);
+        mockGetCurrentOrgId.mockResolvedValue('org-env');
+        const { loginAction } = await import('./login.js');
+        await loginAction();
+
+        expect(mockVerifyToken).toHaveBeenCalledWith('env-token');
+        expect(infoSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Authenticated via MASTRA_API_TOKEN (org org-env)'),
+        );
+        expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining('Already logged in'));
+      });
+
       it('exits 1 through wrapAction when the token does not verify', async () => {
         mockVerifyToken.mockResolvedValue(false);
         const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);

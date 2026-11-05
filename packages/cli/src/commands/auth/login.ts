@@ -10,16 +10,9 @@ import {
 } from './credentials.js';
 
 export async function loginAction() {
-  const existing = await loadCredentials();
-  if (existing) {
-    const stillValid = (await verifyToken(existing.token)) || Boolean(await tryRefreshToken(existing));
-    if (stillValid) {
-      console.info(`\nAlready logged in as ${existing.user.email}\n`);
-      return;
-    }
-  }
   const interactive = isInteractive();
   const envToken = process.env.MASTRA_API_TOKEN;
+  // Checked before saved credentials because getToken() prefers MASTRA_API_TOKEN.
   if (!interactive && envToken) {
     if (!(await verifyToken(envToken))) {
       throw new Error(
@@ -34,6 +27,14 @@ export async function loginAction() {
     }
     console.info(`\nAuthenticated via MASTRA_API_TOKEN (org ${orgId}). Browser sign-in is not needed.\n`);
     return;
+  }
+  const existing = await loadCredentials();
+  if (existing) {
+    const stillValid = (await verifyToken(existing.token)) || Boolean(await tryRefreshToken(existing));
+    if (stillValid) {
+      console.info(`\nAlready logged in as ${existing.user.email}\n`);
+      return;
+    }
   }
   if (!interactive) {
     console.warn(
