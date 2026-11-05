@@ -66,6 +66,7 @@ import type { AgentScheduleHandler } from '../schedules/define';
 import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
+import { flattenApiRoutes } from '../server';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { SignalProvider } from '../signals/signal-provider';
@@ -1512,7 +1513,12 @@ export class Mastra<
    * ```
    */
   public setServer(server: ServerConfig): void {
-    this.#server = server;
+    this.#server = server.apiRoutes
+      ? {
+          ...server,
+          apiRoutes: flattenApiRoutes(server.apiRoutes),
+        }
+      : server;
   }
 
   /**
@@ -1995,7 +2001,12 @@ export class Mastra<
     }
 
     if (config?.server) {
-      this.#server = config.server;
+      this.#server = config.server.apiRoutes
+        ? {
+            ...config.server,
+            apiRoutes: flattenApiRoutes(config.server.apiRoutes),
+          }
+        : config.server;
       this.#serverExplicit = true;
     }
 

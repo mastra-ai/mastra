@@ -16,8 +16,9 @@ import {
 import type { UIMessageStreamOptions as UIMessageStreamOptionsV7 } from '@internal/ai-v7';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
-import { registerApiRoute } from '@mastra/core/server';
+import { registerApiRoute, registerApiRouteGroup } from '@mastra/core/server';
 import { toAISdkStream } from './convert-streams';
 import { APPROVAL_ID_SEPARATOR } from './helpers';
 import type {
@@ -276,6 +277,108 @@ type ChatStreamHandlerOptionsV7<UI_MESSAGE extends V7UIMessage = V7UIMessage, OU
   messageMetadata?: WithTraceId<UIMessageStreamOptionsV7<UI_MESSAGE>['messageMetadata']>;
 };
 
+async function resolveChatAgent({
+  mastra,
+  agentId,
+  agentVersion,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agentId: string;
+  agentVersion?: AgentVersionOptions;
+  requestContext?: RequestContext;
+}) {
+  const baseAgent = mastra.getAgentById(agentId);
+  if (!baseAgent) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+
+  const editorAgent = mastra.getEditor?.()?.agent;
+  if (editorAgent) {
+    return editorAgent.applyStoredOverrides(baseAgent, agentVersion ?? { status: 'published' }, requestContext);
+  }
+
+  if (agentVersion) {
+    return mastra.getAgentById(agentId, agentVersion);
+  }
+
+  return baseAgent;
+}
+
+function createChatUIMessageStream({
+  result,
+  messages,
+  version,
+  lastMessageId,
+  sendStart,
+  sendFinish,
+  sendReasoning,
+  sendSources,
+  includeSubAgentMetadata,
+  experimentalTransform,
+  onError,
+  messageMetadata,
+}: {
+  result: any;
+  messages: SupportedUIMessage[];
+  version: 'v5' | 'v6' | 'v7';
+  lastMessageId?: string;
+  sendStart: boolean;
+  sendFinish: boolean;
+  sendReasoning: boolean;
+  sendSources: boolean;
+  includeSubAgentMetadata: boolean;
+  experimentalTransform?: MastraStreamTransformOptions<any>;
+  onError?: (error: unknown) => string;
+  messageMetadata?: any;
+}): ReadableStream<any> {
+  if (version === 'v6' || version === 'v7') {
+    const createUIMessageStream = (
+      version === 'v7' ? createUIMessageStreamV7 : createUIMessageStreamV6
+    ) as typeof createUIMessageStreamV6;
+    return createUIMessageStream<any>({
+      originalMessages: messages,
+      execute: async ({ writer }) => {
+        for await (const part of toAISdkStream(result, {
+          from: 'agent',
+          version: 'v6',
+          lastMessageId,
+          sendStart,
+          sendFinish,
+          sendReasoning,
+          sendSources,
+          includeSubAgentMetadata,
+          experimentalTransform,
+          onError,
+          messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
+        })) {
+          writer.write(part);
+        }
+      },
+    }) as ReadableStream<any>;
+  }
+
+  return createUIMessageStreamV5<any>({
+    originalMessages: messages,
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkStream(result, {
+        from: 'agent',
+        lastMessageId,
+        sendStart,
+        sendFinish,
+        sendReasoning,
+        sendSources,
+        includeSubAgentMetadata,
+        experimentalTransform,
+        onError,
+        messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
+      })) {
+        writer.write(part);
+      }
+    },
+  }) as ReadableStream<any>;
+}
+
 /**
  * Framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
  * Use this function directly when you need to handle chat streaming outside of Hono or Mastra's own apiRoutes feature.
@@ -331,30 +434,12 @@ export async function handleChatStream<OUTPUT = undefined>({
     throw new Error('runId is required when resumeData is provided');
   }
 
-  const baseAgent = mastra.getAgentById(agentId);
-  if (!baseAgent) {
-    throw new Error(`Agent ${agentId} not found`);
-  }
-
-  // When an editor is configured, an agent's runtime config (instructions, tools,
-  // model, ...) can live in stored config rather than the code definition. Studio
-  // resolves these stored overrides before every run, so this endpoint must do the
-  // same or it would execute a stale/empty code-defined agent (issue #18574). An
-  // explicit agentVersion (from query params or route options) wins; otherwise we
-  // default to the published version, matching the built-in agent handlers.
-  let agentObj = baseAgent;
-  const editorAgent = mastra.getEditor?.()?.agent;
-  if (editorAgent) {
-    agentObj = await editorAgent.applyStoredOverrides(
-      baseAgent,
-      agentVersion ?? { status: 'published' },
-      requestContext as RequestContext | undefined,
-    );
-  } else if (agentVersion) {
-    // No editor configured: preserve the prior behavior of surfacing the
-    // "editor required for versioned agent lookup" error for explicit versions.
-    agentObj = await mastra.getAgentById(agentId, agentVersion);
-  }
+  const agentObj = await resolveChatAgent({
+    mastra,
+    agentId,
+    agentVersion,
+    requestContext: requestContext as RequestContext | undefined,
+  });
 
   if (!Array.isArray(messages)) {
     throw new Error('Messages must be an array of UIMessage objects');
@@ -451,53 +536,20 @@ export async function handleChatStream<OUTPUT = undefined>({
       ? await agentObj.stream(messagesToSend, { ...baseOptions, structuredOutput })
       : await agentObj.stream(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);
 
-  if (version === 'v6' || version === 'v7') {
-    const createUIMessageStream = (
-      version === 'v7' ? createUIMessageStreamV7 : createUIMessageStreamV6
-    ) as typeof createUIMessageStreamV6;
-    return createUIMessageStream<any>({
-      originalMessages: messages,
-      execute: async ({ writer }) => {
-        // v7 UI chunks are structurally identical to v6 at runtime, so both
-        // versions share the v6 transformer and are re-typed at the boundary.
-        for await (const part of toAISdkStream(result, {
-          from: 'agent',
-          version: 'v6',
-          lastMessageId,
-          sendStart,
-          sendFinish,
-          sendReasoning,
-          sendSources,
-          includeSubAgentMetadata,
-          experimentalTransform: effectiveExperimentalTransform,
-          onError,
-          messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
-        })) {
-          writer.write(part);
-        }
-      },
-    }) as ReadableStream<any>;
-  }
-
-  return createUIMessageStreamV5<any>({
-    originalMessages: messages,
-    execute: async ({ writer }) => {
-      for await (const part of toAISdkStream(result, {
-        from: 'agent',
-        lastMessageId,
-        sendStart,
-        sendFinish,
-        sendReasoning,
-        sendSources,
-        includeSubAgentMetadata,
-        experimentalTransform: effectiveExperimentalTransform,
-        onError,
-        messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
-      })) {
-        writer.write(part);
-      }
-    },
-  }) as ReadableStream<any>;
+  return createChatUIMessageStream({
+    result,
+    messages,
+    version,
+    lastMessageId,
+    sendStart,
+    sendFinish,
+    sendReasoning,
+    sendSources,
+    includeSubAgentMetadata,
+    experimentalTransform: effectiveExperimentalTransform,
+    onError,
+    messageMetadata,
+  });
 }
 
 export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage> = {
@@ -506,6 +558,8 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   version?: 'v5' | 'v6' | 'v7';
   agentVersion?: AgentVersionOptions;
+  /** Register a GET route that replays and follows a client-owned run ID. */
+  reconnect?: boolean;
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -538,6 +592,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * @param {string} [options.path='/chat/:agentId'] - The route path. Include `:agentId` for dynamic routing
  * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing
  * @param {AgentExecutionOptions} [options.defaultOptions] - Default options passed to agent execution
+ * @param {boolean} [options.reconnect=false] - Registers `GET <path>/runs/:runId` for replaying and following resumable runs. The client must generate a fresh `runId` for each generation, include it in the POST body, and retain it for reconnects.
  * @param {boolean} [options.sendStart=true] - Whether to send start events in the stream
  * @param {boolean} [options.sendFinish=true] - Whether to send finish events in the stream
  * @param {boolean} [options.sendReasoning=false] - Whether to include reasoning steps in the stream
@@ -576,6 +631,8 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * - The response is a Server-Sent Events (SSE) stream compatible with the selected AI SDK version
  * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
  * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
+ * - With `reconnect: true`, scoped runs can only be reconnected with matching resource and thread IDs in request context
+ * - Reconnect returns 204 when the run is unknown, expired, or already finished
  */
 export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage>({
   path = '/chat/:agentId',
@@ -584,6 +641,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
   experimentalTransform,
   version = 'v5',
   agentVersion,
+  reconnect = false,
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
@@ -598,7 +656,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
   }
   assertValidHeartbeatMs(heartbeatMs);
 
-  return registerApiRoute(path, {
+  const postRoute = registerApiRoute(path, {
     method: 'POST',
     openapi: {
       summary: 'Chat with an agent',
@@ -819,4 +877,136 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
       return withSseHeartbeat(response, heartbeatMs);
     },
   });
+
+  if (!reconnect) {
+    return postRoute;
+  }
+
+  const reconnectPath = `${path.replace(/\/$/, '')}/runs/:runId`;
+  const reconnectRoute = registerApiRoute(reconnectPath, {
+    method: 'GET',
+    openapi: {
+      summary: 'Reconnect to an agent chat run',
+      description: 'Replay and follow an existing agent run in the AI SDK format',
+      tags: ['ai-sdk'],
+      parameters: [
+        ...(path.includes(':agentId')
+          ? [
+              {
+                name: 'agentId',
+                in: 'path' as const,
+                required: true,
+                schema: { type: 'string' as const },
+              },
+            ]
+          : []),
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'versionId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'status',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', enum: ['draft', 'published'] },
+        },
+      ],
+      responses: {
+        '200': {
+          description: 'Replayable streaming response from the agent run',
+          content: {
+            'text/plain': {
+              schema: { type: 'string' },
+            },
+          },
+        },
+        '204': {
+          description: 'The run is unknown, expired, or already finished',
+        },
+        '404': {
+          description: 'The run does not belong to the current resource or thread',
+        },
+      },
+    },
+    handler: async c => {
+      const mastra = c.get('mastra');
+      const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
+      const agentToUse = agent ?? c.req.param('agentId');
+      const runId = c.req.param('runId');
+
+      if (!agentToUse || !runId) {
+        return new Response(null, { status: 204 });
+      }
+
+      const queryVersionId = c.req.query('versionId');
+      const rawStatus = c.req.query('status');
+      if (queryVersionId && rawStatus) {
+        throw new Error('Query parameters "versionId" and "status" are mutually exclusive');
+      }
+      if (rawStatus && rawStatus !== 'draft' && rawStatus !== 'published') {
+        throw new Error('Query parameter "status" must be "draft" or "published"');
+      }
+      const effectiveAgentVersion: AgentVersionOptions | undefined = queryVersionId
+        ? { versionId: queryVersionId }
+        : rawStatus
+          ? { status: rawStatus as 'draft' | 'published' }
+          : agentVersion;
+
+      const agentObj = await resolveChatAgent({
+        mastra,
+        agentId: agentToUse,
+        agentVersion: effectiveAgentVersion,
+        requestContext,
+      });
+      const runRecord = await agentObj.__getRunRecord(runId);
+      if (!runRecord || runRecord.status === 'finished') {
+        return new Response(null, { status: 204 });
+      }
+
+      const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+      const threadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
+      if (
+        (runRecord.resourceId && resourceId !== runRecord.resourceId) ||
+        (runRecord.threadId && threadId !== runRecord.threadId)
+      ) {
+        return new Response(null, { status: 404 });
+      }
+
+      const observed = await agentObj.observe(runId);
+      const uiMessageStream = createChatUIMessageStream({
+        result: observed.output,
+        messages: [],
+        version,
+        sendStart,
+        sendFinish,
+        sendReasoning,
+        sendSources,
+        includeSubAgentMetadata,
+        experimentalTransform,
+        onError,
+        messageMetadata,
+      });
+
+      let response: Response;
+      if (version === 'v7') {
+        response = createUIMessageStreamResponseV7({ stream: uiMessageStream });
+      } else if (version === 'v6') {
+        response = createUIMessageStreamResponseV6({ stream: uiMessageStream });
+      } else {
+        response = createUIMessageStreamResponseV5({ stream: uiMessageStream });
+      }
+
+      return withSseHeartbeat(response, heartbeatMs);
+    },
+  });
+
+  return registerApiRouteGroup(postRoute, [reconnectRoute]) as ReturnType<typeof registerApiRoute>;
 }

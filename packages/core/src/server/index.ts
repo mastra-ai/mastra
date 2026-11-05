@@ -150,6 +150,21 @@ export function registerApiRoute<P extends string>(path: P, options: RegisterApi
   } as ApiRoute;
 }
 
+/**
+ * Makes one route factory contribute multiple HTTP routes while preserving the
+ * primary route's return shape for direct consumers.
+ */
+export function registerApiRouteGroup(primary: ApiRoute, additionalRoutes: ApiRoute[]): ApiRoute {
+  return {
+    ...primary,
+    _mastraRouteGroup: [primary, ...additionalRoutes],
+  };
+}
+
+export function flattenApiRoutes(routes: ApiRoute[]): ApiRoute[] {
+  return routes.flatMap(route => (route._mastraRouteGroup ? flattenApiRoutes(route._mastraRouteGroup) : [route]));
+}
+
 export function defineAuth<TUser>(config: MastraAuthConfig<TUser>): MastraAuthConfig<TUser> {
   return config;
 }

@@ -28,6 +28,8 @@ type ApiRouteBase = {
   fga?: RouteFGAConfig;
   /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
   _mastraInternal?: true;
+  /** Additional routes contributed by a route factory. Mastra flattens these before server registration. */
+  _mastraRouteGroup?: ApiRoute[];
 };
 
 type HonoApiRoute = ApiRouteBase & {
