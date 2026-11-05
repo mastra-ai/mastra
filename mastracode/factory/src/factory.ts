@@ -48,6 +48,8 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
+import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
@@ -139,6 +141,7 @@ import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from './storage/domains/boards/base.js';
+import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope } from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
@@ -150,12 +153,13 @@ import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { McpServersStorage } from './storage/domains/mcp-servers/base.js';
-import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
-import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
+import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
 import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.js';
@@ -329,11 +333,12 @@ export interface MastraFactoryConfig {
    */
   configVersion?: string;
   /**
-   * Boards served to every project, read-only, next to the boards each project stored.
+   * Boards stored in every project once, next to the boards each project stored.
    *
-   * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
-   * (README § Stored boards). Boards passed here still work: code boards are read-only and served
-   * alongside each project's stored boards.
+   * @deprecated Write board definitions into projects with `factory.upsertBoard()`, or manage them
+   * through the boards API (`/web/factory/projects/:id/boards`,
+   * README "Stored boards"); removal is tracked in mastra-ai/mastra#28920. Boards passed here still
+   * work: each project stores them once and is served from its rows, with the code behaviour they declare.
    */
   boards?: readonly InstalledBoard[];
   /**
@@ -344,10 +349,8 @@ export interface MastraFactoryConfig {
    */
   skills?: readonly InlineSkill[];
   /**
-   * Whether every project gets the built-in Work and Review boards, read-only. Default: true.
-   *
-   * @deprecated Will be replaced by a one-time copy of the built-in boards into each project's
-   * database (mastra-ai/mastra#28920). It still decides whether projects get them until then.
+   * Whether projects get the built-in Work board, stored in each project once, and the legacy
+   * read-only Review board. Default: true.
    */
   includeDefaultBoards?: boolean;
 
@@ -467,7 +470,7 @@ function warnDefinedBoards(boards: BoardRegistry): void {
   if (warnedDefinedBoards || ![...boards.values()].some(isDefinedBoard)) return;
   warnedDefinedBoards = true;
   console.warn(
-    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and these definitions are served read-only next to the boards each project stores. Manage boards through the boards API; see the README "Stored boards" section.',
+    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards live in the database, and each project stores these definitions once. Write board definitions into projects with factory.upsertBoard(), or manage them through the boards API; see the README "Stored boards" section and mastra-ai/mastra#28920.',
   );
 }
 
@@ -509,6 +512,8 @@ export class MastraFactory {
   readonly #boards: BoardRegistry;
   /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
+  /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
+  #boardStore: { writes: BoardWrites; projects: FactoryProjectsStorage; audit: AuditDomain } | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
@@ -563,6 +568,82 @@ export class MastraFactory {
     if (!this.#sandbox) return undefined;
     this.#sandboxDescription ??= describeFactorySandbox(this.#sandbox);
     return this.#sandboxDescription;
+  }
+
+  /**
+   * Writes a board definition into projects: each project that has no board under its key gets
+   * it, and each one that has it, edited or not, has it replaced at the next revision. Use it to
+   * push a board from code into projects; it isn't run for you, and projects created later don't
+   * get it until you run it again. A Work or app board's key keeps that board's code behaviour,
+   * so the definition is checked as an edit is; a new key gets none (no handlers, outcomes, tool or
+   * event rules). The board is validated once, as the boards API does, and each write is audited
+   * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
+   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `code_board` for the
+   * legacy Review board, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
+   * Available after `prepare()`.
+   *
+   * @example
+   * ```ts
+   * const { inserted, updated, unchanged } = await factory.upsertBoard(
+   *   {
+   *     key: 'bugs',
+   *     name: 'Bugs',
+   *     phases: [
+   *       { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+   *       { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
+   *       { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+   *     ],
+   *   },
+   *   { projects: 'all' },
+   * );
+   * ```
+   */
+  async upsertBoard(
+    board: StoredBoardInput,
+    options: { projects: 'all' | readonly StoredBoardScope[] },
+  ): Promise<{ inserted: StoredBoardScope[]; updated: StoredBoardScope[]; unchanged: StoredBoardScope[] }> {
+    const store = this.#boardStore;
+    if (!store) {
+      throw new Error(
+        this.#preparing
+          ? "MastraFactory.upsertBoard(): the boards storage isn't available, so boards can't be stored."
+          : 'MastraFactory.upsertBoard() needs prepare() first.',
+      );
+    }
+    const { writes, projects, audit } = store;
+    const input = writes.validate(board);
+    // Work and app boards are stored per project like any other; the legacy Review board isn't.
+    writes.refuseCodeBoard(input.key, 'edit');
+    await projects.ensureReady();
+    let scopes: StoredBoardScope[];
+    if (options.projects === 'all') {
+      scopes = (await projects.listAll()).map(project => ({ orgId: project.orgId, factoryProjectId: project.id }));
+    } else {
+      scopes = [...options.projects];
+      for (const scope of scopes) {
+        if (!(await projects.get({ orgId: scope.orgId, id: scope.factoryProjectId }))) {
+          throw new BoardWriteError(404, {
+            error: 'project_not_found',
+            message: `Project "${scope.factoryProjectId}" does not exist.`,
+          });
+        }
+      }
+    }
+    const result: { inserted: StoredBoardScope[]; updated: StoredBoardScope[]; unchanged: StoredBoardScope[] } = {
+      inserted: [],
+      updated: [],
+      unchanged: [],
+    };
+    for (const scope of scopes) {
+      const writer: BoardWriter = {
+        id: 'factory',
+        audit: async entry => {
+          await audit.record({ orgId: scope.orgId, actorId: 'factory', actorType: 'system', ...entry });
+        },
+      };
+      result[await writes.upsert(scope, input, writer)].push(scope);
+    }
+    return result;
   }
 
   /**
@@ -712,6 +793,7 @@ export class MastraFactory {
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
+    const voiceSettingsStorage = storage.registerDomain(new VoiceSettingsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -728,6 +810,7 @@ export class MastraFactory {
       channelIdentity: channelIdentityStorage,
       comments: workItemCommentsStorage,
       skillOverrides: skillOverridesStorage,
+      voiceSettings: voiceSettingsStorage,
     };
     const mcpServersConfig = this.#config.mcpServers;
     const mcpServersAllowPrivateNetwork =
@@ -816,6 +899,11 @@ export class MastraFactory {
         codeSkills: this.#skills,
       });
       this.#projectBoards = projectBoards;
+      this.#boardStore = {
+        writes: new BoardWrites({ storage: storedBoardsStorage, boards: projectBoards, workItems: workItemsStorage }),
+        projects: factoryProjectsStorage,
+        audit: auditDomain,
+      };
       await timedPhase('prepare.boards.preload', () =>
         projectBoards
           .preload()
@@ -1184,6 +1272,7 @@ export class MastraFactory {
     const environmentBuilds = this.#environmentBuilds;
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
+      ...(this.#projectBoards ? { boards: this.#projectBoards } : {}),
       sandbox: this.#sandbox,
       ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
@@ -1303,7 +1392,7 @@ export class MastraFactory {
       if (policy) {
         const orgId = tenantOrgId(policy.tenant);
         return policy.tenant.credentialScope === 'factory' && policy.factoryProjectId
-          ? { orgId, userId: factoryMemorySettingsUserId(policy.factoryProjectId) }
+          ? { orgId, userId: factoryProjectSettingsUserId(policy.factoryProjectId) }
           : { orgId, userId: policy.tenant.userId };
       }
       // No tenant pays: the session's Factory row applies.
@@ -1312,7 +1401,7 @@ export class MastraFactory {
       if (!factoryProjectId) return { orgId: 'local', userId: 'local' };
       return {
         orgId: binding?.orgId ?? scope?.factoryOrgId ?? 'local',
-        userId: factoryMemorySettingsUserId(factoryProjectId),
+        userId: factoryProjectSettingsUserId(factoryProjectId),
       };
     };
     const loadMemorySettings = async ({

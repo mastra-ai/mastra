@@ -30,6 +30,9 @@ export const queryKeys = {
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
   boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
+  /** Under `boardCatalog`, so invalidating the catalog also refreshes the board. */
+  board: (factoryProjectId: string | undefined, boardKey: string) =>
+    ['factory', 'boards', factoryProjectId ?? null, 'board', boardKey] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
@@ -133,6 +136,8 @@ export const queryKeys = {
   customProviders: () => ['custom-providers'] as const,
   mcpServers: () => ['mcp-servers'] as const,
   defaultModel: () => ['default-model'] as const,
+  voiceSettingsAll: () => ['voice-settings'] as const,
+  voiceSettings: (factoryId: string) => [...queryKeys.voiceSettingsAll(), factoryId] as const,
   om: (sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) =>
     ['om', sessionId ?? null, factoryId ?? null, threadId ?? null, resourceId ?? null] as const,
   factorySkills: (factoryProjectId?: string) => ['factory', 'skills', factoryProjectId ?? null] as const,
