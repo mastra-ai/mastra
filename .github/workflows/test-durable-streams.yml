@@ -88,8 +88,11 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
-      - name: Run worker takeover tests
-        run: pnpm vitest run src/durable-worker-takeover.test.ts
+      # Both files need a real Redis and Postgres at the same time, which only
+      # this job provisions. An unmatched filter is ignored, so the full-restart
+      # file is picked up as soon as it lands on main.
+      - name: Run durability tests
+        run: pnpm vitest run src/durable-worker-takeover.test.ts src/durable-full-restart.test.ts
         working-directory: pubsub/redis-streams
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
