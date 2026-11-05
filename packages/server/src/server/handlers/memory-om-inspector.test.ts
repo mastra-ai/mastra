@@ -10,7 +10,9 @@ import {
   AWAIT_BUFFER_STATUS_ROUTE,
   GET_MEMORY_CONFIG_ROUTE,
   GET_MEMORY_STATUS_ROUTE,
+  GET_OBSERVATIONAL_MEMORY_CONTEXT_ROUTE,
   GET_OBSERVATIONAL_MEMORY_ROUTE,
+  SEARCH_MEMORY_ROUTE,
 } from './memory';
 import { createTestServerContext } from './test-utils';
 
@@ -65,6 +67,14 @@ describe('Memory handlers with a memory-provided OM inspector', () => {
         history: historyLimit ? [record(1, '- reflected'), record(0, '- first')] : undefined,
       })),
       waitForBuffering: vi.fn(async () => {}),
+      getContext: vi.fn(async () => ({
+        system: '<observations>- user is Ryan</observations>',
+        messages: [{ id: 'm1', role: 'user', content: 'hi', createdAt: new Date('2026-11-05T07:40:00Z') }],
+        observedAt: new Date('2026-11-05T07:39:23Z'),
+      })),
+      searchObservations: vi.fn(async () => [
+        { text: '- user is Ryan', threadId: 't1', observedAt: new Date('2026-11-05T07:39:23Z') },
+      ]),
     };
     memory = new RemoteOMMemory(inspector, storage);
     const agent = new Agent({ id: 'assistant', name: 'assistant', instructions: 'x', model: {} as any, memory });
@@ -171,5 +181,72 @@ describe('Memory handlers with a memory-provided OM inspector', () => {
         threadId: 't1',
       }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('returns what the next turn sends the model', async () => {
+    const result = await GET_OBSERVATIONAL_MEMORY_CONTEXT_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      agentId: 'assistant',
+      resourceId: 'user-1',
+      threadId: 't1',
+    });
+    expect(inspector.getContext).toHaveBeenCalledWith({ threadId: 't1', resourceId: 'user-1' });
+    expect(result).toMatchObject({
+      supported: true,
+      context: { system: '<observations>- user is Ryan</observations>', messages: [{ id: 'm1', content: 'hi' }] },
+    });
+  });
+
+  it('has no context for a thread that does not exist yet', async () => {
+    const result = await GET_OBSERVATIONAL_MEMORY_CONTEXT_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      agentId: 'assistant',
+      resourceId: 'user-1',
+      threadId: 'new-thread',
+    });
+    expect(result).toEqual({ supported: true, context: null });
+    expect(inspector.getContext).not.toHaveBeenCalled();
+  });
+
+  it("refuses context for another resource's thread", async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'someone-else');
+    await expect(
+      GET_OBSERVATIONAL_MEMORY_CONTEXT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        requestContext,
+        agentId: 'assistant',
+        resourceId: 'someone-else',
+        threadId: 't1',
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('reports context as unsupported when the inspector cannot provide it', async () => {
+    delete inspector.getContext;
+    const result = await GET_OBSERVATIONAL_MEMORY_CONTEXT_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      agentId: 'assistant',
+      resourceId: 'user-1',
+      threadId: 't1',
+    });
+    expect(result).toEqual({ supported: false, context: null });
+  });
+
+  it('searches observations instead of semantic recall', async () => {
+    const result = await SEARCH_MEMORY_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      agentId: 'assistant',
+      resourceId: 'user-1',
+      threadId: 't1',
+      searchQuery: 'name',
+      limit: 5,
+    });
+    expect(inspector.searchObservations).toHaveBeenCalledWith({ resourceId: 'user-1', query: 'name', limit: 5 });
+    expect(result).toMatchObject({
+      count: 1,
+      searchType: 'observations',
+      results: [{ role: 'observation', content: '- user is Ryan', threadId: 't1' }],
+    });
   });
 });

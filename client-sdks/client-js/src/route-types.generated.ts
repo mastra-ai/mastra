@@ -24,7 +24,7 @@ type InputShared_Auxiliary_116 = {
   parentWorkflow?: InputShared_Auxiliary_116 | undefined;
 };
 
-type InputShared_Auxiliary_208 =
+type InputShared_Auxiliary_209 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -73,41 +73,41 @@ type InputShared_Auxiliary_208 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_208[];
+      args: InputShared_Auxiliary_209[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_208;
+      arg: InputShared_Auxiliary_209;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_232;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_232;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_232;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_232;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_231;
+            some: InputShared_Auxiliary_232;
           }
         | {
-            none: InputShared_Auxiliary_231;
+            none: InputShared_Auxiliary_232;
           };
     };
 
-type InputShared_Auxiliary_231 =
+type InputShared_Auxiliary_232 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -156,33 +156,33 @@ type InputShared_Auxiliary_231 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_231[];
+      args: InputShared_Auxiliary_232[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_231;
+      arg: InputShared_Auxiliary_232;
     };
 
-type InputShared_Auxiliary_278 =
+type InputShared_Auxiliary_279 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_278[];
+      args: InputShared_Auxiliary_279[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_278;
+      arg: InputShared_Auxiliary_279;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_208;
+            some: InputShared_Auxiliary_209;
           }
         | {
-            none: InputShared_Auxiliary_208;
+            none: InputShared_Auxiliary_209;
           };
     };
 
-type InputShared_Auxiliary_731 =
+type InputShared_Auxiliary_732 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_731 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_731[];
+      args: InputShared_Auxiliary_732[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_731;
+      arg: InputShared_Auxiliary_732;
     };
 
-type InputShared_Auxiliary_805 = {
+type InputShared_Auxiliary_806 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_805[] | undefined;
+  children?: InputShared_Auxiliary_806[] | undefined;
 };
 
-type Shared_Auxiliary_790 = {
+type Shared_Auxiliary_793 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_790[] | undefined;
+  children?: Shared_Auxiliary_793[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1849,7 +1849,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_731[];
+  predicates: InputShared_Auxiliary_732[];
 };
 
 type InputShared_Type_90 = {
@@ -1863,7 +1863,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_731;
+  predicate: InputShared_Auxiliary_732;
 };
 
 type InputShared_Type_91 =
@@ -4431,7 +4431,7 @@ type Shared_Type_87 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_790[] | undefined;
+  files?: Shared_Auxiliary_793[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9022,6 +9022,48 @@ export interface GetMemoryObservationalMemory_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /memory/observational-memory/context
+// ============================================================================
+export type GetMemoryObservationalMemoryContext_QueryParams = {
+  agentId: string;
+  resourceId?: string | undefined;
+  threadId: string;
+};
+
+export type GetMemoryObservationalMemoryContext_Response = {
+  supported: boolean;
+  context: {
+    system: string | null;
+    messages: {
+      id?: string | undefined;
+      role: string;
+      content: string;
+      createdAt?: Date | undefined;
+    }[];
+    observedAt: Date | null;
+  } | null;
+};
+
+export type GetMemoryObservationalMemoryContext_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryObservationalMemoryContext_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryObservationalMemoryContext_QueryParams
+        ? { query?: GetMemoryObservationalMemoryContext_QueryParams }
+        : { query: GetMemoryObservationalMemoryContext_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryObservationalMemoryContext_RouteContract {
+  pathParams: never;
+  queryParams: GetMemoryObservationalMemoryContext_QueryParams;
+  body: never;
+  request: GetMemoryObservationalMemoryContext_Request;
+  response: GetMemoryObservationalMemoryContext_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/observational-memory/buffer-status
 // ============================================================================
 export type PostMemoryObservationalMemoryBufferStatus_Body = GetMemoryStatus_QueryParams;
@@ -10713,7 +10755,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_208 | undefined;
+  where?: InputShared_Auxiliary_209 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10803,11 +10845,11 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_208 | undefined;
+  where?: InputShared_Auxiliary_209 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_231 | undefined;
+  having?: InputShared_Auxiliary_232 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10904,11 +10946,11 @@ export type PostObservabilitySpansAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_231 | undefined;
+  where?: InputShared_Auxiliary_232 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (InputShared_Type_16 | `countDistinct.${string}`)[];
-  having?: InputShared_Auxiliary_231 | undefined;
+  having?: InputShared_Auxiliary_232 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10956,7 +10998,7 @@ export type PostObservabilityThreadsQuery_Body =
               field: 'startedAt' | 'endedAt';
             };
           };
-      where?: InputShared_Auxiliary_231 | undefined;
+      where?: InputShared_Auxiliary_232 | undefined;
       orderBy?: {
         field: 'startedAt' | 'endedAt';
         direction: 'asc' | 'desc';
@@ -10972,9 +11014,9 @@ export type PostObservabilityThreadsQuery_Body =
           from: string;
           to: string;
         };
-        where?: InputShared_Auxiliary_208 | undefined;
+        where?: InputShared_Auxiliary_209 | undefined;
       };
-      where?: InputShared_Auxiliary_278 | undefined;
+      where?: InputShared_Auxiliary_279 | undefined;
       page?: {
         limit?: number;
         after?: (string | null) | undefined;
@@ -11051,7 +11093,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_231 | undefined;
+  where?: InputShared_Auxiliary_232 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
     direction: 'asc' | 'desc';
@@ -19690,7 +19732,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_805[] | undefined;
+  files?: InputShared_Auxiliary_806[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19748,7 +19790,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_805[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_806[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -25402,6 +25444,7 @@ export interface RouteTypes {
   'GET /memory/status': GetMemoryStatus_RouteContract;
   'GET /memory/config': GetMemoryConfig_RouteContract;
   'GET /memory/observational-memory': GetMemoryObservationalMemory_RouteContract;
+  'GET /memory/observational-memory/context': GetMemoryObservationalMemoryContext_RouteContract;
   'POST /memory/observational-memory/buffer-status': PostMemoryObservationalMemoryBufferStatus_RouteContract;
   'GET /memory/threads': GetMemoryThreads_RouteContract;
   'GET /memory/threads/:threadId': GetMemoryThreadsThreadId_RouteContract;
@@ -26352,6 +26395,9 @@ export interface Client {
   };
   '/memory/observational-memory/buffer-status': {
     POST: PostMemoryObservationalMemoryBufferStatus_RouteContract;
+  };
+  '/memory/observational-memory/context': {
+    GET: GetMemoryObservationalMemoryContext_RouteContract;
   };
   '/memory/save-messages': {
     POST: PostMemorySaveMessages_RouteContract;

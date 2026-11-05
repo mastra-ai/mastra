@@ -208,6 +208,27 @@ export class PlatformMemory extends MastraMemory {
           await new Promise(resolve => setTimeout(resolve, 1_000));
         }
       },
+      async getContext({ threadId, resourceId }) {
+        const context = await client.getContext(threadId, resourceId, { workingMemory });
+        return {
+          system: context.system,
+          messages: context.messages.map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: new Date(m.createdAt),
+          })),
+          observedAt: context.observedAt ? new Date(context.observedAt) : null,
+        };
+      },
+      async searchObservations({ threadId, resourceId, query, limit }) {
+        const matches = await client.search({ threadId, resourceId, query, limit });
+        return matches.map(m => ({
+          text: m.text,
+          threadId: m.threadId,
+          observedAt: m.observedAt ? new Date(m.observedAt) : null,
+        }));
+      },
     };
   }
 

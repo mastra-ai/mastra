@@ -785,7 +785,7 @@ export interface MemorySearchResult {
   id: string;
   role: string;
   content: string;
-  createdAt: string;
+  createdAt?: string;
   threadId?: string;
   threadTitle?: string;
   context?: {
@@ -1827,6 +1827,16 @@ export type GetObservationalMemoryParams = Omit<
  * Response for observational memory endpoint
  */
 export type GetObservationalMemoryResponse = GeneratedResponse<'GET /memory/observational-memory'>;
+
+/**
+ * Parameters for the observational memory context endpoint
+ */
+export type GetObservationalMemoryContextParams = GeneratedRequest<
+  QueryParams<'GET /memory/observational-memory/context'>
+> &
+  RequestContextOptions;
+
+export type GetObservationalMemoryContextResponse = GeneratedResponse<'GET /memory/observational-memory/context'>;
 
 /**
  * Parameters for awaiting buffer status

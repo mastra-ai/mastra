@@ -31,6 +31,7 @@ import { useChat } from '@mastra/react/chat';
 import {
   memoryStatusQueryKey,
   memoryThreadMessagesQueryKey,
+  observationalMemoryContextQueryKey,
   observationalMemoryQueryKey,
   useMemoryConfig,
 } from '@mastra/react/hooks/memory';
@@ -194,6 +195,7 @@ export function ChatProvider({
       // active thread so unrelated memory caches and other threads are untouched,
       // and refetch (not just invalidate) so the panel shows live data right away.
       void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, threadId) });
+      void queryClient.refetchQueries({ queryKey: observationalMemoryContextQueryKey(agentId, threadId) });
       void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(threadId) });
       void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, threadId) });
     },

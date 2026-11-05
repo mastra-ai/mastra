@@ -51,6 +51,8 @@ import {
   transferThreadResponseSchema,
   getObservationalMemoryQuerySchema,
   getObservationalMemoryResponseSchema,
+  getObservationalMemoryContextQuerySchema,
+  getObservationalMemoryContextResponseSchema,
   awaitBufferStatusBodySchema,
   awaitBufferStatusResponseSchema,
 } from '../schemas/memory';
@@ -565,6 +567,49 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       return { record, history: history?.length ? history : undefined };
     } catch (error) {
       return handleError(error, 'Error getting observational memory');
+    }
+  },
+});
+
+export const GET_OBSERVATIONAL_MEMORY_CONTEXT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/memory/observational-memory/context',
+  responseType: 'json',
+  queryParamSchema: getObservationalMemoryContextQuerySchema,
+  responseSchema: getObservationalMemoryContextResponseSchema,
+  summary: 'Get the thread context observational memory sends the model',
+  description:
+    "Returns the rendered observations and the not-yet-observed messages the agent's next turn sends, when the memory can report them",
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
+    try {
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      const inspector = await resolveObservationalMemoryInspector({ agent, memory, requestContext });
+      const omConfig = inspector ? await inspector.getConfig() : null;
+      if (!inspector?.getContext || !omConfig) return { supported: false, context: null };
+
+      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      if (!effectiveResourceId) return { supported: true, context: null };
+      const omThreadId = await resolveOMThread({
+        mastra,
+        requestContext,
+        memory,
+        inspector,
+        scope: 'thread',
+        threadId,
+        effectiveResourceId,
+      });
+      if (omThreadId === MISSING_THREAD || omThreadId === null) return { supported: true, context: null };
+
+      const context = await inspector.getContext({ threadId: omThreadId, resourceId: effectiveResourceId });
+      return { supported: true, context };
+    } catch (error) {
+      return handleError(error, 'Error getting observational memory context');
     }
   },
 });
@@ -1763,6 +1808,41 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      // Memory that searches its own observations (Platform Memory) answers from those.
+      const inspector = memory.getObservationalMemoryInspector();
+      if (inspector?.searchObservations) {
+        if (effectiveThreadId) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            thread,
+            effectiveResourceId,
+          });
+        }
+        const matches = await inspector.searchObservations({
+          resourceId: effectiveResourceId!,
+          query: searchQuery,
+          limit,
+        });
+        const results: (Omit<SearchResult, 'createdAt'> & { createdAt?: Date })[] = matches.map((match, i) => ({
+          id: `observation-${i}`,
+          role: 'observation',
+          content: match.text,
+          createdAt: match.observedAt ?? undefined,
+          threadId: match.threadId ?? undefined,
+          threadTitle: match.threadId ?? undefined,
+        }));
+        return {
+          results,
+          count: results.length,
+          query: searchQuery,
+          searchScope: 'resource' as const,
+          searchType: 'observations' as const,
+        };
       }
 
       // Get memory configuration first to check scope

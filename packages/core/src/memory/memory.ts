@@ -1376,4 +1376,27 @@ export interface ObservationalMemoryInspector {
   }): Promise<{ record: ObservationalMemoryRecord | null; history?: ObservationalMemoryRecord[] }>;
   /** Resolves once background buffering for the thread has settled. */
   waitForBuffering(args: { threadId: string | null; resourceId: string }): Promise<void>;
+  /** What the model is sent for the thread's next turn: rendered observations, then the messages not yet observed. */
+  getContext?(args: { threadId: string; resourceId: string }): Promise<ObservationalMemoryContext>;
+  /** Searches observations, newest relevant first. */
+  searchObservations?(args: {
+    threadId?: string;
+    resourceId: string;
+    query: string;
+    limit?: number;
+  }): Promise<ObservationalMemoryMatch[]>;
+}
+
+export interface ObservationalMemoryContext {
+  /** Rendered observations, sent as a system message; `null` before the first observation. */
+  system: string | null;
+  /** Messages not yet folded into observations, oldest first. */
+  messages: { id?: string; role: string; content: string; createdAt?: Date }[];
+  observedAt: Date | null;
+}
+
+export interface ObservationalMemoryMatch {
+  text: string;
+  threadId: string | null;
+  observedAt: Date | null;
 }
