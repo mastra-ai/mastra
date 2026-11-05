@@ -1,0 +1,6 @@
+---
+'@mastra/server': minor
+'mastra': patch
+---
+
+Added `GET /observability/feedback/:feedbackId`. The endpoint returns `{ feedback: record | null }` and uses the existing observability authorization. Registered the route in the generated API CLI metadata.

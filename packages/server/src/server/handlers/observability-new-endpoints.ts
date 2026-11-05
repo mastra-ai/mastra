@@ -1281,6 +1281,16 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
 // Feedback Routes
 // ============================================================================
 
+export const GET_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK, {
+  pathParamSchema: z.object({ feedbackId: z.string() }),
+  responseSchema: z.object({ feedback: feedbackRecordSchema.nullable() }),
+  handler: async ({ mastra, feedbackId }) => {
+    const observabilityStore = await getObservabilityStore(mastra);
+    const feedback = await observabilityStore.getFeedbackById(feedbackId);
+    return { feedback: feedback ?? null };
+  },
+});
+
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
@@ -1615,6 +1625,7 @@ export const NEW_ROUTES = {
   GET_SCORE_TIME_SERIES,
   GET_SCORE_PERCENTILES,
   LIST_FEEDBACK,
+  GET_FEEDBACK,
   CREATE_FEEDBACK,
   DELETE_FEEDBACK,
   UPDATE_FEEDBACK_REVIEW_STATUS,

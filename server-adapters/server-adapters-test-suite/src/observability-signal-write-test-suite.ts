@@ -17,6 +17,7 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
     let server: Awaited<ReturnType<typeof startServer>>;
     let store: ObservabilityStorage;
     let trustedScope: Record<string, unknown>;
+    let allowAccess: boolean;
 
     const isFeedback = collection === 'feedback';
     const field = isFeedback ? 'feedback' : 'score';
@@ -26,6 +27,7 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
 
     beforeEach(async () => {
       trustedScope = {};
+      allowAccess = true;
       const storage = new InMemoryStore();
       store = (await storage.getStore('observability'))!;
       server = await startServer(
@@ -37,7 +39,7 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
               authenticateToken: async () => ({}),
               authorize: async (_path, _method, _user, c) => {
                 for (const [key, value] of Object.entries(trustedScope)) c.get('requestContext').set(key, value);
-                return true;
+                return allowAccess;
               },
             },
           },
@@ -60,6 +62,42 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
       const body = (await response.json()) as Record<'feedback' | 'scores', Record<string, unknown>[]>;
       return body[collection];
     };
+
+    describe('single-record reads', () => {
+      it('returns the persisted record with its identity and timestamp', async () => {
+        const id = 'single-record';
+        const timestamp = '2026-11-05T12:00:00.000Z';
+        const identity = { traceId: 'trace-123', timestamp: new Date(timestamp) };
+        if (isFeedback) {
+          await store.createFeedback({ feedback: { ...identity, feedbackId: id, feedbackType: 'thumbs', value: 1 } });
+        } else {
+          await store.createScore({ score: { ...identity, scoreId: id, scorerId: 'accuracy', score: 0.9 } });
+        }
+        const response = await server.request(`${path}/${id}`, {
+          headers: { authorization: 'Bearer test-token' },
+        });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          [field]: { ...payload, [idField]: id, traceId: 'trace-123', timestamp },
+        });
+      });
+
+      it('returns null for a missing record', async () => {
+        const response = await server.request(`${path}/missing`, {
+          headers: { authorization: 'Bearer test-token' },
+        });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ [field]: null });
+      });
+
+      it('denies reads when authorization rejects access', async () => {
+        allowAccess = false;
+        const response = await server.request(`${path}/private-record`, {
+          headers: { authorization: 'Bearer test-token' },
+        });
+        expect(response.status).toBe(403);
+      });
+    });
 
     it.each([undefined, null, '', ' ', '\t\n'])(
       'rejects traceId %j without persisting a record (OBS-788)',
