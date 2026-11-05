@@ -51,7 +51,8 @@ export class MastraGateway extends MastraModelGateway {
     if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') {
       const apiKey = await this.getApiKey();
       const response = await (this.config?.customFetch ?? fetch)(`${this.getBaseUrl()}/v1/models`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10_000),
       });
       if (!response.ok) throw new Error(`Gateway model catalog unavailable (${response.status})`);
       const body: unknown = await response.json();
