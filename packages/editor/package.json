@@ -64,6 +64,7 @@
   ],
   "scripts": {
     "build": "tsdown",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "dev": "tsdown --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
@@ -98,6 +99,7 @@
     "@types/node": "22.19.15",
     "hono": "^4.13.13",
     "tsdown": "0.23.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^4.6.7"
