@@ -1,10 +1,10 @@
+import { StudioConfigContext } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
+import type { StudioConfigContextType } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
+import type { StudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/types';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StudioConfigForm } from '../components/studio-config-form';
-import { StudioConfigContext } from '../context/studio-config-state';
-import type { StudioConfigContextType } from '../context/studio-config-state';
-import type { StudioConfig } from '../types';
 
 const customConfig: StudioConfig = {
   baseUrl: 'http://localhost:4111',

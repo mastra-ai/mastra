@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 // @vitest-environment-options {"url": "https://studio.example.com"}
+import { StudioConfigContext } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
+import { useBrowserStream } from '@mastra/playground-ui/domains/agent-chat/hooks/use-browser-stream';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { browserStreamTicketResponse } from '../../utils/__tests__/fixtures/browser-stream-ticket';
-import { useBrowserStream } from '../use-browser-stream';
-import { StudioConfigContext } from '@/domains/configuration/context/studio-config-state';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'https://studio.example.com';

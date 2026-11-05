@@ -1,20 +1,20 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { AgentOverviewPanel } from '@mastra/playground-ui/domains/agent-chat/overview/agent-overview-panel';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useImperativeHandle } from 'react';
 import { useForm } from 'react-hook-form';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentEditFormProvider } from '../../../context/agent-edit-form-context';
 import { emptyPlatforms, slackPlatform } from '../../__tests__/fixtures/channels';
 import { dynamicFallbackAgent, memoryDisabled, v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import type { AgentFormValues } from '../../agent-edit-page/utils/form-validation';
 import { semanticRecallConfig } from '../../memory-sidebar/__tests__/fixtures/memory';
-import { AgentOverviewPanel } from '../agent-overview-panel';
 import { RouteSidePanel, RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';

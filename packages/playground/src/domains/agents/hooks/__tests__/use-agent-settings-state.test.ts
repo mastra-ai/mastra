@@ -1,4 +1,6 @@
+import { defaultSettings } from '@mastra/playground-ui/domains/agent-chat/hooks/use-agent-settings-state';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { isAnthropicModelWithSamplingRestriction } from '../../utils/model-restrictions';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -19,9 +21,6 @@ const localStorageMock = (() => {
 
 Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 
-import { isAnthropicModelWithSamplingRestriction } from '../../utils/model-restrictions';
-import { defaultSettings } from '../use-agent-settings-state';
-
 /**
  * Test file for use-agent-settings-state.ts
  *
@@ -35,7 +34,7 @@ describe('use-agent-settings-state defaults', () => {
   });
 
   it('should not have temperature or topP set by default (use model provider defaults)', async () => {
-    const { defaultSettings } = await import('../use-agent-settings-state');
+    const { defaultSettings } = await import('@mastra/playground-ui/domains/agent-chat/hooks/use-agent-settings-state');
 
     const modelSettings = defaultSettings.modelSettings;
 

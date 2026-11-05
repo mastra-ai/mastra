@@ -1,10 +1,16 @@
 // @vitest-environment node
 import 'fake-indexeddb/auto';
+import {
+  clearDraftsOnLogout,
+  createThreadDraftState,
+} from '@mastra/playground-ui/domains/agent-chat/conversation/thread-draft-state';
+import {
+  readThreadDraft,
+  writeThreadDraft,
+} from '@mastra/playground-ui/domains/agent-chat/conversation/thread-draft-storage';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { deleteDB, openDB } from 'idb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearDraftsOnLogout, createThreadDraftState } from './thread-draft-state';
-import { readThreadDraft, writeThreadDraft } from './thread-draft-storage';
 
 const unmounts: (() => void)[] = [];
 function mount(key = 'scope') {
@@ -238,7 +244,7 @@ describe('draft persistence lifecycle', () => {
       const { state: first } = mount('shared');
       await ready(first);
       vi.resetModules();
-      const otherTab = await import('./thread-draft-state');
+      const otherTab = await import('@mastra/playground-ui/domains/agent-chat/conversation/thread-draft-state');
       const second = otherTab.createThreadDraftState('shared');
       unmounts.push(second.subscribe(() => {}));
       await ready(second);

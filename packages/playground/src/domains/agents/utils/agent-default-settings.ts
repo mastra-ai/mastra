@@ -1,4 +1,4 @@
-import type { AgentSettingsType, ModelSettings } from '@/types';
+import type { AgentSettingsType, ModelSettings } from '@mastra/playground-ui/domains/agent-chat/types';
 
 type AgentDefaultOptions = {
   maxSteps?: number;

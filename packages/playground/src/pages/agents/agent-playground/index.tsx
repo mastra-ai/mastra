@@ -9,7 +9,7 @@ import { useAgent, useAgentVersions, useAgentVersion, useStoredAgent } from '@ma
 import { useMemory } from '@mastra/react/hooks/memory';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
-import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
+import { StudioAgentOverviewPanel } from '@/domains/agents/components/agent-config-panel';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
 import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
@@ -200,7 +200,7 @@ function AgentPlayground() {
       />
       <RouteSidePanel owner="agent-editor-detail" priority={1}>
         <ActivatedSkillsProvider key={agentId}>
-          <AgentOverviewPanel agentId={agentId!} />
+          <StudioAgentOverviewPanel agentId={agentId!} />
         </ActivatedSkillsProvider>
       </RouteSidePanel>
     </AgentEditFormProvider>

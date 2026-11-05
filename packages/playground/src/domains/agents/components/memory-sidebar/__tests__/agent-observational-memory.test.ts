@@ -10,7 +10,10 @@ import { describe, expect, it } from 'vitest';
  * buffering marker during active observation cycles.
  */
 describe('AgentObservationalMemory token display', () => {
-  const sourceFile = resolve(__dirname, '../agent-observational-memory.tsx');
+  const sourceFile = resolve(
+    __dirname,
+    '../../../../../../../playground-ui/src/domains/agent-chat/memory-sidebar/agent-observational-memory.tsx',
+  );
   const source = readFileSync(sourceFile, 'utf-8');
 
   it('derives observation token counts from the shared observation-window helper', () => {

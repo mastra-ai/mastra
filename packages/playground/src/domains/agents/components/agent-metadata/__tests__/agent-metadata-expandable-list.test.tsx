@@ -1,6 +1,6 @@
+import { AgentMetadataExpandableList } from '@mastra/playground-ui/domains/agent-chat/overview/metadata/agent-metadata-expandable-list';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { AgentMetadataExpandableList } from '../agent-metadata-expandable-list';
 
 const items = Array.from({ length: 12 }, (_, index) => `item-${index + 1}`);
 

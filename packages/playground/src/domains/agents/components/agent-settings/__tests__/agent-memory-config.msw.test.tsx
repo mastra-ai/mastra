@@ -1,8 +1,8 @@
 import '@/test/english-locale';
+import { AgentMemoryConfig } from '@mastra/playground-ui/domains/agent-chat/overview/agent-memory-config';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
-import { AgentMemoryConfig } from '../agent-memory-config';
 import {
   memoryConfigWithDefaults,
   memoryConfigWithDisabledFeatures,

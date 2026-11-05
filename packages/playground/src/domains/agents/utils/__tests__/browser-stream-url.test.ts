@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // @vitest-environment-options {"url": "https://studio.example.com"}
-import { describe, expect, it } from 'vitest';
+import { buildBrowserStreamUrl } from '@mastra/playground-ui/domains/agent-chat/utils/browser-stream-url';
 
-import { buildBrowserStreamUrl } from '../browser-stream-url';
+import { describe, expect, it } from 'vitest';
 
 describe('buildBrowserStreamUrl', () => {
   describe('when an upgrade ticket is available', () => {

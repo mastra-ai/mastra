@@ -1,21 +1,21 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { BrowserThumbnail } from '@mastra/playground-ui/domains/agent-chat/browser-view/index';
+import { useBrowserSession } from '@mastra/playground-ui/domains/agent-chat/context/browser-session-context';
 import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
+
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
-
 import { useStreamMessages, useStreamRunning, useStreamSend } from '../../contexts/stream-chat-context';
 import { StreamChatProvider } from '../../contexts/stream-chat-provider';
 import { useChatDraft } from '../../hooks/use-chat-draft';
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
-import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
-import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
 
 interface AgentChatPanelProviderProps {
   agentId: string;

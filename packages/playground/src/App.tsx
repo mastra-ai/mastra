@@ -1,5 +1,6 @@
 import { coreFeatures } from '@mastra/core/features';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useStudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -97,11 +98,11 @@ import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
+import { StudioAgentChatSlots } from '@/domains/agents/components/studio-agent-chat-slots';
+
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
-
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
-import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { StudioKnowledgeLinks } from '@/domains/knowledge/studio-knowledge-links';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { ObservabilityLayout } from '@/domains/observability/observability-layout';
@@ -556,7 +557,9 @@ function App() {
       <RoleImpersonationProvider>
         <PostHogProvider>
           <RoutePermissionsGate baseUrl={baseUrl}>
-            <RouterProvider router={router} />
+            <StudioAgentChatSlots>
+              <RouterProvider router={router} />
+            </StudioAgentChatSlots>
           </RoutePermissionsGate>
         </PostHogProvider>
       </RoleImpersonationProvider>

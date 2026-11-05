@@ -1,5 +1,5 @@
+import { normalizePromptIndentation } from '@mastra/playground-ui/domains/agent-chat/overview/normalize-prompt-indentation';
 import { describe, expect, it } from 'vitest';
-import { normalizePromptIndentation } from '../normalize-prompt-indentation';
 
 describe('normalizePromptIndentation', () => {
   describe.each(['      ', '\t', '\t  '])('when every nonblank line shares the prefix %j', indentation => {

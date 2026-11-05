@@ -1,5 +1,6 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
+import { useStudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
 import {
   SettingsContainer,
   SettingsDescription,
@@ -11,7 +12,6 @@ import {
 } from '@mastra/playground-ui/new/settings';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
-import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/settings')];

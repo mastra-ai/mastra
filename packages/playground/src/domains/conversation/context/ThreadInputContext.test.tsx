@@ -1,11 +1,14 @@
 import 'fake-indexeddb/auto';
+import {
+  readThreadDraft,
+  writeThreadDraft,
+} from '@mastra/playground-ui/domains/agent-chat/conversation/thread-draft-storage';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/agent-chat/conversation/ThreadInputContext';
+import { useThreadInput } from '@mastra/playground-ui/domains/agent-chat/conversation/useThreadInput';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { deleteDB, openDB } from 'idb';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readThreadDraft, writeThreadDraft } from './thread-draft-storage';
-import { ThreadInputProvider } from './ThreadInputContext';
-import { useThreadInput } from './useThreadInput';
 
 afterEach(async () => {
   cleanup();

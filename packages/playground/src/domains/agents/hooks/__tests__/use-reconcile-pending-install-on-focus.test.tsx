@@ -1,10 +1,10 @@
+import { useReconcilePendingInstallOnFocus } from '@mastra/playground-ui/domains/agent-chat/hooks/use-reconcile-pending-install-on-focus';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useReconcilePendingInstallOnFocus } from '../use-reconcile-pending-install-on-focus';
 import { activeDiscordInstallation } from './fixtures/channel-installations';
 import { server } from '@/test/msw-server';
 

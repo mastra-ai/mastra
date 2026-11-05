@@ -3,12 +3,12 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { useStudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
+import type { StudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/types';
 import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { useStudioConfig } from '../context/studio-config-state';
-import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
 import { HeaderListForm } from './header-list-form';
 

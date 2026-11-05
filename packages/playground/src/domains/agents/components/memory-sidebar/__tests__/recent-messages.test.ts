@@ -1,5 +1,5 @@
+import { getRecentMessagesSettings } from '@mastra/playground-ui/domains/agent-chat/memory-sidebar/lib/recent-messages';
 import { describe, expect, it } from 'vitest';
-import { getRecentMessagesSettings } from '../lib/recent-messages';
 
 describe('Recent message settings', () => {
   describe.each([

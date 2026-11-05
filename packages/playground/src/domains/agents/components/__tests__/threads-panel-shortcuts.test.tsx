@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
+import { ThreadsPanelProvider } from '@mastra/playground-ui/domains/agent-chat/context/threads-panel-context';
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agent-chat/context/use-threads-panel';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
+
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
-import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';
-import { useThreadsPanel } from '@/domains/agents/context/use-threads-panel';
 
 const RegisterPanel = ({ panel }: { panel: CollapsiblePanelHandle | null }) => {
   const threadsPanel = useThreadsPanel();

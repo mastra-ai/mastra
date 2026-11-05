@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { startViewTransition } from '@mastra/playground-ui/domains/agent-chat/utils/routing';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
-import { startViewTransition } from '@/lib/routing';
 
 export interface AgentProfileIdentityStepProps {
   avatar: ReactNode;

@@ -1,8 +1,8 @@
+import { useComposerAutofocus } from '@mastra/playground-ui/domains/agent-chat/thread/hooks/use-composer-autofocus';
 import { render, screen } from '@testing-library/react';
 import { useRef } from 'react';
-import { describe, expect, it } from 'vitest';
 
-import { useComposerAutofocus } from '../use-composer-autofocus';
+import { describe, expect, it } from 'vitest';
 
 const Harness = ({ threadId, disabled }: { threadId?: string; disabled?: boolean }) => {
   const ref = useRef<HTMLTextAreaElement>(null);

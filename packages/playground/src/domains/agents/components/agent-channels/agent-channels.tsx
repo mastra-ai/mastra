@@ -2,13 +2,13 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { PlatformIcon } from '@mastra/playground-ui/domains/agent-chat/components/platform-icons';
+import { useConnectChannelAction } from '@mastra/playground-ui/domains/agent-chat/hooks/use-connect-channel-action';
+import { useReconcilePendingInstallOnFocus } from '@mastra/playground-ui/domains/agent-chat/hooks/use-reconcile-pending-install-on-focus';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useChannelPlatforms, useChannelInstallations, useDisconnectChannel } from '@mastra/react/hooks/agents';
 import type { ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { Plug, Unplug } from 'lucide-react';
-import { PlatformIcon } from './platform-icons';
-import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
-import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface AgentChannelsProps {
   agentId: string;

@@ -1,10 +1,15 @@
 // @vitest-environment node
 import 'fake-indexeddb/auto';
+import {
+  clearUserThreadDrafts,
+  moveThreadDraft,
+  readThreadDraft,
+  writeThreadDraft,
+} from '@mastra/playground-ui/domains/agent-chat/conversation/thread-draft-storage';
+import type { ThreadDraft } from '@mastra/playground-ui/domains/agent-chat/conversation/thread-draft-storage';
 import { IDBObjectStore } from 'fake-indexeddb';
 import { deleteDB, openDB } from 'idb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearUserThreadDrafts, moveThreadDraft, readThreadDraft, writeThreadDraft } from './thread-draft-storage';
-import type { ThreadDraft } from './thread-draft-storage';
 
 const DATABASE = 'mastra-composer-drafts';
 const empty: ThreadDraft = { text: '', attachments: [] };

@@ -1,12 +1,12 @@
+import type * as MemoryTimelineContext from '@mastra/playground-ui/domains/agent-chat/context/memory-timeline-context';
+import { ThreadsPanelProvider } from '@mastra/playground-ui/domains/agent-chat/context/threads-panel-context';
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agent-chat/context/use-threads-panel';
+import { AgentLayout } from '@mastra/playground-ui/domains/agent-chat/sidebar/agent-layout';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
-import { ThreadsPanelProvider } from '../../context/threads-panel-context';
-import { useThreadsPanel } from '../../context/use-threads-panel';
-import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
 const collapseLeftPanel = vi.hoisted(() => vi.fn());
@@ -63,7 +63,7 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-vi.mock('../../context/memory-timeline-context', async () => {
+vi.mock('@mastra/playground-ui/domains/agent-chat/context/memory-timeline-context', async () => {
   const actual = await vi.importActual<typeof MemoryTimelineContext>('../../context/memory-timeline-context');
 
   return {

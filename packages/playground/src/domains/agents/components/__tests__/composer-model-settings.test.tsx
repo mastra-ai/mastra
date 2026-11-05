@@ -1,13 +1,13 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { AgentSettingsProvider } from '@mastra/playground-ui/domains/agent-chat/context/agent-context';
+import { ComposerModelSettings } from '@mastra/playground-ui/domains/agent-chat/model/composer-model-settings';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
-
-import { AgentSettingsProvider } from '../../context/agent-context';
-import { ComposerModelSettings } from '../composer-model-settings';
 import { memoryDisabled, v2Agent } from './fixtures/composer-model-settings';
 import { server } from '@/test/msw-server';
 

@@ -1,6 +1,6 @@
+import { AgentMetadataSection } from '@mastra/playground-ui/domains/agent-chat/overview/metadata/agent-metadata-section';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { AgentMetadataSection } from '../agent-metadata-section';
 import { TestLinkProvider } from '@/test/link-provider';
 
 describe('AgentMetadataSection', () => {

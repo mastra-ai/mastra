@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import type { ChannelInstallationInfo } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { AgentChannelsCard } from '@mastra/playground-ui/domains/agent-chat/components/agent-channels-card';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
 
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   activeDiscordInstallations,
   noSlackInstallations,
@@ -16,7 +17,6 @@ import {
   slackInstallations,
   unconfiguredPlatforms,
 } from '../../__tests__/fixtures/channels';
-import { AgentChannelsCard } from '../agent-channels-card';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

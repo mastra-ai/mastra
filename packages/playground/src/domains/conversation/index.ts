@@ -1,2 +1,2 @@
-export { ThreadInputProvider } from './context/ThreadInputContext';
-export { useThreadInput } from './context/useThreadInput';
+export { ThreadInputProvider } from '@mastra/playground-ui/domains/agent-chat/conversation/ThreadInputContext';
+export { useThreadInput } from '@mastra/playground-ui/domains/agent-chat/conversation/useThreadInput';

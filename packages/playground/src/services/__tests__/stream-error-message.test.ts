@@ -1,5 +1,8 @@
+import {
+  buildStreamErrorMessage,
+  isMaxStepsFinishChunk,
+} from '@mastra/playground-ui/domains/agent-chat/utils/stream-error-message';
 import { describe, expect, it } from 'vitest';
-import { buildStreamErrorMessage, isMaxStepsFinishChunk } from '../stream-error-message';
 
 describe('stream error messages', () => {
   it('only treats terminal tool-call finish chunks as maxSteps exhaustion', () => {

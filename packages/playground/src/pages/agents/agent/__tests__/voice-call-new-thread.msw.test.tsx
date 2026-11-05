@@ -18,16 +18,16 @@ const GREETING = 'Thanks for calling BrightSmile Dental, this is Riley.';
 
 // Heavy presentational siblings with their own coverage — the page state machine,
 // AgentChat, Thread, and the voice hook stay real.
-vi.mock('@/domains/agents/agent-sidebar', () => ({
+vi.mock('@mastra/playground-ui/domains/agent-chat/sidebar/agent-sidebar', () => ({
   AgentSidebar: () => <div data-testid="stub-sidebar" />,
 }));
 vi.mock('@/domains/agents/components/agent-information/agent-information', () => ({
   AgentInformation: () => <div data-testid="stub-agent-information" />,
 }));
-vi.mock('@/domains/agents/components/browser-view', () => ({
+vi.mock('@mastra/playground-ui/domains/agent-chat/browser-view/index', () => ({
   BrowserViewPanel: () => null,
 }));
-vi.mock('@/domains/agents/components/agent-layout', () => ({
+vi.mock('@mastra/playground-ui/domains/agent-chat/sidebar/agent-layout', () => ({
   AgentLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 

@@ -1,9 +1,12 @@
+import {
+  ComposerAttachmentsProvider,
+  useComposerAttachments,
+} from '@mastra/playground-ui/domains/agent-chat/thread/attachments/composer-attachments';
 import { act, cleanup, render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
 
-import { ComposerAttachmentsProvider, useComposerAttachments } from '../composer-attachments';
+import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '@/test/msw-server';
 
 afterEach(() => cleanup());

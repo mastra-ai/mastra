@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
+import { requestBrowserStreamTicket } from '@mastra/playground-ui/domains/agent-chat/utils/browser-stream-ticket';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
 
-import { requestBrowserStreamTicket } from '../browser-stream-ticket';
+import { describe, expect, it } from 'vitest';
 import { browserStreamTicketResponse } from './fixtures/browser-stream-ticket';
 import { server } from '@/test/msw-server';
 

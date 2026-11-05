@@ -1,0 +1,191 @@
+import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { BrowserToolCallItem } from '@/domains/agent-chat/browser-view/browser-tool-call-item';
+import { BrowserViewFrame } from '@/domains/agent-chat/browser-view/browser-view-frame';
+import { useBrowserFrame, useBrowserSession } from '@/domains/agent-chat/context/browser-session-context';
+import { useBrowserToolCalls } from '@/domains/agents/context/browser-tool-calls-context';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { controlStateColorTransition, focusRingInset } from '@/ds/primitives/transitions';
+import { quietTextHoverInGroup } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
+
+interface BrowserThumbnailProps {
+  agentName?: string;
+}
+
+/**
+ * Browser preview component that appears in the chat area.
+ *
+ * Has two states:
+ * - Collapsed: Small thumbnail bar (click to expand)
+ * - Expanded: Larger view with screencast + actions, with a button to switch to modal
+ */
+export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
+  const { hasSession, viewMode, status, currentUrl, setViewMode, closeBrowser } = useBrowserSession();
+  const { latestFrame } = useBrowserFrame();
+  const { toolCalls } = useBrowserToolCalls();
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [hasFrame, setHasFrame] = useState(false);
+  const actionsRef = useRef<HTMLDivElement>(null);
+
+  const isExpanded = viewMode === 'expanded';
+
+  // Update thumbnail image when new frame arrives
+  useEffect(() => {
+    if (latestFrame) {
+      const frameData = `data:image/jpeg;base64,${latestFrame}`;
+      if (imgRef.current) {
+        imgRef.current.src = frameData;
+      }
+      if (!hasFrame) {
+        setHasFrame(true);
+      }
+    }
+  }, [latestFrame, hasFrame]);
+
+  // Reset frame state when session ends
+  useEffect(() => {
+    if (!hasSession) {
+      setHasFrame(false);
+      if (imgRef.current) {
+        imgRef.current.src = '';
+      }
+    }
+  }, [hasSession]);
+
+  // Auto-scroll actions to bottom when new tool calls arrive
+  useEffect(() => {
+    if (isExpanded && actionsRef.current) {
+      actionsRef.current.scrollTop = actionsRef.current.scrollHeight;
+    }
+  }, [toolCalls.length, isExpanded]);
+
+  const handleToggleExpand = useCallback(() => {
+    setViewMode(isExpanded ? 'collapsed' : 'expanded');
+  }, [isExpanded, setViewMode]);
+
+  const handleOpenModal = useCallback(() => {
+    setViewMode('modal');
+  }, [setViewMode]);
+
+  const handleClose = useCallback(async () => {
+    await closeBrowser();
+  }, [closeBrowser]);
+
+  const displayUrl = useMemo(() => {
+    if (!currentUrl) return 'Browser';
+    try {
+      return new URL(currentUrl).hostname;
+    } catch {
+      return currentUrl;
+    }
+  }, [currentUrl]);
+
+  // Don't render if no browser session or if showing in other modes
+  if (!hasSession || viewMode === 'modal') {
+    return null;
+  }
+
+  const isLive = status === 'streaming';
+
+  return (
+    <div
+      className={cn(
+        'overflow-hidden rounded-3xl border border-border bg-background transition-all duration-200',
+        'hover:border-border-strong',
+      )}
+    >
+      {/* Collapsed header - always visible */}
+      <button
+        type="button"
+        onClick={handleToggleExpand}
+        className={cn('group flex w-full items-center gap-3 px-4 py-3', 'hover:bg-fill-subtle', focusRingInset)}
+      >
+        {/* Thumbnail preview */}
+        <div className={cn(raisedSurfaceStyle, 'relative h-14 w-24 shrink-0 overflow-hidden rounded-md')}>
+          {hasFrame ? (
+            <img ref={imgRef} alt="Browser preview" className="object-cover size-full" />
+          ) : (
+            <div className="flex items-center justify-center size-full">
+              <Monitor className="text-muted-foreground size-5" />
+            </div>
+          )}
+          {/* Live indicator dot */}
+          {isLive && <div className="absolute top-1 right-1 animate-pulse rounded-full bg-success-indicator size-2" />}
+        </div>
+
+        {/* Info section */}
+        <div className="min-w-0 flex-1 text-left">
+          <div className="flex items-center gap-2">
+            <Txt as="span" variant="subheading" tone="ink" className="truncate">
+              {agentName}&apos;s browser
+            </Txt>
+            <Badge variant={isLive ? 'success' : 'neutral'} size="sm" indicator={isLive ? 'pulse' : 'dot'}>
+              {isLive ? 'Live' : 'Idle'}
+            </Badge>
+          </div>
+          <Txt variant="caption" tone="muted" className="mt-0.5 truncate">
+            {displayUrl}
+          </Txt>
+        </div>
+
+        {/* Expand/collapse indicator */}
+        <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
+          {isExpanded ? <ChevronDown className="size-5" /> : <ChevronUp className="size-5" />}
+        </div>
+      </button>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="border-t border-border">
+          {/* Interactive screencast */}
+          <div className="p-3">
+            <div className="relative">
+              <BrowserViewFrame className="w-full" />
+              {/* Control buttons overlay */}
+              <div className="absolute top-2 right-2 flex gap-1">
+                <Button
+                  variant="default"
+                  size="icon-sm"
+                  tooltip="Center view"
+                  onClick={handleOpenModal}
+                  className="bg-sidebar/80 backdrop-blur-sm"
+                >
+                  <Maximize2 className="size-3.5" />
+                </Button>
+                <Button
+                  variant="default"
+                  size="icon-sm"
+                  tooltip="Close browser"
+                  onClick={handleClose}
+                  className="bg-sidebar/80 backdrop-blur-sm"
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Browser actions (scrollable, max height) */}
+          {toolCalls.length > 0 && (
+            <div ref={actionsRef} className="max-h-40 overflow-y-auto border-t border-border">
+              <div className="px-3 py-2">
+                <Txt as="h4" variant="subheading" tone="muted" className="mb-2">
+                  Browser Actions
+                </Txt>
+                <div className="space-y-1">
+                  {toolCalls.slice(-5).map(entry => (
+                    <BrowserToolCallItem key={entry.toolCallId} entry={entry} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

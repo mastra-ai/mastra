@@ -1,6 +1,13 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { AgentChat } from '@mastra/playground-ui/domains/agent-chat/components/agent-chat';
+import { AgentChatLoadingSkeleton } from '@mastra/playground-ui/domains/agent-chat/components/agent-loading-skeletons';
+import { AgentSettingsProvider } from '@mastra/playground-ui/domains/agent-chat/context/agent-context';
+import { ObservationalMemoryProvider } from '@mastra/playground-ui/domains/agent-chat/context/agent-observational-memory-context';
+import { WorkingMemoryProvider } from '@mastra/playground-ui/domains/agent-chat/context/agent-working-memory-context';
+import { BrowserSessionProvider } from '@mastra/playground-ui/domains/agent-chat/context/browser-session-provider';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/agent-chat/conversation/ThreadInputContext';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
@@ -12,15 +19,8 @@ import { useMemory, useThreads } from '@mastra/react/hooks/memory';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
-import { AgentChat } from '@/domains/agents/components/agent-chat';
-import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
-import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
-import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
-import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentSession() {

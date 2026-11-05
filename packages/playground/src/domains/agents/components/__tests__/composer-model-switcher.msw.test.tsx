@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { PlaygroundModelProvider } from '@mastra/playground-ui/domains/agent-chat/context/playground-model-context';
+import { ComposerModelSwitcher } from '@mastra/playground-ui/domains/agent-chat/model/composer-model-switcher';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
-
-import { PlaygroundModelProvider } from '../../context/playground-model-context';
-import { ComposerModelSwitcher } from '../composer-model-switcher';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

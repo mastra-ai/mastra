@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { startViewTransition } from '@mastra/playground-ui/domains/agent-chat/utils/routing';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ArrowRightIcon, CheckIcon, LibraryIcon, Plus } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -7,7 +8,6 @@ import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-c
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
 import { useVisibilityChange } from '@/domains/agent-builder/hooks/use-visibility-change-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
-import { startViewTransition } from '@/lib/routing';
 
 export interface AgentProfileLibraryStepProps {
   agentId: string;

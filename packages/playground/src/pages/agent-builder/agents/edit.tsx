@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { startViewTransition } from '@mastra/playground-ui/domains/agent-chat/utils/routing';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useAuthCapabilities } from '@mastra/react/hooks/auth';
 import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
@@ -40,7 +41,6 @@ import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channe
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
-import { startViewTransition } from '@/lib/routing';
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();

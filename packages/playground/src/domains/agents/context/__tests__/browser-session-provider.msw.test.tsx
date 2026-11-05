@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 // @vitest-environment-options {"url": "https://studio.example.com"}
+import { StudioConfigContext } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
+import { BrowserSessionProvider } from '@mastra/playground-ui/domains/agent-chat/context/browser-session-provider';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
+
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { browserStreamTicketResponse } from '../../utils/__tests__/fixtures/browser-stream-ticket';
-import { BrowserSessionProvider } from '../browser-session-provider';
 import { liveBrowserSession } from './fixtures/browser-session';
-import { StudioConfigContext } from '@/domains/configuration/context/studio-config-state';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

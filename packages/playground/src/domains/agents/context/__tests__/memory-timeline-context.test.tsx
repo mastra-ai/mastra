@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
+import {
+  MemoryTimelineProvider,
+  useMemoryTimeline,
+} from '@mastra/playground-ui/domains/agent-chat/context/memory-timeline-context';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
 
-import { MemoryTimelineProvider, useMemoryTimeline } from '../memory-timeline-context';
+import { describe, expect, it } from 'vitest';
 
 function wrapper({ children }: { children: ReactNode }) {
   return <MemoryTimelineProvider>{children}</MemoryTimelineProvider>;

@@ -1,0 +1,61 @@
+import { useId } from 'react';
+import { ProviderLogo } from '../../../llm';
+import { Button } from '@/ds/components/Button';
+import { CardTitle } from '@/ds/components/Card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { TextAndIcon } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
+
+export interface AgentProviderDetailsProps {
+  agentName: string;
+  provider?: string;
+  modelId?: string;
+}
+
+export function AgentProviderDetails({ agentName, provider, modelId }: AgentProviderDetailsProps) {
+  const titleId = useId();
+
+  if (!provider) return <span>—</span>;
+
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        delay={0}
+        closeDelay={0}
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="pointer-events-auto"
+            aria-label={`Show model details for ${agentName}`}
+          >
+            <span aria-hidden="true">
+              <ProviderLogo providerId={provider} className="dark:invert" />
+            </span>
+          </Button>
+        }
+      />
+      <HoverCardContent
+        role="dialog"
+        aria-labelledby={titleId}
+        side="top"
+        align="center"
+        className="w-72 max-w-[calc(100vw-2rem)]"
+      >
+        <div className="grid gap-3">
+          <CardTitle id={titleId}>Model</CardTitle>
+          <TextAndIcon className="text-foreground">
+            <span aria-hidden="true">
+              <ProviderLogo providerId={provider} className="dark:invert" />
+            </span>
+            <span className="overflow-wrap-anywhere min-w-0">{provider}</span>
+          </TextAndIcon>
+          <Txt as="span" variant="caption" tone="ink" className="overflow-wrap-anywhere min-w-0">
+            {modelId || 'No model configured'}
+          </Txt>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}

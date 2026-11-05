@@ -1,9 +1,9 @@
+import { ComposerAttachments } from '@mastra/playground-ui/domains/agent-chat/thread/attachments/attachment';
+import { ComposerAttachmentsProvider } from '@mastra/playground-ui/domains/agent-chat/thread/attachments/composer-attachments';
+
+import { ComposerFileDrop } from '@mastra/playground-ui/domains/agent-chat/thread/attachments/composer-file-drop';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-
-import { ComposerAttachments } from '../attachment';
-import { ComposerAttachmentsProvider } from '../composer-attachments';
-import { ComposerFileDrop } from '../composer-file-drop';
 
 // The OS drag-and-drop is the only browser boundary; the real provider classifies the files.
 const dropOnWindow = (files: File[]) => {

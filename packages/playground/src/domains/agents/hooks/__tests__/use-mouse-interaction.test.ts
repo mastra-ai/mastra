@@ -1,6 +1,6 @@
+import { useMouseInteraction } from '@mastra/playground-ui/domains/agent-chat/hooks/use-mouse-interaction';
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useMouseInteraction } from '../use-mouse-interaction';
 
 describe('useMouseInteraction', () => {
   let frames: FrameRequestCallback[];

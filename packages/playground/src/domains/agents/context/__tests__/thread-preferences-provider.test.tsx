@@ -1,4 +1,12 @@
 import type { BuilderModelPolicy } from '@mastra/client-js';
+import { ChatProvider } from '@mastra/playground-ui/domains/agent-chat/chat/chat-provider';
+import { useAgentSettings } from '@mastra/playground-ui/domains/agent-chat/context/agent-context';
+import { WorkingMemoryProvider } from '@mastra/playground-ui/domains/agent-chat/context/agent-working-memory-context';
+import { usePlaygroundModel } from '@mastra/playground-ui/domains/agent-chat/context/playground-model-context';
+import {
+  ComposerModelSwitcher,
+  ComposerModelWarning,
+} from '@mastra/playground-ui/domains/agent-chat/model/composer-model-switcher';
 import { useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,9 +15,6 @@ import type { HttpHandler } from 'msw';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useAgentSettings } from '../agent-context';
-import { WorkingMemoryProvider } from '../agent-working-memory-context';
-import { usePlaygroundModel } from '../playground-model-context';
 import { ThreadPreferencesProvider } from '../thread-preferences-provider';
 import {
   allowedModels,
@@ -19,8 +24,6 @@ import {
   workingMemory,
 } from './fixtures/thread-preferences';
 import { buildBuilderSettings } from '@/domains/agent-builder/hooks/__tests__/fixtures/builder-settings';
-import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
-import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

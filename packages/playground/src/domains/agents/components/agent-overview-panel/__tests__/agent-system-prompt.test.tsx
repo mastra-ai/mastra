@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { AgentSystemPrompt } from '@mastra/playground-ui/domains/agent-chat/overview/agent-system-prompt';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { AgentSystemPrompt } from '../agent-system-prompt';
 
 const instructions =
   '\n  Follow **these instructions**.\n\n- Keep `source_text` unchanged.\n- Ask before publishing.\n\n';

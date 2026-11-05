@@ -1,12 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { useStudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { HeaderListFormItem } from '@/domains/configuration/components/header-list-form';
 import { HeaderListForm } from '@/domains/configuration/components/header-list-form';
-import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
 /**
  * Compact header editor for the blocked "Authentication Required" screen.

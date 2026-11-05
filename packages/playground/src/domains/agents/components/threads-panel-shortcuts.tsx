@@ -1,5 +1,5 @@
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agent-chat/context/use-threads-panel';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useThreadsPanel } from '../context/use-threads-panel';
 
 /**
  * `{` toggles the threads panel. Rendered inside the agent `KeyboardScope`, so

@@ -1,5 +1,22 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { AgentChat } from '@mastra/playground-ui/domains/agent-chat/components/agent-chat';
+import {
+  AgentChatLoadingSkeleton,
+  AgentLandingLoadingSkeleton,
+} from '@mastra/playground-ui/domains/agent-chat/components/agent-loading-skeletons';
+import { ObservationalMemoryProvider } from '@mastra/playground-ui/domains/agent-chat/context/agent-observational-memory-context';
+import { WorkingMemoryProvider } from '@mastra/playground-ui/domains/agent-chat/context/agent-working-memory-context';
+import { BrowserSessionProvider } from '@mastra/playground-ui/domains/agent-chat/context/browser-session-provider';
+import { MemoryTimelineProvider } from '@mastra/playground-ui/domains/agent-chat/context/memory-timeline-context';
+import { ThreadsPanelProvider } from '@mastra/playground-ui/domains/agent-chat/context/threads-panel-context';
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agent-chat/context/use-threads-panel';
+import type { ThreadDraftHandle } from '@mastra/playground-ui/domains/agent-chat/conversation/ThreadInputContext';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/agent-chat/conversation/ThreadInputContext';
+import { AgentLayout } from '@mastra/playground-ui/domains/agent-chat/sidebar/agent-layout';
+import { AgentSidebar } from '@mastra/playground-ui/domains/agent-chat/sidebar/agent-sidebar';
+import { ChatThreads } from '@mastra/playground-ui/domains/agent-chat/sidebar/chat-threads';
+import { SidebarPanel } from '@mastra/playground-ui/domains/agent-chat/sidebar/sidebar-panel';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
@@ -13,28 +30,11 @@ import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { useMemory, useThreads } from '@mastra/react/hooks/memory';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { AgentSidebar } from '@/domains/agents/agent-sidebar';
-import { AgentChat } from '@/domains/agents/components/agent-chat';
-import { AgentLayout } from '@/domains/agents/components/agent-layout';
-import {
-  AgentChatLoadingSkeleton,
-  AgentLandingLoadingSkeleton,
-} from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
-import { ChatThreads } from '@/domains/agents/components/chat-threads';
-import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
-import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
-import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-preferences-provider';
-import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';
-import { useThreadsPanel } from '@/domains/agents/context/use-threads-panel';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
-import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
-import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentThread() {

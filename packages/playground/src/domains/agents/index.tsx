@@ -1,15 +1,15 @@
 /* eslint-disable react-refresh/only-export-components -- pure re-export barrel */
-export * from './components/agent-chat';
+export * from '@mastra/playground-ui/domains/agent-chat/components/agent-chat';
 export * from './context';
-export * from './components/agent-metadata';
-export * from './components/chat-threads';
+export * from '@mastra/playground-ui/domains/agent-chat/overview/metadata';
+export * from '@mastra/playground-ui/domains/agent-chat/sidebar/chat-threads';
 export * from './components/agent-combobox';
-export * from './components/composer-model-switcher';
-export * from './utils/extractPrompt';
-export * from './components/memory-sidebar/agent-memory';
-export * from './components/agent-layout';
+export * from '@mastra/playground-ui/domains/agent-chat/model/composer-model-switcher';
+export * from '@mastra/playground-ui/domains/agents/utils';
+export * from '@mastra/playground-ui/domains/agent-chat/memory-sidebar/agent-memory';
+export * from '@mastra/playground-ui/domains/agent-chat/sidebar/agent-layout';
 
-export * from './components/browser-view';
+export * from '@mastra/playground-ui/domains/agent-chat/browser-view/index';
 export * from './components/agent-cms-blocks';
 export * from './components/agent-edit-page/utils/form-validation';
 export * from './components/agent-edit-page';
@@ -25,5 +25,4 @@ export * from './components/agent-cms-form-shell';
 export * from './components/agent-version-panel';
 export * from './components/agent-playground';
 export * from './components/agent-page-tabs';
-export * from './components/agent-list/agents-list';
-export * from './components/agent-list/no-agents-info';
+export * from '@mastra/playground-ui/domains/agents/components/agent-list';

@@ -1,6 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { PlatformIcon } from '@mastra/playground-ui/domains/agent-chat/components/platform-icons';
+import { useReconcilePendingInstallOnFocus } from '@mastra/playground-ui/domains/agent-chat/hooks/use-reconcile-pending-install-on-focus';
 import { surfaceRimFocus } from '@mastra/playground-ui/primitives/form-element';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -8,8 +10,6 @@ import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hook
 import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
-import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface IntegrationsProps {
   agentId: string;

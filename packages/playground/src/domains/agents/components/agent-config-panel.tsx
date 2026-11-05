@@ -6,12 +6,18 @@ import {
   DrawerTitle,
   DrawerViewport,
 } from '@mastra/playground-ui/components/Drawer';
+import { AgentOverviewPanel } from '@mastra/playground-ui/domains/agent-chat/overview/agent-overview-panel';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import type { ReactNode } from 'react';
 
-import { AgentOverviewPanel } from './agent-overview-panel/agent-overview-panel';
-import { RouteSidePanel } from '@/lib/route-side-panel';
+import type { ReactNode } from 'react';
+import { RouteSidePanel, useRouteSidePanel } from '@/lib/route-side-panel';
+
+/** The shared overview panel, skipping its data fetching while the route side panel is collapsed. */
+export function StudioAgentOverviewPanel({ agentId }: { agentId: string }) {
+  const { isCollapsed } = useRouteSidePanel();
+  return <AgentOverviewPanel agentId={agentId} collapsed={isCollapsed} />;
+}
 
 /**
  * The agent Config panel. On desktop it is the route side panel next to the Studio frame.
@@ -30,7 +36,7 @@ export function AgentConfigPanel({
   const isMobile = useIsMobile();
   const panel = (
     <ActivatedSkillsProvider key={agentId}>
-      <AgentOverviewPanel agentId={agentId} />
+      <StudioAgentOverviewPanel agentId={agentId} />
     </ActivatedSkillsProvider>
   );
 

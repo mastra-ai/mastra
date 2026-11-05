@@ -1,4 +1,13 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ChatProvider } from '@mastra/playground-ui/domains/agent-chat/chat/chat-provider';
+import {
+  WorkingMemoryProvider,
+  useWorkingMemory,
+} from '@mastra/playground-ui/domains/agent-chat/context/agent-working-memory-context';
+import {
+  PlaygroundModelProvider,
+  usePlaygroundModel,
+} from '@mastra/playground-ui/domains/agent-chat/context/playground-model-context';
 import {
   useChatMessages,
   useChatModelContext,
@@ -14,11 +23,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useRef } from 'react';
+
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { ChatProvider } from '../chat-provider';
 import {
   approvalChunks,
   approvalHistory,
@@ -33,8 +41,6 @@ import {
   unfinishedToolHistory,
 } from './fixtures/tool-run';
 import { workingMemoryFixture } from './fixtures/working-memory';
-import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
-import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -882,8 +888,7 @@ describe('ChatProvider', () => {
     const omPart = latestMessages
       .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
       .find(part => (part as { toolCallId?: string }).toolCallId === 'om-buffering-cycle-reload') as
-      | { state?: string; output?: { omData?: Record<string, unknown> } }
-      | undefined;
+      { state?: string; output?: { omData?: Record<string, unknown> } } | undefined;
 
     expect(omPart?.state).toBe('output-available');
     expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);

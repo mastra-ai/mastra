@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { StudioConfigContext } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
 
+import type { StudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/types';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
-import type { StudioConfig } from '../types';
-import { StudioConfigContext } from './studio-config-state';
 
 export interface StudioConfigProviderProps {
   children: React.ReactNode;

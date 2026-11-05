@@ -26,10 +26,7 @@ export const arrayToRecord = (arr: string[]): Record<string, EntityConfig> => {
 /** Normalize tools from `string[]` (legacy), `Record`, or `ConditionalVariant[]` format. */
 export const normalizeToolsToRecord = (
   tools:
-    | string[]
-    | Record<string, EntityConfig>
-    | StorageConditionalVariant<Record<string, EntityConfig>>[]
-    | undefined,
+    string[] | Record<string, EntityConfig> | StorageConditionalVariant<Record<string, EntityConfig>>[] | undefined,
 ): Record<string, EntityConfig> => {
   if (!tools) return {};
   if (!Array.isArray(tools)) return { ...tools };

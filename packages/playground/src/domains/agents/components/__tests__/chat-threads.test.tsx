@@ -1,12 +1,12 @@
+import { ThreadsPanelProvider } from '@mastra/playground-ui/domains/agent-chat/context/threads-panel-context';
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agent-chat/context/use-threads-panel';
+import type { ChatThreadsProps } from '@mastra/playground-ui/domains/agent-chat/sidebar/chat-threads';
+import { ChatThreads } from '@mastra/playground-ui/domains/agent-chat/sidebar/chat-threads';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ThreadsPanelProvider } from '../../context/threads-panel-context';
-import { useThreadsPanel } from '../../context/use-threads-panel';
 import { writeAllowedCapabilities, writeDeniedCapabilities } from '../../hooks/__tests__/fixtures/auth';
-import type { ChatThreadsProps } from '../chat-threads';
-import { ChatThreads } from '../chat-threads';
 import { namedThread, otherThread } from './fixtures/threads';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';

@@ -1,9 +1,9 @@
+import { AttachFilePopover } from '@mastra/playground-ui/domains/agent-chat/thread/attachments/attach-file-popover';
+import { ComposerAttachments } from '@mastra/playground-ui/domains/agent-chat/thread/attachments/attachment';
+
+import { ComposerAttachmentsProvider } from '@mastra/playground-ui/domains/agent-chat/thread/attachments/composer-attachments';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-
-import { AttachFilePopover } from '../attach-file-popover';
-import { ComposerAttachments } from '../attachment';
-import { ComposerAttachmentsProvider } from '../composer-attachments';
 
 describe('composer attachment previews', () => {
   describe('when several text files are attached', () => {

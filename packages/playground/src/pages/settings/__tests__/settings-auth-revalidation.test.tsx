@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
+import { useStudioConfig } from '@mastra/playground-ui/domains/agent-chat/config/studio-config-state';
 import { MastraReactProvider } from '@mastra/react';
 import type { AuthenticatedCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
 
+import { afterEach, describe, expect, it } from 'vitest';
 import { StudioSettingsPage } from '../index';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import {
   MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
   StudioConfigProvider,
 } from '@/domains/configuration/context/studio-config-context';
-import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

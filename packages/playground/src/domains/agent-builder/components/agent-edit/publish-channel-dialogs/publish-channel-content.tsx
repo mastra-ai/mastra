@@ -9,9 +9,9 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { PlatformIcon } from '@mastra/playground-ui/domains/agent-chat/components/platform-icons';
+import { useConnectChannelAction } from '@mastra/playground-ui/domains/agent-chat/hooks/use-connect-channel-action';
 import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
-import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
 
 interface PlatformCopy {
   description: (platformName: string) => string;
