@@ -39,7 +39,8 @@ import {
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
-import { dashboardAgent, dashboardMcpServer } from './mcp/dashboard-server';
+import { greetingAgent, greetingMcpServer } from './mcp/greeting-server';
+import { observabilityAgent, observabilityMcpServer } from './mcp/observability-server';
 
 // Non-Mastra MCP server — uses @modelcontextprotocol/sdk directly via stdio.
 // toMCPServerProxies() wraps each MCPClient connection as an MCPServerBase so
@@ -158,7 +159,8 @@ export const mastra = new Mastra({
     schemaValidatedAgent,
     requestContextDemoAgent,
     mcpAppsAgent,
-    dashboardAgent,
+    greetingAgent,
+    observabilityAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
@@ -207,7 +209,8 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
     mcpAppsServer,
-    dashboardMcpServer,
+    greetingMcpServer,
+    observabilityMcpServer,
     ...externalMcpClient.toMCPServerProxies(),
   },
   workflows: {

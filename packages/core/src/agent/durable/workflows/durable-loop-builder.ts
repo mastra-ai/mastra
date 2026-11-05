@@ -924,6 +924,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
+      state.tracingStopCause = decision.stopCause;
+      // Also on the registry, which the final step still falls back to.
       const tracingRegistry = getRunRegistryEntry(state.runId, rt.mastra);
       if (tracingRegistry) tracingRegistry.tracingStopCause = decision.stopCause;
       const isFinal = decision.isFinal;
@@ -1174,15 +1176,24 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               // Rebuilt spans end from snapshots taken at run start, so the clocks the
               // steps carried are applied here.
               const clocks = carriedSpanClocks(reg, state);
-              // Another worker may lack tracingTermination; fallback retains guardrail outcome but can lose observer context.
+              // The state carries the facts across workers; the registry is the fallback for
+              // runs whose snapshots predate those fields.
+              const finishReason = finalOutput.stepResult?.reason;
+              const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+              const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
+              if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
+                logger?.warn?.(
+                  `[DurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
+                );
+              }
               const termination =
-                ['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && reg?.tracingTermination
-                  ? reg.tracingTermination
+                ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+                  ? recordedTermination
                   : agentLoopTermination({
-                      stopCause: reg?.tracingStopCause,
-                      delegationFailure: reg?.tracingDelegationFailure,
-                      finishReason: finalOutput.stepResult?.reason,
-                      tripwire,
+                      stopCause,
+                      delegationFailure: state.tracingDelegationFailure ?? reg?.tracingDelegationFailure,
+                      finishReason,
+                      tripwire: tripwire ?? state.lastStepResult?.tripwire,
                       maxSteps: initData.options?.maxSteps,
                     });
               if (observability) {

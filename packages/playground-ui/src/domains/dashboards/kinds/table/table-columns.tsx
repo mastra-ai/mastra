@@ -2,6 +2,7 @@ import { BreakdownChangeDescription } from '../../../metrics/components/breakdow
 import { BreakdownFigure } from '../../../metrics/components/breakdown/breakdown-figure';
 import type { Change, TableColumn, TableRow, ValueColumn } from '../../lib/table';
 import { TableChangeCell, TableDimensionCell, TableNameCell, TableValueCell } from './table-cells';
+import type { ProjectLabel } from './table-cells';
 import type { MetricsTableColumn } from '@/ds/components/MetricsTable';
 
 /** The MetricsTable column for one of the view's columns. */
@@ -10,6 +11,7 @@ export function tableColumn(
   window: { start: Date; end: Date },
   compared: ValueColumn | undefined,
   changeOf: (row: TableRow) => Change | undefined,
+  projectLabel: ProjectLabel,
 ): MetricsTableColumn<TableRow> {
   const o = column.options;
   const base = { id: column.id, header: column.label, description: o.description };
@@ -20,7 +22,7 @@ export function tableColumn(
         width: o.width,
         sortValue: o.sortable ? (row: TableRow) => row.name : undefined,
         firstDirection: 'asc',
-        cell: row => <TableNameCell options={o} row={row} />,
+        cell: row => <TableNameCell options={o} row={row} projectLabel={projectLabel} />,
       };
     case 'dimension':
       return {
@@ -30,7 +32,7 @@ export function tableColumn(
           ? (row: TableRow) => (o.query === undefined ? row.dimensions[o.dimension] : row.lookups[column.id])
           : undefined,
         firstDirection: 'asc',
-        cell: row => <TableDimensionCell id={column.id} options={o} row={row} />,
+        cell: row => <TableDimensionCell id={column.id} options={o} row={row} projectLabel={projectLabel} />,
       };
     case 'value': {
       const value: ValueColumn = { id: column.id, label: column.label, options: o };

@@ -5059,21 +5059,21 @@ describe('extractVersionOptions', () => {
 });
 
 describe('plain Agent resumable streams', () => {
-  function plainAgent(id: string, streams?: boolean) {
+  function plainAgent(id: string, durable?: boolean) {
     return new Agent({
       id,
       name: id,
       instructions: 'test-instructions',
       model: { specificationVersion: 'v2' } as any,
-      ...(streams === undefined ? {} : { streams }),
+      ...(durable === undefined ? {} : { durable }),
     });
   }
 
   it.each([
     [undefined, true],
     [false, false],
-  ])('streams: %s on a registered agent detaches on HTTP close = %s', async (streams, detaches) => {
-    const agent = plainAgent('plain-agent', streams);
+  ])('durable: %s on a registered agent detaches on HTTP close = %s', async (durable, detaches) => {
+    const agent = plainAgent('plain-agent', durable);
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
     let captured: any;
     vi.spyOn(agent, 'stream').mockImplementation(async (_messages, options) => {
@@ -5132,7 +5132,7 @@ describe('plain Agent resumable streams', () => {
       name: 'plain-agent',
       instructions: 'test-instructions',
       model: { specificationVersion: 'v2' } as any,
-      streams: { pubsub },
+      durable: { pubsub },
     });
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
     vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ status: 'running' });
@@ -5161,7 +5161,7 @@ describe('plain Agent resumable streams', () => {
       name: 'plain-agent',
       instructions: 'test-instructions',
       model: { specificationVersion: 'v2' } as any,
-      streams: { pubsub },
+      durable: { pubsub },
     });
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
     vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ status: 'running' });

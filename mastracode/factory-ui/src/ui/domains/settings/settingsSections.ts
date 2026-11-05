@@ -41,6 +41,10 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
   return MODEL_DEFAULTS_ANCHORS[MODEL_ROUTES[modelScope].chats];
 }
 
+export const VOICE_INPUT_ANCHOR = 'voice-input';
+
+type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
+
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };
 
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
@@ -60,7 +64,7 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
   return typeof value === 'string' && value in SETTINGS_SECTION_LABELS;
 }
 
-export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: ModelDefaultsAnchor): string {
+export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: SettingsAnchor): string {
   const path = `/factories/${factoryId}/settings/${section}`;
   return anchor ? `${path}#${anchor}` : path;
 }

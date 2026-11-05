@@ -841,8 +841,8 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       'approve-tool-call',
       'decline-tool-call',
     ] as const) {
-      for (const { streams, explicitAbort } of (kind === 'plain' ? ([undefined, false] as const) : [undefined]).flatMap(
-        streams => [false, true, 'run', 'threadless'].map(explicitAbort => ({ streams, explicitAbort })),
+      for (const { durable, explicitAbort } of (kind === 'plain' ? ([undefined, false] as const) : [undefined]).flatMap(
+        durable => [false, true, 'run', 'threadless'].map(explicitAbort => ({ durable, explicitAbort })),
       )) {
         if (typeof explicitAbort === 'string' && (kind === 'plain' || !['stream', 'stream-alias'].includes(route)))
           continue;
@@ -851,7 +851,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           route,
         );
         it.skipIf(config.skipUntilIdleDisconnectReplay && untilIdle && kind !== 'plain' && !explicitAbort)(
-          `${route}${streams === false ? ' (streams:false)' : ''}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`,
+          `${route}${durable === false ? ' (durable:false)' : ''}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`,
           async () => {
             fixture = await config.setupModel();
             const entered = deferred();
@@ -904,7 +904,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             const inner = new Agent({
               id: 'disconnect-agent',
               name: 'Disconnect agent',
-              streams,
+              durable,
               instructions: 'Execute three steps.',
               model: fixture.model,
               ...(threadless ? {} : { memory }),
@@ -988,7 +988,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
               client.abort();
               await disconnected.promise;
               await request;
-              if (streams !== false && explicitAbort) {
+              if (durable !== false && explicitAbort) {
                 const runScoped = typeof explicitAbort === 'string';
                 if (runScoped) {
                   const denied = await fetch(`${server.baseUrl}/api/agents/otherAgent/runs/${runId}/abort`, {
@@ -1008,11 +1008,11 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
                 expect(response.status).toBe(200);
                 expect(result).toEqual({ aborted: true });
               }
-              const completes = streams !== false && !explicitAbort;
+              const completes = durable !== false && !explicitAbort;
               if (!completes) await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true));
               else expect(toolSignal?.aborted).toBe(false);
               const observing =
-                streams === false
+                durable === false
                   ? undefined
                   : fetch(`${base}/observe`, {
                       method: 'POST',

@@ -238,6 +238,8 @@ const durableLLMOutputSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Provider id and serving model of the response, only when the provider sent one
   response: responseRecordSchema.optional(),
+  // Outcome of a step that ended the run itself, carried to the final step through the state
+  tracingTermination: z.custom<SpanTermination>().optional(),
 });
 
 /**
@@ -385,6 +387,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // emits a deferred error chunk rather than crashing the loop. Used by
       // the exhausted-models path and by run-level timeout expiry (#21724).
       let terminateAttemptSpans: ((termination: SpanTermination) => void) | undefined;
+      let tracingTermination: SpanTermination | undefined;
+      const recordTermination = (termination: SpanTermination) => {
+        tracingTermination = termination;
+        // The registry copy keeps older @mastra/inngest finalizers working in-process.
+        const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+        if (registry) registry.tracingTermination = termination;
+      };
       const emitFatalErrorBail = async (
         fatalError: Error,
         modelId: string,
@@ -401,8 +410,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         // This bail returns a finish result. Record the failure now, but let finalization
         // end the roots with accumulated usage and output, including on evented workers.
         const termination = executionFailureTermination(fatalError);
-        const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        if (registry) registry.tracingTermination = termination;
+        recordTermination(termination);
         terminateAttemptSpans?.(termination);
         // A total timeout can tear down the workflow before its finish mapping runs.
         endRunSpansWithError(runId, fatalError, {
@@ -449,6 +457,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           },
           metadata: { modelId },
           state: typedInput.state,
+          tracingTermination,
         } satisfies DurableLLMStepOutput;
       };
 
@@ -499,10 +508,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         // Clear it so it doesn't fire again on a subsequent iteration (shouldn't
         // happen since the loop will stop, but belt-and-suspenders).
         const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        if (entry) {
-          entry.tripwire = undefined;
-          entry.tracingTermination = agentLoopTermination({ tripwire: registryTripwire });
-        }
+        if (entry) entry.tripwire = undefined;
+        recordTermination(agentLoopTermination({ tripwire: registryTripwire }));
 
         logger?.warn?.('Input processor tripwire triggered (from preparation)', {
           agent: agentId,
@@ -536,6 +543,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           },
           metadata: {},
           state: typedInput.state,
+          tracingTermination,
         } satisfies DurableLLMStepOutput;
       }
 
@@ -917,8 +925,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       }
                     : cause,
               });
-              const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-              if (registry) registry.tracingTermination = termination;
+              recordTermination(termination);
               endAttempt(termination);
             };
 
@@ -1170,6 +1177,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       modelId: currentModel.modelId,
                     },
                     state: typedInput.state,
+                    tracingTermination,
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processInputStep processors:', error);
@@ -1325,6 +1333,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       modelId: currentModel.modelId,
                     },
                     state: typedInput.state,
+                    tracingTermination,
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMRequest processors:', error);
@@ -2759,6 +2768,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   isContinued: false,
                 }),
                 ...recordClocks(),
+                tracingTermination,
               } satisfies DurableLLMStepOutput;
             }
 
@@ -2826,6 +2836,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       isContinued: false,
                     }),
                     ...recordClocks(),
+                    tracingTermination,
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMResponse processors:', error);
@@ -3023,6 +3034,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
               ...recordClocks(),
               ...(releasedToolResultIds.length ? { releasedToolResultIds } : {}),
+              tracingTermination,
             };
 
             // 16. End step span only if there are NO tool calls
