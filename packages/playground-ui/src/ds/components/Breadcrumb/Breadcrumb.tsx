@@ -151,13 +151,15 @@ export const Crumb = ({
           className={cn(
             // Same box as `buttonVariants({ variant: 'ghost', size: 'sm' })` so a label and an
             // icon-sm control sitting next to it share height, radius, padding and colors.
-            'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full px-2',
+            'inline-flex min-w-0 items-center gap-2 overflow-hidden rounded-full pl-2',
             // The first crumb's text stays .9em in from the header edge (the old pill padding).
             '[li:first-child>&]:ml-[calc(.9em-var(--spacing)*2)]',
             controlSizeClasses.sm,
             controlStateColorTransition,
-            // A control follows the text directly; its own margin sets the gap.
-            hasControl && 'pr-0',
+            // A control follows the text directly; its own margin sets the gap. Left and right are
+            // separate utilities (no `px-2` + `pr-0` override), so an app that compiles its own
+            // Tailwind after this stylesheet can't reorder them.
+            hasControl ? 'pr-0' : 'pr-2',
             crumbLabelStateClass({ isCurrent, switcherCoversCrumb, switcherBesideLink }),
             className,
           )}
