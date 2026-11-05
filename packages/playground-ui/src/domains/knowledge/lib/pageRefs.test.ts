@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { KnowledgePagePayload } from '../pageTypes';
-import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from './pageRefs';
+import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex, noteMentionTarget } from './pageRefs';
 
 function page(id: string, parentId: string | null, extra: Partial<KnowledgePagePayload> = {}): KnowledgePagePayload {
   return {
@@ -58,6 +58,52 @@ describe('knowledgePageRefIndex', () => {
   it('skips deleted pages', () => {
     expect(resolved('gone')).toBeUndefined();
     expect(resolved('docs:mastra#gone')).toBeUndefined();
+  });
+});
+
+describe('knowledgePageRefIndex with pages fetched by ref', () => {
+  // An imported page two levels under a scope the explorer hasn't loaded.
+  const plan = page('plan', 'parent', { scopeId: 'notion', name: 'Q3 launch plan', key: 'abc123' });
+
+  it('resolves a ref the host fetched its page by, when the pages on its path are not loaded', () => {
+    const index = knowledgePageRefIndex([docs], new Map([['notion:acme:conn#parent/abc123', plan]]));
+    expect(index.resolve(' notion:acme:conn#parent/abc123 ')?.id).toBe('plan');
+    expect(knowledgePageRefIndex([docs]).resolve('notion:acme:conn#parent/abc123')).toBeUndefined();
+  });
+
+  it('skips a fetched page that has since been deleted or merged', () => {
+    const merged = { ...plan, mergedInto: 'other' };
+    expect(
+      knowledgePageRefIndex([], new Map([['notion:acme:conn#parent/abc123', merged]])).resolve(
+        'notion:acme:conn#parent/abc123',
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe('noteMentionTarget', () => {
+  const plan = page('plan', 'parent', { scopeId: 'notion', name: 'Q3 launch plan', key: 'abc123' });
+  const twin = page('twin', 'elsewhere', { scopeId: 'notion', name: 'Twin', key: 'abc123' });
+  const byId = (...pages: KnowledgePagePayload[]) => new Map(pages.map(candidate => [candidate.id, candidate]));
+  const index = knowledgePageRefIndex([docs, workflows, suspend]);
+
+  it('links a ref the index resolves only to a page the note mentions', () => {
+    expect(noteMentionTarget(index, byId(suspend), ['suspend'], 'docs:mastra#workflows/suspend-and-resume')?.id).toBe(
+      'suspend',
+    );
+    expect(noteMentionTarget(index, byId(suspend), [], 'docs:mastra#workflows/suspend-and-resume')).toBeUndefined();
+  });
+
+  it('links a ref whose path is not loaded to the mentioned page its last key names', () => {
+    expect(noteMentionTarget(index, byId(plan), ['plan'], 'notion:acme:conn#parent/abc123')?.id).toBe('plan');
+  });
+
+  it('links nothing when no mentioned page, or more than one, has that key', () => {
+    expect(noteMentionTarget(index, byId(plan), ['plan'], 'notion:acme:conn#parent/zzz')).toBeUndefined();
+    expect(noteMentionTarget(index, byId(plan), [], 'notion:acme:conn#parent/abc123')).toBeUndefined();
+    expect(
+      noteMentionTarget(index, byId(plan, twin), ['plan', 'twin'], 'notion:acme:conn#parent/abc123'),
+    ).toBeUndefined();
   });
 });
 

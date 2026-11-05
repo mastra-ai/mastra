@@ -16,7 +16,14 @@ function canonicalName(name: string): string {
   return name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-export function knowledgePageRefIndex(pages: Iterable<KnowledgePagePayload>): KnowledgePageRefIndex {
+/**
+ * `byRef` holds pages fetched by the exact ref that names them, so a `scope#key/key` ref resolves even when
+ * the pages on its path aren't loaded.
+ */
+export function knowledgePageRefIndex(
+  pages: Iterable<KnowledgePagePayload>,
+  byRef: ReadonlyMap<string, KnowledgePagePayload> = new Map(),
+): KnowledgePageRefIndex {
   const byId = new Map<string, KnowledgePagePayload>();
   const scopesByAddress = new Map<string, KnowledgePagePayload>();
   const childByKey = new Map<string, KnowledgePagePayload>();
@@ -47,9 +54,44 @@ export function knowledgePageRefIndex(pages: Iterable<KnowledgePagePayload>): Kn
     resolve(raw) {
       const ref = raw.trim();
       if (!ref) return undefined;
-      return byId.get(ref) ?? byPath(ref) ?? scopesByAddress.get(ref) ?? byName.get(canonicalName(ref)) ?? undefined;
+      const fetched = byRef.get(ref);
+      return (
+        byId.get(ref) ??
+        (fetched && !fetched.deletedAt && !fetched.mergedInto ? fetched : undefined) ??
+        byPath(ref) ??
+        scopesByAddress.get(ref) ??
+        byName.get(canonicalName(ref)) ??
+        undefined
+      );
     },
   };
+}
+
+/**
+ * The page a note's `[[ref]]` links to: only one the server resolved the note's mentions to. When the index
+ * can't walk the ref's path (pages on the way aren't loaded), the mentioned page whose key ends the path
+ * stands for it, if just one does.
+ */
+export function noteMentionTarget(
+  index: KnowledgePageRefIndex,
+  pagesById: ReadonlyMap<string, KnowledgePagePayload>,
+  mentions: readonly string[],
+  ref: string,
+): KnowledgePagePayload | undefined {
+  const resolved = index.resolve(ref);
+  if (resolved) return mentions.includes(resolved.id) ? resolved : undefined;
+  const hash = ref.indexOf('#');
+  if (hash <= 0) return undefined;
+  const key = ref
+    .slice(hash + 1)
+    .trim()
+    .split('/')
+    .at(-1);
+  const candidates = mentions.flatMap(id => {
+    const page = pagesById.get(id);
+    return page && !page.isScope && page.key === key ? [page] : [];
+  });
+  return candidates.length === 1 ? candidates[0] : undefined;
 }
 
 const WIKILINK = /\[\[([^\]]+)\]\]/g;
