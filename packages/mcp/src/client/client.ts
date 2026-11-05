@@ -791,6 +791,16 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
+   * Connects as a tool call: the handshake and the streams the connection keeps open reach the
+   * transport's fetch with the call's requestContext, through the connection context. Any enclosing
+   * operation scope is exited first. It would take priority in fetch, and the new streams and stdio
+   * child would deliver every later server message in it.
+   */
+  private connectAsCall<T>(requestContext: RequestContext | null, connect: () => Promise<T>): Promise<T> {
+    return this.operationContextStore.exit(() => this.connectionContextStore.run(requestContext, connect));
+  }
+
+  /**
    * The requestContext the transport's fetch passes on for an outgoing request. An operation scope
    * owns its requests, even when its requestContext is null. Outside one, the handshake and the
    * streams the connection keeps open use the connection context, and a reply to a server request
@@ -1293,14 +1303,11 @@ export class InternalMastraMCPClient extends MastraBase {
 
       this.assertSameLifecycle(generation);
       // A reconnect inside a tool call opens the connection as that call, like a hydrated tool's
-      // first connect: only the transport's fetch sees its requestContext. Run in the operation
-      // scope, the new streams and stdio child would deliver every later server message in it.
+      // first connect.
       const callContext = this.operationContextStore.getStore();
       await (callContext === undefined
         ? this.connect(generation)
-        : this.operationContextStore.exit(() =>
-            this.connectionContextStore.run(callContext, () => this.connect(generation)),
-          ));
+        : this.connectAsCall(callContext, () => this.connect(generation)));
       this.log('debug', 'Successfully reconnected to MCP server');
     })();
     this.reconnectPromise = reconnectPromise;
@@ -1915,7 +1922,7 @@ export class InternalMastraMCPClient extends MastraBase {
           // authenticate that handshake, and the streams the connection keeps open, as this call.
           // `connect()` is memoised: concurrent first calls share the handshake of the first one.
           if (serverMeta.connectFirst) {
-            await this.connectionContextStore.run(operationContext, () => this.connect());
+            await this.connectAsCall(operationContext, () => this.connect());
           }
 
           return this.operationContextStore.run(operationContext, async () => {

@@ -451,6 +451,34 @@ describe('hydrated MCP tool on a 2025-11-25 server event stream (issue #29531)',
     expect(serverLogs.find('echo first')?.user).toBe('alice');
     expect(serverLogs.find('echo second')?.user).toBe('bob');
   });
+
+  it("opens a connection as the call that opens it, even from a callback inside another call's scope", async () => {
+    server = await startServer(legacyHandler({ logOnResponse: true }));
+    const catalog = await cachedCatalog(server.url);
+    let nested: Promise<unknown> | undefined;
+    // The log on alice's own response stream runs this callback inside alice's call. It drops the
+    // connection, so bob's call that follows opens a new one.
+    const logger: LogHandler = entry => {
+      if (!nested && JSON.stringify(entry.details ?? {}).includes('echo trigger')) {
+        nested = (async () => {
+          await client.disconnect();
+          server!.received.length = 0;
+          return tools.demo_echo!.execute!({ text: 'nested' }, callAs('bob'));
+        })();
+      }
+    };
+    const client = perUserClient(server.url, logger);
+    const tools = await client.toolsFromDefinitions({ definitions: catalog });
+
+    // The disconnect may abort alice's own call; only bob's connection matters here.
+    await tools.demo_echo!.execute!({ text: 'trigger' }, callAs('alice')).catch(() => {});
+    await vi.waitFor(() => expect(nested).toBeDefined());
+
+    expect(await nested).toMatchObject({ content: [{ type: 'text', text: 'echo: nested' }] });
+    const { received } = server;
+    expect(received.filter(request => request.method === 'initialize').map(request => request.user)).toEqual(['bob']);
+    expect(received.filter(request => request.user !== 'bob')).toEqual([]);
+  });
 });
 
 /**
