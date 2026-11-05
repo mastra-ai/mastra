@@ -502,8 +502,8 @@ describe('DashboardRenderer', () => {
       });
       const card = cell(container, widget.id);
       await within(card).findByRole('button', { name: `Move ${widget.id}` }, { timeout: 5000 });
-      expect(within(card).queryByRole('link', { name: /^Create alert from / })).toBeNull();
-      expect(within(card).queryByRole('button', { name: /^Create alert from / })).toBeNull();
+      expect(within(card).queryByRole('link', { name: /^Create alert\b/ })).toBeNull();
+      expect(within(card).queryByRole('button', { name: /^Create alert\b/ })).toBeNull();
       expect(action).not.toHaveBeenCalled();
     });
 
@@ -636,13 +636,13 @@ describe('DashboardRenderer', () => {
       if (!spy.mock.lastCall) throw new Error('The host was never asked');
       return spy.mock.lastCall[0];
     };
-    const alertLabel = /^Create alert from /;
+    const alertLabel = /^Create alert\b/;
 
     it.each([
       ['a timeseries card', metricsWidget('agent-runs'), 'Create alert from Agent runs'],
       ['a table card', models(), `Create alert from ${models().views[0].label}`],
       ['a scores card', scoresWidget, `Create alert from ${scoresWidget.views[0].label ?? scoresWidget.title}`],
-      ['a KPI group', kpisWidget, `Create alert from ${kpisWidget.views[0].label ?? kpisWidget.title ?? 'widget'}`],
+      ['a KPI group', kpisWidget, 'Create alert'],
     ])("links %s to the host's alert editor for its open view", async (_, widget, name) => {
       const { alert, spy } = hosting();
       const { container } = renderDashboard(definition(widget), { alert });

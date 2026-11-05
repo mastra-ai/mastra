@@ -29,7 +29,8 @@ export function alertAction(
   source: AlertSource,
 ): ReactNode {
   if (!alert) return undefined;
-  const label = `Create alert from ${view.label?.trim() || widget.title?.trim() || 'widget'}`;
+  const name = view.label?.trim() || widget.title?.trim();
+  const label = name ? `Create alert from ${name}` : 'Create alert';
   const button = (action: Parameters<typeof AlertAction>[0]['action']) => (
     <AlertAction action={action} label={label} LinkComponent={alert.LinkComponent} />
   );
