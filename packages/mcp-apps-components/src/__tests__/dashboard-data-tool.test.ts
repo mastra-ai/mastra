@@ -13,7 +13,13 @@ import {
   DASHBOARD_DATA_TOOL_NAME,
   dashboardDataTool,
 } from '@mastra/mcp-apps-components/dashboard-renderer';
-import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import {
+  Client,
+  InMemoryTransport,
+  ProtocolError,
+  ProtocolErrorCode,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client';
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { Hono } from 'hono';
@@ -95,17 +101,19 @@ afterEach(async () => {
   await Promise.all(closers.splice(0).map(close => close()));
 });
 
+type RelayToolCall = (params: Parameters<Client['callTool']>[0]) => ReturnType<Client['callTool']>;
+
 /**
  * A MastraClient inside the dashboard app, whose host relays its tool calls to `server` the way a
- * real host does. Counts every call so retries show up.
+ * real host does, or answers them with `relay`. Counts every call so retries show up.
  */
-async function dashboardClient(server: Client) {
+async function dashboardClient(server: Client, relay: RelayToolCall = params => server.callTool(params)) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, { serverTools: {} });
   let toolCalls = 0;
   bridge.oncalltool = async params => {
     toolCalls += 1;
-    return server.callTool(params);
+    return relay(params);
   };
   const app = new App({ name: 'dashboard', version: '1.0.0' }, {}, { autoResize: false });
   closers.push(
@@ -227,6 +235,19 @@ describe('dashboardDataTool', () => {
   describe('when the MCP server serving the app has no data tool', () => {
     it('tells the developer to register it, once, without retrying', async () => {
       const { client, toolCalls } = await dashboardClient(readerOfEmptyServer);
+
+      await expect(client.getMetricAggregate(SUM)).rejects.toThrow(/404.*tools: \{ dashboardDataTool \}/);
+      expect(toolCalls()).toBe(1);
+    });
+
+    it('does the same when Studio refuses the call in its own words', async () => {
+      // Studio checks the server's tool list itself and refuses with invalid params, as MCP servers do.
+      const { client, toolCalls } = await dashboardClient(readerOfEmptyServer, async () => {
+        throw new ProtocolError(
+          ProtocolErrorCode.InvalidParams,
+          `Tool "${DASHBOARD_DATA_TOOL_NAME}" isn't available to apps on MCP server "empty"`,
+        );
+      });
 
       await expect(client.getMetricAggregate(SUM)).rejects.toThrow(/404.*tools: \{ dashboardDataTool \}/);
       expect(toolCalls()).toBe(1);

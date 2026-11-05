@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
+import type { McpServerToolListResponse } from '@mastra/client-js';
 import { App } from '@modelcontextprotocol/ext-apps';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { render, waitFor } from '@testing-library/react';
+import { waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { useMcpAppToolCall } from '../../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from '../mcp-app-viewer';
 import type { McpAppViewerProps } from '../mcp-app-viewer';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 type AppTransport = Parameters<App['connect']>[0];
 
@@ -23,10 +30,12 @@ afterEach(async () => {
  * Renders the viewer and connects a real MCP App to it, standing in for the sandbox proxy page
  * it loads: the proxy announces itself, then relays JSON-RPC between the viewer and the app.
  */
-async function renderApp(props: Partial<McpAppViewerProps> = {}, setup?: (app: App) => void) {
-  const { container } = render(
-    <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} {...props} />,
-  );
+async function renderApp(
+  props: Partial<McpAppViewerProps> = {},
+  setup?: (app: App) => void,
+  viewer: ReactElement = <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} {...props} />,
+) {
+  const { container } = renderWithProviders(viewer);
   const frame = await waitFor(() => {
     const contentWindow = container.querySelector('iframe')?.contentWindow;
     if (!contentWindow) throw new Error('sandbox iframe not mounted yet');
@@ -179,5 +188,45 @@ describe('McpAppViewer', () => {
     await expect(
       app.updateModelContext({ content: [{ type: 'text', text: 'The user drilled into traces.' }] }),
     ).rejects.toThrow('No handler for method: ui/update-model-context');
+  });
+
+  describe("when Studio relays an app's tool call to the app's MCP server", () => {
+    /** The viewer as Studio mounts it: tool calls go to the server through Studio's API. */
+    function StudioViewer({ serverId }: { serverId: string }) {
+      const onToolCall = useMcpAppToolCall(serverId);
+      return <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} onToolCall={onToolCall} />;
+    }
+
+    function serveTools(tools: McpServerToolListResponse['tools']) {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/mcp/apps/tools`, () => HttpResponse.json<McpServerToolListResponse>({ tools })),
+      );
+    }
+
+    it("refuses a tool the server doesn't have with invalid params, as MCP servers do", async () => {
+      serveTools([]);
+      const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
+
+      await expect(app.callServerTool({ name: 'dashboardDataTool', arguments: {} })).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('isn\'t available to apps on MCP server "apps"'),
+      });
+    });
+
+    it('refuses a tool the server keeps for the model the same way', async () => {
+      serveTools([
+        {
+          name: 'dashboardDataTool',
+          description: 'Reads data',
+          inputSchema: { type: 'object' },
+          _meta: { ui: { visibility: ['model'] } },
+        },
+      ]);
+      const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
+
+      await expect(app.callServerTool({ name: 'dashboardDataTool', arguments: {} })).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+      });
+    });
   });
 });

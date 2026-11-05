@@ -66,9 +66,17 @@ export const dashboardDataInputSchema = z
 
 export type DashboardDataInput = z.output<typeof dashboardDataInputSchema>;
 
+/** Statuses `Response.json` can't carry: informational ones, and those that forbid a body. */
+const NULL_BODY_STATUSES = new Set([204, 205, 304]);
+
 /** What the tool answers: a status and body, as the matching Mastra route would over HTTP. */
 export const dashboardDataOutputSchema = z.object({
-  status: z.number().int(),
+  status: z
+    .number()
+    .int()
+    .min(200)
+    .max(599)
+    .refine(status => !NULL_BODY_STATUSES.has(status), 'A dashboard read answers with a body.'),
   body: z.unknown(),
 });
 

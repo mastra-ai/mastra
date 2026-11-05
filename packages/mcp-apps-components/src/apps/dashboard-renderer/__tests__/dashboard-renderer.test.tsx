@@ -64,6 +64,22 @@ describe('dashboard renderer app', () => {
     });
   });
 
+  describe('when the server serving the app has no data tool', () => {
+    it('reads each widget once instead of retrying a call that can never succeed', async () => {
+      const host = await renderWithHost(app, { dataTool: false });
+
+      await host.sendToolResult({ content: [], structuredContent: { definition: agentRunsDashboard } });
+
+      expect(await screen.findByText('Agent runs')).toBeTruthy();
+      await expect.poll(() => host.toolCalls.length).toBeGreaterThan(0);
+      const reads = host.toolCalls.length;
+      // MastraClient retries a failure it deems transient after 100ms, then 200ms and 400ms.
+      await new Promise(resolve => setTimeout(resolve, 800));
+      expect(host.toolCalls).toHaveLength(reads);
+      expect(screen.queryByText('693')).toBeNull();
+    });
+  });
+
   describe('when the definition sets a default time range', () => {
     it('fetches metrics over that range', async () => {
       const windowsInHours: number[] = [];

@@ -1,4 +1,4 @@
-import { InMemoryTransport } from '@modelcontextprotocol/client';
+import { InMemoryTransport, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/client';
 import type { CallToolResult } from '@modelcontextprotocol/client';
 import { App } from '@modelcontextprotocol/ext-apps';
 import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextprotocol/ext-apps';
@@ -30,9 +30,14 @@ const once = (bridge: AppBridge, event: 'initialized' | 'sizechange') =>
   new Promise<void>(resolve => bridge.addEventListener(event, () => resolve()));
 
 /** Answers the data tool the way a Mastra server does: by calling the operation's route. */
-async function relayToServer(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
-  if (name !== DASHBOARD_DATA_TOOL_NAME) {
-    return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
+async function relayToServer(
+  name: string,
+  args: Record<string, unknown> = {},
+  dataTool: boolean,
+): Promise<CallToolResult> {
+  // Real hosts reject a tool their server doesn't have as a protocol error, not a tool result.
+  if (!dataTool || name !== DASHBOARD_DATA_TOOL_NAME) {
+    throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
   }
   const call = dashboardDataInputSchema.parse(args);
   const [method, path] = DASHBOARD_DATA_REQUESTS[call.operation].split(' ');
@@ -51,6 +56,8 @@ async function relayToServer(name: string, args: Record<string, unknown> = {}): 
 type HostOptions = {
   hostContext?: McpUiHostContext;
   capabilities?: McpUiHostCapabilities;
+  /** Whether the host's server registered the data tool. */
+  dataTool?: boolean;
 };
 
 /**
@@ -64,6 +71,7 @@ export async function renderWithHost<Input>(
   {
     hostContext = {},
     capabilities = { serverTools: {}, message: {}, updateModelContext: { text: {}, structuredContent: {} } },
+    dataTool = true,
   }: HostOptions = {},
 ) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
@@ -77,7 +85,7 @@ export async function renderWithHost<Input>(
   bridge.oncalltool = async ({ name, arguments: args }) => {
     const call = dashboardDataInputSchema.safeParse(args);
     toolCalls.push({ name, ...(call.success && { call: call.data }) });
-    return relayToServer(name, args);
+    return relayToServer(name, args, dataTool);
   };
   bridge.onupdatemodelcontext = async params => {
     chat.push('context');

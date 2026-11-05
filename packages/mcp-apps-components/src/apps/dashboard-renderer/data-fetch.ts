@@ -54,9 +54,13 @@ function errorMessage(text: string | undefined) {
   return text;
 }
 
-// The spec makes calling a tool the server doesn't have a protocol error, so it rejects the call.
+// The spec makes calling a tool the server doesn't have a protocol error. Hosts phrase it differently
+// (Mastra's MCP server says "Unknown tool", Studio names the server), but both answer with JSON-RPC's
+// invalid params code. The app only sends arguments its own schema built, so that code means the tool is missing.
+const INVALID_PARAMS = -32602;
+
 function isUnknownTool(error: unknown) {
-  return error instanceof Error && error.message.includes(`Unknown tool: ${DASHBOARD_DATA_TOOL_NAME}`);
+  return (error as { code?: unknown } | null)?.code === INVALID_PARAMS;
 }
 
 /**
@@ -88,7 +92,7 @@ export function createDashboardDataFetch(app: App): typeof fetch {
         { signal: init?.signal ?? undefined },
       );
     } catch (error) {
-      if (isUnknownTool(error)) return failure(MISSING_TOOL, 404);
+      if (isUnknownTool(error)) return failure(`${MISSING_TOOL} The host said: ${(error as Error).message}`, 404);
       throw error;
     }
     // The tool answers a route's failures in-band with their status, so `isError` means it rejected

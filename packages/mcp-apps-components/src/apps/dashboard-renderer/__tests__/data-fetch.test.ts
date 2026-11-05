@@ -119,4 +119,14 @@ describe('createDashboardDataFetch', () => {
       await expect(client.listScores()).rejects.toThrow(/403/);
     });
   });
+
+  describe('when the tool answers with a status no response can carry a body with', () => {
+    it.each([0, 101, 204, 205, 304, 600])('fails the request with 502 instead of throwing on %i', async status => {
+      const { app } = await clientBehindHost({ status, body: {} });
+
+      const response = await createDashboardDataFetch(app)('http://mastra.test/observability/scores');
+
+      expect(response.status).toBe(502);
+    });
+  });
 });
