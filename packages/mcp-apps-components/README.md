@@ -18,7 +18,7 @@ Register the dashboard renderer on an `MCPServer`, then return a dashboard defin
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards';
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
-import { dashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';
+import { createDashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';
 import { dashboardRendererApp, dashboardRendererInputSchema } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { z } from 'zod';
 
@@ -68,23 +68,33 @@ export const dashboardServer = new MCPServer({
   name: 'Dashboard Server',
   version: '1.0.0',
   appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
-  tools: { showAgentRuns, dashboardDataTool },
+  tools: {
+    showAgentRuns,
+    dashboardDataTool: createDashboardDataTool({ baseUrl: 'http://localhost:4111' }),
+  },
 });
 ```
 
 ### Data tool
 
-Register `dashboardDataTool`, from `@mastra/mcp-apps-components/dashboard-data-tool`, under that exact key, next to the app. The app calls it by name for every read its dashboard makes, such as `getMetricAggregate`. Without it, each widget fails with a message telling you to register it.
+Create the data tool with `createDashboardDataTool({ baseUrl })`, from `@mastra/mcp-apps-components/dashboard-data-tool`, and register it under the key `dashboardDataTool`, next to the app. The app calls it by name for every read its dashboard makes, such as `getMetricAggregate`. Without it, each widget fails with a message telling you to register it.
 
-The tool runs the observability route behind each read in-process as the caller, with `invokeRoute()` from `@mastra/server`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. It only answers the reads in `DASHBOARD_DATA_OPERATIONS`, and it's app-only, so hosts keep it away from the model.
+The tool sends each read to the matching observability route of the Mastra server at `baseUrl`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. It only sends the reads in `DASHBOARD_DATA_OPERATIONS`, and it's app-only, so hosts keep it away from the model. The MCP server serving it doesn't need a Mastra instance.
 
-Only the `dashboard-data-tool` entry needs `@mastra/server`, which any Mastra server already has. When the server has authentication configured, reads made over an MCP transport that carries no signed-in user, such as stdio, answer with `401`.
+| Option      | Default        | Description                                                                          |
+| ----------- | -------------- | ------------------------------------------------------------------------------------ |
+| `baseUrl`   | —              | Origin of the Mastra server, such as `http://localhost:4111`.                        |
+| `apiPrefix` | `/api`         | The server's `server.apiPrefix`.                                                     |
+| `headers`   | `{}`           | Headers sent with every read. An `authorization` header replaces the caller's token. |
+| `fetch`     | global `fetch` | The `fetch` used to send reads.                                                      |
+
+Without an `authorization` header, the tool forwards the caller's bearer token: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. When the Mastra server has authentication configured, reads that carry no token, such as over stdio, answer with `401`. When the server can't be reached, reads answer with `502`.
 
 ### Answering the data tool yourself
 
-A host that reads observability data its own way, such as one serving several projects, can register its own `dashboardDataTool` instead. Import the contract from `@mastra/mcp-apps-components/dashboard-renderer`, which doesn't load `@mastra/server`: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema` and `dashboardDataOutputSchema`.
+A host that reads observability data its own way, such as one serving several projects, can register its own `dashboardDataTool` instead. Import the contract from `@mastra/mcp-apps-components/dashboard-renderer`: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema` and `dashboardDataOutputSchema`.
 
-To tell the tool which project to read, set `projectId` in the dashboard's tool result. The app sends it as `projectId` on every data tool call. Mastra's `dashboardDataTool` reads the one project its server holds and ignores it.
+To tell the tool which project to read, set `projectId` in the dashboard's tool result. The app sends it as `projectId` on every data tool call. The tool from `createDashboardDataTool()` reads the one project its Mastra server holds and ignores it.
 
 ### Pinning widgets
 

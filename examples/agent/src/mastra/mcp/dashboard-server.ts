@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { MCPClient, MCPServer } from '@mastra/mcp';
 import { Memory } from '@mastra/memory';
-import { dashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';
+import { createDashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';
 import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { DASHBOARD_APP_URI, showObservabilityDashboard } from './dashboard-tools';
 
@@ -11,7 +11,8 @@ const DASHBOARD_SERVER_ID = 'dashboard-mcp-server';
 const MASTRA_SERVER_URL = process.env.MASTRA_BASE_URL ?? `http://localhost:${process.env.PORT ?? 4111}`;
 
 // Serves the prebuilt dashboard renderer as an MCP App. Its iframe never reaches the network: it
-// reads metrics through an app-only data tool, which agents don't see.
+// reads metrics through an app-only data tool, which agents don't see, and which sends each read to
+// this Mastra server's observability API as the signed-in caller.
 export const dashboardMcpServer = new MCPServer({
   id: DASHBOARD_SERVER_ID,
   name: 'Dashboard MCP Server',
@@ -19,7 +20,10 @@ export const dashboardMcpServer = new MCPServer({
   appResources: {
     [DASHBOARD_APP_URI]: dashboardRendererApp(),
   },
-  tools: { showObservabilityDashboard, dashboardDataTool },
+  tools: {
+    showObservabilityDashboard,
+    dashboardDataTool: createDashboardDataTool({ baseUrl: MASTRA_SERVER_URL }),
+  },
 });
 
 // Consumes the server above over HTTP, as any MCP client would. The server key matches the

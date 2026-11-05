@@ -27,8 +27,9 @@ export type DashboardRendererStructuredContent = z.input<typeof dashboardRendere
 /**
  * Renders a Mastra dashboard definition with live metrics. Link a tool to its `ui://` URI and use
  * `dashboardRendererInputSchema` as the tool's output schema. The app reads its data through
- * the `dashboardDataTool` tool, which must be registered on the same MCP server: import Mastra's from
- * `@mastra/mcp-apps-components/dashboard-data-tool`, or answer the data contract exported here.
+ * the `dashboardDataTool` tool, which must be registered on the same MCP server: create Mastra's with
+ * `createDashboardDataTool` from `@mastra/mcp-apps-components/dashboard-data-tool`, or answer the
+ * data contract exported here.
  */
 export const dashboardRendererApp = defineMcpAppResource(html, {
   name: 'Mastra dashboard',

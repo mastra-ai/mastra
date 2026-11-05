@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MCPServer } from '@mastra/mcp';
 // The built package, as consumers install it: the HTML artifacts only exist in dist/.
-import { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
+import { DASHBOARD_DATA_TOOL_NAME, dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -168,10 +168,10 @@ describe('dashboardRendererApp', () => {
     });
   });
 
-  describe('when a host that answers the data tool itself has no @mastra/server', () => {
-    // Hosts like Mastra's platform answer `dashboardDataTool` from their own store, and may pin an
-    // @mastra/server too old to run the in-process tool. Bundle what they import with
-    // @mastra/server unresolvable: loading it would fail the build, as it fails their server.
+  describe('when a host serves the dashboard without @mastra/server', () => {
+    // Hosts like Mastra's platform answer `dashboardDataTool` from their own store, and standalone MCP
+    // servers send its reads to a Mastra server over HTTP; neither installs @mastra/server. Bundle what
+    // they import with @mastra/server unresolvable: loading it would fail the build, as it fails their server.
     let outDir: string;
     const reached: string[] = [];
 
@@ -187,7 +187,8 @@ describe('dashboardRendererApp', () => {
           '  DASHBOARD_DATA_TOOL_NAME,',
           '  DASHBOARD_DATA_OPERATIONS,',
           '  dashboardDataInputSchema,',
-          "} from '@mastra/mcp-apps-components/dashboard-renderer';\n",
+          "} from '@mastra/mcp-apps-components/dashboard-renderer';",
+          "export { createDashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';\n",
         ].join('\n'),
       );
       await build({
@@ -218,8 +219,9 @@ describe('dashboardRendererApp', () => {
       await rm(outDir, { recursive: true, force: true });
     });
 
-    it('serves the app and the data contract without loading it', async () => {
-      const bundled: typeof import('@mastra/mcp-apps-components/dashboard-renderer') = await import(
+    it('serves the app, the data contract and the data tool without loading it', async () => {
+      const bundled: typeof import('@mastra/mcp-apps-components/dashboard-renderer') &
+        typeof import('@mastra/mcp-apps-components/dashboard-data-tool') = await import(
         pathToFileURL(join(outDir, 'out', 'entry.js')).href
       );
 
@@ -229,6 +231,7 @@ describe('dashboardRendererApp', () => {
         operation: 'getMetricAggregate',
         body: {},
       });
+      expect(bundled.createDashboardDataTool({ baseUrl: 'http://localhost:4111' }).id).toBe(DASHBOARD_DATA_TOOL_NAME);
     });
   });
 });
