@@ -186,12 +186,7 @@ describe('LinearRules', () => {
         userId: 'user-1',
         factoryProjectId: project.id,
         input: {
-          externalSource: {
-            integrationId: 'linear',
-            type: 'issue',
-            externalId: `linear:${identifier}`,
-            url: issue.url,
-          },
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}`, url: issue.url },
           title: `${identifier}: Fix intake sync`,
           stages: [stage],
           sessions: {},
