@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { DashboardDefinition } from '@mastra/client-js';
 import type * as PlaygroundMcps from '@mastra/playground-ui/domains/mcps';
-import { fireEvent, renderHook, screen } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useCallback, useState } from 'react';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
@@ -271,6 +271,43 @@ describe('useMcpAppHost', () => {
       result.current.onModelContext?.(otherApp, update);
 
       expect(onPinnedChange).not.toHaveBeenCalled();
+    });
+
+    it("saves one update at a time per dashboard, so an older save can't land after a newer one", async () => {
+      const saves: { app: string; ids: string[]; done: () => void }[] = [];
+      const onPinnedChange = vi.fn(
+        (pinned: DashboardPinnedWidgetEntry[], app: McpAppRef) =>
+          new Promise<void>(done =>
+            saves.push({ app: app.toolCallId, ids: pinned.map(entry => entry.widget.id), done }),
+          ),
+      );
+      const { result } = renderHook(() => useMcpAppHost({ dashboardPins: { pinnedIds: () => [], onPinnedChange } }));
+      const send = (app: McpAppRef, request: number, pinned: unknown[]) =>
+        result.current.onModelContext?.(app, {
+          structuredContent: {
+            [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: request,
+            [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: pinned,
+          },
+        });
+      const answered = (app: McpAppRef) => result.current.hostContext?.(app)?.[DASHBOARD_PIN_REQUEST_CONTEXT_KEY];
+      const otherDashboard = { ...dashboard, toolCallId: 'call-3' };
+
+      send(dashboard, 1, [pinnedSupportRuns]);
+      send(dashboard, 2, []);
+      send(otherDashboard, 1, []);
+
+      // The second update waits for the first; another dashboard doesn't.
+      expect(saves.map(({ app, ids }) => [app, ids])).toEqual([
+        ['call-1', ['support-runs']],
+        ['call-3', []],
+      ]);
+
+      await act(async () => saves[0]!.done());
+      expect(answered(dashboard)).toBe(1);
+      expect(saves.map(({ app, ids }) => [app, ids])).toContainEqual(['call-1', []]);
+
+      await act(async () => saves.find(({ app, ids }) => app === 'call-1' && ids.length === 0)!.done());
+      expect(answered(dashboard)).toBe(2);
     });
 
     it('calls the latest handler the host passed', () => {

@@ -49,6 +49,7 @@ export type DashboardPinsHostOptions = {
    *
    * Update `pinnedIds` before this returns, or before the promise it returns settles: the app then
    * takes the ids it gets next as your answer, so ids you don't add are pins you turned down.
+   * Updates from one app instance wait for the previous one to settle, so they land in order.
    */
   onPinnedChange: (pinned: DashboardPinnedWidgetEntry[], app: McpAppRef) => void | Promise<void>;
 };
@@ -78,6 +79,8 @@ export function useMcpAppHost({ dashboardPins }: McpAppHostOptions): McpAppHostV
   // The last pin update handled per app instance, by tool call id, sent back so the app knows its
   // clicks were answered even when the ids stay the same.
   const [answeredPins, setAnsweredPins] = useState<Readonly<Record<string, number>>>({});
+  // The pin update still being handled per app instance, by tool call id.
+  const pinSaves = useRef(new Map<string, Promise<void>>());
 
   return useMemo<McpAppHostValue>(() => {
     if (!pinnedIds) return {};
@@ -98,18 +101,28 @@ export function useMcpAppHost({ dashboardPins }: McpAppHostOptions): McpAppHostV
         if (pinnedIds(app) == null) return;
         const request = pinRequestSchema.safeParse(structuredContent[DASHBOARD_PIN_REQUEST_CONTEXT_KEY]);
         const answer = () => {
-          if (request.success) setAnsweredPins(answered => ({ ...answered, [app.toolCallId]: request.data }));
+          if (!request.success) return;
+          const handled = request.data;
+          setAnsweredPins(answered =>
+            (answered[app.toolCallId] ?? -Infinity) >= handled ? answered : { ...answered, [app.toolCallId]: handled },
+          );
         };
         const parsed = dashboardPinnedWidgetsSchema.safeParse(structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]);
         if (!parsed.success) {
           console.error(`[Mastra dashboard] Ignored invalid pinned widgets from "${app.toolName}"`, parsed.error);
-          answer();
-          return;
         }
         // A promise wrapper so a handler that throws right away still gets reported and answered.
-        new Promise<void>(resolve => resolve(onPinnedChange.current?.(parsed.data, app)))
-          .catch(error => console.error(`[Mastra dashboard] Couldn't save the pins from "${app.toolName}"`, error))
-          .finally(answer);
+        const save = () =>
+          new Promise<void>(resolve => resolve(parsed.success ? onPinnedChange.current?.(parsed.data, app) : undefined))
+            .catch(error => console.error(`[Mastra dashboard] Couldn't save the pins from "${app.toolName}"`, error))
+            .finally(answer);
+        // One update at a time per app instance, so an older save can't land after a newer one.
+        const previous = pinSaves.current.get(app.toolCallId);
+        const saving = previous ? previous.then(save) : save();
+        pinSaves.current.set(app.toolCallId, saving);
+        void saving.finally(() => {
+          if (pinSaves.current.get(app.toolCallId) === saving) pinSaves.current.delete(app.toolCallId);
+        });
       },
     };
   }, [pinnedIds, answeredPins]);

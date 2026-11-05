@@ -114,9 +114,10 @@ function ChatWithPins({ children }: { children: React.ReactNode }) {
     (app: McpAppRef) => (app.resourceUri === DASHBOARD_APP_URI ? (pins[app.toolCallId] ?? []) : undefined),
     [pins],
   );
-  const onPinnedChange = (pinned: DashboardPinnedWidgetEntry[], app: McpAppRef) => {
-    void savePinnedWidgets(app.toolCallId, pinned); // full list, not a change
-    setPins(current => ({ ...current, [app.toolCallId]: pinned.map(entry => entry.widget.id) }));
+  const onPinnedChange = async (pinned: DashboardPinnedWidgetEntry[], app: McpAppRef) => {
+    // Full list, not a change: diff it, return the ids you kept. If this throws, the pins count as turned down.
+    const ids = await savePinnedWidgets(app.toolCallId, pinned);
+    setPins(current => ({ ...current, [app.toolCallId]: ids }));
   };
 
   const host = useMcpAppHost({ dashboardPins: { pinnedIds, onPinnedChange } });
@@ -124,7 +125,7 @@ function ChatWithPins({ children }: { children: React.ReactNode }) {
 }
 ```
 
-`pinnedIds` returns `[]` for none, `null` to turn pinning off for an app, or `undefined` for apps that aren't dashboards. The hook echoes each handled request number back for you once `onPinnedChange` returns or its promise settles, so update `pinnedIds` by then; ids you don't add are pins you turned down. If `onPinnedChange` throws or rejects, the error is logged and the pins count as turned down. Invalid payloads are dropped and logged, never passed to `onPinnedChange`.
+`pinnedIds` returns `[]` for none, `null` to turn pinning off for an app, or `undefined` for apps that aren't dashboards. The hook echoes each handled request number back for you once `onPinnedChange` returns or its promise settles, so update `pinnedIds` by then; ids you don't add are pins you turned down. If `onPinnedChange` throws or rejects, the error is logged and the pins count as turned down. Updates from one app instance wait for the previous `onPinnedChange` to settle, so an older save never lands after a newer one. Invalid payloads are dropped and logged, never passed to `onPinnedChange`.
 
 #### With `AppBridge` directly
 
