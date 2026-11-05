@@ -293,6 +293,18 @@ describe('transcribeVoiceClips', () => {
     expect(calls.mistral.map(c => c.filename)).toEqual([expect.stringMatching(/\.mp4$/)]);
   });
 
+  it('transcribes a recorded clip whose event carries no subtype', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const clip = voiceClip();
+    const msg = message('m1', [clip], []);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(msg.attachments).toEqual([]);
+    expect(agentReads(msg)).toBe('ship the fix');
+  });
+
   it('leaves messages without voice clips untouched', async () => {
     const seed = await createFactoryStorageForTests();
     const image: Attachment = { type: 'image', mimeType: 'image/png', name: 'shot.png' };

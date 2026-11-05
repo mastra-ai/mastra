@@ -26,7 +26,7 @@ const slackEventFiles = z.object({
   files: z.array(z.object({ subtype: z.string().optional(), url_private: z.string().optional() })),
 });
 
-/** Clips recorded in Slack's composer; any other audio is an ordinary upload. */
+/** Slack marks composer recordings with `subtype: 'slack_audio'` and names them `audio_message.*`; other audio is an upload. */
 function recordedClipUrls(message: HandlerMessage): Set<string> {
   const event = slackEventFiles.safeParse(message.raw);
   if (!event.success) return new Set();
@@ -37,7 +37,11 @@ function recordedClipUrls(message: HandlerMessage): Set<string> {
 
 function voiceClips(message: HandlerMessage): HandlerAttachment[] {
   const recorded = recordedClipUrls(message);
-  return message.attachments.filter(attachment => attachment.url !== undefined && recorded.has(attachment.url));
+  return message.attachments.filter(
+    attachment =>
+      (attachment.url !== undefined && recorded.has(attachment.url)) ||
+      (attachment.name?.startsWith('audio_message') ?? false),
+  );
 }
 
 function say(message: HandlerMessage, text: string): void {
