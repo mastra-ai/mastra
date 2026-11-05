@@ -1817,15 +1817,21 @@ describe('MastraFactory.prepare', () => {
         await expect(tools.down_echo!.execute({ text: 'lost' }, {})).rejects.toThrow();
         expect(JSON.stringify(await tools.up_echo!.execute({ text: 'still works' }, {}))).toContain('still works');
 
-        // The storage read fails: the turn goes on with every non-MCP tool.
-        vi.spyOn(storage.getDomain<McpServersStorage>('mcp-servers'), 'list').mockRejectedValueOnce(
-          new Error('database unavailable'),
+        // The servers cannot be read (here: a replica with another encryption key wrote one):
+        // the turn goes on with every non-MCP tool.
+        const foreignKey = createFactorySecretEncryption({
+          primary: { id: 'other-replica', key: Buffer.alloc(32, 9) },
+        });
+        await storage.ops.updateMany(
+          'mcp_servers',
+          { slug: 'down' },
+          { headers: await foreignKey.encrypt({ Authorization: `Bearer ${MCP_TOKEN}` }) },
         );
         const degraded = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
         expect(degraded).toHaveProperty('factory_list_work_items');
         expect(degraded).not.toHaveProperty('up_echo');
         expect(warn.mock.calls.map(call => String(call[0]))).toContain(
-          '[factory] MCP server tools are unavailable for this turn: database unavailable',
+          '[factory] MCP server tools are unavailable for this turn: [FactorySecretEncryption] Unknown key id "other-replica".',
         );
       });
 
