@@ -2,12 +2,16 @@
 
 import { Readable } from 'node:stream';
 
+import type { DeepgramModel } from '@mastra/voice-deepgram';
+import type { OpenAIConfig } from '@mastra/voice-openai';
+
 import { providerApiKeyEnvVar } from '../agents/mastracode-gateway.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { STTModel } from './stt-registry.js';
 
-/** Deepgram is speech-to-text only, so the chat provider registry doesn't list it. */
 const STT_ONLY_API_KEY_ENV_VARS: Record<string, string> = { deepgram: 'DEEPGRAM_API_KEY' };
+
+const STT_TIMEOUT_MS = 120_000;
 
 export function sttApiKeyEnvVar(provider: string): string | undefined {
   return STT_ONLY_API_KEY_ENV_VARS[provider] ?? providerApiKeyEnvVar(provider);
@@ -21,7 +25,10 @@ export function resolveSTTApiKey(provider: string, authStorage?: AuthStorage): s
 
 /** Structural, because each `@mastra/voice-*` package extends its own bundled `MastraVoice`. */
 interface VoiceListener {
-  listen(audioStream: NodeJS.ReadableStream, options?: Record<string, unknown>): Promise<unknown>;
+  listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: Record<string, unknown>,
+  ): Promise<string | { transcript?: string }>;
 }
 
 // Each voice SDK loads on first dictation, not with every session.
@@ -29,7 +36,7 @@ async function buildVoice(entry: STTModel, apiKey: string): Promise<VoiceListene
   if (entry.resolver === 'deepgram') {
     const { DeepgramVoice } = await import('@mastra/voice-deepgram');
     // `name` is typed for Deepgram's own ids; the registry's model string is passed verbatim.
-    return new DeepgramVoice({ listeningModel: { name: entry.model as never, apiKey } });
+    return new DeepgramVoice({ listeningModel: { name: entry.model as DeepgramModel, apiKey } });
   }
   // The OpenAI and Mistral constructors also build a TTS client and throw without its key.
   const speechModel = { apiKey };
@@ -42,20 +49,15 @@ async function buildVoice(entry: STTModel, apiKey: string): Promise<VoiceListene
     speechModel,
     listeningModel: {
       // Typed for OpenAI's own ids; the client accepts any model string and baseURL.
-      name: entry.model as never,
+      name: entry.model as OpenAIConfig['name'],
       apiKey,
       ...(entry.resolver === 'openai-compatible' && entry.baseURL ? { options: { baseURL: entry.baseURL } } : {}),
     },
   });
 }
 
-/** OpenAI-shaped providers return a string, Deepgram returns `{ transcript }`. */
-function normalizeTranscript(result: unknown): string {
-  if (typeof result === 'string') return result.trim();
-  if (result && typeof result === 'object' && 'transcript' in result && typeof result.transcript === 'string') {
-    return result.transcript.trim();
-  }
-  return '';
+function normalizeTranscript(result: string | { transcript?: string }): string {
+  return (typeof result === 'string' ? result : (result.transcript ?? '')).trim();
 }
 
 export interface STTTranscriber {
@@ -63,10 +65,20 @@ export interface STTTranscriber {
   transcribe(audio: Buffer, filetype: string): Promise<string>;
 }
 
-/** Builds the provider client once, so repeated calls reuse its warm connection. */
 export async function createSTTTranscriber(entry: STTModel, apiKey: string): Promise<STTTranscriber> {
   const voice = await buildVoice(entry, apiKey);
   return {
-    transcribe: async (audio, filetype) => normalizeTranscript(await voice.listen(Readable.from(audio), { filetype })),
+    async transcribe(audio, filetype) {
+      let timer: NodeJS.Timeout | undefined;
+      // listen() takes no AbortSignal, so a slow call is abandoned, not cancelled.
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Speech-to-text timed out after 2 minutes.')), STT_TIMEOUT_MS);
+      });
+      try {
+        return normalizeTranscript(await Promise.race([voice.listen(Readable.from(audio), { filetype }), timeout]));
+      } finally {
+        clearTimeout(timer);
+      }
+    },
   };
 }

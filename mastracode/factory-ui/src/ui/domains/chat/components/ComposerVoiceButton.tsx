@@ -4,15 +4,22 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
 import { VOICE_INPUT_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
-import { useVoiceDictation } from './useVoiceDictation';
+import { useVoiceDictation, voiceDictationSupported } from './useVoiceDictation';
 import type { VoiceDictationState } from './useVoiceDictation';
 
-const LABELS: Record<VoiceDictationState, string> = {
+const TOOLTIPS: Record<VoiceDictationState, string> = {
   idle: 'Dictate',
   requesting: 'Waiting for microphone…',
   recording: 'Stop dictation',
   transcribing: 'Transcribing…',
 };
+
+interface ComposerVoiceButtonProps {
+  factoryId: string;
+  disabled: boolean;
+  onTranscript: (text: string) => void;
+  onError: (message: string) => void;
+}
 
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
   if (state === 'recording') return <Square size={14} />;
@@ -21,22 +28,12 @@ function VoiceIcon({ state }: { state: VoiceDictationState }) {
   return <Mic size={14} />;
 }
 
-export function ComposerVoiceButton({
-  factoryId,
-  disabled,
-  onTranscript,
-  onError,
-}: {
-  factoryId: string;
-  disabled: boolean;
-  onTranscript: (text: string) => void;
-  onError: (message: string) => void;
-}) {
+function VoiceButton({ factoryId, disabled, onTranscript, onError }: ComposerVoiceButtonProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const settingsQuery = useVoiceSettings(factoryId);
   const { state, start, stop } = useVoiceDictation({ factoryId, onTranscript, onError });
-  const needsSetup = settingsQuery.data !== undefined && settingsQuery.data.effective === undefined;
+  const needsSetup = settingsQuery.data !== undefined && settingsQuery.data.effective === null;
 
   if (needsSetup && state === 'idle') {
     return (
@@ -63,12 +60,17 @@ export function ComposerVoiceButton({
       size="icon-sm"
       disabled={blocked}
       onClick={recording ? stop : () => void start()}
-      aria-label={LABELS[state]}
+      aria-label="Dictate"
       aria-pressed={recording}
-      tooltip={LABELS[state]}
+      tooltip={TOOLTIPS[state]}
       className={recording ? 'text-destructive' : undefined}
     >
       <VoiceIcon state={state} />
     </Button>
   );
+}
+
+export function ComposerVoiceButton(props: ComposerVoiceButtonProps) {
+  if (!voiceDictationSupported()) return null;
+  return <VoiceButton {...props} />;
 }

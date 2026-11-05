@@ -13,6 +13,6 @@ describe('createTranscriber', () => {
     const attempt = () => createTranscriber({ provider: 'mistral' });
 
     expect(attempt).toThrow(VoiceCredentialError);
-    expect(attempt).toThrow(/Set MISTRAL_API_KEY or add one with \/api-keys/);
+    expect(attempt).toThrow(/MISTRAL_API_KEY/);
   });
 });

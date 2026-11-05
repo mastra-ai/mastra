@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
-import type { VoiceSettings } from '../../../../../hooks/use-voice-settings';
+import type { VoiceSettingsResponse } from '../../../../../api/types';
 import { VOICE_INPUT_ANCHOR } from '../../settingsSections';
 import type { SettingsScope } from '../SettingsScope';
 import { SettingsSubsection } from '../SettingsSubsection';
 
-type VoiceScope = VoiceSettings['scope'];
+type VoiceScope = VoiceSettingsResponse['scope'];
 
 const MODEL_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'factory', user: 'personal' };
 const KEYS_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'org', user: 'personal' };
@@ -17,10 +17,12 @@ const SCOPE_DESCRIPTION: Record<VoiceScope, string> = {
 };
 
 export function VoiceInputLayout({
+  anchorRef,
   scope,
   models,
   keys,
 }: {
+  anchorRef: Ref<HTMLElement>;
   scope: VoiceScope | undefined;
   models: ReactNode;
   keys: ReactNode;
@@ -28,6 +30,7 @@ export function VoiceInputLayout({
   return (
     <div className="flex flex-col gap-8">
       <SettingsSubsection
+        ref={anchorRef}
         id={VOICE_INPUT_ANCHOR}
         scope={scope && MODEL_SCOPE[scope]}
         title="Voice input"

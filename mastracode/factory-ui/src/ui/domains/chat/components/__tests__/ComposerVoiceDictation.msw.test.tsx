@@ -37,15 +37,25 @@ function micStream(): FakeMicStream {
   return { getTracks: () => [{ stop: stopTrack }] };
 }
 
-function acceptTranscribe(reply: () => Response): unknown[] {
-  const bodies: unknown[] = [];
+interface TranscribeRequest {
+  factoryId: string | null;
+  contentType: string | null;
+  clip: string;
+}
+
+function acceptTranscribe(reply: () => Response): TranscribeRequest[] {
+  const requests: TranscribeRequest[] = [];
   server.use(
     http.post(`${TEST_BASE_URL}/web/voice/transcribe`, async ({ request }) => {
-      bodies.push(await request.json());
+      requests.push({
+        factoryId: new URL(request.url).searchParams.get('factoryId'),
+        contentType: request.headers.get('Content-Type'),
+        clip: await request.text(),
+      });
       return reply();
     }),
   );
-  return bodies;
+  return requests;
 }
 
 function stubVoiceSettings(effective: VoiceSettingsResponse['effective']) {
@@ -93,10 +103,10 @@ describe('Composer voice dictation', () => {
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
 
-    await user.click(await screen.findByRole('button', { name: 'Stop dictation' }));
+    await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
 
     await waitFor(() => expect(message).toHaveValue('fix the login bug and add a test for it'));
-    expect(bodies).toEqual([{ audio: btoa('opus'), mimeType: 'audio/webm;codecs=opus', factoryId: FACTORY_ID }]);
+    expect(bodies).toEqual([{ factoryId: FACTORY_ID, contentType: 'audio/webm;codecs=opus', clip: 'opus' }]);
     expect(stopTrack).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });
@@ -116,6 +126,7 @@ describe('Composer voice dictation', () => {
   it.each([
     ['NotFoundError', 'No microphone found. Connect one to use voice input.'],
     ['NotReadableError', 'Your microphone is busy in another app. Close it and try again.'],
+    ['AbortError', 'Could not start the microphone. Try again.'],
   ])('tells you what to fix when the microphone fails with %s', async (name, message) => {
     getUserMedia.mockRejectedValue(new DOMException('mic failed', name));
     const user = userEvent.setup();
@@ -146,7 +157,7 @@ describe('Composer voice dictation', () => {
       await screen.findByText('This browser could not start recording. Try again or use another browser.'),
     ).toBeVisible();
     expect(stopTrack).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('button', { name: 'Stop dictation' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dictate', pressed: true })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
     expect(bodies).toEqual([]);
   });
@@ -159,15 +170,31 @@ describe('Composer voice dictation', () => {
     await composerReady();
 
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
-    const waiting = await screen.findByRole('button', { name: 'Waiting for microphone…' });
-    expect(waiting).toBeDisabled();
-    await user.click(waiting);
+    const dictate = screen.getByRole('button', { name: 'Dictate' });
+    await waitFor(() => expect(dictate).toBeDisabled());
+    await user.click(dictate);
     grantMic(micStream());
-    await user.click(await screen.findByRole('button', { name: 'Stop dictation' }));
+    await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
 
     expect(getUserMedia).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled());
     expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the microphone when the composer goes away mid-recording', async () => {
+    const bodies = acceptTranscribe(() => HttpResponse.json({ text: 'unused' }));
+    const user = userEvent.setup();
+    stubPreparingSession({ materialized: true });
+    const view = renderThread();
+    const dictate = await screen.findByRole('button', { name: 'Dictate' });
+    await waitFor(() => expect(dictate).toBeEnabled());
+
+    await user.click(dictate);
+    await screen.findByRole('button', { name: 'Dictate', pressed: true });
+    view.unmount();
+
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+    expect(bodies).toEqual([]);
   });
 
   it('sends you to voice input settings instead of recording when no speech-to-text key is set up', async () => {
@@ -190,7 +217,7 @@ describe('Composer voice dictation', () => {
     const message = await composerReady();
 
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
-    await user.click(await screen.findByRole('button', { name: 'Stop dictation' }));
+    await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
 
     expect(await screen.findByText(/Voice input needs an API key/)).toBeVisible();
     expect(message).toHaveValue('');

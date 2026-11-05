@@ -13,7 +13,7 @@ import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderInfo } from '../../../../../api/types';
 import { ProviderOptionRow } from '../models/providers/ProviderRows';
 
-export interface SpeechToTextProviderOption {
+interface SpeechToTextProviderOption {
   provider: ProviderInfo;
   connectedAs: string | undefined;
 }

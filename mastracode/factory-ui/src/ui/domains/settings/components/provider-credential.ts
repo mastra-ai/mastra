@@ -1,14 +1,16 @@
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 
 import type { ProviderInfo } from '../../../../api/types';
+import { useOrgKeyAdminQuery } from '../../../../hooks/use-providers';
 import type { StartProviderOAuthArgs } from '../../../../hooks/use-providers';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 
 export type ProviderCredential = NonNullable<ProviderInfo['userCredential']>;
 export type CredentialScope = 'user' | 'org';
 
 export const CREDENTIAL_LABEL: Record<ProviderCredential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
 export const SIGN_IN_EXPIRED_LABEL = 'Sign-in expired';
-export const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
+const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
 
 export const SHARED_SOURCE: Partial<Record<ProviderInfo['source'], { label: string; description: string }>> = {
   env: { label: 'From env', description: 'Read from the server environment' },
@@ -26,8 +28,25 @@ export function sharedSourceStatus(source: ProviderInfo['source']): StatusPresen
 }
 
 /** Without auth there is one local key store, so org-scoped keys live in it too. */
-export function storedCredentialScope(requested: CredentialScope, authEnabled: boolean): CredentialScope {
+function storedCredentialScope(requested: CredentialScope, authEnabled: boolean): CredentialScope {
   return requested === 'org' && authEnabled ? 'org' : 'user';
+}
+
+/** Where keys at the requested scope are stored, and whether the caller may change them. */
+export function useCredentialAccess(requested: CredentialScope) {
+  const authQuery = useFactoryAuth();
+  const orgKeyAdminQuery = useOrgKeyAdminQuery();
+  const authEnabled = authQuery.data?.authEnabled === true;
+  const scope = storedCredentialScope(requested, authEnabled);
+  const readOnly = scope === 'org' && orgKeyAdminQuery.data === false;
+  return {
+    authEnabled,
+    scope,
+    requestScope: authEnabled ? scope : undefined,
+    readOnly,
+    actionsDisabled: authQuery.isPending || readOnly,
+    memberReason: readOnly ? ORG_SCOPE_MEMBER_REASON : undefined,
+  };
 }
 
 /** The credential saved at exactly this scope. Deployment env keys belong to neither scope. */

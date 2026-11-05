@@ -165,19 +165,16 @@ export function defaultModelForProvider(provider: string): STTModel | undefined 
   return STT_MODELS.find(m => m.provider === provider);
 }
 
+export function findSTTModel(provider: string, model: string): STTModel | undefined {
+  return STT_MODELS.find(m => m.provider === provider && m.model === model);
+}
+
 /**
  * Resolve a provider/model pair to a concrete registry entry.
  * Falls back to the provider default (then the global default) so callers
  * always get a usable entry even if settings name an unknown model.
  */
 export function resolveSTTModel(provider?: string, model?: string): STTModel {
-  if (provider) {
-    if (model) {
-      const exact = STT_MODELS.find(m => m.provider === provider && m.model === model);
-      if (exact) return exact;
-    }
-    const providerDefault = defaultModelForProvider(provider);
-    if (providerDefault) return providerDefault;
-  }
-  return DEFAULT_STT_MODEL;
+  if (!provider) return DEFAULT_STT_MODEL;
+  return (model ? findSTTModel(provider, model) : undefined) ?? defaultModelForProvider(provider) ?? DEFAULT_STT_MODEL;
 }

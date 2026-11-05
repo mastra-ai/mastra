@@ -2,13 +2,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AuthStorage } from '../../auth/storage.js';
-import { resolveSTTModel } from '../stt-registry.js';
-import { createSTTTranscriber, resolveSTTApiKey } from '../transcribe.js';
+import { resolveSTTModel, sttProviders } from '../stt-registry.js';
+import { createSTTTranscriber, resolveSTTApiKey, sttApiKeyEnvVar } from '../transcribe.js';
 
 interface TranscriptionRequest {
   url: string;
@@ -61,6 +61,8 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterAll(() => server.close());
 afterEach(() => {
   requests.length = 0;
+  server.resetHandlers();
+  vi.useRealTimers();
   vi.unstubAllEnvs();
 });
 
@@ -78,7 +80,6 @@ function storedKeys(keys: Record<string, string>): AuthStorage {
 }
 
 describe('createSTTTranscriber', () => {
-  // OpenAIVoice and MistralVoice read their TTS key from OPENAI_API_KEY/MISTRAL_API_KEY and throw without it.
   it.each([
     { provider: 'openai', model: 'whisper-1', host: 'api.openai.com', text: 'from openai' },
     { provider: 'groq', model: 'whisper-large-v3-turbo', host: 'api.groq.com', text: 'from groq' },
@@ -102,6 +103,20 @@ describe('createSTTTranscriber', () => {
     expect(await transcriber.transcribe(AUDIO, 'wav')).toBe('from deepgram');
     expect(requests).toEqual([expect.objectContaining({ authorization: 'Token dg-key', model: 'nova-3' })]);
   });
+
+  it('gives up when the provider never answers', async () => {
+    vi.stubEnv('DEEPGRAM_API_KEY', '');
+    server.use(http.post('https://api.deepgram.com/v1/listen', () => delay('infinite')));
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const transcriber = await createSTTTranscriber(resolveSTTModel('deepgram'), 'dg-key');
+
+    const attempt = expect(transcriber.transcribe(AUDIO, 'wav')).rejects.toThrow(
+      'Speech-to-text timed out after 2 minutes.',
+    );
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    await attempt;
+  });
 });
 
 describe('resolveSTTApiKey', () => {
@@ -121,5 +136,9 @@ describe('resolveSTTApiKey', () => {
   ])('reads the $envVar env var for $provider', ({ provider, envVar }) => {
     vi.stubEnv(envVar, 'env-key');
     expect(resolveSTTApiKey(provider)).toBe('env-key');
+  });
+
+  it.each(sttProviders())('knows which env var holds the %s key', provider => {
+    expect(sttApiKeyEnvVar(provider)).toMatch(/_API_KEY$/);
   });
 });

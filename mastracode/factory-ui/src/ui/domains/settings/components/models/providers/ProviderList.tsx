@@ -3,18 +3,16 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
-import { useCancelProviderOAuth, useOrgKeyAdminQuery, useProvidersQuery } from '../../../../../../hooks/use-providers';
-import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
+import { useCancelProviderOAuth, useProvidersQuery } from '../../../../../../hooks/use-providers';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
 import {
   CREDENTIAL_STATUS,
-  ORG_SCOPE_MEMBER_REASON,
   SIGN_IN_EXPIRED_LABEL,
   credentialAt,
   sharedSourceStatus,
   signInExpiredAt,
-  storedCredentialScope,
+  useCredentialAccess,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
 import { AddProviderDrawer } from './AddProviderDrawer';
@@ -54,18 +52,13 @@ function connectedProviders(providers: ProviderInfo[], scope: CredentialScope): 
 
 export function ProviderList({ credentialScope }: { credentialScope: CredentialScope }) {
   const providersQuery = useProvidersQuery();
-  const authQuery = useFactoryAuth();
-  const orgKeyAdminQuery = useOrgKeyAdminQuery();
+  const { authEnabled, scope, requestScope, readOnly, actionsDisabled, memberReason } =
+    useCredentialAccess(credentialScope);
   const cancelOAuthMutation = useCancelProviderOAuth();
   const [addOpen, setAddOpen] = useState(false);
   const [activeOAuth, setActiveOAuth] = useState<ActiveOAuthSession>();
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
 
-  const authEnabled = authQuery.data?.authEnabled === true;
-  const scope = storedCredentialScope(credentialScope, authEnabled);
-  const requestScope = authEnabled ? scope : undefined;
-  const readOnly = scope === 'org' && orgKeyAdminQuery.data === false;
-  const actionsDisabled = authQuery.isPending || readOnly;
   const providers = providersQuery.data ?? [];
   const connections = connectedProviders(providers, scope);
 
@@ -101,9 +94,9 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           />
         ))}
       </ProviderRows>
-      {readOnly && (
+      {memberReason && (
         <Txt as="p" variant="caption" tone="muted">
-          {ORG_SCOPE_MEMBER_REASON}
+          {memberReason}
         </Txt>
       )}
       {requestScope === 'org' && !readOnly && (

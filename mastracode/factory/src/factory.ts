@@ -147,9 +147,9 @@ import { CustomProvidersStorage } from './storage/domains/custom-providers/base.
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
-import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
-import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { factoryProjectSettingsUserId, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -1274,7 +1274,7 @@ export class MastraFactory {
       if (policy) {
         const orgId = tenantOrgId(policy.tenant);
         return policy.tenant.credentialScope === 'factory' && policy.factoryProjectId
-          ? { orgId, userId: factoryMemorySettingsUserId(policy.factoryProjectId) }
+          ? { orgId, userId: factoryProjectSettingsUserId(policy.factoryProjectId) }
           : { orgId, userId: policy.tenant.userId };
       }
       // No tenant pays: the session's Factory row applies.
@@ -1283,7 +1283,7 @@ export class MastraFactory {
       if (!factoryProjectId) return { orgId: 'local', userId: 'local' };
       return {
         orgId: binding?.orgId ?? scope?.factoryOrgId ?? 'local',
-        userId: factoryMemorySettingsUserId(factoryProjectId),
+        userId: factoryProjectSettingsUserId(factoryProjectId),
       };
     };
     const loadMemorySettings = async ({

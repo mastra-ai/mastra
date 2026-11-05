@@ -41,6 +41,7 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
@@ -61,6 +62,7 @@ export type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 };
+export type { TranscribeResponse, VoiceSettingsResponse };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
 
@@ -186,21 +188,4 @@ export interface UpdateOMResponse {
   config: OMConfigInfo;
 }
 
-export interface VoiceChoice {
-  provider: string;
-  model: string;
-}
-
-/** `GET`/`PUT /web/voice/settings`. */
-export interface VoiceSettingsResponse {
-  /** Like an interactive chat: the Factory's model with organization keys, or the caller's own model and keys. */
-  scope: 'factory' | 'user';
-  /** The saved model on that side; `null` is auto. */
-  selected: VoiceChoice | null;
-  canEdit: boolean;
-  /** The model voice input uses right now, or `null` when no usable key exists. */
-  effective: VoiceChoice | null;
-  models: Array<VoiceChoice & { label: string }>;
-  /** Whether that side holds a key for each provider, and the env var the key fills. */
-  keys: Array<{ provider: string; envVar?: string; saved: boolean }>;
-}
+export type VoiceChoice = NonNullable<VoiceSettingsResponse['selected']>;
