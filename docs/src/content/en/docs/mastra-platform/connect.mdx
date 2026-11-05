@@ -75,8 +75,6 @@ mastra connect add linear
 
 Run the command from the directory that contains your `.env` file. The CLI guides you through the provider's authorization flow. Run [`mastra connect list`](/reference/cli/mastra#mastra-connect-list) to see the providers available to your project and their connection status. The [`mastra connect` reference](/reference/cli/mastra#mastra-connect) covers naming, removing, and replacing connections.
 
-<a id="use-the-connection" />
-
 ## Add tools to an agent
 
 Pass [`tools()`](/reference/connect/tools) to the agent's `tools` option:
@@ -114,12 +112,6 @@ export const opsAgent = new Agent({
 })
 ```
 
-<a id="limit-available-tools" />
-
-<a id="filter-tools-per-request" />
-
-<a id="require-approval-for-sensitive-tools" />
-
 ## Choose tools and require approval
 
 Give an agent only the tools it needs. Use `providers` to select providers, `allowTools` to allow specific tool keys, and `requireApproval` to pause before selected tools run:
@@ -137,7 +129,7 @@ tools({
 
 Tools run without approval by default. Pass `requireApproval: true` to require approval for every tool from a provider. Approval works for toolsets and MCP providers. Follow the [human-in-the-loop guide](/docs/agents/human-in-the-loop) to handle approval requests.
 
-<a id="choose-between-connections" />For a provider with more than one connection, the toolset adds a `<provider>__list_connections` tool. Every other tool from that provider takes a `connection_name` input that selects the account. To always use one connection, set `connectionId` for that provider.
+For a provider with more than one connection, the toolset adds a `<provider>__list_connections` tool. Every other tool from that provider takes a `connection_name` input that selects the account. To always use one connection, set `connectionId` for that provider.
 
 The [`tools()` reference](/reference/connect/tools#parameters) covers exclusion filters, wildcard patterns, options that vary per request, and caching.
 
@@ -158,12 +150,12 @@ export const mastra = new Mastra({
 
 This registers the channel providers and their webhook routes. Making a channel work takes two separate steps:
 
-1. **Connect the provider.** The platform connection stores the bot or app credentials. Each provider's integration page describes this step: <a id="slack" href="/integrations/channels/slack#agent-chat">Slack</a>, <a id="discord" href="/integrations/channels/discord#agent-chat">Discord</a>, <a id="telegram" href="/integrations/channels/telegram#connect">Telegram</a>, and <a id="microsoft-teams" href="/integrations/channels/teams#agent-chat">Microsoft Teams</a>.
+1. **Connect the provider.** The platform connection stores the bot or app credentials. Each provider's integration page describes this step: [Slack](/integrations/channels/slack#agent-chat), [Discord](/integrations/channels/discord#agent-chat), [Telegram](/integrations/channels/telegram#connect), and [Microsoft Teams](/integrations/channels/teams#agent-chat).
 1. **Install the channel on an agent.** In Studio, connect the channel to an agent so people can message that agent.
 
 For webhook delivery and OAuth callbacks, the provider must reach your server at a public URL. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development, use a public HTTPS tunnel.
 
-<a id="configure-available-channels" />The [`channels()` reference](/reference/connect/channels) covers selecting providers, startup errors, and connection refresh. It also shows how to <a id="combine-with-a-self-managed-channel" href="/reference/connect/channels#combine-with-self-managed-channels">combine Connect channels with self-managed channels</a> and <a id="vary-tools-by-channel" href="/reference/connect/channels#vary-tools-by-channel">vary tools by channel</a>.
+The [`channels()` reference](/reference/connect/channels) covers selecting providers, startup errors, and connection refresh. It also shows how to [combine Connect channels with self-managed channels](/reference/connect/channels#combine-with-self-managed-channels) and [vary tools by channel](/reference/connect/channels#vary-tools-by-channel).
 
 ## Use a raw credential
 
@@ -176,10 +168,6 @@ For tool calls, the platform adds credentials to requests on the server. Your ap
 Proxied requests can only reach the provider's API hosts. Some connections allow extra hosts, such as a Supabase project URL. Your code controls which tools an agent gets and which calls need approval.
 
 A raw credential is different. `credential()` returns the secret to your application, and requests you make with it bypass the proxy. They skip its host restrictions and call records. Don't log the credential or return it in agent output.
-
-<a id="provider-directory" />
-
-<a id="mcp-providers" />
 
 ## Providers
 
@@ -206,8 +194,6 @@ Each integration page shows the provider ID, what the provider offers, and its s
   ...getIntegrationItems('Voice', ['voice/openai']),
 ]}
 />
-
-<a id="troubleshoot-a-connection" />
 
 ## Troubleshooting
 
