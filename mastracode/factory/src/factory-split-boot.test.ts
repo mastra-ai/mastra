@@ -19,9 +19,13 @@ import {
   FACTORY_WORK_ITEMS_SCHEMA,
 } from './storage/domains/work-items/work-item-schema.js';
 import { createFactoryStorageForTests } from './storage/test-utils.js';
+import { migrateWorkItemSplit } from './work-items/split-migration.js';
 
 const USER = 'user-split-boot';
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+// Each case boots real factories over a real database, several times; under a loaded runner that
+// outlasts the 5s default.
+vi.setConfig({ testTimeout: 30_000 });
 const secretEncryption = createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } });
 
 /** A database several storage instances (replicas, restarts) open in turn. */
@@ -221,6 +225,62 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot ov
     const { workItems } = await boot();
 
     expect((await workItems.get({ orgId, id: done.id }))?.stages).toEqual(['planning']);
+  });
+
+  // Production: a database 0.27.0 migrated, where an old replica rewrote cards that were since
+  // edited on the board. Each scan skips the same cards and recopies nothing; once one boot finished,
+  // the next does not scan at all.
+  it('reports the same skips and no recopies on every boot that scans, then stops scanning', async () => {
+    const { seed, file, demoteAll, boot } = await setup();
+    const cards = [await file(['intake']), await file(['planning']), await file(['done']), await file(['done'])];
+    await demoteAll();
+    await migrateWorkItemSplit(seed.storage);
+    for (const card of [cards[0]!, cards[2]!]) {
+      const copied = await seed.storage.ops.findOne<{ updated_at: Date; revision: number }>(
+        FACTORY_BOARD_ITEMS_SCHEMA.name,
+        { id: card.id },
+      );
+      const edited = new Date(new Date(copied!.updated_at).getTime() + 1_000);
+      await seed.storage.ops.updateMany(
+        FACTORY_BOARD_ITEMS_SCHEMA.name,
+        { id: card.id },
+        { stages: ['review'], updated_at: edited, revision: copied!.revision + 1 },
+      );
+      await seed.storage.ops.updateMany(
+        'work_items',
+        { id: card.id },
+        { title: 'Changed by an old replica', updated_at: new Date(edited.getTime() + 1_000) },
+      );
+    }
+
+    const scan = async () => {
+      const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const booted = await boot();
+      await booted.backfilled();
+      const lines = info.mock.calls.map(call => String(call[0])).filter(line => line.includes('work item split ('));
+      info.mockRestore();
+      return { booted, lines };
+    };
+    const first = await scan();
+    expect(first.lines).toHaveLength(2);
+    for (const line of first.lines) {
+      expect(line).toMatch(/ 0 copied, 0 recopied, /);
+      expect(line).toContain(`${cards[0]!.id} (Split board item changed after migration)`);
+    }
+    expect(first.lines[1]).toContain(`${cards[2]!.id} (Split board item changed after migration)`);
+    expect(await first.booted.marker()).toHaveLength(1);
+    await first.booted.factory.shutdown();
+
+    // As if that boot had stopped before recording the copy finished.
+    await first.booted.storage.ops.deleteMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, {});
+    const second = await scan();
+    expect(second.lines).toEqual(first.lines);
+    await second.booted.factory.shutdown();
+
+    const third = await boot();
+    expect(third.legacyPageQueries()).toBe(0);
+    expect(third.workItems.legacyBackfillPending).toBe(false);
+    expect((await third.workItems.get({ orgId: cards[0]!.orgId, id: cards[0]!.id }))?.stages).toEqual(['review']);
   });
 
   it('stops the background copy on shutdown without recording it finished, and resumes on the next boot', async () => {
