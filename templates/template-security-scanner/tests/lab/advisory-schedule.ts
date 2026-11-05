@@ -20,6 +20,7 @@ export async function periodicAdvisoryLifecycle() {
   let statusEntered: (() => void) | undefined;
   let modelCalls = 0;
   const models: AdvisoryModels = {
+    /** Fail the first local advisory recommendation and return a bounded recommendation on later calls. */
     async plan() {
       modelCalls++;
       if (modelCalls === 1) throw new Error('OWNED_MODEL_UNAVAILABLE');
@@ -65,6 +66,7 @@ export async function periodicAdvisoryLifecycle() {
   if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   const source = new AdvisorySource(`http://127.0.0.1:${address.port}`, true);
   const secret = randomBytes(32).toString('base64url');
+  /** Build isolated advisory-schedule settings with the selected explicit enablement state. */
   const settings = (enabled: boolean) =>
     loadSettings(
       {
@@ -101,6 +103,7 @@ export async function periodicAdvisoryLifecycle() {
     cookie = response.headers.get('set-cookie')!.split(';')[0]!;
     csrf = ((await response.json()) as { csrfToken: string }).csrfToken;
   };
+  /** Send an authenticated GET or POST to the real advisory-schedule fixture. */
   const request = async (path: string, body?: unknown) => {
     const response = await fetch(`${server!.url}${path}`, {
       method: body === undefined ? 'GET' : 'POST',
@@ -121,6 +124,7 @@ export async function periodicAdvisoryLifecycle() {
       db.close();
     }
   };
+  /** Invoke the actual native schedule and wait for a newly persisted scheduled event. */
   const runWake = async () => {
     const priorId = (await request('/api/advisory-schedule')).data.events[0]?.id;
     const schedule = (await server!.mastra.schedules.list()).find(item => item.workflowId === 'local-advisory-sync');
@@ -247,6 +251,7 @@ export async function periodicAdvisoryLifecycle() {
       item => item.workflowId === 'local-advisory-sync',
     )!;
     const wake = server!.mastra.schedules.run(closingSchedule.id).catch(() => undefined);
+    /** Bound an asynchronous schedule observation and clear its timeout after settlement. */
     const within = async <T>(work: Promise<T>, code: string): Promise<T> => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {

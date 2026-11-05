@@ -117,6 +117,7 @@ describe('Confined discovery through the protected API', () => {
     expect(output.partial).toBe(true);
     expect(output.roles.some(role => role.counters.boundStops > 0)).toBe(true);
     expect(output.cleanup).toBe('COMPLETE');
+    /** Admit a streaming discovery scan and capture the gateway's pre-admission counters. */
     const startStreaming = async () => {
       const selected = await discoveryCase(lab, { path: '/stream' }),
         before = await lab.stats(),
@@ -528,6 +529,7 @@ describe('Confined discovery through the protected API', () => {
       profileIds.push(String(created.data.id));
       target = (await api.request(`/api/targets/${target.id}`)).data as unknown as Target;
     }
+    /** Read current profile and credential revisions from the persisted target bindings. */
     const bindings = async () => {
       const profiles = [];
       for (const id of profileIds) {

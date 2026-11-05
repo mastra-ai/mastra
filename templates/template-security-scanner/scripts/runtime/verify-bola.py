@@ -17,6 +17,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def read(item: dict, ca: str) -> dict:
+    """Perform one validated BOLA read through the configured gateway and return its
+    bounded response evidence.
+    """
     if set(item) != {"url", "proxy"} or not PROXY.fullmatch(item["proxy"]):
         return {"code": "INVALID_REQUEST"}
     if not isinstance(item["url"], str) or len(item["url"]) > 2048:
@@ -50,6 +53,9 @@ def read(item: dict, ca: str) -> dict:
 
 
 def main():
+    """Read exactly two BOLA requests from the private request file and emit their
+    bounded results.
+    """
     try:
         requests = json.loads(Path("/workspace/request.json").read_text())["requests"]
         if not isinstance(requests, list) or len(requests) != 2:

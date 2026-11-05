@@ -113,6 +113,7 @@ export class InvestigationService {
   /** Start bounded verification and schedule workers while preventing duplicate active loops. */
   startWorkers(owner: string) {
     if (this.workerTimer) return;
+    /** Start at most the configured worker capacity while the investigation service remains open. */
     const tick = () => {
       if (this.closing.signal.aborted || this.workers.size >= 6) return;
       void this.executeOne(owner, this.closing.signal).catch(() => undefined);
@@ -378,6 +379,7 @@ export class InvestigationService {
       for (const book of playbooks) {
         const resource = await this.store.ownedResource(owner, scan.targetId, book.category, path);
         if (!resource) continue;
+        /** Expose only a role represented by the exact evidence slice supplied for planning. */
         const role = (id: string) => supplied.find(item => item.observation.profileId === id)?.observation.role ?? null;
         const roles: Record<string, string | null> =
           resource.category === 'idor'
@@ -485,6 +487,7 @@ export class InvestigationService {
   }
   private modelBudget(investigationId: string, owner: string, signal: AbortSignal): ModelBudget {
     return {
+      /** Reserve model allowance after enforcing bounded input bytes, output tokens and cancellation. */
       reserve: async (_role, inputBytes, outputTokens) => {
         signal.throwIfAborted();
         if (
@@ -607,6 +610,7 @@ export class InvestigationService {
       );
       joined.throwIfAborted();
       const budget = this.modelBudget(investigation.id, owner, joined);
+      /** Reject verification when any hypothesis evidence source is no longer retained for this scan. */
       const requireSources = async () => {
         const available = new Set((await this.scans.store.evidence(scan.id, owner, 512, 0)).map(item => item.id));
         if (hypothesis.evidenceIds.some(id => !available.has(id)))

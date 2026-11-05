@@ -45,6 +45,7 @@ export async function privateNativeSandbox(
     },
   });
   try {
+    /** Normalize observed arrays and objects for deterministic sandbox-boundary comparisons. */
     const canonical = (value: unknown): string => {
       if (Array.isArray(value)) return JSON.stringify(value.map(canonical).sort());
       if (value && typeof value === 'object') {
@@ -52,6 +53,7 @@ export async function privateNativeSandbox(
       }
       return JSON.stringify(value);
     };
+    /** Validate actual container identity and security settings against the owned sandbox boundary. */
     const assertBoundary = async (running: boolean) => {
       const matches = await client.listContainers({
         all: true,

@@ -72,6 +72,7 @@ export function forbiddenCredentialValues(headers: Record<string, string>[]) {
   return [...new Set(values)];
 }
 type JsonObject = Record<string, unknown>;
+/** Accept non-null JSON objects while rejecting arrays and primitive values. */
 const object = (value: unknown): JsonObject | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : undefined;
 export const OUTPUT_BOUNDS = { line: 32768, total: 262144, records: 128, exported: 65536 } as const;
@@ -247,6 +248,7 @@ export class DiscoveryParser {
     const request = object(record.request),
       response = object(record.response);
     const headers = object(response?.headers);
+    /** Check observed response headers for the named bounded marker. */
     const marker = (name: string) =>
       headers &&
       Object.entries(headers).some(

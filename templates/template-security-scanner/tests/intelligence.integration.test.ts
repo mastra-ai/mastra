@@ -116,6 +116,7 @@ async function startAdvisoryFixture() {
     requests,
     statusWire,
     callbackCount: () => callbackCount,
+    /** Register the local advisory page response for the selected cursor and next-page token. */
     page(cursor: string | null, ids: string[], nextCursor: string | null) {
       pages.set(`/api/v1/entries${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, {
         body: { entries: ids.map(id => ({ id })), nextCursor },
@@ -175,6 +176,7 @@ async function startHarness(
     csrf = ((await response.json()) as { csrfToken: string }).csrfToken;
   }
   await login();
+  /** Send a real authenticated advisory HTTP request with optional optimistic revision binding. */
   async function request<T = any>(path: string, method = 'GET', body?: unknown, expectedRecordRevision?: number) {
     const response = await fetch(`${running.url}${path}`, {
       method,
@@ -718,6 +720,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
+    /** Exercise advisory detail fallback against the supplied response sequence and expected error code. */
     const run = async (requested: string, responses: Response[], code?: string) => {
       let requests = 0;
       const source = new AdvisorySource(undefined, false, async (_url, options) => {
@@ -1421,6 +1424,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     const copied = await mkdtemp(join(tmpdir(), 'scanner-catalog-tamper-'));
     cleanup.push(() => rm(copied, { recursive: true, force: true }));
     const original = resolve(process.cwd(), 'references');
+    /** Copy a local fixture directory recursively for isolated catalogue-integrity tests. */
     async function copyTree(from: string, to: string) {
       await mkdir(to, { recursive: true });
       for (const entry of await readdir(from, { withFileTypes: true })) {
@@ -1821,6 +1825,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
       expect(JSON.stringify(quarantine)).not.toContain(marker);
       expect(JSON.stringify(quarantine)).not.toContain('http://[');
       if (scenario.expectedSourceId) {
+        /** Match the scenario's expected source identifier and diagnostic reason as one quarantine pair. */
         const matches = (item: { sourceId: string; reason: string }) =>
           item.sourceId === scenario.expectedSourceId && item.reason === scenario.reason;
         const previous = before.body.items.filter(matches);
@@ -1986,6 +1991,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     const held = new Promise<void>(resolve => (release = resolve));
     let calls = 0;
     const app = await startHarness(fixture, {
+      /** Hold the first local planning call to exercise overlapping-admission rejection. */
       async plan() {
         calls++;
         if (calls === 1) {
@@ -2087,6 +2093,7 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     fixture.setDetail(npm);
     const seen: unknown[] = [];
     const models: AdvisoryModels = {
+      /** Record planning candidates and fail the selected local model case without external inference. */
       async plan(candidate) {
         seen.push(candidate);
         if (candidate.id === npm.id) throw new Error('MODEL_UNAVAILABLE');

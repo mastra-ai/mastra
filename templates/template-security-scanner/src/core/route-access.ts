@@ -53,7 +53,9 @@ export const routeAccessRulesSchema = z
     return new Set(keys).size === keys.length;
   }, 'Each method and path template may have one access rule.');
 
+/** Split a route path into segments after normalizing its trailing slash. */
 const segments = (path: string) => (path === '/' ? [] : path.replace(/\/$/, '').slice(1).split('/'));
+/** Recognize a route-template segment enclosed by parameter braces. */
 const parameter = (segment: string) => segment.startsWith('{') && segment.endsWith('}');
 
 /** Every path matched by the template must fit one allowed prefix and no excluded prefix. */

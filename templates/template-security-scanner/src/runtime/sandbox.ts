@@ -79,6 +79,7 @@ export async function probeSandbox(settings: Settings, receipt: ImageReceipt, ab
       'The native sandbox does not support bounded command execution.',
     );
   const signal = AbortSignal.any([AbortSignal.timeout(120_000), ...(abortSignal ? [abortSignal] : [])]);
+  /** Execute a bounded sandbox probe and reject unsuccessful or incomplete command output. */
   const command = async (executable: string, args: string[], maximumBytes = settings.OUTPUT_LIMIT_BYTES) => {
     const result = await executeCommand(executable, args, {
       timeout: settings.COMMAND_TIMEOUT_MS,

@@ -96,6 +96,7 @@ export function protectControlPlane(
     setCookie(context, COOKIE, '', { httpOnly: true, sameSite: 'Strict', path: '/', maxAge: 0 });
     return context.body(null, 204);
   });
+  /** Allow only explicit native metadata GET routes and reject execution or query-controlled context. */
   const nativeBoundary: MiddlewareHandler = async (context, next) => {
     if (
       context.req.method !== 'GET' ||

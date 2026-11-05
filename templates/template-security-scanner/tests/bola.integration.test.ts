@@ -61,6 +61,7 @@ const fakeModels: BolaModels = {
       usageTokens: 100,
     };
   },
+  /** Return a local BOLA interpretation from the actual proof after checking policy and reserving allowance. */
   async interpret(proof: BolaProof, policy, budget: BolaBudget) {
     expect(policy).toEqual({ objectPolicy: 'owner', expectedUnauthorizedStatus: [401, 403, 404] });
     await budget.reserve('dupin', 512, 256);
@@ -152,10 +153,12 @@ async function journey(
   let hostCanaryPort = 0;
   let hostCanaryHits = 0;
   let canaryResult: { hostDenied: boolean; ingressAllowed: boolean; filesClean: boolean } | undefined;
+  /** Attach the owned verifier to the test ingress network for confinement canary checks. */
   const verifierHook: BolaVerificationHook = async ({ verifier, gatewayIp, ingressNetworkId }) => {
     const ingress = await client.getNetwork(ingressNetworkId).inspect();
     const hostIp = ingress.IPAM?.Config?.[0]?.Gateway;
     if (!hostIp || !hostCanaryPort) throw new Error('CANARY_BOUNDARY_UNAVAILABLE');
+    /** Probe the selected owned address and port from the real verifier container. */
     const probe = async (address: string, port: number) => {
       const output = await control(
         verifier,
@@ -235,6 +238,7 @@ async function journey(
       return fakeModels.review(proof, policy, budget, signal);
     },
   };
+  /** Assert that serialized model input excludes the example accounts' credential representations. */
   const assertModelPrivacy = (input: unknown) => {
     const exported = JSON.stringify(input);
     for (const user of seed.users) {
@@ -264,12 +268,14 @@ async function journey(
   const disagreement = ['interpretationDisagrees', 'reviewDisagrees', 'bothDisagree'].includes(scenario);
   const disagreementModels: BolaModels = {
     ...fakeModels,
+    /** Run the local interpretation fixture and apply the selected disagreement scenario. */
     async interpret(proof, policy, budget, signal) {
       const result = await fakeModels.interpret(proof, policy, budget, signal);
       return scenario === 'interpretationDisagrees' || scenario === 'bothDisagree'
         ? { ...result, value: { outcome: 'INCONCLUSIVE' as const } }
         : result;
     },
+    /** Run the local review fixture and apply the selected independent disagreement scenario. */
     async review(proof, policy, budget, signal) {
       const result = await fakeModels.review(proof, policy, budget, signal);
       return scenario === 'reviewDisagrees' || scenario === 'bothDisagree'
@@ -314,6 +320,7 @@ async function journey(
     expect(login.status).toBe(201);
     const cookie = login.headers.get('set-cookie')!.split(';')[0]!;
     const csrf = ((await login.json()) as { csrfToken: string }).csrfToken;
+    /** Send a real authenticated JSON request with optional revision binding to the isolated control plane. */
     const call = async <T>(path: string, method = 'GET', body?: unknown, revision?: number) => {
       const response = await fetch(`${server!.url}${path}`, {
         method,
@@ -337,6 +344,7 @@ async function journey(
     });
     expect(policy.status).toBe(201);
     const origin = `http://${boundary!.address}:18080`;
+    /** Build a revision-bound operator GET rule for the selected route and audience. */
     const rule = (pathTemplate: string, audience: 'user' | 'public', revision: number) => ({
       version: 1,
       method: 'GET',
@@ -347,6 +355,7 @@ async function journey(
       ...(audience === 'user' ? { objectPolicy: 'owner' } : {}),
       expectedUnauthorizedStatus: audience === 'user' ? [401, 403, 404] : [],
     });
+    /** Build the route rules required by the selected collection/detail test scenario. */
     const rules = (revision: number) => [
       rule('/api/orders', 'user', revision),
       rule('/api/orders/{id}', 'user', revision),
@@ -759,6 +768,7 @@ async function journey(
       child.stderr!.on('data', (chunk: Buffer) => {
         childError = (childError + chunk.toString()).slice(-4096);
       });
+      /** Wait for the child process's selected readiness line within the bounded polling window. */
       const waitLine = async (prefix: string) => {
         for (let attempt = 0; attempt < 1200; attempt++) {
           const line = lines.find(item => item.startsWith(prefix));
@@ -1001,6 +1011,7 @@ async function journey(
     const unverifiedPrincipal = ['sameKey', 'sameAccount', 'missingPrincipal', 'mismatchedPrincipal'].includes(
       scenario,
     );
+    /** Audit persisted assessment tables for example credential leakage before cleanup. */
     const assertPrivate = async () => {
       const db = createClient({ url: settings.databaseUrl });
       try {

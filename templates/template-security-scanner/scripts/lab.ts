@@ -19,6 +19,7 @@ const close = () =>
 const stopController = new AbortController();
 let ready = false,
   stopping = false;
+/** Abort lab startup and begin cleanup when the owned runtime is ready. */
 const stop = () => {
   stopping = true;
   stopController.abort();
@@ -48,6 +49,7 @@ try {
       .parse(await response.json()).csrfToken;
   if (!cookie) throw new Error('LAB_COOKIE_MISSING');
   const idSchema = z.object({ id: z.string().uuid(), revision: z.number().int().positive() }).passthrough();
+  /** Create a lab control-plane record with the current session and optional revision binding. */
   const create = async (path: string, body: unknown, revision?: number) => {
     const result = await fetch(`${server!.url}${path}`, {
       method: 'POST',

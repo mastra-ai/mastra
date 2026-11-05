@@ -46,6 +46,7 @@ export interface BolaModels {
     signal: AbortSignal,
   ): Promise<BolaModelCall<z.infer<typeof reviewSchema>>>;
 }
+/** Read reported BOLA model token usage, preserving null when the provider omits it. */
 const usage = (response: { usage?: { totalTokens?: number } }) => response.usage?.totalTokens ?? null;
 
 /** Real Morph-backed agents use the same structured, reserved model boundary as legacy investigations. */

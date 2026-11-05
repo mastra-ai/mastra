@@ -225,6 +225,7 @@ export type StoredProof = {
   availability?: EvidenceAvailability;
 };
 
+/** Parse a persisted JSON record or raise NOT_FOUND when the row is absent. */
 const read = <T>(row: object | undefined): T => {
   if (!row) throw new ControlPlaneError('NOT_FOUND', 404);
   return JSON.parse(String((row as { data: unknown }).data)) as T;

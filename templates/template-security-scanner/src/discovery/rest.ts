@@ -7,6 +7,7 @@ import { privateProcess } from './private-pipe.js';
 import { SecretGuard } from './parser.js';
 
 type ReadResult = { status: number; body: unknown } | null;
+/** Resolve a bounded REST reference only when its canonical URL remains inside target scope. */
 const canonicalReference = (value: string, origin: string, target: Target) => {
   if (value.length > 512 || value.includes('?') || value.includes('#') || value.includes('%')) return null;
   let url: URL;
@@ -25,6 +26,7 @@ const canonicalReference = (value: string, origin: string, target: Target) => {
     return null;
   return url.pathname;
 };
+/** Match an observed path against fixed and parameterized route-template segments. */
 const routeMatches = (template: string, path: string) => {
   const expected = template.split('/');
   const actual = path.split('/');

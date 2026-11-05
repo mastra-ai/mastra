@@ -54,6 +54,7 @@ export type BolaFinding = {
 
 const read = (value: unknown): BolaAssessment => JSON.parse(String(value)) as BolaAssessment;
 const now = () => new Date().toISOString();
+/** Withhold expired BOLA observations while preserving the assessment's visible availability state. */
 const visible = (record: BolaAssessment): BolaAssessment => {
   if (record.evidenceAvailability === 'available' && record.expiresAt && record.expiresAt > now()) return record;
   return {

@@ -23,10 +23,12 @@ export const gatewayStatsSchema = z
     exhaustionReason: z.enum(['requests', 'bytes', 'time', 'peer-mismatch']).nullable(),
   })
   .strict();
+/** Normalize an origin to its protocol, hostname and explicit or default numeric port. */
 const originTuple = (origin: string) => {
   const url = new URL(origin);
   return [url.protocol.slice(0, -1), url.hostname, Number(url.port || (url.protocol === 'https:' ? 443 : 80))];
 };
+/** Use the profile identifier for API-key isolation and the role for legacy gateway profiles. */
 export const gatewayRole = (profile: ScanContext['profiles'][number]) =>
   profile.kind === 'api_key_header' ? profile.id : profile.role;
 

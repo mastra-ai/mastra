@@ -333,6 +333,7 @@ async function buildImage(settings: Settings, receipt: ExampleReceipt) {
     );
     let diagnostic = '',
       bytes = 0;
+    /** Retain only the bounded prefix of image-build diagnostics while counting all received bytes. */
     const capture = (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes < 65536) diagnostic += chunk.toString();

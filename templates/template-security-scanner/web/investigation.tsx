@@ -25,6 +25,7 @@ export function ScanInvestigations({ scanId }: { scanId: string }) {
   const canPlan =
     !settings.error && settings.data?.investigation.requested && settings.data.investigation.modelConfigured;
 
+  /** Request planning for the selected investigation only when the console's planning prerequisites hold. */
   async function plan(item: Investigation) {
     if (!canPlan) return;
     setSelectedId(item.id);
@@ -44,6 +45,7 @@ export function ScanInvestigations({ scanId }: { scanId: string }) {
     }
   }
 
+  /** Request bounded approval using the configured owned callback and selected hypothesis. */
   async function requestApproval(hypothesis: Hypothesis) {
     const callback = settings.data?.investigation.approvalCallback;
     if (!callback) return;

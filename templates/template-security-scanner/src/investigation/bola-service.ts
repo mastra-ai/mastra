@@ -57,6 +57,7 @@ export class BolaAssessmentService {
   ) {
     this.store = new BolaStore(discovery);
   }
+  /** Report whether both BOLA models and discovery execution are available. */
   get enabled() {
     return Boolean(this.models && this.scans.enabled);
   }
@@ -375,6 +376,7 @@ export class BolaAssessmentService {
   }
   private budget(id: string, owner: string, signal: AbortSignal): BolaBudget {
     return {
+      /** Reserve BOLA model allowance after cancellation and serialized-input bound checks. */
       reserve: async (_role, inputBytes, outputTokens) => {
         signal.throwIfAborted();
         if (!Number.isSafeInteger(inputBytes) || inputBytes < 0 || inputBytes > 65536)

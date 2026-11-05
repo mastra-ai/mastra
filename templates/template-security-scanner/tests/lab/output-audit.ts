@@ -114,6 +114,7 @@ async function outputAndTelemetryAuditRun() {
     }),
   );
   const holds = new Map<string, ReturnType<typeof lab.client.getContainer>>();
+  /** Keep one real container consumer alive for each selected image during the audit. */
   const holdImage = async (id: string) => {
     if (holds.has(id)) return;
     const holder = await lab.client.createContainer({

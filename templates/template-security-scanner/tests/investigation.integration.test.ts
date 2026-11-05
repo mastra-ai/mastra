@@ -276,6 +276,7 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
         undefined as never,
         undefined,
         {
+          /** Return a local verification interpretation or raise the selected token-budget failure. */
           interpret: async () => {
             if (blocked) throw new ControlPlaneError('TOKEN_BUDGET_EXCEEDED', 409);
             return { value: { outcome: 'CONFIRMED' }, modelId: 'local-fixture', usageTokens: 1 };
@@ -894,6 +895,7 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
           ).toBe(200);
           await Promise.race([
             new Promise<void>(resolve => {
+              /** Wait for the actual worker-settlement signal before continuing the lifecycle assertion. */
               const check = () => (workerSettled ? resolve() : setTimeout(check, 5));
               check();
             }),
@@ -968,6 +970,7 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
       const register = (body = request) =>
         lab.request(`/api/targets/${selected.target.id}/verification-resources`, 'POST', body);
       const history: Record<string, unknown>[] = [];
+      /** Renew the owned-resource registration and require its real successful API result. */
       const renew = async () => {
         const result = await register();
         expect([result.status, result.data.code ?? null]).toEqual([201, null]);
@@ -1037,6 +1040,7 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
       ).toBe(200);
       await updateTarget({ policyRevision: policy.revision + 1 });
       await renew();
+      /** Reload the target and assert its persisted profile bindings remain current after renewal. */
       const checkProfiles = async () => {
         const target = (await lab.request(`/api/targets/${selected.target.id}`)).data as unknown as Target;
         const bindings = [];
@@ -2106,6 +2110,7 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
         4,
         15000,
         {
+          /** Record serialized model-input reservations and reject input exceeding the 8192-byte allowance. */
           reserve: async (_role, bytes) => {
             if (bytes > 8192) throw new ControlPlaneError('MODEL_INPUT_BOUND_EXCEEDED', 403);
             reservations.push(bytes);

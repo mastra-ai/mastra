@@ -164,6 +164,7 @@ export async function modelWire(scenario: Scenario) {
   registerLabCleanup(
     () => new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve()))),
   );
+  /** Reserve allowance and send the selected model role's request to the local wire fixture. */
   async function call(
     kind: string,
     input: object,

@@ -266,6 +266,7 @@ export async function reviewWireAudit() {
       limits: { maxAttempts: 2, maxRequests: 2, maxDurationSeconds: 15 },
     };
     const ownerMarker = 'LAB_MARKER_OWNEDRESOURCE01';
+    /** Build an IDOR verification proof with the selected alternate-role marker. */
     const proof = (alternateMarker: string | null) =>
       verificationProofSchema.parse({
         source: 'owned-gateway',

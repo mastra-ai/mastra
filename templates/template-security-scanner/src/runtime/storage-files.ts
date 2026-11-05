@@ -6,6 +6,7 @@ import { prepareDataDirectory } from './files.js';
 
 type FileKind = 'application' | 'native' | 'sidecar';
 
+/** Select the diagnostic code for an unsafe domain, native or sidecar storage path. */
 const code = (kind: FileKind) =>
   kind === 'native' ? 'UNSAFE_MASTRA_DATABASE' : kind === 'sidecar' ? 'UNSAFE_DATABASE_SIDECAR' : 'UNSAFE_DATABASE';
 

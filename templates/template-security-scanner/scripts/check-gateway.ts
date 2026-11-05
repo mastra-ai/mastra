@@ -123,6 +123,7 @@ try {
     );
     let bytes = 0;
     const timer = setTimeout(() => build.kill('SIGKILL'), 60000);
+    /** Stop the gateway test build when its output exceeds the configured byte ceiling. */
     const count = (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > 8388608) build.kill('SIGKILL');

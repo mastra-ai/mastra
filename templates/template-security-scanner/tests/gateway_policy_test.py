@@ -71,6 +71,9 @@ class GatewayPolicyTests(unittest.TestCase):
     def test_network_path_authority_is_never_discarded_before_policy(self) -> None:
         # Preserve the original lossy-predicate counterexample. No wire request
         # runs the old predicate; production Policy must reject all these forms.
+        """Verify network-path authorities remain visible to policy checks instead of
+        being discarded during normalization.
+        """
         self.assertEqual(urlsplit("//excluded/nope").path, "/nope")
         self.assertEqual(urlsplit("///catalog").path, "/catalog")
         for path in (
@@ -102,6 +105,9 @@ class GatewayPolicyTests(unittest.TestCase):
         self.assertTrue(auth.secret_in("/reflected?value=" + self.token))
 
     def test_invalid_session_comparison_is_exact_owned_public_scope(self) -> None:
+        """Verify invalid-session comparisons remain confined to the exact owned
+        public resource scope.
+        """
         comparison: dict[str, object] = {
             "role": "public",
             "origin": ["http", "allowed.lab", 18080],
@@ -183,6 +189,9 @@ class GatewayPolicyTests(unittest.TestCase):
         self.assertTrue(conservative.secret_in("/endpoint"))
 
     def test_all_supported_url_encodings_and_excess_depth_fail_closed(self) -> None:
+        """Verify supported credential encodings and excess decoding depth are
+        rejected conservatively.
+        """
         for encoded in credential_variants(self.token):
             self.assertTrue(self.policy.secret_in("/reflected?value=" + encoded))
         value = "".join(f"%{byte:02x}" for byte in self.token.encode())
@@ -192,6 +201,9 @@ class GatewayPolicyTests(unittest.TestCase):
             value = value.replace("%", "%25")
 
     def test_origin_binding_host_body_upgrade_and_methods_are_authorized(self) -> None:
+        """Verify origin, host, method, body and protocol-upgrade constraints are
+        enforced on requests.
+        """
         other = http.Request.make(
             "GET",
             "http://second.lab:18080/catalog",
@@ -215,6 +227,7 @@ class GatewayPolicyTests(unittest.TestCase):
                 self.policy.request(request, "reader")
 
     def test_rest_key_is_injected_only_after_scope_validation(self) -> None:
+        """Verify REST credentials are withheld until scope validation succeeds."""
         policy = Policy(
             {**self.config, "inject_credentials": True, "lab_ips": ["192.0.2.10"]},
             {"reader": self.token, "public": ""},
@@ -256,6 +269,10 @@ class GatewayPolicyTests(unittest.TestCase):
         self.assertNotIn("x-api-key", cleartext.headers)
 
     def test_rest_key_waits_for_numeric_pin_and_verified_peer(self) -> None:
+        """Verify REST credentials require both numeric endpoint pinning and a
+        verified connected peer.
+        """
+
         class TestGateway(Gateway):
             def snapshot(self) -> None:
                 pass
@@ -511,7 +528,14 @@ class GatewayPolicyTests(unittest.TestCase):
     def test_private_linklocal_metadata_multicast_mapped_and_mixed_answers_are_denied(
         self,
     ) -> None:
+        """Verify private and special address classes, mapped forms and mixed DNS
+        answers are rejected.
+        """
+
         def result(address: str) -> tuple[int, int, int, str, tuple[str, int]]:
+            """Build a resolver result containing the selected numeric address for
+            address-policy cases.
+            """
             return (
                 socket.AF_INET6 if ":" in address else socket.AF_INET,
                 socket.SOCK_STREAM,

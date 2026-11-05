@@ -91,6 +91,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
     let networkStop: Promise<void> | undefined;
     let stage: NonNullable<Scan['diagnostic']> = 'INPUTS',
       diagnostic: Scan['diagnostic'] = null;
+    /** Stop the gateway resource and retain any cleanup failure as the scan's terminal reason. */
     const stopNetwork = () => {
       if (gatewayResource)
         networkStop = resources.stop(gatewayResource).catch(() => {
@@ -98,6 +99,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
         });
     };
     joined.addEventListener('abort', stopNetwork, { once: true });
+    /** Read and validate current gateway counters for shared discovery-budget accounting. */
     const snapshot = async () => {
       if (!gateway) throw new Error('GATEWAY_UNAVAILABLE');
       const state = gatewayStatsSchema.parse(
@@ -368,6 +370,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
             await publish(observations, role);
             partial ||= role.partial;
           } else {
+            /** Treat public profiles as ready and run the supported confined check for authenticated profiles. */
             const identity = async () => {
               if (profile.kind === 'public') return 'READY' as const;
               if (profile.kind === 'api_key_header') return 'UNAVAILABLE' as const;

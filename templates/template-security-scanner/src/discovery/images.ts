@@ -206,6 +206,7 @@ export async function buildDiscoveryImages(
         const timer = setTimeout(stop, 600000);
         signal?.addEventListener('abort', stop, { once: true });
         if (signal?.aborted) stop();
+        /** Stop the discovery image build when streamed output exceeds its byte ceiling. */
         const count = (chunk: Buffer) => {
           bytes += chunk.length;
           if (bytes > 8 * 1024 * 1024) stop();

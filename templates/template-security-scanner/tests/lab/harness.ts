@@ -211,6 +211,7 @@ except Exception as e:
     let stopped = false;
     return {
       url,
+      /** Ask the owned child server to close, bounding its shutdown before process termination. */
       close: async () => {
         if (stopped) return;
         stopped = true;
@@ -231,6 +232,7 @@ except Exception as e:
     };
   };
   let activeSettings = settings;
+  /** Start the lab control plane in the explicitly selected child-process or in-process mode. */
   const start = () =>
     options.processMode
       ? startProcess()
@@ -251,6 +253,7 @@ except Exception as e:
   };
   await login();
   const exported: string[] = [];
+  /** Send a real session-protected lab API request with optional JSON body and revision. */
   const request = async (path: string, method = 'GET', body?: unknown, revision?: number) => {
     const response = await fetch(`${running.url}${path}`, {
       method,
@@ -267,6 +270,7 @@ except Exception as e:
     exported.push(JSON.stringify(data));
     return { status: response.status, data };
   };
+  /** Read actual owned target-fixture request counters through its container command channel. */
   const stats = async () => {
     const result = await control(fixture, [
       'python',
@@ -276,6 +280,7 @@ except Exception as e:
     if (!result.success) throw new Error('LAB_STATS_UNAVAILABLE');
     return JSON.parse(result.stdout) as Record<string, number>;
   };
+  /** Poll a persisted scan until it reaches a terminal state within the journey deadline. */
   const wait = async (id: string) => {
     for (let attempt = 0; attempt < 1800; attempt++) {
       const response = await request(`/api/scans/${id}`);
@@ -291,6 +296,7 @@ except Exception as e:
     running = await start();
     await login();
   };
+  /** Crash the owned child control plane and restart it with its persisted state. */
   const crashRestart = async () => {
     if (!('crash' in running)) throw new Error('PROCESS_MODE_REQUIRED');
     await running.crash();
@@ -314,6 +320,7 @@ except Exception as e:
     wait,
     restart,
     stop: () => running.close(),
+    /** Restart the in-process fixture with the selected key to exercise credential-loss recovery. */
     async restartWithKey(key?: string) {
       if (options.processMode) throw new Error('IN_PROCESS_KEY_RECOVERY_REQUIRED');
       await running.close();

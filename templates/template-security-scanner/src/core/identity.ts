@@ -52,6 +52,7 @@ export function ownedLoopbackIdentityTransport(listener: Server): IdentityTransp
   }
   const endpoint = `http://127.0.0.1:${address.port}/identity`;
   return {
+    /** Accept only supported bearer or header identity profiles on an owned lab target. */
     supports: (target, profile) =>
       target.environment === 'lab' &&
       (profile.kind === 'bearer' || profile.kind === 'header') &&
@@ -69,6 +70,7 @@ export function ownedLoopbackIdentityTransport(listener: Server): IdentityTransp
       }
       return new Promise(resolve => {
         let completed = false;
+        /** Resolve the identity observation once, ignoring subsequent completion attempts. */
         const finish = (result: IdentityObservation) => {
           if (!completed) {
             completed = true;

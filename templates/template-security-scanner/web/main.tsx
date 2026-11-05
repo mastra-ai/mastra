@@ -112,6 +112,7 @@ function NavIcon({ view }: { view: View }) {
     </svg>
   );
 }
+/** Resolve the initial console view from the URL hash, falling back to overview. */
 const initialView = (): View => {
   const hash = window.location.hash.slice(1);
   return views.find(view => view === hash) ?? 'overview';
@@ -121,6 +122,7 @@ const initialView = (): View => {
 function Login({ onLogin, initialError = '' }: { onLogin: (session: Session) => void; initialError?: string }) {
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
+  /** Submit the bootstrap credential and expose typed sign-in failure state. */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -318,6 +320,7 @@ function Console({ session, onLogout }: { session: Session; onLogout: () => void
     setView(next);
     document.querySelector('main h1')?.scrollIntoView({ block: 'start' });
   }
+  /** Revoke the current local session and keep sign-out failure visible for retry. */
   async function signOut() {
     setSignOutError('');
     setSigningOut(true);
@@ -459,6 +462,7 @@ function App() {
   }, []);
   useEffect(() => {
     if (!session) return;
+    /** Clear the expired or revoked session and preserve the reason shown on the sign-in view. */
     const ended = () => {
       setLoginReason(Date.now() >= Date.parse(session.expiresAt) ? 'SESSION_EXPIRED' : 'SESSION_ENDED');
       setSession(undefined);

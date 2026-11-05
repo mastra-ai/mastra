@@ -44,6 +44,7 @@ export function verifyFirewall(value: unknown, gatewayIp: string, port: number |
       throw new Error('FIREWALL_UNEXPECTED_FILTER');
   const match = (left: unknown, right: unknown, op = '==') => ({ match: { op, left, right } });
   const payload = (protocol: string, field: string) => ({ payload: { protocol, field } });
+  /** Build a loopback firewall match for the selected direction, ports and optional runtime UID. */
   const loop = (direction: 'input' | 'output', ports: unknown, uid: boolean) => [
     match({ meta: { key: direction === 'input' ? 'iifname' : 'oifname' } }, 'lo'),
     match(payload('ip', direction === 'input' ? 'saddr' : 'daddr'), '127.0.0.1'),

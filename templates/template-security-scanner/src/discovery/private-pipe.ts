@@ -36,6 +36,7 @@ export async function privateProcess(
     maximumBuffered = 0,
     discardedSocketBytes = 0;
   const started = Date.now();
+  /** Kill the container only after its identity and ownership still match the recorded boundary. */
   const killOwned = async () => {
     const inspection = await sandbox.container.inspect();
     if (
@@ -49,6 +50,7 @@ export async function privateProcess(
       await sandbox.container.wait();
     }
   };
+  /** Set the first private-process stop reason and discard buffered socket output before termination. */
   const stop = (reason: string) => {
     if (stopReason) return;
     stopReason = reason;
@@ -60,10 +62,12 @@ export async function privateProcess(
   };
   const deadline = new AbortController();
   const signal = AbortSignal.any([deadline.signal, ...(options.abortSignal ? [options.abortSignal] : [])]);
+  /** Translate deadline expiry or caller cancellation into the private-process stop reason. */
   const abort = () => stop(deadline.signal.aborted ? 'command-timeout' : 'driver-cancelled');
   signal.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => deadline.abort(), options.timeout ?? 45000);
   const streamError = () => stop('stream-error');
+  /** Read an exact bounded private frame or stop on stream termination, cancellation or timeout. */
   const read = async (length: number): Promise<Buffer | null> => {
     while (!stopReason) {
       // Legacy provider streams may report readable repeatedly without satisfying

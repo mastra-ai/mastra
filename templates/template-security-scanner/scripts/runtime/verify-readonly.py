@@ -19,6 +19,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def request_item(item, ca):
+    """Perform one validated read-only request using its private headers and confined
+    gateway endpoint.
+    """
     if item.get("method") != "GET" or not PROXY.fullmatch(item.get("proxy", "")):
         return {"code": "INVALID_REQUEST"}
     if not isinstance(item.get("url"), str) or len(item["url"]) > 2048:
@@ -66,6 +69,9 @@ def request_item(item, ca):
 
 
 def main():
+    """Execute the bounded read-only request list and emit a structured result or
+    safe request-file failure.
+    """
     try:
         data = json.loads(Path("/workspace/request.json").read_text())
         requests = data["requests"]

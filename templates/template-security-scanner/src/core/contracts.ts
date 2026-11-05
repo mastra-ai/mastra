@@ -239,6 +239,7 @@ export const targetSchema = z
   });
 /** Check a request path against the target's allowed and excluded path boundaries. */
 export function pathAllowed(path: string, scope: { allowedPaths: string[]; excludedPaths: string[] }) {
+  /** Match the current path to a whole allowed or excluded prefix segment. */
   const matches = (prefix: string) =>
     prefix === '/' || path === prefix || path.startsWith(`${prefix.replace(/\/$/, '')}/`);
   return scope.allowedPaths.some(matches) && !scope.excludedPaths.some(matches);

@@ -172,6 +172,7 @@ function planningContract(playbooks: Playbook[], authorized: PlanningLimits, lim
   // Morph rejects uniqueItems; hypothesisSchema still enforces evidence ID uniqueness locally.
   const wireSchema = z.toJSONSchema(container(shared), {
     target: 'draft-7',
+    /** Add category-specific JSON Schema limits when planning variants share a common schema. */
     override: context => {
       if (context.zodSchema === shared && variants.length > 1)
         context.jsonSchema.anyOf = [...groups.values()].map(group => ({
@@ -208,6 +209,7 @@ function planningContract(playbooks: Playbook[], authorized: PlanningLimits, lim
     },
   };
 }
+/** Accept finite numeric model usage and preserve null for unavailable or invalid measurements. */
 const usage = (response: { usage?: { totalTokens?: number } }) =>
   typeof response.usage?.totalTokens === 'number' && Number.isFinite(response.usage.totalTokens)
     ? response.usage.totalTokens
@@ -341,6 +343,7 @@ export class MastraInvestigationModels implements InvestigationModels {
       wireSchema,
       structuredSchema,
     } = planningContract(playbooks, planningLimits, limit);
+    /** Remove the last optional parameter name to reduce serialized planning input size. */
     const trimParameters = () => {
       const item = minimal.findLast(item => item.parameterNames.length > 0);
       if (!item) return false;

@@ -8,6 +8,7 @@ const boundary = await readExampleBoundary(settings);
 if (!boundary) throw new Error('OWNED_LAB_REQUIRED');
 
 const models: BolaModels = {
+  /** Select the observed order-detail candidate after reserving the local planning allowance. */
   async select(candidates, budget) {
     await budget.reserve('sherlock', 1024, 512);
     const candidate = candidates.find(

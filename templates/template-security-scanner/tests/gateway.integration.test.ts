@@ -83,6 +83,7 @@ describe('Gateway authorization before contact', () => {
     const options = sandboxOptions(lab.settings, image, `security-scanner-probe-${randomUUID()}`);
     const untrusted = await privateNativeSandbox(lab.client, { ...options, network: networkMode });
     let untrustedRunning = true;
+    /** Destroy the untrusted test sandbox once after its actual creation. */
     const destroyUntrusted = async () => {
       if (untrustedRunning) {
         await untrusted.destroy();
@@ -102,6 +103,7 @@ describe('Gateway authorization before contact', () => {
       authorityInvalid = false,
       noCaTail = '';
     const noCaController = new AbortController();
+    /** Bound no-CA probe output and stop when its explicit negative TLS marker is observed. */
     const inspectNoCa = (chunk: string) => {
       noCaBytes += Buffer.byteLength(chunk);
       if (noCaBytes > 262144) {
@@ -287,6 +289,7 @@ describe('Gateway authorization before contact', () => {
     }
 
     const parser = new DiscoveryParser(context.target, profile, 'http', guard, () => {});
+    /** Run the named wire scenario inside the owned gateway test container. */
     const wire = async (name: string) => {
       const result = await control(session.container, ['python', '/workspace/wire.py', session.ip, name], 6000);
       expect(result.success).toBe(true);

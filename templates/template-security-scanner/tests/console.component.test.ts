@@ -42,6 +42,7 @@ describe('console component outcomes', () => {
   it('shows persisted approval timing only after a decision', async () => {
     const createdAt = '2026-10-31T12:00:00.000Z';
     const decidedAt = '2026-10-31T12:01:15.000Z';
+    /** Build an approval record with the selected decision and optional decision timestamp. */
     const approval = (id: string, decision: string, time: string | null): Approval => ({
       id,
       investigationId: 'investigation',

@@ -199,6 +199,7 @@ async function build(settings: Settings, sourceHash: string, runId: string, sign
     );
     let bytes = 0;
     let failure: RuntimeDiagnostic | undefined;
+    /** Record the first build failure and stop only the owned image-build process group. */
     const stop = (code: string, message: string) => {
       failure ??= new RuntimeDiagnostic(code, message);
       if (child.pid) {
@@ -215,6 +216,7 @@ async function build(settings: Settings, sourceHash: string, runId: string, sign
       () => stop('BUILD_TIMEOUT', 'The local image build exceeded ten minutes. Check Docker and retry.'),
       600_000,
     );
+    /** Enforce the image-build output ceiling while counting both output streams. */
     const count = (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > 8 * 1024 * 1024) stop('BUILD_OUTPUT_LIMIT', 'The local build exceeded its diagnostic output budget.');

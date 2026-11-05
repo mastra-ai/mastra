@@ -44,6 +44,7 @@ let timedOut = false,
   stdoutBytes = 0,
   stderrBytes = 0;
 const chunks: Buffer[] = [];
+/** Kill the owned test process group when the operations journey times out. */
 const stop = () => {
   timedOut = true;
   if (child.pid)

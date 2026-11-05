@@ -48,6 +48,7 @@ export async function inspectBrowser(sandbox: PrivateSandbox, guard: SecretGuard
     .map(value => value.split('\0').filter(Boolean));
   // Crashpad lives in the same directory but is not a browser root and does
   // not accept proxy/CDP flags. Inspect executable basenames, not directory names.
+  /** Recognize the supported Chromium executable basenames. */
   const isBrowser = (executable: string | undefined) =>
     Boolean(executable && /(?:^|\/)(?:chromium|chrome|chrome-headless-shell)$/.test(executable));
   const roots = processes.filter(args => isBrowser(args[0]) && !args.some(arg => arg.startsWith('--type=')));
@@ -138,6 +139,7 @@ async function withBrowserPage<T>(
     ended = true;
   });
   stream.pause();
+  /** Fill the private WebSocket buffer to the requested length within cancellation and deadline bounds. */
   const fill = async (length: number) => {
     while (payload.length < length) {
       signal.throwIfAborted();
@@ -175,6 +177,7 @@ async function withBrowserPage<T>(
       );
     });
   const nonce = randomBytes(16).toString('base64');
+  /** Send one masked client WebSocket frame containing the serialized browser command. */
   const send = async (value: Record<string, unknown>) => {
     const bytes = Buffer.from(JSON.stringify(value)),
       mask = randomBytes(4);
@@ -187,6 +190,7 @@ async function withBrowserPage<T>(
     for (let index = 0; index < masked.length; index++) masked[index] = masked[index]! ^ mask[index % 4]!;
     await write(Buffer.concat([header, mask, masked]));
   };
+  /** Read and validate one bounded unmasked text frame from the browser channel. */
   const readMessage = async () => {
     const header = await read(2);
     if (header[0] !== 0x81 || header[1] === undefined || header[1] & 0x80) throw new Error('BROWSER_CONTROL_WEBSOCKET');
@@ -201,6 +205,7 @@ async function withBrowserPage<T>(
     return record(JSON.parse((await read(size)).toString()));
   };
   let id = 0;
+  /** Send a browser protocol command and observe channel events until its matching response arrives. */
   const call: BrowserCall = async (method, params, sessionId, observe) => {
     const current = ++id;
     await send({ id: current, method, params, ...(sessionId ? { sessionId } : {}) });
@@ -214,6 +219,7 @@ async function withBrowserPage<T>(
     }
     throw new Error('BROWSER_CONTROL_EVENTS');
   };
+  /** Drain existing browser notifications until the observation is settled or its drain deadline expires. */
   const drain: BrowserDrain = async (observe, done) => {
     // Runtime's promise result can precede native network notifications. Read
     // only this existing channel within its original byte/time/message bounds.

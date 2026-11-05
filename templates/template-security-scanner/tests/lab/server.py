@@ -44,6 +44,7 @@ network = (
 
 
 def dns_name(value):
+    """Encode a DNS name as length-prefixed labels followed by the root terminator."""
     return (
         b"".join(bytes([len(label)]) + label.encode() for label in value.split("."))
         + b"\0"
@@ -51,6 +52,9 @@ def dns_name(value):
 
 
 def dns_server():
+    """Serve the owned lab's controlled DNS answers for gateway confinement
+    scenarios.
+    """
     receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     receiver.bind(("0.0.0.0", 53))
     while True:
@@ -124,6 +128,7 @@ threading.Thread(target=dns_server, daemon=True).start()
 
 
 def udp_receiver(port):
+    """Receive owned UDP canaries and record their fixture counters."""
     receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     receiver.bind(("0.0.0.0", port))
     while True:
@@ -170,6 +175,9 @@ os.chmod("/workspace/lab-root.pem", 0o600)
 
 
 def server_context(name, host, expired=False, untrusted=False):
+    """Create a local fixture TLS context with the selected hostname, expiry and
+    trust variant.
+    """
     key = ec.generate_private_key(ec.SECP256R1())
     issuer_key, issuer = (
         root_certificate("untrusted-owned-root") if untrusted else (lab_key, lab_root)
@@ -223,6 +231,9 @@ class Receiver(ThreadingHTTPServer):
         super().__init__(address, handler)
 
     def get_request(self):
+        """Accept a fixture connection, record counters and apply its configured TLS
+        handshake.
+        """
         connection, address = super().get_request()
         if self.server_port != 18090:
             with lock:
@@ -250,6 +261,9 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def respond(self, status, body, headers=None):
+        """Write an owned fixture response with explicit status, headers and body
+        length.
+        """
         self.send_response(status)
         for name, value in (headers or {}).items():
             self.send_header(name, value)
@@ -260,6 +274,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        """Serve the owned lab's control, identity, application and adversarial GET
+        scenarios.
+        """
         if self.server.server_port == 18090:
             if self.path.startswith("/expire?"):
                 role = parse_qs(urlsplit(self.path).query).get("role", [""])[0]

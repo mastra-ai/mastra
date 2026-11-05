@@ -153,6 +153,7 @@ export class OwnedGatewayVerifier implements VerificationDriver {
       const byRole = new Map(context.profiles.map((profile, index) => [profile.role, { profile, index }]));
       const byId = new Map(context.profiles.map((profile, index) => [profile.id, { profile, index }]));
       const requests: Request[] = [];
+      /** Add a verification read only for a profile with ready recorded scan identity. */
       const add = (name: string, profileId: string, invalidSession = false) => {
         const entry = byId.get(profileId);
         if (!entry || !scan.roles.some(role => role.profileId === profileId && role.identity === 'READY'))
@@ -356,6 +357,7 @@ export class OwnedGatewayVerifier implements VerificationDriver {
         requestCount,
         withheld: false,
       };
+      /** Read an optional marker from the indexed verification result. */
       const marker = (index: number) => parsed.results[index]?.marker ?? null;
       const status = (index: number) => parsed.results[index]!.status!;
       if (status(0) === 404)

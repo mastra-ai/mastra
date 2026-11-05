@@ -8,6 +8,9 @@ from urllib.parse import urlsplit
 
 
 def main() -> None:
+    """Execute the selected owned gateway wire scenario and emit its bounded observed
+    result.
+    """
     case = sys.argv[2]
     if case == "raw-connect":
         result = {

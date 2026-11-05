@@ -54,6 +54,7 @@ export async function cleanSetupAndPublicLab() {
   await writeFile(env.NPM_CONFIG_GLOBALCONFIG!, '', { mode: 0o600 });
   let child: ReturnType<typeof spawn> | undefined;
   const commands: Array<{ command: string; elapsedMs: number }> = [];
+  /** Run the isolated npm command and measure its exit, output bounds and elapsed time. */
   const command = async (args: string[], timeout: number) => {
     const started = Date.now(),
       processChild = spawn('npm', args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -97,6 +98,7 @@ export async function cleanSetupAndPublicLab() {
     ])
       await cp(join(sourceRoot, name), join(root, name), {
         recursive: true,
+        /** Exclude generated console assets and Python caches from the clean setup copy. */
         filter: path => !path.includes('/web/dist') && !path.includes('/__pycache__'),
       });
     // A fresh public-registry install has no source lockfile, user npmrc, cached
@@ -179,6 +181,7 @@ export async function cleanSetupAndPublicLab() {
         .parse(await login.json()).csrfToken;
     };
     await authenticate();
+    /** Call the freshly installed local control plane using its real session and optional revision. */
     const request = async (
       path: string,
       body?: unknown,

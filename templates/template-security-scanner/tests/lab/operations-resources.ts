@@ -181,6 +181,7 @@ export async function legacySharedImageLifecycle() {
     primaryFailure = { error };
   }
   const failures: unknown[] = [];
+  /** Attempt exact-resource cleanup, ignoring only absence and collecting other failures. */
   const cleanup = async (operation: () => Promise<unknown>) => {
     try {
       await operation();

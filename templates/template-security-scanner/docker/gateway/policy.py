@@ -21,6 +21,9 @@ from mitmproxy_rs.dns import DnsResolver
 
 
 def credential_variants(secret: str) -> tuple[str, ...]:
+    """Expand a secret into the bounded literal and encoded representations checked
+    by the gateway.
+    """
     raw = secret.encode()
     return (
         secret,
@@ -54,6 +57,9 @@ class Budget:
         self.exhaustion_reason: str | None = None
 
     def reserve(self) -> None:
+        """Reserve one request slot unless time, request, byte or concurrency limits
+        prohibit admission.
+        """
         reason = (
             "time"
             if time.monotonic() >= self.deadline
@@ -74,6 +80,9 @@ class Budget:
         self.active += 1
 
     def consume(self, count: int) -> bool:
+        """Charge streamed response bytes and stop output when the shared byte or
+        time allowance is exhausted.
+        """
         if (
             self.stream_stopped
             or time.monotonic() >= self.deadline
@@ -104,6 +113,9 @@ class Policy:
         secrets: dict[str, str],
         guards: list[tuple[str, str]] | None = None,
     ) -> None:
+        """Build the request policy from configured origins, paths, credentials and
+        optional guard values.
+        """
         self.config = config
         self.secrets = secrets
         self.headers = config["headers"]
@@ -125,6 +137,9 @@ class Policy:
 
     @staticmethod
     def secret_values(headers: Sequence[tuple[str | None, str]]) -> list[str]:
+        """Extract nonempty secret values, including the credential portion of bearer
+        authorization headers.
+        """
         values = []
         for name, value in headers:
             if not value:
@@ -139,6 +154,9 @@ class Policy:
         return values
 
     def secret_in(self, value: str) -> bool:
+        """Detect forbidden secret representations through the supported bounded
+        decoding layers.
+        """
         decoded = value
         for _ in range(3):
             if any(variant in decoded for variant in self.variants):
@@ -158,6 +176,9 @@ class Policy:
         return False
 
     def origin(self, scheme: str, host: str, port: int) -> None:
+        """Reject unapproved origins and local browser-control or bootstrap
+        endpoints.
+        """
         if host in {"127.0.0.1", "localhost", "::1"}:
             if port == 9222:
                 raise PolicyError("control-cdp")
@@ -167,6 +188,9 @@ class Policy:
             raise PolicyError("origin")
 
     def request(self, request: http.Request, role: str) -> None:
+        """Validate origin, path, method, body and identity constraints before
+        authorizing a request.
+        """
         self.origin(request.scheme, request.host, request.port)
         if (
             self.config.get("inject_credentials")
@@ -276,6 +300,9 @@ class Policy:
                 raise PolicyError("identity")
 
     def inject(self, request: http.Request, role: str) -> None:
+        """Inject the configured role credential only when injection is enabled and
+        the header is absent.
+        """
         name = self.headers[role]
         if not self.config.get("inject_credentials") or not name:
             return
@@ -284,6 +311,9 @@ class Policy:
         request.headers[name] = self.secrets[role]
 
     def addresses(self, results: Sequence[tuple[int, int, int, str, Any]]) -> str:
+        """Validate every DNS answer against the address policy and select an allowed
+        numeric endpoint.
+        """
         addresses = {str(item[4][0]) for item in results}
         if not addresses:
             raise PolicyError("dns")
@@ -303,6 +333,9 @@ class Policy:
 
 class Gateway:
     def load(self, loader: Any) -> None:
+        """Load private role headers and policy settings, then initialize gateway
+        budgets and runtime tracking.
+        """
         config = json.loads(Path("/workspace/policy.json").read_text())
         profiles = config["profiles"]
         secrets = {}
@@ -369,6 +402,7 @@ class Gateway:
         )
 
     def time_expired(self) -> None:
+        """Record shared deadline exhaustion and request gateway shutdown once."""
         if self.shutdown_requested:
             return
         self.shutdown_requested = True
@@ -380,10 +414,14 @@ class Gateway:
         cast(Callable[[], None], ctx.master.shutdown)()
 
     def done(self) -> None:
+        """Cancel the deadline timer when the gateway stops."""
         if self.deadline_handle:
             self.deadline_handle.cancel()
 
     def role(self, flow: http.HTTPFlow) -> str:
+        """Resolve the isolated role from the client's configured gateway listener
+        port.
+        """
         if (
             not flow.client_conn.sockname
             or flow.client_conn.sockname[1] not in self.profiles
@@ -392,6 +430,9 @@ class Gateway:
         return self.profiles[flow.client_conn.sockname[1]]
 
     def release(self, flow: http.HTTPFlow) -> None:
+        """Strip injected credentials and release the flow's active reservation
+        without refunding consumed requests.
+        """
         self.strip_credential(flow)
         self.pending.pop(
             (flow.client_conn.id, flow.request.host, flow.request.port), None
@@ -403,6 +444,9 @@ class Gateway:
         self.snapshot()
 
     def strip_credential(self, flow: http.HTTPFlow) -> None:
+        """Remove configured credential headers and clear the flow's injection
+        marker.
+        """
         if self.policy.config.get("inject_credentials"):
             for name in self.policy.headers.values():
                 if name:
@@ -413,6 +457,9 @@ class Gateway:
         # The disconnect hook precedes transport cancellation. An opening/live
         # upstream retains its slot until server_disconnected/connect_error.
         # Requests still awaiting DNS cannot open once their reservation is gone.
+        """Reconcile client disconnection while retaining reservations needed by
+        opening or live upstream connections.
+        """
         for flow in tuple(self.reservations.values()):
             if flow.client_conn.id == client.id:
                 self.counts["disconnected-reservations"] += 1
@@ -434,6 +481,9 @@ class Gateway:
         self.release_connection(data.server.id)
 
     def release_connection(self, server_id: str) -> None:
+        """Clear peer bindings and release reservations associated with a terminal
+        upstream connection.
+        """
         self.expected_peers.pop(server_id, None)
         self.verified_peers.discard(server_id)
         binding = self.connection_flows.pop(server_id, None)
@@ -446,6 +496,9 @@ class Gateway:
                 self.release(flow)
 
     def deny(self, flow: http.HTTPFlow, reason: str) -> None:
+        """Return a trusted policy-denial response and record the bounded denial
+        reason.
+        """
         self.strip_credential(flow)
         self.pending.pop(
             (flow.client_conn.id, flow.request.host, flow.request.port), None
@@ -459,6 +512,7 @@ class Gateway:
         self.release(flow)
 
     def http_connect(self, flow: http.HTTPFlow) -> None:
+        """Validate role and approved HTTPS origin before accepting a CONNECT tunnel."""
         try:
             self.role(flow)
             self.policy.origin("https", flow.request.host, flow.request.port)
@@ -466,6 +520,9 @@ class Gateway:
             self.deny(flow, str(error))
 
     async def requestheaders(self, flow: http.HTTPFlow) -> None:
+        """Authorize request headers, reserve shared budget and prepare a validated
+        upstream connection.
+        """
         authorized = False
         try:
             role = self.role(flow)
@@ -529,6 +586,9 @@ class Gateway:
                 self.deny(flow, "resolver-failure")
 
     def request(self, flow: http.HTTPFlow) -> None:
+        """Handle deferred role-credential injection after request authorization and
+        connection preparation.
+        """
         if (
             not self.policy.config.get("inject_credentials")
             or flow.response is not None
@@ -564,6 +624,9 @@ class Gateway:
     def inject_verified(
         self, flow: http.HTTPFlow, role: str, server: connection.Server | None = None
     ) -> None:
+        """Inject credentials only when the current reserved flow matches its
+        verified numeric upstream peer.
+        """
         endpoint = flow.metadata.get("dns-endpoint")
         peer = flow.server_conn.peername if server is None else server.peername
         binding = self.connection_flows.get(server.id) if server is not None else None
@@ -598,6 +661,9 @@ class Gateway:
         self.snapshot()
 
     def server_connect(self, data: ServerConnectionHookData) -> None:
+        """Bind an authorized reserved flow to its expected numeric upstream endpoint
+        before connecting.
+        """
         if not data.server.address:
             data.server.error = "policy-no-address"
             return
@@ -639,6 +705,9 @@ class Gateway:
         self.snapshot()
 
     def server_connected(self, data: ServerConnectionHookData) -> None:
+        """Verify the connected peer against its reserved endpoint before marking the
+        flow eligible for credentials.
+        """
         expected = self.expected_peers.get(data.server.id)
         binding = self.connection_flows.get(data.server.id)
         flow = self.reservations.get(binding[0]) if binding else None
@@ -684,6 +753,9 @@ class Gateway:
         self.snapshot()
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
+        """Attach trusted upstream provenance and install bounded response streaming
+        and identity checks.
+        """
         if flow.response is None or not flow.metadata.get("reserved"):
             return
         # Only the trusted local deny() path may produce this provenance marker.
@@ -703,6 +775,9 @@ class Gateway:
         identity_body = bytearray()
 
         def stream(chunk: bytes) -> bytes:
+            """Bound identity-response buffering and charge streamed output against
+            the shared response budget.
+            """
             if checking_identity or checking_access:
                 if len(identity_body) + len(chunk) <= 4096:
                     identity_body.extend(chunk)
@@ -731,6 +806,9 @@ class Gateway:
         flow.response.stream = stream
 
     def check_access(self, flow: http.HTTPFlow, body: bytes) -> None:
+        """Classify the role's access-check response without treating an unavailable
+        response as authenticated.
+        """
         role = self.role(flow)
         status = "UNAVAILABLE"
         if flow.response is not None:
@@ -762,6 +840,9 @@ class Gateway:
     def check_identity(
         self, flow: http.HTTPFlow, identity: dict[str, str], body: bytes
     ) -> None:
+        """Compare a bounded identity response with the expected principal and record
+        its access state.
+        """
         role = self.role(flow)
         status = "UNAVAILABLE"
         if flow.response is not None:
@@ -805,6 +886,9 @@ class Gateway:
         self.snapshot()
 
     def tls_failed_server(self, data: Any) -> None:
+        """Record upstream TLS failure and release the associated verified peer and
+        reservation state.
+        """
         self.counts["tls-server-failed"] += 1
         server = getattr(data, "conn", None)
         if server is not None:

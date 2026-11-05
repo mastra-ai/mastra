@@ -7,6 +7,7 @@ const mode = process.argv[2];
 if (mode !== 'vulnerable' && mode !== 'protected') throw new Error('EXAMPLE_MODE_INVALID');
 const db = createClient({ url: 'file:/app/data/example.db' });
 const app = new Hono();
+/** Resolve a bundled example account from its bounded API-key digest, or return null. */
 const authenticate = async (key: string | undefined) => {
   if (!key || key.length > 128) return null;
   const digest = createHash('sha256').update(key, 'utf8').digest();

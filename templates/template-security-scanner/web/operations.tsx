@@ -17,6 +17,7 @@ import { Dialog, Empty, Loading, Notice, Pager, Section, Status, Time, errorCode
 import { ScanInvestigations } from './investigation';
 
 const limit = 25;
+/** Read and trim a named form field, using an empty string when absent. */
 const value = (form: FormData, name: string) => String(form.get(name) ?? '').trim();
 const number = (form: FormData, name: string) => Number(value(form, name));
 const lines = (text: string) =>
@@ -42,6 +43,7 @@ export function PolicyForm({
 }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Submit validated policy settings with the existing policy revision when editing. */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -310,6 +312,7 @@ function TargetForm({
       { pathTemplate: '/api/products', audience: 'public', expectedUnauthorizedStatus: [] },
     ],
   );
+  /** Submit target scope and application settings with the selected policy revision binding. */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -657,6 +660,7 @@ export function ProfileForm({
   const [kind, setKind] = useState(profile?.kind ?? 'public');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  /** Save the identity profile and reconfirm current operator route rules when required. */
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -863,6 +867,7 @@ export function ProfileForm({
   );
 }
 
+/** Display the selected target with its persisted profiles and supported execution controls. */
 function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => void }) {
   const [editing, setEditing] = useState<Profile | 'new'>();
   const [error, setError] = useState('');
@@ -881,6 +886,7 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
     profileRevision: profile.revision,
     credentialRevision: profile.credentialRevision,
   });
+  /** Run the selected profile's identity check and refresh its persisted result. */
   async function check(profile: Profile) {
     setBusy(true);
     setError('');
@@ -894,6 +900,7 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
       setBusy(false);
     }
   }
+  /** Admit discovery only with ready selected profiles and the current target revision. */
   async function scan() {
     const ready = current.filter(profile => profile.identity.status === 'READY');
     if (!ready.length) {
@@ -918,6 +925,7 @@ function TargetDetail({ target, onChanged }: { target: Target; onChanged: () => 
       setBusy(false);
     }
   }
+  /** Admit a BOLA assessment using ready API-key profiles and the selected route policy. */
   async function assess() {
     const ready = current.filter(profile => profile.kind === 'api_key_header' && profile.identity.status === 'READY');
     if (ready.length !== 2) {
@@ -1247,6 +1255,7 @@ export function ScansView() {
   );
   const scan = records.data?.items.find(item => item.id === selected);
   const assessment = assessments.data?.items.find(item => item.id === selectedAssessment);
+  /** Cancel the selected scan and refresh its persisted terminal or draining state. */
   async function cancel(scan: Scan) {
     setBusy(true);
     setError('');
@@ -1260,6 +1269,7 @@ export function ScansView() {
       setBusy(false);
     }
   }
+  /** Cancel the selected BOLA assessment and refresh its persisted lifecycle state. */
   async function cancelAssessment(item: BolaAssessment) {
     setBusy(true);
     setError('');
@@ -1274,6 +1284,7 @@ export function ScansView() {
       setBusy(false);
     }
   }
+  /** Admit investigation from the selected scan using the current bounded execution limits. */
   async function investigate(scan: Scan) {
     setBusy(true);
     setError('');

@@ -115,6 +115,7 @@ async function modelWire() {
   });
   const url = await listen(server);
   cleanup.push(() => closeServer(server));
+  /** Reserve allowance and send a real local model-wire request, then validate its response schema. */
   async function call<T>(
     role: 'sherlock' | 'dupin' | 'watson',
     input: object,
@@ -1120,6 +1121,7 @@ describe('real security console browser journeys', () => {
     );
     const running = await startControlPlane(settings, 0);
     let runningClosed = false;
+    /** Close the running console fixture only once across journey and cleanup paths. */
     const closeRunning = async () => {
       if (runningClosed) return;
       runningClosed = true;

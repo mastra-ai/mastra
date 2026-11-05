@@ -43,6 +43,7 @@ const running = new Promise<void>(resolve => {
   finish = resolve;
 });
 const keepAlive = setInterval(() => undefined, 60_000);
+/** Close the example target once and report a bounded cleanup failure. */
 const stop = async () => {
   if (stopping) return;
   stopping = true;

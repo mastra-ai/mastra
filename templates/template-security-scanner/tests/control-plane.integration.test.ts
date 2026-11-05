@@ -97,6 +97,7 @@ async function startHarness(withFixture = true, sessionTtlSeconds = 1800) {
     expect(response.headers.get('set-cookie')).toContain('SameSite=Strict');
   }
   await login();
+  /** Send an authenticated control-plane HTTP request with optional revision and extra headers. */
   async function call<T>(
     path: string,
     method = 'GET',
@@ -158,6 +159,7 @@ async function startHarness(withFixture = true, sessionTtlSeconds = 1800) {
     url: () => running.url,
     cookie: () => cookie,
     csrf: () => csrf,
+    /** Restart the real control plane with the selected encryption key and renew its local session. */
     async restart(key: string | undefined = KEY) {
       await running.close();
       active = false;

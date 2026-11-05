@@ -65,6 +65,7 @@ let timedOut = false,
   stdoutBytes = 0,
   stderrBytes = 0;
 const output: Buffer[] = [];
+/** Kill the owned test process group when the discovery journey times out. */
 const stop = () => {
   timedOut = true;
   if (child.pid)

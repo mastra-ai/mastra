@@ -330,6 +330,7 @@ export const observationSchema = z.discriminatedUnion('category', [
 export type Observation = z.infer<typeof observationSchema>;
 
 const tools: Record<Category, (observation: Observation) => Outcome> = {
+  /** Classify owner/alternate object reads from matching markers and explicit denial statuses. */
   idor: value =>
     value.category === 'idor' && value.ownerStatus === 200
       ? value.alternateStatus === 200 && value.alternateMarker === value.ownerMarker
@@ -338,6 +339,7 @@ const tools: Record<Category, (observation: Observation) => Outcome> = {
           ? 'NOT_REPRODUCED'
           : 'INCONCLUSIVE'
       : 'INCONCLUSIVE',
+  /** Classify public and invalid-session access against the authenticated protected-resource baseline. */
   authentication_bypass: value =>
     value.category === 'authentication_bypass' && value.protectedStatus === 200
       ? (value.publicStatus === 200 && value.publicMarker === value.protectedMarker) ||
@@ -347,6 +349,7 @@ const tools: Record<Category, (observation: Observation) => Outcome> = {
           ? 'NOT_REPRODUCED'
           : 'INCONCLUSIVE'
       : 'INCONCLUSIVE',
+  /** Classify low-role access against the successful administrator read and matching marker. */
   bfla: value =>
     value.category === 'bfla' && value.adminStatus === 200
       ? value.lowStatus === 200 && value.lowMarker === value.adminMarker
@@ -355,6 +358,7 @@ const tools: Record<Category, (observation: Observation) => Outcome> = {
           ? 'NOT_REPRODUCED'
           : 'INCONCLUSIVE'
       : 'INCONCLUSIVE',
+  /** Classify an observed callback only for a current approved active check in the owned lab. */
   ssrf: value =>
     value.category === 'ssrf' &&
     value.environment === 'lab' &&
@@ -365,14 +369,17 @@ const tools: Record<Category, (observation: Observation) => Outcome> = {
         ? 'CONFIRMED'
         : 'NOT_REPRODUCED'
       : 'BLOCKED',
+  /** Compare the observed configuration value with its expected value for the matching category. */
   misconfiguration: value =>
     value.category === 'misconfiguration'
       ? value.observedValue !== value.expectedValue
         ? 'CONFIRMED'
         : 'NOT_REPRODUCED'
       : 'INCONCLUSIVE',
+  /** Classify whether the browser could read the response for the CORS category. */
   cors: value =>
     value.category === 'cors' ? (value.responseReadable ? 'CONFIRMED' : 'NOT_REPRODUCED') : 'INCONCLUSIVE',
+  /** Confirm a redirect only when its observed external location equals the submitted destination. */
   open_redirect: value =>
     value.category === 'open_redirect'
       ? value.location &&
@@ -381,6 +388,7 @@ const tools: Record<Category, (observation: Observation) => Outcome> = {
         ? 'CONFIRMED'
         : 'NOT_REPRODUCED'
       : 'INCONCLUSIVE',
+  /** Compare the observed information-exposure marker with the expected controlled marker. */
   information_exposure: value =>
     value.category === 'information_exposure'
       ? value.observedMarker === value.marker

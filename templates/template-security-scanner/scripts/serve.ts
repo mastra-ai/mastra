@@ -10,6 +10,7 @@ try {
   const runtime = await startControlPlane(settings, settings.PORT, undefined, boundary);
   console.log(`Local API: ${runtime.url}/api/runtime`);
   let stopping = false;
+  /** Close the local control plane once and report a bounded shutdown diagnostic. */
   const stop = async () => {
     if (stopping) return;
     stopping = true;

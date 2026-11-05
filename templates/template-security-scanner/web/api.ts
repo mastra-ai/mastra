@@ -528,6 +528,7 @@ export class ApiError extends Error {
   }
 }
 
+/** Send a same-origin API request with session and CSRF handling and translate typed failures. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body) headers.set('Content-Type', 'application/json');
@@ -576,6 +577,7 @@ export async function logout() {
 }
 
 export const get = <T>(path: string) => request<T>(path);
+/** Serialize a JSON mutation and attach If-Match when an expected revision is supplied. */
 export const send = <T>(path: string, method: 'POST' | 'PUT' | 'DELETE', body: unknown, revision?: number) =>
   request<T>(path, {
     method,

@@ -712,6 +712,7 @@ export function VulnerabilitiesView() {
     selected ? `/api/advisories/${selected}/events` : '',
   );
   const item = data.data?.items.find(record => record.id === selected);
+  /** Run manual advisory synchronization and display its completed or skipped result. */
   async function sync() {
     setSyncing(true);
     setError('');
@@ -736,6 +737,7 @@ export function VulnerabilitiesView() {
       setSyncing(false);
     }
   }
+  /** Update advisory triage status with the current persisted record revision. */
   async function triage(advisory: Advisory, state: string) {
     setBusy(true);
     setError('');
@@ -753,6 +755,7 @@ export function VulnerabilitiesView() {
       setBusy(false);
     }
   }
+  /** Run a triage action and refresh its stored state while displaying any typed failure. */
   async function action(work: () => Promise<unknown>) {
     setBusy(true);
     setError('');
@@ -766,6 +769,7 @@ export function VulnerabilitiesView() {
       setBusy(false);
     }
   }
+  /** Load the selected advisory's local checker guidance without admitting verification. */
   async function searchCheckers(id: string) {
     setBusy(true);
     setError('');
@@ -1169,6 +1173,7 @@ function ApprovalReview({ id, onClose, onChanged }: { id: string; onClose: () =>
   const hypothesis = useData<Hypothesis>(approval.data ? `/api/hypotheses/${approval.data.hypothesisId}` : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Submit the selected approval decision with its current revision and refresh the caller's view. */
   async function decide(decision: 'approved' | 'denied') {
     const current = approval.data;
     if (!current) return;

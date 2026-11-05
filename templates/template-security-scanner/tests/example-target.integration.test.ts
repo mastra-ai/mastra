@@ -155,6 +155,7 @@ describe('local Hono example target', () => {
     expect(privateFile.mode & 0o777).toBe(0o600);
     expect(seed.users[0].key !== seed.users[1].key).toBe(true);
 
+    /** Read an example API resource with an optional API-key header and return its response data. */
     const request = async (base: string, path: string, key?: string) => {
       const response = await fetch(`${base}${path}`, { headers: key ? { 'x-api-key': key } : {} });
       return { status: response.status, body: (await response.json()) as unknown };
@@ -383,6 +384,7 @@ describe('local Hono example target', () => {
       const cookie = login.headers.get('set-cookie')?.split(';')[0];
       const csrf = ((await login.json()) as { csrfToken: string }).csrfToken;
       expect(cookie).toBeTruthy();
+      /** Send an authenticated JSON request to the isolated example control plane with optional revision. */
       const call = async (path: string, method = 'GET', body?: unknown, revision?: number) => {
         const response = await fetch(`${base}${path}`, {
           method,
@@ -516,6 +518,7 @@ describe('local Hono example target', () => {
       const beforeRules = (await call(`/api/targets/${restTarget.id}`)).data as unknown as Target;
       const { id: _id, owner: _owner, revision: _revision, ...replacement } = beforeRules;
       const confirmedRevision = beforeRules.revision + 1;
+      /** Build an operator route rule with the selected audience and optional object policy. */
       const rule = (pathTemplate: string, audience: 'user' | 'public', objectPolicy?: 'owner' | 'shared') => ({
         version: 1,
         method: 'GET',
@@ -670,6 +673,7 @@ describe('local Hono example target', () => {
       expect(denied.status).toBe(403);
       expect(await denied.json()).toMatchObject({ code: 'INSECURE_AUTH_TRANSPORT' });
 
+      /** Call the separate unowned control plane to verify that owned-lab authorization is required. */
       const noLabCall = async (path: string, method = 'GET', body?: unknown, revision?: number) => {
         const response = await fetch(`${unownedBase}${path}`, {
           method,

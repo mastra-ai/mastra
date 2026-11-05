@@ -8,6 +8,7 @@ const MAX_BODY = 512 * 1024;
 const cveCdnPath = /^\/public\/entries\/CVE-\d{4}-\d{4,}\.json$/;
 const ghsaCdnPath =
   /^\/public\/entries\/GHSA-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}-[23456789cfghjmpqrvwx]{4}\.json$/i;
+/** Recognize HTTP redirect status codes without following the redirect. */
 const isRedirect = (status: number) => status >= 300 && status < 400;
 const redirectDenied = () => new ControlPlaneError('ADVISORY_REDIRECT_DENIED', 503);
 

@@ -99,7 +99,9 @@ export function corsReadObservation(session: string, destination: string) {
   const requests = new Map<string, RequestState>();
   let selected: string | undefined,
     invalid = false;
+  /** Return the selected tracked browser request, if one has been selected. */
   const current = () => (selected ? requests.get(selected) : undefined);
+  /** Track allowlisted browser network events for the expected session and selected request. */
   const observe = (value: Record<string, unknown>) => {
     if (typeof value.method !== 'string' || !methods.has(value.method) || value.sessionId !== session) return;
     const parsed = notification.safeParse(value);
@@ -147,6 +149,7 @@ export function corsReadObservation(session: string, destination: string) {
         request.finished = true;
     }
   };
+  /** Report whether the browser observation has enough terminal network state for classification. */
   const ready = () => {
     const request = current();
     if (invalid || request?.invalid) return true;
@@ -154,6 +157,7 @@ export function corsReadObservation(session: string, destination: string) {
     if (request.failure) return !request.failure.denied || request.failure.canceled || Boolean(request.response);
     return request.finished && Boolean(request.response);
   };
+  /** Classify the browser read only when protocol results and tracked network evidence agree. */
   const result = (value: unknown): CorsReadOutcome => {
     const read = readResult.safeParse(value),
       request = current();
