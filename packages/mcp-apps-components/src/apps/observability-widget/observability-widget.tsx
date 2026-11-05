@@ -5,7 +5,7 @@ import {
   planWidget,
   prepareWidget,
 } from '@mastra/playground-ui/domains/dashboards';
-import type { DashboardEnvironment, ReadyPreparedWidget, WidgetState } from '@mastra/playground-ui/domains/dashboards';
+import type { ReadyPreparedWidget, WidgetState } from '@mastra/playground-ui/domains/dashboards';
 import { applyDocumentTheme } from '@modelcontextprotocol/ext-apps';
 import type { App, McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { readOpened } from './opened';
 import type { Opened } from './opened';
+import { usePin } from './use-pin';
 import { useToolResults } from './use-tool-results';
 
 const REGISTRY = new Map(BUILT_IN_WIDGET_KINDS.map(kind => [kind.kind, kind]));
@@ -25,8 +26,18 @@ function applyTheme(theme: McpUiTheme | undefined) {
 }
 
 /** Plans the widget's requests, sends them through the server's tool, and draws the answers. */
-function Widget({ app, prepared, env }: { app: App; prepared: ReadyPreparedWidget; env: DashboardEnvironment }) {
+function Widget({
+  app,
+  opened,
+  prepared,
+}: {
+  app: App;
+  opened: Extract<Opened, { status: 'ready' }>;
+  prepared: ReadyPreparedWidget;
+}) {
+  const { env } = opened;
   const [state, setState] = useState<WidgetState>({});
+  const pin = usePin(app, opened.widget, opened.datePreset);
   const first = planWidget(prepared, env, state);
   const discovered = useToolResults(app, first.status === 'ready' ? first.discover : []);
   // Planned again with the discover answers so far; both lists go out in the same render.
@@ -45,6 +56,7 @@ function Widget({ app, prepared, env }: { app: App; prepared: ReadyPreparedWidge
         sent.retry();
       }}
       scope="project"
+      pin={pin}
     />
   );
 }
@@ -57,7 +69,7 @@ function OpenedWidget({ app, opened }: { app: App; opened: Extract<Opened, { sta
   };
   if (prepared.ok === 'hidden') return <p role="alert">This widget isn't shown for a project.</p>;
   if (!prepared.ok) return <WidgetError widget={heading} message={prepared.message} />;
-  return <Widget app={app} prepared={prepared} env={opened.env} />;
+  return <Widget app={app} opened={opened} prepared={prepared} />;
 }
 
 /**

@@ -15,6 +15,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./host": {
+      "import": {
+        "types": "./dist/host.d.ts",
+        "default": "./dist/host.js"
+      },
+      "require": {
+        "types": "./dist/host.d.ts",
+        "default": "./dist/host.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [

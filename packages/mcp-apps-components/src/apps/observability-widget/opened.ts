@@ -20,7 +20,7 @@ const openedSchema = z.object({
 });
 
 export type Opened =
-  | { status: 'ready'; widget: DashboardWidget; env: DashboardEnvironment }
+  | { status: 'ready'; widget: DashboardWidget; datePreset: ObservabilityWidgetPreset; env: DashboardEnvironment }
   | { status: 'error'; message: string };
 
 /** The window, filters and gates the widget is drawn over, frozen at `now`. */
@@ -41,5 +41,6 @@ export function readOpened(structuredContent: unknown, now: number): Opened {
   if (!opened.success) return { status: 'error', message: 'The tool returned no widget to show.' };
   const widget = dashboardWidgetSchema.safeParse(opened.data.widget);
   if (!widget.success) return { status: 'error', message: `The widget is invalid: ${widget.error.message}` };
-  return { status: 'ready', widget: widget.data, env: environment(opened.data.datePreset, now) };
+  const { datePreset } = opened.data;
+  return { status: 'ready', widget: widget.data, datePreset, env: environment(datePreset, now) };
 }

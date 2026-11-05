@@ -3,9 +3,11 @@
  */
 import type { Client, Transport } from '@modelcontextprotocol/client';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { ObservabilityWidget } from '../apps/observability-widget/observability-widget';
+import { OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY, observabilityWidgetPins } from '../host';
+import type { McpAppRef, ObservabilityWidgetPin } from '../host';
 import { serveAndConnect } from './greeting-server';
 import { agentRunsKpi, observabilityServer } from './observability-server';
 
@@ -26,7 +28,8 @@ afterEach(async () => {
 async function openWidget(
   mcp: ReturnType<typeof observabilityServer>,
   toolArguments: Record<string, unknown>,
-  hostContext: { theme?: 'light' | 'dark' } = {},
+  hostContext: Record<string, unknown> = {},
+  capabilities: ConstructorParameters<typeof AppBridge>[2] = { serverTools: {} },
 ) {
   const host = await serveAndConnect(mcp.server);
   hosts.push(host);
@@ -44,11 +47,12 @@ async function openWidget(
       window.dispatchEvent(event);
     },
   };
-  const bridge = new AppBridge(client, { name: 'test-host', version: '1.0.0' }, { serverTools: {} }, { hostContext });
+  const bridge = new AppBridge(client, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
   bridge.oninitialized = () => void bridge.sendToolResult(result as Parameters<AppBridge['sendToolResult']>[0]);
   await bridge.connect(hostTransport);
 
   render(<ObservabilityWidget />);
+  return bridge;
 }
 
 it('draws the widget from the answer the server reads for it, over the preset window', async () => {
@@ -94,4 +98,130 @@ it("follows the host's theme, so a light host doesn't get dark-theme text", asyn
 
   await screen.findByText('Agent runs');
   expect(document.documentElement.classList.contains('light')).toBe(true);
+});
+
+const PINNING = { serverTools: {}, updateModelContext: { text: {}, structuredContent: {} } };
+const APP: McpAppRef = {
+  toolName: 'showObservabilityWidget',
+  toolCallId: 'call-1',
+  resourceUri: 'ui://mastra/observability-widget',
+};
+
+/**
+ * A host that owns the pinned ids through `observabilityWidgetPins`, as a chat would: it hears the
+ * app's model context and sends its new ids back.
+ */
+function pinningHost() {
+  let pinnedIds: string[] = [];
+  const pins: Array<Omit<ObservabilityWidgetPin, 'pinned'>> = [];
+  const unpins: string[] = [];
+  const host = () =>
+    observabilityWidgetPins({
+      resourceUri: APP.resourceUri,
+      pinnedIds,
+      onPin: pin => {
+        pins.push(pin);
+        pinnedIds = [...pinnedIds, pin.widget.id];
+      },
+      onUnpin: id => {
+        unpins.push(id);
+        pinnedIds = pinnedIds.filter(pinned => pinned !== id);
+      },
+    });
+  return {
+    pins,
+    unpins,
+    hostContext: () => host().hostContext!(APP)!,
+    pinnedIds: () => pinnedIds,
+    connect: (connected: AppBridge) => {
+      connected.onupdatemodelcontext = async params => {
+        host().onModelContext!(APP, params);
+        connected.setHostContext(host().hostContext!(APP) ?? {});
+        return {};
+      };
+    },
+  };
+}
+
+it('pins and unpins the widget through the host, which hears the widget and its window', async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+  const host = pinningHost();
+
+  host.connect(await openWidget(mcp, { widget: agentRunsKpi, datePreset: '7d' }, host.hostContext(), PINNING));
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Pin agent-runs' }));
+  expect(await screen.findByRole('button', { name: 'Unpin agent-runs' })).toBeTruthy();
+  expect(host.pins).toEqual([{ widget: agentRunsKpi, datePreset: '7d' }]);
+  expect(host.pinnedIds()).toEqual([agentRunsKpi.id]);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Unpin agent-runs' }));
+  expect(await screen.findByRole('button', { name: 'Pin agent-runs' })).toBeTruthy();
+  expect(host.unpins).toEqual([agentRunsKpi.id]);
+  expect(host.pinnedIds()).toEqual([]);
+});
+
+it('shows the widget as pinned when the host already holds it, and follows the host when it unpins', async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+
+  const bridge = await openWidget(
+    mcp,
+    { widget: agentRunsKpi },
+    { [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: [agentRunsKpi.id] },
+    PINNING,
+  );
+
+  expect(await screen.findByRole('button', { name: 'Unpin agent-runs' })).toBeTruthy();
+  bridge.setHostContext({ [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: [] });
+  expect(await screen.findByRole('button', { name: 'Pin agent-runs' })).toBeTruthy();
+});
+
+it('follows the host again once it answers a click, e.g. when the pin is removed elsewhere', async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+  const host = pinningHost();
+  const bridge = await openWidget(mcp, { widget: agentRunsKpi }, host.hostContext(), PINNING);
+  host.connect(bridge);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Pin agent-runs' }));
+  await screen.findByRole('button', { name: 'Unpin agent-runs' });
+  // Unpinned from another page: the host's ids change without the app asking.
+  bridge.setHostContext({ [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: [] });
+  expect(await screen.findByRole('button', { name: 'Pin agent-runs' })).toBeTruthy();
+});
+
+it('has no pin button when the host sends no pinned ids or takes no structured model context', async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+
+  await openWidget(mcp, { widget: agentRunsKpi }, {}, PINNING);
+  await screen.findByText('Agent runs');
+  expect(screen.queryByRole('button', { name: /Pin agent-runs/ })).toBeNull();
+});
+
+it('has no pin button when the host takes only text model context', async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+
+  await openWidget(
+    mcp,
+    { widget: agentRunsKpi },
+    { [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: [] },
+    { serverTools: {}, updateModelContext: { text: {} } },
+  );
+  await screen.findByText('Agent runs');
+  expect(screen.queryByRole('button', { name: /Pin agent-runs/ })).toBeNull();
+});
+
+it('goes back to the host state when the host refuses the update', async () => {
+  const mcp = observabilityServer({ answers: { getMetricAggregate: { data: { value: 1 } } } });
+  const bridge = await openWidget(
+    mcp,
+    { widget: agentRunsKpi },
+    { [OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY]: [] },
+    PINNING,
+  );
+  bridge.onupdatemodelcontext = async () => {
+    throw new Error('No pins here');
+  };
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Pin agent-runs' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Pin agent-runs' })).toBeTruthy());
+  expect(screen.queryByRole('button', { name: 'Unpin agent-runs' })).toBeNull();
 });

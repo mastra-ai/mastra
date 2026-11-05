@@ -106,6 +106,30 @@ export const observabilityServer = new MCPServer({
 
 `examples/agent` has a complete version with every read action, a set of preset widgets and an agent that opens them.
 
+#### Pinning widgets
+
+When the chat host supports it, the widget shows a pin button. The host owns the pinned widgets: it sends their ids to the app, and the app reports each pin and unpin through `ui/update-model-context`. In a host built on `@mastra/playground-ui`, pass `observabilityWidgetPins` from `@mastra/mcp-apps-components/host` to `McpAppHostProvider`:
+
+```tsx
+import { McpAppHostProvider } from '@mastra/playground-ui/domains/mcps';
+import { observabilityWidgetPins } from '@mastra/mcp-apps-components/host';
+
+const host = useMemo(
+  () =>
+    observabilityWidgetPins({
+      resourceUri: 'ui://mastra/observability-widget',
+      pinnedIds,
+      onPin: ({ widget, datePreset }) => savePin(widget, datePreset),
+      onUnpin: widgetId => removePin(widgetId),
+    }),
+  [pinnedIds],
+);
+
+<McpAppHostProvider value={host}>{chat}</McpAppHostProvider>;
+```
+
+The button only shows when the host sends pinned ids and accepts structured model context. A click shows right away and holds until the host sends new ids.
+
 ## Documentation
 
 - [MCP Apps in Mastra](https://mastra.ai/docs/connections/mcp)

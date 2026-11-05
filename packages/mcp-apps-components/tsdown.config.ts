@@ -9,7 +9,7 @@ const RAW = '?raw';
 // package imports each app's page with `?raw`, which inlines the HTML as a string, so it carries no
 // file reference that bundling could break.
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/host.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
