@@ -1,7 +1,6 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../../events';
-import { Mastra } from '../../../../mastra';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -129,14 +128,22 @@ describeForAllEngines('AIMock: agent run topic isolation', engine => {
       const gb = gate();
       const a = await createSharedAgent(llm, { engine, pubsub, streams: true, tools: { wait: ga.tool } });
       const b = await createSharedAgent(llm, { engine, pubsub, streams: true, tools: { wait: gb.tool } });
-      const sharedMastra = new Mastra({ agents: { a: a.agent, b: b.agent }, pubsub, logger: false });
       const runId = 'same-abort-conversation';
+      const cancelReaders: (() => Promise<void>)[] = [];
       const collect = async (result: any) => {
         let text = '';
-        for await (const chunk of result.fullStream) {
-          if (chunk.type === 'text-delta') text += chunk.payload.text;
+        const reader = result.fullStream.getReader();
+        cancelReaders.push(() => reader.cancel());
+        try {
+          while (true) {
+            const { done, value: chunk } = await reader.read();
+            if (done) break;
+            if (chunk.type === 'text-delta') text += chunk.payload.text;
+          }
+          return text;
+        } finally {
+          reader.releaseLock();
         }
-        return text;
       };
       const runningA = a.agent.stream('Agent A: Wait.', { runId }).then(collect);
       let runningB: Promise<string> | undefined;
@@ -160,9 +167,9 @@ describeForAllEngines('AIMock: agent run topic isolation', engine => {
       } finally {
         ga.release();
         gb.release();
+        await Promise.allSettled(cancelReaders.map(cancel => cancel()));
         await Promise.allSettled([runningA, runningB]);
         if (engine !== 'inngest') {
-          await sharedMastra.shutdown({ drainTimeout: 1000 });
           await a.mastra.shutdown({ drainTimeout: 1000 });
           await b.mastra.shutdown({ drainTimeout: 1000 });
         }
