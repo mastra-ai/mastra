@@ -3,6 +3,7 @@ title: "MCP | Connections"
 description: "Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, subscribe to MCP events, and build interactive MCP Apps for Studio."
 packages:
   - "@mastra/mcp"
+  - "@mastra/mcp-apps-components"
 ---
 
 # MCP
@@ -415,6 +416,89 @@ export const mastra = new Mastra({
 ```
 
 Tools loaded through `listTools()` include a `serverId` in `_meta.ui`, allowing Studio to resolve each app resource without scanning every server. Visit [`toMCPServerProxies()`](/reference/tools/mcp-client#tomcpserverproxies) for proxy configuration details.
+
+### Use prebuilt Mastra apps
+
+The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps that render Mastra UI. `dashboardRendererApp` renders a dashboard definition with live observability data, such as agent runs, token usage, or scores.
+
+```bash npm2yarn
+npm install @mastra/mcp-apps-components @mastra/server
+```
+
+The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to `dashboardDataTool` over the host's MCP connection. The tool runs the observability route behind that read in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks. The app sees the same data the user can.
+
+`dashboardDataTool` is app-only, so `MCPClient.listTools()` hides it from agents. App-only visibility doesn't stop a direct call. The tool only answers the reads in `DASHBOARD_DATA_OPERATIONS` and rejects any other operation.
+
+Register the app and `dashboardDataTool`, from the `dashboard-data-tool` entry, on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI. The app calls the data tool by name. Use `dashboardDataTool` as its key:
+
+```typescript title="src/mastra/mcp/dashboard-server.ts"
+import type { DashboardDefinition } from '@mastra/core/storage/dashboards'
+import { createTool } from '@mastra/core/tools'
+import { MCPServer } from '@mastra/mcp'
+import { dashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool'
+import {
+  dashboardRendererApp,
+  dashboardRendererInputSchema,
+} from '@mastra/mcp-apps-components/dashboard-renderer'
+import { z } from 'zod'
+
+const DASHBOARD_APP_URI = 'ui://mastra/dashboard'
+
+const agentRuns: DashboardDefinition = {
+  schemaVersion: 1,
+  defaults: { datePreset: '7d' },
+  rows: [
+    {
+      widgets: [
+        {
+          id: 'runs',
+          span: 12,
+          kind: 'kpis',
+          views: [
+            {
+              queries: [
+                {
+                  id: 'runs',
+                  source: 'metrics',
+                  request: 'aggregate',
+                  name: ['mastra_agent_duration_ms'],
+                  aggregation: 'count',
+                },
+              ],
+              options: {
+                items: [{ label: 'Agent runs', format: 'count', value: { query: 'runs' } }],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+}
+
+const showAgentRuns = createTool({
+  id: 'showAgentRuns',
+  description: 'Shows how many agent runs happened in the last 7 days',
+  inputSchema: z.object({}),
+  outputSchema: dashboardRendererInputSchema,
+  mcp: { _meta: { ui: { resourceUri: DASHBOARD_APP_URI } } },
+  execute: async () => ({ definition: agentRuns, scope: 'project' as const }),
+})
+
+export const dashboardServer = new MCPServer({
+  id: 'dashboard-server',
+  name: 'Dashboard Server',
+  version: '1.0.0',
+  appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
+  tools: { showAgentRuns, dashboardDataTool },
+})
+```
+
+:::note
+
+When server auth is configured, `invokeRoute()` needs the caller resolved by Mastra server auth. Serve the MCP server through a Mastra server adapter, such as Hono, Express, Fastify, Koa, Elysia, or NestJS. Calls without an authenticated caller return `401`.
+
+:::
 
 ### Sandbox security
 

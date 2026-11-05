@@ -2,7 +2,6 @@
 title: 'Reference: MCPServer | Tools and MCP'
 description: 'The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server.'
 packages:
-  - '@mastra/core'
   - '@mastra/mcp'
 ---
 
@@ -180,6 +179,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       "How HTTP requests from 2025-era clients (those that open with `initialize`, such as VS Code and Cursor) are served. `'reject'` (default) answers them with an unsupported-protocol-version error. `'stateless'` answers each request without a session: listing and calling tools, reading resources and getting prompts work, `GET` and `DELETE` session requests get `405`, and features that need 2026-07-28 (suspend/resume, `subscriptions/listen`, events) aren't available to these clients.",
   },
   {
+    name: 'toolResult',
+    type: 'MCPServerToolResultOptions',
+    isOptional: true,
+    description:
+      "Controls how completed tool calls become MCP results. `modelOutput: true` builds the result content from each tool's `toModelOutput`, so tools can return images, audio, and files. `transform` rewrites a result before it's sent. See [Tool results](#tool-results) for details.",
+  },
+  {
     name: 'jsonSchemaValidator',
     type: 'jsonSchemaValidator',
     isOptional: true,
@@ -247,6 +253,91 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
   },
 ]}
 />
+
+## Tool results
+
+By default, a tool's output is sent to the MCP client as a single text block. A string is sent as-is and any other value as JSON. A tool with an `outputSchema` also returns the value as `structuredContent`.
+
+Use the `toolResult` option to send the model-facing output of a tool instead, or to rewrite results before they're sent.
+
+```typescript title="src/mastra/mcp/server.ts"
+import { MCPServer } from '@mastra/mcp'
+import { screenshotTool } from '../tools/screenshot'
+
+const server = new MCPServer({
+  id: 'media-server',
+  name: 'Media Server',
+  version: '1.0.0',
+  tools: { screenshotTool },
+  toolResult: {
+    modelOutput: true,
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'modelOutput',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Builds the result content from the tool's [`toModelOutput`](/docs/agents/tools#shape-output-for-the-model), the same output an agent would send to its model. Tools without `toModelOutput`, and mappers that return `undefined` or an unrecognized shape, keep the default result.",
+  },
+  {
+    name: 'transform',
+    type: '(context: { toolName: string; output: unknown; result: CallToolResult; requestContext: RequestContext }) => CallToolResult | undefined | Promise<CallToolResult | undefined>',
+    isOptional: true,
+    description:
+      'Rewrites the result of every completed tool call, including `ask_*` agent tools and `run_*` workflow tools. `output` is the raw tool output and `result` is the result the server would send, after `modelOutput` mapping. Return `undefined` to keep `result`. It runs for direct calls and tool tasks, but not for thrown tool errors or workflow tasks.',
+  },
+]}
+/>
+
+:::warning
+
+The default of `modelOutput` becomes `true` in the next major version of `@mastra/mcp`. If your MCP clients parse the raw JSON text of tools that define `toModelOutput`, set `modelOutput: false` now to keep the current behavior.
+
+:::
+
+With `modelOutput: true`, the server maps `toModelOutput` values to MCP content:
+
+| `toModelOutput` value | MCP result |
+| - | - |
+| `{ type: 'text', value }` | Text block |
+| `{ type: 'json', value }` | Text block with the JSON value |
+| `{ type: 'error-text' }` or `{ type: 'error-json' }` | Text block with `isError: true` |
+| `content` part `text` | Text block |
+| `content` part `media`, `image-data`, or `file-data` | `image` block for `image/*`, `audio` block for `audio/*`, otherwise an embedded `resource` with a `blob` |
+| `content` part `image-url` or `file-url` with a `data:` URI | Same as media |
+| `content` part `image-url` or `file-url` with a remote URL | Text block with the URL |
+
+For a tool with an `outputSchema`, the result keeps `structuredContent` and its JSON text block first, and the mapped blocks follow. If `toModelOutput` or `transform` throws, the client receives the tool error result.
+
+Use `transform` to forward results that are already MCP-shaped, for example from tools proxied through an `MCPClient`:
+
+```typescript title="src/mastra/mcp/proxy-server.ts"
+import { MCPClient, MCPServer, type MCPServerToolResultContext } from '@mastra/mcp'
+
+const upstream = new MCPClient({
+  servers: { files: { url: new URL('https://files.example.com/mcp') } },
+})
+
+const server = new MCPServer({
+  id: 'proxy-server',
+  name: 'Proxy Server',
+  version: '1.0.0',
+  tools: await upstream.listTools(),
+  toolResult: {
+    // Unstructured upstream tools return the upstream MCP result as their output
+    transform: ({ output }) => {
+      const upstreamResult = output as MCPServerToolResultContext['result']
+      return Array.isArray(upstreamResult?.content) ? upstreamResult : undefined
+    },
+  },
+})
+```
 
 ## Exposing agents as tools
 
@@ -727,6 +818,8 @@ export type MCPServerResourceContent = { text?: string } | { blob?: string }
 
 Every callback receives `extra`, the same protocol context tools see as `context.mcp.extra` (cancellation `signal`, `requestId`, `authInfo`, `_meta`), and `requestContext`, the trusted application context that carries `authInfo` and the user mapped by `mapAuthInfoToUser`. Use them to scope what a caller can list and read.
 
+A `resources/read` request resolves its URI against `listResources` first. When no listed resource matches, the URI is matched against the caller's `resourceTemplates`, and `getResourceContent` receives the expanded URI. Optional expressions such as `{?format}` or `{/section}` may be left out of the URI. Variable values must be percent-encoded as RFC 6570 expansion produces them, so `file://data?format=a/b` doesn't match `file://data{?format}`. The response uses the `mimeType` and `_meta` of the matching resource or template. A URI that matches neither fails with `Resource not found`.
+
 `getResourceContent` also receives `suspend`, `resumeData` and `suspendPayload` (the `MCPServerRequest` members). Declare `resumeSchema` to make `suspend` usable. It works exactly as it does for tools.
 
 Example:
@@ -742,11 +835,13 @@ import type {
 
 // Resources/resource templates will generally be dynamically fetched.
 const myResources: Resource[] = [
-  { uri: 'file://data/123.txt', name: 'Data File', mimeType: 'text/plain' },
+  { uri: 'file://data/readme', name: 'Readme', mimeType: 'text/plain' },
 ]
 
 const myResourceContents: Record<string, MCPServerResourceContent> = {
-  'file://data.txt/123': { text: 'This is the content of the data file.' },
+  'file://data/readme': { text: 'Read this first.' },
+  // Not listed; readable as an expansion of the `file://data/{id}` template
+  'file://data/123': { text: 'This is the content of data file 123.' },
 }
 
 const myResourceTemplates: ResourceTemplate[] = [

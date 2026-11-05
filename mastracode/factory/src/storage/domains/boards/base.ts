@@ -199,6 +199,12 @@ interface BoardRow extends Record<string, unknown> {
   updated_at: Date;
 }
 
+interface VersionRow extends Record<string, unknown> {
+  version: string;
+  /** Keys of the boards Factory stored in the project; null on rows written before the list. */
+  seeded_boards: string[] | null;
+}
+
 interface PhaseRow extends Record<string, unknown> {
   id: string;
   org_id: string;
@@ -381,6 +387,81 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const row = await findBoard(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
       await writeBoard(ops, scope, row, { key, ...input }, options.actor);
+      return { result: undefined, changed: true };
+    });
+    return (await this.get(scope, key))!;
+  }
+
+  /**
+   * Stores Factory's boards (Work, app and seed boards) in the project, each key once: a key the
+   * project has had before is skipped even if its board was deleted since, and a stored board is
+   * never rewritten. A project stored before the list was kept counts the boards it has as stored.
+   * Reads one row when every key was stored before. Returns the keys it inserted.
+   */
+  async seedBoards(scope: StoredBoardScope, boards: readonly StoredBoardInput[]): Promise<string[]> {
+    const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
+    if (marker?.seeded_boards && boards.every(board => marker.seeded_boards!.includes(board.key))) return [];
+    return this.#insertOnce(scope, boards, { actor: DEFAULT_INTAKE_ROUTE_ACTOR, skipSeeded: true });
+  }
+
+  /**
+   * Inserts a board into the project unless one is stored under its key, and records the key as
+   * stored, so seeding never adds it again. Unlike seeding, it inserts a key the project deleted.
+   * Returns whether it inserted the board.
+   */
+  async insertIfMissing(scope: StoredBoardScope, board: StoredBoardInput, actor: string): Promise<boolean> {
+    return (await this.#insertOnce(scope, [board], { actor, skipSeeded: false })).length > 0;
+  }
+
+  async #insertOnce(
+    scope: StoredBoardScope,
+    boards: readonly StoredBoardInput[],
+    options: { actor: string; skipSeeded: boolean },
+  ): Promise<string[]> {
+    await ensureVersionRow(this.ops, scope);
+    return this.#transact(async ops => {
+      const marker = (await ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope)))!;
+      const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
+      const present = new Set(rows.map(row => row.board_key));
+      const seeded = new Set(marker.seeded_boards ?? present);
+      let position = nextPosition(rows);
+      const inserted: string[] = [];
+      for (const board of boards) {
+        if (present.has(board.key) || (options.skipSeeded && seeded.has(board.key))) continue;
+        await insertBoard(ops, scope, board, { position: position++, actor: options.actor });
+        present.add(board.key);
+        inserted.push(board.key);
+      }
+      const next = [...new Set([...seeded, ...boards.map(board => board.key)])];
+      const unchanged = marker.seeded_boards !== null && next.length === marker.seeded_boards.length;
+      if (inserted.length === 0 && unchanged) return inserted;
+      // Compare-and-set on the version, and every marker write takes a new one: two replicas
+      // recording different keys can't both match the version they read, so neither key is lost.
+      const updated = await ops.updateMany(
+        VERSIONS,
+        { ...scopeWhere(scope), version: marker.version },
+        {
+          seeded_boards: next,
+          version: randomUUID(),
+          updated_at: new Date(),
+        },
+      );
+      if (updated !== 1) throw new ConcurrentBoardWrite();
+      return inserted;
+    });
+  }
+
+  /** Rewrites a board to `definition` (Factory's current one for its key), raising its revision. */
+  async resetTo(
+    scope: StoredBoardScope,
+    key: string,
+    definition: StoredBoardInput,
+    options: { expectedRevision: number; actor: string },
+  ): Promise<StoredBoardRecord> {
+    await this.#write(scope, async ops => {
+      const row = await findBoard(ops, scope, key);
+      checkRevision(row, key, options.expectedRevision);
+      await writeBoard(ops, scope, row, { ...definition, key }, options.actor);
       return { result: undefined, changed: true };
     });
     return (await this.get(scope, key))!;

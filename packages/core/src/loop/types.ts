@@ -15,6 +15,7 @@ import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { PendingSignalListener, AgentSignalType, CreatedAgentSignal } from '../agent/signals';
+import type { AgentStreamPublisher } from '../agent/streams/publisher';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -212,6 +213,12 @@ export type LoopConfig<OUTPUT = undefined> = {
    */
   onAbort?: (event: { steps: any[]; text?: string }) => Promise<void> | void;
   abortSignal?: AbortSignal;
+  /**
+   * @internal The object this run's steps report themselves as running under: the signal the thread runtime prepared
+   * for the run. Later replacements of `abortSignal` — the publisher's signal, then a total timeout — are derived from
+   * it and the runtime never asks about those, so they must not stand in for it.
+   */
+  stepOwner?: object;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;
 };
@@ -308,6 +315,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * which is the caller's own signal and may be reused across many runs.
    */
   runAbortSignal?: AbortSignal;
+  /** @internal Publishes the run's chunks on its agent stream topic for resumable readers. */
+  streamPublisher?: AgentStreamPublisher;
   agentName?: string;
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */

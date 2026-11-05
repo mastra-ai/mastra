@@ -183,7 +183,7 @@ describe('NotificationSignalNotice', () => {
     it('titles it with the server and event', () => {
       render(<NotificationSignalNotice signal={signal} />);
 
-      expect(screen.getByText('tickets · ticket.created')).not.toBeNull();
+      expect(screen.getByText('tickets: ticket.created')).not.toBeNull();
       expect(screen.queryByText('mcp-events / mcp-event')).toBeNull();
     });
 
@@ -197,7 +197,7 @@ describe('NotificationSignalNotice', () => {
     it('labels the opened body as untrusted', () => {
       render(<NotificationSignalNotice signal={signal} />);
       expect(screen.queryByText('Untrusted event data from the MCP server')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: /tickets · ticket\.created/ }));
+      fireEvent.click(screen.getByRole('button', { name: /tickets: ticket\.created/ }));
 
       expect(screen.getByText('Untrusted event data from the MCP server')).not.toBeNull();
       expect(screen.getAllByText('tickets emitted ticket.created')).toHaveLength(2);
@@ -249,7 +249,7 @@ describe('NotificationSignalNotice', () => {
     it('titles it as an ended subscription', () => {
       render(<NotificationSignalNotice signal={signal} />);
 
-      expect(screen.getByText('tickets · ticket.created · subscription ended')).not.toBeNull();
+      expect(screen.getByText('tickets: ticket.created (subscription ended)')).not.toBeNull();
       expect(screen.getByText('high')).not.toBeNull();
     });
   });

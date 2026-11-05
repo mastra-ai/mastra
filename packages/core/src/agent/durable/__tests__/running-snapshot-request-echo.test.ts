@@ -14,6 +14,7 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { storeRunsInV2 } from './storage-version';
 
 // Stands in for the prompt + tool-schema body a provider echoes back on every
 // step. Distinctive so it can be found in the persisted snapshot.
@@ -77,7 +78,9 @@ describe('durable agent running snapshots (issue #26462)', () => {
         }),
       },
     });
-    const durableAgent = createDurableAgent({ agent });
+    // v1's snapshot pruning drops the request body; v2 stores step results unpruned
+    // (see workflows/__tests__/snapshot-write-amplification.test.ts).
+    const durableAgent = storeRunsInV2(createDurableAgent({ agent }), false);
     const mastra = new Mastra({
       logger: false,
       storage: new InMemoryStore(),
