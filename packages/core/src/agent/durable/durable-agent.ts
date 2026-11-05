@@ -2190,6 +2190,9 @@ export class DurableAgent<
     }
     fork.#streams.adoptInnerPubsub(this.#streams);
     fork.source = this.source;
+    // Share the untilIdle wrappers, so a task finishing under the fork's stream isn't
+    // also reported by the registered agent (mirrors `Agent.__fork()`).
+    fork.#activeStreamUntilIdle = this.#activeStreamUntilIdle;
     // `_agentNetworkAppend` is a private base-class flag; copy it via an indexed
     // cast (the same idiom the base uses in `toRawConfig()`) so the fork mirrors
     // `Agent.__fork()` without widening the field's visibility.
