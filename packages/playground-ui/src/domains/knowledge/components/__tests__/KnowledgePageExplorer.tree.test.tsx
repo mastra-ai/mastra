@@ -368,7 +368,9 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(row('Pricing').getAttribute('aria-selected')).toBe('true');
       fireEvent.click(row('Pricing'));
       expect(screen.getByTestId('view').textContent).toBe('page');
-      expect(within(screen.getByRole('region', { name: 'Selected page' })).getByText('Pricing')).toBeTruthy();
+      expect(
+        within(screen.getByRole('region', { name: 'Selected page' })).getByRole('heading', { name: 'Pricing' }),
+      ).toBeTruthy();
     });
 
     it('focuses a different page instead of opening when the second click lands elsewhere', () => {

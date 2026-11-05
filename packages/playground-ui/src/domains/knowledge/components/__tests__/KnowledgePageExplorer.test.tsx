@@ -84,7 +84,9 @@ describe('KnowledgePageExplorer', () => {
     expect(results.getAllByRole('option')).toHaveLength(1);
     fireEvent.click(results.getByRole('button', { name: 'Archived' }));
     expect(screen.queryByRole('listbox')).toBeNull();
-    expect(within(screen.getByRole('region', { name: 'Selected page' })).getByText('Archived')).toBeTruthy();
+    expect(
+      within(screen.getByRole('region', { name: 'Selected page' })).getByRole('heading', { name: 'Archived' }),
+    ).toBeTruthy();
   });
 
   it('says when a selected page is gone', () => {

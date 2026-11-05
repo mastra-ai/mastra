@@ -31,7 +31,7 @@ import type {
   KnowledgePinPayload,
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
-import { KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
+import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
@@ -440,17 +440,17 @@ function ChildPages({
   const levels = useTreeLevels(requests);
   const pages = levels.flatMap(level => level.data?.pages ?? []);
   const last = levels[levels.length - 1];
-  if (levels[0]?.isPending) return <TreeRowsSkeleton label="Loading pages" rows={3} />;
-  if (pages.length === 0) {
+  if (levels[0]?.isPending) {
     return (
-      <p className="text-body text-muted-foreground" data-testid="knowledge-no-child-pages">
-        No pages under this one.
-      </p>
+      <KnowledgeDetailSection label="Pages">
+        <TreeRowsSkeleton label="Loading pages" rows={3} />
+      </KnowledgeDetailSection>
     );
   }
+  if (pages.length === 0) return null;
   const next = last?.data?.nextCursor;
   return (
-    <>
+    <KnowledgeDetailSection label="Pages">
       <div className={`rounded-xl p-1 ${raisedSurfaceStyle}`}>
         <Tree
           className="rounded-lg bg-background p-1"
@@ -463,7 +463,7 @@ function ChildPages({
         </Tree>
       </div>
       {next ? <MoreButton onClick={() => setCursors(current => [...current, next])} /> : null}
-    </>
+    </KnowledgeDetailSection>
   );
 }
 
@@ -1378,12 +1378,12 @@ export function KnowledgePageExplorer({
           <section
             ref={focusPageTabOnMount}
             aria-label="Selected page"
-            className={`flex min-h-0 min-w-0 flex-1 flex-col ${overlay ? `bg-background p-2 pl-[calc(var(--knowledge-tree-inset)+0.5rem)] transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'overflow-auto rounded-lg border border-border bg-card'}`}
+            className={`flex min-h-0 min-w-0 flex-1 flex-col ${overlay ? `bg-background p-2 pl-[calc(var(--knowledge-tree-inset)+0.5rem)] transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'overflow-hidden rounded-lg border border-border bg-card'}`}
           >
             <div
               className={
                 overlay
-                  ? `flex min-h-0 flex-1 flex-col overflow-auto rounded-studio-frame ${frameSurfaceStyle}`
+                  ? `flex min-h-0 flex-1 flex-col overflow-hidden rounded-studio-frame ${frameSurfaceStyle}`
                   : 'contents'
               }
             >
@@ -1530,7 +1530,7 @@ export function KnowledgePageExplorer({
                         />
                       </DataPanel.HeaderActions>
                     </DataPanel.Header>
-                    <div className="min-h-0 flex-1 overflow-auto">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                       <SelectedPage
                         source={source}
                         pageId={drawerShownId}

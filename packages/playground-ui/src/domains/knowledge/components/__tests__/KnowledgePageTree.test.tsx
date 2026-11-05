@@ -198,10 +198,10 @@ describe('KnowledgePageDetail', () => {
     expect(marked.map(item => item.textContent)).toEqual([expect.stringContaining('See Billing')]);
   });
 
-  it('says so when a page has no notes', () => {
+  it('leaves out the notes section when a page has none', () => {
     renderWithProviders(<KnowledgePageDetail page={orgPage} notes={[]} pagesById={pagesById} onPageClick={() => {}} />);
     expect(screen.getByText('Scope')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Acme' })).toBeTruthy();
-    expect(screen.getByText('No notes on this page.')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Notes' })).toBeNull();
   });
 });

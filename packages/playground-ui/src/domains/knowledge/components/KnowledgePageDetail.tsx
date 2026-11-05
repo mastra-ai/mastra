@@ -1,4 +1,4 @@
-import { ChevronRight, Pin } from 'lucide-react';
+import { Pin } from 'lucide-react';
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
@@ -19,6 +19,7 @@ import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
 import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { Badge } from '@/ds/components/Badge';
+import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
 import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
@@ -118,7 +119,15 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
 const BODY_REMARK_PLUGINS = [remarkKnowledgeLinks];
 const BODY_COMPONENTS: Components = { span: BodySpan };
 
-function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
+export function KnowledgeDetailSection({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count?: number;
+  children: ReactNode;
+}) {
   return (
     <section aria-label={label} className="flex flex-col gap-2">
       <Txt as="h3" variant="label" tone="ink" className="flex items-center gap-1.5">
@@ -308,7 +317,11 @@ export function KnowledgePageDetail({
   const bodyLinks = useMemo(() => ({ index: refIndex, onPageClick }), [refIndex, onPageClick]);
 
   return (
-    <article aria-label={page.name} className="@container flex min-h-0 flex-col overflow-y-auto">
+    <article
+      key={page.id}
+      aria-label={page.name}
+      className="@container flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+    >
       <header
         className={
           compact
@@ -316,24 +329,16 @@ export function KnowledgePageDetail({
             : 'flex flex-col gap-3 border-b border-border bg-fill-subtle px-6 pt-5 pb-4'
         }
       >
-        {ancestors.length > 0 ? (
-          <nav aria-label="Breadcrumb">
-            <ol className="flex flex-wrap items-center gap-1">
-              {ancestors.map(ancestor => (
-                <li key={ancestor.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="rounded px-1 py-0.5 text-caption text-muted-foreground hover:bg-fill hover:text-foreground"
-                    onClick={() => onPageClick(ancestor)}
-                  >
-                    {scopeTitle(ancestor)}
-                  </button>
-                  <ChevronRight size={12} className="text-muted-foreground" aria-hidden />
-                </li>
-              ))}
-            </ol>
-          </nav>
-        ) : null}
+        <Breadcrumb label="Breadcrumb" className="ml-[-.9em] min-w-0" listClassName="overflow-hidden">
+          {ancestors.map(ancestor => (
+            <Crumb key={ancestor.id} as="button" onClick={() => onPageClick(ancestor)}>
+              {scopeTitle(ancestor)}
+            </Crumb>
+          ))}
+          <Crumb as="span" isCurrent>
+            {scopeTitle(page)}
+          </Crumb>
+        </Breadcrumb>
         <div className="flex flex-col gap-2">
           {compact ? null : (
             <div className="flex min-w-0 items-center gap-2">
@@ -392,12 +397,8 @@ export function KnowledgePageDetail({
             </Txt>
           )}
 
-          <Section label="Notes" count={notesMore ? undefined : notes.length}>
-            {notes.length === 0 ? (
-              <Txt variant="body" tone="muted">
-                No notes on this page.
-              </Txt>
-            ) : (
+          {notes.length > 0 ? (
+            <KnowledgeDetailSection label="Notes" count={notesMore ? undefined : notes.length}>
               <ul className="flex flex-col gap-2">
                 {notes.map(note => {
                   const highlighted = !!highlightMentionOf && note.mentions.includes(highlightMentionOf);
@@ -421,16 +422,16 @@ export function KnowledgePageDetail({
                   );
                 })}
               </ul>
-            )}
-            {notesMore}
-          </Section>
+              {notesMore}
+            </KnowledgeDetailSection>
+          ) : null}
         </div>
 
         <aside className="flex min-w-0 flex-col divide-y divide-border border-t border-border *:py-6 *:last:pb-0 @4xl:w-72 @4xl:shrink-0 @4xl:border-t-0 @4xl:border-l @4xl:pl-8 @4xl:*:first:pt-0">
-          {childPages ? <Section label="Pages">{childPages}</Section> : null}
+          {childPages}
 
           {mentionedBy.length > 0 ? (
-            <Section label="Mentioned in" count={mentionedBy.length}>
+            <KnowledgeDetailSection label="Mentioned in" count={mentionedBy.length}>
               <ul className="flex flex-col gap-2">
                 {mentionedBy.map(note => (
                   <KnowledgeNoteItem
@@ -443,11 +444,11 @@ export function KnowledgePageDetail({
                   />
                 ))}
               </ul>
-            </Section>
+            </KnowledgeDetailSection>
           ) : null}
 
           {activity && activity.length > 0 ? (
-            <Section label="Activity">
+            <KnowledgeDetailSection label="Activity">
               <ol className="relative flex flex-col gap-3 border-l border-border pl-4">
                 {activity.map(event => (
                   <li key={event.id} className="relative flex flex-col">
@@ -473,7 +474,7 @@ export function KnowledgePageDetail({
                   </li>
                 ))}
               </ol>
-            </Section>
+            </KnowledgeDetailSection>
           ) : null}
         </aside>
       </div>
