@@ -7,21 +7,28 @@
  * walks the URI once per template segment instead.
  *
  * Plain `{x}` and `{+x}` must be non-empty, since an empty path segment never
- * names a resource; `{x}` stops at `/`, `?` and `#`, which an expansion encodes.
+ * names a resource. Outside `{+x}` and `{#x}`, values must be percent-encoded:
+ * an ASCII reserved character other than `,` ends the value. Raw non-ASCII
+ * characters are accepted because clients often send them unencoded.
  */
 export function matchesUriTemplate(template: string, uri: string): boolean {
   return advance(uri, new Set([0]), parse(template)).has(uri.length);
 }
 
+type Allowed = (char: string) => boolean;
+
 type Segment =
   | { kind: 'literal'; text: string }
   | { kind: 'choice'; options: Segment[][] }
-  | { kind: 'run'; excluded: string; min: 0 | 1 }
+  | { kind: 'run'; allowed: Allowed; min: 0 | 1 }
   | { kind: 'optional'; segments: Segment[] }
   | { kind: 'repeat'; segments: Segment[] };
 
+const encoded: Allowed = char => /[\w\-.~%,]/.test(char) || char.charCodeAt(0) > 127;
+const anything: Allowed = () => true;
+
 const literal = (text: string): Segment => ({ kind: 'literal', text });
-const run = (excluded: string, min: 0 | 1 = 0): Segment => ({ kind: 'run', excluded, min });
+const run = (allowed: Allowed, min: 0 | 1 = 0): Segment => ({ kind: 'run', allowed, min });
 const optional = (...segments: Segment[]): Segment => ({ kind: 'optional', segments });
 const repeat = (...segments: Segment[]): Segment => ({ kind: 'repeat', segments });
 const choice = (options: Segment[][]): Segment => ({ kind: 'choice', options });
@@ -52,24 +59,24 @@ function expression(body: string): Segment[] {
     .filter(spec => spec.name);
   switch (operator) {
     case '':
-      return [run('/?#', 1)];
+      return [run(encoded, 1)];
     case '+':
-      return [run('', 1)];
+      return [run(anything, 1)];
     case '#':
-      return [optional(literal('#'), run(''))];
+      return [optional(literal('#'), run(anything))];
     case '/':
       return specs.map(({ exploded }) =>
-        exploded ? repeat(literal('/'), run('/?#')) : optional(literal('/'), run('/?#')),
+        exploded ? repeat(literal('/'), run(encoded)) : optional(literal('/'), run(encoded)),
       );
     case '.':
-      return specs.map(() => optional(literal('.'), run('/?#')));
+      return specs.map(() => optional(literal('.'), run(encoded)));
     case ';':
-      return specs.map(({ name }) => optional(literal(`;${name}`), optional(literal('='), run(';/?#'))));
+      return specs.map(({ name }) => optional(literal(`;${name}`), optional(literal('='), run(encoded))));
     default: {
       // The first pair present starts with the operator (`?` or `&`); every later pair starts with `&`.
       const pair = ({ name, exploded }: (typeof specs)[number], separator: string): Segment[] => {
-        const first = [literal(`${separator}${name}=`), run('&#?')];
-        return exploded ? [...first, repeat(literal(`&${name}=`), run('&#?'))] : first;
+        const first = [literal(`${separator}${name}=`), run(encoded)];
+        return exploded ? [...first, repeat(literal(`&${name}=`), run(encoded))] : first;
       };
       const firstPresent = specs.map((spec, i) => [
         ...pair(spec, operator),
@@ -100,13 +107,13 @@ function step(uri: string, positions: Set<number>, segment: Segment): Set<number
       for (const option of segment.options) for (const p of advance(uri, positions, option)) next.add(p);
       return next;
     case 'run': {
-      // A run stops at the first excluded character, so a start inside an earlier run reaches nothing new.
+      // A run stops at the first disallowed character, so a start inside an earlier run reaches nothing new.
       let end = 0;
       for (const p of [...positions].sort((a, b) => a - b)) {
         if (segment.min === 0) next.add(p);
         if (p < end) continue;
         end = p;
-        while (end < uri.length && !segment.excluded.includes(uri[end]!)) next.add(++end);
+        while (end < uri.length && segment.allowed(uri[end]!)) next.add(++end);
       }
       return next;
     }
