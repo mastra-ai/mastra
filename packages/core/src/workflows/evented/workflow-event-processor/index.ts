@@ -2723,9 +2723,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         // The resumed inner step's input is the output of the step that ran before it
         // inside the nested workflow (i.e. the suspended step's stored payload), not the
         // input to the nested-workflow step itself.
+        // Use the stored payload even when it is `null` or `undefined`: that is the input the step ran with.
+        const suspendedStepResult = nestedStepResults?.[suspendedStepId] as StepResult<any, any, any, any> | undefined;
         const nestedPrevResult = {
           status: 'success' as const,
-          output: (nestedStepResults?.[suspendedStepId] as any)?.payload ?? (prevResult as any)?.output,
+          output: suspendedStepResult ? suspendedStepResult.payload : (prevResult as any)?.output,
         };
 
         await this.mastra.pubsub.publish('workflows', {
@@ -2796,9 +2798,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         const nestedSteps = resumeSteps.slice(1);
         // The step the nested workflow resumes into receives the output of the step that
         // ran before it (its stored payload), not the input to the nested-workflow step.
+        // Use the stored payload even when it is `null` or `undefined`: that is the input the step ran with.
+        const resumedStepResult = nestedStepResults?.[nestedSteps[0]!] as StepResult<any, any, any, any> | undefined;
         const nestedPrevResult = {
           status: 'success' as const,
-          output: (nestedStepResults?.[nestedSteps[0]!] as any)?.payload ?? (prevResult as any)?.output,
+          output: resumedStepResult ? resumedStepResult.payload : (prevResult as any)?.output,
         };
 
         await this.mastra.pubsub.publish('workflows', {
@@ -2945,7 +2949,9 @@ export class WorkflowEventProcessor extends EventProcessor {
               stepResults: nestedContext,
               prevResult: {
                 status: 'success',
-                output: nestedContext[suspendedNestedStepId]?.payload ?? (prevResult as any)?.output,
+                output: nestedContext[suspendedNestedStepId]
+                  ? nestedContext[suspendedNestedStepId].payload
+                  : (prevResult as any)?.output,
               },
               resumeData: nestedResumeData,
               activeStepsPath,

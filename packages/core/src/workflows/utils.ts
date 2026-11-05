@@ -697,7 +697,8 @@ export function isEntryFinished(
 export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) {
   if (steps) {
     for (const step of Object.values(steps)) {
-      if (step.status === 'failed' && 'error' in step && step.error) {
+      // `context.input` holds the raw workflow input, which can be `null`.
+      if (step?.status === 'failed' && 'error' in step && step.error) {
         step.error = getErrorFromUnknown(step.error, { serializeStack: false });
       }
     }

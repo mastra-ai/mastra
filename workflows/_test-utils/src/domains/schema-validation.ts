@@ -652,7 +652,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
         expect(firstObserved(mocks).inputData).toBe(7);
       });
 
-      itFailsIf(skipTests.schemaNullableInputFails)('accepts explicit null for a nullable inputSchema', async () => {
+      it('accepts explicit null for a nullable inputSchema', async () => {
         const { workflow, mocks, resetMocks } = registry!['schema-nullable-input']!;
         resetMocks?.();
 

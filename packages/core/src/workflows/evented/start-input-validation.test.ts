@@ -209,3 +209,79 @@ describe('evented resume feeds the first step the input it started with (#29424)
     15_000,
   );
 });
+
+describe('evented run with an explicit null input reports step failures (#29424)', () => {
+  it('returns a failed result when the first step throws', async () => {
+    const step = createStep({
+      id: 'boom',
+      inputSchema: z.string().nullable(),
+      outputSchema: z.object({ received: z.string().nullable() }),
+      execute: async () => {
+        throw new Error('step exploded');
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'fail-nullable-input',
+      inputSchema: z.string().nullable(),
+      outputSchema: z.object({ received: z.string().nullable() }),
+    })
+      .then(step)
+      .commit();
+    await startHost(workflow);
+    const run = await workflow.createRun();
+
+    const result = await run.start({ inputData: null });
+
+    expect(result.status).toBe('failed');
+    expect(result.status === 'failed' && result.error.message).toBe('step exploded');
+  }, 15_000);
+});
+
+describe('evented nested resume feeds the suspended step its own stored input (#29424)', () => {
+  it('resumes a nested step whose input was null, not the nested workflow input', async () => {
+    const resumedInputs: unknown[] = [];
+    const produceNull = createStep({
+      id: 'produce-null',
+      inputSchema: z.string(),
+      outputSchema: z.string().nullable(),
+      execute: async () => null,
+    });
+    const approve = createStep({
+      id: 'approve',
+      inputSchema: z.string().nullable(),
+      outputSchema: z.object({ received: z.string().nullable() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) return suspend({});
+        resumedInputs.push(inputData);
+        return { received: inputData };
+      },
+    });
+    const child = createWorkflow({
+      id: 'nested-null-child',
+      inputSchema: z.string(),
+      outputSchema: z.object({ received: z.string().nullable() }),
+    })
+      .then(produceNull)
+      .then(approve)
+      .commit();
+    const parent = createWorkflow({
+      id: 'nested-null-parent',
+      inputSchema: z.string(),
+      outputSchema: z.object({ received: z.string().nullable() }),
+    })
+      .then(child)
+      .commit();
+    await startHost(parent);
+    const run = await parent.createRun();
+
+    const started = await run.start({ inputData: 'seed' });
+    expect(started.status).toBe('suspended');
+
+    const resumed = await run.resume({ step: [child, approve], resumeData: { approved: true } });
+
+    expect(resumed.status).toBe('success');
+    expect(resumedInputs).toEqual([null]);
+    expect(resumed.status === 'success' && resumed.result).toEqual({ received: null });
+  }, 15_000);
+});
