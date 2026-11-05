@@ -180,7 +180,7 @@ export class TemporalRun<
 
         const suspended = {
           ...status,
-          steps: normalizeStepResults(status.steps),
+          steps: toStepResults(status.input, status.steps),
         } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         await this.invokeLifecycleCallbacks(suspended, requestContext);
         return suspended;
@@ -195,7 +195,7 @@ export class TemporalRun<
       return {
         ...output,
         ...(input !== undefined && { input: input as TInput }),
-        steps: normalizeStepResults(output.steps),
+        steps: toStepResults(input !== undefined ? input : output.input, output.steps),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
       if (error instanceof WorkflowFailedError && error.cause instanceof CancelledFailure) {
@@ -210,7 +210,7 @@ export class TemporalRun<
       const failure = toFailureDetails(error);
 
       if (failure) {
-        const steps = normalizeStepResults(failure.steps);
+        const steps = toStepResults(input, failure.steps);
         return (
           failure.tripwire
             ? { status: 'tripwire', input, tripwire: failure.tripwire, state: initialState, steps }
@@ -424,6 +424,7 @@ export class TemporalRun<
 
 function isSuspendedWorkflowResult(value: unknown): value is {
   status: 'suspended';
+  input?: unknown;
   steps: Record<string, unknown>;
   suspended?: string[][];
   resumeLabels?: Record<string, { stepId: string }>;
@@ -486,6 +487,11 @@ function normalizeStepResult(value: unknown): unknown {
   }
 
   return { status: 'success', output: value, startedAt: 0, endedAt: 0 };
+}
+
+// Like a local run, the step records start with the workflow input under `input`.
+function toStepResults<T>(input: unknown, steps: T): T {
+  return { input, ...normalizeStepResults(steps) } as T;
 }
 
 // Workers built before step results used the core StepResult shape return raw step outputs.

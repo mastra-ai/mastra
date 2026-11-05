@@ -201,6 +201,7 @@ describe('TemporalRun', () => {
     await expect(run.start({ inputData: { value: 1 } })).resolves.toEqual({
       ...firstSuspension,
       steps: {
+        input: { value: 1 },
         firstApproval: {
           status: 'suspended',
           payload: { value: 1 },
@@ -217,6 +218,7 @@ describe('TemporalRun', () => {
     ).resolves.toEqual({
       ...secondSuspension,
       steps: {
+        input: { value: 1 },
         firstApproval: {
           status: 'success',
           payload: { value: 1 },
@@ -236,6 +238,7 @@ describe('TemporalRun', () => {
     await expect(run.resume({ step: 'secondApproval', resumeData: { approved: true } })).resolves.toEqual({
       ...finalResult,
       steps: {
+        input: { value: 1 },
         firstApproval: {
           status: 'success',
           payload: { value: 1 },
@@ -383,6 +386,7 @@ describe('TemporalRun', () => {
       input: { value: 1 },
       state: {},
       steps: {
+        input: { value: 1 },
         approval: {
           status: 'suspended',
           payload: { value: 1 },
@@ -450,6 +454,7 @@ describe('TemporalRun', () => {
 
   describe('lifecycle hooks', () => {
     const steps = {
+      input: { value: 1 },
       increment: { status: 'success', payload: { value: 1 }, output: { ok: true }, startedAt: 1, endedAt: 2 },
     };
     const workerSteps = {
@@ -687,6 +692,7 @@ describe('TemporalRun', () => {
         voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
       };
       const normalizedSteps = {
+        input: { value: 1 },
         voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
       };
       const onFinish = vi.fn();
@@ -711,6 +717,7 @@ describe('TemporalRun', () => {
         voidStep: { __temporalStepResult: true, status: 'success', startedAt: 1, endedAt: 2 },
       };
       const normalizedSteps = {
+        input: { value: 1 },
         voidStep: { status: 'success', payload: undefined, output: undefined, startedAt: 1, endedAt: 2 },
       };
       const onFinish = vi.fn();
@@ -762,7 +769,7 @@ describe('TemporalRun failed runs', () => {
   // #28754: start() returned every failed run as `failed` with `steps: {}` and Temporal's
   // WorkflowFailedError, because the Workflow dropped its step outputs when a step threw and the
   // Activity failure kept only the error's class name and message.
-  it('returns the same failed and tripwire results as a local run', async () => {
+  it('returns the same success, failed and tripwire results as a local run', async () => {
     const packageRoot = fileURLToPath(new URL('..', import.meta.url));
     const directory = await realpath(await mkdtemp(path.join(packageRoot, '.failed-result-')));
 
@@ -802,6 +809,7 @@ describe('TemporalRun failed runs', () => {
            },
          });
 
+         export const succeeding = createWorkflow({ id: 'succeeding', inputSchema: Value }).then(addOne).commit();
          export const failing = createWorkflow({ id: 'failing', inputSchema: Value }).then(addOne).then(fail).commit();
          export const parallel = createWorkflow({ id: 'parallel', inputSchema: Value }).parallel([addOne, fail]).commit();
          export const tripwire = createWorkflow({ id: 'tripwire', inputSchema: Value }).then(guard).commit();`,
@@ -864,27 +872,34 @@ describe('TemporalRun failed runs', () => {
       const { addOne, fail, guard } = local;
       const inputSchema = addOne.inputSchema;
       const temporal = {
+        succeeding: createTemporalWorkflow({ id: 'succeeding', inputSchema }).then(addOne).commit(),
         failing: createTemporalWorkflow({ id: 'failing', inputSchema }).then(addOne).then(fail).commit(),
         parallel: createTemporalWorkflow({ id: 'parallel', inputSchema }).parallel([addOne, fail]).commit(),
         tripwire: createTemporalWorkflow({ id: 'tripwire', inputSchema }).then(guard).commit(),
       };
-      // Step ids to statuses. Temporal step records have no `input` entry, so the local one is left out.
+      // Step ids to statuses.
       const statuses = (steps: Record<string, unknown>) =>
         Object.fromEntries(
-          Object.entries(steps)
-            .filter(([stepId]) => stepId !== 'input')
-            .map(([stepId, step]) => [stepId, (step as { status?: string }).status]),
+          Object.entries(steps).map(([stepId, step]) => [stepId, (step as { status?: string }).status]),
         );
       // Fails the test if a fixture stops failing, which would make both runs succeed alike.
-      const expectedStatus = { failing: 'failed', parallel: 'failed', tripwire: 'tripwire' } as const;
+      const expectedStatus = {
+        succeeding: 'success',
+        failing: 'failed',
+        parallel: 'failed',
+        tripwire: 'tripwire',
+      } as const;
 
-      for (const id of ['failing', 'parallel', 'tripwire'] as const) {
+      for (const id of ['succeeding', 'failing', 'parallel', 'tripwire'] as const) {
         const expected = await (await local[id]!.createRun()).start({ inputData: { value: 5 } });
         const actual = await (await temporal[id].createRun()).start({ inputData: { value: 5 } });
 
         expect(expected.status).toBe(expectedStatus[id]);
         expect(statuses(actual.steps)).toEqual(statuses(expected.steps));
         expect(actual.status).toBe(expected.status);
+        // #29502: a local run keeps the start input under `steps.input`.
+        expect(expected.steps.input).toEqual({ value: 5 });
+        expect(actual.steps.input).toEqual(expected.steps.input);
         if (expected.status === 'failed' && actual.status === 'failed') {
           expect(actual.error).toMatchObject({ message: 'step failed', code: 'E_STEP' });
           expect(expected.error).toMatchObject({ message: 'step failed', code: 'E_STEP' });
