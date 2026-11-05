@@ -538,3 +538,47 @@ describe('PlatformMemory observational-memory inspector', () => {
     }
   });
 });
+
+describe('PlatformMemory inspector context and search', () => {
+  function inspectorFor(handler: (url: URL, init?: RequestInit) => unknown) {
+    const memory = new PlatformMemory({
+      accessToken: 'tok_1',
+      instanceId: 'mem_1',
+      apiUrl: 'https://platform.test',
+      fetch: async (input, init) => new Response(JSON.stringify(handler(new URL(String(input)), init))),
+    });
+    return memory.getObservationalMemoryInspector();
+  }
+
+  it('maps the thread context the model is sent', async () => {
+    let requested: URL | undefined;
+    const inspector = inspectorFor(url => {
+      requested = url;
+      return {
+        system: '<observations>- user is Ryan</observations>',
+        messages: [{ id: 'm1', role: 'user', content: 'hi', parts: [], createdAt: '2026-11-05T07:40:00.000Z' }],
+        observedAt: '2026-11-05T07:39:23.547Z',
+      };
+    });
+    const context = await inspector.getContext!({ threadId: 't1', resourceId: 'r1' });
+    expect(requested?.pathname).toBe('/v1/memory/mem_1/threads/t1/context');
+    expect(requested?.searchParams.get('resourceId')).toBe('r1');
+    expect(requested?.searchParams.get('workingMemory')).toBe('readonly');
+    expect(context).toEqual({
+      system: '<observations>- user is Ryan</observations>',
+      messages: [{ id: 'm1', role: 'user', content: 'hi', createdAt: new Date('2026-11-05T07:40:00.000Z') }],
+      observedAt: new Date('2026-11-05T07:39:23.547Z'),
+    });
+  });
+
+  it('searches observations', async () => {
+    let body: unknown;
+    const inspector = inspectorFor((_url, init) => {
+      body = JSON.parse(String(init?.body));
+      return { matches: [{ text: '- user is Ryan', threadId: 't1', observedAt: null }] };
+    });
+    const matches = await inspector.searchObservations!({ resourceId: 'r1', query: 'name', limit: 3 });
+    expect(body).toEqual({ resourceId: 'r1', query: 'name', limit: 3 });
+    expect(matches).toEqual([{ text: '- user is Ryan', threadId: 't1', observedAt: null }]);
+  });
+});

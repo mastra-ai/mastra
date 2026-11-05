@@ -205,6 +205,8 @@ import type {
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
+  GetObservationalMemoryContextParams,
+  GetObservationalMemoryContextResponse,
   AwaitBufferStatusParams,
   AwaitBufferStatusResponse,
   GetMemoryStatusResponse,
@@ -535,6 +537,20 @@ export class MastraClient extends BaseResource {
     const queryString = queryParams.toString();
     return this.request(
       `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
+    );
+  }
+
+  /**
+   * Returns what observational memory sends the model on the thread's next turn: rendered
+   * observations, then the messages not yet observed. `supported` is false when the memory can't report it.
+   */
+  public getObservationalMemoryContext(
+    params: GetObservationalMemoryContextParams,
+  ): Promise<GetObservationalMemoryContextResponse> {
+    const queryParams = new URLSearchParams({ agentId: params.agentId, threadId: params.threadId });
+    if (params.resourceId) queryParams.set('resourceId', params.resourceId);
+    return this.request(
+      `/memory/observational-memory/context?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
     );
   }
 

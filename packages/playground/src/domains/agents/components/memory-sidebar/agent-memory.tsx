@@ -16,6 +16,7 @@ import {
 } from '@mastra/react/hooks/memory';
 import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
+import { AgentMemoryContext } from './agent-memory-context';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { getRecentMessagesSettings } from './lib/recent-messages';
@@ -30,6 +31,7 @@ interface AgentMemoryProps {
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
   const isGatewayMemory = memoryType === 'gateway';
+  const isPlatformMemory = memoryType === 'platform';
   const { threadInput: chatInputValue } = useThreadInput(threadId);
 
   const { paths, navigate } = useLinkComponent();
@@ -53,6 +55,8 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   // Check if semantic recall is enabled
   const config = data?.config;
   const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
+  // Platform Memory searches its observations instead of semantic recall.
+  const isSearchEnabled = isSemanticRecallEnabled || isPlatformMemory;
 
   // Check if observational memory is enabled
   const { data: omStatus } = useMemoryWithOMStatus({
@@ -152,7 +156,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
           Recent Messages
         </Txt>
         <Txt variant="caption" tone="muted" className="mt-1">
-          {getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
+          {isPlatformMemory
+            ? 'Messages not yet observed are sent in full; older ones are replaced by their observations.'
+            : getRecentMessagesSettings(config?.lastMessages, config?.messageHistory).description}
         </Txt>
       </div>
 
@@ -163,13 +169,17 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         </div>
       )}
 
+      {isOMEnabled && threadId && (
+        <AgentMemoryContext agentId={agentId} resourceId={effectiveResourceId} threadId={threadId} />
+      )}
+
       {/* Memory Search Section - hidden for gateway memory */}
       {!isGatewayMemory && (
         <div className="border-b border-border p-4">
           <div className="mb-2">
             <div className="mb-2 flex items-center gap-2">
               <Txt as="h3" variant="subheading" tone="ink">
-                Semantic Recall
+                {isPlatformMemory ? 'Observation Search' : 'Semantic Recall'}
               </Txt>
               {searchMemoryData?.searchScope && (
                 <Txt
@@ -190,7 +200,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               )}
             </div>
           </div>
-          {isSemanticRecallEnabled ? (
+          {isSearchEnabled ? (
             <MemorySearch
               searchMemory={query => searchMemory({ searchQuery: query, memoryConfig: { lastMessages: 0 } })}
               onResultClick={handleResultClick}

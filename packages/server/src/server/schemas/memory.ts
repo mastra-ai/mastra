@@ -756,6 +756,34 @@ export const getObservationalMemoryResponseSchema = z.object({
 });
 
 /**
+ * Query schema for GET /api/memory/observational-memory/context
+ */
+export const getObservationalMemoryContextQuerySchema = z.object({
+  agentId: z.string(),
+  resourceId: z.string().optional(),
+  threadId: z.string(),
+});
+
+export const getObservationalMemoryContextResponseSchema = z.object({
+  /** `false` when the agent's memory can't report its context. */
+  supported: z.boolean(),
+  context: z
+    .object({
+      system: z.string().nullable(),
+      messages: z.array(
+        z.object({
+          id: z.string().optional(),
+          role: z.string(),
+          content: z.string(),
+          createdAt: z.coerce.date().optional(),
+        }),
+      ),
+      observedAt: z.coerce.date().nullable(),
+    })
+    .nullable(),
+});
+
+/**
  * Body schema for POST /api/memory/observational-memory/buffer-status
  */
 export const awaitBufferStatusBodySchema = z.object({

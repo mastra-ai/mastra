@@ -264,9 +264,11 @@ export const MemorySearch = ({
                           >
                             {result.role}
                           </Txt>
-                          <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
-                            {formatRelativeTime(result.createdAt)}
-                          </Txt>
+                          {result.createdAt && (
+                            <Txt variant="meta" tone="muted" title={formatDate(result.createdAt, 'date-time')}>
+                              {formatRelativeTime(result.createdAt)}
+                            </Txt>
+                          )}
                           {result.threadTitle && (
                             <div className="flex items-center gap-1">
                               <Txt
