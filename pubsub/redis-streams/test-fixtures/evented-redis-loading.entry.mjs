@@ -40,21 +40,32 @@ const stepEndFault = process.env.LOADING_STEP_END_FAULT;
 if (stepEndFault) {
   const publish = pubsub.publish.bind(pubsub);
   let faulted = false;
-  pubsub.publish = async (topic, event) => {
+  const siblingPublished = Promise.withResolvers();
+  const finishedCall = event => {
     const prevResult = /** @type {any} */ (event.data)?.prevResult;
-    if (
-      !faulted &&
-      event.type === 'workflow.step.end' &&
-      prevResult?.status === 'success' &&
-      prevResult.output?.toolCallId === 'operation-0'
-    ) {
+    return event.type === 'workflow.step.end' && prevResult?.status === 'success'
+      ? prevResult.output?.toolCallId
+      : undefined;
+  };
+  pubsub.publish = async (topic, event) => {
+    const callId = finishedCall(event);
+    if (!faulted && callId === 'operation-0') {
       faulted = true;
-      // Written synchronously so process.exit below cannot drop it.
+      if (stepEndFault === 'exit') {
+        // Die only once operation-1 has published its own step.end, so the dead
+        // worker leaves no tool mid-flight: the one undelivered step is operation-0,
+        // whose result was saved before this publish.
+        await siblingPublished.promise;
+        // Written synchronously so process.exit below cannot drop it.
+        writeSync(1, 'step-end-fault\n');
+        process.exit(1);
+      }
       writeSync(1, 'step-end-fault\n');
-      if (stepEndFault === 'exit') process.exit(1);
       throw new Error('read ECONNRESET');
     }
-    return publish(topic, event);
+    const published = await publish(topic, event);
+    if (callId === 'operation-1') siblingPublished.resolve();
+    return published;
   };
 }
 

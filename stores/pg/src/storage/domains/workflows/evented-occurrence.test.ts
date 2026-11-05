@@ -1053,4 +1053,130 @@ describe('Postgres evented occurrence replay', () => {
       driver.dispose();
     }
   }, 20_000);
+
+  it('reuses a saved plain step result and its request context when step.end publish was lost', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const calls: number[] = [];
+    const seen: unknown[] = [];
+    const charge = createStep({
+      id: 'charge',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData, requestContext }) => {
+        calls.push(inputData.n);
+        requestContext.set('charged', inputData.n);
+        return { n: inputData.n + 1 };
+      },
+    });
+    const read = createStep({
+      id: 'read',
+      inputSchema: schema,
+      outputSchema: z.object({ n: z.number(), charged: z.unknown() }),
+      execute: async ({ inputData, requestContext }) => {
+        seen.push(requestContext.get(MASTRA_AUTH_TOKEN_KEY));
+        return { n: inputData.n, charged: requestContext.get('charged') };
+      },
+    });
+    const workflow = createWorkflow({
+      id: `plain-lost-end-${randomUUID()}`,
+      inputSchema: schema,
+      outputSchema: z.object({ n: z.number(), charged: z.unknown() }),
+    })
+      .then(charge)
+      .then(read)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+    const publish = driver.pubsub.publish.bind(driver.pubsub);
+    let dropped!: () => void;
+    const lost = new Promise<void>(resolve => {
+      dropped = resolve;
+    });
+    const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (topic === 'workflows' && event.type === 'workflow.step.end' && event.data.prevResult?.output?.n === 8) {
+        dropped();
+        return;
+      }
+      return publish(topic, event, options);
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-plain-token');
+      const result = run.start({ inputData: { n: 7 }, requestContext });
+      await lost;
+      interrupted.mockRestore();
+      const original = driver.events.find(
+        event =>
+          event.type === 'workflow.step.run' &&
+          event.runId === run.runId &&
+          event.data.executionPath?.length === 1 &&
+          event.data.executionPath[0] === 0,
+      )!;
+      const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
+      const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+      if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+      await driver.redeliverEvent(original);
+      expect(await result).toMatchObject({ status: 'success', result: { n: 8, charged: 7 } });
+      expect(calls).toEqual([7]);
+      expect(seen).toEqual(['live-plain-token']);
+    } finally {
+      interrupted.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 20_000);
+
+  it('reuses a saved loop body result when the next publish was lost', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const calls: number[] = [];
+    const inc = createStep({
+      id: 'inc',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => {
+        calls.push(inputData.n);
+        return { n: inputData.n + 1 };
+      },
+    });
+    const workflow = createWorkflow({ id: `loop-lost-next-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+      .dountil(inc, async ({ inputData }) => inputData.n >= 3)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+    const publish = driver.pubsub.publish.bind(driver.pubsub);
+    let dropped!: () => void;
+    const lost = new Promise<void>(resolve => {
+      dropped = resolve;
+    });
+    const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (topic === 'workflows' && event.type === 'workflow.step.run' && event.data.prevResult?.output?.n === 2) {
+        dropped();
+        return;
+      }
+      return publish(topic, event, options);
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = run.start({ inputData: { n: 0 } });
+      await lost;
+      interrupted.mockRestore();
+      const original = driver.events.find(
+        event =>
+          event.type === 'workflow.step.run' && event.runId === run.runId && event.data.prevResult?.output?.n === 1,
+      )!;
+      const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
+      const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+      if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+      await driver.redeliverEvent(original);
+      expect(await result).toMatchObject({ status: 'success', result: { n: 3 } });
+      expect(calls).toEqual([0, 1, 2]);
+    } finally {
+      interrupted.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 20_000);
 });

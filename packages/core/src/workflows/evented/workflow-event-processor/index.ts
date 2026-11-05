@@ -3427,28 +3427,42 @@ export class WorkflowEventProcessor extends EventProcessor {
       const updatedState = (stepResult as any).__state ?? currentState;
 
       if (guardIteration && !completedResult && stepResult.status === 'success') {
-        const snapshot = await workflowsStore!.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-        const storedResult = readForeachResult({ ...stepResults, ...snapshot?.context }, leafId);
+        // A metadata patch: the store merges it into the row it locks, so no stale
+        // copy of the foreach record (or of a sibling's iteration) is written back.
+        const patch = {
+          metadata: {
+            foreachCompletedIterations: {
+              [executionPath[1]!]: {
+                eventId: args.eventId,
+                result: stepResult,
+                requestContext: withoutAuthToken(requestContext),
+              },
+            },
+          },
+        };
         await workflowsStore!.updateWorkflowResults({
           workflowName: workflowId,
           runId,
           stepId: leafId,
           requestContext: withoutAuthToken(requestContext),
-          result: {
-            ...(storedResult as StepResult<any, any, any, any>),
-            // Null slots leave every iteration's persisted output unchanged.
-            ...(Array.isArray(storedResult?.output) ? { output: storedResult.output.map(() => null) } : {}),
-            metadata: {
-              ...(storedResult?.metadata as Record<string, unknown> | undefined),
-              foreachCompletedIterations: {
-                [executionPath[1]!]: {
-                  eventId: args.eventId,
-                  result: stepResult,
-                  requestContext: withoutAuthToken(requestContext),
-                },
-              },
-            },
-          },
+          result: patch as unknown as StepResult<any, any, any, any>,
+        });
+      }
+
+      // Commit a sequential step's result before publishing step.end, so a
+      // redelivered step.run hits the start guard's 'completed' conflict and
+      // reclaims it instead of running the step body again. Parallel branches are
+      // left to step.end: an early branch record would let a sibling aggregate
+      // before this branch's state delta is stored.
+      if (guardStart && !completedResult && stepResult.status === 'success' && executionPath.length === 1) {
+        await workflowsStore!.updateWorkflowResults({
+          workflowName: workflowId,
+          runId,
+          stepId: leafId,
+          result: stepResult,
+          requestContext: withoutAuthToken(requestContext),
+          state: updatedState,
+          completionGuard: { eventId: args.eventId! },
         });
       }
 

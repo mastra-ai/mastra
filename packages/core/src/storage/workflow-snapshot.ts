@@ -75,7 +75,13 @@ export function mergeWorkflowStepResult({
   }
 
   const existingResult = snapshot.context[stepId];
-  if (
+  if ((result as { status?: unknown }).status === undefined && result.metadata?.foreachCompletedIterations) {
+    // A status-less iteration record is a metadata patch: it carries only the
+    // iteration its writer owns, so it never replaces step-level fields with a stale copy.
+    snapshot.context[stepId] = existingResult
+      ? { ...existingResult, metadata: { ...existingResult.metadata, ...result.metadata } }
+      : result;
+  } else if (
     existingResult &&
     'output' in existingResult &&
     Array.isArray(existingResult.output) &&
