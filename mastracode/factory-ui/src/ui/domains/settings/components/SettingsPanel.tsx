@@ -18,6 +18,7 @@ import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
+import { McpServersSection } from './mcp-servers/McpServersSection';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
 
@@ -58,6 +59,7 @@ export function SettingsPanel() {
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && <ConnectionsSection />}
+      {section === 'mcp-servers' && <McpServersSection />}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'intake' && <IntakeSection />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}

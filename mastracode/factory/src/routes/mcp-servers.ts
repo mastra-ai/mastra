@@ -72,6 +72,30 @@ export interface McpServerInfo {
   tools: McpServerToolInfo[];
 }
 
+/** `GET /web/config/mcp-servers`. */
+export interface McpServersResponse {
+  servers: McpServerInfo[];
+  /** Whether the caller may add, edit, connect, and remove servers (organization admins). */
+  canManage: boolean;
+  /** Whether the Factory can sign in to OAuth servers without a client ID (served over https). */
+  oauth: { metadataDocument: boolean };
+}
+
+/** A single server after a create, edit, connect, tool selection, or sign-out. */
+export interface McpServerResponse {
+  server: McpServerInfo;
+}
+
+/** `POST :id/oauth/start`: where to send the admin, or the server when its saved sign-in was still good. */
+export type McpOAuthStartResponse = { authorizationUrl: string } | McpServerResponse;
+
+export type { McpServerAuthType, McpServerStatus };
+export type {
+  CreateMcpServerRequest,
+  SelectMcpServerToolsRequest,
+  UpdateMcpServerRequest,
+} from '../mcp-servers/schemas.js';
+
 interface McpServersContext {
   storage: McpServersStorage;
   orgId: string;
@@ -301,7 +325,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
             servers: await Promise.all(records.map(record => toMcpServerInfo(ctx.storage, record))),
             canManage: await this.#canManage(c, ctx),
             oauth: { metadataDocument: Boolean(clientMetadataDocument) },
-          });
+          } satisfies McpServersResponse);
         }),
       }),
 

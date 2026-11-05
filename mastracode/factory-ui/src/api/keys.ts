@@ -131,6 +131,7 @@ export const queryKeys = {
   availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
+  mcpServers: () => ['mcp-servers'] as const,
   defaultModel: () => ['default-model'] as const,
   om: (sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) =>
     ['om', sessionId ?? null, factoryId ?? null, threadId ?? null, resourceId ?? null] as const,

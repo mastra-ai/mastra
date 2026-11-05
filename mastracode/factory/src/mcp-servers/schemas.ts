@@ -226,3 +226,7 @@ export function createMcpServerSchemas(network: McpServerNetworkOptions) {
 export type McpServerSchemas = ReturnType<typeof createMcpServerSchemas>;
 export type CreateMcpServerBody = z.output<McpServerSchemas['create']>;
 export type UpdateMcpServerBody = z.output<McpServerSchemas['update']>;
+/** Request bodies as clients send them (headers as a list of name/value pairs). */
+export type CreateMcpServerRequest = z.input<McpServerSchemas['create']>;
+export type UpdateMcpServerRequest = z.input<McpServerSchemas['update']>;
+export type SelectMcpServerToolsRequest = z.input<McpServerSchemas['selectTools']>;

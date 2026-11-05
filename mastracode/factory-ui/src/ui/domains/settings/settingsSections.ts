@@ -7,6 +7,7 @@ export type SettingsSection =
   | 'preferences'
   | 'factory'
   | 'connections'
+  | 'mcp-servers'
   | 'repositories'
   | 'intake'
   | 'models'
@@ -19,6 +20,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   preferences: 'Preferences',
   factory: 'Manage Factory',
   connections: 'Connections',
+  'mcp-servers': 'MCP Servers',
   repositories: 'Repositories',
   intake: 'Work Intake',
   models: 'Models',
