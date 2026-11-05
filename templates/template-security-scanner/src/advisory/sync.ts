@@ -42,7 +42,7 @@ export class AdvisorySync {
     }
   }
 
-  /** Hydrate and persist one advisory page while carrying its deterministic item failures. */
+  /** Persist one advisory page and translate selected deterministic store errors into cycle failures. */
   private async importPage(...args: Parameters<AdvisoryStore['importPage']>) {
     try {
       return await this.store.importPage(...args);
