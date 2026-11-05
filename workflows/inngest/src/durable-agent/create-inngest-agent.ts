@@ -67,11 +67,11 @@ import type {
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import { AgentStreamBus } from '@mastra/core/agent/streams';
 import type { ActorSignal } from '@mastra/core/auth/ee';
-import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { CachingPubSub, PubSub } from '@mastra/core/events';
+import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
@@ -807,50 +807,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
   const workflow = createInngestDurableAgenticWorkflow({ inngest, retries });
 
-  // Track whether user provided a custom cache (if not, we'll inherit from mastra)
-  let _customCache = cache;
-
-  // Set up pubsub with lazy CachingPubSub creation
-  // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
-  let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
-  let _cachingPubsub: CachingPubSub | null = null;
-
-  // Resolve the cache that backs CachingPubSub history.
-  //
-  // Resolution order: user-provided > mastra's serverCache > InMemoryServerCache fallback.
-  // The fallback gives single-process observe replay parity with the in-memory durable agent.
-  // Cross-process observe still requires a shared cache backend (Redis, etc.) supplied via
-  // `cache` or `mastra.serverCache`.
-  function resolveCache(): MastraServerCache {
-    const resolved = _customCache ?? mastra?.serverCache ?? new InMemoryServerCache();
-    _customCache = resolved;
-    return resolved;
-  }
-
-  // Lazily create CachingPubSub for the agent.
-  //
-  // We always wrap the inner pubsub with CachingPubSub (mirroring the in-memory DurableAgent
-  // at packages/core/src/agent/durable/durable-agent.ts#ensurePubsubInitialized). Without it,
-  // `observe()` would only see live events: the bare InngestPubSub.subscribe streams from the
-  // current point in the realtime channel, with no history replay, so reconnects and late
-  // observers miss everything emitted before they attached.
-  //
-  // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
-  // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
-  function getPubsub(): CachingPubSub {
-    if (!_cachingPubsub) {
-      if (innerPubsub instanceof CachingPubSub) {
-        _cachingPubsub = innerPubsub;
-        _customCache = _customCache ?? mastra?.serverCache;
-      } else {
-        _cachingPubsub = new CachingPubSub(innerPubsub, resolveCache());
-      }
-    }
-    return _cachingPubsub;
-  }
+  // Always supply the Inngest transport explicitly so Mastra registration cannot replace it.
+  const innerPubsub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
+  const streamBus = new AgentStreamBus(
+    { pubsub: innerPubsub, cache },
+    {
+      getMastra: () => mastra,
+      usesSharedRunLog: () => false,
+      warn: message => mastra?.getLogger()?.warn(message),
+    },
+  );
 
   async function getPubsubOffset(runId: string): Promise<number> {
-    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
+    const history = await streamBus.pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
     return history.length;
   }
 
@@ -861,7 +830,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    */
   async function isObservationComplete(runId: string): Promise<boolean> {
     try {
-      const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const history = await streamBus.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
       const latest = history.at(-1);
       if (latest) {
         const type = latest.type === AgentStreamEventTypes.CHUNK ? latest.data?.type : latest.type;
@@ -902,7 +871,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (snapshot?.status !== 'suspended') return;
       await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
       await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
-      await emitAbortEvent(getPubsub(), runId, { steps: [], text: '' });
+      await emitAbortEvent(streamBus.pubsub, runId, { steps: [], text: '' });
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to delete snapshot of aborted suspended Inngest run', {
         agentId,
@@ -1091,15 +1060,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // InngestPubSub so ordinary workflow channel isolation is preserved.
   // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
   const inngestWorkflow = workflow as unknown as InngestWorkflow;
-  inngestWorkflow.__setPubsubFactory(defaultPubsub => new InngestAgentPubSubRouter(defaultPubsub, getPubsub));
+  inngestWorkflow.__setPubsubFactory(
+    defaultPubsub => new InngestAgentPubSubRouter(defaultPubsub, () => streamBus.pubsub),
+  );
   inngestWorkflow.__setEmitWorkflowEvents(false);
-
-  // Lazily resolve cache
-  function getCache(): MastraServerCache | undefined {
-    // Ensure pubsub is initialized (which resolves cache)
-    getPubsub();
-    return _customCache;
-  }
 
   /**
    * Trigger the workflow via Inngest event
@@ -1134,7 +1098,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    */
   async function emitError(runId: string, error: Error): Promise<void> {
     try {
-      await emitErrorEvent(getPubsub(), runId, error);
+      await emitErrorEvent(streamBus.pubsub, runId, error);
     } catch (publishError) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent error event', {
         agentId,
@@ -1175,7 +1139,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   async function requestRemoteAbort(runId: string): Promise<void> {
     try {
-      await publishAbortRequest(getPubsub(), runId);
+      await publishAbortRequest(streamBus.pubsub, runId);
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent abort request', {
         agentId,
@@ -1268,11 +1232,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     get cache() {
-      return getCache();
+      return streamBus.cache ?? undefined;
     },
 
     get pubsub() {
-      return getPubsub();
+      return streamBus.pubsub;
     },
 
     async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {
@@ -1369,7 +1333,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         fail: failStream,
         ready,
       } = createDurableAgentStream<TOutput>({
-        pubsub: getPubsub(),
+        pubsub: streamBus.pubsub,
         runId,
         messageId,
         model: {
@@ -1439,7 +1403,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const workflowExecution = ready
         .then(async () => {
           // Only initial runs open a message; resume continues the existing stream.
-          await emitChunkEvent(getPubsub(), runId, {
+          await emitChunkEvent(streamBus.pubsub, runId, {
             type: 'start',
             runId,
             from: ChunkFrom.AGENT,
@@ -1809,7 +1773,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         detach: detachStream,
         ready,
       } = createDurableAgentStream<TOutput>({
-        pubsub: getPubsub(),
+        pubsub: streamBus.pubsub,
         runId,
         offset: resumeOffset,
         initialToolCalls,
@@ -2039,7 +2003,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     async observe(runId, observeOptions) {
       // Create the stream subscription with offset support
       const stream = createDurableAgentStream<TOutput>({
-        pubsub: getPubsub(),
+        pubsub: streamBus.pubsub,
         runId,
         messageId: crypto.randomUUID(),
         model: {
@@ -2486,7 +2450,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Same split as DurableAgent: the thread request also releases a parked run.
       await Promise.all([
         agentThreadStreamRuntime.requestThreadRunAbort(threadPubSub, abortOptions, runId),
-        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
+        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(streamBus.pubsub, runId),
       ]);
       return true;
     },
@@ -2517,7 +2481,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         return true;
       }
       try {
-        return await requestAcknowledgedAbort(getPubsub(), runId);
+        return await requestAcknowledgedAbort(streamBus.pubsub, runId);
       } finally {
         abortLocalController(runId);
       }
@@ -2532,7 +2496,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ...forkOptions,
         agent: agent.__fork(),
         pubsub: innerPubsub,
-        cache: _customCache,
+        cache: streamBus.cache ?? undefined,
         mastra,
       });
     },

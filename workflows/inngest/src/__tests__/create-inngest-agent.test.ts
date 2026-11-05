@@ -32,6 +32,7 @@ import { z } from 'zod';
 import { InngestDurableStepIds } from '../durable-agent/create-inngest-agentic-workflow';
 import { InngestExecutionEngine } from '../execution-engine';
 import { createInngestAgent, isInngestAgent } from '../index';
+import { InngestPubSub } from '../pubsub';
 
 // Mock model for testing
 function createMockModel() {
@@ -260,6 +261,56 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(durableAgent.cache).toBe(customCache);
     expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+  });
+
+  it.each([false, true])('keeps Inngest transport after registration (resolved first: %s)', resolvedFirst => {
+    const durableAgent = createInngestAgent({ agent: makeAgent(`registration-transport-${resolvedFirst}`), inngest });
+    const before = resolvedFirst ? durableAgent.pubsub : undefined;
+    const serverCache = new InMemoryServerCache();
+    const mastra = new Mastra({ cache: serverCache, logger: false });
+
+    durableAgent.__setMastra(mastra);
+
+    const pubsub = durableAgent.pubsub as CachingPubSub;
+    expect(pubsub.getInner()).toBeInstanceOf(InngestPubSub);
+    expect(pubsub.getInner()).not.toBe(mastra.pubsub);
+    if (before) {
+      expect(pubsub).toBe(before);
+    } else {
+      expect(durableAgent.cache).toBe(serverCache);
+    }
+  });
+
+  it('prefers the explicit cache over the registered server cache', () => {
+    const cache = new InMemoryServerCache();
+    const durableAgent = createInngestAgent({ agent: makeAgent('explicit-cache-precedence'), inngest, cache });
+    durableAgent.__setMastra(new Mastra({ cache: new InMemoryServerCache(), logger: false }));
+
+    expect(durableAgent.cache).toBe(cache);
+    expect((durableAgent.pubsub as CachingPubSub).getCache()).toBe(cache);
+  });
+
+  it('reuses an existing caching transport and publishes and replays each event once', async () => {
+    const inner = new EventEmitterPubSub();
+    const publish = vi.spyOn(inner, 'publish');
+    const cache = new InMemoryServerCache();
+    const pubsub = new CachingPubSub(inner, cache);
+    const durableAgent = createInngestAgent({ agent: makeAgent('existing-caching-transport'), inngest, pubsub });
+    durableAgent.__setMastra(new Mastra({ cache: new InMemoryServerCache(), logger: false }));
+    const topic = AGENT_STREAM_TOPIC('existing-caching-transport-run');
+
+    await durableAgent.pubsub.publish(topic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId: 'existing-caching-transport-run',
+      data: { chunk: 'once' },
+    });
+
+    expect(durableAgent.pubsub).toBe(pubsub);
+    expect(durableAgent.cache).toBe(cache);
+    expect(publish).toHaveBeenCalledOnce();
+    const history = await durableAgent.pubsub.getHistory(topic);
+    expect(history).toHaveLength(1);
+    expect(history[0].data).toEqual({ chunk: 'once' });
   });
 
   // The next two tests mirror packages/core/src/agent/durable/__tests__/resumable-streams.test.ts

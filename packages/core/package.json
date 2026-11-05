@@ -71,6 +71,16 @@
         "default": "./dist/agent/durable/index.cjs"
       }
     },
+    "./agent/streams": {
+      "import": {
+        "types": "./dist/agent/streams/index.d.ts",
+        "default": "./dist/agent/streams/index.js"
+      },
+      "require": {
+        "types": "./dist/agent/streams/index.d.ts",
+        "default": "./dist/agent/streams/index.cjs"
+      }
+    },
     "./agent/message-list": {
       "import": {
         "types": "./dist/agent/message-list/index.d.ts",

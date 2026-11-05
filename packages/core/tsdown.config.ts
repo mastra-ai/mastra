@@ -117,6 +117,7 @@ export default defineConfig({
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
+    'src/agent/streams/index.ts',
     'src/auth/ee/index.ts',
     'src/auth/ee/fga-check.ts',
     'src/agent-builder/ee/index.ts',
