@@ -58,7 +58,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.connections,
         icon: Cable,
         searchText:
-          'personal organization connections connected accounts slack integrations github gitlab tokens pat mcp claude chatgpt',
+          'personal organization connections connected accounts slack integrations github gitlab tokens pat',
       },
     ],
   },
