@@ -45,6 +45,7 @@ import {
   prepareForDurableExecution,
   persistDurableRunInput,
   createDurableAgentStream,
+  createRunAbortController,
   emitChunkEvent,
   emitErrorEvent,
   emitAbortEvent,
@@ -1292,22 +1293,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * Best-effort: the local abort has already happened, and a caller asking to
    * stop a run should not get a rejection because the publish failed.
    */
-  // Forward an external signal to the local controller and also publish the
-  // abort request: the step worker may be another process that never sees
-  // this controller (mirrors `result.abort()`).
-  function forwardExternalAbort(external: AbortSignal, controller: AbortController, runId: string): () => void {
-    const forward = () => {
-      controller.abort((external as AbortSignal & { reason?: unknown }).reason);
-      void requestRemoteAbort(runId);
-    };
-    if (external.aborted) {
-      forward();
-    } else {
-      external.addEventListener('abort', forward, { once: true });
-    }
-    return () => external.removeEventListener('abort', forward);
-  }
-
   async function requestRemoteAbort(runId: string): Promise<void> {
     try {
       await publishAbortRequest(getPubsub(), runId);
@@ -1457,10 +1442,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // an ABORT pubsub event when the inner catch detects the signal. If the
       // caller supplied an external signal, forward it onto the internal
       // controller so either source can cancel the run.
-      const abortController = new AbortController();
-      const stopForwardingAbort = streamOptions?.abortSignal
-        ? forwardExternalAbort(streamOptions.abortSignal, abortController, runId)
-        : undefined;
+      // Forward the caller's signal to the local controller and also publish the
+      // abort request: the step worker may be another process that never sees
+      // this controller (mirrors `result.abort()`).
+      const { controller: abortController, detach: stopForwardingAbort } = createRunAbortController(
+        streamOptions?.abortSignal,
+        { onExternalAbort: () => void requestRemoteAbort(runId) },
+      );
       registryEntry.abortController = abortController;
       const clearTotalTimeout = armTotalTimeout(
         registryEntry,
@@ -1881,10 +1869,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // attach it to the run-registry entry so the durable LLM step (when
       // co-located) can react. The previous run's controller is no longer
       // relevant.
-      const abortController = new AbortController();
-      const stopForwardingAbort = resumeOptions?.abortSignal
-        ? forwardExternalAbort(resumeOptions.abortSignal, abortController, runId)
-        : undefined;
+      // Forward the caller's signal to the local controller and also publish the
+      // abort request: the step worker may be another process that never sees
+      // this controller (mirrors `result.abort()`).
+      const { controller: abortController, detach: stopForwardingAbort } = createRunAbortController(
+        resumeOptions?.abortSignal,
+        { onExternalAbort: () => void requestRemoteAbort(runId) },
+      );
       // Ensure a registry entry exists for this resumed segment. On Inngest,
       // a resume frequently runs in a fresh process where no prior stream()
       // entry is in memory — without this, the abort controller would be

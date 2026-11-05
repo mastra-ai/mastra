@@ -84,6 +84,7 @@ import type { UntrackedRunLiveness } from './execution-fence';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
+import { createRunAbortController } from './run-abort';
 import { recordRunSavedMessages } from './run-message-refs';
 import {
   deleteRunRegistryEntry,
@@ -3115,18 +3116,7 @@ export class DurableAgent<
     // to thread it into the model call + abort short-circuits. If the caller
     // also supplied an external signal, forward its abort to the internal
     // controller so either source can cancel the run.
-    const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
-      }
-    }
+    const { controller: abortController } = createRunAbortController(options?.abortSignal);
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
@@ -3828,23 +3818,9 @@ export class DurableAgent<
     // controller is gone (the stream that owned it has already settled), so
     // we overwrite the registry slot. If the caller passed an external
     // signal, forward it onto the new internal controller.
-    const abortController = new AbortController();
-    const externalAbortSignal = resolvedOptions.abortSignal;
-    const forwardExternalAbort = () => abortController.abort(externalAbortSignal?.reason);
-    let externalAbortAttached = false;
-    const detachExternalAbort = () => {
-      if (!externalAbortAttached) return;
-      externalAbortSignal?.removeEventListener('abort', forwardExternalAbort);
-      externalAbortAttached = false;
-    };
-    if (externalAbortSignal) {
-      if (externalAbortSignal.aborted) {
-        forwardExternalAbort();
-      } else {
-        externalAbortSignal.addEventListener('abort', forwardExternalAbort, { once: true });
-        externalAbortAttached = true;
-      }
-    }
+    const { controller: abortController, detach: detachExternalAbort } = createRunAbortController(
+      resolvedOptions.abortSignal,
+    );
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
@@ -4315,18 +4291,7 @@ export class DurableAgent<
     //    snapshot.
     this.#assertRecoveryActive();
     const releaseLocalRecovery = this.#claimLocalRecovery(runId);
-    const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
-      }
-    }
+    const { controller: abortController } = createRunAbortController(options?.abortSignal);
 
     let executionFence: ExecutionFence | undefined;
     let recoveryState: RehydratedRecoveryState;
@@ -4758,18 +4723,7 @@ export class DurableAgent<
     // to thread it into the model call + abort short-circuits. If the caller
     // also supplied an external signal, forward its abort to the internal
     // controller so either source can cancel the run.
-    const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
-      } else {
-        options.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
-      }
-    }
+    const { controller: abortController } = createRunAbortController(options?.abortSignal);
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
