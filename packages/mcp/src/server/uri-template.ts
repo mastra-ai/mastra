@@ -15,7 +15,7 @@ export function matchesUriTemplate(template: string, uri: string): boolean {
 
 type Segment =
   | { kind: 'literal'; text: string }
-  | { kind: 'oneOf'; chars: string }
+  | { kind: 'choice'; options: Segment[][] }
   | { kind: 'run'; excluded: string; min: 0 | 1 }
   | { kind: 'optional'; segments: Segment[] }
   | { kind: 'repeat'; segments: Segment[] };
@@ -24,6 +24,7 @@ const literal = (text: string): Segment => ({ kind: 'literal', text });
 const run = (excluded: string, min: 0 | 1 = 0): Segment => ({ kind: 'run', excluded, min });
 const optional = (...segments: Segment[]): Segment => ({ kind: 'optional', segments });
 const repeat = (...segments: Segment[]): Segment => ({ kind: 'repeat', segments });
+const choice = (options: Segment[][]): Segment => ({ kind: 'choice', options });
 
 function parse(template: string): Segment[] {
   const segments: Segment[] = [];
@@ -65,9 +66,16 @@ function expression(body: string): Segment[] {
     case ';':
       return specs.map(({ name }) => optional(literal(`;${name}`), optional(literal('='), run(';/?#'))));
     default: {
-      // `?` and `&`: the first pair present opens the query, later ones join it.
-      const pair = (name: string) => [{ kind: 'oneOf', chars: '?&' } as const, literal(`${name}=`), run('&#')];
-      return specs.map(({ name, exploded }) => (exploded ? repeat(...pair(name)) : optional(...pair(name))));
+      // The first pair present starts with the operator (`?` or `&`); every later pair starts with `&`.
+      const pair = ({ name, exploded }: (typeof specs)[number], separator: string): Segment[] => {
+        const first = [literal(`${separator}${name}=`), run('&#?')];
+        return exploded ? [...first, repeat(literal(`&${name}=`), run('&#?'))] : first;
+      };
+      const firstPresent = specs.map((spec, i) => [
+        ...pair(spec, operator),
+        ...specs.slice(i + 1).map(later => optional(...pair(later, '&'))),
+      ]);
+      return [optional(choice(firstPresent))];
     }
   }
 }
@@ -88,8 +96,8 @@ function step(uri: string, positions: Set<number>, segment: Segment): Set<number
     case 'literal':
       for (const p of positions) if (uri.startsWith(segment.text, p)) next.add(p + segment.text.length);
       return next;
-    case 'oneOf':
-      for (const p of positions) if (p < uri.length && segment.chars.includes(uri[p]!)) next.add(p + 1);
+    case 'choice':
+      for (const option of segment.options) for (const p of advance(uri, positions, option)) next.add(p);
       return next;
     case 'run': {
       // A run stops at the first excluded character, so a start inside an earlier run reaches nothing new.

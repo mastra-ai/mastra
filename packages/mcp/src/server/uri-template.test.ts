@@ -20,6 +20,9 @@ describe('matchesUriTemplate', () => {
     ['file://data/{id}{?format,lang}', 'file://data/123?format=json&lang=en', true],
     ['file://data/{id}{?format,lang}', 'file://data/123?lang=en', true],
     ['file://data/{id}{?format,lang}', 'file://data/123?other=1', false],
+    ['file://data/{id}{?format,lang}', 'file://data/123?format=a?lang=b', false],
+    ['file://data{?format}', 'file://data&format=json', false],
+    ['file://data{?format}{&lang}', 'file://data?format=a&lang=b', true],
     ['doc://{id}{#section}', 'doc://1#intro', true],
     ['x://{a}-{b}-{c}-{d}', 'x://1-2-3-4', true],
   ])('%s against %s -> %s', (template, uri, expected) => {
