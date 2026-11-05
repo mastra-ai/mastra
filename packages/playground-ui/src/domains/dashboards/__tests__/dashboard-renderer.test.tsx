@@ -957,22 +957,21 @@ describe('DashboardRenderer', () => {
       });
 
       it('shows a source the host disables in the menu, with its reason', async () => {
+        const PART = 'This is part of a sum. An alert watches the whole value.';
         const { alert } = perSource(s =>
-          s.ref.field === 'estimatedCost'
-            ? { disabled: 'Cost alerts are not supported yet.' }
-            : { href: '/alerts/new' },
+          s.label.startsWith('Tokens:') ? { disabled: PART } : { href: '/alerts/new' },
         );
         const { container } = renderDashboard(definition(kpisWidget), { alert });
         const menu = await openMenu(cell(container, 'kpis'));
-        const cost = within(menu).getByRole('menuitem', { name: /Model cost/ });
-        expect(cost.getAttribute('aria-disabled')).toBe('true');
-        expect(cost.getAttribute('href')).toBeNull();
-        expect(cost.textContent).toContain('Cost alerts are not supported yet.');
+        const input = within(menu).getByRole('menuitem', { name: /Tokens: input/ });
+        expect(input.getAttribute('aria-disabled')).toBe('true');
+        expect(input.getAttribute('href')).toBeNull();
+        expect(input.textContent).toContain(PART);
         expect(
           within(menu)
             .getAllByRole('menuitem')
             .filter(i => i.getAttribute('href')),
-        ).toHaveLength(4);
+        ).toHaveLength(3);
       });
 
       it('leaves out a source the host passes over', async () => {

@@ -45,6 +45,14 @@ const kpis: Widget = {
           distinctColumn: 'threadId',
           compare: 'previousWindow',
         },
+        ...(['input', 'output'] as const).map(part => ({
+          id: part,
+          source: 'metrics' as const,
+          request: 'aggregate' as const,
+          name: [`mastra_model_total_${part}_tokens`],
+          aggregation: 'sum' as const,
+          compare: 'previousWindow' as const,
+        })),
       ],
       options: {
         items: [
@@ -55,6 +63,13 @@ const kpis: Widget = {
             format: 'count',
             value: { query: 'threads' },
             detail: 'with agent runs',
+          },
+          {
+            label: 'Tokens',
+            icon: 'hash',
+            format: 'count',
+            value: { sum: [{ query: 'input' }, { query: 'output' }] },
+            detail: 'input and output',
           },
         ],
       },
@@ -115,7 +130,8 @@ const PERCENTILES = 'Rules cannot read metrics percentiles yet. Use a span perce
 /** One source's answer: a reason for what rules can't read yet, else a link. */
 function respondTo(target: DashboardAlertTarget, source: DashboardAlertSource): DashboardAlertAction {
   if (source.ref.percentile !== undefined) return { disabled: PERCENTILES };
-  if (source.ref.field === 'estimatedCost') return { disabled: 'Cost alerts are not supported yet.' };
+  // The renderer labels a part of a combined value "{value}: {query}"; this host watches whole values.
+  if (/: /.test(source.label)) return { disabled: 'This is part of a sum. An alert watches the whole value.' };
   if (source.query.source === 'scores' && !source.query.scorerId)
     return { disabled: 'This card reads every scorer. An alert watches one.' };
   return { href: `#alerts/new?card=${target.widget.id}&value=${encodeURIComponent(source.label)}` };
@@ -212,7 +228,7 @@ const openAlertMenu =
       async () => {
         if (canvasElement.ownerDocument.querySelector('[role="menu"]')) return;
         const card = canvasElement.querySelector<HTMLElement>(`[data-widget-id="${widgetId}"]`);
-        const trigger = card && within(card).queryByRole('button', { name: /^Create alert from/ });
+        const trigger = card && within(card).queryByRole('button', { name: /^Create alert/ });
         if (trigger) {
           card.scrollIntoView();
           await userEvent.click(trigger);
@@ -226,8 +242,8 @@ const openAlertMenu =
 /** The Agent runs card's menu, open: one entry per series. */
 export const MenuOpen: Story = { play: openAlertMenu('agent-runs') };
 
-/** The tabbed table's menu, open: one entry per value column, the cost column disabled with its reason. */
-export const MenuWithDisabledEntry: Story = { play: openAlertMenu('breakdown') };
+/** The KPI row's menu, open: one entry per figure, the parts of the token sum disabled with their reason. */
+export const MenuWithDisabledEntry: Story = { play: openAlertMenu('kpis') };
 
 /** The host answers one link for every card: every button is plain, whatever its sources. */
 export const AllEnabled: Story = { args: { hostResponse: 'enabled' } };
