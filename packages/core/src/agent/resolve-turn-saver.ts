@@ -2,9 +2,11 @@ import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { isObservationalMemoryEnabled } from '../memory/types';
 import type { MemoryConfigInternal } from '../memory/types';
-import type { OutputProcessorOrWorkflow } from '../processors';
+import type { OutputProcessor, OutputProcessorOrWorkflow } from '../processors';
 import { isProcessorWorkflow } from '../processors/is-processor-workflow';
 import type { MessageHistory } from '../processors/memory/message-history';
+
+type PersistsMessages = Pick<MessageHistory, 'persistMessages'>;
 
 /**
  * What saves a run's turn to thread history.
@@ -15,8 +17,23 @@ import type { MessageHistory } from '../processors/memory/message-history';
  *   observational memory when that owns the writes (`observational`).
  */
 export type TurnSaver =
-  | { kind: 'configured-history'; processor: Pick<MessageHistory, 'persistMessages'> }
+  | { kind: 'configured-history'; processor: PersistsMessages }
   | { kind: 'memory'; observational: boolean };
+
+function findConfiguredProcessor(processors: OutputProcessorOrWorkflow[], id: string): OutputProcessor | undefined {
+  return processors.find((processor): processor is OutputProcessor => {
+    return !isProcessorWorkflow(processor) && processor.id === id;
+  });
+}
+
+/**
+ * A custom processor may take the `message-history` id to replace the built-in one; the finish
+ * path then saves only through it. Without `persistMessages` there is nothing equivalent to call
+ * before the finish.
+ */
+function persistsMessages(processor: OutputProcessor): processor is OutputProcessor & PersistsMessages {
+  return 'persistMessages' in processor && typeof processor.persistMessages === 'function';
+}
 
 /**
  * Resolves what saves this run's turn, mirroring `Memory.getOutputProcessors`. Undefined when
@@ -41,14 +58,11 @@ export function resolveTurnSaver({
   const config = memory.getMergedThreadConfig(memoryConfig);
   if (config.readOnly) return;
 
-  const configured = (id: string) => configuredOutputProcessors.find(p => !isProcessorWorkflow(p) && p.id === id);
-  const history = configured('message-history') as Partial<Pick<MessageHistory, 'persistMessages'>> | undefined;
+  const history = findConfiguredProcessor(configuredOutputProcessors, 'message-history');
   if (history) {
-    return typeof history.persistMessages === 'function'
-      ? { kind: 'configured-history', processor: history as Pick<MessageHistory, 'persistMessages'> }
-      : undefined;
+    return persistsMessages(history) ? { kind: 'configured-history', processor: history } : undefined;
   }
-  if (configured('observational-memory')) return;
+  if (findConfiguredProcessor(configuredOutputProcessors, 'observational-memory')) return;
 
   const observational = isObservationalMemoryEnabled(config.observationalMemory);
   if (!observational && !normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory).enabled) return;
