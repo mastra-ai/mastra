@@ -3482,11 +3482,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       // left to step.end: an early branch record would let a sibling aggregate
       // before this branch's state delta is stored.
       if (guardStart && !completedResult && stepResult.status === 'success' && executionPath.length === 1) {
+        // State is saved through `state`; keep it out of the step record, as step.end does.
+        const { __state: _state, __stateDelta: _stateDelta, ...cleanStepResult } = stepResult as any;
         await workflowsStore!.updateWorkflowResults({
           workflowName: workflowId,
           runId,
           stepId: leafId,
-          result: stepResult,
+          result: cleanStepResult,
           requestContext: withoutAuthToken(requestContext),
           state: updatedState,
           completionGuard: { eventId: args.eventId! },

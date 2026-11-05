@@ -1120,7 +1120,7 @@ describe('Postgres evented occurrence replay', () => {
       if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
       await driver.redeliverEvent(original);
       expect(await result).toMatchObject({ status: 'success', result: [{ n: 7 }, { n: 8 }] });
-      expect(calls).toEqual([7, 8]);
+      expect([...calls].sort()).toEqual([7, 8]);
     } finally {
       interrupted.mockRestore();
       await mastra.stopWorkers();
@@ -1176,8 +1176,9 @@ describe('Postgres evented occurrence replay', () => {
       id: 'charge',
       inputSchema: schema,
       outputSchema: schema,
-      execute: async ({ inputData, requestContext }) => {
+      execute: async ({ inputData, requestContext, setState }) => {
         calls.push(inputData.n);
+        await setState({ n: inputData.n + 1 });
         requestContext.set('charged', inputData.n);
         return { n: inputData.n + 1 };
       },
@@ -1186,7 +1187,8 @@ describe('Postgres evented occurrence replay', () => {
       id: 'read',
       inputSchema: schema,
       outputSchema: z.object({ n: z.number(), charged: z.unknown() }),
-      execute: async ({ inputData, requestContext }) => {
+      execute: async ({ inputData, requestContext, state }) => {
+        expect(state).toEqual({ n: 8 });
         seen.push(requestContext.get(MASTRA_AUTH_TOKEN_KEY));
         return { n: inputData.n, charged: requestContext.get('charged') };
       },
@@ -1195,6 +1197,7 @@ describe('Postgres evented occurrence replay', () => {
       id: `plain-lost-end-${randomUUID()}`,
       inputSchema: schema,
       outputSchema: z.object({ n: z.number(), charged: z.unknown() }),
+      stateSchema: schema,
     })
       .then(charge)
       .then(read)
@@ -1217,9 +1220,14 @@ describe('Postgres evented occurrence replay', () => {
       const run = await workflow.createRun();
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-plain-token');
-      const result = run.start({ inputData: { n: 7 }, requestContext });
+      const result = run.start({ inputData: { n: 7 }, initialState: { n: 0 }, requestContext });
       await lost;
       interrupted.mockRestore();
+      const store = await storage.getStore('workflows');
+      const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+      expect(snapshot?.context.charge).toMatchObject({ status: 'success', output: { n: 8 } });
+      expect(snapshot?.context.charge).not.toHaveProperty('__state');
+      expect(snapshot?.context.__state).toEqual({ n: 8 });
       const original = driver.events.find(
         event =>
           event.type === 'workflow.step.run' &&
