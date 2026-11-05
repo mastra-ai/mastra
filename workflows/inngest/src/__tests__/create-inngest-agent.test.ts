@@ -459,13 +459,13 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(customPublish).toHaveBeenCalledTimes(2);
     expect(customPublish).toHaveBeenNthCalledWith(
       1,
-      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
+      `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
       expect.any(Object),
       undefined,
     );
     expect(customPublish).toHaveBeenNthCalledWith(
       2,
-      `agent.control.v2.${JSON.stringify([durableAgent.id, runId])}`,
+      `agent.control.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
       expect.any(Object),
       undefined,
     );
@@ -493,7 +493,9 @@ describe('createInngestAgent observe-replay wiring', () => {
     await routed.clearTopic(streamTopic);
     await routed.clearTopic(workflowTopic);
     expect(customClearTopic).toHaveBeenCalledOnce();
-    expect(customClearTopic).toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
+    expect(customClearTopic).toHaveBeenCalledWith(
+      `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
+    );
     expect(defaultClearTopic).toHaveBeenCalledOnce();
     expect(defaultClearTopic).toHaveBeenCalledWith(workflowTopic);
 
@@ -567,7 +569,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
+      `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
       expect.objectContaining({ type: AgentStreamEventTypes.ERROR, runId }),
       undefined,
     );
@@ -619,7 +621,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
+      `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
       expect.objectContaining({
         type: AgentStreamEventTypes.ERROR,
         runId,
@@ -678,7 +680,7 @@ describe('createInngestAgent observe-replay wiring', () => {
 
     expect(customPublish).toHaveBeenCalledOnce();
     expect(customPublish).toHaveBeenCalledWith(
-      `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`,
+      `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
       expect.objectContaining({
         type: AgentStreamEventTypes.ERROR,
         runId,
@@ -1194,7 +1196,8 @@ describe('InngestAgent parity surface', () => {
     const abortRequests = () =>
       publish.mock.calls.filter(
         ([topic, event]: any[]) =>
-          topic === `agent.control.v2.${JSON.stringify([durableAgent.id, runId])}` &&
+          topic ===
+            `agent.control.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}` &&
           event?.type === AgentControlEventTypes.ABORT_REQUEST,
       );
     const external = new AbortController();
@@ -3233,6 +3236,7 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     '__fork preserves replay, control and abort acknowledgements with id override=%s',
     async override => {
       const transport = new EventEmitterPubSub();
+      const physicalPublish = vi.spyOn(transport, 'publish');
       const cache = new InMemoryServerCache();
       const agent = new Agent({
         id: 'inner-agent',
@@ -3254,6 +3258,12 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
       const topic = AGENT_STREAM_TOPIC('same-run');
       const event = { type: 'fork-marker', data: { text: 'fork-output' } };
       await fork.pubsub.publish(topic, event);
+      const encodedPair = Buffer.from(JSON.stringify([parent.id, 'same-run']), 'utf8').toString('base64url');
+      expect(physicalPublish).toHaveBeenCalledExactlyOnceWith(
+        `agent.stream.v2.${encodedPair}`,
+        expect.objectContaining(event),
+        undefined,
+      );
       expect(await parent.pubsub.getHistory(topic)).toEqual([expect.objectContaining(event)]);
       expect(await sibling.pubsub.getHistory(topic)).toEqual([]);
       const replay: unknown[] = [];
@@ -3277,6 +3287,12 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
         try {
           await fork.pubsub.publish(controlTopic, event);
           await fork.pubsub.flush();
+          const prefix = controlTopic.startsWith('agent.control.') ? 'agent.control.' : 'agent.abort-ack.';
+          expect(physicalPublish).toHaveBeenLastCalledWith(
+            `${prefix}v2.${encodedPair}`,
+            expect.objectContaining(event),
+            undefined,
+          );
           expect(parentEvents).toEqual([expect.objectContaining(event)]);
           expect(siblingEvents).toEqual([]);
         } finally {
@@ -3334,7 +3350,8 @@ describe('thread and run abort (#25156)', () => {
   ) {
     return publish.mock.calls.filter(
       ([topic, event]: any[]) =>
-        topic === `agent.control.v2.${JSON.stringify([durableAgent.id, runId])}` &&
+        topic ===
+          `agent.control.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}` &&
         event?.type === AgentControlEventTypes.ABORT_REQUEST &&
         event.runId === runId,
     );
