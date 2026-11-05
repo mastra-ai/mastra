@@ -18,10 +18,11 @@ await response.processDataStream({
 });
 
 // After a dropped connection:
-await agent.observe({ runId, offset });
+const resumed = await agent.observe({ runId, offset });
+await resumed.processDataStream({ onChunk: async chunk => console.log(chunk) });
 ```
 
-An `abort` chunk shares its index with the `finish` chunk that follows it. If the last chunk received was `abort`, pass its `index` to receive both again.
+An `abort` chunk shares its index with the `finish` chunk that follows it. If the last chunk received was `abort`, pass its `index` to receive both again. Chunks built locally from the stream, such as structured-output `object` and `object-result` chunks, carry no `index` and aren't in the run log, so an offset can only resume from the last chunk that has one.
 
 Resuming a finished plain (non-durable) agent run past its last chunk over HTTP `/observe` now closes the stream right away instead of waiting for the idle timeout.
 

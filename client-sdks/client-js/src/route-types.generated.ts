@@ -5419,7 +5419,7 @@ export type PostAgentsAgentIdObserve_PathParams = GetAgentsAgentId_PathParams;
 export type PostAgentsAgentIdObserve_Body = {
   /** The run ID to observe/reconnect to */
   runId: string;
-  /** Resume from this event index (0-based). If omitted, replays all events. */
+  /** Run-log position to resume from. Every /observe frame, and every /stream frame from a durable or evented agent, carries an `index`; pass the last received index + 1. An abort frame shares its index with the finish frame after it, so if the last frame received was an abort, pass its index. If omitted, replays all frames. */
   offset?: number | undefined;
 };
 

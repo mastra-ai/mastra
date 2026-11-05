@@ -3423,7 +3423,7 @@ export class Agent extends BaseResource {
    *
    * @example
    * ```typescript
-   * const agent = client.agents('my-agent');
+   * const agent = client.getAgent('my-agent');
    * let offset = 0;
    * const trackOffset = async (chunk) => {
    *   if (chunk.index === undefined) return;
