@@ -2,7 +2,9 @@
 '@mastra/factory': minor
 ---
 
-Added a `tools` option to `MastraFactory`, so every session on a Factory can use your own tools, including MCP tools and your Mastra Connect connections. For example, give sessions in web chat, Slack and on work items the tools of your project's Linear connection:
+Factory sessions now get your Mastra Connect tools automatically. With Platform credentials and `MASTRA_PROJECT_ID`, which Platform deploys already have, every session in web chat, Slack and on work items can use the tools of each provider connected in your Platform project. Connect Linear, and a Slack thread can ask about its issues. Delete and archive tools are left out, because sessions approve tools automatically by default. Every user and organization on the Factory shares these connections.
+
+Added a `tools` option to choose session tools yourself, such as an MCP server's tools or a narrower Connect selection. It replaces the default, and `tools: {}` turns it off:
 
 ```ts
 import { tools as connectTools } from '@mastra/connect';
@@ -14,4 +16,4 @@ const factory = new MastraFactory({
 });
 ```
 
-Pass an MCP server's tools (`await mcpClient.listTools()`) the same way, or a function that picks tools for each run from its request context. All sessions and users on the Factory share the credentials built into these tools. A tool named like one Factory already gives the session is skipped with a warning, so Factory's own tools keep working. Factory no longer loads MCP servers from the host's `mcp.json` files, so the `tools` option is the one place a Factory's MCP tools come from.
+A tool named like one Factory already gives the session is skipped with a warning, so Factory's own tools keep working. Factory no longer loads MCP servers from the host's `mcp.json` files, so `tools` is the one place a Factory's MCP tools come from.

@@ -1095,9 +1095,13 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
-### Your own tools in sessions
+### Mastra Connect and your own tools in sessions
 
-`tools` gives every Factory session more tools, such as an MCP server's or those of your [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) connections. Pass a record of tools, or a function that returns them for each run from its `requestContext`:
+With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the tools of each provider connected in the Platform project through [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect). Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Connect Linear in the project, and a Slack thread, a web chat or a work item can ask about its issues.
+
+Every user and organization on the Factory shares the project's connections. Sessions approve tools automatically by default, so delete and archive tools are left out. When the Platform can't list the connections, the run goes on without them and Factory logs why.
+
+`tools` replaces that default with the tools you choose: a record of tools, such as an MCP server's, or a function that returns them for each run from its `requestContext`. `tools: {}` offers none.
 
 ```typescript
 import { tools as connectTools } from '@mastra/connect';
@@ -1109,7 +1113,7 @@ const factory = new MastraFactory({
 });
 ```
 
-Credentials built into these tools are shared by every user of the Factory. A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools throws, the run fails with that error. Sessions run these tools without asking while automatic approval is on, the default; when a person turns it off, they follow the `mcp` permission category. Factory doesn't read MCP servers from the host's `mcp.json` files: `tools` is the one place a Factory's MCP tools come from.
+A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools you pass throws, the run fails with that error. Sessions run these tools without asking while automatic approval is on; when a person turns it off, they follow the `mcp` permission category. Factory doesn't read MCP servers from the host's `mcp.json` files: `tools` is the one place a Factory's MCP tools come from.
 
 ### Voice input
 

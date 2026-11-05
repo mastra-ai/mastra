@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -1484,6 +1485,90 @@ describe('MastraFactory.prepare', () => {
     it("never loads the host process's own MCP servers", async () => {
       const config = await prepareFactory({ storage: fakeStorage() });
       expect(config.disableMcp).toBe(true);
+    });
+
+    describe("from the Platform project's Mastra Connect connections", () => {
+      afterEach(() => {
+        vi.unstubAllEnvs();
+      });
+
+      async function servePlatform({ listing }: { listing: 'linear' | 'down' }) {
+        const requests: Array<{ method?: string; url?: string; authorization?: string }> = [];
+        const httpServer = createServer((req, res) => {
+          requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization });
+          const json = (body: unknown) =>
+            res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+          if (req.url?.startsWith('/v2/connections?providerKey=')) {
+            json({ connections: [] });
+          } else if (req.url?.startsWith('/v2/projects/')) {
+            if (listing === 'down') res.writeHead(503).end();
+            else json({ connections: [{ id: 'conn-linear', integrationId: 'linear', status: 'active' }] });
+          } else if (req.url === '/v2/integrations') {
+            json({ integrations: [] });
+          } else if (req.method === 'POST' && req.url === '/v2/connections/conn-linear/proxy/graphql') {
+            json({
+              data: {
+                teams: { nodes: [{ id: 'team-1', name: 'Factory', key: 'FACT' }], pageInfo: { hasNextPage: false } },
+              },
+            });
+          } else {
+            res.writeHead(404).end();
+          }
+        });
+        httpServer.listen(0, '127.0.0.1');
+        await once(httpServer, 'listening');
+        onTestFinished(async () => {
+          httpServer.close();
+          await once(httpServer, 'close');
+        });
+        const address = httpServer.address();
+        if (!address || typeof address === 'string') throw new Error('The Platform stand-in has no TCP port.');
+        return { url: `http://127.0.0.1:${address.port}`, requests };
+      }
+
+      function stubPlatform(url: string, projectId: string) {
+        vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-jwt');
+        vi.stubEnv('MASTRA_PROJECT_ID', projectId);
+        vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', url);
+      }
+
+      it('gives every session the Linear tools without delete or archive ones, acting with the deploy token', async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-linear');
+        const config = await prepareFactory({ storage: fakeStorage() });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools)).toEqual(expect.arrayContaining(['linear_list_teams', 'linear_list_issues']));
+        expect(Object.keys(tools).filter(name => /_(delete|archive)_/.test(name))).toEqual([]);
+        const teams = await tools.linear_list_teams.execute({}, { requestContext: new RequestContext() });
+        expect(teams).toEqual({ items: [{ id: 'team-1', name: 'Factory', key: 'FACT' }] });
+        const proxied = platform.requests.find(request => request.url === '/v2/connections/conn-linear/proxy/graphql');
+        expect(proxied?.authorization).toBe('Bearer platform-jwt');
+      });
+
+      it("keeps the run going without Connect tools when the Platform can't list the connections", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        onTestFinished(() => warn.mockRestore());
+        const platform = await servePlatform({ listing: 'down' });
+        stubPlatform(platform.url, 'project-down');
+        const config = await prepareFactory({ storage: fakeStorage() });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
+      });
+
+      it("offers the host's own tools instead of the project's connections", async () => {
+        const platform = await servePlatform({ listing: 'linear' });
+        stubPlatform(platform.url, 'project-host-tools');
+        const config = await prepareFactory({ storage: fakeStorage(), tools: {} });
+
+        const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+        expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
+      });
     });
   });
 

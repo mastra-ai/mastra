@@ -23,6 +23,7 @@ import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import { tools as connectTools } from '@mastra/connect';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -285,6 +286,10 @@ export interface MastraFactoryConfig {
    * user of the instance. Pass a function to resolve tools per run instead, for
    * example to use the run's org credentials. A name Factory already gives the
    * session keeps Factory's tool; the configured one is skipped with a warning.
+   *
+   * Defaults, with Platform credentials and `MASTRA_PROJECT_ID`, to the Mastra
+   * Connect tools of every provider connected in the Platform project, minus
+   * delete and archive tools. Pass `{}` to offer none.
    */
   tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
@@ -436,6 +441,28 @@ async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
   }
   const { PlatformFactorySandbox } = await import('@mastra/platform-workspace');
   return new PlatformFactorySandbox();
+}
+
+function platformConnectTools(): FactoryTools | undefined {
+  if (!hasPlatformCredentials()) return undefined;
+  if (!process.env.MASTRA_PROJECT_ID?.trim()) {
+    console.warn(
+      'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so sessions get no Mastra Connect tools.',
+    );
+    return undefined;
+  }
+  // Sessions auto-approve tools by default, so destructive Connect tools stay out.
+  const resolve = connectTools({ disallowTools: ['*_delete_*', '*_archive_*'] });
+  return async ({ requestContext }) => {
+    try {
+      return await resolve({ requestContext });
+    } catch (error) {
+      console.warn(
+        `MastraFactory: Mastra Connect tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return {};
+    }
+  };
 }
 
 /**
@@ -1478,6 +1505,7 @@ export class MastraFactory {
           ]
         : [],
     );
+    const sessionTools = this.#config.tools ?? platformConnectTools();
     const warnedConfiguredToolClashes = new Set<string>();
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
@@ -1841,10 +1869,9 @@ export class MastraFactory {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
             }
           }
-          const configuredTools = this.#config.tools;
-          if (configuredTools) {
+          if (sessionTools) {
             const contributed =
-              typeof configuredTools === 'function' ? await configuredTools({ requestContext }) : configuredTools;
+              typeof sessionTools === 'function' ? await sessionTools({ requestContext }) : sessionTools;
             for (const [name, tool] of Object.entries(contributed)) {
               const owner = toolOwners.get(name);
               if (!owner) {
