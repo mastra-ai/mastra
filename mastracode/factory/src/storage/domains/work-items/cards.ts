@@ -154,9 +154,22 @@ export class Cards {
         sources.set(source.work_item_id, group);
       }
     }
-    return boards.map(board =>
-      joinCard(board, items.get(board.work_item_id) ?? null, sources.get(board.work_item_id) ?? []),
-    );
+    const deletedMidRead = await this.#deletedBoardIds(boards.filter(board => !items.has(board.work_item_id)));
+    return boards
+      .filter(board => !deletedMidRead.has(board.id))
+      .map(board => joinCard(board, items.get(board.work_item_id) ?? null, sources.get(board.work_item_id) ?? []));
+  }
+
+  async #deletedBoardIds(boards: readonly BoardItemDbRecord[]): Promise<Set<string>> {
+    const deleted = new Set(boards.map(board => board.id));
+    const ids = [...deleted];
+    for (let index = 0; index < ids.length; index += ID_BATCH) {
+      const page = await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, {
+        id: { in: ids.slice(index, index + ID_BATCH) },
+      });
+      for (const board of page) deleted.delete(board.id);
+    }
+    return deleted;
   }
 
   async findOne(where: CollectionWhere): Promise<WorkItemDbRow | null> {
@@ -164,7 +177,7 @@ export class Cards {
     const boardWhere = await this.#where(where);
     if (!boardWhere) return null;
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, boardWhere);
-    return board ? (await this.#join([board]))[0]! : null;
+    return board ? ((await this.#join([board]))[0] ?? null) : null;
   }
 
   async findMany(where: CollectionWhere, options?: CollectionListOptions): Promise<WorkItemDbRow[]> {
@@ -288,7 +301,7 @@ export class Cards {
           : {}),
       };
     });
-    return board ? (await this.#join([board]))[0]! : null;
+    return board ? ((await this.#join([board]))[0] ?? null) : null;
   }
 
   async updateMany(where: CollectionWhere, patch: Partial<WorkItemDbRow>): Promise<number> {

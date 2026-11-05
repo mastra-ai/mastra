@@ -5,9 +5,10 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
-describe.each([false, true])('resume signals (durable: %s)', durable => {
+describe.each([false, true])('resume signals (durable execution: %s)', durable => {
   describe.each(['resumeStream', 'resumeStreamUntilIdle'] as const)('%s signal exclusions', method => {
     beforeEach(() => agentThreadStreamRuntime.resetForTests());
 
@@ -45,7 +46,6 @@ describe.each([false, true])('resume signals (durable: %s)', durable => {
           id: 'resume-exclusions',
           name: 'resume-exclusions',
           instructions: 'test',
-          durable,
           model,
           tools: {
             approval: createTool({
@@ -69,7 +69,11 @@ describe.each([false, true])('resume signals (durable: %s)', durable => {
             },
           ],
         });
-        const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        const mastra = new Mastra({
+          agents: { agent: durable ? createDurableAgent({ agent }) : agent },
+          storage: new InMemoryStore(),
+          logger: false,
+        });
         await mastra.startEventEngine();
         onTestFinished(() => mastra.stopEventEngine());
         const registered = mastra.getAgent('agent');

@@ -24,7 +24,7 @@ export const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLA
 // Every path resolves to the id-bearing route so tests can assert real hrefs
 // where they matter and simply render everywhere else.
 //
-// Typed via assertion (not annotation) on purpose: CI's Changed Test Gate
+// Typed via assertion (not annotation) on purpose: the former CI Changed Test Gate
 // typechecks this file against the base branch, whose `LinkComponentPaths`
 // may not match the head branch's exactly. The assertion tolerates extra
 // keys so the stub can carry entries for both versions.
