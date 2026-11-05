@@ -110,125 +110,124 @@ class Node {
   }
 }
 
+const skipRedis = !process.env.REDIS_URL && !process.env.CI && process.env.SKIP_REDIS_TESTS === '1';
+
 for (const engine of ['durable', 'evented'] as const) {
-  describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_REDIS_TESTS === '1')(
-    `observe() across two Mastra processes (${engine}, LibSQL file + Redis)`,
-    () => {
-      let llm: LLMock;
-      let producer: Node;
-      let observer: Node;
-      let cleanupStorage: () => Promise<void>;
+  describe.skipIf(skipRedis)(`observe() across two Mastra processes (${engine}, LibSQL file + Redis)`, () => {
+    let llm: LLMock;
+    let producer: Node;
+    let observer: Node;
+    let cleanupStorage: () => Promise<void>;
 
-      beforeAll(async () => {
-        llm = new LLMock({ port: 0 });
-        await llm.start();
-      });
+    beforeAll(async () => {
+      llm = new LLMock({ port: 0 });
+      await llm.start();
+    });
 
-      afterAll(async () => {
-        await llm.stop();
-      });
+    afterAll(async () => {
+      await llm.stop();
+    });
 
-      beforeEach(async () => {
-        await flushRedis();
-        const storage = await makeStorageDir('mastra-observe-');
-        cleanupStorage = storage.cleanup;
-        const env = {
-          REDIS_URL,
-          KEY_PREFIX: `observe-${randomUUID()}`,
-          STORAGE_URL: storage.storageUrl,
-          LLM_URL: llm.url.replace(/\/+$/, ''),
-          ENGINE: engine,
-          PREWRAPPED_PUBSUB: engine === 'evented' ? '1' : '0',
-        };
-        const start = (nodeId: string) =>
-          new Node(
-            spawn(TSX_BIN, [ENTRY], {
-              cwd: PACKAGE_DIR,
-              env: { ...process.env, ...env, NODE_ID: nodeId },
-              stdio: ['pipe', 'pipe', 'pipe'],
-            }),
-          );
-        producer = start('producer');
-        observer = start('observer');
-        await Promise.all([producer.next(e => e.type === 'ready'), observer.next(e => e.type === 'ready')]);
-      });
-
-      afterEach(async () => {
-        llm.clearFixtures?.();
-        llm.reset?.();
-        await Promise.all([producer?.stop(), observer?.stop()]);
-        await cleanupStorage?.();
-      });
-
-      it('closes an observation of a run no process knows', async () => {
-        expect(await observer.observeToClose('unknown', `run-${randomUUID()}`)).toEqual([]);
-      });
-
-      it('replays a run the other process finished, then closes', async () => {
-        llm.on({ endpoint: 'chat' }, { content: 'Finished elsewhere.' });
-        producer.send({ cmd: 'stream', prompt: 'Go' });
-        const { runId } = await producer.next(e => e.type === 'stream-done');
-
-        const types = await observer.observeToClose('finished', runId);
-
-        expect(observer.textOf('finished')).toBe('Finished elsewhere.');
-        expect(types.filter(type => type === 'text-delta')).toHaveLength(1);
-        expect(types.filter(type => type === 'finish')).toHaveLength(1);
-        expect(types.at(-1)).toBe('finish');
-      });
-
-      it('follows a live run owned by the other process and closes on its finish', async () => {
-        llm.on(
-          { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },
-          { toolCalls: [{ id: 'call_gate', name: 'wait_gate', arguments: JSON.stringify({ step: 'one' }) }] },
+    beforeEach(async () => {
+      await flushRedis();
+      const storage = await makeStorageDir('mastra-observe-');
+      cleanupStorage = storage.cleanup;
+      const env = {
+        REDIS_URL,
+        KEY_PREFIX: `observe-${randomUUID()}`,
+        STORAGE_URL: storage.storageUrl,
+        LLM_URL: llm.url.replace(/\/+$/, ''),
+        ENGINE: engine,
+        PREWRAPPED_PUBSUB: engine === 'evented' ? '1' : '0',
+      };
+      const start = (nodeId: string) =>
+        new Node(
+          spawn(TSX_BIN, [ENTRY], {
+            cwd: PACKAGE_DIR,
+            env: { ...process.env, ...env, NODE_ID: nodeId },
+            stdio: ['pipe', 'pipe', 'pipe'],
+          }),
         );
-        llm.on(
-          { endpoint: 'chat', predicate: (req: any) => req.messages.some((m: any) => m.role === 'tool') },
-          { content: 'Gate released.' },
-        );
-        producer.send({ cmd: 'stream', prompt: 'Wait for the gate' });
-        const { runId } = await producer.next(e => e.type === 'run');
-        await producer.next(e => e.type === 'tool-started');
+      producer = start('producer');
+      observer = start('observer');
+      await Promise.all([producer.next(e => e.type === 'ready'), observer.next(e => e.type === 'ready')]);
+    });
 
-        observer.send({ cmd: 'observe', id: 'live', runId });
-        await observer.next(e => e.id === 'live' && e.type === 'chunk' && e.chunk === 'tool-call');
-        // Run is parked in a tool with no publishes pending: the observation must stay attached.
-        expect(observer.isClosed('live')).toBe(false);
+    afterEach(async () => {
+      llm.clearFixtures?.();
+      llm.reset?.();
+      await Promise.all([producer?.stop(), observer?.stop()]);
+      await cleanupStorage?.();
+    });
 
-        producer.send({ cmd: 'release' });
-        await producer.next(e => e.type === 'stream-done');
-        await observer.next(e => e.id === 'live' && e.type === 'closed', CLOSE_WITHIN_MS);
+    it('closes an observation of a run no process knows', async () => {
+      expect(await observer.observeToClose('unknown', `run-${randomUUID()}`)).toEqual([]);
+    });
 
-        expect(observer.textOf('live')).toBe('Gate released.');
-        expect(observer.observed('live').at(-1)).toBe('finish');
-      });
+    it('replays a run the other process finished, then closes', async () => {
+      llm.on({ endpoint: 'chat' }, { content: 'Finished elsewhere.' });
+      producer.send({ cmd: 'stream', prompt: 'Go' });
+      const { runId } = await producer.next(e => e.type === 'stream-done');
 
-      it('stays attached across an approval suspend and follows the resume to its finish', async () => {
-        llm.on(
-          { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },
-          { toolCalls: [{ id: 'call_approve', name: 'lookup_status', arguments: JSON.stringify({ query: 'alpha' }) }] },
-        );
-        llm.on(
-          { endpoint: 'chat', predicate: (req: any) => req.messages.some((m: any) => m.role === 'tool') },
-          { content: 'Approved: OK:alpha.' },
-        );
-        producer.send({ cmd: 'stream', prompt: 'Look up alpha', requireToolApproval: true });
-        const { runId, toolCallId } = await producer.next(e => e.type === 'approval');
+      const types = await observer.observeToClose('finished', runId);
 
-        observer.send({ cmd: 'observe', id: 'suspended', runId });
-        await observer.next(e => e.id === 'suspended' && e.type === 'chunk' && e.chunk === 'tool-call-approval');
-        expect(observer.isClosed('suspended')).toBe(false);
+      expect(observer.textOf('finished')).toBe('Finished elsewhere.');
+      expect(types.filter(type => type === 'text-delta')).toHaveLength(1);
+      expect(types.filter(type => type === 'finish')).toHaveLength(1);
+      expect(types.at(-1)).toBe('finish');
+    });
 
-        producer.send({ cmd: 'approve', runId, toolCallId });
-        await producer.next(e => e.type === 'resume-done');
-        await observer.next(e => e.id === 'suspended' && e.type === 'closed', CLOSE_WITHIN_MS);
+    it('follows a live run owned by the other process and closes on its finish', async () => {
+      llm.on(
+        { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },
+        { toolCalls: [{ id: 'call_gate', name: 'wait_gate', arguments: JSON.stringify({ step: 'one' }) }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: any) => req.messages.some((m: any) => m.role === 'tool') },
+        { content: 'Gate released.' },
+      );
+      producer.send({ cmd: 'stream', prompt: 'Wait for the gate' });
+      const { runId } = await producer.next(e => e.type === 'run');
+      await producer.next(e => e.type === 'tool-started');
 
-        expect(producer.events.filter(e => e.type === 'tool-executed')).toHaveLength(1);
-        expect(observer.textOf('suspended')).toBe('Approved: OK:alpha.');
-        expect(observer.observed('suspended').at(-1)).toBe('finish');
-      });
-    },
-  );
+      observer.send({ cmd: 'observe', id: 'live', runId });
+      await observer.next(e => e.id === 'live' && e.type === 'chunk' && e.chunk === 'tool-call');
+      // Run is parked in a tool with no publishes pending: the observation must stay attached.
+      expect(observer.isClosed('live')).toBe(false);
+
+      producer.send({ cmd: 'release' });
+      await producer.next(e => e.type === 'stream-done');
+      await observer.next(e => e.id === 'live' && e.type === 'closed', CLOSE_WITHIN_MS);
+
+      expect(observer.textOf('live')).toBe('Gate released.');
+      expect(observer.observed('live').at(-1)).toBe('finish');
+    });
+
+    it('stays attached across an approval suspend and follows the resume to its finish', async () => {
+      llm.on(
+        { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },
+        { toolCalls: [{ id: 'call_approve', name: 'lookup_status', arguments: JSON.stringify({ query: 'alpha' }) }] },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: any) => req.messages.some((m: any) => m.role === 'tool') },
+        { content: 'Approved: OK:alpha.' },
+      );
+      producer.send({ cmd: 'stream', prompt: 'Look up alpha', requireToolApproval: true });
+      const { runId, toolCallId } = await producer.next(e => e.type === 'approval');
+
+      observer.send({ cmd: 'observe', id: 'suspended', runId });
+      await observer.next(e => e.id === 'suspended' && e.type === 'chunk' && e.chunk === 'tool-call-approval');
+      expect(observer.isClosed('suspended')).toBe(false);
+
+      producer.send({ cmd: 'approve', runId, toolCallId });
+      await producer.next(e => e.type === 'resume-done');
+      await observer.next(e => e.id === 'suspended' && e.type === 'closed', CLOSE_WITHIN_MS);
+
+      expect(producer.events.filter(e => e.type === 'tool-executed')).toHaveLength(1);
+      expect(observer.textOf('suspended')).toBe('Approved: OK:alpha.');
+      expect(observer.observed('suspended').at(-1)).toBe('finish');
+    });
+  });
 }
 
 /**
@@ -299,133 +298,140 @@ const within = <T>(promise: Promise<T>, ms: number, what: string) =>
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${what} timed out`)), ms)),
   ]);
 
-describe.each(['durable', 'evented'] as const)('observe by index across an API restart (%s, Redis)', engine => {
-  let llm: LLMock;
-  let redis: ReturnType<typeof createClient>;
-  const processes: ManagedProcess[] = [];
-  let cleanupStorage: (() => Promise<void>) | undefined;
+for (const engine of ['durable', 'evented'] as const) {
+  describe.skipIf(skipRedis)(`observe by index across an API restart (${engine}, Redis)`, () => {
+    let llm: LLMock;
+    let redis: ReturnType<typeof createClient>;
+    const processes: ManagedProcess[] = [];
+    let cleanupStorage: (() => Promise<void>) | undefined;
 
-  beforeAll(async () => {
-    llm = new LLMock({ port: 0 });
-    await llm.start();
-    redis = createClient({ url: REDIS_URL });
-    await redis.connect();
-  });
+    beforeAll(async () => {
+      llm = new LLMock({ port: 0 });
+      await llm.start();
+      redis = createClient({ url: REDIS_URL });
+      await redis.connect();
+    });
 
-  afterAll(async () => {
-    await llm.stop();
-    await redis.quit().catch(() => {});
-  });
+    afterAll(async () => {
+      await llm.stop();
+      await redis.quit().catch(() => {});
+    });
 
-  afterEach(async () => {
-    await Promise.all(processes.splice(0).map(child => killProcess(child, 'SIGKILL')));
-    await cleanupStorage?.();
-    llm.reset();
-  });
+    afterEach(async () => {
+      await Promise.all(processes.splice(0).map(child => killProcess(child, 'SIGKILL')));
+      await cleanupStorage?.();
+      llm.reset();
+    });
 
-  it('resumes from the last received index + 1 on a new API process while the worker keeps running', async () => {
-    await flushRedis();
-    const storage = await makeStorageDir('mastra-observe-index-restart-');
-    cleanupStorage = storage.cleanup;
-    const keyPrefix = `observe-index-${randomUUID()}`;
-    const env = {
-      REDIS_URL,
-      KEY_PREFIX: keyPrefix,
-      STORAGE_URL: storage.storageUrl,
-      LLM_URL: llm.url.replace(/\/+$/, ''),
-      ENGINE: engine,
-      // Plain node with the tsx loader, so a kill reaches the server itself.
-      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import tsx`,
-    };
-    const launch = async (role: 'api' | 'worker', label: string) => {
-      const port = await getFreePort();
-      const child = spawnFixture({
-        entry: ENTRY,
-        label,
-        binary: process.execPath,
-        env: { ...env, ROLE: role, PORT: String(port), MASTRA_WORKERS: role === 'worker' ? 'orchestration' : 'false' },
-      });
-      processes.push(child);
-      await waitForLine(child, 'ready', 60_000);
-      const url = `http://localhost:${port}`;
-      if (role === 'api') await waitForServerHttp(url);
-      return { child, url };
-    };
+    it('resumes from the last received index + 1 on a new API process while the worker keeps running', async () => {
+      await flushRedis();
+      const storage = await makeStorageDir('mastra-observe-index-restart-');
+      cleanupStorage = storage.cleanup;
+      const keyPrefix = `observe-index-${randomUUID()}`;
+      const env = {
+        REDIS_URL,
+        KEY_PREFIX: keyPrefix,
+        STORAGE_URL: storage.storageUrl,
+        LLM_URL: llm.url.replace(/\/+$/, ''),
+        ENGINE: engine,
+        // Plain node with the tsx loader, so a kill reaches the server itself.
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import tsx`,
+      };
+      const launch = async (role: 'api' | 'worker', label: string) => {
+        const port = await getFreePort();
+        const child = spawnFixture({
+          entry: ENTRY,
+          label,
+          binary: process.execPath,
+          env: {
+            ...env,
+            ROLE: role,
+            PORT: String(port),
+            MASTRA_WORKERS: role === 'worker' ? 'orchestration' : 'false',
+          },
+        });
+        processes.push(child);
+        await waitForLine(child, 'ready', 60_000);
+        const url = `http://localhost:${port}`;
+        if (role === 'api') await waitForServerHttp(url);
+        return { child, url };
+      };
 
-    const toolResults = (req: any) => req.messages.filter((m: any) => m.role === 'tool').length;
-    llm.on(
-      { endpoint: 'chat', predicate: (req: any) => toolResults(req) === 0 },
-      { toolCalls: [{ id: 'call_lookup', name: 'lookup_status', arguments: JSON.stringify({ query: '1' }) }] },
-    );
-    llm.on(
-      { endpoint: 'chat', predicate: (req: any) => toolResults(req) === 1 },
-      { toolCalls: [{ id: 'call_gate', name: 'wait_gate', arguments: JSON.stringify({ step: 'gate' }) }] },
-    );
-    llm.on({ endpoint: 'chat', predicate: (req: any) => toolResults(req) === 2 }, { content: 'Gate released.' });
-
-    const worker = await launch('worker', `${engine}-worker`);
-    const api = await launch('api', `${engine}-api-1`);
-    try {
-      const runId = randomUUID();
-      const streamed = await open(api.url, '/api/agents/observerAgent/stream', {
-        messages: 'Look up 1, then wait for the gate.',
-        runId,
-        maxSteps: 4,
-      });
-      await waitForLine(engine === 'evented' ? worker.child : api.child, '"type":"tool-started"', 30_000);
-      // Let the gate's tool-call frame reach the client before the API dies.
-      await within(
-        (async () => {
-          while (!streamed.frames.some(f => f.type === 'tool-call' && f.payload?.toolName === 'wait_gate')) {
-            await new Promise(r => setTimeout(r, 25));
-          }
-        })(),
-        10_000,
-        'gate tool-call frame on /stream',
+      const toolResults = (req: any) => req.messages.filter((m: any) => m.role === 'tool').length;
+      llm.on(
+        { endpoint: 'chat', predicate: (req: any) => toolResults(req) === 0 },
+        { toolCalls: [{ id: 'call_lookup', name: 'lookup_status', arguments: JSON.stringify({ query: '1' }) }] },
       );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: any) => toolResults(req) === 1 },
+        { toolCalls: [{ id: 'call_gate', name: 'wait_gate', arguments: JSON.stringify({ step: 'gate' }) }] },
+      );
+      llm.on({ endpoint: 'chat', predicate: (req: any) => toolResults(req) === 2 }, { content: 'Gate released.' });
 
-      if (engine === 'evented') {
-        // The orchestration worker executes evented runs, so the API can die mid-run.
-        await killProcess(api.child, 'SIGKILL');
-      } else {
-        // A durable agent executes in the API process that started it; that
-        // process stays up, and the client reconnects to a freshly booted one.
-        streamed.drop();
+      const worker = await launch('worker', `${engine}-worker`);
+      const api = await launch('api', `${engine}-api-1`);
+      try {
+        const runId = randomUUID();
+        const streamed = await open(api.url, '/api/agents/observerAgent/stream', {
+          messages: 'Look up 1, then wait for the gate.',
+          runId,
+          maxSteps: 4,
+        });
+        await waitForLine(engine === 'evented' ? worker.child : api.child, '"type":"tool-started"', 30_000);
+        // Let the gate's tool-call frame reach the client before the API dies.
+        await within(
+          (async () => {
+            while (!streamed.frames.some(f => f.type === 'tool-call' && f.payload?.toolName === 'wait_gate')) {
+              await new Promise(r => setTimeout(r, 25));
+            }
+          })(),
+          10_000,
+          'gate tool-call frame on /stream',
+        );
+
+        if (engine === 'evented') {
+          // The orchestration worker executes evented runs, so the API can die mid-run.
+          await killProcess(api.child, 'SIGKILL');
+        } else {
+          // A durable agent executes in the API process that started it; that
+          // process stays up, and the client reconnects to a freshly booted one.
+          streamed.drop();
+        }
+        await within(streamed.done, 10_000, '/stream closing');
+        const received = streamed.frames;
+        expect(received.every(f => typeof f.index === 'number')).toBe(true);
+        expect(received.some(f => f.type === 'finish')).toBe(false);
+
+        const restarted = await launch('api', `${engine}-api-2`);
+        const resumed = await open(restarted.url, '/api/agents/observerAgent/observe', {
+          runId,
+          offset: received.at(-1)!.index! + 1,
+        });
+        // The run is parked in the gate: the resumed observation is attached and waiting.
+        await new Promise(r => setTimeout(r, 500));
+        expect(resumed.frames.filter(f => f.type === 'text-delta')).toEqual([]);
+
+        await redis.set(`${keyPrefix}:gate`, '1');
+        await within(resumed.done, 30_000, 'resumed /observe closing on finish');
+        expect(resumed.frames.at(-1)?.type).toBe('finish');
+
+        // A finished durable run is only authorized by the process that executed
+        // it (a fresh API process answers 404), so replay it there.
+        const replayUrl = engine === 'evented' ? restarted.url : api.url;
+        const full = await open(replayUrl, '/api/agents/observerAgent/observe', { runId, offset: 0 });
+        await within(full.done, 15_000, 'full /observe replay');
+        expect([...received, ...resumed.frames]).toEqual(full.frames);
+        expect(
+          full.frames
+            .filter(f => f.type === 'text-delta')
+            .map(f => f.payload?.text)
+            .join(''),
+        ).toBe('Gate released.');
+      } catch (error) {
+        throw new Error(processes.map(child => `[${child.label}]\n${child.stdout}\n${child.stderr}`).join('\n'), {
+          cause: error,
+        });
       }
-      await within(streamed.done, 10_000, '/stream closing');
-      const received = streamed.frames;
-      expect(received.every(f => typeof f.index === 'number')).toBe(true);
-      expect(received.some(f => f.type === 'finish')).toBe(false);
-
-      const restarted = await launch('api', `${engine}-api-2`);
-      const resumed = await open(restarted.url, '/api/agents/observerAgent/observe', {
-        runId,
-        offset: received.at(-1)!.index! + 1,
-      });
-      // The run is parked in the gate: the resumed observation is attached and waiting.
-      await new Promise(r => setTimeout(r, 500));
-      expect(resumed.frames.filter(f => f.type === 'text-delta')).toEqual([]);
-
-      await redis.set(`${keyPrefix}:gate`, '1');
-      await within(resumed.done, 30_000, 'resumed /observe closing on finish');
-      expect(resumed.frames.at(-1)?.type).toBe('finish');
-
-      // A finished durable run is only authorized by the process that executed
-      // it (a fresh API process answers 404), so replay it there.
-      const replayUrl = engine === 'evented' ? restarted.url : api.url;
-      const full = await open(replayUrl, '/api/agents/observerAgent/observe', { runId, offset: 0 });
-      await within(full.done, 15_000, 'full /observe replay');
-      expect([...received, ...resumed.frames]).toEqual(full.frames);
-      expect(
-        full.frames
-          .filter(f => f.type === 'text-delta')
-          .map(f => f.payload?.text)
-          .join(''),
-      ).toBe('Gate released.');
-    } catch (error) {
-      throw new Error(processes.map(child => `[${child.label}]\n${child.stdout}\n${child.stderr}`).join('\n'), {
-        cause: error,
-      });
-    }
-  }, 120_000);
-});
+    }, 120_000);
+  });
+}
