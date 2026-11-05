@@ -92,7 +92,7 @@ export async function renderWithHost<Input>(
     modelContexts.push(params);
     return {};
   };
-  // Notifications outside the MCP Apps spec, e.g. the dashboard's pin requests.
+  // Notifications outside the MCP Apps spec; apps should send none.
   const notifications: Array<{ method: string; params?: unknown }> = [];
   bridge.fallbackNotificationHandler = async ({ method, params }) => {
     notifications.push({ method, params });

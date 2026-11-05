@@ -6,11 +6,12 @@ import { defineMcpAppResource } from './define-mcp-app-resource';
 
 export { dashboardRendererInputSchema };
 export {
+  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
-  DASHBOARD_WIDGET_PIN_NOTIFICATION,
-  dashboardWidgetPinNotificationParamsSchema,
+  dashboardPinnedWidgetSchema,
+  dashboardPinnedWidgetsSchema,
 } from './apps/dashboard-renderer/pin';
-export type { DashboardWidgetPinNotificationParams } from './apps/dashboard-renderer/pin';
+export type { DashboardPinnedWidget } from './apps/dashboard-renderer/pin';
 export {
   DASHBOARD_DATA_TOOL_NAME,
   DASHBOARD_DATA_OPERATIONS,
