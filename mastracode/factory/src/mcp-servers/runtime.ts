@@ -124,12 +124,12 @@ export class McpServersRuntime {
     });
     try {
       const { definitions, errorDetails } = await client.listToolDefinitionsWithErrors();
-      const failure = errorDetails[record.slug];
+      // Slugs and tool names are user/server supplied: `constructor` must not find `Object.prototype`.
+      const failure = Object.hasOwn(errorDetails, record.slug) ? errorDetails[record.slug] : undefined;
       if (failure) return classifyFailure(record, failure, policyError);
       // A name longer than a tool selection may carry could never be chosen.
-      const tools = Object.values(definitions[record.slug] ?? {}).filter(
-        tool => tool.name.length <= MCP_SERVER_LIMITS.toolNameLength,
-      );
+      const offered = Object.hasOwn(definitions, record.slug) ? definitions[record.slug] : undefined;
+      const tools = Object.values(offered ?? {}).filter(tool => tool.name.length <= MCP_SERVER_LIMITS.toolNameLength);
       if (tools.length > MCP_SERVER_LIMITS.tools) {
         return {
           status: 'error',
@@ -174,20 +174,21 @@ export class McpServersRuntime {
       active.add(record.id);
       const client = this.#clientFor(record);
       for (const toolName of record.selectedTools) {
-        const entry = record.toolCatalog[toolName];
+        const entry = Object.hasOwn(record.toolCatalog, toolName) ? record.toolCatalog[toolName] : undefined;
         if (!entry) continue;
         const skip = (reason: SkippedMcpServerTool['reason'], detail?: string) => {
           skipped.push({ serverId: record.id, toolName, exposedName: entry.exposedName, reason, detail });
         };
-        if (isReservedToolName(entry.exposedName)) {
-          skip('reserved_name');
-          continue;
-        }
-        if (taken.has(entry.exposedName)) {
-          skip('name_conflict');
-          continue;
-        }
+        // One bad entry must not cost the organization every other server's tools.
         try {
+          if (isReservedToolName(entry.exposedName)) {
+            skip('reserved_name');
+            continue;
+          }
+          if (taken.has(entry.exposedName)) {
+            skip('name_conflict');
+            continue;
+          }
           const tool = await client.toolFromDefinition({ serverName: record.slug, definition: entry.definition });
           this.#guardTool(record, client, tool);
           tools[entry.exposedName] = tool;

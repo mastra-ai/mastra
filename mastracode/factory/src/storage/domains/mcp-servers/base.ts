@@ -519,7 +519,8 @@ export class McpServersStorage extends FactoryStorageDomain {
     const row = await this.#db.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, current => {
       if (current.url !== ifUrl) return null;
       applied = true;
-      const catalog: McpServerToolCatalog = {};
+      // Tool names come from the server: `__proto__` must be a key, not a prototype.
+      const catalog: McpServerToolCatalog = Object.create(null);
       for (const definition of tools) {
         catalog[definition.name] = { exposedName: toolExposedName(current.slug, definition.name), definition };
       }
@@ -534,7 +535,7 @@ export class McpServersStorage extends FactoryStorageDomain {
         const kept = new Set(stringArray(current.selected_tools));
         const pending = new Set(stringArray(current.new_tools));
         selected = names.filter(name => kept.has(name));
-        newTools = names.filter(name => !kept.has(name) && (pending.has(name) || !(name in previous)));
+        newTools = names.filter(name => !kept.has(name) && (pending.has(name) || !Object.hasOwn(previous, name)));
       }
       return {
         tool_catalog: catalog,
@@ -563,7 +564,7 @@ export class McpServersStorage extends FactoryStorageDomain {
   }): Promise<McpServerRecord | null> {
     const row = await this.#db.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, current => {
       const catalog = current.tool_catalog ?? {};
-      const unknown = selected.filter(name => !(name in catalog));
+      const unknown = selected.filter(name => !Object.hasOwn(catalog, name));
       if (unknown.length > 0) {
         throw new McpServerInputError(
           `Unknown tools: ${unknown.join(', ')}. Refresh the server's tools and try again.`,

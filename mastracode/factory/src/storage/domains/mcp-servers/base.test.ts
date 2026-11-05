@@ -328,6 +328,27 @@ describe('McpServersStorage', () => {
     ).rejects.toThrow('Add at least one header.');
   });
 
+  it('treats tool names like `constructor` and `__proto__` as tools, not object internals', async () => {
+    const { mcpServers } = await createFactoryStorageForTests();
+    const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
+    const discover = (names: string[]) =>
+      mcpServers.saveDiscovery({ orgId: 'org-a', id: server.id, ifUrl: server.url, tools: names.map(tool) });
+
+    const first = await discover(['echo', '__proto__']);
+    expect(Object.keys(first!.toolCatalog!).sort()).toEqual(['__proto__', 'echo']);
+    expect(first!.selectedTools.sort()).toEqual(['__proto__', 'echo']);
+
+    // Tools the server adds later are new even when they share a name with an object property.
+    const refreshed = await discover(['echo', '__proto__', 'constructor', 'toString']);
+    expect(refreshed!.newTools.sort()).toEqual(['constructor', 'toString']);
+
+    for (const name of ['hasOwnProperty', 'valueOf']) {
+      await expect(
+        mcpServers.setSelectedTools({ orgId: 'org-a', id: server.id, userId: 'admin', selected: [name] }),
+      ).rejects.toThrow(`Unknown tools: ${name}`);
+    }
+  });
+
   it('selects every tool on first discovery and never auto-selects tools added later', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });

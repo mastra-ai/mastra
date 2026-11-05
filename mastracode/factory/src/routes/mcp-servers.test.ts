@@ -195,6 +195,20 @@ describe('MCP server routes', () => {
     expect((await ctx.storage.get({ orgId: 'org-a', id: server.id }))!.selectedTools.sort()).toEqual(['add', 'echo']);
   });
 
+  it("refuses selecting object built-ins like `toString`, which would break every server's tools", async () => {
+    const mcp = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    const server = await createServer(ctx, admin, bearerBody(mcp.url));
+    await ctx.request(admin, 'POST', `/${server.id}/discover`);
+
+    for (const name of ['toString', 'constructor', '__proto__']) {
+      const response = await ctx.request(admin, 'PUT', `/${server.id}/tools`, { selected: ['echo', name] });
+      expect(response.status).toBe(400);
+    }
+    const { tools } = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    expect(Object.keys(tools).sort()).toEqual(['docs_add', 'docs_echo']);
+  });
+
   it('requires the headers again when the server moves to another origin', async () => {
     const ctx = await setup();
     const server = await createServer(ctx, admin, bearerBody('https://mcp.example.com/mcp'));

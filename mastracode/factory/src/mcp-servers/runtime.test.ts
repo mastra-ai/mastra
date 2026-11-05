@@ -176,6 +176,25 @@ describe('McpServersRuntime.toolsFor', () => {
     expect(Object.keys(tools).sort()).toEqual(['live_add', 'live_echo']);
   });
 
+  it('connects a server named like an object built-in and gives sessions its tools named like ones', async () => {
+    const server = await startTestMcpServer({ bearerToken: TOKEN, extraToolNames: ['constructor', 'toString'] });
+    const ctx = await setup();
+    const record = await connectServer(ctx, 'org-a', bearerServer(server.url, TOKEN, 'constructor'));
+    expect(Object.keys(record.toolCatalog!).sort()).toEqual(['add', 'constructor', 'echo', 'toString']);
+
+    const { tools, skipped } = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+
+    expect(skipped).toEqual([]);
+    expect(Object.keys(tools).sort()).toEqual([
+      'constructor_add',
+      'constructor_constructor',
+      'constructor_echo',
+      'constructor_toString',
+    ]);
+    await tools.constructor_toString!.execute!({ text: 'hi' }, {} as never);
+    expect(server.calls).toEqual([{ tool: 'toString', args: { text: 'hi' } }]);
+  });
+
   it('skips a tool whose name is already taken instead of failing the session', async () => {
     const server = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();
