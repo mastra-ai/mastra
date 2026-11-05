@@ -22,5 +22,5 @@ const [projectId, setProjectId] = useState('demo-agents');
   size="icon-sm"
   chevron="up-down"
   aria-label="Switch project"
-/>
+/>;
 ```
