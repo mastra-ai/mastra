@@ -2,4 +2,4 @@
 '@mastra/duckdb': patch
 ---
 
-Trace, span, and thread lists load much faster on large DuckDB databases, because loading a page now reads far less stored input and output.
+Improved list speed on large DuckDB databases. Trace, span, and thread pages now read far less stored input and output, which makes a large difference on slow disks.
