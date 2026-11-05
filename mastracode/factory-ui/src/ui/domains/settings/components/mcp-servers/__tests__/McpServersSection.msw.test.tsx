@@ -415,6 +415,34 @@ describe('McpServersSection', () => {
       );
     });
 
+    it("asks for the headers again when this Factory can't read the saved ones", async () => {
+      const unreadable =
+        "This Factory can't read the server's saved credentials. Give every Factory instance the same secret encryption keys, or enter the credentials again.";
+      const api = mockMcpServersApi({
+        servers: [{ ...docsServer, headerNames: [], status: 'error', lastError: unreadable }],
+      });
+      const user = userEvent.setup();
+      renderSection();
+
+      expect(await row('Docs')).toHaveTextContent(unreadable);
+      await user.click(within(await row('Docs')).getByRole('button', { name: 'Edit' }));
+      expect(screen.queryByRole('list', { name: 'Saved headers' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Add at least one header.');
+      expect(api.mutations()).toEqual([]);
+
+      await user.type(screen.getByRole('textbox', { name: 'Header 1 name' }), 'Authorization');
+      await user.type(screen.getByLabelText('Header 1 value'), 'Bearer re-entered');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(api.mutations()[0]).toEqual({
+          method: 'PATCH',
+          path: `/${DOCS_ID}`,
+          body: { headers: [{ name: 'Authorization', value: 'Bearer re-entered' }] },
+        }),
+      );
+    });
+
     it('warns that moving a server to another address removes its saved credentials', async () => {
       mockMcpServersApi();
       const user = userEvent.setup();

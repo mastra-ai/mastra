@@ -1220,7 +1220,7 @@ or set `MASTRA_FACTORY_MCP_ALLOW_PRIVATE_NETWORK=true`. This also allows plain `
 Set these when auth is enabled:
 
 - `stateSecret`: A deployment-stable secret for signing the OAuth sign-in state. Without it each process uses its own random secret, and a sign-in fails when the callback reaches a different replica.
-- `secretEncryption`: Encrypts saved headers, OAuth client secrets, and tokens at rest, for example with `createFactorySecretEncryption()`. Without it they are stored as plaintext and the Factory warns at boot.
+- `secretEncryption`: Encrypts saved headers, OAuth client secrets, and tokens at rest, for example with `createFactorySecretEncryption()`. Without it they are stored as plaintext and the Factory warns at boot. Give every instance the same keys: an instance that can't decrypt a server's saved credentials shows the server with an error in Settings and leaves it out of sessions, until its keys match or an admin enters the credentials again.
 
 ### Development
 

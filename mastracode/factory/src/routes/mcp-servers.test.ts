@@ -4,6 +4,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { McpServersRuntime } from '../mcp-servers/runtime.js';
 import { startTestMcpServer } from '../mcp-servers/test-utils.js';
+import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { McpServersStorage } from '../storage/domains/mcp-servers/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { McpServerInfo } from './mcp-servers.js';
@@ -24,7 +25,7 @@ async function setup({
   withStorage = true,
   publicOrigin = 'https://factory.example.com',
 }: { enabled?: boolean; withStorage?: boolean; publicOrigin?: string } = {}) {
-  const { mcpServers } = await createFactoryStorageForTests();
+  const { storage: backend, mcpServers } = await createFactoryStorageForTests();
   const runtime = new McpServersRuntime({ storage: mcpServers, allowPrivateNetwork: true });
   onTestFinished(() => runtime.close());
   const routes = new McpServerRoutes({
@@ -49,7 +50,7 @@ async function setup({
       method,
       ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     });
-  return { storage: mcpServers, runtime, request };
+  return { backend, storage: mcpServers, runtime, request };
 }
 
 type Ctx = Awaited<ReturnType<typeof setup>>;
@@ -538,5 +539,86 @@ describe('MCP server routes', () => {
       status: 'unknown',
       lastError: null,
     });
+  });
+
+  it("keeps every other server working, and the server fixable, when this instance can't read its credentials", async () => {
+    const docsServer = await startTestMcpServer({ bearerToken: TOKEN });
+    const crmServer = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    const docs = await createServer(ctx, admin, bearerBody(docsServer.url));
+    const crm = await createServer(ctx, admin, bearerBody(crmServer.url, 'CRM'));
+    const old = await createServer(ctx, admin, bearerBody('https://old.example.com/mcp', 'Old'));
+    for (const server of [docs, crm])
+      expect((await ctx.request(admin, 'POST', `/${server.id}/discover`)).status).toBe(200);
+    // An instance with an encryption key this one lacks saved new credentials for two of them.
+    const otherInstance = createFactorySecretEncryption({
+      primary: { id: 'other-instance', key: Buffer.alloc(32, 3) },
+    });
+    const foreign = await otherInstance.encrypt({ Authorization: `Bearer ${TOKEN}` });
+    for (const server of [crm, old])
+      await ctx.backend.ops.updateMany('mcp_servers', { id: server.id }, { headers: foreign });
+    const crmRequests = crmServer.methods.length;
+
+    const listed = await ctx.request(member, 'GET', '');
+    expect(listed.status).toBe(200);
+    const { servers } = (await listed.json()) as { servers: McpServerInfo[] };
+    const unreadable = {
+      status: 'error',
+      lastError:
+        "This Factory can't read the server's saved credentials. Give every Factory instance the same secret encryption keys, or enter the credentials again.",
+      headerNames: [],
+    };
+    expect(servers.find(s => s.id === docs.id)).toMatchObject({ status: 'connected', headerNames: ['Authorization'] });
+    expect(servers.find(s => s.id === crm.id)).toMatchObject(unreadable);
+
+    // Sessions keep the readable server's tools.
+    const { tools, skipped } = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    expect(Object.keys(tools).sort()).toEqual(['docs_add', 'docs_echo']);
+    expect(skipped).toEqual(
+      ['echo', 'add'].map(toolName => ({
+        serverId: crm.id,
+        toolName,
+        exposedName: `crm_${toolName}`,
+        reason: 'credentials_unreadable',
+      })),
+    );
+
+    // Connecting without the credentials is refused, and leaves what the other instances see alone.
+    const refused = await ctx.request(admin, 'POST', `/${crm.id}/discover`);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({ error: 'mcp_server_credentials_unreadable', message: unreadable.lastError });
+    expect(crmServer.methods.length).toBe(crmRequests);
+    expect(await ctx.storage.get({ orgId: 'org-a', id: crm.id })).toMatchObject({
+      status: 'connected',
+      lastError: null,
+    });
+
+    // Nor does it sign in with a client secret it can't read.
+    const tracker = await createServer(ctx, admin, {
+      name: 'Tracker',
+      url: 'https://tracker.example.com/mcp',
+      authType: 'oauth',
+      oauth: { clientId: 'factory-client', clientSecret: CLIENT_SECRET },
+    });
+    await ctx.backend.ops.updateMany(
+      'mcp_servers',
+      { id: tracker.id },
+      { oauth_client_secret: await otherInstance.encrypt(CLIENT_SECRET) },
+    );
+    expect((await ctx.request(admin, 'POST', `/${tracker.id}/oauth/start`, {})).status).toBe(409);
+
+    // An admin can remove one, and fix the other by entering its credentials again.
+    expect((await ctx.request(admin, 'DELETE', `/${old.id}`)).status).toBe(200);
+    const fixed = await ctx.request(admin, 'PATCH', `/${crm.id}`, {
+      headers: [{ name: 'Authorization', value: `Bearer ${TOKEN}` }],
+    });
+    expect(fixed.status).toBe(200);
+    expect(((await fixed.json()) as { server: McpServerInfo }).server).toMatchObject({
+      status: 'unknown',
+      headerNames: ['Authorization'],
+    });
+    expect((await ctx.request(admin, 'POST', `/${crm.id}/discover`)).status).toBe(200);
+    const after = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    expect(Object.keys(after.tools).sort()).toEqual(['crm_add', 'crm_echo', 'docs_add', 'docs_echo']);
   });
 });

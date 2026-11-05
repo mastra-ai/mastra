@@ -196,8 +196,10 @@ async function toMcpServerInfo(storage: McpServersStorage, record: McpServerReco
           },
         }
       : {}),
-    status: record.status,
-    lastError: record.lastError,
+    // Reported, never stored: an instance missing a key must not mark the server broken for the others.
+    ...(record.credentialsUnreadable
+      ? { status: 'error' as const, lastError: CREDENTIALS_UNREADABLE }
+      : { status: record.status, lastError: record.lastError }),
     discoveredAt: record.discoveredAt?.toISOString() ?? null,
     tools,
   };
@@ -214,6 +216,13 @@ function invalidBody(c: Context, error: z.ZodError) {
 
 function notFound(c: Context) {
   return c.json({ error: 'mcp_server_not_found', message: 'MCP server not found.' }, 404);
+}
+
+const CREDENTIALS_UNREADABLE =
+  "This Factory can't read the server's saved credentials. Give every Factory instance the same secret encryption keys, or enter the credentials again.";
+
+function credentialsUnreadable(c: Context) {
+  return c.json({ error: 'mcp_server_credentials_unreadable', message: CREDENTIALS_UNREADABLE }, 409);
 }
 
 async function readJson(c: Context, { optional = false } = {}): Promise<{ body: unknown } | { response: Response }> {
@@ -290,7 +299,9 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
     const connect = async (
       ctx: McpServersContext,
       record: McpServerRecord,
-    ): Promise<McpServerRecord | 'not_found' | 'changed'> => {
+    ): Promise<McpServerRecord | 'not_found' | 'changed' | 'unreadable'> => {
+      // Connecting without its credentials could only fail, and would mark the server so for every instance.
+      if (record.credentialsUnreadable) return 'unreadable';
       const result = await runtime.discover(record);
       const updated =
         result.status === 'connected'
@@ -315,6 +326,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
     const connectResponse = async (c: Context, ctx: McpServersContext, record: McpServerRecord) => {
       const outcome = await connect(ctx, record);
       if (outcome === 'not_found') return notFound(c);
+      if (outcome === 'unreadable') return credentialsUnreadable(c);
       if (outcome === 'changed') {
         return c.json(
           { error: 'mcp_server_changed', message: 'The server changed while connecting. Connect again.' },
@@ -450,6 +462,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
             if (record.authType !== 'oauth') {
               return c.json({ error: 'mcp_server_not_oauth', message: 'This server does not use OAuth.' }, 400);
             }
+            if (record.credentialsUnreadable) return credentialsUnreadable(c);
             if (!stateSigner) {
               return c.json(
                 { error: 'mcp_oauth_unavailable', message: 'OAuth sign-in is not available on this deployment.' },
@@ -570,7 +583,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
             if (!signedIn) return back('changed', at);
             const connected = await connect(ctx, signedIn);
             // Signed in either way; an edit during discovery only means the tools need loading again.
-            if (connected === 'changed') return back('connect_failed', at);
+            if (connected === 'changed' || connected === 'unreadable') return back('connect_failed', at);
             if (typeof connected === 'string') return back(connected, at);
             return back(connected.status === 'connected' ? 'connected' : 'connect_failed', at);
           } catch (error) {

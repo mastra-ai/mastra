@@ -1895,7 +1895,9 @@ export class MastraFactory {
                         ? 'another tool has that name.'
                         : reason === 'reserved_name'
                           ? 'that name belongs to a built-in or Factory tool.'
-                          : `its stored definition is invalid (${detail}).`),
+                          : reason === 'credentials_unreadable'
+                            ? "this Factory can't decrypt the server's saved credentials (check that every instance has the same secretEncryption keys)."
+                            : `its stored definition is invalid (${detail}).`),
                   );
                 }
               }

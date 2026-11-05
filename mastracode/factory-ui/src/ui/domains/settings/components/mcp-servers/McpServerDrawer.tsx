@@ -175,8 +175,10 @@ function updateBody(server: McpServerInfo, draft: Draft): UpdateMcpServerRequest
 
   if (authType === 'headers') {
     // Saved headers never follow a server to another origin.
+    // No names means none this Factory can read.
     const keepSaved =
       server.authType === 'headers' &&
+      server.headerNames.length > 0 &&
       draft.auth === savedAuth(server) &&
       sameOrigin(url, server.url) &&
       !draft.replaceHeaders &&
@@ -238,7 +240,11 @@ export function McpServerDrawer({
   const signsOut =
     server?.authType === 'oauth' && draft.auth === 'oauth' && draftUrl !== null && draftUrl.href !== server.url;
   const savedHeaders =
-    server?.authType === 'headers' && draft.auth === savedAuth(server) && !originChanged && !draft.replaceHeaders
+    server?.authType === 'headers' &&
+    server.headerNames.length > 0 &&
+    draft.auth === savedAuth(server) &&
+    !originChanged &&
+    !draft.replaceHeaders
       ? server.headerNames
       : null;
 

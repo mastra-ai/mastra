@@ -40,6 +40,12 @@ export interface McpServerRecord {
   headers: Record<string, string> | null;
   oauthClientId: string | null;
   oauthClientSecret: string | null;
+  /**
+   * The saved headers or client secret can't be decrypted with this
+   * instance's keys (it lacks a key another instance used, or the value is
+   * damaged); they read as `null`. Nothing may connect with such a record.
+   */
+  credentialsUnreadable: boolean;
   oauthScopes: string[];
   /**
    * Hosts of the OAuth authorization server (its issuer and token endpoint)
@@ -328,6 +334,20 @@ export class McpServersStorage extends FactoryStorageDomain {
   }
 
   async #toRecord(row: McpServerDbRow): Promise<McpServerRecord> {
+    // One server whose secrets this instance can't decrypt must not hide the
+    // organization's other servers, or keep an admin from fixing or removing it.
+    let credentialsUnreadable = false;
+    const readable = async <T>(stored: string | null, decrypt: (stored: string) => Promise<{ value: T }>) => {
+      if (stored === null) return null;
+      try {
+        return (await decrypt(stored)).value;
+      } catch {
+        credentialsUnreadable = true;
+        return null;
+      }
+    };
+    const headers = await readable(row.headers, stored => this.#decryptHeaders(stored));
+    const oauthClientSecret = await readable(row.oauth_client_secret, stored => this.#decryptString(stored));
     return {
       id: row.id,
       orgId: row.org_id,
@@ -337,10 +357,10 @@ export class McpServersStorage extends FactoryStorageDomain {
       name: row.name,
       url: row.url,
       authType: row.auth_type,
-      headers: row.headers === null ? null : (await this.#decryptHeaders(row.headers)).value,
+      headers,
       oauthClientId: row.oauth_client_id,
-      oauthClientSecret:
-        row.oauth_client_secret === null ? null : (await this.#decryptString(row.oauth_client_secret)).value,
+      oauthClientSecret,
+      credentialsUnreadable,
       oauthScopes: stringArray(row.oauth_scopes),
       authorizationServerHosts: stringArray(row.authorization_server_hosts),
       oauthGeneration: Number(row.oauth_generation ?? 0),

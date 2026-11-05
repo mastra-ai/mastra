@@ -31,7 +31,7 @@ export interface SkippedMcpServerTool {
   serverId: string;
   toolName: string;
   exposedName: string;
-  reason: 'name_conflict' | 'reserved_name' | 'invalid_definition';
+  reason: 'name_conflict' | 'reserved_name' | 'invalid_definition' | 'credentials_unreadable';
   /** Why the definition is invalid; contains no secrets. */
   detail?: string;
 }
@@ -181,6 +181,20 @@ export class McpServersRuntime {
 
     for (const record of records) {
       if (record.status !== 'connected' || !record.toolCatalog || record.selectedTools.length === 0) continue;
+      if (record.credentialsUnreadable) {
+        for (const toolName of record.selectedTools) {
+          const entry = Object.hasOwn(record.toolCatalog, toolName) ? record.toolCatalog[toolName] : undefined;
+          if (entry) {
+            skipped.push({
+              serverId: record.id,
+              toolName,
+              exposedName: entry.exposedName,
+              reason: 'credentials_unreadable',
+            });
+          }
+        }
+        continue;
+      }
       active.add(record.id);
       const client = this.#clientFor(record, readAt);
       // Changed since this read began: the next turn gets its tools.

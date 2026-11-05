@@ -1804,7 +1804,7 @@ describe('MastraFactory.prepare', () => {
         ]);
       });
 
-      it("keeps a session's other tools when a server is down or the servers cannot be read", async () => {
+      it("keeps a session's other tools when a server is down or its credentials can't be read", async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         onTestFinished(() => warn.mockRestore());
         const { storage, extraTools } = await prepare();
@@ -1818,8 +1818,7 @@ describe('MastraFactory.prepare', () => {
         await expect(tools.down_echo!.execute({ text: 'lost' }, {})).rejects.toThrow();
         expect(JSON.stringify(await tools.up_echo!.execute({ text: 'still works' }, {}))).toContain('still works');
 
-        // The servers cannot be read (here: a replica with another encryption key wrote one):
-        // the turn goes on with every non-MCP tool.
+        // A replica with another encryption key saved one server's credentials: only that server is left out.
         const foreignKey = createFactorySecretEncryption({
           primary: { id: 'other-replica', key: Buffer.alloc(32, 9) },
         });
@@ -1828,12 +1827,14 @@ describe('MastraFactory.prepare', () => {
           { slug: 'down' },
           { headers: await foreignKey.encrypt({ Authorization: `Bearer ${MCP_TOKEN}` }) },
         );
-        const degraded = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
-        expect(degraded).toHaveProperty('factory_list_work_items');
-        expect(degraded).not.toHaveProperty('up_echo');
+        const unreadable = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
+        expect(unreadable).not.toHaveProperty('down_echo');
+        expect(JSON.stringify(await unreadable.up_echo!.execute({ text: 'unaffected' }, {}))).toContain('unaffected');
         expect(warn.mock.calls.map(call => String(call[0]))).toContain(
-          '[factory] MCP server tools are unavailable for this turn: [FactorySecretEncryption] Unknown key id "other-replica".',
+          '[factory] MCP server tool "echo" (as "down_echo") is not given to sessions: ' +
+            "this Factory can't decrypt the server's saved credentials (check that every instance has the same secretEncryption keys).",
         );
+        expect(unreadable).toHaveProperty('factory_list_work_items');
       });
 
       it('gives sessions no MCP server tools when the feature is off', async () => {
