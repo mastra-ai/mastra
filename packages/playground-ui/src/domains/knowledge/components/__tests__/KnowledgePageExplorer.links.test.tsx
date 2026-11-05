@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -111,10 +111,11 @@ describe('KnowledgePageExplorer body links', () => {
   describe('when an open page body links other pages with [[ref]]', () => {
     const body = () => within(screen.getByTestId('knowledge-page-body'));
 
-    it('draws a nested scope#path link as the target page, and opens it on click', () => {
+    it('draws a nested scope#path link as the target page, and opens it on click', async () => {
       renderWithProviders(<Host initial="overview" initialView="page" />);
       const link = body().getByRole('button', { name: 'Suspend and resume' });
-      expect(link.getAttribute('title')).toBe('docs:mastra#workflows/suspend-and-resume');
+      act(() => link.focus());
+      expect((await screen.findByRole('tooltip')).textContent).toBe('docs:mastra#workflows/suspend-and-resume');
       fireEvent.click(link);
       expect(screen.getByTestId('selected').textContent).toBe('suspend');
     });
@@ -174,7 +175,6 @@ describe('KnowledgePageExplorer body links', () => {
         .querySelector('.react-flow__node [data-page-id="overview"]')
         ?.querySelector('[data-testid="knowledge-hidden-links"]');
       expect(badge?.getAttribute('aria-label')).toBe('0 links in, 2 links out');
-      expect(badge?.getAttribute('title')).toBe('0 links in, 2 links out');
       // A count of none is left off rather than written as 0.
       expect(badge?.textContent).toBe('2→');
     });
@@ -239,7 +239,6 @@ describe('KnowledgePageExplorer body links', () => {
         const toggle = screen.getByRole('button', { name });
         expect(canvas.contains(toggle)).toBe(true);
         expect(toggle.parentElement).toBe(back.parentElement);
-        expect(toggle.getAttribute('title')).toContain(name);
       }
     });
 
@@ -253,30 +252,16 @@ describe('KnowledgePageExplorer body links', () => {
       renderWithProviders(<Host initial={null} initialView="graph" />);
       const toggle = screen.getByRole('button', { name: 'All links' });
       expect(toggle.getAttribute('aria-pressed')).toBe('false');
-      expect(toggle.getAttribute('title')).toContain('off');
       fireEvent.click(toggle);
       expect(toggle.getAttribute('aria-pressed')).toBe('true');
-      expect(toggle.getAttribute('title')).toContain('on');
-    });
-
-    it('have a solid fill when on that the off state lacks', () => {
-      renderWithProviders(<Host initial={null} initialView="graph" />);
-      const toggle = screen.getByRole('button', { name: 'All links' });
-      expect(toggle.className).toContain('aria-pressed:bg-fill-inverse');
-      expect(toggle.className).toContain('aria-pressed:text-background');
     });
   });
 
   describe('the Graph and Page toggle', () => {
-    it('gives the selected segment a solid fill and full-strength text, the others muted text', () => {
-      renderWithProviders(<Host initial={null} initialView="graph" />);
-      const graph = screen.getByRole('button', { name: 'Graph' });
-      const page = screen.getByRole('button', { name: 'Page' });
-      expect(graph.getAttribute('aria-pressed')).toBe('true');
-      expect(page.getAttribute('aria-pressed')).toBe('false');
-      expect(graph.className).toContain('aria-pressed:bg-fill-inverse');
-      expect(graph.className).toContain('aria-pressed:text-background');
-      expect(graph.className).toContain('text-muted-foreground');
+    it('marks the current view as the selected tab', () => {
+      renderWithProviders(<Host initial="overview" initialView="graph" />);
+      expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'Page' }).getAttribute('aria-selected')).toBe('false');
     });
   });
 });

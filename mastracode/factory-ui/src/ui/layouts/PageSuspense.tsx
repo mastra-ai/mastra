@@ -10,13 +10,15 @@ function PageLoader() {
   );
 }
 
+export type LazyPageComponent = ComponentType & { preload: () => Promise<unknown> };
+
 /**
  * A page loaded on first visit. Navigations run in a transition, which keeps a
  * boundary already showing a page instead of its loader; each call returns its
  * own component, so opening the page mounts a fresh boundary that shows it.
  * `preload` fetches the page ahead of a visit, which then renders without the loader.
  */
-export function lazyPage(load: () => Promise<ComponentType>, fallback: ReactNode = <PageLoader />) {
+export function lazyPage(load: () => Promise<ComponentType>, fallback: ReactNode = <PageLoader />): LazyPageComponent {
   let loading: Promise<{ default: ComponentType }> | undefined;
   let loaded: ComponentType | undefined;
   const preload = () =>

@@ -16,6 +16,10 @@ import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
 export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
 export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGet.responseSchema>;
+export type StoredBoardInfo = StoredBoardResponse['board'];
+export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
+export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
 
 import type {
   CustomProviderInfo,

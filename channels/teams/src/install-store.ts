@@ -27,6 +27,7 @@ interface TeamsInstallationData {
  */
 export class TeamsInstallStore {
   #warnedPlaintext = false;
+  #warnedUnreadable = new Set<string>();
 
   constructor(
     private readonly storage: ChannelsStorage,
@@ -115,6 +116,25 @@ export class TeamsInstallStore {
 
   #fromRecord(record: ChannelInstallation): TeamsInstallation {
     const data = (record.data ?? {}) as TeamsInstallationData;
+    // A record whose secret cannot be decrypted (the encryption key changed or
+    // was removed) must not take down every read path — one bad row would make
+    // the whole runtime crash at boot and block disconnect() from ever
+    // deleting it. Surface it as an installation without a usable secret.
+    let appPassword: string | undefined;
+    let secretUnreadable = false;
+    try {
+      appPassword = this.#dec(data.appPassword);
+    } catch (err) {
+      secretUnreadable = true;
+      if (!this.#warnedUnreadable.has(record.id)) {
+        this.#warnedUnreadable.add(record.id);
+        console.error(
+          `[Teams] Cannot decrypt the stored bot secret for installation "${record.id}" (agent "${record.agentId}"): ` +
+            'the encryption key changed or is missing. The bot cannot receive or send messages — ' +
+            `disconnect and reconnect the agent to re-provision it. (${err instanceof Error ? err.message : String(err)})`,
+        );
+      }
+    }
     return {
       id: record.id,
       agentId: record.agentId,
@@ -122,7 +142,8 @@ export class TeamsInstallStore {
       status: record.status === 'active' ? 'active' : 'pending',
       appId: data.appId,
       entraObjectId: data.entraObjectId,
-      appPassword: this.#dec(data.appPassword),
+      appPassword,
+      ...(secretUnreadable && { secretUnreadable }),
       appTenantId: data.appTenantId,
       appType: data.appType,
       botName: data.botName,
