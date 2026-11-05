@@ -73,7 +73,7 @@ export class DomainStore {
     if (!result.rows[0]) throw new ControlPlaneError('NOT_FOUND', 404);
     return JSON.parse(String(result.rows[0].data)) as T;
   }
-  /** List operator-owned domain records with bounded pagination and total count. */
+  /** List operator-owned domain records of one kind with bounded pagination. */
   async list<T>(
     kind: RecordKind,
     owner: string,
@@ -135,7 +135,7 @@ export class DomainStore {
       args: [profileId, envelope],
     });
   }
-  /** Parse a persisted domain row into its revisioned owner-bound record shape. */
+  /** Load a profile's sealed credential envelope or fail with CREDENTIAL_UNAVAILABLE. */
   async envelope(profileId: string, transaction?: Transaction) {
     const result = await (transaction ?? this.client).execute({
       sql: 'SELECT envelope FROM scanner_credentials WHERE profile_id = ?',
