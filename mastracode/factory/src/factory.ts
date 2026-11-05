@@ -1843,6 +1843,9 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             mcpEnabled,
+            ...(mcpServersRuntime
+              ? { mcpServers: { runtime: mcpServersRuntime, allowPrivateNetwork: mcpServersAllowPrivateNetwork } }
+              : {}),
             deploymentModelProviders,
             skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.key,

@@ -1327,6 +1327,36 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
+  it('tells the UI it serves MCP server settings exactly when it mounts their routes', async () => {
+    const cases = [
+      { mcpServers: undefined, serves: true },
+      { mcpServers: { allowPrivateNetwork: true }, serves: true },
+      { mcpServers: false as const, serves: false },
+    ];
+    for (const { mcpServers, serves } of cases) {
+      prepareMock.mockClear();
+      // No auth: the local user may list (and manage) servers.
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        auth: null,
+        ...(mcpServers === undefined ? {} : { mcpServers }),
+      });
+      const routes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+        controller: sessionNotifierStub,
+        authStorage: {},
+      });
+      const app = new Hono();
+      mountApiRoutes(app as never, routes);
+
+      const features = await (await app.request('/web/config/features')).json();
+      const list = await app.request('/web/config/mcp-servers');
+      expect({ features: features.mcpServers, listStatus: list.status }).toEqual({
+        features: serves,
+        listStatus: serves ? 200 : 404,
+      });
+    }
+  });
+
   it('registers the Factory transition tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });

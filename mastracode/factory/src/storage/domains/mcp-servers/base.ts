@@ -614,6 +614,12 @@ export class McpServersStorage extends FactoryStorageDomain {
     await this.#db.deleteMany('mcp_server_oauth', { server_id: serverId });
   }
 
+  /** Whether a sign-in stored tokens for the server (`tokens`, or `tokens:<issuer>` per authorization server). */
+  async hasOAuthTokens(serverId: string): Promise<boolean> {
+    const rows = await this.#db.findMany<McpServerOAuthDbRow>('mcp_server_oauth', { server_id: serverId });
+    return rows.some(row => row.key === 'tokens' || row.key.startsWith('tokens:'));
+  }
+
   async createFlow(flow: Omit<McpServerOAuthFlow, 'createdAt'>): Promise<McpServerOAuthFlow> {
     const row = await this.#db.insertOne<McpServerOAuthFlowDbRow>('mcp_server_oauth_flows', {
       nonce: flow.nonce,

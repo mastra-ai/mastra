@@ -16,6 +16,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '.
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { MaterializeError } from '../integrations/github/sandbox.js';
+import type { McpServersRuntime } from '../mcp-servers/runtime.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -70,6 +71,7 @@ import { buildFsRoutes } from './fs.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
+import { McpServerRoutes } from './mcp-servers.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
@@ -139,6 +141,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** The Factory MCP endpoint is mounted; surfaced so the UI can show its URL. */
   mcpEnabled: boolean;
+  /** Organization MCP servers; absent when `MastraFactory({ mcpServers: false })`. */
+  mcpServers?: { runtime: McpServersRuntime; allowPrivateNetwork: boolean };
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   /** App skills from `MastraFactory({ skills })`. */
@@ -789,11 +793,20 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
-      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled },
+      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled, mcpServers: Boolean(deps.mcpServers) },
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
+    ...(deps.mcpServers
+      ? new McpServerRoutes({
+          auth: deps.auth,
+          storage: deps.domains.mcpServers,
+          runtime: deps.mcpServers.runtime,
+          allowPrivateNetwork: deps.mcpServers.allowPrivateNetwork,
+          publicOrigin: deps.publicOrigin,
+        }).routes()
+      : []),
     ...new OAuthRoutes({
       auth: deps.auth,
       authStorage: deps.authStorage,

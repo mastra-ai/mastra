@@ -748,8 +748,11 @@ async function persistMemorySettings(context: MemorySettingsContext, patch: Memo
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
-  /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
-  features?: { knowledge: boolean; mcp?: boolean };
+  /**
+   * `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server).
+   * `mcpServers`: organization MCP server settings are served (`MastraFactory({ mcpServers })`).
+   */
+  features?: { knowledge: boolean; mcp?: boolean; mcpServers?: boolean };
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -942,7 +945,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'GET',
         requiresAuth: false,
         handler: async c =>
-          c.json({ knowledge: options.features?.knowledge ?? false, mcp: options.features?.mcp ?? false }),
+          c.json({
+            knowledge: options.features?.knowledge ?? false,
+            mcp: options.features?.mcp ?? false,
+            mcpServers: options.features?.mcpServers ?? false,
+          }),
       }),
 
       registerApiRoute('/web/config/providers', {
