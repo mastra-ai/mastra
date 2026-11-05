@@ -117,6 +117,11 @@ describe('AgentCapabilitiesFooter', () => {
 
   it.each([
     { label: 'gateway', memory: { result: true, memoryType: 'gateway' } as GetMemoryStatusResponse, status: 'Gateway' },
+    {
+      label: 'platform',
+      memory: { result: true, memoryType: 'platform' } as GetMemoryStatusResponse,
+      status: 'Platform',
+    },
     { label: 'loading', memory: 'loading' as const, status: 'Checking' },
     { label: 'disabled', memory: { result: false } as GetMemoryStatusResponse, status: 'Off' },
   ])('shows the memory status as "$status" ($label)', async ({ memory, status }) => {

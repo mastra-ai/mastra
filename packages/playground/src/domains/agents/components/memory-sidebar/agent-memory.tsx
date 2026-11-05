@@ -25,7 +25,7 @@ import { MemorySearch } from '@/lib/ai-ui/memory-search';
 interface AgentMemoryProps {
   agentId: string;
   threadId: string;
-  memoryType?: 'local' | 'gateway';
+  memoryType?: 'local' | 'gateway' | 'platform';
 }
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {

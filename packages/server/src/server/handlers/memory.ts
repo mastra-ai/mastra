@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
-import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMemory, ObservationalMemoryInspector, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -58,13 +58,8 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
-import {
-  getGatewayClient,
-  isGatewayAgentAsync,
-  toLocalThread,
-  toLocalMessage,
-  toLocalOMRecord,
-} from './gateway-memory-client';
+import { getGatewayClient, isGatewayAgentAsync, toLocalThread, toLocalMessage } from './gateway-memory-client';
+import { resolveObservationalMemoryInspector } from './om-inspector';
 import {
   validateBody,
   getEffectiveResourceId,
@@ -357,105 +352,46 @@ async function getAgentFromContext({
   return agent;
 }
 
-/**
- * Gets Observational Memory configuration from an agent's processors.
- * Returns null if OM is not enabled.
- */
-async function getOMConfigFromAgent(
-  agent: Agent,
-  requestContext?: RequestContext,
-): Promise<{
-  enabled: boolean;
-  scope?: 'thread' | 'resource';
-  shareTokenBudget?: boolean;
-  messageTokens?: number | { min: number; max: number };
-  observationTokens?: number | { min: number; max: number };
-  observationModel?: string;
-  reflectionModel?: string;
-  observationModelRouting?: Array<{ upTo: number; model: string }>;
-  reflectionModelRouting?: Array<{ upTo: number; model: string }>;
-} | null> {
-  try {
-    // Guard against older @mastra/core versions that don't have resolveProcessorById
-    if (typeof agent.resolveProcessorById !== 'function') {
-      return null;
-    }
-    const omProcessor = await agent.resolveProcessorById('observational-memory', requestContext);
-    if (!omProcessor) {
-      return null;
-    }
+const MISSING_THREAD = Symbol('missing-thread');
 
-    // Use getResolvedConfig if available (properly resolves model names)
-    // Fall back to .config for backwards compatibility
-    const hasResolvedConfig = typeof (omProcessor as any).getResolvedConfig === 'function';
-
-    if (hasResolvedConfig) {
-      const resolvedConfig = await (omProcessor as any).getResolvedConfig(requestContext);
-      return {
-        enabled: true,
-        scope: resolvedConfig.scope || 'resource',
-        shareTokenBudget: resolvedConfig.shareTokenBudget,
-        messageTokens: resolvedConfig.observation?.messageTokens,
-        observationTokens: resolvedConfig.reflection?.observationTokens,
-        observationModel: resolvedConfig.observation?.model,
-        reflectionModel: resolvedConfig.reflection?.model,
-        observationModelRouting: resolvedConfig.observation?.routing,
-        reflectionModelRouting: resolvedConfig.reflection?.routing,
-      };
-    }
-
-    // Fallback for older processor versions
-    const processorConfig = (omProcessor as any).config || {};
-    return {
-      enabled: true,
-      scope: processorConfig.scope || 'resource',
-      shareTokenBudget: processorConfig.shareTokenBudget,
-      messageTokens: processorConfig.observation?.messageTokens,
-      observationTokens: processorConfig.reflection?.observationTokens,
-      observationModel: undefined,
-      reflectionModel: undefined,
-      observationModelRouting: undefined,
-      reflectionModelRouting: undefined,
-    };
-  } catch {
-    return null;
-  }
+/** Studio labels memory as local, legacy gateway, or Platform-hosted. */
+function studioMemoryType(inspector: ObservationalMemoryInspector): 'local' | 'gateway' | 'platform' {
+  return inspector.kind === 'gateway' || inspector.kind === 'platform' ? inspector.kind : 'local';
 }
 
 /**
- * Gets Observational Memory status for a specific resource/thread.
+ * The thread an OM record is keyed by: `null` for resource-scoped OM, `MISSING_THREAD` when a
+ * thread-scoped record has no thread to check ownership against (new chat, or mid-deletion).
+ * Checks the caller may read the thread. Legacy gateway memory keeps threads remotely, so it
+ * skips the local lookup.
  */
-async function getOMStatus(
-  memoryStorage: MemoryStorage,
-  resourceId: string,
-  threadId?: string,
-): Promise<{
-  hasRecord: boolean;
-  originType?: string;
-  lastObservedAt?: Date | null;
-  tokenCount?: number;
-  observationTokenCount?: number;
-  isObserving?: boolean;
-  isReflecting?: boolean;
-} | null> {
-  try {
-    const record = await memoryStorage.getObservationalMemory(threadId ?? null, resourceId);
-    if (!record) {
-      return { hasRecord: false };
+async function resolveOMThread({
+  mastra,
+  requestContext,
+  memory,
+  inspector,
+  scope,
+  threadId,
+  effectiveResourceId,
+}: Pick<MemoryContext, 'mastra' | 'requestContext'> & {
+  memory: MastraMemory | null | undefined;
+  inspector: ObservationalMemoryInspector;
+  scope: 'thread' | 'resource';
+  threadId?: string;
+  effectiveResourceId: string;
+}): Promise<string | null | typeof MISSING_THREAD> {
+  if (scope === 'resource') {
+    if (threadId && memory && inspector.kind !== 'gateway') {
+      const thread = await memory.getThreadById({ threadId });
+      await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
     }
-
-    return {
-      hasRecord: true,
-      originType: record.originType,
-      lastObservedAt: record.lastObservedAt ?? null,
-      tokenCount: record.totalTokensObserved,
-      observationTokenCount: record.observationTokenCount,
-      isObserving: record.isObserving,
-      isReflecting: record.isReflecting,
-    };
-  } catch {
     return null;
   }
+  if (!threadId) return MISSING_THREAD;
+  if (inspector.kind === 'gateway' || !memory) return threadId;
+  const thread = await memory.getThreadById({ threadId });
+  await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
+  return thread ? threadId : MISSING_THREAD;
 }
 
 // ============================================================================
@@ -474,112 +410,55 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
-      // Check if this is a gateway agent first
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
-      if (agent && isGateway) {
-        const gwClient = getGatewayClient();
-        if (gwClient) {
-          // Gateway memory is available — check for OM status via gateway
-          let omStatus:
-            | {
-                enabled: boolean;
-                hasRecord?: boolean;
-                originType?: string;
-                lastObservedAt?: Date;
-                tokenCount?: number;
-                observationTokenCount?: number;
-                isObserving?: boolean;
-                isReflecting?: boolean;
-              }
-            | undefined;
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      const inspector = await resolveObservationalMemoryInspector({ agent, memory, requestContext });
+      const omConfig = inspector ? await inspector.getConfig() : null;
 
-          if (resourceId && threadId) {
-            try {
-              const { record } = await gwClient.getObservationRecord(threadId, resourceId);
-              if (record) {
-                omStatus = {
-                  enabled: true,
-                  hasRecord: true,
-                  originType: record.originType,
-                  lastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-                  tokenCount: record.totalTokensObserved,
-                  observationTokenCount: record.observationTokenCount,
-                  isObserving: record.isObserving,
-                  isReflecting: record.isReflecting,
-                };
-              } else {
-                omStatus = { enabled: true, hasRecord: false };
-              }
-            } catch {
-              omStatus = { enabled: true };
-            }
-          } else {
-            omStatus = { enabled: true };
-          }
-
-          return { result: true, memoryType: 'gateway' as const, observationalMemory: omStatus };
+      if (inspector && omConfig) {
+        const memoryType = studioMemoryType(inspector);
+        const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+        if (!effectiveResourceId || (!threadId && omConfig.scope !== 'resource')) {
+          return { result: true, memoryType, observationalMemory: { enabled: true } };
         }
+        const omThreadId = await resolveOMThread({
+          mastra,
+          requestContext,
+          memory,
+          inspector,
+          scope: omConfig.scope,
+          threadId,
+          effectiveResourceId,
+        });
+        if (omThreadId === MISSING_THREAD) {
+          return { result: true, memoryType, observationalMemory: { enabled: true, hasRecord: false } };
+        }
+        let record;
+        try {
+          ({ record } = await inspector.getRecord({ threadId: omThreadId, resourceId: effectiveResourceId }));
+        } catch {
+          return { result: true, memoryType, observationalMemory: { enabled: true } };
+        }
+        return {
+          result: true,
+          memoryType,
+          observationalMemory: record
+            ? {
+                enabled: true,
+                hasRecord: true,
+                originType: record.originType,
+                lastObservedAt: record.lastObservedAt ?? undefined,
+                tokenCount: record.totalTokensObserved,
+                observationTokenCount: record.observationTokenCount,
+                isObserving: record.isObserving,
+                isReflecting: record.isReflecting,
+              }
+            : { enabled: true, hasRecord: false },
+        };
       }
 
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
-
       if (memory) {
-        // Check for Observational Memory
-        let omStatus:
-          | {
-              enabled: boolean;
-              hasRecord?: boolean;
-              originType?: string;
-              lastObservedAt?: Date;
-              tokenCount?: number;
-              observationTokenCount?: number;
-              isObserving?: boolean;
-              isReflecting?: boolean;
-            }
-          | undefined;
-
-        if (agent) {
-          const omConfig = await getOMConfigFromAgent(agent, requestContext);
-          const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
-          let threadMissing = false;
-          if (omConfig?.enabled && effectiveResourceId && threadId) {
-            const thread = await memory.getThreadById({ threadId });
-            await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
-            // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
-            threadMissing = !thread && omConfig.scope !== 'resource';
-          }
-          if (omConfig?.enabled && effectiveResourceId && threadMissing) {
-            omStatus = { enabled: true, hasRecord: false };
-          } else if (omConfig?.enabled && effectiveResourceId) {
-            // For resource-scoped OM, lookup by resourceId only (threadId=null)
-            const omThreadId = omConfig.scope === 'resource' ? undefined : threadId;
-            // Get OM status from the agent's memory storage (not mastra.getStorage())
-            try {
-              const memoryStore = await memory.storage.getStore('memory');
-              if (memoryStore) {
-                const status = await getOMStatus(memoryStore, effectiveResourceId, omThreadId);
-                if (status) {
-                  omStatus = {
-                    enabled: true,
-                    ...status,
-                    // Convert null to undefined for schema compatibility
-                    lastObservedAt: status.lastObservedAt ?? undefined,
-                  };
-                } else {
-                  omStatus = { enabled: true, hasRecord: false };
-                }
-              }
-            } catch {
-              // Storage not configured, just mark as enabled
-              omStatus = { enabled: true };
-            }
-          } else if (omConfig?.enabled) {
-            omStatus = { enabled: true };
-          }
-        }
-
-        return { result: true, memoryType: 'local' as const, observationalMemory: omStatus };
+        return { result: true, memoryType: inspector ? studioMemoryType(inspector) : ('local' as const) };
       }
 
       if (!agentSupportsMemory(agent)) {
@@ -611,54 +490,25 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
-      // For gateway agents, return config with default OM thresholds
-      // These match @mastra/memory's OBSERVATIONAL_MEMORY_DEFAULTS
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
-      if (agent && (await isGatewayAgentAsync(agent)) && getGatewayClient()) {
-        return {
-          memoryType: 'gateway' as const,
-          config: {
-            observationalMemory: {
-              enabled: true,
-              scope: 'thread' as const,
-              messageTokens: 30_000,
-              observationTokens: 40_000,
-            },
-          },
-        };
-      }
-
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      const inspector = await resolveObservationalMemoryInspector({ agent, memory, requestContext });
+      const omConfig = inspector ? await inspector.getConfig() : null;
+      const observationalMemory = omConfig ? { enabled: true, ...omConfig } : agent ? { enabled: false } : undefined;
 
       if (!memory) {
+        // Gateway agents keep their memory remotely; everything else without memory has none.
+        if (inspector) return { memoryType: studioMemoryType(inspector), config: { observationalMemory } };
         // Return null config when memory is not configured (Issue #11765)
-        // This allows the playground UI to gracefully handle agents without memory
         return { config: null };
       }
 
-      // Get the merged configuration (defaults + custom)
-      const config = memory.getMergedThreadConfig({});
-
-      // Check for Observational Memory config
-      let omConfig:
-        | {
-            enabled: boolean;
-            scope?: 'thread' | 'resource';
-            messageTokens?: number | { min: number; max: number };
-            observationTokens?: number | { min: number; max: number };
-            observationModel?: string;
-            reflectionModel?: string;
-          }
-        | undefined;
-
-      if (agent) {
-        omConfig = (await getOMConfigFromAgent(agent, requestContext)) ?? { enabled: false };
-      }
-
       return {
+        ...(inspector && inspector.kind !== 'local' && { memoryType: studioMemoryType(inspector) }),
         config: {
-          ...config,
-          observationalMemory: omConfig,
+          ...memory.getMergedThreadConfig({}),
+          ...inspector?.getDisplayConfig?.(),
+          observationalMemory,
         },
       };
     } catch (error) {
@@ -679,85 +529,40 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, from, to, offset, limit, requestContext }) => {
     try {
-      // Verify agent has OM enabled
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
       }
-
-      const historyLimit = limit ?? 5;
-      const historyOptions = { from, to, offset };
-
-      // Gateway OM: proxy to gateway API
-      const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
-      if (gwClient) {
-        if (resourceId && threadId) {
-          const [recordResult, historyResult] = await Promise.all([
-            gwClient.getObservationRecord(threadId, resourceId),
-            gwClient.getObservationHistory(threadId, { resourceId, limit: historyLimit, from, to, offset }),
-          ]);
-          return {
-            record: recordResult.record ? toLocalOMRecord(recordResult.record) : null,
-            history: historyResult.records?.length > 0 ? historyResult.records.map(toLocalOMRecord) : undefined,
-          };
-        }
-        // No threadId or resourceId yet (e.g. /chat/new) — return empty
-        return { record: null, history: undefined };
-      }
-
-      const omConfig = await getOMConfigFromAgent(agent, requestContext);
-      if (!omConfig?.enabled) {
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      const inspector = await resolveObservationalMemoryInspector({ agent, memory, requestContext });
+      const omConfig = inspector ? await inspector.getConfig() : null;
+      if (!inspector || !omConfig) {
         throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
-      }
-
-      // Get storage from the agent's memory (not mastra.getStorage())
-      // This ensures we use the same storage the agent uses for OM
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
-      if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
-      }
-
-      let memoryStore: MemoryStorage | undefined;
-      try {
-        memoryStore = await memory.storage.getStore('memory');
-      } catch {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
-      }
-      if (!memoryStore) {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
       }
 
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       if (!effectiveResourceId) {
+        if (inspector.kind !== 'local') return { record: null, history: undefined };
         throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
       }
-      if (threadId) {
-        const thread = await memory.getThreadById({ threadId });
-        await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
-        // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
-        if (!thread && omConfig.scope !== 'resource') {
-          return { record: null, history: undefined };
-        }
-      }
-
-      // For resource-scoped OM, lookup by resourceId only (threadId=null)
-      const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
-
-      // Get current record
-      const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
-
-      // Get history
-      const history = await memoryStore.getObservationalMemoryHistory(
-        omThreadId,
+      const omThreadId = await resolveOMThread({
+        mastra,
+        requestContext,
+        memory,
+        inspector,
+        scope: omConfig.scope,
+        threadId,
         effectiveResourceId,
-        historyLimit,
-        historyOptions,
-      );
+      });
+      if (omThreadId === MISSING_THREAD) return { record: null, history: undefined };
 
-      return {
-        record: record ?? null,
-        history: history.length > 0 ? history : undefined,
-      };
+      const { record, history } = await inspector.getRecord({
+        threadId: omThreadId,
+        resourceId: effectiveResourceId,
+        historyLimit: limit ?? 5,
+        historyOptions: { from, to, offset },
+      });
+      return { record, history: history?.length ? history : undefined };
     } catch (error) {
       return handleError(error, 'Error getting observational memory');
     }
@@ -781,75 +586,33 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
       }
-
-      // Gateway proxy: poll the gateway OM record until buffering flags clear
-      const gwClient = (await isGatewayAgentAsync(agent)) ? getGatewayClient() : null;
-      if (gwClient) {
-        if (resourceId && threadId) {
-          const maxWaitMs = 30_000;
-          const pollIntervalMs = 1_000;
-          const deadline = Date.now() + maxWaitMs;
-
-          let record: ReturnType<typeof toLocalOMRecord> | null = null;
-          while (Date.now() < deadline) {
-            const result = await gwClient.getObservationRecord(threadId, resourceId);
-            record = result.record ? toLocalOMRecord(result.record) : null;
-            if (!record || (!record.isBufferingObservation && !record.isBufferingReflection)) {
-              break;
-            }
-            await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
-          }
-          return { record };
-        }
-        return { record: null };
-      }
-
-      const omConfig = await getOMConfigFromAgent(agent, requestContext);
-      if (!omConfig?.enabled) {
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
+      const inspector = await resolveObservationalMemoryInspector({ agent, memory, requestContext });
+      const omConfig = inspector ? await inspector.getConfig() : null;
+      if (!inspector || !omConfig) {
         throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
-      }
-
-      // Resolve the OM processor to call waitForBuffering
-      const omProcessor = await agent.resolveProcessorById('observational-memory', requestContext);
-      if (!omProcessor || typeof (omProcessor as any).waitForBuffering !== 'function') {
-        throw new HTTPException(400, { message: 'Observational Memory processor not available' });
-      }
-
-      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
-      if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
-      }
-
-      let memoryStore: MemoryStorage | undefined;
-      try {
-        memoryStore = await memory.storage.getStore('memory');
-      } catch {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
-      }
-      if (!memoryStore) {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
       }
 
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       if (!effectiveResourceId) {
+        if (inspector.kind !== 'local') return { record: null };
         throw new HTTPException(400, { message: 'resourceId is required' });
       }
-      if (threadId) {
-        const thread = await memory.getThreadById({ threadId });
-        await enforceThreadAccess({ mastra, requestContext, threadId, thread, effectiveResourceId });
-        // A thread-scoped record without its thread (new chat, or mid-deletion) has no owner to check against
-        if (!thread && omConfig.scope !== 'resource') {
-          return { record: null };
-        }
-      }
+      const omThreadId = await resolveOMThread({
+        mastra,
+        requestContext,
+        memory,
+        inspector,
+        scope: omConfig.scope,
+        threadId,
+        effectiveResourceId,
+      });
+      if (omThreadId === MISSING_THREAD) return { record: null };
 
       // Block until buffering completes (30s timeout)
-      await (omProcessor as any).waitForBuffering(threadId, effectiveResourceId);
-
-      const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
-      const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
-
-      return { record: record ?? null };
+      await inspector.waitForBuffering({ threadId: threadId ?? null, resourceId: effectiveResourceId });
+      const { record } = await inspector.getRecord({ threadId: omThreadId, resourceId: effectiveResourceId });
+      return { record };
     } catch (error) {
       console.error('Error awaiting buffer status', error);
       return handleError(error, 'Error awaiting buffer status');
