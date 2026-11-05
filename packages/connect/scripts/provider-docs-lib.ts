@@ -16,12 +16,6 @@ export const REFERENCE_OUTPUT = 'src/content/en/reference/connect/providers.mdx'
 export const INTEGRATIONS_DIR = 'src/content/en/integrations';
 export const PARTIALS_DIR = 'src/components/connect/generated';
 
-/**
- * The reference page was generated before outputs carried a marker. It is the only path
- * the generator may overwrite without finding the marker in the existing file.
- */
-const LEGACY_UNMARKED_OUTPUTS = new Set([REFERENCE_OUTPUT]);
-
 const MODEL = '__GATEWAY_OPENAI_MODEL_LUNA__';
 const TOOLS_REFERENCE = '/reference/connect/tools';
 const PROVIDER_TOOLSETS_REFERENCE = '/reference/connect/providers';
@@ -357,7 +351,7 @@ export function writeOutputs(docsRoot: string, outputs: Output[]): string[] {
   assertSafeOutputs(outputs);
   for (const { path } of outputs) {
     const file = join(docsRoot, path);
-    if (existsSync(file) && !LEGACY_UNMARKED_OUTPUTS.has(path)) {
+    if (existsSync(file)) {
       if (!readFileSync(file, 'utf8').includes(GENERATED_MARKER)) {
         throw new Error(
           `Refusing to overwrite ${path}: it has no generator marker, so it may be handwritten. ` +
