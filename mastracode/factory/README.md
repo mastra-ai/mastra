@@ -1111,6 +1111,19 @@ const factory = new MastraFactory({
 
 Credentials built into these tools are shared by every user of the Factory. A tool named like one Factory already gives the session, such as `linear_get_issue` from a connected Linear integration, is not offered, and Factory logs that once per name. When resolving the tools throws, the run fails with that error. Sessions run these tools without asking while automatic approval is on, the default; when a person turns it off, they follow the `mcp` permission category. Factory doesn't read MCP servers from the host's `mcp.json` files: `tools` is the one place a Factory's MCP tools come from.
 
+### Voice input
+
+The composer mic records a clip in the browser and posts it to `POST /web/voice/transcribe`. The server transcribes it with a provider from the Mastra Code speech-to-text registry (`@mastra/code-sdk/voice/stt-registry`), so keys never reach the browser.
+
+Voice input resolves its model and key the way an interactive chat in the same Factory does:
+
+- `factory` model scope: the Factory's voice model with organization keys. Only organization admins change the model.
+- `user` or `hybrid` model scope: each member's own voice model with personal keys. Organization keys are never used.
+
+Either side starts on auto, the first registry provider with a key. OAuth subscriptions are never used. With sign-in enabled, keys come only from stored credentials; in local mode the provider env var applies before a stored key. `GET`/`PUT /web/voice/settings` back **Settings → Models → Voice input**.
+
+Voice clips recorded in Slack and sent to a Factory session (a mention, a DM, or a thread the bot is in) are transcribed the same way under the thread's Factory, with the sender as the member, before the agent sees the message. A thread with no Factory session uses the sender's own voice model and key. The transcript replaces the clip; a clip that can't be transcribed stays attached with a note saying why. Uploaded audio files stay attachments.
+
 ### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
