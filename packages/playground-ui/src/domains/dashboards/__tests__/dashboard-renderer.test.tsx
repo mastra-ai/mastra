@@ -617,11 +617,6 @@ describe('DashboardRenderer', () => {
       if (!spy.mock.lastCall) throw new Error('The host was never asked');
       return spy.mock.lastCall[0];
     };
-    /** Hovering or focusing a disabled button's wrapper shows why it's disabled. */
-    const reasonTrigger = (button: HTMLElement) => {
-      if (!button.parentElement) throw new Error('No wrapper');
-      return button.parentElement;
-    };
     const alertLabel = /^Create alert from /;
 
     it.each([
@@ -645,7 +640,7 @@ describe('DashboardRenderer', () => {
       await pickView('Agent runs', 'Failure rate');
       expect(
         await within(cell(container, 'agent-runs')).findByRole('link', { name: 'Create alert from Failure rate' }),
-      );
+      ).toBeDefined();
       expect(lastTarget(spy).view).toMatchObject({ label: widget.views[1].label, queries: widget.views[1].queries });
     });
 
@@ -653,7 +648,9 @@ describe('DashboardRenderer', () => {
       const { alert, spy } = hosting();
       const { container } = renderDashboard(definition(metricsWidget('agent-runs')), { alert, environment: 'prod' });
       await within(cell(container, 'agent-runs')).findByRole('link', { name: alertLabel });
-      for (const query of lastTarget(spy).queries) {
+      const { queries } = lastTarget(spy);
+      expect(queries).toHaveLength(1);
+      for (const query of queries) {
         expect(query.source).toBe('metrics');
         if (query.source === 'metrics') expect(query.filters).toMatchObject({ environment: 'prod' });
         if (query.source === 'metrics') expect(query.filters).not.toHaveProperty('timestamp');
@@ -664,9 +661,9 @@ describe('DashboardRenderer', () => {
       const { alert } = hosting(() => ({ disabled: 'Percentiles are not supported yet.' }));
       const { container } = renderDashboard(definition(metricsWidget('agent-runs')), { alert });
       const button = await within(cell(container, 'agent-runs')).findByRole('button', { name: alertLabel });
-      expect(button.hasAttribute('disabled')).toBe(true);
+      expect(button.getAttribute('aria-disabled')).toBe('true');
       expect(within(cell(container, 'agent-runs')).queryByRole('link', { name: alertLabel })).toBeNull();
-      fireEvent.focus(reasonTrigger(button));
+      fireEvent.focus(button);
       expect(await screen.findByText('Percentiles are not supported yet.')).toBeDefined();
     });
 
@@ -686,8 +683,8 @@ describe('DashboardRenderer', () => {
         filterTokens: [{ fieldId: 'serviceName', value: 'checkout' }],
       });
       const button = await within(cell(container, 'distinct-ids')).findByRole('button', { name: alertLabel });
-      expect(button.hasAttribute('disabled')).toBe(true);
-      fireEvent.focus(reasonTrigger(button));
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      fireEvent.focus(button);
       expect(await screen.findAllByText('Not available with a service filter.')).not.toHaveLength(0);
       expect(spy).not.toHaveBeenCalled();
     });

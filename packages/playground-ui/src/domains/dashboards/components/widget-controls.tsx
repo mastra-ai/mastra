@@ -33,12 +33,13 @@ export function AlertAction({
       </Button>
     );
   }
-  // A disabled button takes no pointer events, so its wrapper shows the reason.
+  // A disabled button takes no pointer events or focus, so its wrapper is the control that's
+  // named, focused and shows the reason.
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span tabIndex={0} className="inline-flex">
-          <Button variant="ghost" size="icon-sm" aria-label={label} disabled>
+        <span role="button" tabIndex={0} aria-label={label} aria-disabled="true" className="inline-flex">
+          <Button variant="ghost" size="icon-sm" disabled aria-hidden tabIndex={-1}>
             <BellPlusIcon />
           </Button>
         </span>
