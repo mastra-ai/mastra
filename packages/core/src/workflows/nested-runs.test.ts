@@ -756,6 +756,9 @@ describe('a nested run hands back only its changes', () => {
     // Fails if the hand-back re-parses the start state instead of using the one the run started with.
     ['a default computed on each parse', z.string().default(() => `plain-${++parses}`)],
   ])("keeps a sibling's newer value for a key the nested run's schema filled with %s", async (_, tone) => {
+    // The nested run starts (and its schema fills `tone`) before the sibling writes, and finishes after.
+    let appendStarted!: () => void;
+    const started = new Promise<void>(resolve => (appendStarted = resolve));
     let siblingWrote!: () => void;
     const wrote = new Promise<void>(resolve => (siblingWrote = resolve));
     const sibling = createStep({
@@ -763,6 +766,7 @@ describe('a nested run hands back only its changes', () => {
       inputSchema: num,
       outputSchema: num,
       execute: async ({ inputData, state, setState }) => {
+        await started;
         await setState({ ...state, tone: 'newer' });
         siblingWrote();
         return inputData;
@@ -775,6 +779,7 @@ describe('a nested run hands back only its changes', () => {
       outputSchema: num,
       stateSchema: innerState,
       execute: async ({ inputData, state, setState }) => {
+        appendStarted();
         await wrote;
         await setState({ ...state, items: [...state.items, 'inner:0'] });
         return inputData;
