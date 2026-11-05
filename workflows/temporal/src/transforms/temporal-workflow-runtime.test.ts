@@ -1,10 +1,10 @@
+import { ApplicationFailure } from '@temporalio/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const executeChild = vi.fn();
 const proxyActivities = vi.fn();
 const sleep = vi.fn(async () => {});
 const logInfo = vi.fn();
-const nonRetryable = vi.fn((message: string) => Object.assign(new Error(message), { nonRetryable: true }));
 const defineQuery = vi.fn((name: string) => name);
 const defineSignal = vi.fn((name: string) => name);
 const signalHandlers = new Map<string, (...args: unknown[]) => void>();
@@ -15,19 +15,24 @@ const condition = vi.fn(async (predicate: () => boolean) => {
   await vi.waitFor(() => expect(predicate()).toBe(true));
 });
 
-vi.mock('@temporalio/workflow', () => ({
-  ApplicationFailure: { nonRetryable },
-  condition,
-  defineQuery,
-  defineSignal,
-  executeChild,
-  proxyActivities,
-  setHandler,
-  sleep,
-  log: {
-    info: logInfo,
-  },
-}));
+vi.mock('@temporalio/workflow', async importOriginal => {
+  const { ApplicationFailure, TemporalFailure } = await importOriginal<typeof import('@temporalio/workflow')>();
+  return {
+    ApplicationFailure,
+    TemporalFailure,
+    isCancellation: () => false,
+    condition,
+    defineQuery,
+    defineSignal,
+    executeChild,
+    proxyActivities,
+    setHandler,
+    sleep,
+    log: {
+      info: logInfo,
+    },
+  };
+});
 
 const succeeded = (output: unknown) =>
   expect.objectContaining({
@@ -44,7 +49,6 @@ describe('temporal workflow runtime helper module', () => {
     proxyActivities.mockReset();
     sleep.mockClear();
     logInfo.mockClear();
-    nonRetryable.mockClear();
     defineQuery.mockClear();
     defineSignal.mockClear();
     setHandler.mockClear();
@@ -118,6 +122,7 @@ describe('temporal workflow runtime helper module', () => {
       runId: 'run-1',
       timeTravel: {
         inputData: { value: 20 },
+        resumeData: { approved: true },
         state: { preserved: true },
         executionPath: [1],
         steps: ['second'],
@@ -136,21 +141,22 @@ describe('temporal workflow runtime helper module', () => {
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledWith({
       inputData: { value: 20 },
-      initData: { value: 20 },
+      initData: { value: 100 },
+      resumeData: { approved: true },
       runId: 'run-1',
       validateInputs: true,
       workflowId: 'time-travel-workflow',
     });
     expect(third).toHaveBeenCalledWith({
       inputData: { value: 21 },
-      initData: { value: 20 },
+      initData: { value: 100 },
       runId: 'run-1',
       validateInputs: true,
       workflowId: 'time-travel-workflow',
     });
     expect(result).toEqual({
       status: 'success',
-      input: { value: 20 },
+      input: { value: 100 },
       result: { value: 22 },
       state: { preserved: true },
       steps: {
@@ -250,10 +256,10 @@ describe('temporal workflow runtime helper module', () => {
           stepResults: { target: { status: 'running', payload: { value: 1 }, startedAt: 1 } },
         },
       }),
-    ).rejects.toMatchObject({ nonRetryable: true });
-    expect(nonRetryable).toHaveBeenCalledWith(
-      'Temporal time travel currently supports only top-level sequential step targets.',
-    );
+    ).rejects.toMatchObject({
+      nonRetryable: true,
+      message: 'Temporal time travel currently supports only top-level sequential step targets.',
+    });
   });
 
   it('rejects malformed seeded execution paths before running activities', async () => {
@@ -430,6 +436,38 @@ describe('temporal workflow runtime helper module', () => {
     });
     expect(approval).toHaveBeenNthCalledWith(2, expect.objectContaining({ resumeData: { approved: true } }));
     expect(review).toHaveBeenNthCalledWith(2, expect.objectContaining({ resumeData: { reviewed: true } }));
+  });
+
+  // A local run fails a `.parallel()` with a failed branch even when another branch suspended.
+  // Waiting for every branch must not keep the run open until someone resumes the suspended one.
+  it('fails a parallel run whose sibling branch is suspended without waiting for a resume', async () => {
+    const approval = vi.fn().mockResolvedValue({ __temporalSuspension: true, suspendPayload: { reason: 'approval' } });
+    const check = vi.fn(async () => {
+      await vi.waitFor(() => expect(condition).toHaveBeenCalled());
+      throw ApplicationFailure.nonRetryable('check failed');
+    });
+    proxyActivities.mockReturnValue({ approval, check });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow')
+      .parallel([
+        { type: 'step', step: { id: 'approval' } },
+        { type: 'step', step: { id: 'check' } },
+      ])
+      .commit();
+
+    await expect(workflow({ inputData: {} })).rejects.toMatchObject({
+      message: 'check failed',
+      details: [
+        {
+          steps: {
+            approval: expect.objectContaining({ status: 'suspended' }),
+            check: expect.objectContaining({ status: 'failed' }),
+          },
+        },
+      ],
+    });
+    expect(approval).toHaveBeenCalledOnce();
   });
 
   it('executes mapping entries through proxy activities', async () => {

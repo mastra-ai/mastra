@@ -73,6 +73,12 @@
         "type": "toggle"
       }
     ],
+    "upstage/solar-pro4": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "upstage/solar-pro2": [
       {
         "type": "effort",
@@ -83,12 +89,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "upstage/solar-pro4": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "thinkingmachines/inkling": [
@@ -103,29 +103,7 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "meta/muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.6-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-plus": [
+    "qwen/qwen3-max": [
       {
         "type": "toggle"
       },
@@ -141,7 +119,15 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-plus": [
+    "qwen/qwen3.6-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen-plus": [
       {
         "type": "toggle"
       },
@@ -157,7 +143,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.7-plus": [
+    "qwen/qwen3.5-plus": [
       {
         "type": "toggle"
       },
@@ -173,7 +159,15 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-max": [
+    "qwen/qwen-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.7-plus": [
       {
         "type": "toggle"
       },
@@ -190,6 +184,12 @@
       {
         "type": "effort",
         "values": ["high", "xhigh"]
+      }
+    ],
+    "meta/muse-spark-1.2-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

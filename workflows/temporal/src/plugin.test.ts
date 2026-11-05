@@ -51,10 +51,8 @@ async function writeTemporalWorkflowShim(projectRoot: string): Promise<void> {
   await writeFile(
     path.join(temporalWorkflowDir, 'index.js'),
     `
+      export { ApplicationFailure, TemporalFailure, isCancellation } from ${JSON.stringify(import.meta.resolve('@temporalio/workflow'))};
       const getMock = () => globalThis.__temporalWorkflowMock;
-      export const ApplicationFailure = {
-        nonRetryable: message => new Error(message),
-      };
       export const condition = (...args) => getMock().condition(...args);
       export const defineQuery = (...args) => getMock().defineQuery(...args);
       export const defineSignal = (...args) => getMock().defineSignal(...args);
@@ -387,17 +385,16 @@ describe('Temporal prebuild integration', () => {
 
       // `read` returns a string where `increment` declares a number. Unchecked, the run
       // succeeded with { value: '51' }.
+      // The run fails with the Activity's failure as its cause.
       await expect(workflows.readWorkflow!({ inputData: { text: '5' } })).rejects.toMatchObject({
-        type: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
-        nonRetryable: true,
+        cause: { type: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED', nonRetryable: true },
       });
       await expect(workflows.incrementWorkflow!({ inputData: { value: 5, note: ' hi ' } })).resolves.toMatchObject({
         result: { value: 6, note: 'hi' },
       });
 
       await expect(workflows.tenantWorkflow!({ inputData: {}, requestContext: {} })).rejects.toMatchObject({
-        type: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
-        nonRetryable: true,
+        cause: { type: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED', nonRetryable: true },
       });
       await expect(
         workflows.tenantWorkflow!({ inputData: {}, requestContext: { tenantId: 'tenant-1' } }),

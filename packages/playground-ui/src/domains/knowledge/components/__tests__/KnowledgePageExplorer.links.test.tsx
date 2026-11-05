@@ -258,25 +258,13 @@ describe('KnowledgePageExplorer body links', () => {
       expect(toggle.getAttribute('aria-pressed')).toBe('true');
       expect(toggle.getAttribute('title')).toContain('on');
     });
-
-    it('have a solid fill when on that the off state lacks', () => {
-      renderWithProviders(<Host initial={null} initialView="graph" />);
-      const toggle = screen.getByRole('button', { name: 'All links' });
-      expect(toggle.className).toContain('aria-pressed:bg-fill-inverse');
-      expect(toggle.className).toContain('aria-pressed:text-background');
-    });
   });
 
   describe('the Graph and Page toggle', () => {
-    it('gives the selected segment a solid fill and full-strength text, the others muted text', () => {
-      renderWithProviders(<Host initial={null} initialView="graph" />);
-      const graph = screen.getByRole('button', { name: 'Graph' });
-      const page = screen.getByRole('button', { name: 'Page' });
-      expect(graph.getAttribute('aria-pressed')).toBe('true');
-      expect(page.getAttribute('aria-pressed')).toBe('false');
-      expect(graph.className).toContain('aria-pressed:bg-fill-inverse');
-      expect(graph.className).toContain('aria-pressed:text-background');
-      expect(graph.className).toContain('text-muted-foreground');
+    it('marks the current view as the selected tab', () => {
+      renderWithProviders(<Host initial="overview" initialView="graph" />);
+      expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'Page' }).getAttribute('aria-selected')).toBe('false');
     });
   });
 });

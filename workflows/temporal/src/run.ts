@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { RequestContext } from '@mastra/core/di';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { ObservabilityContext, TracingOptions } from '@mastra/core/observability';
 import { createTimeTravelExecutionParams, Run } from '@mastra/core/workflows';
 import type {
@@ -9,10 +10,30 @@ import type {
   WorkflowRunStartOptions,
   WorkflowRunState,
 } from '@mastra/core/workflows';
-import { CancelledFailure, WorkflowExecutionAlreadyStartedError, WorkflowFailedError } from '@temporalio/client';
+import {
+  ApplicationFailure,
+  CancelledFailure,
+  WorkflowExecutionAlreadyStartedError,
+  WorkflowFailedError,
+} from '@temporalio/client';
 import type { Client, WorkflowHandle, WorkflowOptions } from '@temporalio/client';
+import type { WorkflowFailureDetails } from './transforms/temporal-workflow-runtime';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
+
+// Runs failed by a Worker that predates these details return undefined.
+function toFailureDetails(error: unknown): WorkflowFailureDetails | undefined {
+  if (!(error instanceof WorkflowFailedError) || !(error.cause instanceof ApplicationFailure)) {
+    return undefined;
+  }
+
+  const details = error.cause.details?.[0] as Partial<WorkflowFailureDetails> | undefined;
+  return details?.error && details.steps ? (details as WorkflowFailureDetails) : undefined;
+}
+
+function toError(error: WorkflowFailureDetails['error']): Error {
+  return getErrorFromUnknown(error, { serializeStack: false });
+}
 
 type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
   inputData?: TInput;
@@ -172,7 +193,7 @@ export class TemporalRun<
 
         const suspended = {
           ...status,
-          steps: normalizeStepResults(status.steps),
+          steps: toStepResults(status.input, status.steps),
         } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         await this.invokeLifecycleCallbacks(suspended, requestContext);
         return suspended;
@@ -187,7 +208,7 @@ export class TemporalRun<
       return {
         ...output,
         ...(input !== undefined && { input: input as TInput }),
-        steps: normalizeStepResults(output.steps),
+        steps: toStepResults(input !== undefined ? input : output.input, output.steps),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
       if (error instanceof WorkflowFailedError && error.cause instanceof CancelledFailure) {
@@ -197,6 +218,17 @@ export class TemporalRun<
           state: initialState,
           steps: {},
         } as unknown as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      }
+
+      const failure = toFailureDetails(error);
+
+      if (failure) {
+        const steps = toStepResults(input, failure.steps);
+        return (
+          failure.tripwire
+            ? { status: 'tripwire', input, tripwire: failure.tripwire, state: initialState, steps }
+            : { status: 'failed', input, error: toError(failure.error), state: initialState, steps }
+        ) as WorkflowResult<TState, TInput, TOutput, TSteps>;
       }
 
       return this.failedResult(input, initialState, error);
@@ -209,7 +241,7 @@ export class TemporalRun<
       input: input as TInput,
       error: error instanceof Error ? error : new Error(String(error)),
       state: initialState,
-      steps: {},
+      steps: toStepResults(input, {}),
     } as WorkflowResult<TState, TInput, TOutput, TSteps>;
   }
 
@@ -234,6 +266,7 @@ export class TemporalRun<
       status: result.status,
       result: result.status === 'success' ? result.result : undefined,
       error: result.status === 'failed' ? result.error : undefined,
+      tripwire: result.status === 'tripwire' ? result.tripwire : undefined,
       steps: result.steps,
       runId: this.runId,
       workflowId: this.workflowId,
@@ -242,6 +275,26 @@ export class TemporalRun<
       requestContext,
       state: (result.state ?? {}) as Record<string, any>,
     });
+  }
+
+  private resolveSuspendedStep(
+    status: unknown,
+    payload: { step?: string; label?: string },
+  ): { stepId: string; suspendedAt?: number } {
+    if (!isSuspendedWorkflowResult(status)) {
+      throw new Error(`Workflow run "${this.runId}" is not suspended.`);
+    }
+
+    const stepId =
+      payload.step ??
+      (payload.label ? status.resumeLabels?.[payload.label]?.stepId : undefined) ??
+      (status.suspended?.length === 1 && status.suspended[0]?.length === 1 ? status.suspended[0][0] : undefined);
+    const stepResult = stepId ? status.steps[stepId] : undefined;
+    if (!stepId || !isSuspendedStepResult(stepResult)) {
+      throw new Error(`No suspended step matches the requested resume target for run "${this.runId}".`);
+    }
+
+    return { stepId, suspendedAt: stepResult.suspendedAt };
   }
 
   private async resumePayload(params: {
@@ -320,14 +373,7 @@ export class TemporalRun<
     const handle = this.client.workflow.getHandle(this.runId);
     const payload = await this.resumePayload(params);
     const status = await this.queryStatus(handle);
-    const stepId = isSuspendedWorkflowResult(status)
-      ? (payload.step ??
-        (payload.label ? status.resumeLabels?.[payload.label]?.stepId : undefined) ??
-        (status.suspended?.length === 1 && status.suspended[0]?.length === 1 ? status.suspended[0][0] : undefined))
-      : undefined;
-    const previousStep = stepId && isSuspendedWorkflowResult(status) ? status.steps[stepId] : undefined;
-    const previousSuspension =
-      stepId && isSuspendedStepResult(previousStep) ? { stepId, suspendedAt: previousStep.suspendedAt } : undefined;
+    const previousSuspension = this.resolveSuspendedStep(status, payload);
     await handle.signal('mastra.resume', payload);
     return this.awaitResultOrSuspended(handle, undefined, undefined, requestContext, previousSuspension, true);
   }
@@ -356,7 +402,10 @@ export class TemporalRun<
     actor?: any;
   }) {
     const handle = this.client.workflow.getHandle(this.runId);
-    await handle.signal('mastra.resume', await this.resumePayload(params));
+    const payload = await this.resumePayload(params);
+    const status = await this.queryStatus(handle);
+    this.resolveSuspendedStep(status, payload);
+    await handle.signal('mastra.resume', payload);
     return { runId: this.runId };
   }
 
@@ -461,7 +510,12 @@ export class TemporalRun<
           `Cannot time travel to step "${steps[0]}" because preceding step "${entry.step.id}" is missing from the source execution.`,
         );
       }
-      timeTravel.stepResults[entry.step.id] = sourceStepResult;
+      if (sourceStepResult.status !== 'success') {
+        throw new Error(
+          `Cannot time travel to step "${steps[0]}" because preceding step "${entry.step.id}" did not succeed in the source execution.`,
+        );
+      }
+      timeTravel.stepResults[entry.step.id] ??= sourceStepResult;
     }
     const previousTemporalRunId = (await sourceHandle.describe()).runId;
     const requestContext = args.requestContext ?? new RequestContext<TRequestContext>();
@@ -469,7 +523,7 @@ export class TemporalRun<
 
     const handle = await this.startWorkflow(
       {
-        inputData: timeTravel.inputData,
+        inputData: status.input,
         initialState: timeTravel.state,
         requestContext: Object.fromEntries(requestContext.entries()),
         runId: this.runId,
@@ -477,6 +531,7 @@ export class TemporalRun<
         outputOptions: args.outputOptions,
         tracingOptions: args.tracingOptions,
         perStep: args.perStep,
+        validateInputs: this.validateInputs,
         timeTravel,
         timeTravelLineage: { previousTemporalRunId, target: steps },
       },
@@ -487,7 +542,7 @@ export class TemporalRun<
 
     return this.awaitResultOrSuspended(
       handle,
-      timeTravel.inputData as TInput,
+      status.input as TInput,
       timeTravel.state as TState,
       requestContext as RequestContext,
     ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
@@ -527,6 +582,7 @@ export class TemporalRun<
 
 function isSuspendedWorkflowResult(value: unknown): value is {
   status: 'suspended';
+  input?: unknown;
   steps: Record<string, unknown>;
   suspended?: string[][];
   resumeLabels?: Record<string, { stepId: string }>;
@@ -544,13 +600,24 @@ function isSuspendedStepResult(value: unknown): value is { status: 'suspended'; 
   return typeof value === 'object' && value !== null && (value as { status?: unknown }).status === 'suspended';
 }
 
-// The worker only records successful steps; a failed run rejects handle.result() instead.
+// Failed step records arrive in the failure details of a failed run, not in handle.result().
 function normalizeStepResult(value: unknown): unknown {
   if (typeof value !== 'object' || value === null) {
     return { status: 'success', output: value, startedAt: 0, endedAt: 0 };
   }
 
   const record = value as Record<string, unknown>;
+  if (record.__temporalStepResult === true && record.status === 'failed') {
+    return {
+      status: 'failed',
+      payload: record.payload,
+      error: toError(record.error as WorkflowFailureDetails['error']),
+      ...(record.tripwire !== undefined && { tripwire: record.tripwire }),
+      startedAt: record.startedAt,
+      endedAt: record.endedAt,
+    };
+  }
+
   if (record.__temporalStepResult === true && record.status === 'suspended' && typeof record.suspendedAt === 'number') {
     return {
       status: 'suspended',
@@ -578,6 +645,11 @@ function normalizeStepResult(value: unknown): unknown {
   }
 
   return { status: 'success', output: value, startedAt: 0, endedAt: 0 };
+}
+
+// Like a local run, the step records start with the workflow input under `input`.
+function toStepResults<T>(input: unknown, steps: T): T {
+  return { input, ...normalizeStepResults(steps) } as T;
 }
 
 // Workers built before step results used the core StepResult shape return raw step outputs.
