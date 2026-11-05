@@ -870,6 +870,8 @@ export class DurableAgent<
       // Preserve dynamic model resolution until a request context is available.
       model: ({ requestContext }) => agent.getModel({ requestContext }),
       notifications: agent.__getNotificationConfig(),
+      // Runs publish through this wrapper's own stream bus.
+      durable: false,
     });
 
     this.#wrappedAgent = agent;
@@ -948,6 +950,26 @@ export class DurableAgent<
    */
   get pubsub(): PubSub {
     return this.#streams.pubsub;
+  }
+
+  /** Durable runs always publish on their stream topic. */
+  override hasResumableStreams(): boolean {
+    return true;
+  }
+
+  /** @internal */
+  override __getStreamBus(): AgentStreamBus {
+    return this.#streams;
+  }
+
+  /**
+   * Owner of a run this process still tracks (until its auto-cleanup clears
+   * the replay history), or undefined.
+   * @internal
+   */
+  override __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    if (!this.#runRegistry.has(runId)) return undefined;
+    return { ...this.#runRegistry.getMemoryInfo(runId) };
   }
 
   /**
@@ -2190,6 +2212,9 @@ export class DurableAgent<
     }
     fork.#streams.adoptInnerPubsub(this.#streams);
     fork.source = this.source;
+    // Share the untilIdle wrappers, so a task finishing under the fork's stream isn't
+    // also reported by the registered agent (mirrors `Agent.__fork()`).
+    fork.#activeStreamUntilIdle = this.#activeStreamUntilIdle;
     // `_agentNetworkAppend` is a private base-class flag; copy it via an indexed
     // cast (the same idiom the base uses in `toRawConfig()`) so the fork mirrors
     // `Agent.__fork()` without widening the field's visibility.
@@ -2228,10 +2253,13 @@ export class DurableAgent<
    * Whether new runs of this agent's loop are stored as workflow storage
    * version 2 where the engine and store support it (see the workflow's
    * `autoStorageVersion` option). A resumed run stays in its stored version.
+   * Off until crash recovery and resume claims are tested on version 2: the
+   * restart harness and resume-claim-loser.test.ts still store runs in v1.
+   * EventedAgent overrides this to `false`.
    * @internal
    */
   protected get storesRunsInJournal(): boolean {
-    return true;
+    return false;
   }
 
   /**
@@ -2796,7 +2824,7 @@ export class DurableAgent<
    *
    * @internal Used by the server's run abort route.
    */
-  async __abortRunAcknowledged(runId: string): Promise<boolean> {
+  override async __abortRunAcknowledged(runId: string): Promise<boolean> {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     if (wrapperClose) {
       wrapperClose();
@@ -3156,8 +3184,8 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     // Whether this caller's stream closes at the suspension boundary. Defaults
@@ -3880,8 +3908,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     const globalEntry = getRunRegistryEntry(runId, this.#mastra);
@@ -4408,8 +4436,8 @@ export class DurableAgent<
       cleanupOwnedRegistryState();
     };
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     let workflow: ReturnType<DurableAgent<TAgentId, TTools, TOutput>['getWorkflow']>;
@@ -4775,13 +4803,14 @@ export class DurableAgent<
 
     // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(() => {
-        if (!cleanedUp) {
-          releaseRunState();
-          cleanedUp = true;
-        }
-      }, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer =
+        this.#streams.scheduleCleanup(() => {
+          if (!cleanedUp) {
+            releaseRunState();
+            cleanedUp = true;
+          }
+        }) ?? null;
     };
 
     // 3. Create the durable agent stream (subscribes to pubsub)
@@ -5550,8 +5579,8 @@ export class DurableAgent<
     };
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp || this.#streams.cleanupTimeoutMs === 0) return;
-      autoCleanupTimer = setTimeout(performCleanup, this.#streams.cleanupTimeoutMs);
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = this.#streams.scheduleCleanup(performCleanup) ?? null;
     };
 
     const completeTerminalLifecycle = () => {

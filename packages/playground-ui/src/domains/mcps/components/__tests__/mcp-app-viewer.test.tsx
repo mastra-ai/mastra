@@ -1,61 +1,33 @@
 // @vitest-environment jsdom
-import { App } from '@modelcontextprotocol/ext-apps';
+import type { McpServerToolListResponse } from '@mastra/client-js';
+import type { App } from '@modelcontextprotocol/ext-apps';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import type { ReactElement } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 
+import { useMcpAppToolCall } from '../../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from '../mcp-app-viewer';
 import type { McpAppViewerProps } from '../mcp-app-viewer';
-
-type AppTransport = Parameters<App['connect']>[0];
+import { connectApp, sandboxFrame } from './connect-app';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 const SANDBOX_URL = new URL('http://sandbox.test/proxy.html');
 const HTML = '<!DOCTYPE html><html><body>app</body></html>';
 
-const apps = new Set<App>();
+function viewer(props: Partial<McpAppViewerProps>) {
+  return <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} {...props} />;
+}
 
-afterEach(async () => {
-  await Promise.all([...apps].map(app => app.close()));
-  apps.clear();
-});
-
-/**
- * Renders the viewer and connects a real MCP App to it, standing in for the sandbox proxy page
- * it loads: the proxy announces itself, then relays JSON-RPC between the viewer and the app.
- */
-async function renderApp(props: Partial<McpAppViewerProps> = {}, setup?: (app: App) => void) {
-  const { container } = render(
-    <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} {...props} />,
-  );
-  const frame = await waitFor(() => {
-    const contentWindow = container.querySelector('iframe')?.contentWindow;
-    if (!contentWindow) throw new Error('sandbox iframe not mounted yet');
-    return contentWindow;
-  });
-
-  // The viewer only accepts messages coming from its sandbox iframe.
-  const fromSandbox = (data: unknown) => window.dispatchEvent(new MessageEvent('message', { data, source: frame }));
-  const onHostMessage = (event: MessageEvent) => transport.onmessage?.(event.data);
-  const transport: AppTransport = {
-    async start() {
-      frame.addEventListener('message', onHostMessage);
-    },
-    async send(message) {
-      // Like a real postMessage, deliver on a later task, once the viewer is listening.
-      setTimeout(() => fromSandbox(message));
-    },
-    async close() {
-      frame.removeEventListener('message', onHostMessage);
-      transport.onclose?.();
-    },
-  };
-
-  fromSandbox({ jsonrpc: '2.0', method: 'ui/notifications/sandbox-proxy-ready', params: {} });
-  const app = new App({ name: 'test-app', version: '1.0.0' }, {}, { autoResize: false });
-  apps.add(app);
-  setup?.(app);
-  await app.connect(transport);
-  return app;
+async function renderApp(
+  props: Partial<McpAppViewerProps> = {},
+  setup?: (app: App) => void,
+  element: ReactElement = viewer(props),
+) {
+  const { container } = renderWithProviders(element);
+  return connectApp(container, setup);
 }
 
 describe('McpAppViewer', () => {
@@ -147,6 +119,57 @@ describe('McpAppViewer', () => {
     expect(onUpdateModelContext).toHaveBeenLastCalledWith(undefined);
   });
 
+  it("hands the app's raw model context to onModelContext, next to the text for the chat", async () => {
+    const onUpdateModelContext = vi.fn();
+    const onModelContext = vi.fn();
+    const app = await renderApp({ onUpdateModelContext, onModelContext });
+
+    const params = {
+      content: [{ type: 'text' as const, text: 'Pinned: Agent runs' }],
+      structuredContent: { 'mastra.ai/dashboard-pinned-widgets': [{ widget: { id: 'agent-runs' } }] },
+    };
+    await app.updateModelContext(params);
+
+    expect(onModelContext).toHaveBeenLastCalledWith(params);
+    expect(onUpdateModelContext).toHaveBeenLastCalledWith(
+      [
+        'Context from the "showDashboard" MCP App shown in this conversation:',
+        'Pinned: Agent runs',
+        '{"mastra.ai/dashboard-pinned-widgets":[{"widget":{"id":"agent-runs"}}]}',
+      ].join('\n'),
+    );
+  });
+
+  it('accepts model context with only onModelContext, advertising structured content', async () => {
+    const onModelContext = vi.fn();
+    const app = await renderApp({ onModelContext });
+
+    expect(app.getHostCapabilities()?.updateModelContext).toEqual({ text: {}, structuredContent: {} });
+    await app.updateModelContext({ structuredContent: { drilldown: { page: 'traces' } } });
+    expect(onModelContext).toHaveBeenLastCalledWith({ structuredContent: { drilldown: { page: 'traces' } } });
+  });
+
+  it('sends extra host-context keys to the app, and their changes to the running app', async () => {
+    const { container, rerender } = renderWithProviders(viewer({ hostContext: { 'mastra.ai/pins': ['a'] } }));
+    const { frame } = await sandboxFrame(container);
+    const app = await connectApp(container);
+    expect(app.getHostContext()).toMatchObject({ 'mastra.ai/pins': ['a'], theme: expect.any(String) });
+
+    const changed = new Promise(resolve => app.addEventListener('hostcontextchanged', resolve));
+    rerender(viewer({ hostContext: { 'mastra.ai/pins': ['a', 'b'] } }));
+
+    expect(await changed).toEqual({ 'mastra.ai/pins': ['a', 'b'] });
+    expect(app.getHostContext()).toMatchObject({ 'mastra.ai/pins': ['a', 'b'] });
+    // Same sandbox and bridge: the app was not reloaded.
+    expect(container.querySelector('iframe')).toBe(frame);
+  });
+
+  it("keeps the viewer's theme over a host-context theme", async () => {
+    const app = await renderApp({ hostContext: { theme: 'not-a-theme' } });
+
+    expect(app.getHostContext()?.theme).not.toBe('not-a-theme');
+  });
+
   it('opens web links the app asks for in a new tab, without giving the page a handle on Studio', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     const app = await renderApp();
@@ -179,5 +202,45 @@ describe('McpAppViewer', () => {
     await expect(
       app.updateModelContext({ content: [{ type: 'text', text: 'The user drilled into traces.' }] }),
     ).rejects.toThrow('No handler for method: ui/update-model-context');
+  });
+
+  describe("when Studio relays an app's tool call to the app's MCP server", () => {
+    /** The viewer as Studio mounts it: tool calls go to the server through Studio's API. */
+    function StudioViewer({ serverId }: { serverId: string }) {
+      const onToolCall = useMcpAppToolCall(serverId);
+      return <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} onToolCall={onToolCall} />;
+    }
+
+    function serveTools(tools: McpServerToolListResponse['tools']) {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/mcp/apps/tools`, () => HttpResponse.json<McpServerToolListResponse>({ tools })),
+      );
+    }
+
+    it("refuses a tool the server doesn't have with invalid params, as MCP servers do", async () => {
+      serveTools([]);
+      const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
+
+      await expect(app.callServerTool({ name: 'dashboardData', arguments: {} })).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('isn\'t available to apps on MCP server "apps"'),
+      });
+    });
+
+    it('refuses a tool the server keeps for the model the same way', async () => {
+      serveTools([
+        {
+          name: 'dashboardData',
+          description: 'Reads data',
+          inputSchema: { type: 'object' },
+          _meta: { ui: { visibility: ['model'] } },
+        },
+      ]);
+      const app = await renderApp({}, undefined, <StudioViewer serverId="apps" />);
+
+      await expect(app.callServerTool({ name: 'dashboardData', arguments: {} })).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+      });
+    });
   });
 });

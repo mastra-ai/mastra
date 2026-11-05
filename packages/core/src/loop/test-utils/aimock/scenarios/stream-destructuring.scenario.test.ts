@@ -45,6 +45,16 @@ async function recordRunBoundaries(pubsub: EventEmitterPubSub, mastra: Mastra) {
   return { serialized, writes };
 }
 
+/** Checks a durable run published and wrote through every boundary of the storage version it ran on. */
+function expectRunCrossedBoundaries(writes: Record<string, number>, engine: string) {
+  expect(writes.publish).toBeGreaterThan(0);
+  const evented = engine === 'evented';
+  const boundaries = writes.writeWorkflowRunCheckpoint
+    ? ['writeWorkflowRunCheckpoint', ...(evented ? ['appendWorkflowRunEntries', 'updateWorkflowRunHeader'] : [])]
+    : ['persistWorkflowSnapshot', ...(evented ? ['updateWorkflowResults', 'updateWorkflowState'] : [])];
+  for (const boundary of boundaries) expect(writes[boundary], boundary).toBeGreaterThan(0);
+}
+
 /**
  * Destructuring the stream result (moved from save-and-errors.e2e, which ran
  * this once against a hash-matched recording on the normal engine).
@@ -235,12 +245,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         );
         expect(onFinish).not.toHaveBeenCalled();
         if (isDurableEngineVariant(engine)) {
-          expect(writes.publish).toBeGreaterThan(0);
-          expect(writes.writeWorkflowRunCheckpoint).toBeGreaterThan(0);
-          if (engine === 'evented') {
-            expect(writes.appendWorkflowRunEntries).toBeGreaterThan(0);
-            expect(writes.updateWorkflowRunHeader).toBeGreaterThan(0);
-          }
+          expectRunCrossedBoundaries(writes, engine);
           expect(serialized.join('\n')).not.toMatch(/PRIVATE_(ERROR|EARLIER)_REQUEST/);
         }
       } finally {
@@ -355,12 +360,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         expect(llm.getRequests()).toHaveLength(0);
         expect(await output.request).toEqual(request);
         if (isDurableEngineVariant(engine)) {
-          expect(writes.publish).toBeGreaterThan(0);
-          expect(writes.writeWorkflowRunCheckpoint).toBeGreaterThan(0);
-          if (engine === 'evented') {
-            expect(writes.appendWorkflowRunEntries).toBeGreaterThan(0);
-            expect(writes.updateWorkflowRunHeader).toBeGreaterThan(0);
-          }
+          expectRunCrossedBoundaries(writes, engine);
           expect(serialized.join('\n')).not.toContain('private-cached-request');
         }
       } finally {
@@ -426,12 +426,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         expect(await output.request).toEqual(requests[1]);
         await expect.poll(() => callbackRequest).toEqual(requests[1]);
         if (isDurableEngineVariant(engine)) {
-          expect(writes.publish).toBeGreaterThan(0);
-          expect(writes.writeWorkflowRunCheckpoint).toBeGreaterThan(0);
-          if (engine === 'evented') {
-            expect(writes.appendWorkflowRunEntries).toBeGreaterThan(0);
-            expect(writes.updateWorkflowRunHeader).toBeGreaterThan(0);
-          }
+          expectRunCrossedBoundaries(writes, engine);
           const leaks: string[] = [];
           const visit = (value: unknown, path: string) => {
             if (typeof value === 'string' && value.includes('PRIVATE_REQUEST_')) leaks.push(path);

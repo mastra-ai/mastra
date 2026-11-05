@@ -23,9 +23,10 @@ export async function verifyRunLease(runId: string | undefined): Promise<void> {
 }
 
 /**
- * The steps (model requests and tool calls) each run has running now, keyed by an object owned by that one run
- * instance: the abort signal the thread runtime prepared for it, or a durable run's registry entry. Runs that share
- * a run id, agent or thread never share one.
+ * The steps (model requests and tool calls) each run has running now, keyed by the object that run's caller declares
+ * as its owner: the abort signal the thread runtime prepared for it, or a durable run's registry entry. It has to be
+ * that object and not a signal derived from it further down — the runtime only knows the one it prepared, so a derived
+ * signal would silently read as idle. Runs that share a run id, agent or thread never share one.
  */
 const runningSteps = new WeakMap<object, { count: number; onSettled: Array<() => void> }>();
 /** When each run's last step settled, so the moment between one step and the next doesn't read as idle. */

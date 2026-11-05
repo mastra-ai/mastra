@@ -299,6 +299,47 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
     );
   });
 
+  // `mastra dev` extracts the `server` option, whose api routes import installed packages (#28645). Rollup loads modules
+  // with `fs/promises` `readFile` and copies that module's functions when it is first imported, so the patch must run
+  // before the deployer import. The module reads recorded during extraction are the files that entered the graph.
+  it('extracts the server option without loading installed packages (#28645)', async () => {
+    const appDir = join(fixturePath, 'apps', 'custom');
+    const entryFile = join(appDir, 'src', 'mastra', 'index.ts');
+    const outputDir = join(appDir, '.mastra', 'option-extraction-e2e');
+
+    try {
+      const { stdout } = await execa(
+        'node',
+        [
+          '--input-type=module',
+          '-e',
+          `import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+const reads = [];
+const readFile = fs.readFile;
+fs.readFile = (path, ...args) => (reads.push(String(path)), readFile(path, ...args));
+syncBuiltinESMExports();
+const { extractMastraOption } = await import('@mastra/deployer/build');
+const result = await extractMastraOption('server', ${JSON.stringify(entryFile)}, ${JSON.stringify(outputDir)});
+fs.readFile = readFile;
+syncBuiltinESMExports();
+const server = await result.getConfig();
+console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.path) }));`,
+        ],
+        { cwd: appDir },
+      );
+      const { reads, routes }: { reads: string[]; routes: string[] } = JSON.parse(stdout.trim().split('\n').at(-1)!);
+      const modules = reads.filter(file => !file.endsWith('package.json'));
+      const routeFile = join('src', 'mastra', 'api', 'route', 'test.ts');
+
+      expect(modules.some(file => file.endsWith(routeFile))).toBe(true);
+      expect(modules.filter(file => file.includes('node_modules'))).toEqual([]);
+      expect(routes).toEqual(expect.arrayContaining(['/test', '/transitive-workspace']));
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
   function runApiTests(port: number) {
     it('should resolve api routes', async () => {
       const res = await fetch(`http://localhost:${port}/test`);
@@ -1608,6 +1649,9 @@ export const mastra = new Mastra({
 
       // read-excel-file/node/package.json is named "read-excel-file/node" at 1.0.0 (#28828).
       expect(dependencies['read-excel-file']).toBe('9.3.12');
+
+      // Only reachable through pino transport detection in the analyzed bundle.
+      expect(dependencies['pino-pretty']).toBe('13.2.0');
     });
   });
 
@@ -1706,6 +1750,8 @@ class AliasDeployer extends Deployer {
           );
           expect(output).toContain('MASTRA_BROWSER_CJS_ALIAS_SHIM');
           expect(output).not.toContain('MASTRA_NODE_ALIAS_SHIM');
+          // #29572: the deployer is stripped from the entry
+          expect(output).not.toContain('alias-test');
 
           const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
           expect(outputPackageJson.dependencies ?? {}).not.toHaveProperty('ajv');
