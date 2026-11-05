@@ -1,6 +1,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { TokenUsage } from '@mastra/core/agent-controller';
+import { replaceEqualDeep } from '@tanstack/react-query';
 
 import type { OMBudgets } from './om';
 
@@ -182,14 +183,22 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
         _decodeHasReasoning: false,
       };
     }
-    case 'display_state_changed':
-      return {
-        ...state,
-        omProgress: event.displayState.omProgress ?? state.omProgress,
-        usage: event.displayState.tokenUsage ?? state.usage,
-        bufferingMessages: event.displayState.bufferingMessages ?? false,
-        bufferingObservations: event.displayState.bufferingObservations ?? false,
-      };
+    case 'display_state_changed': {
+      // Snapshots arrive many times a second and mostly repeat what is shown; the same state lets React skip the chat.
+      const omProgress = replaceEqualDeep(state.omProgress, event.displayState.omProgress ?? state.omProgress);
+      const usage = replaceEqualDeep(state.usage, event.displayState.tokenUsage ?? state.usage);
+      const bufferingMessages = event.displayState.bufferingMessages ?? false;
+      const bufferingObservations = event.displayState.bufferingObservations ?? false;
+      if (
+        omProgress === state.omProgress &&
+        usage === state.usage &&
+        bufferingMessages === state.bufferingMessages &&
+        bufferingObservations === state.bufferingObservations
+      ) {
+        return state;
+      }
+      return { ...state, omProgress, usage, bufferingMessages, bufferingObservations };
+    }
     case 'goal_evaluation':
       return { ...state, goal: event.payload };
     case 'follow_up_queued':
