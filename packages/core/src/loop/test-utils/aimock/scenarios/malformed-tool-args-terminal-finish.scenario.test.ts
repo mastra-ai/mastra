@@ -2,7 +2,9 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
+import { recordDelegationFailure, takeDelegationFailure } from '../../../shared/delegation-outcome';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
@@ -129,6 +131,49 @@ describeForAllEngines('AIMock scenario: cut-off tool-call arguments in a termina
     expect(await output.finishReason).toBe('length');
     const { messages = [] } = await output.response;
     expect(JSON.stringify(messages.filter(message => message.role === 'tool'))).toContain('lookup service unavailable');
+  });
+
+  // A delegation hook that bails on a failed sub-agent leaves a flag and its failure on the
+  // RequestContext. A terminal finish must consume both, or a caller that reuses the context
+  // would stop its next run's first tool turn early with a stale failure (#29518).
+  it('consumes a delegation bail left by a failed call at a "length" finish (#29518)', async () => {
+    const requestContext = new RequestContext();
+    const delegate = createTool({
+      id: 'delegate',
+      description: 'Ask a sub-agent',
+      inputSchema: z.object({ query: z.string().optional() }),
+      execute: async (_input, context) => {
+        const ctx = context?.requestContext ?? requestContext;
+        ctx.set('__mastra_delegationBailed', true);
+        recordDelegationFailure(ctx, { outcome: 'error', stopReason: null });
+        throw new Error('sub-agent failed');
+      },
+    });
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      model: chatModel(getMock()),
+      prompt: 'Ask the sub-agent',
+      tools: { delegate },
+      requestContext,
+      stopWhen: stepCountIs(5),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call-delegate', name: 'delegate', arguments: '{"query": "x"}' }],
+            finishReason: 'length',
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'unexpected second request' });
+      },
+    });
+
+    expect(await output.finishReason).toBe('length');
+    expect(requests).toHaveLength(1);
+    expect(requestContext.get('__mastra_delegationBailed')).toBeFalsy();
+    expect(takeDelegationFailure(requestContext)).toBeUndefined();
   });
 
   it.each(['tool_calls', 'stop'])(
