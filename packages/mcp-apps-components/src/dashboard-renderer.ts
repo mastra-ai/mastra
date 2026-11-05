@@ -6,6 +6,7 @@ import { defineMcpAppResource } from './define-mcp-app-resource';
 
 export { dashboardRendererInputSchema };
 export {
+  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
   dashboardPinnedWidgetSchema,
   dashboardPinnedWidgetsSchema,

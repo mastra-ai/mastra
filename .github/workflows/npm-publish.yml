@@ -530,7 +530,7 @@ jobs:
       # Same new-package preflight as the other publish jobs, scoped to the
       # playground subgraph this job publishes. See the prerelease job.
       - name: Preflight - verify publishable packages exist on npm and trust this workflow
-        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000 --pnpm-filter '@mastra/playground-ui...' --pnpm-filter '@mastra/observability...' --pnpm-filter '@mastra/mcp-apps-components...'
+        run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000 --pnpm-filter-prod '@mastra/playground-ui...' --pnpm-filter-prod '@mastra/observability...' --pnpm-filter-prod '@mastra/mcp-apps-components...'
 
       - name: Build playground UI, observability, MCP Apps components, and dependencies
         run: pnpm turbo build --filter '@mastra/playground-ui...' --filter '@mastra/observability...' --filter '@mastra/mcp-apps-components...'
@@ -574,7 +574,7 @@ jobs:
           if [[ "$DRY_RUN" == 'true' ]]; then
             args+=(--dry-run)
           fi
-          pnpm --filter '@mastra/playground-ui...' --filter '@mastra/observability...' --filter '@mastra/mcp-apps-components...' publish -r --no-git-checks --tag "$FINAL_TAG" --access public "${args[@]}"
+          pnpm --filter-prod '@mastra/playground-ui...' --filter-prod '@mastra/observability...' --filter-prod '@mastra/mcp-apps-components...' publish -r --no-git-checks --tag "$FINAL_TAG" --access public "${args[@]}"
 
   # ===========================================
   # SNAPSHOT: Manual trigger only (non-main branches)

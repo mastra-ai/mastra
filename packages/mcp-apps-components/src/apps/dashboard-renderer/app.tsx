@@ -24,8 +24,15 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
   const capabilities = app.getHostCapabilities();
   // Each model context update replaces the last, so pins re-send the last drilldown and drilldowns the pins.
   const lastDrilldown = useRef<DrilldownModelContext | undefined>(undefined);
-  const updateModelContext = () =>
-    app.updateModelContext(dashboardModelContext({ pinned: pins.pinned(), drilldown: lastDrilldown.current }));
+  const updateModelContext = async () => {
+    const pinState = pins.report();
+    try {
+      await app.updateModelContext(dashboardModelContext({ pins: pinState, drilldown: lastDrilldown.current }));
+    } catch (error) {
+      if (pinState) pins.rejected(pinState.request);
+      throw error;
+    }
+  };
 
   // Drilldowns continue the conversation, so they only show on hosts that accept messages.
   // Hosts that take model context get the exact filters as data; the rest get them spelled out.

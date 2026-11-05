@@ -6,7 +6,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
-import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, dashboardPinnedWidgetsSchema } from '../pin';
+import {
+  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
+  DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
+  dashboardPinnedWidgetsSchema,
+} from '../pin';
 import { agentRunsAggregate, agentRunsDashboard, emptyTimeSeries, supportRunsChart } from './fixtures/dashboard';
 
 const AGGREGATE_API = `${MASTRA_SERVER}/observability/metrics/aggregate`;
@@ -219,13 +223,13 @@ describe('dashboard renderer app', () => {
       return found;
     };
 
-    async function showDashboard(pinnedWidgets: string[]) {
+    async function showDashboard(pinnedWidgets: string[], hostContext: Record<string, unknown> = {}) {
       server.use(
         http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)),
         http.post(TIME_SERIES_API, () => HttpResponse.json(emptyTimeSeries)),
       );
       const host = await renderWithHost(app, {
-        hostContext: { [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: pinnedWidgets },
+        hostContext: { [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: pinnedWidgets, ...hostContext },
       });
       await host.sendToolResult({ content: [], structuredContent: { definition: pinnableDashboard, scope: 'org' } });
       expect(await screen.findByText('Agent runs')).toBeTruthy();
@@ -239,6 +243,12 @@ describe('dashboard renderer app', () => {
       return dashboardPinnedWidgetsSchema.parse(pinned).map(({ widget }) => widget.id);
     };
 
+    // What a host sends once it handled the app's last pin update, with the ids it ended up with.
+    const answer = (host: { modelContexts: unknown[] }, ids?: string[]) => ({
+      [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: lastContext(host)?.structuredContent[DASHBOARD_PIN_REQUEST_CONTEXT_KEY],
+      ...(ids && { [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ids }),
+    });
+
     it('reports every widget the user wants pinned in model context, and shows it pinned once the host says so', async () => {
       const host = await showDashboard(['kpis']);
 
@@ -246,15 +256,19 @@ describe('dashboard renderer app', () => {
 
       await expect.poll(() => host.modelContexts).toHaveLength(1);
       const context = lastContext(host);
-      // The full list, not the change: the widget the host already pinned comes along.
-      expect(context?.structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]).toEqual([
-        { widget: expect.objectContaining({ id: 'kpis', kind: 'kpis' }), scope: 'org', defaults: pageDefaults },
-        {
-          widget: expect.objectContaining({ id: 'support-runs', kind: 'timeseries', title: 'Support runs' }),
-          scope: 'org',
-          defaults: pageDefaults,
-        },
-      ]);
+      // The full list, not the change: the widget the host already pinned comes along, without
+      // defaults so the host keeps the ones it stored for it.
+      expect(context?.structuredContent).toEqual({
+        [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: [
+          { widget: expect.objectContaining({ id: 'kpis', kind: 'kpis' }), scope: 'org' },
+          {
+            widget: expect.objectContaining({ id: 'support-runs', kind: 'timeseries', title: 'Support runs' }),
+            scope: 'org',
+            defaults: pageDefaults,
+          },
+        ],
+        [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: expect.any(Number),
+      });
       // What hosts parse the payload with accepts what the app sends.
       expect(
         dashboardPinnedWidgetsSchema.safeParse(context?.structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY])
@@ -269,12 +283,19 @@ describe('dashboard renderer app', () => {
       // The host owns the state: until it answers, the widget still shows unpinned.
       expect(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin Support runs' })).toBeTruthy();
 
-      await host.setHostContext({ [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ['kpis', 'support-runs'] });
+      await host.setHostContext(answer(host, ['kpis', 'support-runs']));
 
       expect(
         await within(widgetCell('support-runs')).findByRole('button', { name: 'Unpin Support runs' }),
       ).toBeTruthy();
       expect(within(widgetCell('kpis')).getByRole('button', { name: 'Unpin widget' })).toBeTruthy();
+
+      // Once the host holds the pin, later updates leave its defaults to the host too.
+      fireEvent.click(within(widgetCell('kpis')).getByRole('button', { name: 'Unpin widget' }));
+      await expect.poll(() => host.modelContexts).toHaveLength(2);
+      expect(lastContext(host)?.structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]).toEqual([
+        { widget: expect.objectContaining({ id: 'support-runs' }), scope: 'org' },
+      ]);
     });
 
     it('reports the list without a widget the user unpins', async () => {
@@ -283,7 +304,10 @@ describe('dashboard renderer app', () => {
       fireEvent.click(within(widgetCell('kpis')).getByRole('button', { name: 'Unpin widget' }));
 
       await expect.poll(() => host.modelContexts).toHaveLength(1);
-      expect(lastContext(host)?.structuredContent).toEqual({ [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: [] });
+      expect(lastContext(host)?.structuredContent).toEqual({
+        [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: [],
+        [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: expect.any(Number),
+      });
       expect(lastContext(host)?.content).toEqual([
         { type: 'text', text: 'The user has no widgets of this dashboard pinned.' },
       ]);
@@ -316,11 +340,70 @@ describe('dashboard renderer app', () => {
 
       fireEvent.click(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin Support runs' }));
       await expect.poll(() => host.modelContexts).toHaveLength(1);
-      await host.setHostContext({ [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ['kpis'] });
+      await host.setHostContext(answer(host, ['kpis']));
       fireEvent.click(within(widgetCell('kpis')).getByRole('button', { name: 'Unpin widget' }));
 
       await expect.poll(() => host.modelContexts).toHaveLength(2);
       expect(requestedIds(host)).toEqual([]);
+    });
+
+    it('stops asking for a pin the host turned down without changing its ids', async () => {
+      const host = await showDashboard([]);
+
+      fireEvent.click(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin Support runs' }));
+      await expect.poll(() => host.modelContexts).toHaveLength(1);
+      // The ids stay [], so the bridge only sends the answer.
+      await host.setHostContext(answer(host, []));
+      fireEvent.click(within(widgetCell('kpis')).getByRole('button', { name: 'Pin widget' }));
+
+      await expect.poll(() => host.modelContexts).toHaveLength(2);
+      expect(requestedIds(host)).toEqual(['kpis']);
+      expect(lastContext(host)?.content).toEqual([
+        { type: 'text', text: 'The user pinned these widgets of this dashboard: "kpis".' },
+      ]);
+    });
+
+    it('keeps a click the host has not reached when it answers an earlier one', async () => {
+      const host = await showDashboard([]);
+
+      fireEvent.click(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin Support runs' }));
+      await expect.poll(() => host.modelContexts).toHaveLength(1);
+      const firstAnswer = answer(host, ['support-runs']);
+      fireEvent.click(within(widgetCell('kpis')).getByRole('button', { name: 'Pin widget' }));
+      await expect.poll(() => host.modelContexts).toHaveLength(2);
+
+      // The host answers the first update before the second, then the user clicks again.
+      await host.setHostContext(firstAnswer);
+      fireEvent.click(await within(widgetCell('support-runs')).findByRole('button', { name: 'Unpin Support runs' }));
+
+      await expect.poll(() => host.modelContexts).toHaveLength(3);
+      expect(requestedIds(host)).toEqual(['kpis']);
+    });
+
+    it('drops the clicks of an update the host fails', async () => {
+      const failed = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = await showDashboard([]);
+      const accept = host.bridge.onupdatemodelcontext;
+      host.bridge.onupdatemodelcontext = async () => {
+        host.bridge.onupdatemodelcontext = accept;
+        throw new Error('Host is busy');
+      };
+
+      fireEvent.click(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin Support runs' }));
+      await expect.poll(() => failed).toHaveBeenCalledWith('[Mastra dashboard] Pin failed', expect.anything());
+      fireEvent.click(within(widgetCell('kpis')).getByRole('button', { name: 'Pin widget' }));
+
+      await expect.poll(() => host.modelContexts).toHaveLength(1);
+      expect(requestedIds(host)).toEqual(['kpis']);
+    });
+
+    it('numbers its updates past the answer the host kept from an earlier instance of the app', async () => {
+      const host = await showDashboard([], { [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: 7 });
+
+      fireEvent.click(within(widgetCell('support-runs')).getByRole('button', { name: 'Pin Support runs' }));
+
+      await expect.poll(() => host.modelContexts).toHaveLength(1);
+      expect(lastContext(host)?.structuredContent[DASHBOARD_PIN_REQUEST_CONTEXT_KEY]).toBe(8);
     });
 
     it('keeps the pinned widgets in the model context a drilldown sends, and the drilldown in later pins', async () => {
@@ -331,9 +414,8 @@ describe('dashboard renderer app', () => {
       await expect.poll(() => host.chat).toEqual(['context', 'message']);
       expect(lastContext(host)?.structuredContent).toEqual({
         drilldown: expect.objectContaining({ page: 'traces' }),
-        [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: [
-          { widget: expect.objectContaining({ id: 'kpis' }), scope: 'org', defaults: pageDefaults },
-        ],
+        [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: [{ widget: expect.objectContaining({ id: 'kpis' }), scope: 'org' }],
+        [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: expect.any(Number),
       });
       const sentDrilldown = lastContext(host)?.structuredContent.drilldown;
 

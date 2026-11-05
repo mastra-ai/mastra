@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { DashboardDefinition } from '@mastra/client-js';
 import type * as PlaygroundMcps from '@mastra/playground-ui/domains/mcps';
 import { fireEvent, renderHook, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -6,11 +7,12 @@ import { useCallback, useState } from 'react';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
   agentRunsAggregate,
+  agentRunsDashboard,
   emptyTimeSeries,
   supportRunsChart,
 } from '../apps/dashboard-renderer/__tests__/fixtures/dashboard';
 import { app as dashboardApp } from '../apps/dashboard-renderer/app';
-import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, useMcpAppHost } from '../host';
+import { DASHBOARD_PIN_REQUEST_CONTEXT_KEY, DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, useMcpAppHost } from '../host';
 import type { DashboardPinnedWidgetEntry, McpAppHostOptions, McpAppHostValue, McpAppRef } from '../host';
 import { MASTRA_SERVER, renderWithHost } from '../test/host';
 import { server } from '../test/msw-server';
@@ -27,14 +29,59 @@ it('returns a value McpAppHostProvider accepts', () => {
   expectTypeOf<PlaygroundMcps.McpAppRef>().toExtend<McpAppRef>();
 });
 
-/** A chat host keeping the pinned widget ids of one dashboard in state. */
-function usePinningHost(initial: string[] | null) {
+/**
+ * A chat host keeping the pinned widget ids of one dashboard in state. `save` decides what it keeps
+ * of each list the app sends; by default, all of it.
+ */
+function usePinningHost(initial: string[] | null, save: (requested: string[]) => string[] = requested => requested) {
   const [ids, setIds] = useState(initial);
+  const [received, setReceived] = useState<string[][]>([]);
   const pinnedIds = useCallback((app: McpAppRef) => (app.toolCallId === dashboard.toolCallId ? ids : undefined), [ids]);
   const host = useMcpAppHost({
-    dashboardPins: { pinnedIds, onPinnedChange: pinned => setIds(pinned.map(({ widget }) => widget.id)) },
+    dashboardPins: {
+      pinnedIds,
+      onPinnedChange: pinned => {
+        const requested = pinned.map(({ widget }) => widget.id);
+        setReceived(lists => [...lists, requested]);
+        setIds(save(requested));
+      },
+    },
   });
-  return { host, ids };
+  return { host, ids, received };
+}
+
+// A KPI group and a chart, so each pin has to name the widget it was clicked on.
+const twoWidgetDashboard: DashboardDefinition = {
+  schemaVersion: 1,
+  rows: [...agentRunsDashboard.rows, ...supportRunsChart.rows],
+};
+
+/** Renders the dashboard app with the given chat host wired in the way the playground-ui viewer wires it. */
+async function connectDashboard(chat: { result: { current: ReturnType<typeof usePinningHost> } }) {
+  server.use(
+    http.post(`${MASTRA_SERVER}/observability/metrics/aggregate`, () => HttpResponse.json(agentRunsAggregate)),
+    http.post(`${MASTRA_SERVER}/observability/metrics/timeseries`, () => HttpResponse.json(emptyTimeSeries)),
+  );
+  const hostContext = () => chat.result.current.host.hostContext?.(dashboard) ?? {};
+  const host = await renderWithHost(dashboardApp, { hostContext: hostContext() });
+  host.bridge.onupdatemodelcontext = async params => {
+    chat.result.current.host.onModelContext?.(dashboard, params);
+    return {};
+  };
+  await host.sendToolResult({ content: [], structuredContent: { definition: twoWidgetDashboard } });
+  expect(await screen.findByText('Support runs')).toBeTruthy();
+  /** Sends the app the host's current context once it has handled the app's last update. */
+  const answer = async () => {
+    // The app numbers its updates from 1, and each one here reaches the host.
+    await expect
+      .poll(() => {
+        const sent = chat.result.current.received.length;
+        return sent > 0 && hostContext()[DASHBOARD_PIN_REQUEST_CONTEXT_KEY] === sent;
+      })
+      .toBe(true);
+    await host.setHostContext(hostContext());
+  };
+  return { host, answer };
 }
 
 describe('useMcpAppHost', () => {
@@ -65,6 +112,55 @@ describe('useMcpAppHost', () => {
       await expect.poll(() => chat.result.current.ids).toEqual([]);
       await host.setHostContext(hostContext());
       expect(await screen.findByRole('button', { name: 'Pin Support runs' })).toBeTruthy();
+    });
+
+    it("stops asking for a pin the host turns down, even though its ids don't change", async () => {
+      const chat = renderHook(() => usePinningHost([], () => []));
+      const { answer } = await connectDashboard(chat);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin Support runs' }));
+      await answer();
+      expect(screen.getByRole('button', { name: 'Pin Support runs' })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin widget' }));
+
+      await expect.poll(() => chat.result.current.received).toEqual([['support-runs'], ['kpis']]);
+    });
+
+    it('builds on the pins the host took before the next click', async () => {
+      const chat = renderHook(() => usePinningHost([]));
+      const { answer } = await connectDashboard(chat);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin Support runs' }));
+      await answer();
+      expect(await screen.findByRole('button', { name: 'Unpin Support runs' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Pin widget' }));
+
+      await expect.poll(() => chat.result.current.ids).toEqual(['support-runs', 'kpis']);
+    });
+
+    it("treats pins the host couldn't save as turned down", async () => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let failing = true;
+      const chat = renderHook(() =>
+        usePinningHost([], requested => {
+          if (failing) throw new Error('Storage is down');
+          return requested;
+        }),
+      );
+      const { answer } = await connectDashboard(chat);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pin Support runs' }));
+      await answer();
+      failing = false;
+      fireEvent.click(screen.getByRole('button', { name: 'Pin widget' }));
+
+      await expect.poll(() => chat.result.current.ids).toEqual(['kpis']);
+      expect(errors).toHaveBeenCalledWith(
+        '[Mastra dashboard] Couldn\'t save the pins from "showDashboard"',
+        expect.any(Error),
+      );
+      errors.mockRestore();
     });
 
     it('hides the pin buttons while the host turns pinning off', async () => {

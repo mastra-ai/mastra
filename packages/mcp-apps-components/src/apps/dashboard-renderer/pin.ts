@@ -16,14 +16,27 @@ import { z } from 'zod';
 export const DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY = 'mastra.ai/dashboard-pinned-widgets';
 
 /**
- * One pinned widget: the widget as the dashboard renders it, the dashboard's scope, and the range
- * and filters the user had on when they pinned it, as dashboard `defaults`. Together they render
- * the widget on its own as the user saw it.
+ * The key that pairs each pin update with the host's answer, as an MCP Apps extension key:
+ *
+ * - **App → host**, in `structuredContent` next to the pinned widgets: a number that grows with
+ *   each update.
+ * - **Host → app**, in host context: the number of the last update the host handled, whether it
+ *   took the pins or not. Send it with the ids the update left you with, in the same host context
+ *   change. A host that keeps its ids as they were sends nothing else, so this is how the app knows
+ *   the user's click was turned down.
+ */
+export const DASHBOARD_PIN_REQUEST_CONTEXT_KEY = 'mastra.ai/dashboard-pin-request';
+
+/**
+ * One pinned widget: the widget as the dashboard renders it, the dashboard's scope, and, for the
+ * widgets the user pins in this update, the range and filters they had on, as dashboard `defaults`.
+ * Together they render the widget on its own as the user saw it. Widgets the host had already
+ * pinned come without `defaults`: keep the ones you stored for them.
  */
 export const dashboardPinnedWidgetSchema = z.object({
   widget: dashboardWidgetSchema,
   scope: z.enum(DASHBOARD_SCOPES),
-  defaults: dashboardDefaultsSchema,
+  defaults: dashboardDefaultsSchema.optional(),
 });
 
 /**

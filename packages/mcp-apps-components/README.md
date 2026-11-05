@@ -79,8 +79,8 @@ Each tool runs its read-only observability route in-process as the caller, with 
 Each widget shows a pin button when the host says it can pin. The host owns the pinned widgets; the app only reports which ones the user wants. Everything goes through standard MCP Apps messages.
 
 1. The host sets `mastra.ai/dashboard-pinned-widgets` in its host context to the ids of the widgets it has pinned (`[]` for none) and advertises `updateModelContext.structuredContent`. Without both, no pin buttons show.
-2. When the user clicks a widget's button, the app sends `ui/update-model-context` with the **full list** of widgets the user wants pinned under the same key in `structuredContent`. Each entry is `{ widget, scope, defaults }`: the widget definition, the dashboard's scope, and the date range and filters the user had on, which together render the pinned widget on its own as the user saw it. The update also has a short text block describing the pins, so the model sees them too.
-3. The host stores the change and sends the new list of ids back in its host context. Each button follows the host, not the click.
+2. When the user clicks a widget's button, the app sends `ui/update-model-context` with the **full list** of widgets the user wants pinned under the same key in `structuredContent`. Each entry is `{ widget, scope, defaults? }`: the widget definition, the dashboard's scope, and the date range and filters the user had on, which together render the pinned widget on its own as the user saw it. Only widgets pinned since the app loaded carry `defaults`; for the rest, keep the defaults you stored. The update also has a short text block describing the pins, so the model sees them too, and a request number under `mastra.ai/dashboard-pin-request`.
+3. The host stores what it accepts and sends back, in its host context, the new list of ids and the request number it handled. Each button follows the host, not the click.
 
 Every model context update replaces the previous one, so each update the dashboard sends carries both its pin state and its last drilldown. An update without the pin key carries no pin state; it never means "nothing pinned".
 
@@ -112,7 +112,7 @@ function ChatWithPins({ children }: { children: React.ReactNode }) {
 }
 ```
 
-`pinnedIds` returns `[]` for none, `null` to turn pinning off for an app, or `undefined` for apps that aren't dashboards. Invalid payloads are dropped and logged, never passed to `onPinnedChange`.
+`pinnedIds` returns `[]` for none, `null` to turn pinning off for an app, or `undefined` for apps that aren't dashboards. The hook echoes each handled request number back for you once `onPinnedChange` returns or its promise settles, so update `pinnedIds` by then; ids you don't add are pins you turned down. If `onPinnedChange` throws or rejects, the error is logged and the pins count as turned down. Invalid payloads are dropped and logged, never passed to `onPinnedChange`.
 
 #### With `AppBridge` directly
 
@@ -121,6 +121,7 @@ The params come from the app's iframe, so parse them with `dashboardPinnedWidget
 ```typescript
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import {
+  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
   dashboardPinnedWidgetsSchema,
 } from '@mastra/mcp-apps-components/dashboard-renderer';
@@ -138,9 +139,14 @@ bridge.onupdatemodelcontext = async ({ structuredContent }) => {
   const parsed = dashboardPinnedWidgetsSchema.safeParse(structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]);
   if (!parsed.success) return {};
 
-  await savePinnedWidgets(parsed.data); // full list: diff it against what you stored
-  // setHostContext replaces the whole context, so keep the other fields
-  hostContext = { ...hostContext, [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: parsed.data.map(entry => entry.widget.id) };
+  const ids = await savePinnedWidgets(parsed.data); // full list: diff it, return the ids you kept
+  // setHostContext replaces the whole context, so keep the other fields. Echo the request number,
+  // so the app knows you answered even when you turned a pin down and the ids stay the same.
+  hostContext = {
+    ...hostContext,
+    [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ids,
+    [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: structuredContent[DASHBOARD_PIN_REQUEST_CONTEXT_KEY],
+  };
   bridge.setHostContext(hostContext);
   return {};
 };
@@ -150,8 +156,8 @@ Keep in mind:
 
 - To turn pinning off, set the key to a non-array value such as `null`. Deleting the key does nothing, because `AppBridge` only sends the fields that changed, so the app keeps the last ids it got.
 - Widget ids are only unique within one dashboard definition. Keep pinned ids per bridge (one tool call), not across dashboards.
-- Until the host answers, the app builds each click on the previous one, so quick clicks don't drop pins. Once the host sends its list back, that list wins, including when it declines a pin.
-- The app only knows the `defaults` of widgets pinned since it loaded. Widgets pinned earlier come back with the dashboard's current range and filters, so keep the entries you already store for those ids and only add the new ones.
+- Until the host answers a click, the app applies it on top of the host's ids, so quick clicks don't drop pins. A click is answered once the host echoes a request number at or above the one it was sent with, or once the host's ids already reflect it. A pin the host declines then drops, and the next click doesn't resend it.
+- If the app's model context update fails, its clicks drop, and the buttons show the host's ids again.
 - A widget that no longer parses shows no pin button, so the host owns unpinning it.
 
 ## Documentation

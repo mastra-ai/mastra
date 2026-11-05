@@ -1,8 +1,13 @@
-import { useMemo, useRef } from 'react';
-import type { z } from 'zod';
-import { DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY, dashboardPinnedWidgetsSchema } from './apps/dashboard-renderer/pin';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { z } from 'zod';
+import {
+  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
+  DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
+  dashboardPinnedWidgetsSchema,
+} from './apps/dashboard-renderer/pin';
 
 export {
+  DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
   dashboardPinnedWidgetSchema,
   dashboardPinnedWidgetsSchema,
@@ -39,15 +44,21 @@ export type DashboardPinsHostOptions = {
   pinnedIds: (app: McpAppRef) => readonly string[] | null | undefined;
   /**
    * Every widget the user wants pinned from `app`, after each pin or unpin. It is the full list,
-   * not a change: diff it against the host's own state.
+   * not a change: diff it against the host's own state. Entries without `defaults` are widgets you
+   * already pinned; keep the defaults you stored for them.
+   *
+   * Update `pinnedIds` before this returns, or before the promise it returns settles: the app then
+   * takes the ids it gets next as your answer, so ids you don't add are pins you turned down.
    */
-  onPinnedChange: (pinned: DashboardPinnedWidgetEntry[], app: McpAppRef) => void;
+  onPinnedChange: (pinned: DashboardPinnedWidgetEntry[], app: McpAppRef) => void | Promise<void>;
 };
 
 export type McpAppHostOptions = {
   /** Pin widgets from the dashboard-renderer app. */
   dashboardPins?: DashboardPinsHostOptions;
 };
+
+const pinRequestSchema = z.number().int();
 
 /**
  * Builds the value for `McpAppHostProvider` from the MCP Apps features a host supports.
@@ -61,27 +72,45 @@ export function useMcpAppHost({ dashboardPins }: McpAppHostOptions): McpAppHostV
   const pinnedIds = dashboardPins?.pinnedIds;
   // The handler only runs on app updates, so a new one shouldn't hand the apps new host context.
   const onPinnedChange = useRef(dashboardPins?.onPinnedChange);
-  onPinnedChange.current = dashboardPins?.onPinnedChange;
+  useLayoutEffect(() => {
+    onPinnedChange.current = dashboardPins?.onPinnedChange;
+  });
+  // The last pin update handled per app instance, by tool call id, sent back so the app knows its
+  // clicks were answered even when the ids stay the same.
+  const [answeredPins, setAnsweredPins] = useState<Readonly<Record<string, number>>>({});
 
   return useMemo<McpAppHostValue>(() => {
     if (!pinnedIds) return {};
     return {
       hostContext: app => {
         const ids = pinnedIds(app);
-        return ids === undefined ? undefined : { [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ids };
+        if (ids === undefined) return undefined;
+        const answered = answeredPins[app.toolCallId];
+        return {
+          [DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]: ids,
+          ...(answered !== undefined && { [DASHBOARD_PIN_REQUEST_CONTEXT_KEY]: answered }),
+        };
       },
       onModelContext: (app, { structuredContent }) => {
         // No key means the update carries no pin state, not that nothing is pinned.
         if (!structuredContent || !(DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY in structuredContent)) return;
         // Only apps the host lets pin may change its pins.
         if (pinnedIds(app) == null) return;
+        const request = pinRequestSchema.safeParse(structuredContent[DASHBOARD_PIN_REQUEST_CONTEXT_KEY]);
+        const answer = () => {
+          if (request.success) setAnsweredPins(answered => ({ ...answered, [app.toolCallId]: request.data }));
+        };
         const parsed = dashboardPinnedWidgetsSchema.safeParse(structuredContent[DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY]);
         if (!parsed.success) {
           console.error(`[Mastra dashboard] Ignored invalid pinned widgets from "${app.toolName}"`, parsed.error);
+          answer();
           return;
         }
-        onPinnedChange.current?.(parsed.data, app);
+        // A promise wrapper so a handler that throws right away still gets reported and answered.
+        new Promise<void>(resolve => resolve(onPinnedChange.current?.(parsed.data, app)))
+          .catch(error => console.error(`[Mastra dashboard] Couldn't save the pins from "${app.toolName}"`, error))
+          .finally(answer);
       },
     };
-  }, [pinnedIds]);
+  }, [pinnedIds, answeredPins]);
 }
