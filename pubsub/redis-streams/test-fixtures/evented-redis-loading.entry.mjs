@@ -1,8 +1,6 @@
 // @ts-check
-// API or worker process for evented-redis-loading.test.ts (COR-1502) and
-// evented-step-end-fault.test.ts (#29504). Both talk to Redis (through the
-// test's LOADING proxy for COR-1502) and to Postgres directly.
-import { writeSync } from 'node:fs';
+// API or worker process for evented-redis-loading.test.ts (COR-1502). Both talk
+// to Redis through the test's LOADING proxy and to Postgres directly.
 import { Agent } from '@mastra/core/agent';
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { ConsoleLogger } from '@mastra/core/logger';
@@ -33,41 +31,6 @@ const pubsub = new RedisStreamsPubSub({
   logger: { warn: (...args) => console.error('[pubsub warn]', ...args) },
 });
 await storage.init();
-
-// #29504: fail the first `workflow.step.end` publish for a finished tool call,
-// either by throwing a non-LOADING transport error or by dying before it is sent.
-const stepEndFault = process.env.LOADING_STEP_END_FAULT;
-if (stepEndFault) {
-  const publish = pubsub.publish.bind(pubsub);
-  let faulted = false;
-  const siblingPublished = Promise.withResolvers();
-  const finishedCall = event => {
-    const prevResult = /** @type {any} */ (event.data)?.prevResult;
-    return event.type === 'workflow.step.end' && prevResult?.status === 'success'
-      ? prevResult.output?.toolCallId
-      : undefined;
-  };
-  pubsub.publish = async (topic, event) => {
-    const callId = finishedCall(event);
-    if (!faulted && callId === 'operation-0') {
-      faulted = true;
-      if (stepEndFault === 'exit') {
-        // Die only once operation-1 has published its own step.end, so the dead
-        // worker leaves no tool mid-flight: the one undelivered step is operation-0,
-        // whose result was saved before this publish.
-        await siblingPublished.promise;
-        // Written synchronously so process.exit below cannot drop it.
-        writeSync(1, 'step-end-fault\n');
-        process.exit(1);
-      }
-      writeSync(1, 'step-end-fault\n');
-      throw new Error('read ECONNRESET');
-    }
-    const published = await publish(topic, event);
-    if (callId === 'operation-1') siblingPublished.resolve();
-    return published;
-  };
-}
 
 const tool = createTool({
   id: 'recordedTool',

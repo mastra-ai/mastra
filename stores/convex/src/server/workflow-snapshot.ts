@@ -73,13 +73,7 @@ export function mergeWorkflowStepResult({
   }
 
   const existingResult = snapshot.context[stepId];
-  if (result.status === undefined && result.metadata?.foreachCompletedIterations) {
-    // A status-less iteration record is a metadata patch: it carries only the
-    // iteration its writer owns, so it never replaces step-level fields with a stale copy.
-    snapshot.context[stepId] = existingResult
-      ? { ...existingResult, metadata: { ...existingResult.metadata, ...result.metadata } }
-      : result;
-  } else if (
+  if (
     existingResult &&
     'output' in existingResult &&
     Array.isArray(existingResult.output) &&
@@ -125,16 +119,6 @@ export function mergeWorkflowStepResult({
       foreachNestedRunIds: {
         ...existingResult?.metadata?.foreachNestedRunIds,
         ...snapshot.context[stepId].metadata?.foreachNestedRunIds,
-      },
-    };
-  }
-  // Same for iteration results saved before their step.end was published.
-  if (existingResult?.metadata?.foreachCompletedIterations || result.metadata?.foreachCompletedIterations) {
-    snapshot.context[stepId].metadata = {
-      ...snapshot.context[stepId].metadata,
-      foreachCompletedIterations: {
-        ...existingResult?.metadata?.foreachCompletedIterations,
-        ...snapshot.context[stepId].metadata?.foreachCompletedIterations,
       },
     };
   }

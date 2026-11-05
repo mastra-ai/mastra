@@ -33,7 +33,6 @@ import {
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
-import { deepEqual } from '../../../utils/deep-equal';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -157,23 +156,6 @@ type ForeachStepResult = {
   startedAt?: number;
   [key: string]: unknown;
 };
-
-/** Whether a live step result has the same status and output as its stored (serialized) copy. */
-function isSameAsStored(
-  live: StepResult<any, any, any, any>,
-  stored: StepResult<any, any, any, any> | undefined,
-): boolean {
-  if (!stored || live.status !== stored.status) return false;
-  const output = (live as { output?: unknown }).output;
-  try {
-    return deepEqual(
-      output === undefined ? undefined : JSON.parse(JSON.stringify(output)),
-      (stored as { output?: unknown }).output,
-    );
-  } catch {
-    return false;
-  }
-}
 
 function isResumedRunningRecord(result: unknown): boolean {
   return (
@@ -2351,18 +2333,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       !timeTravel &&
       !resumeSteps?.length &&
       step.type !== 'foreach';
-    // A foreach iteration has no start guard; instead its successful result is
-    // saved under this event's id before step.end is published, so a redelivery
-    // of the same event reuses it rather than running the step body again.
-    const guardIteration =
-      workflowsStore?.supportsWorkflowStepGuards() &&
-      args.eventId &&
-      !restart &&
-      !timeTravel &&
-      !resumeSteps?.length &&
-      step.type === 'foreach' &&
-      !nestedWorkflowStep;
-    let reusedIterationContext: Record<string, unknown> | undefined;
     let nestedRunId = '';
     let authorizedEventId: string | undefined;
     let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
@@ -2686,15 +2656,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         },
       });
-    }
-
-    if (guardIteration) {
-      const snapshot = await workflowsStore!.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-      const saved = snapshot?.context[leafId]?.metadata?.foreachCompletedIterations?.[executionPath[1]!];
-      if (saved?.eventId === args.eventId) {
-        completedResult = saved.result;
-        reusedIterationContext = saved.requestContext;
-      }
     }
 
     // Run nested workflow - only a plain `step` entry can wrap a live Workflow
@@ -3254,10 +3215,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } finally {
       releaseControl?.();
     }
-    // A reused iteration skipped its body, so forward the context that body produced.
-    requestContext = reusedIterationContext
-      ? restoreLiveRequestContext(reusedIterationContext, Object.fromEntries(rc.entries()))
-      : Object.fromEntries(rc.entries());
+    requestContext = Object.fromEntries(rc.entries());
     if (guardStart) {
       stepResult.metadata = { ...stepResult.metadata, startedBy: args.eventId };
     }
@@ -3443,57 +3401,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else {
       // Extract updated state from step result
       const updatedState = (stepResult as any).__state ?? currentState;
-
-      // The saves below make a redelivered step.run reuse a finished result
-      // rather than run the body again. They only cover successful sequential
-      // steps and foreach iterations on guard-capable stores, and only once the
-      // save commits: a crash before it, a lease reclaimed mid-step, branch steps
-      // and stores without step guards are still at-least-once.
-      if (guardIteration && !completedResult && stepResult.status === 'success') {
-        // A metadata patch: the store merges it into the row it locks, so no stale
-        // copy of the foreach record (or of a sibling's iteration) is written back.
-        // The iteration's result inherits the aggregate's metadata (step-executor
-        // spreads stepResults[stepId]), so drop the saved-iteration map from it or
-        // every entry would embed all entries before it.
-        const { foreachCompletedIterations: _saved, ...iterationMetadata } = stepResult.metadata ?? {};
-        const patch = {
-          metadata: {
-            foreachCompletedIterations: {
-              [executionPath[1]!]: {
-                eventId: args.eventId,
-                result: stepResult.metadata ? { ...stepResult, metadata: iterationMetadata } : stepResult,
-                requestContext: withoutAuthToken(requestContext),
-              },
-            },
-          },
-        };
-        await workflowsStore!.updateWorkflowResults({
-          workflowName: workflowId,
-          runId,
-          stepId: leafId,
-          requestContext: withoutAuthToken(requestContext),
-          result: patch as unknown as StepResult<any, any, any, any>,
-        });
-      }
-
-      // Commit a sequential step's result before publishing step.end, so a
-      // redelivered step.run hits the start guard's 'completed' conflict and
-      // reclaims it instead of running the step body again. Parallel branches are
-      // left to step.end: an early branch record would let a sibling aggregate
-      // before this branch's state delta is stored.
-      if (guardStart && !completedResult && stepResult.status === 'success' && executionPath.length === 1) {
-        // State is saved through `state`; keep it out of the step record, as step.end does.
-        const { __state: _state, __stateDelta: _stateDelta, ...cleanStepResult } = stepResult as any;
-        await workflowsStore!.updateWorkflowResults({
-          workflowName: workflowId,
-          runId,
-          stepId: leafId,
-          result: cleanStepResult,
-          requestContext: withoutAuthToken(requestContext),
-          state: updatedState,
-          completionGuard: { eventId: args.eventId! },
-        });
-      }
 
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
@@ -4309,14 +4216,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
-        // Only the committed winner's values may drive a reclaimed continuation. When this
-        // event carries that same result (step.run saved it before publishing), keep the
-        // live copy so values JSON can't hold, such as Dates, reach the next step intact.
+        // Only the committed winner's values may drive a reclaimed continuation.
         newStepResults = error.storedSnapshot?.context;
-        if (!isSameAsStored(prevResult, error.storedResult)) {
-          storedResult = error.storedResult!;
-          prevResult = storedResult;
-        }
+        storedResult = error.storedResult!;
+        prevResult = storedResult;
         requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
         currentState = error.storedSnapshot?.context.__state ?? currentState;
       }

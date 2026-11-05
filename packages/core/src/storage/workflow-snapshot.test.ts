@@ -221,29 +221,4 @@ describe('mergeWorkflowStepResult', () => {
 
     expect(context.foreach.output).toEqual([{ __mastra_pending__: true, value: 'user-data' }]);
   });
-
-  it('applies a status-less metadata patch without replacing step-level fields', () => {
-    const snapshot = createEmptyWorkflowSnapshot('run-1');
-    snapshot.context.foreach = {
-      status: 'success',
-      startedAt: 1,
-      payload: [1, 2],
-      output: ['a', 'b'],
-      metadata: { startedBy: 'event-0', foreachCompletedIterations: { 0: { eventId: 'e0' } } },
-    };
-    mergeWorkflowStepResult({
-      snapshot,
-      stepId: 'foreach',
-      requestContext: {},
-      result: { metadata: { foreachCompletedIterations: { 1: { eventId: 'e1' } } } } as any,
-    });
-    expect(snapshot.context.foreach).toMatchObject({
-      status: 'success',
-      output: ['a', 'b'],
-      metadata: {
-        startedBy: 'event-0',
-        foreachCompletedIterations: { 0: { eventId: 'e0' }, 1: { eventId: 'e1' } },
-      },
-    });
-  });
 });
