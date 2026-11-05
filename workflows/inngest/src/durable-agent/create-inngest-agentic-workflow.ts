@@ -396,9 +396,15 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
+        // The stop cause travels on the state, so the final step classifies the run on a worker
+        // that never held this registry entry. The registry copy is the final step's fallback.
+        const recordStopCause = (cause: NonNullable<IterationState['tracingStopCause']>) => {
+          state.tracingStopCause = cause;
+          if (tracingRegistry) tracingRegistry.tracingStopCause = cause;
+        };
+
         if (state.delegationBailed) {
-          if (tracingRegistry)
-            tracingRegistry.tracingStopCause = state.lastStepResult?.isContinued ? 'delegation' : 'model_finished';
+          recordStopCause(state.lastStepResult?.isContinued ? 'delegation' : 'model_finished');
           await emitStepFinish(false);
           return false;
         }
@@ -410,9 +416,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
-          if (tracingRegistry) {
-            tracingRegistry.tracingStopCause = shouldContinue ? 'max_steps' : 'model_finished';
-          }
+          recordStopCause(shouldContinue ? 'max_steps' : 'model_finished');
           await emitStepFinish(false);
           return false;
         }
@@ -455,7 +459,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return conditions.some(Boolean);
         });
 
-        if (stopped && tracingRegistry) tracingRegistry.tracingStopCause = 'stop_condition';
+        if (stopped) recordStopCause('stop_condition');
         await emitStepFinish(!stopped);
         return !stopped;
       })
@@ -570,6 +574,28 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
             ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
           };
+          // The state carries the facts across workers; the registry is the fallback for
+          // runs whose snapshots predate those fields.
+          const finishReason = finalOutput.stepResult?.reason;
+          const stopCause = state.tracingStopCause ?? registry?.tracingStopCause;
+          const recordedTermination = state.tracingTermination ?? registry?.tracingTermination;
+          if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
+            mastra
+              ?.getLogger?.()
+              ?.warn?.(
+                `[InngestDurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
+              );
+          }
+          const termination =
+            ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
+              ? recordedTermination
+              : agentLoopTermination({
+                  stopCause,
+                  delegationFailure: state.tracingDelegationFailure ?? registry?.tracingDelegationFailure,
+                  finishReason,
+                  tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                  maxSteps: state.options?.maxSteps ?? maxSteps,
+                });
           if (state.modelSpanData) {
             const modelSpan =
               registry?.resumeModelSpan ??
@@ -586,15 +612,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             );
             const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
             modelSpan?.createTracker()?.endGeneration({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...termination,
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
@@ -614,15 +632,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               registry?.agentSpan ??
               observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
-              ...(['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && registry?.tracingTermination
-                ? registry.tracingTermination
-                : agentLoopTermination({
-                    stopCause: registry?.tracingStopCause,
-                    delegationFailure: registry?.tracingDelegationFailure,
-                    finishReason: finalOutput.stepResult?.reason,
-                    tripwire,
-                    maxSteps: state.options?.maxSteps ?? maxSteps,
-                  })),
+              ...termination,
               output: { text: finalText },
               ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });
