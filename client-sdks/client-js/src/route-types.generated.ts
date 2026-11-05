@@ -3198,12 +3198,11 @@ type Shared_Type_46 = {
         [key: string]: unknown;
       }
     | undefined;
-  /** Whether this agent is hydrated with durable execution enabled */
+  /** Whether this agent publishes resumable streams */
   durable?:
     | (
         | boolean
         | {
-            maxSteps?: number | undefined;
             cleanupTimeoutMs?: number | undefined;
           }
       )
@@ -16041,13 +16040,12 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | (
             | boolean
             | {
-                maxSteps?: number | undefined;
                 cleanupTimeoutMs?: number | undefined;
               }
           )
@@ -16209,13 +16207,12 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | (
             | boolean
             | {
-                maxSteps?: number | undefined;
                 cleanupTimeoutMs?: number | undefined;
               }
           )
@@ -16425,12 +16422,11 @@ export type PostStoredAgents_Body = {
         [key: string]: unknown;
       }
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | boolean
         | {
-            maxSteps?: number | undefined;
             cleanupTimeoutMs?: number | undefined;
           }
       )
@@ -16594,13 +16590,12 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | (
             | boolean
             | {
-                maxSteps?: number | undefined;
                 cleanupTimeoutMs?: number | undefined;
               }
           )
