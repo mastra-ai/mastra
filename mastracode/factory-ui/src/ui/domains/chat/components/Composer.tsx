@@ -47,6 +47,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
+import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
@@ -117,6 +118,11 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const sendTitle = chatPreparing ? 'Initializing session…' : startingDraft ? 'Starting session…' : undefined;
 
   const updateDraft = setComposerDraft;
+
+  const appendTranscript = (text: string) => {
+    updateDraft(draft.trim() ? `${draft.trimEnd()} ${text}` : text);
+    inputRef.current?.focus();
+  };
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -318,6 +324,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
+              {factoryId && (
+                <ComposerVoiceButton
+                  factoryId={factoryId}
+                  disabled={textareaDisabled || preview !== undefined}
+                  onTranscript={appendTranscript}
+                  onError={message => pushNotice(message, 'error')}
+                />
+              )}
               <ComposerPrimaryAction
                 showAbort={liveRun && !hasSubmittableDraft}
                 sendDisabled={sendDisabled || !hasSubmittableDraft}
