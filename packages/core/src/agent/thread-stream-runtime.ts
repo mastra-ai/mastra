@@ -3358,9 +3358,14 @@ export class AgentThreadStreamRuntime {
       });
       if (sourceId) return sourceId;
       // A PubSub subscribe/publish failure settles the attempt immediately;
-      // wait out the rest of its window so retries stay paced.
-      const unusedMs = attemptMs - (Date.now() - attemptStartedAt);
-      if (unusedMs > 0) await new Promise(resolve => setTimeout(resolve, unusedMs));
+      // wait out the rest of its window so retries stay paced. Recheck the
+      // absolute boundary because timers can wake early.
+      const retryAt = Math.min(deadline, attemptStartedAt + attemptTimeoutMs);
+      let unusedMs = retryAt - Date.now();
+      while (unusedMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, unusedMs));
+        unusedMs = retryAt - Date.now();
+      }
       attemptTimeoutMs *= 2;
     }
   }

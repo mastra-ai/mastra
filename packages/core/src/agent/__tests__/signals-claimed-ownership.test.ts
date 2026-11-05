@@ -3184,7 +3184,8 @@ describe('Agent signals: claimed thread ownership', () => {
     subscription.unsubscribe();
   });
 
-  it('delivers a claimed-owner wake when the owner answers discovery after the first attempt window', async () => {
+  it.each([false, true])('delivers a claimed-owner wake after slow discovery (final window: %s)', async finalWindow => {
+    let discoveryRequests = 0;
     class SlowDiscoveryPubSub extends EventEmitterPubSub {
       override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
         const [topic, event] = args;
@@ -3192,7 +3193,9 @@ describe('Agent signals: claimed thread ownership', () => {
           topic === 'agent.thread-owner-discovery' &&
           (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
         ) {
-          await new Promise(resolve => setTimeout(resolve, 150));
+          discoveryRequests++;
+          if (finalWindow && discoveryRequests < 4) throw new Error('pubsub temporarily unavailable');
+          await new Promise(resolve => setTimeout(resolve, finalWindow ? 200 : 150));
         }
         return super.publish(...args);
       }
@@ -3221,6 +3224,7 @@ describe('Agent signals: claimed thread ownership', () => {
     const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
     expect(claim.claimed).toBe(true);
 
+    const startedAt = Date.now();
     const signalResult = senderRuntime.sendSignal(
       senderAgent,
       { type: 'user-message', contents: 'wake the slow owner' },
@@ -3228,53 +3232,85 @@ describe('Agent signals: claimed thread ownership', () => {
       pubsub,
     );
     await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
-    await nextRun;
+    const run = await nextRun;
+    expect(run.value.text).toBe('owner response');
+    if (finalWindow) {
+      expect(discoveryRequests).toBe(4);
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(900);
+    }
 
     claim.unsubscribe();
     subscription.unsubscribe();
   });
 
-  it('paces claimed-owner discovery retries when pubsub publish fails immediately', async () => {
-    let discoveryRequests = 0;
-    class FailingDiscoveryPubSub extends EventEmitterPubSub {
-      override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
-        const [topic, event] = args;
+  it.each([false, true])(
+    'paces claimed-owner discovery retries when pubsub fails (early final timer: %s)',
+    async earlyFinalTimer => {
+      let discoveryRequests = 0;
+      let firedEarly = false;
+      const realSetTimeout = globalThis.setTimeout;
+      const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) => {
+        // Only shorten the final pacing wait, after the fourth publish has failed.
         if (
-          topic === 'agent.thread-owner-discovery' &&
-          (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+          earlyFinalTimer &&
+          !firedEarly &&
+          discoveryRequests === 4 &&
+          delay !== undefined &&
+          delay > 100 &&
+          delay < 400
         ) {
-          discoveryRequests++;
-          throw new Error('pubsub unavailable');
+          firedEarly = true;
+          return realSetTimeout(callback, delay - 50, ...args);
         }
-        return super.publish(...args);
+        return realSetTimeout(callback, delay, ...args);
+      });
+      class FailingDiscoveryPubSub extends EventEmitterPubSub {
+        override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+          const [topic, event] = args;
+          if (
+            topic === 'agent.thread-owner-discovery' &&
+            (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+          ) {
+            discoveryRequests++;
+            throw new Error('pubsub unavailable');
+          }
+          return super.publish(...args);
+        }
       }
-    }
-    const pubsub = new FailingDiscoveryPubSub();
-    const senderAgent = new Agent({
-      id: 'failing-discovery-sender-agent',
-      name: 'Failing Discovery Sender Agent',
-      instructions: 'Test',
-      model: createTextStreamModel('sender response'),
-      pubsub,
-    });
+      const pubsub = new FailingDiscoveryPubSub();
+      const senderAgent = new Agent({
+        id: 'failing-discovery-sender-agent',
+        name: 'Failing Discovery Sender Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
 
-    const signalResult = new AgentThreadStreamRuntime().sendSignal(
-      senderAgent,
-      { type: 'user-message', contents: 'wake nobody' },
-      {
-        resourceId: 'failing-discovery-user',
-        threadId: 'failing-discovery-thread',
-        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
-      },
-      pubsub,
-    );
-    // The whole message survives storage and display: no NUL from the internal thread key.
-    await expect(signalResult.accepted).rejects.toThrow(
-      'No claimed thread owner responded for thread failing-discovery-thread (resource failing-discovery-user) within 1000ms',
-    );
-    // 100 + 200 + 400 + remaining 300ms fits in the 1s budget.
-    expect(discoveryRequests).toBeLessThanOrEqual(4);
-  });
+      const startedAt = Date.now();
+      const signalResult = new AgentThreadStreamRuntime().sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake nobody' },
+        {
+          resourceId: 'failing-discovery-user',
+          threadId: 'failing-discovery-thread',
+          ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+        },
+        pubsub,
+      );
+      try {
+        // The whole message survives storage and display: no NUL from the internal thread key.
+        await expect(signalResult.accepted).rejects.toThrow(
+          'No claimed thread owner responded for thread failing-discovery-thread (resource failing-discovery-user) within 1000ms',
+        );
+        expect(Date.now() - startedAt).toBeGreaterThanOrEqual(1000);
+        expect(firedEarly).toBe(earlyFinalTimer);
+        // 100 + 200 + 400 + remaining 300ms fits in the 1s budget.
+        expect(discoveryRequests).toBeLessThanOrEqual(4);
+      } finally {
+        timer.mockRestore();
+      }
+    },
+  );
 
   it('escapes NUL characters inside ids in thread-owner errors', async () => {
     const pubsub = new EventEmitterPubSub();
