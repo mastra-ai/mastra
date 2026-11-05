@@ -9,7 +9,7 @@ export function boardCatalogQueryOptions(client: ApiClient, factoryProjectId: st
   return queryOptions({
     queryKey: queryKeys.boardCatalog(factoryProjectId),
     queryFn: factoryProjectId
-      ? () => client.get<BoardCatalogResponse>(`/web/factory/projects/${factoryProjectId}/boards`)
+      ? () => client.get<BoardCatalogResponse>(`/web/factory/projects/${encodeURIComponent(factoryProjectId)}/boards`)
       : skipToken,
   });
 }

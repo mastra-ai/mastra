@@ -176,6 +176,15 @@ describe('Opening Factory', () => {
     expect(requests).toContainEqual({ url: 'GET /web/factory/projects', afterSignIn: false });
   });
 
+  it('keeps a Factory id from a crafted link inside the requests it starts', async () => {
+    const { requests } = recordRequests();
+    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedIn)));
+    const { router } = renderApp('/factories/..%2F..%2F..%2Fauth%2Flogout/work');
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/factory-1/work'));
+    expect(requests.map(({ url }) => url).filter(url => url.includes('/auth/logout'))).toEqual([]);
+  });
+
   it('loads the factories once a visitor who opened the app signed out signs in from another tab', async () => {
     const listFailureShown = watchForText('Unable to load your factories');
     server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
