@@ -1124,6 +1124,43 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
 
     createReplayInputWorkflow('tt-replay-nullable-input', z.string().nullable());
     createReplayInputWorkflow('tt-replay-optional-input', z.string().optional());
+
+    // The same replay one level down: the parent's first step is a nested workflow, and time
+    // travel targets the nested workflow's first step, which receives the parent's input.
+    const createNestedReplayInputWorkflow = (id: string, schema: z.ZodType) => {
+      const observeInput = vi.fn();
+      const step = createStep({
+        id: 'observe',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        execute: async ({ inputData }) => {
+          observeInput(inputData);
+          return { received: inputData };
+        },
+      });
+
+      const child = createWorkflow({
+        id: `${id}-child`,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [step],
+      });
+      child.then(step).commit();
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [child],
+      });
+      workflow.then(child).commit();
+
+      workflows[id] = { workflow, mocks: { observeInput }, resetMocks: () => observeInput.mockClear() };
+    };
+
+    createNestedReplayInputWorkflow('tt-replay-nested-object-input', z.object({}));
+    createNestedReplayInputWorkflow('tt-replay-nested-nullable-input', z.string().nullable());
+    createNestedReplayInputWorkflow('tt-replay-nested-optional-input', z.string().optional());
   }
 
   return workflows;
@@ -1819,6 +1856,24 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
           expect(replayed.status).toBe('success');
           expect(replayed.result).toEqual({ received: 'replayed' });
           expect(mocks.observeInput.mock.calls).toEqual([[null], ['replayed']]);
+        });
+
+        it.each([
+          { id: 'tt-replay-nested-object-input', input: {} },
+          { id: 'tt-replay-nested-nullable-input', input: null },
+          { id: 'tt-replay-nested-optional-input', input: undefined },
+        ])('replays $input into the first step of a nested workflow ($id)', async ({ id, input }) => {
+          const { workflow, mocks, resetMocks } = registry![id]!;
+          resetMocks?.();
+          const runId = uniqueRunId(id);
+
+          const started = await execute(workflow, input, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: `${id}-child.observe`, runId });
+
+          expect(replayed.status).toBe('success');
+          expect(mocks.observeInput.mock.calls).toEqual([[input], [input]]);
         });
       },
     );

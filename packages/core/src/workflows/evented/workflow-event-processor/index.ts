@@ -2840,11 +2840,16 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (nestedDispatch === 'time-travel' && timeTravel) {
+        // Without a stored child snapshot, the child replays the input the parent gives it,
+        // kept as is when null or undefined (#29424).
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
             runId: nestedRunId,
-          })) ?? ({ context: {} } as WorkflowRunState);
+          })) ??
+          ({
+            context: { input: prevResult.status === 'success' ? prevResult.output : undefined },
+          } as WorkflowRunState);
 
         const timeTravelParams = createTimeTravelExecutionParams({
           steps: timeTravel.steps.slice(1),
