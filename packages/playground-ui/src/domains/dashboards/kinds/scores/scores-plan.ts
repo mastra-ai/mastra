@@ -6,6 +6,9 @@ import { scorerDiscoveryRequest, scorersOf, withScorer } from '../../lib/scores'
 import type { WidgetPlanContext } from '../../widget-kind';
 import type { ScoresOptions } from './options';
 
+/** Scores chart their first view only, so only its queries are gated. */
+export const scoresGatedQueries = ([view]: WidgetPlanContext<ScoresOptions>['views']) => view.queries;
+
 /** Finds the scorers to chart, when the queries don't name their own. */
 export const scoresDiscover = ({ views: [view], page }: WidgetPlanContext<ScoresOptions>) => [
   scorerDiscoveryRequest(view.queries, page),

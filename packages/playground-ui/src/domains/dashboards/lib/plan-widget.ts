@@ -23,15 +23,21 @@ export type WidgetPlan =
     };
 
 /**
- * The queries the page's gates apply to. A kind planning no requests fetches on its own, behind
- * its own `ViewGate`, so the planner never holds it up.
+ * The queries the page's gates apply to with `state` picked: the kind's `gatedQueries`, or every
+ * view's. A kind planning no requests fetches on its own, behind its own `ViewGate`, so the planner
+ * never holds it up.
  */
-export const plannedQueries = ({ kind, views }: ReadyPreparedWidget) =>
-  kind.discover || kind.requests ? views.flatMap(v => v.queries) : [];
+export function plannedQueries({ kind, views }: ReadyPreparedWidget, state: WidgetState) {
+  if (!kind.discover && !kind.requests) return [];
+  return kind.gatedQueries ? kind.gatedQueries(views, state) : views.flatMap(v => v.queries);
+}
 
-/** Whether the widget's queries can run on the page `env` describes. */
-export const preparedGate = (prepared: ReadyPreparedWidget, env: DashboardEnvironment): WidgetGate =>
-  widgetGate(plannedQueries(prepared), env, { partial: prepared.kind.partial });
+/** Whether the queries the widget shows with `state` picked can run on the page `env` describes. */
+export const preparedGate = (
+  prepared: ReadyPreparedWidget,
+  env: DashboardEnvironment,
+  state: WidgetState,
+): WidgetGate => widgetGate(plannedQueries(prepared, state), env, { partial: prepared.kind.partial });
 
 /**
  * What a widget sends, worked out from plain data and nothing else: the page `env`, the user's
@@ -45,7 +51,7 @@ export function planWidget(
   state: WidgetState,
   discovered: (DashboardResult | undefined)[] = [],
 ): WidgetPlan {
-  const gate = preparedGate(prepared, env);
+  const gate = preparedGate(prepared, env, state);
   if (gate.status !== 'ready') return gate;
   const ctx: WidgetPlanContext<unknown> = {
     widget: prepared.widget,

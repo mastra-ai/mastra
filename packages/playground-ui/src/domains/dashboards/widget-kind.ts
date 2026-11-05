@@ -1,4 +1,4 @@
-import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
+import type { DashboardQuery, DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import type { ComponentType } from 'react';
 import type { z } from 'zod/v4';
 import type { ChartCardProps } from '../metrics/components/chart-card';
@@ -98,6 +98,11 @@ export type WidgetKind<Options = unknown> = {
    * on their own, checking `blocked` (a table's tabs).
    */
   partial?: boolean;
+  /**
+   * The queries the page's gates check, given what the user picked. Defaults to every view's, so
+   * pick only the views the widget shows: a closed view's trace query mustn't hide an open metrics one.
+   */
+  gatedQueries?: (views: WidgetPlanContext<Options>['views'], state: WidgetState) => DashboardQuery[];
   /** Requests whose answers decide what `requests` asks (the scorers to chart, a table's opening tab). */
   discover?: (ctx: WidgetPlanContext<Options>) => WidgetRequests;
   /** The requests the widget renders from, given the answers to `discover`. */

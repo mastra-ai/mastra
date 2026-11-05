@@ -33,7 +33,7 @@ export type StatelessWidgetProps = {
  * back; picks on the widget come back through `onStateChange`.
  */
 export function StatelessWidget({ prepared, env, discovered = [], results = [], ...props }: StatelessWidgetProps) {
-  const gate = preparedGate(prepared, env);
+  const gate = preparedGate(prepared, env, props.state);
   if (gate.status === 'hidden') return null;
   return (
     <prepared.kind.component

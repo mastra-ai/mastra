@@ -27,6 +27,9 @@ if (plan.status === 'ready') {
   const answers = await Promise.all(plan.requests.map(request => request && sendRequest(client, request)));
 }
 
+// `results` must answer `plan.requests` from the planWidget call made with this same `state` and
+// `discovered`, in the same order. Re-plan and re-send when either changes.
+
 <StatelessWidget
   prepared={prepared}
   env={env}
@@ -39,4 +42,6 @@ if (plan.status === 'ready') {
 />;
 ```
 
-**Custom widget kinds** can add optional `discover` and `requests` planners and read `gate`, `state`, `onStateChange`, `results`, and `onRetry` from their props. Kinds that keep fetching with hooks inside `component` keep working in `DashboardRenderer`.
+**Custom widget kinds** can add optional `discover` and `requests` planners and read `gate`, `state`, `onStateChange`, `results`, and `onRetry` from their props. A kind whose views read different sources can add `gatedQueries` so only the views it shows are checked against the server's capabilities and filters. Kinds that keep fetching with hooks inside `component` keep working in `DashboardRenderer`.
+
+**Breaking for code that renders `kind.component` directly:** `WidgetKindProps` now requires `gate`, `state`, `onStateChange`, `results`, and `onRetry`. Render through `DashboardRenderer` or `StatelessWidget`, which pass them, instead.

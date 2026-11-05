@@ -13,20 +13,19 @@ type ConnectedWidgetProps = Omit<
   'env' | 'state' | 'onStateChange' | 'discovered' | 'results' | 'onRetry'
 >;
 
-/** `StatelessWidget` with its state held here and its requests sent through React Query. */
-function Connected({ env, ...props }: ConnectedWidgetProps & { env: DashboardEnvironment }) {
-  const [state, setState] = useState<WidgetState>({});
-  const first = planWidget(props.prepared, env, state);
+type HeldProps = ConnectedWidgetProps & { state: WidgetState; onStateChange: (next: WidgetState) => void };
+
+/** `StatelessWidget` with its requests sent through React Query. */
+function Connected({ env, ...props }: HeldProps & { env: DashboardEnvironment }) {
+  const first = planWidget(props.prepared, env, props.state);
   const discovered = useDashboardResults(first.status === 'ready' ? first.discover : []);
   // Planned again with the discover answers so far; both lists go out in the same render.
-  const plan = planWidget(props.prepared, env, state, discovered.results);
+  const plan = planWidget(props.prepared, env, props.state, discovered.results);
   const sent = useDashboardResults(plan.status === 'ready' ? plan.requests : []);
   return (
     <StatelessWidget
       {...props}
       env={env}
-      state={state}
-      onStateChange={setState}
       discovered={discovered.results}
       results={sent.results}
       onRetry={() => {
@@ -37,18 +36,25 @@ function Connected({ env, ...props }: ConnectedWidgetProps & { env: DashboardEnv
   );
 }
 
-function WithAggregates(props: ConnectedWidgetProps) {
+function WithAggregates(props: HeldProps) {
   return <Connected {...props} env={useDashboardEnvironment()} />;
 }
 
-function MetricsOnly(props: ConnectedWidgetProps) {
+function MetricsOnly(props: HeldProps) {
   return <Connected {...props} env={useMetricsEnvironment()} />;
 }
 
 /**
- * A widget inside `MetricsProvider`. Only one with trace or span aggregates loads the server's
- * capabilities, which those aggregates wait on.
+ * A widget inside `MetricsProvider`. Only one whose shown queries include trace or span aggregates
+ * loads the server's capabilities, which those aggregates wait on. Its state is held here, above
+ * that choice, so picking a view that switches it keeps the pick.
  */
 export function ConnectedWidget(props: ConnectedWidgetProps) {
-  return needsAggregates(plannedQueries(props.prepared)) ? <WithAggregates {...props} /> : <MetricsOnly {...props} />;
+  const [state, setState] = useState<WidgetState>({});
+  const held = { ...props, state, onStateChange: setState };
+  return needsAggregates(plannedQueries(props.prepared, state)) ? (
+    <WithAggregates {...held} />
+  ) : (
+    <MetricsOnly {...held} />
+  );
 }

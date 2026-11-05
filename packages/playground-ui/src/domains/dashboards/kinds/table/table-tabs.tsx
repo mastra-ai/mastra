@@ -39,5 +39,7 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
       </TableFrame>
     );
   }
+  // Unkeyed: picking a tab clears `sort` and `compared` in the widget state. Local state added to
+  // `TableView` would carry over to the next tab instead, so key it on `index` if that happens.
   return <TableView {...props} index={index} view={view} heading={heading} page={page} />;
 }

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { MastraClient } from '@mastra/client-js';
-import type { DashboardWidget } from '@mastra/client-js';
+import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { useEffect, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderInMetrics, seedMetrics } from '../../metrics/components/__tests__/metrics-msw';
+import { olderServerCapabilities } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
+import { renderInMetrics, seedMetrics, serveCapabilities } from '../../metrics/components/__tests__/metrics-msw';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardGridCell } from '../components/dashboard-grid';
 import { DashboardRenderer } from '../components/dashboard-renderer';
@@ -357,5 +358,93 @@ describe('StatelessWidget on its own', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /retry/i }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Agent runs, then a trace-aggregate view: a closed view's source must not gate the open one. */
+function mixedSourceWidget(): DashboardWidget {
+  const [runs] = metricsWidget('agent-runs').views;
+  const [ids] = metricsWidget('distinct-ids').views;
+  if (!runs || !ids) throw new Error('METRICS_DASHBOARD changed shape');
+  return { ...metricsWidget('agent-runs'), id: 'mixed', views: [runs, { ...ids, label: 'Resources' }] };
+}
+
+/** KPIs only ever show their first view; a second, trace-aggregate one is never open. */
+function kpisWithTraceView(): DashboardWidget {
+  const [first] = kpisWidget.views;
+  if (!first) throw new Error('kpisWidget changed shape');
+  const second: DashboardWidgetView = {
+    ...first,
+    queries: [...first.queries, { id: 'traces', source: 'traceAggregate', measures: ['count'] }],
+  };
+  return { ...kpisWidget, views: [first, second] };
+}
+
+describe('a widget whose views read different sources', () => {
+  const page = {
+    window: { start: new Date('2026-10-27T12:00:00Z'), end: new Date(TEST_NOW) },
+    filters: { timestamp: { start: new Date('2026-10-27T12:00:00Z'), end: new Date(TEST_NOW) } },
+    comparisonLabel: 'vs previous 24h',
+  };
+
+  describe('when the server has no trace aggregates', () => {
+    const env: DashboardEnvironment = {
+      ...page,
+      gates: { trace: { status: 'unavailable' }, span: { status: 'unavailable' } },
+    };
+
+    it('plans the open metrics view and hides only the trace one', () => {
+      const widget = prepared(mixedSourceWidget(), undefined);
+      expect(planWidget(widget, env, {}).status).toBe('ready');
+      expect(planWidget(widget, env, { view: 1 }).status).toBe('hidden');
+    });
+
+    it('plans KPIs from their first view alone', () => {
+      expect(planWidget(prepared(kpisWithTraceView(), undefined), env, {}).status).toBe('ready');
+    });
+
+    it('shows the open metrics view in DashboardRenderer', async () => {
+      serveCapabilities(olderServerCapabilities);
+      const { root, sent } = await renderRenderer(mixedSourceWidget(), undefined);
+      expect(within(root).getByText('Agent runs')).toBeDefined();
+      expect(sent.some(r => r.includes('/traces/aggregate'))).toBe(false);
+    });
+  });
+
+  describe('when a filter rules out trace aggregates', () => {
+    const env: DashboardEnvironment = {
+      ...page,
+      gates: { trace: { status: 'unsupported-filter', unsupportedFields: ['serviceName'] }, span: { status: 'ready' } },
+    };
+
+    it('plans the open metrics view and blocks only the trace one', () => {
+      const widget = prepared(mixedSourceWidget(), undefined);
+      expect(planWidget(widget, env, {}).status).toBe('ready');
+      expect(planWidget(widget, env, { view: 1 })).toEqual({
+        status: 'pending',
+        gate: { status: 'unsupported-filter', unsupportedFields: ['serviceName'] },
+      });
+    });
+  });
+
+  describe('when the server has trace aggregates', () => {
+    it('loads capabilities only once the trace view is picked, and keeps the pick', async () => {
+      const recorder = recordRequests();
+      const { container } = renderInMetrics(
+        <DashboardRenderer
+          definition={{ schemaVersion: 1, rows: [{ widgets: [mixedSourceWidget()] }] }}
+          scope="project"
+        />,
+      );
+      await settle(recorder);
+      expect(recorder.sent).not.toContain(CAPABILITIES);
+
+      pickIn(find(container, '[data-widget-id="mixed"]'), 'Resources');
+      await settle(recorder);
+      recorder.stop();
+      expect(recorder.sent).toContain(CAPABILITIES);
+      expect(recorder.sent.some(r => r.includes('/traces/aggregate'))).toBe(true);
+      expect(within(find(container, '[data-widget-id="mixed"]')).getByText('Resources')).toBeDefined();
+    });
   });
 });
