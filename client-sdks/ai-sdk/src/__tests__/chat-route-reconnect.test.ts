@@ -352,6 +352,44 @@ describe('chatRoute reconnect', () => {
     controlled.finish();
   });
 
+  it('reconnects with the route default request context when middleware context is absent', async () => {
+    const controlled = createControlledModel();
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Help the user.',
+      model: controlled.model,
+    });
+    const routeRequestContext = new RequestContext();
+    routeRequestContext.set(MASTRA_RESOURCE_ID_KEY, 'route-resource');
+    const route = chatRoute({
+      path: '/chat/:agentId',
+      reconnect: true,
+      defaultOptions: { requestContext: routeRequestContext },
+    });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agent.id]: agent },
+      server: { apiRoutes: [route] },
+    });
+    const runId = 'route-default-context-run';
+
+    const postResponse = await invoke(getRoute(mastra, 'POST'), createContext({ mastra, method: 'POST', runId }));
+    const postReader = postResponse.body!.getReader();
+    await readUntil(postReader, 'Hello from a resumable run');
+    await postReader.cancel();
+
+    await vi.waitFor(async () =>
+      expect(await agent.__getRunRecord(runId)).toMatchObject({ resourceId: 'route-resource' }),
+    );
+
+    const reconnectResponse = await invoke(getRoute(mastra, 'GET'), createContext({ mastra, method: 'GET', runId }));
+    expect(reconnectResponse.status).toBe(200);
+    const reconnectBody = reconnectResponse.text();
+    controlled.finish();
+    expect(await reconnectBody).toContain('Hello from a resumable run');
+  });
+
   it('rejects an owner-less run for a tenant-scoped caller', async () => {
     const controlled = createControlledModel();
     const agent = new Agent({

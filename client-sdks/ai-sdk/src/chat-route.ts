@@ -998,7 +998,8 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
     },
     handler: async c => {
       const mastra = c.get('mastra');
-      const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
+      const requestContext =
+        ((c as any).get('requestContext') as RequestContext | undefined) || defaultOptions?.requestContext;
       const agentToUse = agent ?? c.req.param('agentId');
       const runId = c.req.param('runId');
 
