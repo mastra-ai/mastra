@@ -145,3 +145,67 @@ describe('evented start() with no inputData key (#29424)', () => {
     expect(observed).toEqual([{ inputData: { count: 5 }, initData: { count: 5 } }]);
   });
 });
+
+describe('evented resume feeds the first step the input it started with (#29424)', () => {
+  it.each([
+    {
+      label: 'explicit null with a nullable inputSchema',
+      id: 'resume-nullable-input',
+      schema: z.string().nullable(),
+      start: { inputData: null },
+    },
+    {
+      label: 'omitted input with an optional inputSchema',
+      id: 'resume-omitted-input',
+      schema: z.string().optional(),
+      start: {},
+    },
+  ])(
+    '$label',
+    async ({ id, schema, start }) => {
+      const expectedInput = 'inputData' in start ? start.inputData : undefined;
+      const executions: Array<{ inputData: unknown; resumeData: unknown }> = [];
+      const step = createStep({
+        id: 'approve',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          executions.push({ inputData, resumeData });
+          if (!resumeData) return suspend({});
+          return { received: inputData };
+        },
+      });
+      const workflow = createWorkflow({
+        id,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+      })
+        .then(step)
+        .commit();
+      const storage = await startHost(workflow);
+      const run = await workflow.createRun();
+
+      const started = await run.start(start);
+      expect(started.status).toBe('suspended');
+
+      const workflowsStore = await storage.getStore('workflows');
+      const suspendedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+      expect(suspendedSnapshot?.context.approve?.status).toBe('suspended');
+      expect(suspendedSnapshot?.context.approve?.payload).toBe(expectedInput);
+
+      const resumed = await run.resume({ step: 'approve', resumeData: { approved: true } });
+
+      expect(resumed.status).toBe('success');
+      expect(resumed.status === 'success' && resumed.result).toStrictEqual({ received: expectedInput });
+      expect(executions).toStrictEqual([
+        { inputData: expectedInput, resumeData: undefined },
+        { inputData: expectedInput, resumeData: { approved: true } },
+      ]);
+    },
+    15_000,
+  );
+});
