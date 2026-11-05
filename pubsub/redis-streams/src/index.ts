@@ -331,6 +331,23 @@ export interface RedisStreamsPubSubConfig {
    * operators can see what's happening without noise on the happy path.
    */
   logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
+  /**
+   * How long `publish` keeps retrying a write that failed with a transient
+   * connection error (or `-LOADING`) before giving up. Defaults to 120000.
+   */
+  publishRetryBudgetMs?: number;
+}
+
+/**
+ * Thrown when a publish could not reach Redis before the retry budget ran
+ * out, including when an attempt never settled (node-redis parks commands in
+ * its offline queue while disconnected).
+ */
+export class PublishRetryBudgetExhaustedError extends Error {
+  constructor(budgetMs: number, options?: { cause?: unknown }) {
+    super(`redis-streams: publish did not reach Redis within ${budgetMs}ms`, options);
+    this.name = 'PublishRetryBudgetExhaustedError';
+  }
 }
 
 export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
@@ -363,6 +380,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #reclaimIdleMs: number;
   #maxDeliveryAttempts: number;
   #inFlightTimeoutMs: number;
+  #publishRetryBudgetMs: number;
   #logger?: RedisStreamsPubSubConfig['logger'];
   // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
   // multiple topics independently. Without the topic in the key,
@@ -431,6 +449,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       );
     }
     this.#inFlightTimeoutMs = inFlightTimeout;
+    this.#publishRetryBudgetMs = options.publishRetryBudgetMs ?? PUBLISH_RETRY_BUDGET_MS;
   }
 
   /**
@@ -613,13 +632,30 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // A retry after a lost reply can append the event twice. Both copies carry
     // the same event id; a duplicate workflow.step.run is dropped by the step
     // fence, and other events are already handled as at-least-once deliveries.
-    const deadline = Date.now() + PUBLISH_RETRY_BUDGET_MS;
+    const budgetMs = this.#publishRetryBudgetMs;
+    const deadline = Date.now() + budgetMs;
+    let lastError: unknown;
     for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw lastError ?? new PublishRetryBudgetExhaustedError(budgetMs);
+      // While disconnected, node-redis parks commands in its offline queue and
+      // their promises never settle, so each attempt is bounded by what is left
+      // of the budget. Running out is final: the caller nacks as before.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const budgetExhausted = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new PublishRetryBudgetExhaustedError(budgetMs, { cause: lastError })),
+          remaining,
+        );
+      });
       try {
-        return await this.#xaddEvent(streamKey, payload, xaddOptions);
+        return await Promise.race([this.#xaddEvent(streamKey, payload, xaddOptions), budgetExhausted]);
       } catch (error) {
         if (!isTransientPublishError(error) || this.#closed || Date.now() >= deadline) throw error;
+        lastError = error;
         await new Promise(resolve => setTimeout(resolve, PUBLISH_RETRY_DELAY_MS));
+      } finally {
+        clearTimeout(timer);
       }
     }
   }

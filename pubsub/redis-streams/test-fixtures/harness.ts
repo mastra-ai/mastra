@@ -292,11 +292,21 @@ export function makeLoadingProxy(target: { host: string; port: number }) {
 /**
  * TCP proxy that drops the connection carrying the first XADD. With
  * `before`, the XADD never reaches Redis; with `after`, Redis applies it and
- * the reply is lost. Every later connection forwards normally.
+ * the reply is lost. Every later connection forwards normally, unless
+ * `closeListenerAfterDrop` is set: then the proxy stops accepting connections
+ * once it drops, like a Redis that went away and stayed down.
  */
-export function makeXaddDropProxy(target: { host: string; port: number }, mode: 'before' | 'after') {
+export function makeXaddDropProxy(
+  target: { host: string; port: number },
+  mode: 'before' | 'after',
+  options: { closeListenerAfterDrop?: boolean } = {},
+) {
   const sockets = new Set<Socket>();
   let dropped = false;
+  const drop = () => {
+    dropped = true;
+    if (options.closeListenerAfterDrop) server.close();
+  };
   const server = createServer(client => {
     sockets.add(client);
     client.on('close', () => sockets.delete(client));
@@ -323,14 +333,14 @@ export function makeXaddDropProxy(target: { host: string; port: number }, mode: 
         if (name === 'XADD') sawXadd = true;
       }
       if (sawXadd && mode === 'before') {
-        dropped = true;
+        drop();
         return void client.destroy();
       }
       upstream.write(chunk);
       // Publish wraps XADD in MULTI/EXEC when a TTL is set; wait for EXEC so
       // Redis applies the write, then hide its reply by dropping the client.
       if (sawXadd && (!inMulti || names.includes('EXEC'))) {
-        dropped = true;
+        drop();
         replyLost = true;
         setTimeout(() => client.destroy(), 200);
       }
