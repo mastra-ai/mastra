@@ -134,5 +134,42 @@ export function createCustomRouteFGATestSuite(config: CustomRouteFGATestSuiteCon
       expect(authed.status).toBe(200);
       expect(await authed.json()).toEqual({ route: 'admin' });
     });
+
+    it('checks FGA with the params of the route that handles an overlapping path', async () => {
+      // '/docs/:docId' is registered first, so it serves '/docs/open' even though the
+      // framework may pick the static route. FGA must still see docId from the URL.
+      const check = vi.fn(async (_user: unknown, { resource }: { resource: { id: string } }) => resource.id === 'open');
+      const fga: IFGAProvider = { check, require: vi.fn(), filterAccessible: vi.fn() };
+      const mastra = new Mastra({
+        logger: false,
+        server: {
+          fga,
+          apiRoutes: [
+            registerApiRoute('/docs/:docId', {
+              method: 'GET',
+              fga: { resourceType: 'doc', resourceIdParam: 'docId', permission: 'docs:read' },
+              handler: async (c: any) => c.json({ docId: c.req.param('docId') }),
+            }),
+            registerApiRoute('/docs/open', { method: 'GET', handler: async (c: any) => c.json({ route: 'static' }) }),
+          ],
+        },
+      });
+      const originalGetServer = mastra.getServer.bind(mastra);
+      mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+            authorize: async () => true,
+          },
+        }) as any;
+
+      const server = await startServer(mastra);
+      close = server.close;
+
+      const response = await server.request('/docs/open', { headers: { authorization: 'Bearer valid-token' } });
+      expect(response.status).toBe(200);
+      expect(checkedIds(check)).toEqual(['open']);
+    });
   });
 }

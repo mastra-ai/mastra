@@ -784,8 +784,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         // Fastify prefers static paths, but the custom route handler dispatches to the first
         // registered match. Check auth against the route that will actually run.
         const requestPath = String(request.url.split('?')[0] || '/');
-        const dispatched =
-          findMatchingCustomRoute(requestPath, String(request.method || 'GET'), routes)?.route ?? route;
+        const match = findMatchingCustomRoute(requestPath, String(request.method || 'GET'), routes);
+        const dispatched = match?.route ?? route;
         const serverRoute: ServerRoute = {
           method: dispatched.method as any,
           path: dispatched.path,
@@ -856,7 +856,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           ...(typeof request.body === 'object' && request.body !== null
             ? (request.body as Record<string, unknown>)
             : {}),
-          ...(request.params as Record<string, string>),
+          // Use the dispatched route's params; Fastify's may belong to a different route.
+          ...(match ? match.params : (request.params as Record<string, string>)),
         });
         if (fgaError) {
           return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
