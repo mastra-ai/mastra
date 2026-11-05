@@ -1096,6 +1096,36 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // #29424: a run started with null or omitted input. Time travel replays the first step with
+  // the input it originally received, so the step must get that same null or undefined again.
+  {
+    const createReplayInputWorkflow = (id: string, schema: z.ZodType) => {
+      const observeInput = vi.fn();
+      const step = createStep({
+        id: 'observe',
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        execute: async ({ inputData }) => {
+          observeInput(inputData);
+          return { received: inputData };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: schema,
+        outputSchema: z.object({ received: schema }),
+        steps: [step],
+      });
+      workflow.then(step).commit();
+
+      workflows[id] = { workflow, mocks: { observeInput }, resetMocks: () => observeInput.mockClear() };
+    };
+
+    createReplayInputWorkflow('tt-replay-nullable-input', z.string().nullable());
+    createReplayInputWorkflow('tt-replay-optional-input', z.string().optional());
+  }
+
   return workflows;
 }
 
@@ -1737,6 +1767,59 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         expect(mocks.getUserInput).toHaveBeenCalledTimes(2);
         // promptAgent should have been called again
         expect(mocks.promptAgent).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    // #29424: the evented engine replayed a stored null or undefined step input as {}, so the
+    // step's inputSchema rejected it on time travel even though the original run accepted it.
+    describe.skipIf(skipTests.timeTravelPreviousRun || !timeTravel)(
+      'time travel replays a null or omitted workflow input (#29424)',
+      () => {
+        const uniqueRunId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        it('replays explicit null input under a nullable inputSchema', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-nullable-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-null');
+
+          const started = await execute(workflow, null, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId });
+
+          expect(replayed.status).toBe('success');
+          expect(replayed.result).toEqual({ received: null });
+          expect(mocks.observeInput.mock.calls).toEqual([[null], [null]]);
+        });
+
+        it('replays omitted input under an optional inputSchema', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-optional-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-omitted');
+
+          const started = await execute(workflow, undefined, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId });
+
+          expect(replayed.status).toBe('success');
+          expect(mocks.observeInput.mock.calls).toEqual([[undefined], [undefined]]);
+        });
+
+        it('uses new inputData passed to time travel over the stored null input', async () => {
+          const { workflow, mocks, resetMocks } = registry!['tt-replay-nullable-input']!;
+          resetMocks?.();
+          const runId = uniqueRunId('tt-replay-override');
+
+          const started = await execute(workflow, null, { runId });
+          expect(started.status).toBe('success');
+
+          const replayed = await timeTravel!(workflow, { step: 'observe', runId, inputData: 'replayed' });
+
+          expect(replayed.status).toBe('success');
+          expect(replayed.result).toEqual({ received: 'replayed' });
+          expect(mocks.observeInput.mock.calls).toEqual([[null], ['replayed']]);
+        });
       },
     );
   });

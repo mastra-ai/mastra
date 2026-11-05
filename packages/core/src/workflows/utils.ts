@@ -528,9 +528,16 @@ export const createTimeTravelExecutionParams = (params: {
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);
       const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
+      // A target in the first entry has no previous step, so it replays the workflow input the
+      // default engine also gives it: new inputData if passed, else the stored input, kept even
+      // when null or undefined instead of becoming {} (#29424). A target inside a nested workflow
+      // (steps.length > 1) keeps the recorded payload, since inputData belongs to the inner step.
+      const isFirstEntryTarget = !prevStep && stepId === firstStepId && steps.length === 1;
       result = {
         status,
-        payload: context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {},
+        payload: isFirstEntryTarget
+          ? stepResults.input
+          : (context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {}),
         output: isCompleteStatus
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
