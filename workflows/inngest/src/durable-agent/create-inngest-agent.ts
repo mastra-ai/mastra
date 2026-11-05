@@ -95,6 +95,7 @@ import {
   buildDurableTriggerEventData,
   mergeResumeRequestContext,
 } from '../durable-event-payload';
+import { endRunSpansWithError } from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
@@ -1471,6 +1472,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           }
         })
         .catch(async error => {
+          // The run never reached a worker, so nothing else will end the spans opened at prepare.
+          endRunSpansWithError(runId, error);
           await emitError(runId, error);
           await failStream(error);
         });
