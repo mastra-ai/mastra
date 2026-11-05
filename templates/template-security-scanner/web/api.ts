@@ -95,12 +95,13 @@ export type Target = {
   }[];
   routeAccessRules?: RouteAccessRule[];
 };
-export type RouteAccessRule = {
+export type RouteAccessRule = (
+  | { source: 'operator'; operatorRevision: number }
+  | { source: 'openapi_suggestion'; operatorRevision?: never }
+) & {
   version: 1;
   method: 'GET';
   pathTemplate: string;
-  source: 'operator';
-  operatorRevision: number;
   audience: 'public' | 'user' | 'admin';
   objectPolicy?: 'owner' | 'shared';
   expectedUnauthorizedStatus: number[];

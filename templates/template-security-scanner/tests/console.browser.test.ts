@@ -300,6 +300,14 @@ describe('real security console browser journeys', () => {
             audience: 'public',
             expectedUnauthorizedStatus: [],
           },
+          {
+            version: 1,
+            method: 'GET',
+            pathTemplate: '/api/products',
+            source: 'openapi_suggestion',
+            audience: 'public',
+            expectedUnauthorizedStatus: [],
+          },
         ],
       },
     });
@@ -324,9 +332,14 @@ describe('real security console browser journeys', () => {
       const read = await page.request.get(`${url}/api/targets/${target.id}`);
       expect(read.status()).toBe(200);
       const current = await read.json();
-      expect(current.routeAccessRules.map((rule: { operatorRevision: number }) => rule.operatorRevision)).toEqual([
-        current.revision,
-      ]);
+      expect(
+        current.routeAccessRules
+          .filter((rule: { source: string }) => rule.source === 'operator')
+          .map((rule: { operatorRevision: number }) => rule.operatorRevision),
+      ).toEqual([current.revision]);
+      expect(
+        current.routeAccessRules.filter((rule: { source: string }) => rule.source === 'openapi_suggestion'),
+      ).toEqual([target.routeAccessRules[1]]);
       expect(current.schedule).toEqual(target.schedule);
       expect(current.authenticationDrivers).toEqual([]);
     }

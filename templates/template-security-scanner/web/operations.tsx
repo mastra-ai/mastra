@@ -725,10 +725,9 @@ export function ProfileForm({
             authenticationDrivers: driver
               ? [...(current.authenticationDrivers ?? []), driver]
               : current.authenticationDrivers,
-            routeAccessRules: current.routeAccessRules?.map(rule => ({
-              ...rule,
-              operatorRevision: current.revision + 1,
-            })),
+            routeAccessRules: current.routeAccessRules?.map(rule =>
+              rule.source === 'operator' ? { ...rule, operatorRevision: current.revision + 1 } : rule,
+            ),
           },
           current.revision,
         );
