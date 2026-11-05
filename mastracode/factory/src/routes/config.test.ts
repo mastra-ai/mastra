@@ -683,7 +683,7 @@ describe('Mastra Gateway routes with a tenant', () => {
       keyId: 'key_1',
     });
     const { models } = (await (await app.request('/web/config/models')).json()) as { models: Array<{ id: string }> };
-    expect(models.map(m => m.id)).toContain(`mastra/${PROVIDER_DEFAULT_MODELS.anthropic}`);
+    expect(models.map(m => m.id)).toContain('mastra/anthropic/claude-opus-5.5');
   });
 
   it('reuses the key the scope already has', async () => {
@@ -805,126 +805,8 @@ describe('Mastra Gateway routes with a tenant', () => {
 
   const teamsCustomer = () =>
     Response.json({
-      customer: { creditPool: { featureId: 'gateway_credits_teams', topupPlanId: 'gateway_credit_topup_teams' } },
+      customer: { creditPool: { featureId: 'gateway_credits_teams' } },
     });
-
-  it("buys credits on the organization's own credit pool and settles them on a saved card", async () => {
-    const platform = fakePlatform({
-      'GET /billing/customer': teamsCustomer,
-      'POST /billing/attach': () => Response.json({ paymentUrl: null }),
-    });
-
-    const res = await buyCredits(buildApp(platform), 50);
-
-    expect(await res.json()).toEqual({ status: 'added' });
-    expect(platform.requests).toContainEqual({
-      method: 'POST',
-      path: '/billing/attach',
-      body: {
-        planId: 'gateway_credit_topup_teams',
-        featureQuantities: [{ featureId: 'gateway_credits_teams', quantity: 50 }],
-        successUrl: 'https://projects.mastra.ai/add-credits/org1?credits_added=1',
-        redirectMode: 'if_required',
-      },
-    });
-  });
-
-  it('hands back the payment page when the organization has no card to charge', async () => {
-    const platform = fakePlatform({
-      'GET /billing/customer': teamsCustomer,
-      'POST /billing/attach': () => Response.json({ paymentUrl: 'https://checkout.stripe.com/c/pay/cs_1' }),
-    });
-
-    const res = await buyCredits(buildApp(platform), 20);
-
-    expect(await res.json()).toEqual({
-      status: 'payment_required',
-      paymentUrl: 'https://checkout.stripe.com/c/pay/cs_1',
-    });
-  });
-
-  it('hands back the invoice when the saved card needs the user to confirm the payment', async () => {
-    const platform = fakePlatform({
-      'GET /billing/customer': teamsCustomer,
-      'POST /billing/attach': () =>
-        Response.json({
-          paymentUrl: null,
-          requiredAction: { code: '3ds_required', reason: 'Card needs authentication' },
-          invoice: { hostedInvoiceUrl: 'https://invoice.stripe.com/i/inv_1' },
-        }),
-    });
-
-    const res = await buyCredits(buildApp(platform), 20);
-
-    expect(await res.json()).toEqual({ status: 'payment_required', paymentUrl: 'https://invoice.stripe.com/i/inv_1' });
-  });
-
-  it('refuses a member the platform does not let buy credits', async () => {
-    const platform = fakePlatform(
-      {
-        'GET /billing/customer': teamsCustomer,
-        'POST /billing/attach': () => Response.json({ detail: 'Requires role: admin' }, { status: 403 }),
-      },
-      { role: 'member' },
-    );
-
-    const res = await buyCredits(buildApp(platform), 20);
-
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/Only admins/);
-  });
-
-  it("passes on the platform's reason when it rejects the purchase", async () => {
-    const platform = fakePlatform({
-      'GET /billing/customer': teamsCustomer,
-      'POST /billing/attach': () =>
-        Response.json(
-          { status: 409, detail: 'Another billing change is in progress. Try again in a moment.' },
-          { status: 409 },
-        ),
-    });
-
-    const res = await buyCredits(buildApp(platform), 20);
-
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({ error: 'Another billing change is in progress. Try again in a moment.' });
-  });
-
-  it('warns that the payment may have gone through when Mastra does not answer the purchase', async () => {
-    const platform = fakePlatform({
-      'GET /billing/customer': teamsCustomer,
-      'POST /billing/attach': () => {
-        throw new DOMException('The operation timed out.', 'TimeoutError');
-      },
-    });
-
-    const res = await buyCredits(buildApp(platform), 20);
-
-    expect(res.status).toBe(502);
-    expect((await res.json()).error).toMatch(/may have gone through/);
-  });
-
-  it('charges nothing for an amount the platform does not sell', async () => {
-    const platform = fakePlatform();
-    const app = buildApp(platform);
-
-    const responses = await Promise.all([buyCredits(app, 4), buyCredits(app, 12.5), buyCredits(app, 10_001)]);
-
-    expect(responses.map(r => r.status)).toEqual([400, 400, 400]);
-    expect(platform.requests).toEqual([]);
-  });
-
-  it("buys nothing while the user's Mastra session is on another organization than the Factory", async () => {
-    const platform = fakePlatform(
-      { 'GET /billing/customer': teamsCustomer, 'POST /billing/attach': () => Response.json({ paymentUrl: null }) },
-      { organizationId: 'org-other' },
-    );
-
-    const res = await buyCredits(buildApp(platform), 20);
-
-    expect(res.status).toBe(409);
-    expect(platform.requests.map(r => r.path)).toEqual(['/auth/me']);
-  });
 
   it('offers the one-click gateway only when auth can act on the Mastra platform', async () => {
     const gatewayRow = async (app: Hono) => {

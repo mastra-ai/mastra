@@ -1,4 +1,3 @@
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 
@@ -6,7 +5,6 @@ import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
-  GatewayCreditPurchase,
   MastraGatewayCredits,
   OAuthPollResponse,
   OAuthStartResponse,
@@ -14,7 +12,6 @@ import type {
   ProvidersResponse,
   SaveProviderKeyResponse,
 } from '../api/types';
-import { formatWholeDollars } from '../ui/domains/workspaces/components/mastra-gateway-credits';
 
 /**
  * A credential change (key saved/removed, OAuth completed, signed out) alters
@@ -99,29 +96,6 @@ export function useMastraGatewayCreditsQuery() {
     queryKey: queryKeys.mastraGatewayCredits(),
     queryFn: () => client.get<MastraGatewayCredits>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`),
     refetchOnWindowFocus: 'always',
-  });
-}
-
-/**
- * The toast lives here because the notice holding the dialog unmounts once the balance is above zero.
- * A failed purchase may still have charged, so the balance is read again.
- */
-export function useAddGatewayCredits() {
-  const { client } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (amount: number) =>
-      client.post<GatewayCreditPurchase>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`, {
-        amount,
-      }),
-    onSuccess: (purchase, amount) => {
-      if (purchase.status !== 'added') return;
-      toast.success(`Added ${formatWholeDollars(amount)} to your organization’s Mastra credits`);
-      queryClient.setQueryData<MastraGatewayCredits>(queryKeys.mastraGatewayCredits(), credits =>
-        credits ? { ...credits, remaining: (credits.remaining ?? 0) + amount } : credits,
-      );
-    },
-    onError: () => queryClient.invalidateQueries({ queryKey: queryKeys.mastraGatewayCredits() }),
   });
 }
 

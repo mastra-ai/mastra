@@ -93,7 +93,7 @@ export function ModelProviderPicker({
                 onPreviewProvider?.(gateway.provider, 'api_key');
               }}
             >
-              {connection.connectingGateway ? 'Connecting…' : 'Use Mastra Gateway'}
+              {connection.connectingGateway ? 'Connecting…' : 'Connect Mastra Gateway'}
             </Button>
           </div>
           <Txt as="h2" variant="meta" tone="muted" className="m-0">

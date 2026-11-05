@@ -319,9 +319,7 @@ export async function resolveTenantProviderDefaultModel(
     ([provider]) => store.get(provider) !== undefined,
   )?.[1];
   if (providerDefault) return providerDefault;
-  return store.get(MASTRA_GATEWAY_PROVIDER)
-    ? `${MASTRA_GATEWAY_PREFIX}${PROVIDER_DEFAULT_MODELS.anthropic}`
-    : undefined;
+  return store.get(MASTRA_GATEWAY_PROVIDER) ? `${MASTRA_GATEWAY_PREFIX}anthropic/claude-opus-5.5` : undefined;
 }
 
 /** Test hook: clear registration and cached tenant snapshots. */

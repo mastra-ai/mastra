@@ -295,7 +295,7 @@ describe('chat run errors', () => {
     expect(screen.getByText('Provider access failed')).toBeVisible();
   });
 
-  it('adds credits from a run that ran out of Mastra Gateway credits', async () => {
+  it('sends the organization to add credits on Mastra when a run runs out of gateway credits', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
         HttpResponse.json({
@@ -305,22 +305,18 @@ describe('chat run errors', () => {
           addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
         }),
       ),
-      http.post(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () => HttpResponse.json({ status: 'added' })),
     );
     const outOfCredits = failedReply(
       "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
       'AI_APICallError',
       { statusCode: 402 },
     );
-    const user = userEvent.setup();
-    renderWithProviders(<ErrorSession messages={[outOfCredits]} modelId="mastra/anthropic/claude-fable-5" />);
+    renderWithProviders(<ErrorSession messages={[outOfCredits]} modelId="mastra/anthropic/claude-opus-5.5" />);
 
     expect(screen.getByText('Out of Mastra Gateway credits')).toBeVisible();
-    await user.click(await screen.findByRole('button', { name: 'Add credits' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Add credits' });
-    await user.click(within(dialog).getByRole('button', { name: 'Add $20' }));
-
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credits' })).not.toBeInTheDocument());
+    const addCredits = await screen.findByRole('link', { name: 'Add credits' });
+    expect(addCredits).toHaveAttribute('href', 'https://projects.mastra.ai/add-credits/org-1');
+    expect(addCredits).toHaveAttribute('target', '_blank');
   });
 
   it('continues a timed-out run from the card', async () => {

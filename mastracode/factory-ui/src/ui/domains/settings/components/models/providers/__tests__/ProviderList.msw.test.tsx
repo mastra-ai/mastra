@@ -89,8 +89,10 @@ describe('ProviderList', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add provider' })).not.toBeInTheDocument());
     expect(await screen.findByText('No gateway credits left')).toBeInTheDocument();
     expect(within(rowFor('mastra')).getByText('Key saved')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Add credits' }));
-    expect(await screen.findByRole('dialog', { name: 'Add credits' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Add credits' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai/add-credits/org-1',
+    );
   });
 
   it('lets the user remove the Mastra Gateway key Factory created, but not replace it', async () => {

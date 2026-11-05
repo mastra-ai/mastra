@@ -5,9 +5,8 @@ import type { RouteAuth } from './route.js';
 
 const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects.mastra.ai';
 
-/** The Starter plan's gateway credit pool and its top-up plan, used when the customer names none. */
+/** The Starter plan's gateway credit pool, used when the customer names none. */
 const STARTER_CREDIT_POOL = 'gateway_credits';
-const STARTER_TOPUP_PLAN = 'gateway_credit_topup';
 
 const GATEWAY_KEYS_PATH = '/gateway/organization/v2/keys';
 
@@ -122,7 +121,7 @@ const BillingCustomer = z.object({
   customer: z
     .object({
       balances: z.record(z.string(), CustomerBalance.nullish()).nullish(),
-      creditPool: z.object({ featureId: z.string().nullish(), topupPlanId: z.string().nullish() }).nullish(),
+      creditPool: z.object({ featureId: z.string().nullish() }).nullish(),
     })
     .nullish(),
 });
@@ -167,63 +166,4 @@ export async function getGatewayCredits(auth: RouteAuth, c: Context, orgId: stri
     canAddCredits: member.isAdmin,
     addCreditsUrl: addCreditsUrl(orgId),
   };
-}
-
-export type GatewayCreditPurchase = { status: 'added' } | { status: 'payment_required'; paymentUrl: string };
-
-const PlatformProblem = z.object({
-  detail: z.string().min(1).optional().catch(undefined),
-  error: z.string().min(1).optional().catch(undefined),
-});
-
-const AttachResult = z.object({
-  paymentUrl: z.string().nullish(),
-  requiredAction: z.unknown().optional(),
-  invoice: z.object({ hostedInvoiceUrl: z.string().nullish() }).nullish(),
-});
-
-/** A saved card settles at once; otherwise Mastra returns the page where the user pays. */
-export async function purchaseGatewayCredits(
-  auth: RouteAuth,
-  c: Context,
-  orgId: string,
-  amount: number,
-): Promise<GatewayCreditPurchase> {
-  await platformMember(auth, c, orgId);
-  const pool = (await billingCustomer(auth, c, 'Could not add Mastra Gateway credits. Try again.'))?.creditPool;
-  const unconfirmed =
-    'Mastra did not confirm the purchase, and the payment may have gone through. Check your balance before you try again.';
-  const res = await platformFetch(
-    auth,
-    c,
-    '/billing/attach',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        planId: pool?.topupPlanId ?? STARTER_TOPUP_PLAN,
-        featureQuantities: [{ featureId: pool?.featureId ?? STARTER_CREDIT_POOL, quantity: amount }],
-        successUrl: `${addCreditsUrl(orgId)}?credits_added=1`,
-        redirectMode: 'if_required',
-      }),
-    },
-    unconfirmed,
-  );
-  if (res.status === 403) {
-    throw new MastraGatewayError(
-      403,
-      'Only admins of your Mastra organization can add credits. Ask an admin to add them.',
-    );
-  }
-  if (res.status >= 400 && res.status < 500) {
-    const problem = PlatformProblem.safeParse(await res.json().catch(() => undefined)).data;
-    throw new MastraGatewayError(409, problem?.detail ?? problem?.error ?? 'Mastra could not add the credits.');
-  }
-  if (!res.ok) throw platformUnavailable(unconfirmed);
-  const result = await readJson(res, AttachResult, unconfirmed);
-  if (result.paymentUrl) return { status: 'payment_required', paymentUrl: result.paymentUrl };
-  if (result.requiredAction) {
-    return { status: 'payment_required', paymentUrl: result.invoice?.hostedInvoiceUrl || addCreditsUrl(orgId) };
-  }
-  return { status: 'added' };
 }

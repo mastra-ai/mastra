@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useMastraGatewayCreditsQuery } from '../../../../hooks/use-providers';
-import { AddGatewayCreditsDialog } from '../../workspaces/components/AddGatewayCreditsDialog';
 import { ASK_ADMIN_FOR_CREDITS } from '../../workspaces/components/mastra-gateway-credits';
 
 export function AddGatewayCreditsAction() {
@@ -16,13 +15,8 @@ export function AddGatewayCreditsAction() {
     );
   }
   return (
-    <AddGatewayCreditsDialog
-      addCreditsUrl={credits.addCreditsUrl}
-      trigger={
-        <Button size="sm" variant="primary">
-          Add credits
-        </Button>
-      }
-    />
+    <Button size="sm" variant="primary" render={<a href={credits.addCreditsUrl} target="_blank" rel="noreferrer" />}>
+      Add credits
+    </Button>
   );
 }
