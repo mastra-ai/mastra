@@ -3178,6 +3178,17 @@ describe('Agent Routes Authorization', () => {
       },
     );
 
+    it('closes a legacy run whose log ends in an error event, resumed past the end', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-past-end-error';
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'error', data: {} } as any);
+      const unsubscribe = vi.spyOn(mockDurableAgent.pubsub, 'unsubscribe');
+      expect(await collectWithDeadline(await observe(runId, { offset: 2 }))).toEqual([]);
+      expect(unsubscribe.mock.calls.filter(([t]) => t === topic)).toHaveLength(1);
+    });
+
     it('keeps a past-end resume open after a trailing error chunk until the run finishes', async () => {
       (mockDurableAgent as any).__subscribeToRunStream = undefined;
       const runId = 'observe-legacy-error-chunk';
