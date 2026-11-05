@@ -400,11 +400,6 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     const checkedPaths = new Set<string>();
     // Compare resolved identities so a symlinked instruction file cannot escape the base path.
     const rootIdentity = basePath ? resolvePathIdentity(toAbsolutePath(basePath)) : undefined;
-    let ignoredIdentities: Set<string> | undefined;
-    const isIgnored = (identity: string) =>
-      (ignoredIdentities ??= new Set((this.getIgnoredInstructionPaths?.(args) ?? []).map(resolvePathIdentity))).has(
-        identity,
-      );
     for (const toolCall of completedToolCalls) {
       for (const instructionPath of this.findInstructionPathsInInvocation(toolCall, reader, basePath)) {
         const identity = resolvePathIdentity(instructionPath);
@@ -417,7 +412,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
           continue;
         }
 
-        if (isIgnored(identity)) {
+        if (this.isIgnoredInstructionPath(args, identity, resolvePathIdentity)) {
           continue;
         }
 
@@ -456,6 +451,15 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     }
 
     return this.reminderText?.trim() || undefined;
+  }
+
+  private isIgnoredInstructionPath(
+    args: ProcessInputStepArgs,
+    identity: string,
+    resolvePathIdentity: (path: string) => string,
+  ): boolean {
+    const ignoredPaths = this.getIgnoredInstructionPaths?.(args) ?? [];
+    return ignoredPaths.some(path => resolvePathIdentity(path) === identity);
   }
 
   private *findInstructionPathsInInvocation(

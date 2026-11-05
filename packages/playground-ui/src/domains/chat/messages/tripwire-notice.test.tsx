@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { EditorView } from '@codemirror/view';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { TripwireNotice } from './tripwire-notice';
 
@@ -31,24 +31,6 @@ describe('TripwireNotice', () => {
       metadata: { category: 'violence' },
     };
 
-    it('loads the metadata editor only once the details are expanded', async () => {
-      const loadEditor = vi.fn();
-      vi.resetModules();
-      vi.doMock('@/ds/components/CodeEditor/code-editor', importOriginal => {
-        loadEditor();
-        return importOriginal();
-      });
-      const { TripwireNotice } = await import('./tripwire-notice');
-      render(<TripwireNotice reason="blocked for safety" tripwire={tripwire} />);
-
-      expect(loadEditor).not.toHaveBeenCalled();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Details' }));
-
-      await screen.findByRole('textbox', { name: 'Tripwire metadata' });
-      expect(loadEditor).toHaveBeenCalledOnce();
-    });
-
     it('keeps the details collapsed until requested', () => {
       render(<TripwireNotice reason="blocked for safety" tripwire={tripwire} />);
 
@@ -56,16 +38,14 @@ describe('TripwireNotice', () => {
       expect(screen.queryByText('Not allowed')).toBeNull();
     });
 
-    it('reveals retry, processor and metadata once expanded', async () => {
+    it('reveals retry, processor and metadata once expanded', () => {
       render(<TripwireNotice reason="blocked for safety" tripwire={tripwire} />);
 
       fireEvent.click(screen.getByRole('button', { name: 'Details' }));
 
       expect(screen.getByText('Not allowed')).not.toBeNull();
       expect(screen.getByText('moderation')).not.toBeNull();
-      const editor = (await screen.findByRole('textbox', { name: 'Tripwire metadata' })).closest<HTMLElement>(
-        '.cm-editor',
-      );
+      const editor = screen.getByRole('textbox', { name: 'Tripwire metadata' }).closest<HTMLElement>('.cm-editor');
       const view = editor ? EditorView.findFromDOM(editor) : null;
       expect(view?.state.doc.toString()).toBe(JSON.stringify({ category: 'violence' }, null, 2));
     });

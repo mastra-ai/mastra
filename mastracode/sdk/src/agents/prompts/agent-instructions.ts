@@ -76,63 +76,6 @@ function createProjectPathResolver(projectPath: string): (path: string) => strin
   };
 }
 
-const GIT_TREE_CACHE_LIMIT = 10_000;
-const gitTreeOutputs = new Map<string, string>();
-
-// A blobless clone fetches file content over the network, so only a successful read is cached.
-function gitAtTree(projectPath: string, args: string[]): string | null {
-  const key = args.join('\0');
-  const cached = gitTreeOutputs.get(key);
-  if (cached !== undefined) return cached;
-  try {
-    const output = execFileSync('git', ['-C', projectPath, '--literal-pathspecs', ...args], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 1024 * 1024,
-    });
-    if (gitTreeOutputs.size >= GIT_TREE_CACHE_LIMIT) gitTreeOutputs.delete(gitTreeOutputs.keys().next().value!);
-    gitTreeOutputs.set(key, output);
-    return output;
-  } catch {
-    return null;
-  }
-}
-
-function createGitRefLookup(projectPath: string, ref: string) {
-  let trees: string[] | undefined;
-  const resolveTrees = (): string[] => {
-    try {
-      const output = execFileSync('git', ['-C', projectPath, 'cat-file', '--batch-check=%(objectname)'], {
-        encoding: 'utf-8',
-        input: `origin/${ref}^{tree}\n${ref}^{tree}\n`,
-        stdio: ['pipe', 'pipe', 'ignore'],
-      });
-      return [...new Set(output.split('\n').filter(line => /^[0-9a-f]+$/.test(line)))];
-    } catch {
-      return [];
-    }
-  };
-  const typeAt = (tree: string, rel: string) =>
-    gitAtTree(projectPath, ['ls-tree', '--full-tree', tree, '--', rel])?.split(/\s/)[1];
-  return {
-    type: (rel: string): string | null => {
-      for (const tree of (trees ??= resolveTrees())) {
-        const type = typeAt(tree, rel);
-        if (type) return type;
-      }
-      return null;
-    },
-    show: (rel: string): string | null => {
-      for (const tree of (trees ??= resolveTrees())) {
-        if (!typeAt(tree, rel)) continue;
-        const content = gitAtTree(projectPath, ['show', `${tree}:${rel}`]);
-        if (content !== null) return content;
-      }
-      return null;
-    },
-  };
-}
-
 /**
  * Create a reader that serves instruction files from a git ref instead of the
  * working tree. Paths are still addressed as working-tree paths under
@@ -143,10 +86,21 @@ function createGitRefLookup(projectPath: string, ref: string) {
  */
 export function createGitRefInstructionReader(projectPath: string, ref: string): InstructionFileReader {
   const toRelative = createProjectPathResolver(projectPath);
-  const lookup = createGitRefLookup(projectPath, ref);
   const show = (path: string): string | null => {
     const rel = toRelative(path);
-    return rel ? lookup.show(rel) : null;
+    if (!rel) return null;
+    for (const candidate of [`origin/${ref}`, ref]) {
+      try {
+        return execFileSync('git', ['-C', projectPath, 'show', `${candidate}:${rel}`], {
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          maxBuffer: 1024 * 1024,
+        });
+      } catch {
+        // Ref or file missing at this candidate — try the next one.
+      }
+    }
+    return null;
   };
   return {
     ref,
@@ -178,10 +132,19 @@ export function createGitRefReminderReader(
   const gitReader = createGitRefInstructionReader(projectPath, ref);
   const toRelative = createProjectPathResolver(projectPath);
   const canonicalRoot = realpathOrResolved(projectPath);
-  const lookup = createGitRefLookup(projectPath, ref);
   const objectType = (rel: string): string | null => {
     if (rel === '') return 'tree'; // project root
-    return lookup.type(rel);
+    for (const candidate of [`origin/${ref}`, ref]) {
+      try {
+        return execFileSync('git', ['-C', projectPath, 'cat-file', '-t', `${candidate}:${rel}`], {
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+      } catch {
+        // Ref or object missing at this candidate — try the next one.
+      }
+    }
+    return null;
   };
   return {
     pathExists: path => {

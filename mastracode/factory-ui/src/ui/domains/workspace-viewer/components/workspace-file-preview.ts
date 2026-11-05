@@ -1,5 +1,5 @@
 import type { WorkspaceFile } from '../../../../api/types';
-import { languageForPath } from '@mastra/playground-ui/components/Code';
+import { languageForPath } from '@mastra/playground-ui/components/CodeEditor';
 
 export interface WorkspaceFilePreview extends WorkspaceFile {
   language?: string;
