@@ -4,7 +4,7 @@
 '@mastra/client-js': patch
 ---
 
-Align stored-agent durable configuration with resumable streams: accept a boolean or `{ cleanupTimeoutMs }` and remove the checkpoint execution `maxSteps` option. Stored `durable: true` agents now hydrate as plain agents with resumable streams, not durable execution wrappers. Use an explicit code-defined `createDurableAgent({ agent })` wrapper when checkpoint persistence and recovery are required.
+Align stored-agent durable configuration with resumable streams: accept a boolean or `{ cleanupTimeoutMs }` and reject checkpoint execution options such as `maxSteps` with guidance to use `createDurableAgent`. Previously persisted objects with execution options still hydrate, but emit one migration warning per hydrated agent. Stored `durable: true` agents now hydrate as plain agents with resumable streams, not durable execution wrappers. Stored `durable: false` agents disable resumable streams, so HTTP disconnects abort their runs. Use an explicit code-defined `createDurableAgent({ agent })` wrapper when checkpoint persistence and recovery are required.
 
 Before, a stored agent version enabled durable execution with:
 

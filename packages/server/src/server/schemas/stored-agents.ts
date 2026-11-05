@@ -268,9 +268,15 @@ const storedProcessorGraphSchema = z.object({
  */
 const durableConfigSchema = z.union([
   z.boolean(),
-  z.object({
-    cleanupTimeoutMs: z.number().int().nonnegative().optional(),
-  }),
+  z.strictObject(
+    {
+      cleanupTimeoutMs: z.number().int().nonnegative().optional(),
+    },
+    {
+      error:
+        'Stored-agent durable configuration only accepts cleanupTimeoutMs. Use createDurableAgent({ agent, ...executionOptions }) for durable execution options.',
+    },
+  ),
 ]);
 
 const snapshotConfigSchema = z.object({

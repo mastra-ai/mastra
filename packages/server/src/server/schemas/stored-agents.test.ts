@@ -1,6 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { createStoredAgentBodySchema, updateStoredAgentBodySchema, storedAgentSchema } from './stored-agents';
 
+describe('stored-agent durable migration', () => {
+  it.each([createStoredAgentBodySchema, updateStoredAgentBodySchema])(
+    'rejects legacy execution options instead of silently stripping them',
+    schema => {
+      for (const legacy of [{ maxSteps: 50 }, { shouldPersistSnapshot: true }, { id: 'old' }, { name: 'Old' }]) {
+        const result = schema.safeParse({
+          name: 'Test Agent',
+          instructions: 'Hello',
+          model: { provider: 'openai', name: 'gpt-4' },
+          durable: { cleanupTimeoutMs: 0, ...legacy },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('createDurableAgent');
+      }
+    },
+  );
+
+  it.each([true, false, {}, { cleanupTimeoutMs: 0 }])('preserves supported durable configuration %j', durable => {
+    const result = updateStoredAgentBodySchema.parse({ durable });
+    expect(result.durable).toEqual(durable);
+  });
+});
+
 describe('stored-agents schemas – conditional fields & requestContextSchema', () => {
   // ---------------------------------------------------------------------------
   // conditionalFieldSchema (via createStoredAgentBodySchema)
