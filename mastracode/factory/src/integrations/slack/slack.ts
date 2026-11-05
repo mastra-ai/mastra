@@ -1182,7 +1182,7 @@ function typedText(message: HandlerMessage): string {
   const raw = message.raw as { text?: unknown } | undefined;
   const text = typeof raw?.text === 'string' ? raw.text : message.text;
   return text
-    .replace(/<@[^>]+>/g, ' ')
+    .replace(/<[@!][^>]+>/g, ' ')
     .replace(/(?<!\w)@[\w.-]+/g, ' ')
     .trim();
 }

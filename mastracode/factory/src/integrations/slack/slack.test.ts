@@ -2726,12 +2726,18 @@ describe('Slack voice clips', () => {
     expect(events).toEqual([]);
   });
 
-  it("cards the sender, and starts no session, when a clip sent with only a mention of the bot can't be transcribed for lack of a key", async () => {
+  it.each([
+    { mentions: 'the bot', text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' },
+    { mentions: 'the bot and @here', text: '@Mastra Factory(Caleb) @here', rawText: '<@U-BOT> <!here>' },
+  ])("cards the sender, and starts no session, when a clip sent with only a mention of $mentions can't be transcribed for lack of a key", async ({
+    text,
+    rawText,
+  }) => {
     const f = await fixture();
     const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Chat', modelScope: 'user' } });
     await f.defaultFactory(project.id);
     f.thread.isSubscribed = vi.fn().mockResolvedValue(false);
-    const message = voiceMessage({ isMention: true, text: '@Mastra Factory(Caleb)', rawText: '<@U-BOT>' });
+    const message = voiceMessage({ isMention: true, text, rawText });
 
     await createHandlers(f.deps).onMention!(f.thread, message, f.defaultHandler, f.ctx);
 
