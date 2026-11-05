@@ -129,7 +129,10 @@ export const Crumb = ({
           {icon && (
             <Icon
               className={cn(
-                'ml-[-.3em] flex size-[13px] shrink-0 items-center justify-center opacity-50 group-hover:opacity-100',
+                'flex size-[13px] shrink-0 items-center justify-center opacity-50 group-hover:opacity-100',
+                // Only the first crumb's icon tucks into the padding (keeping the header's left edge);
+                // after a separator it keeps the full gap, like text.
+                '[li:first-child_&]:ml-[-.3em]',
                 'transition-opacity duration-normal ease-out-custom',
                 // One 13px glyph across icon sets: Mastra's icons are cropped to the glyph, while
                 // Lucide's 24-grid leaves 2px a side, so it draws 24/20 larger.
