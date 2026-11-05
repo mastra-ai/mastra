@@ -2,7 +2,7 @@
 '@mastra/mcp-apps-components': minor
 ---
 
-`@mastra/mcp-apps-components` now ships plain MCP Apps that follow the MCP Apps spec, starting with `greetingApp`. Register it as an app resource on an `MCPServer` and write its two tools as regular Mastra tools: the tool the model calls to open it, and an app-only tool (`visibility: ['app']`) that it calls for its data.
+`@mastra/mcp-apps-components` now ships MCP Apps that use only messages from the MCP Apps spec. The first one is `greetingApp`, exported from the package root. To use it, register it as an app resource on an `MCPServer` and write its two tools as regular Mastra tools. The model calls one tool to open the app. The app calls the other, an app-only tool (`visibility: ['app']`), to get its data.
 
 ```ts
 import { createTool } from '@mastra/core/tools';
@@ -37,4 +37,4 @@ new MCPServer({
 });
 ```
 
-**Breaking:** the dashboard app and its helpers are removed: `dashboardRendererApp`, `observabilityAppTools`, widget pinning, and the `./dashboard-renderer`, `./observability-tools` and `./host` entry points.
+**Breaking:** the dashboard app is removed. The `./dashboard-renderer` (`dashboardRendererApp`) and `./observability-tools` (`observabilityAppTools`) entry points no longer exist. The package also has no peer dependencies anymore, so `@mastra/server` is no longer required.
