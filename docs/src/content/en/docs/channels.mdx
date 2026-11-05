@@ -336,7 +336,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-The `logger` here is the same one you pass to `new Mastra({ logger })`. State adapters such as `createRedisState()` also default to the console and take the same `logger` option.
+The `logger` here is the same one you pass to `new Mastra({ logger })`. Export it from its own file, such as `src/mastra/logger.ts`, so the agent file and `src/mastra/index.ts` can both import it. State adapters such as `createRedisState()` also default to the console and take the same `logger` option.
 
 The Discord adapter's Gateway path logs the first 100 characters of each message at `info`, and `minLevel: 'warn'` keeps that text out of your logs. The Chat SDK itself logs message text at `debug`. If your Mastra logger runs at `debug`, set `chatOptions.logger` with a higher `minLevel` to keep that text out.
 
