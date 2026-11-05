@@ -64,6 +64,10 @@ const operations = [
   'listPageBodyLinkSources',
 ] as const satisfies readonly (keyof KnowledgePageStore)[];
 
+// Storage methods outside the page store that the hosted store answers: the scopes its instance shares
+// with every reader, such as the ones its importers write to.
+const storeOperations = ['listSharedScopeDeclarations'] as const;
+
 // Fails to compile when a page-store method is neither forwarded nor deliberately left to the base class.
 type UnforwardedOperation = Exclude<keyof KnowledgePageStore, (typeof operations)[number]>;
 const operationsAreExhaustive: [UnforwardedOperation] extends ['renameScopeDeclaration']
@@ -97,7 +101,11 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     super({ storageIsolationKey: endpoint });
     return new Proxy(this, {
       get(target, key) {
-        if (typeof key === 'string' && operations.includes(key as (typeof operations)[number])) {
+        if (
+          typeof key === 'string' &&
+          (operations.includes(key as (typeof operations)[number]) ||
+            storeOperations.includes(key as (typeof storeOperations)[number]))
+        ) {
           return (input?: unknown) => target.request(key, input);
         }
         const value: unknown = Reflect.get(target, key, target);

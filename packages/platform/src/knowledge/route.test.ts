@@ -42,6 +42,25 @@ it('uses the project-scoped operation route with bearer auth', async () => {
   ]);
 });
 
+it('asks the hosted store which scopes its instance shares with every reader', async () => {
+  const urls: string[] = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({ result: ['linear:$account:$connection'] }));
+  });
+  const store = (await new PlatformKnowledge({
+    apiUrl: 'http://localhost',
+    instanceId: 'kn_1',
+    accessToken: 'token',
+  }).getStorage()) as unknown as { listSharedScopeDeclarations(): Promise<string[]> };
+  try {
+    expect(await store.listSharedScopeDeclarations()).toEqual(['linear:$account:$connection']);
+    expect(urls).toEqual(['http://localhost/v1/knowledge/kn_1/operations/listSharedScopeDeclarations']);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
 it('allows the project to be derived from the instance and credential', () => {
   expect(
     () => new PlatformKnowledge({ apiUrl: 'http://localhost', instanceId: 'instance', accessToken: 'token' }),
