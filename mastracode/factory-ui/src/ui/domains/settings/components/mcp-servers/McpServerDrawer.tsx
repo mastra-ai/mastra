@@ -391,7 +391,8 @@ export function McpServerDrawer({
                   </div>
                 </div>
               ) : (
-                <HeaderRows headers={draft.headers} onChange={headers => update({ headers })} />
+                // Typed headers replace the saved ones even if the address moves back to their origin.
+                <HeaderRows headers={draft.headers} onChange={headers => update({ headers, replaceHeaders: true })} />
               ))}
 
             {draft.auth === 'oauth' && (

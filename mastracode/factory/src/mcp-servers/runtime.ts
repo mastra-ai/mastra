@@ -75,6 +75,7 @@ export class McpServersRuntime {
    */
   #connectionChanges = 0;
   readonly #connectionChangedAt = new Map<string, number>();
+  #closed = false;
 
   constructor({ storage, allowPrivateNetwork, oauthEndpoints }: McpServersRuntimeOptions) {
     this.#storage = storage;
@@ -181,27 +182,31 @@ export class McpServersRuntime {
 
     for (const record of records) {
       if (record.status !== 'connected' || !record.toolCatalog || record.selectedTools.length === 0) continue;
-      if (record.credentialsUnreadable) {
-        for (const toolName of record.selectedTools) {
-          const entry = Object.hasOwn(record.toolCatalog, toolName) ? record.toolCatalog[toolName] : undefined;
-          if (entry) {
-            skipped.push({
-              serverId: record.id,
-              toolName,
-              exposedName: entry.exposedName,
-              reason: 'credentials_unreadable',
-            });
-          }
+      const catalog = record.toolCatalog;
+      const entries = record.selectedTools.flatMap(toolName =>
+        Object.hasOwn(catalog, toolName) ? [{ toolName, entry: catalog[toolName]! }] : [],
+      );
+      const skipServer = (reason: SkippedMcpServerTool['reason'], detail?: string) => {
+        for (const { toolName, entry } of entries) {
+          skipped.push({ serverId: record.id, toolName, exposedName: entry.exposedName, reason, detail });
         }
+      };
+      if (record.credentialsUnreadable) {
+        skipServer('credentials_unreadable');
         continue;
       }
       active.add(record.id);
-      const client = this.#clientFor(record, readAt);
+      let client: MCPClient | undefined;
+      try {
+        client = this.#clientFor(record, readAt);
+      } catch (error) {
+        // A server whose stored settings no longer make a connection costs only its own tools.
+        skipServer('invalid_definition', safeErrorText(record, error instanceof Error ? error.message : String(error)));
+        continue;
+      }
       // Changed since this read began: the next turn gets its tools.
       if (!client) continue;
-      for (const toolName of record.selectedTools) {
-        const entry = Object.hasOwn(record.toolCatalog, toolName) ? record.toolCatalog[toolName] : undefined;
-        if (!entry) continue;
+      for (const { toolName, entry } of entries) {
         const skip = (reason: SkippedMcpServerTool['reason'], detail?: string) => {
           skipped.push({ serverId: record.id, toolName, exposedName: entry.exposedName, reason, detail });
         };
@@ -244,6 +249,7 @@ export class McpServersRuntime {
   }
 
   async close(): Promise<void> {
+    this.#closed = true;
     const clients = [...this.#clients.values()];
     this.#clients.clear();
     this.#connectionChangedAt.clear();
@@ -300,7 +306,8 @@ export class McpServersRuntime {
     const updatedAt = record.updatedAt.getTime();
     const cached = this.#clients.get(record.id);
     if (cached?.updatedAt === updatedAt) return cached.client;
-    if (this.#changedSince(record.id, readAt)) return undefined;
+    // Shut down (a connection made now would never be closed), or a read older than the connection's last change.
+    if (this.#closed || this.#changedSince(record.id, readAt)) return undefined;
     // Disconnect first: it also removes the stale instance from MCPClient's id cache.
     if (cached) this.invalidate(record.id);
     const client = new MCPClient({

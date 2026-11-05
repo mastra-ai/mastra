@@ -376,7 +376,11 @@ describe('MCP server OAuth sign-in', () => {
     );
     ctx.authorizationServer.deny = false;
 
-    // RFC 9207: a code that came back through some other authorization server is never redeemed.
+    // RFC 9207: a code that came back through some other authorization server is never redeemed,
+    // nor one whose `iss` was stripped when this authorization server says it always sends one.
+    const stripped = await authorize(await startSignIn(ctx, server.id));
+    stripped.searchParams.delete('iss');
+    expect(await deliverCallback(ctx, stripped)).toBe(`${at}&oauth=error&reason=failed`);
     ctx.authorizationServer.responseIssuer = 'https://attacker.example';
     expect(await deliverCallback(ctx, await authorize(await startSignIn(ctx, server.id)))).toBe(
       `${at}&oauth=error&reason=failed`,

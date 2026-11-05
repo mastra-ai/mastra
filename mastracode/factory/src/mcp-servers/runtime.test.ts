@@ -9,10 +9,10 @@ import { startTestMcpServer } from './test-utils.js';
 const TOKEN = 'mcp-test-token-5be1f0a7';
 
 async function setup({ allowPrivateNetwork = true }: { allowPrivateNetwork?: boolean } = {}) {
-  const { mcpServers } = await createFactoryStorageForTests();
+  const { storage: backend, mcpServers } = await createFactoryStorageForTests();
   const runtime = new McpServersRuntime({ storage: mcpServers, allowPrivateNetwork });
   onTestFinished(() => runtime.close());
-  return { storage: mcpServers, runtime };
+  return { backend, storage: mcpServers, runtime };
 }
 
 function bearerServer(url: string, token = TOKEN, slug = 'docs'): CreateMcpServerInput {
@@ -317,5 +317,37 @@ describe('McpServersRuntime.toolsFor', () => {
 
     expect(tools).toEqual({});
     expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives sessions the other servers' tools when one server's stored settings can't make a connection", async () => {
+    const server = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    await connectServer(ctx, 'org-a', bearerServer(server.url));
+    const broken = await connectServer(ctx, 'org-a', bearerServer(server.url, TOKEN, 'crm'));
+    // Written by another version of the Factory, or by hand.
+    await ctx.backend.ops.updateMany('mcp_servers', { id: broken.id }, { url: 'not a url' });
+
+    const { tools, skipped } = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+
+    expect(Object.keys(tools).sort()).toEqual(['docs_add', 'docs_echo']);
+    expect(skipped.map(({ exposedName, reason, detail }) => ({ exposedName, reason, detail }))).toEqual([
+      { exposedName: 'crm_echo', reason: 'invalid_definition', detail: 'Invalid URL' },
+      { exposedName: 'crm_add', reason: 'invalid_definition', detail: 'Invalid URL' },
+    ]);
+  });
+
+  it('opens no new connections once the Factory shuts down, even for a read already in flight', async () => {
+    const server = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    await connectServer(ctx, 'org-a', bearerServer(server.url));
+    const before = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+
+    const inFlight = ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    await ctx.runtime.close();
+
+    expect((await inFlight).tools).toEqual({});
+    expect((await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() })).tools).toEqual({});
+    await expect(before.tools.docs_echo!.execute!({ text: 'after shutdown' }, {} as never)).rejects.toThrow();
+    expect(server.methods).not.toContain('tools/call');
   });
 });

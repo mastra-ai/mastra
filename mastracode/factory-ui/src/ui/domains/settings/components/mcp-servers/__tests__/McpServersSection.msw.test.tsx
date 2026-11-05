@@ -533,6 +533,31 @@ describe('McpServersSection', () => {
       );
     });
 
+    it('keeps header values the admin typed when the address moves back to where it was', async () => {
+      const api = mockMcpServersApi({ servers: [{ ...docsServer, headerNames: ['X-Api-Key'] }] });
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(within(await row('Docs')).getByRole('button', { name: 'Edit' }));
+      const url = screen.getByRole('textbox', { name: 'Server URL' });
+      await user.clear(url);
+      await user.type(url, 'https://docs.example.org/mcp');
+      await user.type(screen.getByLabelText('Header 1 value'), 'key-2');
+      await user.clear(url);
+      await user.type(url, docsServer.url);
+      expect(screen.queryByRole('list', { name: 'Saved headers' })).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Header 1 value')).toHaveValue('key-2');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() =>
+        expect(api.mutations()[0]).toEqual({
+          method: 'PATCH',
+          path: `/${DOCS_ID}`,
+          body: { headers: [{ name: 'X-Api-Key', value: 'key-2' }] },
+        }),
+      );
+    });
+
     it('asks for the client secret again when an OAuth server moves to another address', async () => {
       const api = mockMcpServersApi();
       const user = userEvent.setup();
