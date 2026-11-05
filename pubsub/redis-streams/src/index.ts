@@ -1,6 +1,13 @@
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
-import { createClient, createCluster } from 'redis';
+import {
+  ClientOfflineError,
+  ConnectionTimeoutError,
+  createClient,
+  createCluster,
+  SocketClosedUnexpectedlyError,
+  SocketTimeoutError,
+} from 'redis';
 import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClusterType } from 'redis';
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
@@ -8,13 +15,34 @@ const RECLAIM_PAGE_SIZE = 100;
 const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIM_PAGE_SIZE = 500;
 // A restarted Redis answers `-LOADING` until it has replayed its RDB/AOF, which
-// takes from seconds to minutes. node-redis does not retry server replies, so
-// a publish that fails there loses the event (e.g. a finished step's result).
-const LOADING_RETRY_BUDGET_MS = 120_000;
-const LOADING_RETRY_DELAY_MS = 250;
+// takes from seconds to minutes, and a dropped connection fails the commands in
+// flight on it. node-redis retries neither, so a publish that fails there loses
+// the event (e.g. a finished step's step.end, whose step then runs again).
+const PUBLISH_RETRY_BUDGET_MS = 120_000;
+const PUBLISH_RETRY_DELAY_MS = 250;
+const TRANSIENT_SOCKET_CODES = new Set(['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'ECONNREFUSED']);
 
 function isLoadingError(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith('LOADING');
+}
+
+/**
+ * Whether a publish failed for a reason that a later attempt can get past: the
+ * server is still loading, or the connection dropped. Other server replies
+ * (wrong type, OOM, auth) are not retried.
+ */
+function isTransientPublishError(error: unknown): boolean {
+  if (isLoadingError(error)) return true;
+  if (
+    error instanceof SocketClosedUnexpectedlyError ||
+    error instanceof ClientOfflineError ||
+    error instanceof ConnectionTimeoutError ||
+    error instanceof SocketTimeoutError
+  ) {
+    return true;
+  }
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && TRANSIENT_SOCKET_CODES.has(code);
 }
 
 type XaddTrimOptions = { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } };
@@ -582,13 +610,16 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     };
     const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
-    const deadline = Date.now() + LOADING_RETRY_BUDGET_MS;
+    // A retry after a lost reply can append the event twice. Both copies carry
+    // the same event id; a duplicate workflow.step.run is dropped by the step
+    // fence, and other events are already handled as at-least-once deliveries.
+    const deadline = Date.now() + PUBLISH_RETRY_BUDGET_MS;
     for (;;) {
       try {
         return await this.#xaddEvent(streamKey, payload, xaddOptions);
       } catch (error) {
-        if (!isLoadingError(error) || this.#closed || Date.now() >= deadline) throw error;
-        await new Promise(resolve => setTimeout(resolve, LOADING_RETRY_DELAY_MS));
+        if (!isTransientPublishError(error) || this.#closed || Date.now() >= deadline) throw error;
+        await new Promise(resolve => setTimeout(resolve, PUBLISH_RETRY_DELAY_MS));
       }
     }
   }

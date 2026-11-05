@@ -3444,15 +3444,24 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Extract updated state from step result
       const updatedState = (stepResult as any).__state ?? currentState;
 
+      // The saves below make a redelivered step.run reuse a finished result
+      // rather than run the body again. They only cover successful sequential
+      // steps and foreach iterations on guard-capable stores, and only once the
+      // save commits: a crash before it, a lease reclaimed mid-step, branch steps
+      // and stores without step guards are still at-least-once.
       if (guardIteration && !completedResult && stepResult.status === 'success') {
         // A metadata patch: the store merges it into the row it locks, so no stale
         // copy of the foreach record (or of a sibling's iteration) is written back.
+        // The iteration's result inherits the aggregate's metadata (step-executor
+        // spreads stepResults[stepId]), so drop the saved-iteration map from it or
+        // every entry would embed all entries before it.
+        const { foreachCompletedIterations: _saved, ...iterationMetadata } = stepResult.metadata ?? {};
         const patch = {
           metadata: {
             foreachCompletedIterations: {
               [executionPath[1]!]: {
                 eventId: args.eventId,
-                result: stepResult,
+                result: stepResult.metadata ? { ...stepResult, metadata: iterationMetadata } : stepResult,
                 requestContext: withoutAuthToken(requestContext),
               },
             },

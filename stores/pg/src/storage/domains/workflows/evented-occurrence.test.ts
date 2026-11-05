@@ -1054,6 +1054,119 @@ describe('Postgres evented occurrence replay', () => {
     }
   }, 20_000);
 
+  it('keeps a sibling iteration saved when concurrent foreach step.end writes land', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const calls: number[] = [];
+    const tag = createStep({
+      id: 'tag',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => {
+        calls.push(inputData.n);
+        // Both iterations save their entry into the same record; the later save
+        // must not drop the earlier one.
+        await new Promise(resolve => setTimeout(resolve, inputData.n === 7 ? 50 : 150));
+        return inputData;
+      },
+    });
+    const workflow = createWorkflow({
+      id: `foreach-concurrent-lost-end-${randomUUID()}`,
+      inputSchema: z.array(schema),
+      outputSchema: z.array(schema),
+    })
+      .foreach(tag, { concurrency: 2 })
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+    const publish = driver.pubsub.publish.bind(driver.pubsub);
+    let siblingEnded!: () => void;
+    const sibling = new Promise<void>(resolve => {
+      siblingEnded = resolve;
+    });
+    const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (topic === 'workflows' && event.type === 'workflow.step.end' && event.data.executionPath?.length === 2) {
+        if (event.data.executionPath[1] === 0) return;
+        const published = await publish(topic, event, options);
+        siblingEnded();
+        return published;
+      }
+      return publish(topic, event, options);
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = run.start({ inputData: [{ n: 7 }, { n: 8 }] });
+      await sibling;
+      const store = (await storage.getStore('workflows'))!;
+      // Wait until iteration 1's step.end has stored its slot of the aggregate.
+      await expect
+        .poll(async () => {
+          const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+          return (snapshot?.context.tag as { output?: unknown[] } | undefined)?.output?.[1] ?? null;
+        })
+        .toEqual({ n: 8 });
+      const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+      expect(Object.keys(snapshot?.context.tag?.metadata?.foreachCompletedIterations ?? {}).sort()).toEqual(['0', '1']);
+      interrupted.mockRestore();
+      const original = driver.events.find(
+        event =>
+          event.type === 'workflow.step.run' &&
+          event.runId === run.runId &&
+          event.data.executionPath?.length === 2 &&
+          event.data.executionPath[1] === 0,
+      )!;
+      const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
+      const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+      if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+      await driver.redeliverEvent(original);
+      expect(await result).toMatchObject({ status: 'success', result: [{ n: 7 }, { n: 8 }] });
+      expect(calls).toEqual([7, 8]);
+    } finally {
+      interrupted.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 20_000);
+
+  it('keeps each saved foreach iteration the size of its own result', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number(), blob: z.string() });
+    const workflow = createWorkflow({
+      id: `foreach-saved-size-${randomUUID()}`,
+      inputSchema: z.array(z.object({ n: z.number() })),
+      outputSchema: z.array(schema),
+    })
+      .foreach(
+        createStep({
+          id: 'pad',
+          inputSchema: z.object({ n: z.number() }),
+          outputSchema: schema,
+          execute: async ({ inputData }) => ({ n: inputData.n, blob: 'x'.repeat(2048) }),
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const items = Array.from({ length: 16 }, (_, n) => ({ n }));
+      expect(await run.start({ inputData: items })).toMatchObject({ status: 'success' });
+      const store = (await storage.getStore('workflows'))!;
+      const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+      const saved = snapshot?.context.pad?.metadata?.foreachCompletedIterations as
+        | Record<string, { result: { metadata?: Record<string, unknown> } }>
+        | undefined;
+      expect(Object.keys(saved ?? {})).toHaveLength(16);
+      for (const entry of Object.values(saved!)) {
+        expect(entry.result.metadata?.foreachCompletedIterations).toBeUndefined();
+        expect(JSON.stringify(entry).length).toBeLessThan(4096);
+      }
+    } finally {
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 30_000);
+
   it('reuses a saved plain step result and its request context when step.end publish was lost', async () => {
     const driver = new RedeliveryDriver();
     const schema = z.object({ n: z.number() });
