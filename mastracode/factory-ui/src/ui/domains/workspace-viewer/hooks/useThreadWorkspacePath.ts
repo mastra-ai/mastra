@@ -1,20 +1,20 @@
 import { useMatch, useParams } from 'react-router';
 
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 
 /** Workspace for the current route — user threads have no `sessionId` segment, so resolve from the thread. */
 export function useThreadWorkspacePath() {
   const { sessionId, threadId } = useParams<{ sessionId?: string; threadId?: string }>();
   const isUserThreadRoute = Boolean(useMatch('/factories/:factoryId/user/threads/:threadId'));
-  const userSession = useUserSessionQuery(isUserThreadRoute ? threadId : undefined);
+  const routedSessionId = isUserThreadRoute ? threadId : sessionId;
+  const session = useUserSessionQuery(routedSessionId);
+  const unavailable = sessionUnavailableError(session);
 
   return {
-    // A user route already names the session. Reserve its panel immediately;
-    // the panel waits for authorized metadata before requesting workspace data.
-    workspacePath: isUserThreadRoute ? (userSession.data?.sessionId ?? threadId) : sessionId,
+    // The route already names the session, so the panel claims its space before the read lands.
+    workspacePath: unavailable ? undefined : routedSessionId,
     threadId,
-    isPending: isUserThreadRoute && userSession.isPending,
-    error: isUserThreadRoute ? (userSession.error ?? undefined) : undefined,
-    retry: () => void userSession.refetch(),
+    isPending: isUserThreadRoute && session.isPending,
+    error: isUserThreadRoute ? unavailable : undefined,
   };
 }

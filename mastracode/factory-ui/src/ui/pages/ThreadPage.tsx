@@ -17,7 +17,7 @@ import { TeammateSessionLine } from '../domains/chat/components/TeammateSessionL
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { DraftSessionCreateError } from '../domains/workspaces/services/user-sessions';
+import { DraftSessionCreateError, isSessionNotFound } from '../domains/workspaces/services/user-sessions';
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
@@ -51,9 +51,7 @@ export function ThreadPage() {
     );
   }
 
-  if (workspace.error) {
-    return <SessionUnavailableMain error={workspace.error} factoryId={factoryId} onRetry={workspace.retry} />;
-  }
+  if (workspace.error && isSessionNotFound(workspace.error)) return <SessionNotFoundMain factoryId={factoryId} />;
 
   return (
     <ChatSessionBoundary threadId={threadId}>
@@ -65,40 +63,20 @@ export function ThreadPage() {
   );
 }
 
-function SessionUnavailableMain({
-  error,
-  factoryId,
-  onRetry,
-}: {
-  error: Error;
-  factoryId: string | undefined;
-  onRetry: () => void;
-}) {
+function SessionNotFoundMain({ factoryId }: { factoryId: string | undefined }) {
   const navigate = useNavigate();
-  // The server answers a missing session and a teammate's private one with the same 404.
-  const notFound = 'status' in error && error.status === 404;
   return (
     <ChatPageLayout>
       <div className="grid min-h-0 place-items-center">
         <EmptyState
           as="h1"
           iconSlot={<MessageSquareOff />}
-          titleSlot={notFound ? 'Session not found' : 'Could not load this session'}
-          descriptionSlot={
-            notFound
-              ? 'This session does not exist, or it is private to another user.'
-              : `Failed to load the session: ${error.message}`
-          }
+          titleSlot="Session not found"
+          descriptionSlot="This session does not exist, or it is private to another user."
           actionSlot={
-            notFound ? (
-              factoryId && (
-                <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
-                  Start a new session
-                </Button>
-              )
-            ) : (
-              <Button variant="primary" onClick={onRetry}>
-                Retry
+            factoryId && (
+              <Button variant="primary" onClick={() => void navigate(newUserSessionPath(factoryId))}>
+                Start a new session
               </Button>
             )
           }

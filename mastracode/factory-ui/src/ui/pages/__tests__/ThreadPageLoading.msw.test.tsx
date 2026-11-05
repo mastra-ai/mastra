@@ -1,13 +1,14 @@
 import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { listedRepository } from '../../../../e2e/ui/factory-projects';
+import { queryKeys } from '../../../api/keys';
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
@@ -56,6 +57,7 @@ function stubThreadRoute({
   const changesGate = deferred();
   const onChanges = vi.fn();
   const onSwitchThread = vi.fn<(threadId: string) => void>();
+  const sessionAnswer: { status: 200 | 404 | 500 } = { status: 200 };
   let activeThreadId = initialThreadId;
 
   server.use(
@@ -88,7 +90,8 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, async () => {
       await sessionGate.promise;
-      return HttpResponse.json({ session: userSession });
+      if (sessionAnswer.status === 200) return HttpResponse.json({ session: userSession });
+      return HttpResponse.json({ error: 'Session lookup failed' }, { status: sessionAnswer.status });
     }),
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId }),
@@ -135,7 +138,7 @@ function stubThreadRoute({
     }),
   );
 
-  return { sessionGate, messagesGate, changesGate, onChanges, onSwitchThread };
+  return { sessionGate, messagesGate, changesGate, onChanges, onSwitchThread, sessionAnswer };
 }
 
 function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`) {
@@ -248,5 +251,75 @@ describe('ThreadPage loading shell', () => {
 
     sessionGate.resolve();
     await waitFor(() => expect(onSwitchThread).toHaveBeenCalledWith(ROUTE_THREAD_ID));
+  });
+});
+
+describe('ThreadPage when reading the session fails', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('keeps a draft typed while the session loads through a failed read and its retry', async () => {
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute();
+    sessionAnswer.status = 500;
+    messagesGate.resolve();
+    const user = userEvent.setup();
+    renderThreadRoute();
+
+    await user.type(await screen.findByRole('textbox', { name: 'Message' }), 'Draft written while opening the session');
+    sessionGate.resolve();
+
+    expect(await screen.findByText(/Failed to load session \(500\)/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start a new session' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft written while opening the session');
+
+    sessionAnswer.status = 200;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+    expect(screen.queryByText(/Failed to load session/)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft written while opening the session');
+  });
+
+  it('keeps the open session, its transcript and draft when refreshing the session fails', async () => {
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
+    sessionGate.resolve();
+    messagesGate.resolve();
+    const user = userEvent.setup();
+    const { client } = renderThreadRoute();
+    expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Draft in progress');
+
+    sessionAnswer.status = 500;
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.userSession(SESSION_ID) }));
+    await waitForMutationsIdle(client);
+
+    expect(screen.queryByText(/Failed to load session/)).not.toBeInTheDocument();
+    expect(screen.getByText('Run the focused checks')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('Draft in progress');
+  });
+
+  it('leaves for the not-found page when refreshing finds the session gone', async () => {
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute({ messages: threadRailMessagesWithEcho });
+    sessionGate.resolve();
+    messagesGate.resolve();
+    const { client } = renderThreadRoute();
+    expect(await screen.findByText('Run the focused checks')).toBeInTheDocument();
+
+    sessionAnswer.status = 404;
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.userSession(SESSION_ID) }));
+
+    expect(await screen.findByRole('heading', { name: 'Session not found' })).toBeInTheDocument();
+  });
+
+  it('offers no workspace panel on a workspace route the viewer cannot read', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
+    const { sessionGate, messagesGate, sessionAnswer } = stubThreadRoute();
+    sessionAnswer.status = 404;
+    sessionGate.resolve();
+    messagesGate.resolve();
+    renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
+
+    expect(await screen.findByText(/not found or is private to another user/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Workspace files' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
   });
 });
