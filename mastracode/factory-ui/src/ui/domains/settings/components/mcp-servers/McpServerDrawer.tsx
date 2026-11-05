@@ -6,6 +6,7 @@ import {
   DrawerDescription,
   DrawerFooter,
   DrawerHeader,
+  DrawerInteractive,
   DrawerTitle,
 } from '@mastra/playground-ui/components/Drawer';
 import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -236,7 +237,9 @@ export function McpServerDrawer({
               A remote MCP server reached over HTTP. Everyone in your organization can use the tools you choose.
             </DrawerDescription>
           </DrawerHeader>
-          <DrawerBody className="flex min-h-0 flex-col gap-4 overflow-y-auto">
+          {/* Outside an interactive region, a pointerdown on a segmented-control item starts a
+              drawer swipe that captures the pointer, so the click never selects the item. */}
+          <DrawerInteractive render={<DrawerBody className="flex min-h-0 flex-col gap-4 overflow-y-auto" />}>
             <Field className="gap-1">
               <FieldLabel>Name</FieldLabel>
               <Input
@@ -384,7 +387,7 @@ export function McpServerDrawer({
                 {error}
               </Txt>
             )}
-          </DrawerBody>
+          </DrawerInteractive>
           <DrawerFooter>
             <Button type="button" size="sm" disabled={saving} onClick={onClose}>
               Cancel

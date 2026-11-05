@@ -228,6 +228,20 @@ describe('McpServersSection', () => {
       expect(screen.queryByDisplayValue('sk-live-5e3f')).not.toBeInTheDocument();
     });
 
+    it("keeps the form out of the drawer's swipe-to-dismiss so a mouse can pick the authentication", async () => {
+      mockMcpServersApi({ servers: [] });
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.click(await screen.findByRole('button', { name: 'Add server' }));
+
+      // Outside Base UI's `data-drawer-content` region, a pointerdown on a radio starts a drawer
+      // swipe and captures the pointer, so in a browser the click never selects it. jsdom has no
+      // pointer capture, so the click itself can't show the failure; the region can.
+      const authentication = screen.getByRole('radiogroup', { name: 'Authentication' });
+      expect(authentication.closest('[data-drawer-content]')).not.toBeNull();
+    });
+
     it('adds custom headers and an OAuth server, starting its sign-in', async () => {
       const api = mockMcpServersApi({ servers: [] });
       const user = userEvent.setup();
