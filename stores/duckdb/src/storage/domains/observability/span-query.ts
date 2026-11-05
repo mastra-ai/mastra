@@ -9,7 +9,7 @@ import type {
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
 import { spanQueryOutcomeFieldsSupported, timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
-import { parseJson, payloadColumnSql } from './helpers';
+import { parseJson, payloadColumnSql, timeRangeOf } from './helpers';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
 
@@ -204,7 +204,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   );
   const page = rows.slice(0, plan.limit);
   if (!page.length) return buildSpanQueryResponse(plan, [], []);
-  const payloadValues: unknown[] = [];
+  const payloadValues: unknown[] = timeRangeOf(page.map(row => row.endedAt));
   const payloadWhere = page
     .map(row => {
       const key = keys([row], payloadValues);
@@ -229,7 +229,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
           `${preview}, CASE WHEN ${missingPreviewSql(preview)} THEN CAST(${payload} AS VARCHAR) END AS ${preview}Payload`,
       )
       .join(',\n    ')}
-    FROM span_events WHERE ${payloadWhere}`,
+    FROM span_events WHERE endedAt BETWEEN ? AND ? AND (${payloadWhere})`,
     payloadValues,
   );
   const payloads: SpanQueryPayload[] = previewRows.map(row => {

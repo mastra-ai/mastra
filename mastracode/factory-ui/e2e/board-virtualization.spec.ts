@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
 import { largeBoard, largeCandidatePage } from '../src/ui/__tests__/fixtures/largeBoard';
+import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
 const viewports = [
@@ -21,22 +22,12 @@ test.describe('Factory board virtualization', () => {
     server.use(
       http.get('*/auth/me', () => HttpResponse.json({ authenticated: true, authEnabled: false })),
       http.get('*/web/factory/projects', () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Large factory' }] }),
-      ),
-      http.get('*/web/factory/projects/fp-1/source-control-connections', () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
-              repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '/repo',
-                  repository: { slug: 'acme/app', defaultBranch: 'main' },
-                },
-              ],
+              id: 'fp-1',
+              name: 'Large factory',
+              repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
             },
           ],
         }),

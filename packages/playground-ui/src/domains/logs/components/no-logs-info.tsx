@@ -18,7 +18,7 @@ export interface NoLogsInfoProps {
   dateTo?: Date;
 }
 
-const LEVEL_TIP = 'Pick a wider range or lower the logging level — verbose entries (debug, info) may be filtered out.';
+const LEVEL_TIP = 'Pick a wider range or lower the logging level. Verbose entries (debug, info) may be filtered out.';
 
 function describeRange({ datePreset, dateFrom, dateTo }: NoLogsInfoProps): { title: string; description: string } {
   if (datePreset && datePreset !== 'all' && datePreset !== 'custom') {

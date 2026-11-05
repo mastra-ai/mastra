@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Ticket } from 'lucide-react';
@@ -20,7 +21,15 @@ export function GlobalSearchWorkItemResults({
           key={result.id}
           icon={<Ticket />}
           title={result.title}
-          subtitle={result.context}
+          subtitle={
+            <Metadata singleLine>
+              {result.context.map((part, index) => (
+                <Metadata.Item key={index} className={index === 0 ? 'shrink-0' : undefined}>
+                  {part}
+                </Metadata.Item>
+              ))}
+            </Metadata>
+          }
           badge={result.identifier}
           value={result.value}
           onSelect={() => onSelect(result)}

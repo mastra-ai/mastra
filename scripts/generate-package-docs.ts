@@ -12,28 +12,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { generateSourceMap } from './package-docs-source-map';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const MONOREPO_ROOT = path.join(__dirname, '..');
-
-interface ExportInfo {
-  types: string;
-  implementation: string;
-  line?: number;
-}
-
-interface ModuleInfo {
-  index: string;
-  chunks: string[];
-}
-
-interface SourceMap {
-  version: string;
-  package: string;
-  exports: Record<string, ExportInfo>;
-  modules: Record<string, ModuleInfo>;
-}
 
 interface ManifestEntry {
   path: string; // e.g., "docs/agents/adding-voice/llms.txt"
@@ -49,9 +32,6 @@ interface LlmsManifest {
   packages: Record<string, ManifestEntry[]>;
 }
 
-// Cache for chunk file contents and their pre-split lines
-const chunkCache = new Map<string, string[] | null>();
-
 // Cache for file existence checks
 const existsCache = new Map<string, boolean>();
 
@@ -61,172 +41,6 @@ function cachedExists(filePath: string): boolean {
   const exists = fs.existsSync(filePath);
   existsCache.set(filePath, exists);
   return exists;
-}
-
-function getChunkLines(chunkPath: string): string[] | null {
-  const cached = chunkCache.get(chunkPath);
-  if (cached !== undefined) return cached;
-
-  if (!cachedExists(chunkPath)) {
-    chunkCache.set(chunkPath, null);
-    return null;
-  }
-
-  try {
-    const stat = fs.statSync(chunkPath);
-    if (!stat.isFile()) {
-      chunkCache.set(chunkPath, null);
-      return null;
-    }
-  } catch {
-    chunkCache.set(chunkPath, null);
-    return null;
-  }
-
-  const content = fs.readFileSync(chunkPath, 'utf-8');
-  const lines = content.split('\n');
-  chunkCache.set(chunkPath, lines);
-  return lines;
-}
-
-function parseIndexExports(indexPath: string): Map<string, { chunk: string; exportName: string }> {
-  const exports = new Map<string, { chunk: string; exportName: string }>();
-
-  if (!cachedExists(indexPath)) {
-    return exports;
-  }
-
-  const content = fs.readFileSync(indexPath, 'utf-8');
-
-  // Parse: export { Agent, TripWire } from '../chunk-IDD63DWQ.js';
-  const regex = /export\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]/g;
-  let match;
-
-  while ((match = regex.exec(content)) !== null) {
-    const names = match[1].split(',').map(n => n.trim().split(' as ')[0].trim());
-    const chunkPath = match[2];
-    const chunk = path.basename(chunkPath);
-
-    for (const name of names) {
-      if (name) {
-        exports.set(name, { chunk, exportName: name });
-      }
-    }
-  }
-
-  return exports;
-}
-
-function findExportLine(chunkPath: string, exportName: string): number | undefined {
-  const lines = getChunkLines(chunkPath);
-  if (!lines) return undefined;
-
-  // Look for class or function definition
-  const patterns = [
-    new RegExp(`^var ${exportName} = class`),
-    new RegExp(`^function ${exportName}\\s*\\(`),
-    new RegExp(`^var ${exportName} = function`),
-    new RegExp(`^var ${exportName} = \\(`), // Arrow function
-    new RegExp(`^const ${exportName} = `),
-    new RegExp(`^let ${exportName} = `),
-  ];
-
-  for (let i = 0; i < lines.length; i++) {
-    for (const pattern of patterns) {
-      if (pattern.test(lines[i])) {
-        return i + 1; // 1-indexed
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function generateSourceMap(packageRoot: string): SourceMap {
-  const distDir = path.join(packageRoot, 'dist');
-  const packageJson = getPackageJson(packageRoot);
-
-  const sourceMap: SourceMap = {
-    version: packageJson.version,
-    package: packageJson.name,
-    exports: {},
-    modules: {},
-  };
-
-  // Default modules to analyze
-  const modules = [
-    'agent',
-    'tools',
-    'workflows',
-    'memory',
-    'stream',
-    'llm',
-    'mastra',
-    'mcp',
-    'evals',
-    'processors',
-    'storage',
-    'vector',
-    'voice',
-  ];
-
-  for (const mod of modules) {
-    const indexPath = path.join(distDir, mod, 'index.js');
-
-    if (!cachedExists(indexPath)) {
-      continue;
-    }
-
-    const exports = parseIndexExports(indexPath);
-    const chunks = new Set<string>();
-
-    for (const [name, info] of exports) {
-      chunks.add(info.chunk);
-
-      const chunkPath = path.join(distDir, info.chunk);
-      const line = findExportLine(chunkPath, name);
-
-      // Determine the types file
-      let typesFile = `dist/${mod}/index.d.ts`;
-
-      // Check if there's a more specific types file
-      const specificTypesPath = path.join(distDir, mod, `${name.toLowerCase()}.d.ts`);
-      if (cachedExists(specificTypesPath)) {
-        typesFile = `dist/${mod}/${name.toLowerCase()}.d.ts`;
-      }
-
-      sourceMap.exports[name] = {
-        types: typesFile,
-        implementation: `dist/${info.chunk}`,
-        line,
-      };
-    }
-
-    sourceMap.modules[mod] = {
-      index: `dist/${mod}/index.js`,
-      chunks: [...chunks],
-    };
-  }
-
-  // Also check root index.js for additional exports
-  const rootIndexPath = path.join(distDir, 'index.js');
-  if (cachedExists(rootIndexPath)) {
-    const rootExports = parseIndexExports(rootIndexPath);
-    for (const [name, info] of rootExports) {
-      if (!sourceMap.exports[name]) {
-        const chunkPath = path.join(distDir, info.chunk);
-        const line = findExportLine(chunkPath, name);
-
-        sourceMap.exports[name] = {
-          types: 'dist/index.d.ts',
-          implementation: `dist/${info.chunk}`,
-          line,
-        };
-      }
-    }
-  }
-
-  return sourceMap;
 }
 
 function loadLlmsManifest(): LlmsManifest {
@@ -353,7 +167,7 @@ function generateDocsForPackage(packageName: string, packageRoot: string, manife
   fs.mkdirSync(path.join(docsOutputDir, 'assets'), { recursive: true });
 
   // Step 1: Generate SOURCE_MAP.json in assets/
-  const sourcemap = generateSourceMap(packageRoot);
+  const sourcemap = generateSourceMap(packageRoot, packageJson);
   fs.writeFileSync(path.join(docsOutputDir, 'assets', 'SOURCE_MAP.json'), JSON.stringify(sourcemap, null, 2), 'utf-8');
 
   // Step 2: Copy documentation files

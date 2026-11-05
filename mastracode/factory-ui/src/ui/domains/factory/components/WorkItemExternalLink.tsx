@@ -6,7 +6,7 @@ import type { WorkItem } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 
 /** The item where it lives upstream, named by what a person types to find it there. */
-export function WorkItemExternalLink({ item, variant = 'ghost' }: { item: WorkItem; variant?: 'ghost' | 'default' }) {
+export function WorkItemExternalLink({ item }: { item: WorkItem }) {
   if (item.url === null) return null;
   const identifier = workItemIdentifier(item);
   return (
@@ -15,7 +15,7 @@ export function WorkItemExternalLink({ item, variant = 'ghost' }: { item: WorkIt
       target="_blank"
       rel="noreferrer"
       aria-label={identifier === undefined ? undefined : `${externalLinkLabel(item.source)}: ${identifier}`}
-      className={buttonVariants({ variant, size: 'sm' })}
+      className={buttonVariants({ variant: 'ghost', size: 'sm' })}
     >
       <SourceIcon source={item.source} />
       {identifier ?? externalLinkLabel(item.source)}

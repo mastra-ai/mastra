@@ -6,8 +6,12 @@
 
 import { MC_TOOLS } from '../../tool-names.js';
 
+const DEFAULT_PLANS_DIR = '.mastracode/plans';
+
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  /** `web_extract` is registered (Parallel/Tavily); provider-executed search has no extract tool. */
+  hasWebExtract?: boolean;
   hasSubagents?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
@@ -17,7 +21,8 @@ interface ToolGuidanceOptions {
 
 export function buildToolGuidance(modeId: string, options: ToolGuidanceOptions = {}): string {
   const denied = options.deniedTools ?? new Set<string>();
-  const plansDir = options.plansDir ?? '.mastracode/plans';
+  // Name the dir with `/` so the win32 default (`.mastracode\plans`) still matches DEFAULT_PLANS_DIR.
+  const plansDir = (options.plansDir ?? DEFAULT_PLANS_DIR).replaceAll('\\', '/');
   const sections: string[] = [];
 
   sections.push(`# Tool Usage Rules
@@ -130,10 +135,16 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (options.hasWebSearch) {
     const webTools: string[] = [];
     if (!denied.has('web_search')) webTools.push('**web_search**');
-    if (!denied.has('web_extract')) webTools.push('**web_extract**');
+    if (options.hasWebExtract && !denied.has('web_extract')) webTools.push('**web_extract**');
     if (webTools.length > 0) {
+      const purpose =
+        webTools.length === 2
+          ? 'Search the web / extract page content'
+          : webTools[0] === '**web_search**'
+            ? 'Search the web'
+            : 'Extract page content';
       sections.push(`
-${webTools.join(' / ')} — Search the web / extract page content
+${webTools.join(' / ')} — ${purpose}
 - Use for looking up documentation, error messages, package APIs.`);
     }
   }
@@ -218,6 +229,20 @@ ${patchToolGuidance}
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
 - Takes one argument: \`path\` (the plan markdown file you wrote under \`${plansDir}/\`). Do NOT pass the plan body — it lives in the file.`);
+  }
+
+  // Outside plan mode nothing else names the plans directory (the submit_plan
+  // tool example is directory-neutral), so state it here. Explore (`fast`) mode
+  // is read-only and has neither submit_plan nor file writes.
+  if (modeId !== 'plan' && modeId !== 'fast' && !denied.has('submit_plan')) {
+    const elsewhere =
+      plansDir === DEFAULT_PLANS_DIR
+        ? ''
+        : `, never under \`${DEFAULT_PLANS_DIR}/\`. Plans anywhere else cannot be shown to the user`;
+    sections.push(`
+**submit_plan** — Submit a plan for user review
+- Write plan files under \`${plansDir}/\` (e.g. \`${plansDir}/add-dark-mode.md\`)${elsewhere}.
+- Pass that file's \`path\` to \`submit_plan\`. Do NOT pass the plan body — it lives in the file.`);
   }
 
   if (modeId === 'plan') {
