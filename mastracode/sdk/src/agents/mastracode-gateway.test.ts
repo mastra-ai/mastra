@@ -237,7 +237,7 @@ describe('MastraCodeGateway', () => {
         .catch(() => undefined);
 
       expect(requests.length).toBeGreaterThan(0);
-      expect(requests.every(request => !request.url.startsWith('https://custom.example.com'))).toBe(true);
+      expect(requests.every(request => new URL(request.url).host !== 'custom.example.com')).toBe(true);
     });
   });
 
