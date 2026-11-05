@@ -615,15 +615,12 @@ function readTool(host: KnowledgePageToolHost) {
       const run = await start(host, context);
       const limit = limitOf(requested);
       if (!ref) {
-        const held = await run.storage.getScopesByAddress(run.principals);
         return {
-          scopes: held
-            .filter(scope => knowledgeScopeReadable(scope, run.read))
-            .map(scope => ({
-              address: scope.address,
-              name: scope.name,
-              ...(scope.description ? { description: scope.description } : {}),
-            })),
+          scopes: (await run.rootScopes()).map(scope => ({
+            address: scope.address,
+            name: scope.name,
+            ...(scope.description ? { description: scope.description } : {}),
+          })),
         };
       }
 
@@ -868,9 +865,7 @@ export async function listKnowledgeTree(
   let scopes: KnowledgePage[] = [];
   if (!origin) {
     if (cursor?.startsWith('p')) throw new Error('knowledge_list: a page cursor needs the `from` it came from.');
-    const held = await run.storage.getScopesByAddress(run.principals);
-    const order = (scope: KnowledgePage) => run.principals.indexOf(scope.address ?? '');
-    scopes = held.filter(scope => knowledgeScopeReadable(scope, run.read)).sort((a, b) => order(a) - order(b));
+    scopes = await run.rootScopes();
   } else {
     originRef = (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id;
     if (origin.isScope && !cursor?.startsWith('p')) scopes = await childScopes(origin.id);

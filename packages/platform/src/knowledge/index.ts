@@ -1,5 +1,5 @@
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
-import type { KnowledgeConfig } from '@mastra/core/knowledge';
+import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
 import {
   MastraCompositeStore,
   KnowledgeStorage,
@@ -109,7 +109,13 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
   private async request(operation: string, input?: unknown): Promise<unknown> {
     const response = await fetch(`${this.endpoint}/operations/${operation}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${this.token}`,
+        'content-type': 'application/json',
+        // This client merges the instance's scope declarations (`getScopeDeclarations`) into its own, so
+        // the service leaves its read views as they are rather than widening them for older clients.
+        'x-mastra-knowledge-store-declarations': 'merged',
+      },
       body: encode({ input }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -153,6 +159,18 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
       throw new Error(message);
     }
     return decode<{ result?: unknown }>(text).result;
+  }
+
+  /**
+   * The scope declarations the instance supplies, such as the ones its importers write to, with their
+   * access rules. Anything but a declaration record is a broken response, not "none".
+   */
+  override async getScopeDeclarations(): Promise<KnowledgeScopeDeclarations> {
+    const result = await this.request('getScopeDeclarations');
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      throw new Error('Knowledge service answered getScopeDeclarations without a declaration record');
+    }
+    return result as KnowledgeScopeDeclarations;
   }
 
   override getCapabilities() {

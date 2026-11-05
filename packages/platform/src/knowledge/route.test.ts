@@ -13,11 +13,16 @@ afterEach(async () => {
 });
 
 it('uses the project-scoped operation route with bearer auth', async () => {
-  const requests: { url?: string; authorization?: string; body: string }[] = [];
+  const requests: { url?: string; authorization?: string; declarations?: string | string[]; body: string }[] = [];
   const server = createServer(async (req, res) => {
     let body = '';
     for await (const chunk of req) body += chunk;
-    requests.push({ url: req.url, authorization: req.headers.authorization, body });
+    requests.push({
+      url: req.url,
+      authorization: req.headers.authorization,
+      declarations: req.headers['x-mastra-knowledge-store-declarations'],
+      body,
+    });
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ result: { pages: [] } }));
   });
@@ -37,10 +42,49 @@ it('uses the project-scoped operation route with bearer auth', async () => {
     {
       url: '/v1/knowledge/instance%20two/operations/listPages',
       authorization: 'Bearer token',
+      // Tells the service this client reads the instance's declarations, so it doesn't widen reads.
+      declarations: 'merged',
       body: JSON.stringify({ input: { read: 'all' } }),
     },
   ]);
 });
+
+it('asks the hosted store for the scope declarations its instance supplies', async () => {
+  const urls: string[] = [];
+  const declarations = { 'linear:$account:$connection': { access: [{ principal: '*', role: 'viewer' }] } };
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+    urls.push(String(input));
+    return new Response(JSON.stringify({ result: declarations }));
+  });
+  const store = (await new PlatformKnowledge({
+    apiUrl: 'http://localhost',
+    instanceId: 'kn_1',
+    accessToken: 'token',
+  }).getStorage())!;
+  try {
+    expect(await store.getScopeDeclarations()).toEqual(declarations);
+    expect(urls).toEqual(['http://localhost/v1/knowledge/kn_1/operations/getScopeDeclarations']);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
+
+it.each([{}, { result: null }, { result: ['linear:$account:$connection'] }])(
+  'rejects a hosted answer without a declaration record: %j',
+  async body => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify(body)));
+    const store = (await new PlatformKnowledge({
+      apiUrl: 'http://localhost',
+      instanceId: 'kn_1',
+      accessToken: 'token',
+    }).getStorage())!;
+    try {
+      await expect(store.getScopeDeclarations()).rejects.toThrow(/without a declaration record/);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  },
+);
 
 it('allows the project to be derived from the instance and credential', () => {
   expect(
