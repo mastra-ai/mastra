@@ -424,6 +424,13 @@ type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>
 
 type SubAgentPendingToolCall = NonNullable<SubAgentToolOutput['subAgentPendingToolCalls']>[number];
 
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
+
 const RESOLVED_TOOL_INVOCATION_STATES = new Set<string>(['result', 'output-error', 'output-denied']);
 
 /**
@@ -12420,24 +12427,19 @@ export class Agent<
 
     // Resuming past the run's last entry replays nothing; if that entry ended the
     // run, nothing more will arrive, so close (matches the HTTP /observe route).
-    // Read after subscribing so a terminal entry racing attachment is not lost; a
-    // failed read only means we can't close early. An error *chunk* can precede the
-    // finish, so only an error event ends the run.
+    // Read only after subscribing so a terminal entry racing attachment is not lost.
+    // A failed read only means we can't close early.
+    // A client resuming at last index + 1 needs a one-entry read; only an offset
+    // further past the end falls back to the full log to find the true tail.
     const offset = options?.offset;
     if (offset !== undefined && offset > 0) {
       const topic = AGENT_STREAM_TOPIC(runId);
-      const last = await bus.pubsub
-        .getHistory(topic, offset - 1)
-        .then(async window => (window.length > 0 ? window : await bus.pubsub.getHistory(topic, 0)).at(-1))
-        .catch(() => undefined);
-      const type = last?.type === 'chunk' ? (last.data as { type?: string } | undefined)?.type : last?.type;
-      if (
-        typeof last?.index === 'number' &&
-        last.index < offset &&
-        (type === 'finish' || last.type === 'error' || type === 'abort')
-      ) {
-        detach();
-      }
+      const readTail = async () => {
+        const window = await bus.pubsub.getHistory(topic, offset - 1);
+        return window.length > 0 ? window.at(-1) : (await bus.pubsub.getHistory(topic, 0)).at(-1);
+      };
+      const last = await readTail().catch(() => undefined);
+      if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) detach();
     }
 
     return {

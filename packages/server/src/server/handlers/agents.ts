@@ -258,6 +258,13 @@ function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string)
   return visit(snapshot.context);
 }
 
+/** A run-log entry that ends the run. An error *chunk* can precede the finish, so it does not count. */
+const isRunTerminalEvent = (event: any): boolean => {
+  if (event?.type === 'error') return true;
+  const type = event?.type === 'chunk' ? event.data?.type : event?.type;
+  return type === 'finish' || type === 'abort';
+};
+
 // Matches the snapshot wait of the durable resume path this check gates
 // (RESUME_SNAPSHOT_WAIT_MS in @mastra/inngest), so the route is never the tighter bound.
 const DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS = 10_000;
@@ -3059,22 +3066,15 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           // run, nothing more will arrive, so close instead of waiting for the idle timeout.
           // Read only after subscribing so a terminal entry racing attachment is not lost.
           // A failed read only means we can't close early; the idle timer still bounds the stream.
-          // Terminal entries match the live check below: an error *chunk* can precede the
-          // finish, so only an error event ends the run.
           // A client resuming at last index + 1 needs a one-entry read; only an offset
           // further past the end falls back to the full log to find the true tail.
-          const readTail = async () => {
-            const window = await pubsub.getHistory(topic, Math.max(offset - 1, 0));
-            return window.length > 0 ? window.at(-1) : (await pubsub.getHistory(topic, 0)).at(-1);
-          };
-          const last = await readTail().catch(() => undefined);
-          const type = last?.type === 'chunk' ? last.data?.type : last?.type;
-          if (
-            typeof last?.index === 'number' &&
-            last.index < offset &&
-            (type === 'finish' || last.type === 'error' || type === 'abort')
-          ) {
-            onComplete();
+          if (offset > 0) {
+            const readTail = async () => {
+              const window = await pubsub.getHistory(topic, offset - 1);
+              return window.length > 0 ? window.at(-1) : (await pubsub.getHistory(topic, 0)).at(-1);
+            };
+            const last = await readTail().catch(() => undefined);
+            if (typeof last?.index === 'number' && last.index < offset && isRunTerminalEvent(last)) onComplete();
           }
           return () => pubsub.unsubscribe(topic, onEvent);
         });
