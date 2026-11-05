@@ -3423,13 +3423,20 @@ export class Agent extends BaseResource {
    *
    * @example
    * ```typescript
-   * // Resume after the last indexed chunk received
-   * const offset = lastIndexedChunk.type === 'abort' ? lastIndexedChunk.index : lastIndexedChunk.index + 1;
-   * const response = await client.agents('my-agent').observe({ runId: 'run-123', offset });
+   * const agent = client.agents('my-agent');
+   * let offset = 0;
+   * const trackOffset = async (chunk) => {
+   *   if (chunk.index === undefined) return;
+   *   // An abort shares its index with the finish after it
+   *   offset = chunk.type === 'abort' ? chunk.index : chunk.index + 1;
+   * };
    *
-   * await response.processDataStream({
-   *   onChunk: (chunk) => console.log('Received:', chunk),
-   * });
+   * const stream = await agent.stream(messages, { runId: 'run-123' });
+   * await stream.processDataStream({ onChunk: trackOffset });
+   *
+   * // After a dropped connection, resume where the last indexed chunk left off
+   * const response = await agent.observe({ runId: 'run-123', offset });
+   * await response.processDataStream({ onChunk: trackOffset });
    * ```
    */
   async observe(params: { runId: string; offset?: number }): Promise<
