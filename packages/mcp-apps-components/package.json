@@ -5,6 +5,16 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
     "./dashboard-renderer": {
       "import": {
         "types": "./dist/dashboard-renderer.d.ts",
@@ -13,16 +23,6 @@
       "require": {
         "types": "./dist/dashboard-renderer.d.ts",
         "default": "./dist/dashboard-renderer.cjs"
-      }
-    },
-    "./dashboard-data-tool": {
-      "import": {
-        "types": "./dist/dashboard-data-tool.d.ts",
-        "default": "./dist/dashboard-data-tool.js"
-      },
-      "require": {
-        "types": "./dist/dashboard-data-tool.d.ts",
-        "default": "./dist/dashboard-data-tool.cjs"
       }
     },
     "./host": {

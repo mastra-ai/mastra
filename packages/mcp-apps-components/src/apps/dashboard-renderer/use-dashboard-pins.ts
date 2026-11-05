@@ -1,6 +1,6 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { DashboardRendererInput } from './input';
+import type { DashboardInput } from './input';
 import type { PinsModelContext } from './model-context';
 import { DASHBOARD_PIN_REQUEST_CONTEXT_KEY, DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY } from './pin';
 import type { DashboardPinnedWidget } from './pin';
@@ -43,7 +43,7 @@ function useHostPinnedWidgets(app: App): readonly string[] | undefined {
  *
  * `pageDefaults` are the range and filters on now, recorded for each widget the user pins.
  */
-export function useDashboardPins(app: App, input: DashboardRendererInput, pageDefaults: PinDefaults) {
+export function useDashboardPins(app: App, input: DashboardInput, pageDefaults: PinDefaults) {
   const hostPinned = useHostPinnedWidgets(app);
   const canPin = hostPinned !== undefined && Boolean(app.getHostCapabilities()?.updateModelContext?.structuredContent);
 

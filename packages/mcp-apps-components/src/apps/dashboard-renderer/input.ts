@@ -7,7 +7,7 @@ import { z } from 'zod';
  * a widget with bad options shows its error in its own cell. The initial time range and filters
  * come from the definition's `defaults`.
  */
-export const dashboardRendererInputSchema = z.object({
+export const dashboardInputSchema = z.object({
   definition: dashboardDefinitionSchema,
   scope: z.enum(DASHBOARD_SCOPES).default('project'),
   /**
@@ -17,4 +17,4 @@ export const dashboardRendererInputSchema = z.object({
   projectId: z.string().min(1).optional(),
 });
 
-export type DashboardRendererInput = z.output<typeof dashboardRendererInputSchema>;
+export type DashboardInput = z.output<typeof dashboardInputSchema>;

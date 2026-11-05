@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
-import { DASHBOARD_DATA_TOOL_NAME } from '../data';
+import { dashboardContract } from '../contract';
 import {
   DASHBOARD_PIN_REQUEST_CONTEXT_KEY,
   DASHBOARD_PINNED_WIDGETS_CONTEXT_KEY,
@@ -47,8 +47,8 @@ describe('dashboard renderer app', () => {
       expect(host.toolCalls).toEqual(
         host.toolCalls.map(() =>
           expect.objectContaining({
-            name: DASHBOARD_DATA_TOOL_NAME,
-            call: expect.objectContaining({ operation: 'getMetricAggregate' }),
+            name: dashboardContract.dataTool,
+            call: expect.objectContaining({ read: 'getMetricAggregate' }),
           }),
         ),
       );

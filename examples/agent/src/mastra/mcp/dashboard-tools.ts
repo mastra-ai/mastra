@@ -1,4 +1,3 @@
-import { createTool } from '@mastra/core/tools';
 import { dashboardDefaultsSchema } from '@mastra/core/storage/dashboards';
 import type {
   DashboardDefinition,
@@ -6,12 +5,11 @@ import type {
   DashboardRow,
   DashboardWidget,
 } from '@mastra/core/storage/dashboards';
-import { dashboardRendererInputSchema } from '@mastra/mcp-apps-components/dashboard-renderer';
+import type { McpAppTool } from '@mastra/mcp-apps-components';
+import type { dashboardUi } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { timeseriesOptionsSchema } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
 import type { TimeseriesOptions } from '@mastra/playground-ui/domains/dashboards/lib/timeseries';
 import { z } from 'zod';
-
-export const DASHBOARD_APP_URI = 'ui://mastra/dashboard';
 
 const INPUT = 'mastra_model_total_input_tokens';
 const OUTPUT = 'mastra_model_total_output_tokens';
@@ -178,33 +176,32 @@ function layout(widgets: DashboardWidget[]): DashboardRow[] {
   return rows.map(row => ({ widgets: row.length === 1 ? [{ ...row[0]!, span: 12 }] : row }));
 }
 
-export const showObservabilityDashboard = createTool({
+const inputSchema = z.object({
+  sections: z
+    .array(z.enum(SECTIONS))
+    .min(1)
+    .describe(
+      'Only the parts the user asked about: overview KPIs, agent runs over time, token usage over time, agent latency.',
+    ),
+  datePreset: dashboardDefaultsSchema.shape.datePreset.describe('Initial time range, e.g. 24h, 7d or 30d.'),
+  chart: timeseriesOptionsSchema.shape.chart
+    .optional()
+    .describe(
+      'Chart type for agent runs and token usage. Defaults to stacked bars. Latency is always a line. No other chart types exist.',
+    ),
+});
+
+// The tool the model calls to open the dashboard: it turns the sections asked for into the dashboard's input.
+export const showObservabilityDashboard: McpAppTool<typeof inputSchema, typeof dashboardUi.input> = {
   id: 'showObservabilityDashboard',
   description:
     'Shows a live observability dashboard (agent runs, model cost, tokens, latency) for this Mastra server, rendered as an interactive UI in the chat.',
-  inputSchema: z.object({
-    sections: z
-      .array(z.enum(SECTIONS))
-      .min(1)
-      .describe(
-        'Only the parts the user asked about: overview KPIs, agent runs over time, token usage over time, agent latency.',
-      ),
-    datePreset: dashboardDefaultsSchema.shape.datePreset.describe('Initial time range, e.g. 24h, 7d or 30d.'),
-    chart: timeseriesOptionsSchema.shape.chart
-      .optional()
-      .describe(
-        'Chart type for agent runs and token usage. Defaults to stacked bars. Latency is always a line. No other chart types exist.',
-      ),
-  }),
-  outputSchema: dashboardRendererInputSchema,
-  mcp: {
-    _meta: { ui: { resourceUri: DASHBOARD_APP_URI } },
-  },
+  inputSchema,
   execute: async ({ sections, datePreset, chart }) => {
     const widgets = sections.map(section =>
       chart && CHART_SECTIONS.has(section) ? withChart(WIDGETS[section], chart) : WIDGETS[section],
     );
     const definition: DashboardDefinition = { schemaVersion: 1, defaults: { datePreset }, rows: layout(widgets) };
-    return { definition, scope: 'project' as const };
+    return { definition, scope: 'project' };
   },
-});
+};

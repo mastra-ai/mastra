@@ -1,3 +1,4 @@
+import { isValidationError } from '@mastra/core/tools';
 import { InMemoryTransport, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/client';
 import type { CallToolResult } from '@modelcontextprotocol/client';
 import { App } from '@modelcontextprotocol/ext-apps';
@@ -5,12 +6,11 @@ import type { McpUiHostCapabilities, McpUiHostContext } from '@modelcontextproto
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import {
-  DASHBOARD_DATA_REQUESTS,
-  DASHBOARD_DATA_TOOL_NAME,
-  dashboardDataInputSchema,
-} from '../apps/dashboard-renderer/data';
-import type { DashboardDataInput } from '../apps/dashboard-renderer/data';
+import { z } from 'zod';
+import { dashboardContract } from '../apps/dashboard-renderer/contract';
+import { createMcpApp } from '../create-mcp-app';
+import { defineMcpAppUi } from '../define-mcp-app-ui';
+import type { mcpAppDataInputSchema } from '../reads';
 import type { McpAppDefinition } from '../runtime/define-mcp-app';
 
 /** Where the test host's Mastra server answers the dashboard's reads; MSW handlers mock its routes. */
@@ -29,28 +29,34 @@ afterEach(async () => {
 const once = (bridge: AppBridge, event: 'initialized' | 'sizechange') =>
   new Promise<void>(resolve => bridge.addEventListener(event, () => resolve()));
 
-/** Answers the data tool the way a Mastra server does: by calling the operation's route. */
+// The host's server: the dashboard's real data tool, sending each read to MASTRA_SERVER.
+const { tools } = createMcpApp({
+  ui: defineMcpAppUi({ ...dashboardContract, html: '' }),
+  tool: {
+    id: 'showDashboard',
+    description: 'Shows a dashboard',
+    inputSchema: z.object({}),
+    execute: () => ({}) as never,
+  },
+  prepareRequest: ({ path }) => ({ url: `${MASTRA_SERVER}${path}` }),
+});
+const serverDataTool = tools[dashboardContract.dataTool]!;
+
+/** A data tool call the app made, as the tool's input schema parses it. */
+export type DataToolCall = z.output<ReturnType<typeof mcpAppDataInputSchema<typeof dashboardContract.reads>>>;
+
 async function relayToServer(
   name: string,
   args: Record<string, unknown> = {},
-  dataTool: boolean,
+  hasDataTool: boolean,
 ): Promise<CallToolResult> {
   // Real hosts reject a tool their server doesn't have as a protocol error, not a tool result.
-  if (!dataTool || name !== DASHBOARD_DATA_TOOL_NAME) {
+  if (!hasDataTool || name !== dashboardContract.dataTool) {
     throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
   }
-  const call = dashboardDataInputSchema.parse(args);
-  const [method, path] = DASHBOARD_DATA_REQUESTS[call.operation].split(' ');
-  const url = new URL(`${MASTRA_SERVER}${path}`);
-  for (const [key, value] of Object.entries(call.query ?? {})) {
-    for (const item of [value].flat()) url.searchParams.append(key, item);
-  }
-  const response = await fetch(url, {
-    method,
-    ...(call.body && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(call.body) }),
-  });
-  const structuredContent = { status: response.status, body: await response.json() };
-  return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent };
+  const result: unknown = await serverDataTool.execute!(args, {});
+  if (isValidationError(result)) return { content: [{ type: 'text', text: result.message }], isError: true };
+  return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
 }
 
 type HostOptions = {
@@ -77,13 +83,13 @@ export async function renderWithHost<Input>(
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
   // The tool calls the app made, with the read each one carried.
-  const toolCalls: Array<{ name: string; call?: DashboardDataInput }> = [];
+  const toolCalls: Array<{ name: string; call?: DataToolCall }> = [];
   const messages: string[] = [];
   const modelContexts: unknown[] = [];
   // What the app asked of the host's chat, in order: a model context update or a message.
   const chat: Array<'context' | 'message'> = [];
   bridge.oncalltool = async ({ name, arguments: args }) => {
-    const call = dashboardDataInputSchema.safeParse(args);
+    const call = (serverDataTool.inputSchema as z.ZodType<DataToolCall>).safeParse(args);
     toolCalls.push({ name, ...(call.success && { call: call.data }) });
     return relayToServer(name, args, dataTool);
   };

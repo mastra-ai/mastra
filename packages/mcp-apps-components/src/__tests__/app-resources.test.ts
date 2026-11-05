@@ -5,10 +5,28 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MCPServer } from '@mastra/mcp';
 // The built package, as consumers install it: the HTML artifacts only exist in dist/.
-import { DASHBOARD_DATA_TOOL_NAME, dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';
+import { createMcpApp } from '@mastra/mcp-apps-components';
+import type { McpAppUi } from '@mastra/mcp-apps-components';
+import { dashboardUi } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import { agentRunsDashboard } from '../apps/dashboard-renderer/__tests__/fixtures/dashboard';
+
+/** The dashboard app as a host builds it, with a tool that opens an empty dashboard. */
+function dashboardApp(ui: McpAppUi = dashboardUi) {
+  return createMcpApp({
+    ui,
+    tool: {
+      id: 'showDashboard',
+      description: 'Shows a dashboard',
+      inputSchema: z.object({}),
+      execute: () => ({ definition: agentRunsDashboard }),
+    },
+    prepareRequest: () => ({ response: { status: 200, body: {} } }),
+  });
+}
 
 async function serveHTTP(server: MCPServer) {
   const httpServer = http.createServer(async (req, res) => {
@@ -27,7 +45,7 @@ async function serveHTTP(server: MCPServer) {
   };
 }
 
-describe('dashboardRendererApp', () => {
+describe('dashboardUi', () => {
   describe('when registered as an MCP server app resource', () => {
     let served: Awaited<ReturnType<typeof serveHTTP>>;
     let client: Client;
@@ -36,10 +54,7 @@ describe('dashboardRendererApp', () => {
       const server = new MCPServer({
         name: 'Dashboards',
         version: '1.0.0',
-        tools: {},
-        appResources: {
-          'ui://mastra/dashboard': dashboardRendererApp(),
-        },
+        ...dashboardApp(),
       });
       served = await serveHTTP(server);
       client = new Client(
@@ -103,7 +118,7 @@ describe('dashboardRendererApp', () => {
       const require = createRequire(import.meta.url);
       const cjs: typeof import('@mastra/mcp-apps-components/dashboard-renderer') = require('@mastra/mcp-apps-components/dashboard-renderer');
 
-      expect(cjs.dashboardRendererApp().html).toBe(dashboardRendererApp().html);
+      expect(cjs.dashboardUi.html).toBe(dashboardUi.html);
     });
   });
 
@@ -117,10 +132,7 @@ describe('dashboardRendererApp', () => {
       // Under node_modules so the externals below still resolve when the output runs.
       outDir = await mkdtemp(join(packageDir, 'node_modules', '.bundled-consumer-'));
       const entry = join(outDir, 'entry.ts');
-      await writeFile(
-        entry,
-        "export { dashboardRendererApp } from '@mastra/mcp-apps-components/dashboard-renderer';\n",
-      );
+      await writeFile(entry, "export { dashboardUi } from '@mastra/mcp-apps-components/dashboard-renderer';\n");
       await build({
         configFile: false,
         logLevel: 'silent',
@@ -145,8 +157,7 @@ describe('dashboardRendererApp', () => {
       const server = new MCPServer({
         name: 'Dashboards',
         version: '1.0.0',
-        tools: {},
-        appResources: { 'ui://mastra/dashboard': bundled.dashboardRendererApp() },
+        ...dashboardApp(bundled.dashboardUi),
       });
       const served = await serveHTTP(server);
       const client = new Client(
@@ -159,7 +170,7 @@ describe('dashboardRendererApp', () => {
         const { contents } = await client.readResource({ uri: 'ui://mastra/dashboard' });
         const html = contents[0] && 'text' in contents[0] ? contents[0].text : '';
 
-        expect(html).toBe(dashboardRendererApp().html);
+        expect(html).toBe(dashboardUi.html);
         expect(html).toContain('ui/notifications/initialized');
       } finally {
         await client.close();
@@ -169,9 +180,8 @@ describe('dashboardRendererApp', () => {
   });
 
   describe('when a host serves the dashboard without @mastra/server', () => {
-    // Hosts like Mastra's platform answer `dashboardDataTool` from their own store, and standalone MCP
-    // servers send its reads to a Mastra server over HTTP; neither installs @mastra/server. Bundle what
-    // they import with @mastra/server unresolvable: loading it would fail the build, as it fails their server.
+    // Standalone MCP servers send the dashboard's reads to a Mastra server over HTTP and don't install
+    // @mastra/server. Bundle what they import with it unresolvable: loading it would fail the build, as it fails their server.
     let outDir: string;
     const reached: string[] = [];
 
@@ -182,13 +192,8 @@ describe('dashboardRendererApp', () => {
       await writeFile(
         entry,
         [
-          'export {',
-          '  dashboardRendererApp,',
-          '  DASHBOARD_DATA_TOOL_NAME,',
-          '  DASHBOARD_DATA_OPERATIONS,',
-          '  dashboardDataInputSchema,',
-          "} from '@mastra/mcp-apps-components/dashboard-renderer';",
-          "export { createDashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';\n",
+          "export { dashboardUi } from '@mastra/mcp-apps-components/dashboard-renderer';",
+          "export { createMcpApp } from '@mastra/mcp-apps-components';\n",
         ].join('\n'),
       );
       await build({
@@ -219,22 +224,26 @@ describe('dashboardRendererApp', () => {
       await rm(outDir, { recursive: true, force: true });
     });
 
-    it('serves the app, the data contract and the data tool without loading it', async () => {
+    it('builds the app and its data tool without loading it', async () => {
       const bundled: typeof import('@mastra/mcp-apps-components/dashboard-renderer') &
-        typeof import('@mastra/mcp-apps-components/dashboard-data-tool') = await import(
+        typeof import('@mastra/mcp-apps-components') = await import(
         pathToFileURL(join(outDir, 'out', 'entry.js')).href
       );
 
-      expect(reached).toEqual([]);
-      expect(bundled.dashboardRendererApp().html).toBe(dashboardRendererApp().html);
-      expect(bundled.dashboardDataInputSchema.parse({ operation: 'getMetricAggregate', body: {} })).toEqual({
-        operation: 'getMetricAggregate',
-        body: {},
+      const { appResources, tools } = bundled.createMcpApp({
+        ui: bundled.dashboardUi,
+        tool: {
+          id: 'showDashboard',
+          description: 'Shows a dashboard',
+          inputSchema: z.object({}),
+          execute: () => ({ definition: agentRunsDashboard }),
+        },
+        prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
       });
-      expect(
-        bundled.createDashboardDataTool({ prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }) })
-          .id,
-      ).toBe(DASHBOARD_DATA_TOOL_NAME);
+
+      expect(reached).toEqual([]);
+      expect(appResources['ui://mastra/dashboard']?.html).toBe(dashboardUi.html);
+      expect(Object.keys(tools)).toEqual(['showDashboard', 'dashboardData']);
     });
   });
 });

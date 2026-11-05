@@ -3,19 +3,20 @@ import type { DashboardRendererProps, OnDashboardDrilldown } from '@mastra/playg
 import { MetricsProvider } from '@mastra/playground-ui/domains/metrics';
 import type { DatePreset } from '@mastra/playground-ui/domains/metrics';
 import { useRef, useState } from 'react';
+import { createMcpAppDataFetch } from '../../runtime/data-fetch';
 import { defineMcpApp } from '../../runtime/define-mcp-app';
 import { MastraServerProvider } from '../../runtime/mastra-server-provider';
 import { useMcpApp } from '../../runtime/mcp-app-context';
-import { createDashboardDataFetch } from './data-fetch';
+import { dashboardContract } from './contract';
 import { drilldownContext, drilldownMessage, drilldownPrompt } from './drilldown';
-import { dashboardRendererInputSchema } from './input';
-import type { DashboardRendererInput } from './input';
+import { dashboardInputSchema } from './input';
+import type { DashboardInput } from './input';
 import { dashboardModelContext } from './model-context';
 import type { DrilldownModelContext } from './model-context';
 import { useDashboardPins } from './use-dashboard-pins';
 import './dashboard.css';
 
-function Dashboard({ input }: { input: DashboardRendererInput }) {
+function Dashboard({ input }: { input: DashboardInput }) {
   const app = useMcpApp();
   const [defaults] = useState(() => dashboardDefaults(input.definition));
   const [preset, setPreset] = useState<DatePreset>(defaults.preset ?? '24h');
@@ -61,7 +62,9 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
   const pin = pinState ? { onPin, isPinned: pinState.isPinned } : {};
 
   return (
-    <MastraServerProvider createFetch={hostApp => createDashboardDataFetch(hostApp, { projectId: input.projectId })}>
+    <MastraServerProvider
+      createFetch={hostApp => createMcpAppDataFetch(hostApp, { ui: dashboardContract, projectId: input.projectId })}
+    >
       <MetricsProvider
         preset={preset}
         onPresetChange={setPreset}
@@ -75,8 +78,8 @@ function Dashboard({ input }: { input: DashboardRendererInput }) {
 }
 
 export const app = defineMcpApp({
-  name: 'Mastra dashboard',
-  schema: dashboardRendererInputSchema,
+  name: dashboardContract.name,
+  schema: dashboardInputSchema,
   loadingTitle: 'Loading dashboard',
   errorTitle: "Couldn't show this dashboard",
   render: input => <Dashboard input={input} />,

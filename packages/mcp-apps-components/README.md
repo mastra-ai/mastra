@@ -1,8 +1,8 @@
 # @mastra/mcp-apps-components
 
-Prebuilt [MCP Apps](https://mastra.ai/docs/connections/mcp) that render Mastra UI components inside any MCP App host, such as Mastra Studio. Each app ships as a self-contained HTML resource you register on an `MCPServer`, plus a server-side helper to link it to your tools.
+Prebuilt [MCP Apps](https://mastra.ai/docs/connections/mcp) that render Mastra UI components inside any MCP App host, such as Mastra Studio. Each app ships as a self-contained UI that you turn into an MCP App with `createMcpApp` and register on an `MCPServer`.
 
-The apps never reach the network from their iframe. Each read they make travels as a call to one app-only data tool that you register on the same server.
+The UIs never reach the network from their iframe. Each read they make travels as a call to an app-only data tool that `createMcpApp` registers next to them, and you decide where each read goes.
 
 ## Installation
 
@@ -12,17 +12,20 @@ npm install @mastra/mcp-apps-components
 
 ## Usage
 
-Register the dashboard renderer on an `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI.
+`createMcpApp` takes three things:
+
+- `ui`: the prebuilt UI, such as `dashboardUi`. It carries its HTML, its `ui://` URI, the input it renders and the reads it makes.
+- `tool`: the tool the model calls to open the UI. Its `execute` turns the model's request into the UI's input, typed against `ui.input`.
+- `prepareRequest`: where each of the UI's reads goes.
+
+It returns `appResources` and `tools` to register on an `MCPServer`.
 
 ```typescript
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards';
-import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
-import { createDashboardDataTool } from '@mastra/mcp-apps-components/dashboard-data-tool';
-import { dashboardRendererApp, dashboardRendererInputSchema } from '@mastra/mcp-apps-components/dashboard-renderer';
+import { createMcpApp } from '@mastra/mcp-apps-components';
+import { dashboardUi } from '@mastra/mcp-apps-components/dashboard-renderer';
 import { z } from 'zod';
-
-const DASHBOARD_APP_URI = 'ui://mastra/dashboard';
 
 const agentRuns: DashboardDefinition = {
   schemaVersion: 1,
@@ -54,45 +57,54 @@ const agentRuns: DashboardDefinition = {
   ],
 };
 
-const showAgentRuns = createTool({
-  id: 'showAgentRuns',
-  description: 'Shows how many agent runs happened in the last 7 days',
-  inputSchema: z.object({}),
-  outputSchema: dashboardRendererInputSchema,
-  mcp: { _meta: { ui: { resourceUri: DASHBOARD_APP_URI } } },
-  execute: async () => ({ definition: agentRuns, scope: 'project' as const }),
+const dashboard = createMcpApp({
+  ui: dashboardUi,
+  tool: {
+    id: 'showAgentRuns',
+    description: 'Shows how many agent runs happened in the last 7 days',
+    inputSchema: z.object({}),
+    execute: () => ({ definition: agentRuns }),
+  },
+  prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
 });
 
 export const dashboardServer = new MCPServer({
   id: 'dashboard-server',
   name: 'Dashboard Server',
   version: '1.0.0',
-  appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
-  tools: {
-    showAgentRuns,
-    dashboardDataTool: createDashboardDataTool({
-      prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
-    }),
-  },
+  appResources: dashboard.appResources,
+  tools: dashboard.tools,
 });
 ```
 
-### Data tool
+Call `createMcpApp` once per UI on a server. The data tool's name is built into the UI (`dashboardData` for the dashboard), so a second app built from the same UI would replace the first one's data tool.
 
-Create the data tool with `createDashboardDataTool({ prepareRequest })`, from `@mastra/mcp-apps-components/dashboard-data-tool`, and register it under the key `dashboardDataTool`, next to the app. The app calls it by name for every read its dashboard makes, such as `getMetricAggregate`. Without it, each widget fails with a message telling you to register it.
+### Reads
 
-For each read, the tool calls `prepareRequest` with the read's `operation`, its Mastra route `path` (such as `/observability/metrics/aggregate`), the `projectId` the app asked for and the caller's `token`. `prepareRequest` returns the `url` to send the read to and any `headers` to add. The tool adds the route's method, query parameters and JSON body, sends the read, and hands the response to the app. It only sends the reads in `DASHBOARD_DATA_OPERATIONS`, and it's app-only, so hosts keep it away from the model. The MCP server serving it doesn't need a Mastra instance.
+Each UI declares the reads it makes, by name, with the route that answers them, such as `getMetricAggregate: 'POST /observability/metrics/aggregate'`. Routes can have parameters, such as `getTrace: 'GET /observability/traces/:traceId'`.
 
-The tool sends the caller's bearer token as `authorization`: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. An `authorization` header returned by `prepareRequest` replaces it. When a Mastra server has authentication configured, reads that carry no token, such as over stdio, answer with `401`. When the server can't be reached, reads answer with `502`.
+For each read, the data tool calls `prepareRequest` with:
+
+- `read`: the read's name.
+- `params`: the route's parameters, decoded.
+- `path`: the route path with its parameters encoded, without the API prefix, such as `/observability/metrics/aggregate`.
+- `projectId`: the project the UI asked for, if any.
+- `token`: the caller's bearer token, if any.
+
+`prepareRequest` returns the `url` to send the read to and any `headers` to add, or `{ response }` to answer without sending anything. The data tool adds the route's method, query parameters and JSON body, sends the read, and hands the response to the UI. It refuses reads the UI doesn't declare, and parameters that are empty, `.` or `..`. It's app-only, so hosts keep it away from the model. The MCP server serving it doesn't need a Mastra instance.
+
+The data tool sends the caller's bearer token as `authorization`: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. An `authorization` header returned by `prepareRequest` replaces it. When a Mastra server has authentication configured, reads that carry no token, such as over stdio, answer with `401`. When the server can't be reached, reads answer with `502`.
 
 ### Serving several projects
 
-Set `projectId` in the dashboard's tool result. The app sends it on every data tool call, and `prepareRequest` decides where it goes. The app's `projectId` isn't trusted: check the caller can read the project, and return `{ response }` to answer without sending anything.
+Set `projectId` in the UI's input from your tool's `execute`. The UI sends it with every read, and `prepareRequest` decides where it goes. The `projectId` comes from the iframe, so it isn't trusted: check the caller can read the project, and return `{ response }` to answer without sending anything.
 
 ```typescript
 const REGIONS = { us: 'https://us.example.com', eu: 'https://eu.example.com' };
 
-createDashboardDataTool({
+createMcpApp({
+  ui: dashboardUi,
+  tool: showAgentRuns,
   prepareRequest: async ({ path, projectId, token }) => {
     const project = projectId && (await findProjectFor(token, projectId));
     if (!project) return { response: { status: 403, body: { error: 'Not your project' } } };
@@ -101,7 +113,7 @@ createDashboardDataTool({
 });
 ```
 
-To send a read to a different path, map its `operation`, typed as `DashboardDataOperation`, to your own route. A host whose API answers reads differently can register its own `dashboardDataTool` instead, from the contract in `@mastra/mcp-apps-components/dashboard-renderer`: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema` and `dashboardDataOutputSchema`.
+To send a read to a different path, map its `read` name to your own route. `prepareRequest` is typed against the UI's reads, so a map typed as `Record<keyof typeof dashboardUi.reads, string>` fails to compile when a UI adds a read.
 
 ### Pinning widgets
 

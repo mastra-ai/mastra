@@ -4,9 +4,24 @@ import { InMemoryTransport } from '@modelcontextprotocol/client';
 import { App } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DASHBOARD_DATA_TOOL_NAME } from '../data';
-import type { DashboardDataOutput } from '../data';
-import { createDashboardDataFetch } from '../data-fetch';
+import { dashboardContract } from '../../apps/dashboard-renderer/contract';
+import { defineMcpAppUi } from '../../define-mcp-app-ui';
+import type { McpAppUi } from '../../define-mcp-app-ui';
+import type { McpAppDataOutput } from '../../reads';
+import { createMcpAppDataFetch } from '../data-fetch';
+
+type UiContract = Pick<McpAppUi, 'name' | 'dataTool' | 'reads'>;
+
+// A UI that reads one trace by its ID, to cover routes with parameters.
+const traceUi = defineMcpAppUi({
+  uri: 'ui://test/trace',
+  name: 'Trace viewer',
+  description: 'Shows one trace',
+  html: '',
+  dataTool: 'traceData',
+  input: dashboardContract.input,
+  reads: { getTrace: 'GET /observability/traces/:traceId' },
+});
 
 const closers: Array<() => Promise<void>> = [];
 
@@ -15,7 +30,10 @@ afterEach(async () => {
 });
 
 /** A MastraClient inside an app whose host answers every tool call with `answer`. */
-async function clientBehindHost(answer: DashboardDataOutput, options?: { projectId?: string }) {
+async function clientBehindHost(
+  answer: McpAppDataOutput,
+  { ui = dashboardContract, projectId }: { ui?: UiContract; projectId?: string } = {},
+) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, { serverTools: {} });
   const calls: Array<{ name: string; arguments?: Record<string, unknown> }> = [];
@@ -36,14 +54,14 @@ async function clientBehindHost(answer: DashboardDataOutput, options?: { project
     baseUrl: 'http://mastra.test',
     apiPrefix: '',
     retries: 0,
-    fetch: createDashboardDataFetch(app, options),
+    fetch: createMcpAppDataFetch(app, { ui, projectId }),
   });
   return { client, calls, app };
 }
 
-describe('createDashboardDataFetch', () => {
+describe('createMcpAppDataFetch', () => {
   describe('when MastraClient posts a read', () => {
-    it('sends the operation and its body to the data tool and answers with the body', async () => {
+    it('sends the read and its body to the data tool and answers with the body', async () => {
       const aggregate = { value: 3 };
       const { client, calls } = await clientBehindHost({ status: 200, body: aggregate });
       const args = {
@@ -59,9 +77,9 @@ describe('createDashboardDataFetch', () => {
       expect(response).toEqual(aggregate);
       expect(calls).toEqual([
         {
-          name: DASHBOARD_DATA_TOOL_NAME,
+          name: dashboardContract.dataTool,
           arguments: {
-            operation: 'getMetricAggregate',
+            read: 'getMetricAggregate',
             body: {
               ...args,
               filters: { timestamp: { start: '2026-11-01T00:00:00.000Z', end: '2026-11-02T00:00:00.000Z' } },
@@ -73,7 +91,7 @@ describe('createDashboardDataFetch', () => {
   });
 
   describe('when MastraClient lists scores', () => {
-    it('sends the query parameters with the operation', async () => {
+    it('sends the query parameters with the read', async () => {
       const scores = { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
       const { client, calls } = await clientBehindHost({ status: 200, body: scores });
 
@@ -82,8 +100,8 @@ describe('createDashboardDataFetch', () => {
       expect(response).toEqual(scores);
       expect(calls).toEqual([
         {
-          name: DASHBOARD_DATA_TOOL_NAME,
-          arguments: { operation: 'listScores', query: { page: '0', perPage: '100' } },
+          name: dashboardContract.dataTool,
+          arguments: { read: 'listScores', query: { page: '0', perPage: '100' } },
         },
       ]);
     });
@@ -97,9 +115,41 @@ describe('createDashboardDataFetch', () => {
       await client.listScores({ pagination: { page: 0, perPage: 100 } });
 
       expect(calls.map(call => call.arguments)).toEqual([
-        expect.objectContaining({ operation: 'getMetricAggregate', projectId: 'proj_1' }),
-        expect.objectContaining({ operation: 'listScores', projectId: 'proj_1' }),
+        expect.objectContaining({ read: 'getMetricAggregate', projectId: 'proj_1' }),
+        expect.objectContaining({ read: 'listScores', projectId: 'proj_1' }),
       ]);
+    });
+  });
+
+  describe('when the UI reads a route with a parameter', () => {
+    it('sends the decoded parameter with the read', async () => {
+      const trace = { traceId: 'trace-1', spans: [] };
+      const { client, calls } = await clientBehindHost({ status: 200, body: trace }, { ui: traceUi });
+
+      expect(await client.getTrace('trace-1')).toEqual(trace);
+      expect(calls).toEqual([{ name: 'traceData', arguments: { read: 'getTrace', params: { traceId: 'trace-1' } } }]);
+    });
+
+    it('decodes an encoded slash instead of reading another path', async () => {
+      const { app, calls } = await clientBehindHost({ status: 200, body: {} }, { ui: traceUi });
+
+      const response = await createMcpAppDataFetch(app, { ui: traceUi })(
+        'http://mastra.test/observability/traces/a%2Fb',
+      );
+
+      expect(response.status).toBe(200);
+      expect(calls).toEqual([{ name: 'traceData', arguments: { read: 'getTrace', params: { traceId: 'a/b' } } }]);
+    });
+
+    it('fails a malformed encoding with 404 without calling the server', async () => {
+      const { app, calls } = await clientBehindHost({ status: 200, body: {} }, { ui: traceUi });
+
+      const response = await createMcpAppDataFetch(app, { ui: traceUi })(
+        'http://mastra.test/observability/traces/%E0%A4%A',
+      );
+
+      expect(response.status).toBe(404);
+      expect(calls).toEqual([]);
     });
   });
 
@@ -116,10 +166,13 @@ describe('createDashboardDataFetch', () => {
     it('fails it with 400 without calling the server', async () => {
       const { calls, app } = await clientBehindHost({ status: 200, body: {} });
 
-      const response = await createDashboardDataFetch(app)('http://mastra.test/observability/metrics/aggregate', {
-        method: 'POST',
-        body: 'not json',
-      });
+      const response = await createMcpAppDataFetch(app, { ui: dashboardContract })(
+        'http://mastra.test/observability/metrics/aggregate',
+        {
+          method: 'POST',
+          body: 'not json',
+        },
+      );
 
       expect(response.status).toBe(400);
       expect(calls).toEqual([]);
@@ -138,7 +191,9 @@ describe('createDashboardDataFetch', () => {
     it.each([0, 101, 204, 205, 304, 600])('fails the request with 502 instead of throwing on %i', async status => {
       const { app } = await clientBehindHost({ status, body: {} });
 
-      const response = await createDashboardDataFetch(app)('http://mastra.test/observability/scores');
+      const response = await createMcpAppDataFetch(app, { ui: dashboardContract })(
+        'http://mastra.test/observability/scores',
+      );
 
       expect(response.status).toBe(502);
     });
