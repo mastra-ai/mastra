@@ -37,6 +37,33 @@ export const agentRunsKpi: DashboardWidget = {
   ],
 };
 
+/** A bar chart of agent runs over time, split by status. */
+export const agentRunsChart: DashboardWidget = {
+  id: 'agent-runs-chart',
+  span: 6,
+  kind: 'timeseries',
+  title: 'Agent runs over time',
+  views: [
+    {
+      queries: [
+        {
+          id: 'runs',
+          source: 'metrics',
+          request: 'timeSeries',
+          name: ['mastra_agent_duration_ms'],
+          aggregation: 'count',
+          groupBy: ['status'],
+        },
+      ],
+      options: {
+        chart: 'stackedBar',
+        format: 'count',
+        series: [{ dataKey: 'runs', label: 'Runs', color: 'green', value: { query: 'runs' } }],
+      },
+    },
+  ],
+};
+
 /**
  * The server a host writes around the observability widget: `showObservabilityWidget` opens it with
  * a widget and a date preset, and the app-only `queryObservability` answers each action the app
