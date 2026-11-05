@@ -236,6 +236,15 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * with the write (`supportsGuardedSnapshotWrites` is about v1 snapshots): when the run is stored
    * and its header's status is not one of these values, nothing is written and the call resolves
    * to null. A run that isn't stored yet is always written.
+   *
+   * `startGuard` and `completionGuard` (on stores whose `supportsWorkflowStepGuards()` is true)
+   * check a header-less append of one step against the run as stored, as `updateWorkflowResults`
+   * checks a v1 snapshot: `assertWorkflowStepGuard` runs under the run's lock, and a rejection
+   * throws its `WorkflowStepConflictError`, with the stored run as `storedSnapshot`, writing nothing.
+   * With `completionGuard.pruneOnly`, only the step is written: it keeps its stored metadata and is
+   * marked `__continuationStarted`, and the run's state and request context stay as stored. With
+   * `startGuard.previousStep`, that step's result is written too when it's still the one the
+   * guard's event started, as `updateWorkflowResults` does.
    * @experimental
    */
   async appendWorkflowRunEntries(
@@ -249,6 +258,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
       startStateSeq?: number;
       fence?: RunFence;
       expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+      startGuard?: WorkflowStepStartGuard;
+      completionGuard?: WorkflowStepCompletionGuard;
     } & WorkflowRunAppendHeader,
   ): Promise<{ lastSeq: number; runToken?: string } | null> {
     throw runJournalNotSupportedError(this.constructor.name);

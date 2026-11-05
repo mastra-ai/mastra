@@ -188,6 +188,15 @@ function readForeachResult(
   return result;
 }
 
+/**
+ * A step conflict's stored steps with the run's state in `__state`, where the evented engine keeps
+ * it: a storage v1 snapshot already has it there, a v2 run keeps its state in `value`.
+ */
+function storedContext(snapshot: WorkflowRunState | undefined): Record<string, any> | undefined {
+  if (!snapshot || currentStorageVersion() !== 2) return snapshot?.context;
+  return { ...snapshot.context, __state: snapshot.value };
+}
+
 /** Broadcast topic carrying cancellation to every processor that may be executing the run's steps. */
 const WORKFLOW_CONTROL_TOPIC = 'workflow.control';
 const WORKFLOW_CONTROL_ABORT = 'workflow.control.abort';
@@ -701,12 +710,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     return currentStorageVersion() === 2 ? undefined : workflow?.options?.pruneSnapshot;
   }
 
-  /**
-   * Whether this run's step writes carry start/completion guards. Only storage v1 writes take
-   * guards so far, so a storage v2 run goes unguarded even on a store that supports them.
-   */
+  /** Whether this run's step writes carry start/completion guards. */
   #guardsSteps(store: WorkflowsStorage | undefined): store is WorkflowsStorage {
-    return currentStorageVersion() !== 2 && !!store?.supportsWorkflowStepGuards();
+    return !!store?.supportsWorkflowStepGuards();
   }
 
   /**
@@ -1978,9 +1984,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         );
       const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
       if (previous && this.#guardsSteps(workflowsStore)) {
-        await workflowsStore.updateWorkflowResults({
-          workflowName: workflowId,
-          runId,
+        await this.#runStorage(workflowId, runId).writeStepResult({
           stepId: previous[0],
           result: this.pruneStepResultForPersist({
             workflow,
@@ -2191,22 +2195,24 @@ export class WorkflowEventProcessor extends EventProcessor {
         const loopCondition =
           result.metadata?.loopCondition ?? (await evaluateLoopCondition(args, step, this.stepExecutor, result));
         stepResult = { ...result, metadata: { ...result.metadata, startedBy, loopCondition } };
-        await store.updateWorkflowResults({
-          workflowName: args.workflowId,
-          runId: args.runId,
+        await this.#runStorage(args.workflowId, args.runId).writeStepResult({
           stepId: leafId,
           result: stepResult,
           requestContext: withoutAuthToken(args.requestContext),
           state: resolveCurrentState({ stepResult, stepResults: args.stepResults, state: args.state }),
           completionGuard: { eventId: startedBy },
         });
+        // The committed result is now the body's record; on storage v2 the next iteration's
+        // count is written over it, so it must not fall back to the running record.
+        args = { ...args, stepResults: { ...args.stepResults, [leafId]: stepResult } };
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed' || !error.storedResult) throw error;
         stepResult = error.storedResult;
+        const stored = storedContext(error.storedSnapshot);
         args = {
           ...args,
-          stepResults: error.storedSnapshot?.context ?? args.stepResults,
-          state: error.storedSnapshot?.context.__state ?? args.state,
+          stepResults: stored ?? args.stepResults,
+          state: stored?.__state ?? args.state,
           requestContext: restoreLiveRequestContext(error.storedRequestContext, args.requestContext),
         };
       }
@@ -2377,11 +2383,12 @@ export class WorkflowEventProcessor extends EventProcessor {
           } catch (error) {
             if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
             if (error.storedResult?.status === 'success') {
+              const stored = storedContext(error.storedSnapshot);
               const continuation = {
                 ...args,
-                stepResults: { ...stepResults, ...error.storedSnapshot?.context },
+                stepResults: { ...stepResults, ...stored },
                 requestContext: restoreLiveRequestContext(error.storedRequestContext, requestContext),
-                state: error.storedSnapshot?.context.__state ?? currentState,
+                state: stored?.__state ?? currentState,
                 prevResult: error.storedResult,
               };
               if (step.type === 'loop') await this.#processLoop(continuation, step, error.storedResult, args.eventId);
@@ -2565,8 +2572,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           ) {
             completedResult = error.storedResult;
             requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
-            currentState = error.storedSnapshot?.context.__state ?? currentState;
-            Object.assign(stepResults, error.storedSnapshot?.context);
+            const stored = storedContext(error.storedSnapshot);
+            currentState = stored?.__state ?? currentState;
+            Object.assign(stepResults, stored);
           } else {
             throw error;
           }
@@ -3299,9 +3307,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         return;
       }
       if (guardStart && !completedResult) {
-        await workflowsStore!.updateWorkflowResults({
-          workflowName: workflowId,
-          runId,
+        await runStorage.writeStepResult({
           stepId: leafId,
           result: stepResult,
           requestContext: withoutAuthToken(requestContext),
@@ -4197,11 +4203,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
         // Only the committed winner's values may drive a reclaimed continuation.
-        newStepResults = error.storedSnapshot?.context;
+        newStepResults = storedContext(error.storedSnapshot);
         storedResult = error.storedResult!;
         prevResult = storedResult;
         requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
-        currentState = error.storedSnapshot?.context.__state ?? currentState;
+        currentState = newStepResults?.__state ?? currentState;
       }
 
       // When the Mastra has no storage configured, the write returns

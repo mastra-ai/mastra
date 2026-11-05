@@ -170,7 +170,16 @@ export function scopedRunStorage(runId: string, runStorage: RunStorage): RunStor
   };
 
   const overrides: Partial<RunStorage> = {
-    writeStepResult: async write => runStorage.writeStepResult(await toPatch(write)),
+    writeStepResult: async write => {
+      const patched = await toPatch(write);
+      try {
+        return await runStorage.writeStepResult(patched);
+      } catch (error) {
+        // A rejected write (a step guard conflict) leaves the stored state as it was, not as `toPatch` assumed.
+        scope.bases.delete(runId);
+        throw error;
+      }
+    },
     mergeStepResult: async write => runStorage.mergeStepResult(await toPatch(write)),
     writeState: async write => runStorage.writeState(await toPatch(write)),
     writeSnapshot: async (snapshot, resourceId, opts) => {

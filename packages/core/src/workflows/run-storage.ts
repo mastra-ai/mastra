@@ -75,9 +75,9 @@ type StepResultWrite = StateWrite & {
   stepId: string;
   result: StepResult<any, any, any, any>;
   requestContext: Record<string, any>;
-  /** Storage v1 only: the store rejects the write unless this delivery may start the step. */
+  /** The store rejects the write unless this delivery may start the step (not on v2's `mergeStepResult`). */
   startGuard?: WorkflowStepStartGuard;
-  /** Storage v1 only: the store rejects the write unless this delivery owns the running step. */
+  /** The store rejects the write unless this delivery owns the running step (not on v2's `mergeStepResult`). */
   completionGuard?: WorkflowStepCompletionGuard;
 };
 
@@ -438,7 +438,6 @@ class RunStorageV2 implements RunStorage {
     completionGuard,
   }: StepResultWrite): Promise<StepWriteResult | undefined> {
     if (state) throw wholeStateOnV2();
-    if (startGuard || completionGuard) throw new Error('Storage v2 runs do not support step guards');
     const store = await this.#getStore();
     if (!store) return undefined;
     const written = await store.appendWorkflowRunEntries({
@@ -447,6 +446,8 @@ class RunStorageV2 implements RunStorage {
       steps: { [stepId]: result },
       requestContext,
       ...(statePatch?.length ? { statePatch } : {}),
+      startGuard,
+      completionGuard,
     });
     return written ? { results: { [stepId]: result }, seq: written.lastSeq } : { results: {} };
   }

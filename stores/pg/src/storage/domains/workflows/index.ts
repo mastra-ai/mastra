@@ -1217,6 +1217,8 @@ export class WorkflowsPG extends WorkflowsStorage {
       startStateSeq?: number;
       fence?: RunFence;
       expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+      startGuard?: WorkflowStepStartGuard;
+      completionGuard?: WorkflowStepCompletionGuard;
     } & WorkflowRunAppendHeader,
   ): Promise<{ lastSeq: number; runToken: string } | null> {
     const { workflowName, runId, steps, stepPatches, state, statePatch, startStateSeq, expectedStatus } = args;
@@ -1224,6 +1226,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     const write = stateColumnsWrite({ state, statePatch }, false);
     const expected = expectedStatus === undefined ? undefined : [expectedStatus].flat();
     const fence = resolveRunFence(this, args.fence, runId);
+    const guarded = !!(args.startGuard || args.completionGuard);
+    if (guarded && args.header) throw new Error('Step guards apply to header-less appends');
     let row: AppendedRow | null;
     try {
       if (args.header) {
@@ -1253,25 +1257,119 @@ export class WorkflowsPG extends WorkflowsStorage {
           ),
         );
       }
-      row = await withRunFence(this.#db.client, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', q =>
-        this.#appendWithoutHeader(q, {
-          workflowName,
-          runId,
-          entries,
-          write,
-          requestContext: args.requestContext,
-          startStateSeq,
-          expected,
-        }),
-      );
+      row = guarded
+        ? await this.#db.client.tx(async t => {
+            if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries');
+            return this.#appendGuarded(t, { ...args, expected });
+          })
+        : await withRunFence(this.#db.client, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', q =>
+            this.#appendWithoutHeader(q, {
+              workflowName,
+              runId,
+              entries,
+              write,
+              requestContext: args.requestContext,
+              startStateSeq,
+              expected,
+            }),
+          );
     } catch (error) {
-      if (isRunFenceConflictError(error)) throw error;
+      if (isRunFenceConflictError(error) || isWorkflowStepConflictError(error)) throw error;
       throw this.#runError('APPEND_WORKFLOW_RUN_ENTRIES', workflowName, runId, error);
     }
     if (!row) return null;
     const { lastSeq, runToken, ...columns } = row;
     await this.checkpointStateIfDue({ workflowName, runId, columns });
     return { lastSeq, runToken };
+  }
+
+  /**
+   * A header-less append of one step checked by its step guards against the run as stored, as
+   * `updateWorkflowResults` checks a v1 snapshot. The run's row lock is held from the read through
+   * the append, so no other write lands between the check and the write.
+   */
+  async #appendGuarded(
+    t: Queryable,
+    {
+      workflowName,
+      runId,
+      steps,
+      stepPatches,
+      state,
+      statePatch,
+      requestContext,
+      startStateSeq,
+      expected,
+      startGuard,
+      completionGuard,
+    }: {
+      workflowName: string;
+      runId: string;
+      steps: Record<string, StepResult<any, any, any, any>>;
+      stepPatches?: Record<string, StatePatchOp[]>;
+      state?: Record<string, any>;
+      statePatch?: StatePatchOp[];
+      requestContext?: Record<string, any>;
+      startStateSeq?: number;
+      expected?: WorkflowRunStatus[];
+      startGuard?: WorkflowStepStartGuard;
+      completionGuard?: WorkflowStepCompletionGuard;
+    },
+  ): Promise<AppendedRow | null> {
+    const [stepId, ...others] = Object.keys(steps);
+    if (!stepId || others.length) throw new Error('A guarded append writes exactly one step');
+    const run = await t.oneOrNone<{ header: WorkflowRunHeader }>(
+      `SELECT header FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+      [workflowName, runId],
+    );
+    let snapshot: WorkflowRunState | null = null;
+    if (run) {
+      if (!matchesExpectedWorkflowStatus(run.header.status, expected)) return null;
+      // The run's lock is held, so this read sees every append committed before it.
+      const { entries } = await t.one<{ entries: EntryRow[] }>(
+        `SELECT ${this.#entriesSql('r')} AS entries FROM ${this.#runsTable()} r
+         WHERE r.workflow_name = $1 AND r.run_id = $2`,
+        [workflowName, runId],
+      );
+      snapshot = await this.#materializeRun(t, run.header, entries);
+    }
+    // Throws when the run isn't stored.
+    assertWorkflowStepGuard({ snapshot, stepId, startGuard, completionGuard });
+    if (!snapshot) return null;
+
+    const result = steps[stepId]!;
+    const pruneOnly = completionGuard?.pruneOnly;
+    const written: Record<string, StepResult<any, any, any, any>> = {
+      [stepId]: pruneOnly
+        ? {
+            ...result,
+            metadata: { ...snapshot.context[stepId]?.metadata, ...result.metadata, __continuationStarted: true },
+          }
+        : result,
+    };
+    const previous = startGuard?.previousStep;
+    const previousResult = previous && snapshot.context[previous.stepId];
+    if (
+      previous &&
+      previous.stepId !== stepId &&
+      previousResult?.status === 'success' &&
+      previousResult.metadata?.startedBy === previous.eventId
+    ) {
+      written[previous.stepId] = {
+        ...previous.result,
+        metadata: { ...previousResult.metadata, ...previous.result.metadata, __continuationStarted: true },
+      };
+    }
+    // A prune only marks the step; like `updateWorkflowResults`, it leaves state and request context as stored.
+    const stateWrite = pruneOnly ? {} : { state, statePatch };
+    return this.#appendWithoutHeader(t, {
+      workflowName,
+      runId,
+      entries: journalEntries(written, stateWrite, false, stepPatches),
+      write: stateColumnsWrite(stateWrite, false),
+      requestContext: pruneOnly ? undefined : requestContext,
+      startStateSeq,
+    });
   }
 
   /**
