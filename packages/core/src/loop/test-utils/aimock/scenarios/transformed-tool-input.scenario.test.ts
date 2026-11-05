@@ -11,8 +11,8 @@ import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScena
  *
  * The tool builder validated and decoded the arguments, then `Tool.execute` validated the decoded
  * `URL` against the same schema and rejected it ("expected string, received URL"). The handler
- * never ran. Models with a schema compat layer (OpenAI, Anthropic, Google) skipped the second
- * validation, so the scenario uses a provider without one.
+ * never ran. Models with a schema compat layer (for example OpenAI, Anthropic, Google) skipped the
+ * second validation, so the scenario uses a provider without one.
  */
 
 const URL_ARG = 'https://example.com/docs';
@@ -51,9 +51,9 @@ function expectToolRanWithUrl(received: unknown[], requests: { body: unknown }[]
   expect(received).toHaveLength(1);
   expect(received[0]).toBeInstanceOf(URL);
   expect((received[0] as URL).href).toBe(URL_ARG);
-  const followUp = JSON.stringify(requests[1]?.body);
-  expect(followUp).toContain('/docs');
-  expect(followUp).not.toMatch(/validation failed/i);
+  // The model gets the tool's result back, not a validation error.
+  const toolMessage = ((requests[1]?.body as any)?.messages ?? []).find((m: any) => m.role === 'tool');
+  expect(JSON.parse(toolMessage?.content ?? 'null')).toEqual({ host: 'example.com', path: '/docs' });
 }
 
 describeForAllEngines('AIMock scenario: tool input schema decodes the model arguments', engine => {

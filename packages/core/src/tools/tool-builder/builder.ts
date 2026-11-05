@@ -1067,10 +1067,10 @@ export class CoreToolBuilder extends MastraBase {
             toolSpan?.end({ output: error, ...executionFailureTermination(error), attributes: { success: false } });
             return error;
           }
-          if (data !== undefined) {
+          if (!error) {
             args = data;
+            inputValidated = true;
           }
-          inputValidated = !error;
         }
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
@@ -1208,10 +1208,6 @@ export class CoreToolBuilder extends MastraBase {
             io: 'input',
           }),
           {
-            // Returns the raw input on success. The AI SDK passes this value to `execute`,
-            // which validates and decodes it, and stores it as the tool-call args. A decoded
-            // value (e.g. a `URL` from a string transform) fails that validation and cannot be
-            // cloned into message history (#27259).
             validate: (value: unknown) => {
               const result = schemaToUse['~standard'].validate(value);
               // standard-schema validate may return a Promise
@@ -1223,7 +1219,7 @@ export class CoreToolBuilder extends MastraBase {
                       error: createStandardSchemaIssuesError(r.issues),
                     };
                   }
-                  return { success: true as const, value };
+                  return { success: true as const, value: (r as { value: unknown }).value };
                 });
               }
               // standard-schema returns { value } on success or { issues } on failure,
@@ -1234,7 +1230,7 @@ export class CoreToolBuilder extends MastraBase {
                   error: createStandardSchemaIssuesError(result.issues),
                 };
               }
-              return { success: true as const, value };
+              return { success: true as const, value: (result as { value: unknown }).value };
             },
           },
         );
