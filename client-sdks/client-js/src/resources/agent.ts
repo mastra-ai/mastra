@@ -3418,7 +3418,7 @@ export class Agent extends BaseResource {
    *   durable and evented agents, carry an `index`; pass the last received chunk's `index + 1`. An `abort` chunk shares its
    *   index with the `finish` chunk after it, so if the last chunk received was `abort`, pass its `index`. Chunks without an `index`
    *   (such as structured-output `object` chunks) are skipped when choosing the offset. If omitted,
-   *   replays all chunks.
+   *   replays the chunks still cached for the run, or only live chunks if the server's transport can't replay.
    * @returns Promise containing a streaming Response
    *
    * @example
