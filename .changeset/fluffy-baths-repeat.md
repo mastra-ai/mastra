@@ -9,5 +9,4 @@ Added one-click Mastra Gateway setup to Factory. When Factory signs users in wit
 - Members who are not admins of the Mastra organization are told to ask an admin, since only admins can buy credits.
 - New gateway setups start on Claude Opus 5.5.
 - Factory creates no key while the user's Mastra session is on a different organization than the Factory, and asks them to sign in again with the Factory's organization.
-- Removing the Mastra Gateway credential also revokes its key on Mastra.
 - With other auth providers, Factory lists Mastra Gateway as a regular API-key provider.
