@@ -12,9 +12,12 @@ Breadcrumbs look cleaner and more consistent:
 `Combobox` takes a new `chevron` prop for compact triggers. `crumbSwitcherTriggerProps` already sets it, so breadcrumb switchers pick it up:
 
 ```tsx
+const [projectId, setProjectId] = useState('demo-agents');
+
 <Combobox
   options={projects}
   value={projectId}
+  onValueChange={setProjectId}
   variant="ghost"
   size="icon-sm"
   chevron="up-down"
