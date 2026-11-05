@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
@@ -722,11 +723,13 @@ export function KnowledgePageExplorer({
   source,
   selectedPageId,
   onSelect,
-  view,
+  view: requestedView,
   onViewChange,
   toolbarEnd,
   flush = false,
 }: KnowledgePageExplorerProps) {
+  const narrow = useIsMobile(1024);
+  const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
   const selected = source.usePage(selectedPageId);
   const lazyMode = !!source.useTreeLevels;
   // Parents whose next level the graph loads: the focus and its parent (or the root scopes), plus any
@@ -948,11 +951,14 @@ export function KnowledgePageExplorer({
   const closeMention = useCallback(() => setMention(null), []);
   // Below lg the graph shares its slot with the tree. Mount it only when it is showing: a graph mounted
   // into a hidden 0×0 pane has nothing to fit and was left unfitted when the toggle revealed it.
-  const narrow = useIsMobile(1024);
   const graphShown = !narrow || view === 'graph';
   const overlay = !narrow;
   const [treeOpen, setTreeOpen] = useState(true);
-  const [closingPageId, setClosingPageId] = useState<string>();
+  const [drawerLastId, setDrawerLastId] = useState<string>();
+  const viewTabs = useRef<HTMLDivElement>(null);
+  const showPagesButton = useRef<HTMLElement>(null);
+  const hidePagesButton = useRef<HTMLElement>(null);
+  const focusTabOnPageOpen = useRef(false);
   const highlightMentionOf = marked && marked.source === selectedPageId ? marked.target : undefined;
   const showPage = view === 'page' && !!selectedPageId;
   // The pages focused before this one, most recent last, so Back retraces a walk through the levels.
@@ -980,12 +986,16 @@ export function KnowledgePageExplorer({
     onSelect(pageId);
     onViewChange('page');
   };
+  const frameInGraph = (pageId: string) => {
+    onSelect(pageId);
+    if (requestedView !== 'graph') onViewChange('graph');
+  };
   // From the tree: in the graph, a first click frames the page there and a second click on the same
   // page opens it, like clicking a node. Elsewhere it opens. A lazily loaded graph loads around whatever
   // is focused; a host's fixed graph that lacks the page has nothing to frame, so it opens as a page.
   const selectFromTree = (page: KnowledgePagePayload) => {
     if (page.isScope) setFocusScopeId(page.id);
-    if (view === 'graph' && (lazyMode || pagesById.has(page.id)) && page.id !== selectedPageId) onSelect(page.id);
+    if (view === 'graph' && (lazyMode || pagesById.has(page.id)) && page.id !== selectedPageId) frameInGraph(page.id);
     else openPage(page.id);
   };
   // Pages reached from outside the tree (search, links, mentions) clear a focus they fall outside of.
@@ -1003,7 +1013,7 @@ export function KnowledgePageExplorer({
   const selectFromSearch = (pageId: string) => {
     if (view === 'graph' && (lazyMode || pagesById.has(pageId)) && pageId !== selectedPageId) {
       leaveScopeFocusFor(pageId);
-      onSelect(pageId);
+      frameInGraph(pageId);
     } else openAnywhere(pageId);
   };
   const focusScope = focusScopeId
@@ -1026,14 +1036,22 @@ export function KnowledgePageExplorer({
   const tabValue = explorerTab(view, showPage);
   const drawerOpen = overlay && !showPage && !!selectedPageId && !isNotFound(selected.error);
   const drawerPageId = drawerOpen && selectedPageId ? selectedPageId : undefined;
-  const drawerShownId = drawerPageId ?? closingPageId;
+  if (drawerPageId && drawerPageId !== drawerLastId) setDrawerLastId(drawerPageId);
+  const drawerShownId = drawerPageId ?? drawerLastId;
   const graphInsets = {
     left: treeInset(overlay, treeOpen),
     right: drawerPageId ? PAGE_DRAWER_INSET : 0,
   };
-  const clearSelection = () => {
-    if (selectedPageId) setClosingPageId(selectedPageId);
-    onSelect(null);
+  const focusViewTab = () =>
+    viewTabs.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+  const focusPageTabOnMount = (section: HTMLElement | null) => {
+    if (!section || !focusTabOnPageOpen.current) return;
+    focusTabOnPageOpen.current = false;
+    focusViewTab();
+  };
+  const toggleTree = (open: boolean) => {
+    flushSync(() => setTreeOpen(open));
+    (open ? hidePagesButton : showPagesButton).current?.focus();
   };
 
   const treeClosed = overlay && !treeOpen;
@@ -1046,7 +1064,8 @@ export function KnowledgePageExplorer({
           size="icon-sm"
           tooltip="Hide pages"
           aria-label="Hide pages"
-          onClick={() => setTreeOpen(false)}
+          ref={hidePagesButton}
+          onClick={() => toggleTree(false)}
         >
           <PanelLeftClose />
         </Button>
@@ -1105,6 +1124,7 @@ export function KnowledgePageExplorer({
       <ActionRow className={flush ? 'shrink-0 border-b border-surface-rim px-3 py-2' : undefined}>
         <ActionRow.Start>
           <Tabs<KnowledgeExplorerView>
+            ref={viewTabs}
             value={tabValue}
             defaultTab={tabValue}
             onValueChange={next => onViewChange(next)}
@@ -1169,13 +1189,15 @@ export function KnowledgePageExplorer({
             inert={!treeClosed}
             aria-hidden={!treeClosed || undefined}
             className={`absolute top-3 left-3 z-10 shadow-overlay transition-opacity duration-slow ease-out-custom motion-reduce:transition-none ${treeClosed ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-            onClick={() => setTreeOpen(true)}
+            ref={showPagesButton}
+            onClick={() => toggleTree(true)}
           >
             <PanelLeftOpen />
           </Button>
         ) : null}
         {showPage ? (
           <section
+            ref={focusPageTabOnMount}
             aria-label="Selected page"
             style={overlay ? { paddingLeft: graphInsets.left } : undefined}
             className={`min-h-0 min-w-0 flex-1 overflow-auto ${overlay ? `bg-background transition-[padding] duration-slow ease-out-custom motion-reduce:transition-none ${flush ? '' : 'rounded-xl border border-border'}` : 'rounded-lg border border-border bg-card'}`}
@@ -1267,14 +1289,13 @@ export function KnowledgePageExplorer({
                     return lazy.loadMore.get(parentId)?.();
                   }
                   if (isScopeGroup(page)) return setOpenGroups(current => new Set(current).add(page.id));
-                  onSelect(page.id);
                   // Hosts resolve a `?page=` with no view to the page view, so say graph outright.
-                  if (view !== 'graph') onViewChange('graph');
+                  frameInGraph(page.id);
                 }}
                 onOpen={page => openPage(page.id)}
                 onClearSelection={() => {
                   setMention(null);
-                  if (selectedPageId) clearSelection();
+                  if (selectedPageId) onSelect(null);
                 }}
                 onMentionSelect={setMention}
               />
@@ -1284,6 +1305,9 @@ export function KnowledgePageExplorer({
                 inert={!drawerPageId}
                 aria-hidden={!drawerPageId || undefined}
                 data-state={drawerPageId ? 'open' : 'closed'}
+                onTransitionEnd={event => {
+                  if (!drawerPageId && event.target === event.currentTarget) setDrawerLastId(undefined);
+                }}
                 className={`absolute inset-y-2 right-2 z-10 flex w-96 transition-[translate,opacity] duration-slow ease-out-custom motion-reduce:transition-none ${drawerPageId ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0'}`}
               >
                 {drawerShownId ? (
@@ -1298,7 +1322,10 @@ export function KnowledgePageExplorer({
                           size="icon-sm"
                           tooltip="Open page"
                           aria-label="Open page"
-                          onClick={() => openPage(drawerShownId)}
+                          onClick={() => {
+                            focusTabOnPageOpen.current = true;
+                            openPage(drawerShownId);
+                          }}
                         >
                           <SquareArrowOutUpRight />
                         </Button>
@@ -1306,7 +1333,10 @@ export function KnowledgePageExplorer({
                           icon="x"
                           label="Close page details"
                           tooltip="Close"
-                          onClick={clearSelection}
+                          onClick={() => {
+                            focusViewTab();
+                            onSelect(null);
+                          }}
                         />
                       </DataPanel.HeaderActions>
                     </DataPanel.Header>

@@ -637,7 +637,7 @@ function GraphLegend({
       ) : null}
       <ul
         aria-label="Legend"
-        hidden={!open}
+        hidden={collapsible && !open}
         className={`pointer-events-none flex flex-col gap-1 rounded-lg px-2.5 py-2 ${collapsible ? 'bg-card shadow-overlay' : 'rounded-md border border-border bg-card/90 shadow-raised'}`}
       >
         <li className="flex items-center gap-2">

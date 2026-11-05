@@ -66,6 +66,9 @@ function Host({
     <>
       <output data-testid="view">{view}</output>
       <output data-testid="selected">{selected ?? ''}</output>
+      <button type="button" onClick={() => setSelected(null)}>
+        Host clears the selection
+      </button>
       <KnowledgePageExplorer
         graph={graph}
         source={source}
@@ -132,6 +135,51 @@ describe('KnowledgePageExplorer drawers', () => {
     fireEvent.click(within(pageDrawer()).getByRole('button', { name: 'Close page details' }));
     expect(noPageDrawer()).toBe(true);
     expect(screen.getByTestId('selected').textContent).toBe('');
+  });
+
+  it('treats a tree view as the graph on a wide screen, so a tree pick opens the drawer', () => {
+    renderWithProviders(<Host initialView="tree" />);
+    expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(treeDrawer()).getByRole('treeitem', { name: /Customer onboarding/ }));
+    expect(screen.getByTestId('view').textContent).toBe('graph');
+    expect(within(pageDrawer()).getByRole('heading', { name: 'Customer onboarding' })).toBeTruthy();
+  });
+
+  it('fades out the page that was showing, not one closed earlier', () => {
+    renderWithProviders(<Host initial="onboarding" />);
+    fireEvent.click(within(pageDrawer()).getByRole('button', { name: 'Close page details' }));
+    fireEvent.click(within(treeDrawer()).getByRole('treeitem', { name: /Billing and refunds/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Host clears the selection' }));
+    const closing = screen.getByRole('region', { name: 'Page details', hidden: true });
+    expect(within(closing).getByRole('heading', { name: 'Billing and refunds', hidden: true })).toBeTruthy();
+    const drawer = closing.closest('[data-state="closed"]');
+    if (!drawer) throw new Error('no closing drawer');
+    fireEvent.transitionEnd(drawer);
+    expect(screen.queryByRole('region', { name: 'Page details', hidden: true })).toBeNull();
+  });
+
+  it('moves focus to the Graph tab when the drawer closes', () => {
+    renderWithProviders(<Host initial="onboarding" />);
+    const close = within(pageDrawer()).getByRole('button', { name: 'Close page details' });
+    close.focus();
+    fireEvent.click(close);
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Graph' }));
+  });
+
+  it('moves focus to the Page tab when the drawer opens the full page', () => {
+    renderWithProviders(<Host initial="onboarding" />);
+    const open = within(pageDrawer()).getByRole('button', { name: 'Open page' });
+    open.focus();
+    fireEvent.click(open);
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Page' }));
+  });
+
+  it('keeps focus on the tree toggle as the tree hides and shows', () => {
+    renderWithProviders(<Host />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hide pages' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show pages' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show pages' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Hide pages' }));
   });
 
   it('keeps the tree beside the page in the page view', () => {
