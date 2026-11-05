@@ -19,6 +19,7 @@ import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
+import type { AgentStreamPublisher } from '../../streams/publisher';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -45,6 +46,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
+  streamPublisher?: AgentStreamPublisher;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -88,6 +90,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   requireToolApproval,
   toolCallConcurrency,
   eagerToolExecution,
+  streamPublisher,
   resumeContext,
   agentId,
   actor,
@@ -188,6 +191,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     requireToolApproval,
     toolCallConcurrency,
     eagerToolExecution,
+    streamPublisher,
     resumeContext,
     getResumeSnapshot,
     agentId,

@@ -7,7 +7,7 @@ import { fetchMentionRoster } from '../ui/domains/factory/services/members';
 const ROSTER_STALE_TIME = 5 * 60_000;
 
 /** The roster query itself, so a send can await it instead of hoping for a cache hit. */
-export function mentionRosterQuery(baseUrl: string, factoryProjectId: string) {
+export function mentionRosterQueryOptions(baseUrl: string, factoryProjectId: string) {
   return {
     queryKey: queryKeys.factoryMembers(factoryProjectId),
     queryFn: ({ signal }: { signal: AbortSignal }) => fetchMentionRoster(baseUrl, factoryProjectId, signal),
@@ -20,7 +20,7 @@ export function useFactoryMembers(factoryProjectId: string | undefined, { enable
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.factoryMembers(factoryProjectId),
-    queryFn: enabled && factoryProjectId ? mentionRosterQuery(baseUrl, factoryProjectId).queryFn : skipToken,
+    queryFn: enabled && factoryProjectId ? mentionRosterQueryOptions(baseUrl, factoryProjectId).queryFn : skipToken,
     staleTime: ROSTER_STALE_TIME,
   });
 }

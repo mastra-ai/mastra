@@ -992,6 +992,19 @@ describe('Resume with CachingPubSub Event Replay', () => {
       }
       return originalPersist(args);
     });
+    // Storage v2 stores a status in the run's header.
+    for (const method of [
+      'appendWorkflowRunEntries',
+      'writeWorkflowRunCheckpoint',
+      'updateWorkflowRunHeader',
+    ] as const) {
+      const write = (workflows[method] as (args: any) => Promise<unknown>).bind(workflows);
+      (workflows[method] as (args: any) => Promise<unknown>) = async args => {
+        const status = method === 'updateWorkflowRunHeader' ? args.opts?.status : args.header?.status;
+        if (status === 'suspended') await new Promise(resolve => setTimeout(resolve, 300));
+        return write(args);
+      };
+    }
 
     const tool = createTool({
       id: 'approvalTool',
