@@ -53,15 +53,15 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-latest": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-latest": [
+      {
+        "type": "toggle"
       }
     ],
     "glm-latest": [

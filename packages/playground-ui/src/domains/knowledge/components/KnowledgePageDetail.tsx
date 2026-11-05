@@ -1,8 +1,9 @@
-import { ChevronRight, Pin } from 'lucide-react';
+import { Pin } from 'lucide-react';
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
 
+import { scopeTitle } from '../lib/pageAddress';
 import { knowledgePageRefIndex } from '../lib/pageRefs';
 import type { KnowledgePageRefIndex } from '../lib/pageRefs';
 import { parseRecordSegments } from '../lib/recordText';
@@ -14,10 +15,14 @@ import type {
   KnowledgePagePayload,
   KnowledgePinPayload,
 } from '../pageTypes';
+import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
+import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { Badge } from '@/ds/components/Badge';
+import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Metadata } from '@/ds/components/Metadata';
+import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
 import { Txt } from '@/ds/components/Txt';
 
 const ACTIVITY_LABELS: Record<KnowledgeActivityAction, string> = {
@@ -35,42 +40,9 @@ const ACTIVITY_LABELS: Record<KnowledgeActivityAction, string> = {
   'pin-removed': 'Unpinned',
 };
 
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime())
-    ? iso
-    : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-const RELATIVE_STEPS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-  ['second', 60],
-  ['minute', 60],
-  ['hour', 24],
-  ['day', 7],
-  ['week', 4.35],
-  ['month', 12],
-  ['year', Infinity],
-];
-
-/** "3 minutes ago", with the exact time left to a tooltip. */
-function formatAgo(iso: string, now = Date.now()): string {
-  const time = new Date(iso).getTime();
-  if (Number.isNaN(time)) return iso;
-  let value = (time - now) / 1000;
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
-  for (const [unit, size] of RELATIVE_STEPS) {
-    if (Math.abs(value) < size) return format.format(Math.round(value), unit);
-    value /= size;
-  }
-  return formatWhen(iso);
-}
-
-function When({ iso }: { iso: string }) {
-  return (
-    <time dateTime={iso} title={formatWhen(iso)}>
-      {formatAgo(iso)}
-    </time>
-  );
+/** Who wrote something, readably: an importer's run id reads as "Importer". */
+function authorName(author: string): string {
+  return author.startsWith('importer:') ? 'Importer' : author;
 }
 
 /** A small round mark with the author's initial, tinted per author so a page's writers tell apart. */
@@ -122,42 +94,50 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
   if (typeof ref !== 'string' || !links) return <span {...props} />;
   const target = links.index.resolve(ref);
   return target ? (
-    <button
-      type="button"
-      data-testid="knowledge-body-link"
-      title={ref}
-      className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
-      onClick={() => links.onPageClick(target)}
-    >
-      {target.name}
-    </button>
+    <KnowledgeTooltip label={ref}>
+      <button
+        type="button"
+        data-testid="knowledge-body-link"
+        className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
+        onClick={() => links.onPageClick(target)}
+      >
+        {target.name}
+      </button>
+    </KnowledgeTooltip>
   ) : (
-    <span
-      data-testid="knowledge-body-link-unresolved"
-      title="No loaded page has this address"
-      className="rounded border border-dashed border-border px-1 text-muted-foreground"
-    >
-      {ref}
-    </span>
+    <KnowledgeTooltip label="No loaded page has this address">
+      <span
+        data-testid="knowledge-body-link-unresolved"
+        className="rounded border border-dashed border-border px-1 text-muted-foreground"
+      >
+        {ref}
+      </span>
+    </KnowledgeTooltip>
   );
 }
 
 const BODY_REMARK_PLUGINS = [remarkKnowledgeLinks];
 const BODY_COMPONENTS: Components = { span: BodySpan };
 
-function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
+export function KnowledgeDetailSection({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count?: number;
+  children: ReactNode;
+}) {
   return (
-    <section aria-label={label} className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 border-b border-border pb-2">
-        <Txt as="h3" variant="eyebrow" tone="muted" className="uppercase">
-          {label}
-        </Txt>
-        {count !== undefined ? (
-          <Badge variant="neutral" size="xs">
+    <section aria-label={label} className="flex flex-col gap-2">
+      <Txt as="h3" variant="label" tone="ink" className="flex items-center gap-1.5">
+        {label}
+        {count ? (
+          <Txt as="span" variant="label" tone="muted" className="tabular-nums">
             {count}
-          </Badge>
+          </Txt>
         ) : null}
-      </div>
+      </Txt>
       {children}
     </section>
   );
@@ -232,10 +212,10 @@ export function KnowledgeNoteItem({
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <Txt as="span" variant="label" tone="ink">
-            {note.provenance.author}
+            {authorName(note.provenance.author)}
           </Txt>
           <Txt as="span" variant="caption" tone="muted">
-            <When iso={note.updatedAt} />
+            <RelativeTimestamp value={note.updatedAt} />
           </Txt>
           {onPage ? (
             <Txt as="span" variant="caption" tone="muted">
@@ -337,7 +317,11 @@ export function KnowledgePageDetail({
   const bodyLinks = useMemo(() => ({ index: refIndex, onPageClick }), [refIndex, onPageClick]);
 
   return (
-    <article aria-label={page.name} className="@container flex min-h-0 flex-col overflow-y-auto">
+    <article
+      key={page.id}
+      aria-label={page.name}
+      className="@container flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain"
+    >
       <header
         className={
           compact
@@ -345,86 +329,56 @@ export function KnowledgePageDetail({
             : 'flex flex-col gap-3 border-b border-border bg-fill-subtle px-6 pt-5 pb-4'
         }
       >
-        {ancestors.length > 0 ? (
-          <nav aria-label="Breadcrumb">
-            <ol className="flex flex-wrap items-center gap-1">
-              {ancestors.map(ancestor => (
-                <li key={ancestor.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="rounded px-1 py-0.5 text-caption text-muted-foreground hover:bg-fill hover:text-foreground"
-                    onClick={() => onPageClick(ancestor)}
-                  >
-                    {ancestor.name}
-                  </button>
-                  <ChevronRight size={12} className="text-muted-foreground" aria-hidden />
-                </li>
-              ))}
-            </ol>
-          </nav>
-        ) : null}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={page.isScope ? 'info' : 'neutral'} size="sm">
-              {kind}
-            </Badge>
-            {page.isScope ? null : (
-              <Txt as="span" variant="caption" tone="muted">
-                in {scope?.address ?? scope?.name ?? page.scopeId}
-              </Txt>
-            )}
-            {pin ? (
-              <Badge variant="warning" size="sm" icon={<Pin size={10} aria-hidden />}>
-                {pin.audience.length > 0 ? `Pinned for ${pin.audience.join(', ')}` : 'Pinned'}
-              </Badge>
-            ) : null}
-          </div>
+        <Breadcrumb label="Breadcrumb" className="ml-[-.9em] min-w-0" listClassName="overflow-hidden">
+          {ancestors.map(ancestor => (
+            <Crumb key={ancestor.id} as="button" onClick={() => onPageClick(ancestor)}>
+              {scopeTitle(ancestor)}
+            </Crumb>
+          ))}
+          <Crumb as="span" isCurrent>
+            {scopeTitle(page)}
+          </Crumb>
+        </Breadcrumb>
+        <div className="flex flex-col gap-2">
           {compact ? null : (
-            <Txt as="h2" variant="title" className="break-words">
-              {page.name}
-            </Txt>
+            <div className="flex min-w-0 items-center gap-2">
+              <KnowledgeSourceIcon page={page} className="size-icon-lg" />
+              <KnowledgeTooltip label={(page.isScope ? page.address : path) ?? page.name}>
+                <Txt as="h2" variant="title" className="min-w-0 break-words" data-testid="knowledge-page-title">
+                  {scopeTitle(page)}
+                </Txt>
+              </KnowledgeTooltip>
+              <Badge variant="neutral" size="sm" className="shrink-0 tabular-nums">
+                v{page.version}
+              </Badge>
+            </div>
           )}
           {page.description ? (
             <Txt variant="body" tone="muted">
               {page.description}
             </Txt>
           ) : null}
-        </div>
-        <dl className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {page.isScope && page.address ? (
-            <div className="flex items-center gap-1.5">
-              <dt className="sr-only">Address</dt>
-              <dd>
-                <Txt as="span" variant="caption" tone="muted" font="mono">
-                  {page.address}
-                </Txt>
-              </dd>
-            </div>
-          ) : null}
-          {path && !page.isScope ? (
-            <div className="flex items-center gap-1.5">
-              <dt className="sr-only">Path</dt>
-              <dd>
-                <Txt as="span" variant="caption" tone="muted" font="mono" data-testid="knowledge-page-path">
-                  {path}
-                </Txt>
-              </dd>
-            </div>
-          ) : null}
-          <div className="flex items-center gap-1.5">
-            <dt className="sr-only">Version</dt>
-            <dd>
-              <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
-                <Metadata>
-                  <Metadata.Item>Version {page.version}</Metadata.Item>
-                  <Metadata.Item>
-                    Updated <When iso={page.updatedAt} /> by {page.updatedBy.author}
-                  </Metadata.Item>
-                </Metadata>
-              </Txt>
-            </dd>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Badge variant={page.isScope ? 'info' : 'neutral'} size="sm">
+              {kind}
+            </Badge>
+            {pin ? (
+              <Badge variant="warning" size="sm" icon={<Pin size={10} aria-hidden />}>
+                {pin.audience.length > 0 ? `Pinned for ${pin.audience.join(', ')}` : 'Pinned'}
+              </Badge>
+            ) : null}
+            <Txt as="span" variant="caption" tone="muted" data-testid="knowledge-page-version">
+              <Metadata>
+                {page.isScope ? null : <Metadata.Item>In {scope ? scopeTitle(scope) : page.scopeId}</Metadata.Item>}
+                {compact ? <Metadata.Item>v{page.version}</Metadata.Item> : null}
+                <Metadata.Item>
+                  Updated{' '}
+                  <RelativeTimestamp value={page.updatedAt} label={`Updated by ${authorName(page.updatedBy.author)}`} />
+                </Metadata.Item>
+              </Metadata>
+            </Txt>
           </div>
-        </dl>
+        </div>
       </header>
 
       <div className={`flex flex-col gap-8 ${compact ? 'p-4' : 'p-6'} @4xl:flex-row`}>
@@ -438,17 +392,13 @@ export function KnowledgePageDetail({
               </BodyLinks.Provider>
             </div>
           ) : (
-            <Txt variant="body" tone="muted" className="italic">
+            <Txt variant="body" tone="muted">
               This {page.isScope ? 'scope' : 'page'} has no body yet.
             </Txt>
           )}
 
-          <Section label="Notes" count={notesMore ? undefined : notes.length}>
-            {notes.length === 0 ? (
-              <Txt variant="body" tone="muted">
-                No notes on this page.
-              </Txt>
-            ) : (
+          {notes.length > 0 || notesMore ? (
+            <KnowledgeDetailSection label="Notes" count={notesMore ? undefined : notes.length}>
               <ul className="flex flex-col gap-2">
                 {notes.map(note => {
                   const highlighted = !!highlightMentionOf && note.mentions.includes(highlightMentionOf);
@@ -472,16 +422,16 @@ export function KnowledgePageDetail({
                   );
                 })}
               </ul>
-            )}
-            {notesMore}
-          </Section>
+              {notesMore}
+            </KnowledgeDetailSection>
+          ) : null}
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-8 @4xl:w-72 @4xl:shrink-0">
-          {childPages ? <Section label="Pages">{childPages}</Section> : null}
+        <aside className="flex min-w-0 flex-col divide-y divide-border border-t border-border *:py-6 *:last:pb-0 @4xl:w-72 @4xl:shrink-0 @4xl:border-t-0 @4xl:border-l @4xl:pl-8 @4xl:*:first:pt-0">
+          {childPages}
 
           {mentionedBy.length > 0 ? (
-            <Section label="Mentioned in" count={mentionedBy.length}>
+            <KnowledgeDetailSection label="Mentioned in" count={mentionedBy.length}>
               <ul className="flex flex-col gap-2">
                 {mentionedBy.map(note => (
                   <KnowledgeNoteItem
@@ -494,11 +444,11 @@ export function KnowledgePageDetail({
                   />
                 ))}
               </ul>
-            </Section>
+            </KnowledgeDetailSection>
           ) : null}
 
           {activity && activity.length > 0 ? (
-            <Section label="Activity">
+            <KnowledgeDetailSection label="Activity">
               <ol className="relative flex flex-col gap-3 border-l border-border pl-4">
                 {activity.map(event => (
                   <li key={event.id} className="relative flex flex-col">
@@ -509,18 +459,22 @@ export function KnowledgePageDetail({
                     <Txt as="span" variant="body-sm" tone="ink">
                       {ACTIVITY_LABELS[event.action] ?? event.action}
                     </Txt>
-                    <Txt as="span" variant="caption" tone="muted">
-                      <Metadata>
-                        <Metadata.Item>{event.provenance.author}</Metadata.Item>
-                        <Metadata.Item>
-                          <When iso={event.createdAt} />
+                    <Txt as="span" variant="caption" tone="muted" className="min-w-0">
+                      <Metadata singleLine>
+                        <Metadata.Item className="min-w-0">
+                          <KnowledgeTooltip label={event.provenance.author}>
+                            <span className="truncate">{authorName(event.provenance.author)}</span>
+                          </KnowledgeTooltip>
+                        </Metadata.Item>
+                        <Metadata.Item className="shrink-0">
+                          <RelativeTimestamp value={event.createdAt} />
                         </Metadata.Item>
                       </Metadata>
                     </Txt>
                   </li>
                 ))}
               </ol>
-            </Section>
+            </KnowledgeDetailSection>
           ) : null}
         </aside>
       </div>

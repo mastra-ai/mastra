@@ -17,13 +17,13 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "gemma4-26b": [
+    "mistral4-119b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "mistral4-119b": [
+    "gemma4-26b": [
       {
         "type": "effort",
         "values": ["none", "high"]

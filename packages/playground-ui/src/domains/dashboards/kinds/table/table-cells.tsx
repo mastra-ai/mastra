@@ -4,7 +4,6 @@ import { BreakdownNotPriced } from '../../../metrics/components/breakdown/breakd
 import { BreakdownEntityMark, BreakdownModelMark } from '../../../metrics/components/breakdown/breakdown-row-mark';
 import { BreakdownText } from '../../../metrics/components/breakdown/breakdown-text';
 import { BreakdownTrendText } from '../../../metrics/components/breakdown/breakdown-trend-text';
-import { useMetricsScope } from '../../../metrics/hooks/use-metrics-scope';
 import { DASH, changeTrend, formatChange, formatValue } from '../../lib/table';
 import type { Change, TableColumnOptions, TableRow, ValueColumn } from '../../lib/table';
 
@@ -18,8 +17,18 @@ function RowMark({ mark, row }: { mark: NameOptions['mark']; row: TableRow }) {
 }
 
 /** The row's mark and name; with a provider mark, a model reads `openai › gpt-5-mini`. */
-export function TableNameCell({ options, row }: { options: NameOptions; row: TableRow }) {
-  const { projectLabel } = useMetricsScope();
+/** Display name for a project id, when the page spans several projects. */
+export type ProjectLabel = ((projectId: string) => string) | undefined;
+
+export function TableNameCell({
+  options,
+  row,
+  projectLabel,
+}: {
+  options: NameOptions;
+  row: TableRow;
+  projectLabel: ProjectLabel;
+}) {
   const title =
     options.as === 'project' ? (projectLabel?.(row.name) ?? row.name) : row.name || (options.unnamed ?? 'Unnamed');
   const provider = options.mark && 'providerDimension' in options.mark ? options.mark.providerDimension : undefined;
@@ -34,8 +43,17 @@ export function TableNameCell({ options, row }: { options: NameOptions; row: Tab
   );
 }
 
-export function TableDimensionCell({ id, options, row }: { id: string; options: DimensionOptions; row: TableRow }) {
-  const { projectLabel } = useMetricsScope();
+export function TableDimensionCell({
+  id,
+  options,
+  row,
+  projectLabel,
+}: {
+  id: string;
+  options: DimensionOptions;
+  row: TableRow;
+  projectLabel: ProjectLabel;
+}) {
   const value = options.query === undefined ? row.dimensions[options.dimension] : row.lookups[id];
   if (!value) return <BreakdownText text={DASH} />;
   return <BreakdownText text={options.as === 'project' ? (projectLabel?.(value) ?? value) : value} />;

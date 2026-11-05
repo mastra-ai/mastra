@@ -39,12 +39,6 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "hf:zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
     "hf:zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
@@ -63,28 +57,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "hf:openai/gpt-oss-120b": [
+    "hf:zai-org/GLM-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
-    "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+    "hf:MiniMaxAI/MiniMax-M3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "hf:deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "hf:Qwen/Qwen3.6-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "hf:moonshotai/Kimi-K3": [
@@ -99,10 +81,28 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "hf:MiniMaxAI/MiniMax-M3": [
+    "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "hf:deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "hf:openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "hf:Qwen/Qwen3.6-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ]
   }

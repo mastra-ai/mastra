@@ -38,14 +38,18 @@ async function extractError(res: Response): Promise<string> {
 }
 
 export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiClient {
-  const doFetch = fetchImpl ?? globalThis.fetch;
-
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    // Read the global fetch per request, not once: the app builds its client at
+    // startup, before anything that wraps fetch (a test's network mock) installs.
+    const doFetch = fetchImpl ?? globalThis.fetch;
     // `credentials: 'include'` so cross-site session cookies are sent when the
     // SPA is hosted on a different origin than the API (platform deploy). It is
     // a no-op for same-origin local dev.
     const init: RequestInit = { method, credentials: 'include' };
-    if (body !== undefined) {
+    if (body instanceof Blob) {
+      init.headers = { 'Content-Type': body.type };
+      init.body = body;
+    } else if (body !== undefined) {
       init.headers = { 'Content-Type': 'application/json' };
       init.body = JSON.stringify(body);
     }
