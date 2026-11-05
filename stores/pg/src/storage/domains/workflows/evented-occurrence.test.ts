@@ -1128,6 +1128,45 @@ describe('Postgres evented occurrence replay', () => {
     }
   }, 20_000);
 
+  it('passes the live plain step result on after saving it before step.end', async () => {
+    const driver = new RedeliveryDriver();
+    const at = new Date('2026-01-02T03:04:05.000Z');
+    const seen: unknown[] = [];
+    const stamp = createStep({
+      id: 'stamp',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ at: z.date() }),
+      execute: async () => ({ at }),
+    });
+    const read = createStep({
+      id: 'read',
+      inputSchema: z.object({ at: z.date() }),
+      outputSchema: z.object({ isDate: z.boolean() }),
+      execute: async ({ inputData }) => {
+        seen.push(inputData.at);
+        return { isDate: inputData.at instanceof Date };
+      },
+    });
+    const workflow = createWorkflow({
+      id: `plain-live-result-${randomUUID()}`,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ isDate: z.boolean() }),
+    })
+      .then(stamp)
+      .then(read)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      expect(await run.start({ inputData: {} })).toMatchObject({ status: 'success', result: { isDate: true } });
+      expect(seen).toEqual([at]);
+    } finally {
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 20_000);
+
   it('reuses a saved loop body result when the next publish was lost', async () => {
     const driver = new RedeliveryDriver();
     const schema = z.object({ n: z.number() });

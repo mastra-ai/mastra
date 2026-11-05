@@ -33,6 +33,7 @@ import {
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
+import { deepEqual } from '../../../utils/deep-equal';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -156,6 +157,22 @@ type ForeachStepResult = {
   startedAt?: number;
   [key: string]: unknown;
 };
+
+/** Whether a live step result has the same output as its stored (serialized) copy. */
+function isSameAsStored(
+  live: StepResult<any, any, any, any>,
+  stored: StepResult<any, any, any, any> | undefined,
+): boolean {
+  const output = (live as { output?: unknown }).output;
+  try {
+    return deepEqual(
+      output === undefined ? undefined : JSON.parse(JSON.stringify(output)),
+      (stored as { output?: unknown } | undefined)?.output,
+    );
+  } catch {
+    return false;
+  }
+}
 
 function isResumedRunningRecord(result: unknown): boolean {
   return (
@@ -4280,10 +4297,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
-        // Only the committed winner's values may drive a reclaimed continuation.
+        // Only the committed winner's values may drive a reclaimed continuation. When this
+        // event carries that same result (step.run saved it before publishing), keep the
+        // live copy so values JSON can't hold, such as Dates, reach the next step intact.
         newStepResults = error.storedSnapshot?.context;
-        storedResult = error.storedResult!;
-        prevResult = storedResult;
+        if (!isSameAsStored(prevResult, error.storedResult)) {
+          storedResult = error.storedResult!;
+          prevResult = storedResult;
+        }
         requestContext = restoreLiveRequestContext(error.storedRequestContext, requestContext);
         currentState = error.storedSnapshot?.context.__state ?? currentState;
       }
