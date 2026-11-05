@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../../events';
+import { Mastra } from '../../../../mastra';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -112,50 +113,61 @@ describeForAllEngines('AIMock: agent run topic isolation', engine => {
     15000,
   );
 
-  test('aborting one agent does not cancel a sibling using the same run id', async () => {
-    const llm = getMock();
-    llm.on(
-      { endpoint: 'chat', hasToolResult: false },
-      {
-        toolCalls: [{ id: 'wait-call', name: 'wait', arguments: {} }],
-      },
-    );
-    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Sibling completed.' });
-    const pubsub = new EventEmitterPubSub();
-    const ga = gate();
-    const gb = gate();
-    const a = await createSharedAgent(llm, { engine, pubsub, streams: true, tools: { wait: ga.tool } });
-    const b = await createSharedAgent(llm, { engine, pubsub, streams: true, tools: { wait: gb.tool } });
-    const runId = 'same-abort-conversation';
-    const collect = async (result: any) => {
-      let text = '';
-      for await (const chunk of result.fullStream) {
-        if (chunk.type === 'text-delta') text += chunk.payload.text;
+  test.each(['first', 'second'] as const)(
+    'aborting the %s agent leaves its same-run-id sibling running',
+    async target => {
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        {
+          toolCalls: [{ id: 'wait-call', name: 'wait', arguments: {} }],
+        },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Sibling completed.' });
+      const pubsub = new EventEmitterPubSub();
+      const ga = gate();
+      const gb = gate();
+      const a = await createSharedAgent(llm, { engine, pubsub, streams: true, tools: { wait: ga.tool } });
+      const b = await createSharedAgent(llm, { engine, pubsub, streams: true, tools: { wait: gb.tool } });
+      const sharedMastra = new Mastra({ agents: { a: a.agent, b: b.agent }, pubsub, logger: false });
+      const runId = 'same-abort-conversation';
+      const collect = async (result: any) => {
+        let text = '';
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'text-delta') text += chunk.payload.text;
+        }
+        return text;
+      };
+      const runningA = a.agent.stream('Agent A: Wait.', { runId }).then(collect);
+      let runningB: Promise<string> | undefined;
+      try {
+        await Promise.race([ga.ready, runningA]);
+        runningB = b.agent.stream('Agent B: Wait.', { runId }).then(collect);
+        await Promise.race([gb.ready, runningB]);
+        const owner = target === 'first' ? a : b;
+        const ownerGate = target === 'first' ? ga : gb;
+        const siblingGate = target === 'first' ? gb : ga;
+        const ownerRun = target === 'first' ? runningA : runningB;
+        const siblingRun = target === 'first' ? runningB : runningA;
+        owner.agent.abortRunStream(runId);
+        await expect.poll(() => ownerGate.aborted).toBe(true);
+        expect(siblingGate.aborted).toBe(false);
+        ownerGate.release();
+        await ownerRun;
+        expect(siblingGate.aborted).toBe(false);
+        siblingGate.release();
+        expect(await siblingRun).toBe('Sibling completed.');
+      } finally {
+        ga.release();
+        gb.release();
+        await Promise.allSettled([runningA, runningB]);
+        if (engine !== 'inngest') {
+          await sharedMastra.shutdown({ drainTimeout: 1000 });
+          await a.mastra.shutdown({ drainTimeout: 1000 });
+          await b.mastra.shutdown({ drainTimeout: 1000 });
+        }
       }
-      return text;
-    };
-    const runningA = a.agent.stream('Agent A: Wait.', { runId }).then(collect);
-    let runningB: Promise<string> | undefined;
-    try {
-      await Promise.race([ga.ready, runningA]);
-      runningB = b.agent.stream('Agent B: Wait.', { runId }).then(collect);
-      await Promise.race([gb.ready, runningB]);
-      a.agent.abortRunStream(runId);
-      await expect.poll(() => ga.aborted).toBe(true);
-      expect(gb.aborted).toBe(false);
-      ga.release();
-      await runningA;
-      expect(gb.aborted).toBe(false);
-      gb.release();
-      expect(await runningB).toBe('Sibling completed.');
-    } finally {
-      ga.release();
-      gb.release();
-      await Promise.allSettled([runningA, runningB]);
-      if (engine !== 'inngest') {
-        await a.mastra.shutdown({ drainTimeout: 1000 });
-        await b.mastra.shutdown({ drainTimeout: 1000 });
-      }
-    }
-  }, 15000);
+    },
+    15000,
+  );
 });
