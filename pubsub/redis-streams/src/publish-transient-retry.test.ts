@@ -37,6 +37,9 @@ describe('publish retries when the connection drops mid-XADD', () => {
 
       expect(proxy.dropped).toBe(true);
       await waitFor(async () => received.length > 0, 10_000);
+      if (mode === 'after') {
+        await waitFor(async () => received.length >= 2, 10_000);
+      }
       // A lost reply means the retry appends a second copy of the same event id.
       const ids = new Set(received.map(event => event.id));
       expect(ids.size).toBe(1);
