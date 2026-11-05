@@ -1,17 +1,13 @@
 /**
- * Whether `uri` is an RFC 6570 expansion of `template`, used to resolve
- * `resources/read` against advertised resource templates.
+ * Whether `uri` is an RFC 6570 expansion of `template`. Decides membership only,
+ * without extracting variables.
  *
- * The SDK's `UriTemplate.match` compiles to a backtracking regex: with a few
- * adjacent variables (`x://{a}-{b}-{c}-{d}`) a 2 KB client URI takes minutes.
- * This walks the URI once per template segment instead, so the cost stays
- * linear in the URI length. Only membership is decided; variable values are
- * not extracted.
+ * The SDK's `UriTemplate.match` is a backtracking regex that takes minutes on a
+ * few KB of client URI when variables are adjacent (`x://{a}-{b}-{c}-{d}`); this
+ * walks the URI once per template segment instead.
  *
- * Variables with a prefix operator (`{.x}`, `{/x}`, `{#x}`, `{;x}`, `{?x}`,
- * `{&x}`) may be omitted, as an undefined variable expands to nothing. Plain
- * `{x}` and `{+x}` must be non-empty. `{x}` stops at `/`, `?` and `#`, which
- * a real expansion percent-encodes.
+ * Plain `{x}` and `{+x}` must be non-empty, since an empty path segment never
+ * names a resource; `{x}` stops at `/`, `?` and `#`, which an expansion encodes.
  */
 export function matchesUriTemplate(template: string, uri: string): boolean {
   return advance(uri, new Set([0]), parse(template)).has(uri.length);
@@ -20,12 +16,14 @@ export function matchesUriTemplate(template: string, uri: string): boolean {
 type Segment =
   | { kind: 'literal'; text: string }
   | { kind: 'oneOf'; chars: string }
-  | { kind: 'run'; excluded: string }
-  | { kind: 'optional'; segments: Segment[] };
+  | { kind: 'run'; excluded: string; min: 0 | 1 }
+  | { kind: 'optional'; segments: Segment[] }
+  | { kind: 'repeat'; segments: Segment[] };
 
 const literal = (text: string): Segment => ({ kind: 'literal', text });
-const run = (excluded: string): Segment => ({ kind: 'run', excluded });
+const run = (excluded: string, min: 0 | 1 = 0): Segment => ({ kind: 'run', excluded, min });
 const optional = (...segments: Segment[]): Segment => ({ kind: 'optional', segments });
+const repeat = (...segments: Segment[]): Segment => ({ kind: 'repeat', segments });
 
 function parse(template: string): Segment[] {
   const segments: Segment[] = [];
@@ -46,25 +44,31 @@ function parse(template: string): Segment[] {
 
 function expression(body: string): Segment[] {
   const operator = '+#./;?&'.includes(body[0] ?? '') ? body[0]! : '';
-  const specs = body.slice(operator.length).split(',');
-  const exploded = specs.some(spec => spec.includes('*'));
-  const names = specs.map(spec => spec.replace(/[*]|:\d*$/g, '').trim()).filter(Boolean);
+  const specs = body
+    .slice(operator.length)
+    .split(',')
+    .map(spec => ({ name: spec.replace(/[*]|:\d*$/g, '').trim(), exploded: spec.includes('*') }))
+    .filter(spec => spec.name);
   switch (operator) {
     case '':
-      return [run('/?#')];
+      return [run('/?#', 1)];
     case '+':
-      return [run('')];
+      return [run('', 1)];
     case '#':
       return [optional(literal('#'), run(''))];
     case '/':
-      return exploded ? [optional(literal('/'), run('?#'))] : names.map(() => optional(literal('/'), run('/?#')));
+      return specs.map(({ exploded }) =>
+        exploded ? repeat(literal('/'), run('/?#')) : optional(literal('/'), run('/?#')),
+      );
     case '.':
-      return names.map(() => optional(literal('.'), run('/?#')));
+      return specs.map(() => optional(literal('.'), run('/?#')));
     case ';':
-      return names.map(name => optional(literal(`;${name}`), optional(literal('='), run(';/?#'))));
-    default:
+      return specs.map(({ name }) => optional(literal(`;${name}`), optional(literal('='), run(';/?#'))));
+    default: {
       // `?` and `&`: the first pair present opens the query, later ones join it.
-      return names.map(name => optional({ kind: 'oneOf', chars: '?&' }, literal(`${name}=`), run('&#')));
+      const pair = (name: string) => [{ kind: 'oneOf', chars: '?&' } as const, literal(`${name}=`), run('&#')];
+      return specs.map(({ name, exploded }) => (exploded ? repeat(...pair(name)) : optional(...pair(name))));
+    }
   }
 }
 
@@ -88,13 +92,13 @@ function step(uri: string, positions: Set<number>, segment: Segment): Set<number
       for (const p of positions) if (p < uri.length && segment.chars.includes(uri[p]!)) next.add(p + 1);
       return next;
     case 'run': {
-      // One pass: `inRun` is true while some start offset reaches `i` through allowed characters.
-      let start = uri.length;
-      for (const p of positions) start = Math.min(start, p);
-      let inRun = false;
-      for (let i = start; i < uri.length; i++) {
-        inRun = (inRun || positions.has(i)) && !segment.excluded.includes(uri[i]!);
-        if (inRun) next.add(i + 1);
+      // A run stops at the first excluded character, so a start inside an earlier run reaches nothing new.
+      let end = 0;
+      for (const p of [...positions].sort((a, b) => a - b)) {
+        if (segment.min === 0) next.add(p);
+        if (p < end) continue;
+        end = p;
+        while (end < uri.length && !segment.excluded.includes(uri[end]!)) next.add(++end);
       }
       return next;
     }
@@ -102,5 +106,15 @@ function step(uri: string, positions: Set<number>, segment: Segment): Set<number
       for (const p of positions) next.add(p);
       for (const p of advance(uri, positions, segment.segments)) next.add(p);
       return next;
+    case 'repeat': {
+      for (const p of positions) next.add(p);
+      let frontier = positions;
+      while (frontier.size > 0) {
+        const reached = [...advance(uri, frontier, segment.segments)].filter(p => !next.has(p));
+        for (const p of reached) next.add(p);
+        frontier = new Set(reached);
+      }
+      return next;
+    }
   }
 }

@@ -12,7 +12,10 @@ describe('matchesUriTemplate', () => {
     ['file://{name}.{ext}', 'file://my.report.pdf', true],
     ['users://{id}{/sub}', 'users://1/profile', true],
     ['users://{id}{/sub}', 'users://1', true],
+    ['users://{id}{/sub}', 'users://1/', true],
     ['repo://{owner}{/path*}', 'repo://me/src/index.ts', true],
+    ['file://data{?tags*}', 'file://data?tags=a&tags=b', true],
+    ['file://data/{id}{?format}', 'file://data/123?format=', true],
     ['file://data/{id}{?format,lang}', 'file://data/123', true],
     ['file://data/{id}{?format,lang}', 'file://data/123?format=json&lang=en', true],
     ['file://data/{id}{?format,lang}', 'file://data/123?lang=en', true],
@@ -26,5 +29,6 @@ describe('matchesUriTemplate', () => {
   // A backtracking regex takes minutes on this input; the test timeout catches a regression.
   it('rejects a long non-matching URI against adjacent variables in linear time', () => {
     expect(matchesUriTemplate('x://{a}-{b}-{c}-{d}', `x://${'a-'.repeat(50_000)}/`)).toBe(false);
+    expect(matchesUriTemplate('x://d{?t*}', `x://d?${'t=a&'.repeat(50_000)}/`)).toBe(false);
   });
 });
