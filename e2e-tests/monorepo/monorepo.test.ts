@@ -328,11 +328,12 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
         ],
         { cwd: appDir },
       );
-      const { reads, routes } = JSON.parse(stdout.trim().split('\n').at(-1)!);
-      const modules = reads.filter((file: string) => !file.endsWith('package.json'));
+      const { reads, routes }: { reads: string[]; routes: string[] } = JSON.parse(stdout.trim().split('\n').at(-1)!);
+      const modules = reads.filter(file => !file.endsWith('package.json'));
+      const routeFile = join('src', 'mastra', 'api', 'route', 'test.ts');
 
-      expect(modules.some((file: string) => file.endsWith(join('src', 'mastra', 'api', 'route', 'test.ts')))).toBe(true);
-      expect(modules.filter((file: string) => file.includes('node_modules'))).toEqual([]);
+      expect(modules.some(file => file.endsWith(routeFile))).toBe(true);
+      expect(modules.filter(file => file.includes('node_modules'))).toEqual([]);
       expect(routes).toEqual(expect.arrayContaining(['/test', '/transitive-workspace']));
     } finally {
       await rm(outputDir, { recursive: true, force: true });

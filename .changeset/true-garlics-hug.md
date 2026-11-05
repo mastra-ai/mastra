@@ -2,4 +2,4 @@
 '@mastra/deployer': patch
 ---
 
-Fixed `mastra build` and `mastra dev` running out of memory on large apps since 1.79.0. Reading the `deployer`, `bundler` and `server` options from the Mastra config no longer loads every installed package those options import. Raw TypeScript workspace packages are still supported. Fixes [#28645](https://github.com/mastra-ai/mastra/issues/28645).
+Reduced the memory `mastra build` and `mastra dev` use to read the `deployer`, `bundler` and `server` options from the Mastra config. Since 1.79.0 this step loaded every installed package those options import, which could run large apps out of memory ([#28645](https://github.com/mastra-ai/mastra/issues/28645)). Raw TypeScript workspace packages are still supported.
