@@ -316,6 +316,59 @@ describeParity('client-tools parity', target => {
     }
   });
 
+  // The user sends something else while the client tool is still pending, and the client answers
+  // afterwards. Only the latest stored message is matched against the client's answer, so the
+  // answer is saved as a new message: it must still reach the model and be kept, and the message
+  // stored in between is left as it was.
+  // Technical: answeringStoredCalls only compares against the newest stored row, so this locks in
+  // the fallback (outcomes keep their own id) rather than a re-key onto an unrelated message.
+  it('a client answering a call that is no longer the latest stored message keeps its result', async () => {
+    const memories = new Map<ParityEngine, MockMemory>();
+    const results = await expectParity(target, {
+      model: { respond },
+      buildAgent: ({ engine, model }) => {
+        const memory = new MockMemory();
+        memories.set(engine, memory);
+        return new Agent({ id: 't33-agent', name: 'T33 Agent', instructions: 'Follow the script.', model, memory });
+      },
+      run: async handle => {
+        const first = await handle.turn('Go.', { ...TURN_OPTIONS, clientTools: CLIENT_TOOLS });
+
+        await memories.get(handle.engine)!.saveMessages({
+          messages: [
+            {
+              id: 'later-note',
+              role: 'user',
+              createdAt: new Date(Date.now() + 1_000),
+              threadId: THREAD,
+              resourceId: RESOURCE,
+              content: { format: 2, parts: [{ type: 'text', text: 'Make it quick.' }] },
+            },
+          ],
+        });
+
+        await handle.turn([continuations['an assistant message'](first.toolCalls[0]!)], {
+          ...TURN_OPTIONS,
+          clientTools: CLIENT_TOOLS,
+        });
+      },
+    });
+
+    for (const engine of ['plain', target] as const) {
+      expect(results[engine]!.turns[1]!.streamedText).toBe('client answered');
+
+      const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
+      const invocations = toolParts(messages).map(part => part.toolInvocation as Record<string, unknown>);
+      expect(invocations.map(({ state, toolCallId }) => ({ state, toolCallId }))).toEqual([
+        { state: 'call', toolCallId: 'parity-call-1' },
+        { state: 'result', toolCallId: 'parity-call-1' },
+      ]);
+      expect(invocations.at(-1)).toMatchObject({ result: { colour: 'teal' } });
+      const note = messages.find(message => message.id === 'later-note');
+      expect(note?.content.parts).toEqual([{ type: 'text', text: 'Make it quick.' }]);
+    }
+  });
+
   it('generate: each engine returns the client tool call with reason tool-calls', async () => {
     const records = [];
     for (const engine of ['plain', target] as const) records.push(await driveGenerate(engine));

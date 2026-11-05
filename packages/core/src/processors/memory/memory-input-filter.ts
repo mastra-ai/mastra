@@ -92,6 +92,11 @@ import type { MemoryStorage } from '../../storage';
  * A pending client call can only be completed by the client, so this can't mistake a duplicated
  * server result for a new one. A message sealed by observational memory takes nothing more, so its
  * outcomes keep their own id and are saved as a new message.
+ *
+ * Only the latest stored message is checked. That covers `@mastra/client-js`, which answers a call
+ * before anything else is added to the thread. If newer messages were stored after the pending
+ * call, the outcomes keep their own id: the result is still saved and reaches the model, but the
+ * older message keeps its pending copy of the call.
  */
 function answeringStoredCalls(outcomes: MastraDBMessage, latestStored: MastraDBMessage): MastraDBMessage {
   if (
