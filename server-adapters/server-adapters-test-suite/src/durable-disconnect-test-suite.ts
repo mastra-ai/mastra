@@ -278,10 +278,12 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             expect(await collectPublicFrames(response)).toEqual(expected);
           }
           expect(expected).toHaveLength(terminal === 'error' ? 1 : 2);
-          // The terminal log entry is index 2. Its frames (abort + finish for an abort) all
-          // carry that index, so a client cut between abort and finish resumes at 2 and gets
-          // both again, and resuming past the entry returns nothing and closes (COR-1506).
-          expect(expected.map(frame => (frame as { index?: number }).index)).toEqual(expected.map(() => 2));
+          // The terminal log entry is index 2. Only its finish frame carries that index: the
+          // abort frame synthesized before it has none, so the last indexed frame is always
+          // the finish, and resuming past the entry returns nothing and closes (COR-1506).
+          expect(expected.map(frame => (frame as { index?: number }).index)).toEqual(
+            terminal === 'error' ? [2] : [undefined, 2],
+          );
           const pastEnd = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },

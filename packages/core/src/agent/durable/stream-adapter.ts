@@ -746,7 +746,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               type: 'abort',
               runId,
               from: ChunkFrom.AGENT,
-              ...logIndex,
               payload: {},
             } as ChunkType<OUTPUT>);
           }
@@ -895,7 +894,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             type: 'abort',
             runId,
             from: ChunkFrom.AGENT,
-            ...logIndex,
             payload: {},
           } as ChunkType<OUTPUT>);
           const finishData: AgentFinishEventData = {

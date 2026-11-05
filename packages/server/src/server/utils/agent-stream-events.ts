@@ -30,7 +30,8 @@ type ObservedAgentFrame =
 export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame[] {
   const { runId } = event;
   const logIndex = typeof event.index === 'number' ? { index: event.index } : undefined;
-  const abort = { type: 'abort' as const, runId, from: ChunkFrom.AGENT, ...logIndex, payload: {} };
+  // The abort frame is synthesized beside the finish frame of the same log entry, so only finish carries the index.
+  const abort = { type: 'abort' as const, runId, from: ChunkFrom.AGENT, payload: {} };
   switch (event.type) {
     case 'chunk': {
       // The envelope index is authoritative: drop any index a forwarded sub-agent chunk carried.

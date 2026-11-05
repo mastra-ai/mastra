@@ -3061,10 +3061,13 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           // A failed read only means we can't close early; the idle timer still bounds the stream.
           // Terminal entries match the live check below: an error *chunk* can precede the
           // finish, so only an error event ends the run.
-          const last = await pubsub
-            .getHistory(topic, 0)
-            .then(history => history.at(-1))
-            .catch(() => undefined);
+          // A client resuming at last index + 1 needs a one-entry read; only an offset
+          // further past the end falls back to the full log to find the true tail.
+          const readTail = async () => {
+            const window = await pubsub.getHistory(topic, Math.max(offset - 1, 0));
+            return window.length > 0 ? window.at(-1) : (await pubsub.getHistory(topic, 0)).at(-1);
+          };
+          const last = await readTail().catch(() => undefined);
           const type = last?.type === 'chunk' ? last.data?.type : last?.type;
           if (
             typeof last?.index === 'number' &&

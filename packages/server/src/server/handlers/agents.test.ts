@@ -3159,6 +3159,24 @@ describe('Agent Routes Authorization', () => {
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
 
+    it.each([
+      { offset: 3, reads: [2] },
+      { offset: 100, reads: [99, 0] },
+    ])(
+      'closes a finished legacy run resumed at offset $offset, reading history from $reads',
+      async ({ offset, reads }) => {
+        (mockDurableAgent as any).__subscribeToRunStream = undefined;
+        const runId = `observe-legacy-past-end-${offset}`;
+        const topic = AGENT_STREAM_TOPIC(runId);
+        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
+        const getHistory = vi.spyOn(mockDurableAgent.pubsub, 'getHistory');
+        expect(await collectWithDeadline(await observe(runId, { offset }))).toEqual([]);
+        expect(getHistory.mock.calls.filter(([t]) => t === topic).map(([, from]) => from)).toEqual(reads);
+      },
+    );
+
     it('keeps a past-end resume open after a trailing error chunk until the run finishes', async () => {
       (mockDurableAgent as any).__subscribeToRunStream = undefined;
       const runId = 'observe-legacy-error-chunk';
@@ -5244,6 +5262,33 @@ describe('plain Agent resumable streams', () => {
       const agent = plainAgent('plain-agent');
       const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
       await expect(observeAs(mastra, 'elsewhere', 'user-a')).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('closes a finished plain run resumed far past its end (COR-1506)', async () => {
+      const agent = plainAgent('plain-agent');
+      const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' });
+      const runId = 'plain-past-end';
+      const bus = agent.__getStreamBus()!.pubsub;
+      await bus.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: AgentStreamEventTypes.FINISH,
+        data: { output: {}, stepResult: { reason: 'stop' } },
+      });
+      const getHistory = vi.spyOn(bus, 'getHistory');
+      const stream = await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'plain-agent',
+        runId,
+        offset: 100,
+        requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+      } as any);
+      const events: any[] = [];
+      const started = Date.now();
+      for await (const event of stream as any) events.push(event);
+      expect(events).toEqual([]);
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(getHistory.mock.calls.map(([, from]) => from)).toEqual([99, 0]);
     });
   });
 
