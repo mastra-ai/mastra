@@ -52,7 +52,7 @@ export interface VerificationDriver {
 
 export class InvestigationService {
   readonly store: InvestigationStore;
-  /** Resume the durable approval decision only after its stored binding remains valid. */
+  /** Return the owned-lab approval callback URL, or null when no owned lab is configured. */
   approvalCallback() {
     return this.ownedLab?.callback ?? null;
   }
