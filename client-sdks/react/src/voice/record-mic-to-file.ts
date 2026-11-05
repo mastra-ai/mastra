@@ -10,9 +10,9 @@ const FILE_EXTENSIONS: Record<string, string> = {
 
 const FALLBACK_MIME_TYPE = 'audio/webm';
 
-function fileExtension(mimeType: string): string {
+function containerType(mimeType: string): string {
   const [base = ''] = mimeType.split(';');
-  return FILE_EXTENSIONS[base.trim().toLowerCase()] ?? 'webm';
+  return base.trim().toLowerCase();
 }
 
 function releaseMicrophone(stream: MediaStream) {
@@ -36,8 +36,8 @@ export async function recordMicrophoneToFile(onFinish: (file: File) => void) {
   };
 
   mediaRecorder.onstop = () => {
-    const type = mediaRecorder.mimeType || chunks[0]?.type || FALLBACK_MIME_TYPE;
-    const file = new File(chunks, `recording-${Date.now()}.${fileExtension(type)}`, {
+    const type = containerType(mediaRecorder.mimeType || chunks[0]?.type || '') || FALLBACK_MIME_TYPE;
+    const file = new File(chunks, `recording-${Date.now()}.${FILE_EXTENSIONS[type] ?? 'webm'}`, {
       type,
       lastModified: Date.now(),
     });

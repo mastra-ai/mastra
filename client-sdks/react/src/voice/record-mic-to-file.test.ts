@@ -62,12 +62,21 @@ describe('recordMicrophoneToFile', () => {
     expect(await file.text()).toBe('chunk-1chunk-2');
   });
 
+  it('keeps labelling a Chrome recording audio/webm, without the codecs parameter', async () => {
+    recordedMimeType = 'audio/webm;codecs=opus';
+
+    const file = await recordClip([new Blob(['opus'])]);
+
+    expect(file.type).toBe('audio/webm');
+    expect(file.name).toMatch(/^recording-\d+\.webm$/);
+  });
+
   it('labels a Safari recording as the mp4 audio it is, so the server decodes it correctly', async () => {
     recordedMimeType = 'audio/mp4;codecs=mp4a.40.2';
 
     const file = await recordClip([new Blob(['aac'], { type: 'audio/mp4' })]);
 
-    expect(file.type).toBe('audio/mp4;codecs=mp4a.40.2');
+    expect(file.type).toBe('audio/mp4');
     expect(file.name).toMatch(/^recording-\d+\.m4a$/);
   });
 
@@ -76,7 +85,7 @@ describe('recordMicrophoneToFile', () => {
 
     const file = await recordClip([new Blob(['opus'])]);
 
-    expect(file.type).toBe('audio/ogg;codecs=opus');
+    expect(file.type).toBe('audio/ogg');
     expect(file.name).toMatch(/\.ogg$/);
   });
 

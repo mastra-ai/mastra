@@ -67,7 +67,7 @@ describe('Composer voice dictation', () => {
     await user.click(recording);
 
     await waitFor(() => expect(message).toHaveValue('fix the login bug and add a test for it'));
-    expect(bodies).toEqual([{ factoryId: FACTORY_ID, contentType: 'audio/webm;codecs=opus', clip: 'opus' }]);
+    expect(bodies).toEqual([{ factoryId: FACTORY_ID, contentType: 'audio/webm', clip: 'opus' }]);
     expect(stopTrack).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
   });
