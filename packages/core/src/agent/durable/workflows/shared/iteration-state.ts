@@ -1,6 +1,32 @@
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
-import type { DurableAgenticExecutionOutput } from '../../types';
+import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
+
+interface SpanClocks {
+  completionStartTime?: Date | string;
+  timeToFirstTokenMs?: number;
+}
+
+/**
+ * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
+ * resumed segment keeps them on the run registry beside its fresh spans; the
+ * originals keep them in the loop state. Undefined when none was captured yet.
+ */
+export function carriedSpanClocks(
+  registry:
+    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
+    | undefined,
+  state: SpanClocks,
+): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
+  const clocks: SpanClocks = registry?.resumeModelSpanData
+    ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
+    : state;
+  const attributes = {
+    ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
+    ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),
+  };
+  return Object.keys(attributes).length ? attributes : undefined;
+}
 
 /**
  * Input for creating iteration state update
@@ -73,7 +99,10 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     text: executionOutput.output.text,
     content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults,
+    // Tracing facts stay off the step records, which `stream.steps` and the finish payload expose.
+    toolResults: executionOutput.toolResults?.map(
+      ({ stepSpanData: _stepSpanData, tracingDelegationFailure: _tracingDelegationFailure, ...result }) => result,
+    ),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
@@ -131,14 +160,17 @@ function isHeldResult(result: unknown, ids: Set<string>): boolean {
  * };
  * ```
  */
-export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
+export function createBaseIterationStateUpdate(
+  input: IterationStateUpdateInput,
+): BaseIterationState & Required<Pick<BaseIterationState, 'accumulatedSteps'>> {
   const { currentState, executionOutput } = input;
+  const previousSteps = currentState.accumulatedSteps ?? [];
 
   // Legacy states with completed steps cannot prove whether their numeric totals
   // include every provider measurement. Preserve the zero identity only for a
   // pre-first-step state; otherwise migrate the accumulator to unknown.
   const currentUsage =
-    currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
+    currentState.usageAggregationVersion === 1 || previousSteps.length === 0
       ? currentState.accumulatedUsage
       : {
           ...currentState.accumulatedUsage,
@@ -170,9 +202,9 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     inputTripwire: signalPreempted ? currentState.inputTripwire : undefined,
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
     accumulatedSteps: signalPreempted
-      ? currentState.accumulatedSteps
+      ? previousSteps
       : [
-          ...withReleasedToolResults(currentState.accumulatedSteps, executionOutput.releasedToolResultIds),
+          ...withReleasedToolResults(previousSteps, executionOutput.releasedToolResultIds),
           buildStepRecord(executionOutput),
         ],
     accumulatedUsage: newUsage,
@@ -190,7 +222,19 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
-    // First inference wins; later iterations never overwrite it.
-    completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
+    // First inference wins; later iterations never overwrite it. Both values travel
+    // together, so state saved with only the clock never gains a later step's number.
+    ...(currentState.completionStartTime
+      ? { completionStartTime: currentState.completionStartTime, timeToFirstTokenMs: currentState.timeToFirstTokenMs }
+      : {
+          completionStartTime: executionOutput.completionStartTime,
+          timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
+        }),
+    // The latest iteration's response, even when it has none, as in the main loop: a run
+    // whose final step is aborted or rejected mid-stream ends with no response on the span.
+    lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,
+    // Both belong to the iteration whose lastStepResult the final step classifies.
+    tracingTermination: executionOutput.tracingTermination,
+    tracingDelegationFailure: executionOutput.tracingDelegationFailure,
   };
 }

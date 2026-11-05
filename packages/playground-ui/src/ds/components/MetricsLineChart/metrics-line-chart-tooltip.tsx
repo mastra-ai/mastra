@@ -44,7 +44,8 @@ export function MetricsLineChartTooltip({
     return entry.value;
   };
   return (
-    <ChartTooltip>
+    // A floor like shadcn's chart tooltip, so short readouts don't size it to their own label.
+    <ChartTooltip className="min-w-32">
       <Txt variant="column" tone="ink" className="mb-1">
         {heading}
       </Txt>

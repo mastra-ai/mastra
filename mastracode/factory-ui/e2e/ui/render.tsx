@@ -5,7 +5,7 @@ import { render, renderHook, waitFor } from '@testing-library/react';
 import type { RenderHookOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { ApiConfigProvider } from '../../src/api/config';
+import { ApiConfigProvider, createApiConfig } from '../../src/api/config';
 
 /**
  * Base URL every test stubs against. `src` is platform-agnostic and
@@ -13,6 +13,9 @@ import { ApiConfigProvider } from '../../src/api/config';
  * that MSW intercepts (the web app injects `''` for same-origin requests).
  */
 export const TEST_BASE_URL = 'http://localhost:4111';
+
+/** The API config every test renders with, built once like the web entry's. */
+export const TEST_API = createApiConfig({ baseUrl: TEST_BASE_URL });
 
 function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -28,7 +31,7 @@ function Wrapper({ client, children }: { client: QueryClient; children: ReactNod
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={client}>
-          <ApiConfigProvider baseUrl={TEST_BASE_URL}>{children}</ApiConfigProvider>
+          <ApiConfigProvider config={TEST_API}>{children}</ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>
     </ThemeProvider>

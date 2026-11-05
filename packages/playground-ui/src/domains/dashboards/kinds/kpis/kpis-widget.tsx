@@ -1,0 +1,72 @@
+import { BotIcon, CoinsIcon, HashIcon, MessagesSquareIcon } from 'lucide-react';
+import { KpiCard } from '../../../metrics/components/kpi-card';
+import { formatCount, formatUsd } from '../../../metrics/lib/chart-format';
+import { PinAction } from '../../components/widget-controls';
+import { valueOf } from '../../lib/answers';
+import type { DashboardResult } from '../../lib/requests';
+import { answersById, exprRefs } from '../../lib/values';
+import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
+import { kpiFigures } from './options';
+import type { KpisOptions } from './options';
+import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
+
+const ICONS = { bot: BotIcon, coins: CoinsIcon, hash: HashIcon, threads: MessagesSquareIcon } as const;
+
+const FORMAT = { count: formatCount, usd: formatUsd };
+const change = (pct: number | undefined) => (pct !== undefined && Number.isFinite(pct) ? pct : undefined);
+
+export function KpisWidget({ views, gate, results, comparisonLabel, dragHandle, pin }: WidgetKindProps<KpisOptions>) {
+  const [view] = views;
+  const figures =
+    gate.status === 'ready' ? <KpisView view={view} results={results} comparisonLabel={comparisonLabel} /> : null;
+  if (!dragHandle && !pin) return figures;
+  // The group has no title of its own, so the grip and the pin sit beside it, there even before the figures load.
+  return (
+    <div className="flex items-center gap-1.5">
+      {dragHandle && <MetricsCard.DragHandle {...dragHandle} />}
+      <div className="min-w-0 flex-1">{figures}</div>
+      {pin && <PinAction {...pin} />}
+    </div>
+  );
+}
+
+function KpisView({
+  view,
+  results,
+  comparisonLabel,
+}: {
+  view: ResolvedView<KpisOptions>;
+  results: (DashboardResult | undefined)[];
+  comparisonLabel: string;
+}) {
+  const byId = answersById(view.queries, results);
+  const answers = new Map([...byId].map(([id, r]) => [id, valueOf(r?.data)]));
+  return (
+    <MetricsCardGroup>
+      {view.options.items.map((item, i) => {
+        const used = [...new Set(exprRefs(item.value).map(r => r.query))]
+          .map(id => byId.get(id))
+          .filter((r): r is DashboardResult => r !== undefined);
+        const figures = kpiFigures(item.value, answers);
+        const format = FORMAT[item.format];
+        return (
+          <KpiCard
+            key={i}
+            label={item.label}
+            icon={ICONS[item.icon]}
+            value={figures.value === undefined ? '—' : format(figures.value)}
+            change={change(figures.change)}
+            lowerIsBetter={item.lowerIsBetter}
+            detail={item.detail}
+            previous={figures.previous === undefined ? undefined : format(figures.previous)}
+            comparison={comparisonLabel}
+            isLoading={used.some(r => r.isLoading)}
+            isUpdating={used.some(r => r.isRefetching)}
+            isError={used.some(r => r.isError)}
+          />
+        );
+      })}
+    </MetricsCardGroup>
+  );
+}

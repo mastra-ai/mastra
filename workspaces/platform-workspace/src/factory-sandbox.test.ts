@@ -197,6 +197,17 @@ describe('PlatformFactorySandbox', () => {
     expect((bare as any)._idleTimeoutMinutes).toBe(5);
   });
 
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new PlatformFactorySandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_1',
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    expect((sandbox.create({ ...listContext(), factoryId: 'fac-platform' }, {}) as any)._env).toEqual({ TOKEN: 't' });
+    expect((sandbox.create({ ...listContext(), factoryId: 'fac-mastra' }, {}) as any)._env).toEqual({});
+    expect((sandbox.create(listContext(), {}) as any)._env).toEqual({});
+  });
+
   it('resolves the idle timeout as setting, then provider default, then host option, then built-in', () => {
     const ctx = listContext();
     const client = { accessToken: 'sk_test', projectId: 'proj_1' };

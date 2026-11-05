@@ -7,7 +7,7 @@ description: "Browse Charm Hyper model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/hyper.svg" alt="Charm Hyper logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Charm Hyper
 
-Access 23 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
+Access 26 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
 
 Learn more in the [Charm Hyper documentation](https://hyper.charm.land).
 
@@ -202,6 +202,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 16.332
   },
   {
+    "model": "hyper/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 2.2,
+    "outputCost": 11
+  },
+  {
     "model": "hyper/minimax-m2.7",
     "imageInput": false,
     "audioInput": false,
@@ -226,6 +238,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.30656
   },
   {
+    "model": "hyper/muse-spark-open",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.4,
+    "outputCost": 4.65
+  },
+  {
     "model": "hyper/prism",
     "imageInput": true,
     "audioInput": false,
@@ -233,9 +257,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 1000000,
-    "maxOutput": 16000,
+    "maxOutput": 131072,
     "inputCost": 3.2664,
     "outputCost": 16.332
+  },
+  {
+    "model": "hyper/prism-core",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.52432,
+    "outputCost": 4.79072
   },
   {
     "model": "hyper/qwen3.7-flash",

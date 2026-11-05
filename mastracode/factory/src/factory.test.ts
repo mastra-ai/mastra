@@ -15,6 +15,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
+import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -34,6 +35,7 @@ import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
+import { defineBoard } from './boards/index.js';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -431,6 +433,59 @@ describe('MastraFactory constructor', () => {
     ).toThrow("duplicate board id 'work'");
   });
 
+  describe('app skills', () => {
+    const notesBoard = (skill: string, context = 'build') =>
+      defineBoard({
+        id: 'notes',
+        name: 'Notes',
+        initialPhase: 'queued',
+        phases: {
+          queued: { name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
+          drafting: { name: 'Drafting', kind: 'working', nextPhases: ['done'], runner: { skill, context } },
+          done: { name: 'Done', kind: 'terminal' },
+        },
+      });
+    const releaseNotes = createSkill({ name: 'release-notes', description: 'Draft notes', instructions: 'Draft.' });
+
+    it('rejects skills not made with createSkill() and duplicate names', () => {
+      expect(
+        () =>
+          new MastraFactory({
+            secretEncryption,
+            storage: fakeStorage(),
+            skills: [{ name: 'release-notes', instructions: 'Draft.' }] as never,
+          }),
+      ).toThrow('must be created with createSkill()');
+      expect(
+        () => new MastraFactory({ secretEncryption, storage: fakeStorage(), skills: [releaseNotes, releaseNotes] }),
+      ).toThrow("duplicate skill name 'release-notes'");
+    });
+
+    it('warns at startup when a board phase runs a skill that does not exist', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('release-notes')] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("Board 'notes' phase 'drafting' runs skill 'release-notes', but no such skill exists"),
+      );
+      warn.mockClear();
+
+      new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        boards: [notesBoard('release-notes')],
+        skills: [releaseNotes],
+      });
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('factory-plan')] });
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("Board 'notes'"));
+
+      new MastraFactory({ secretEncryption, storage: fakeStorage(), boards: [notesBoard('factory-review')] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("runs review skill 'factory-review' in the 'build' context"),
+      );
+      warn.mockRestore();
+    });
+  });
+
   it('allows replacing a built-in board when default boards are disabled', () => {
     expect(
       () =>
@@ -462,6 +517,16 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
     expect(config.subagents).toEqual([]);
+  });
+
+  it('disables rich score storage by default and allows opting in', async () => {
+    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
+    expect(disabled.disableScoreStorage).toBe(true);
+
+    vi.clearAllMocks();
+
+    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
+    expect(enabled.disableScoreStorage).toBe(false);
   });
 
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
@@ -616,12 +681,18 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
     const knowledge = { key: 'mastra', instance };
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
 
     expect(config.knowledge).toEqual(knowledge);
+  });
+
+  it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config.knowledge).toBe(false);
   });
 
   it('throws when called twice', async () => {
@@ -872,6 +943,7 @@ describe('MastraFactory.prepare', () => {
       'model-credentials',
       'model-defaults',
       'memory-settings',
+      'boards',
       'custom-providers',
       'queue-health',
       'integrations',
@@ -880,6 +952,7 @@ describe('MastraFactory.prepare', () => {
       'source-control',
       'channel-identity',
       'work-item-comments',
+      'skill-overrides',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
@@ -1498,6 +1571,7 @@ describe('MastraFactory.prepare', () => {
       'factory_subscribe_session',
       'factory_unsubscribe_session',
       'factory_recreate_sandbox',
+      'factory_sandbox_port_url',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1545,6 +1619,7 @@ describe('MastraFactory.prepare', () => {
       };
 
       expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('platform')).toHaveProperty('factory_sandbox_port_url');
       expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
@@ -2543,16 +2618,14 @@ describe('MastraFactory.prepare integrations', () => {
     const github = fakeIntegration({
       id: 'github',
       sourceControlStorage,
-      listInstallationRepos: vi.fn(async () => [
-        {
-          id: 456,
-          fullName: 'acme/api',
-          name: 'api',
-          owner: 'acme',
-          defaultBranch: 'invalid branch',
-          private: false,
-        },
-      ]),
+      getInstallationRepo: vi.fn(async () => ({
+        id: 456,
+        fullName: 'acme/api',
+        name: 'api',
+        owner: 'acme',
+        defaultBranch: 'invalid branch',
+        private: false,
+      })),
     } as Partial<FactoryIntegration> & { id: string });
 
     await prepareFactory({ storage, integrations: [github] });
@@ -2566,6 +2639,39 @@ describe('MastraFactory.prepare integrations', () => {
     });
 
     expect(repository?.defaultBranch).toBe('main');
+  });
+
+  it('resolves a selected GitHub repository with one lookup and rejects a different repository at that name', async () => {
+    const storage = fakeStorage();
+    const installation = { id: 'installation-1', externalId: '123' };
+    const upsert = vi.fn(async ({ input }: { input: unknown }) => input);
+    const getInstallationRepo = vi.fn(async () => ({
+      id: 789,
+      fullName: 'acme/api',
+      name: 'api',
+      owner: 'acme',
+      defaultBranch: 'main',
+      private: false,
+    }));
+    const listInstallationRepos = vi.fn(async () => []);
+    const github = fakeIntegration({
+      id: 'github',
+      sourceControlStorage: { installations: { get: vi.fn(async () => installation) }, repositories: { upsert } },
+      getInstallationRepo,
+      listInstallationRepos,
+    } as Partial<FactoryIntegration> & { id: string });
+
+    await prepareFactory({ storage, integrations: [github] });
+    const resolveRepository = projectRouteOptions.at(-1)?.resolveRepository;
+    const input = { integrationId: 'github', orgId: 'org-1', installationId: installation.id, slug: 'acme/api' };
+
+    await expect(resolveRepository?.({ ...input, externalId: '456' })).resolves.toBeNull();
+    expect(upsert).not.toHaveBeenCalled();
+
+    await expect(resolveRepository?.({ ...input, externalId: '789' })).resolves.toMatchObject({ externalId: '789' });
+    expect(getInstallationRepo).toHaveBeenCalledWith(123, 'acme/api');
+    expect(getInstallationRepo).toHaveBeenCalledTimes(2);
+    expect(listInstallationRepos).not.toHaveBeenCalled();
   });
 
   it('initializes version-control capabilities with integration-scoped storage', async () => {

@@ -21,6 +21,7 @@
     "moonshotai/Kimi-K2.6-TEE",
     "moonshotai/Kimi-K2.7-Code",
     "moonshotai/Kimi-K3-TEE",
+    "tencent/Hy4",
     "zai-org/GLM-5.1-TEE",
     "zai-org/GLM-5.2-Fast",
     "zai-org/GLM-5.2-TEE",
@@ -49,7 +50,7 @@
         "type": "toggle"
       }
     ],
-    "google/gemma-4-31B-turbo-TEE": [
+    "moonshotai/Kimi-K3-TEE": [
       {
         "type": "toggle"
       }
@@ -59,7 +60,7 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K3-TEE": [
+    "Qwen/Qwen3.6-27B-TEE": [
       {
         "type": "toggle"
       }
@@ -69,7 +70,7 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.6-27B-TEE": [
+    "google/gemma-4-31B-turbo-TEE": [
       {
         "type": "toggle"
       }

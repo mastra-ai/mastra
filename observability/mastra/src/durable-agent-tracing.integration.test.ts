@@ -13,7 +13,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType, getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
@@ -122,6 +122,49 @@ function cachedToolThenTextModel() {
   });
 }
 
+/** An error the AI SDK retry ladder treats like a provider 5xx (`APICallError` markers + `isRetryable`). */
+function retryableError(message: string): Error {
+  const error = new Error(message) as Error & Record<symbol | string, unknown>;
+  error[Symbol.for('vercel.ai.error')] = true;
+  error[Symbol.for('vercel.ai.error.AI_APICallError')] = true;
+  error.isRetryable = true;
+  error.statusCode = 503;
+  return error;
+}
+
+/** The first call fails after `failAfterMs` without streaming anything; later calls stream `text`. */
+function failOnceThenTextModel(text: string, failAfterMs: number) {
+  const answer = textModel(text);
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async options => {
+      if (call++ === 0) {
+        await new Promise(resolve => setTimeout(resolve, failAfterMs));
+        throw retryableError('provider unavailable');
+      }
+      return answer.doStream(options);
+    },
+  });
+}
+
+/** Fails after `failAfterMs` without streaming, under its own provider and model id. */
+function failingAfterModel(provider: string, modelId: string, failAfterMs: number) {
+  return new MockLanguageModelV2({
+    provider,
+    modelId,
+    doStream: async () => {
+      await new Promise(resolve => setTimeout(resolve, failAfterMs));
+      throw new Error(`${modelId} is unavailable`);
+    },
+  });
+}
+
+/** Streams `text` at once, under its own provider and model id. */
+function namedTextModel(provider: string, modelId: string, text: string) {
+  const answer = textModel(text);
+  return new MockLanguageModelV2({ provider, modelId, doStream: options => answer.doStream(options) });
+}
+
 /** Emits an error chunk so the run fails mid-stream (exercises the error path). */
 function errorModel() {
   return new MockLanguageModelV2({
@@ -170,6 +213,17 @@ class DeclaringStreamProcessor implements Processor {
   }
 }
 
+/** Blocks the response at its first text delta, as a moderation processor would. */
+class AbortOnTextProcessor implements Processor {
+  readonly id = 'abort-on-text';
+  readonly name = 'Abort on text';
+
+  async processOutputStream({ part, abort }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+    if (part.type === 'text-delta') abort('blocked');
+    return part;
+  }
+}
+
 const weatherTool = createTool({
   id: 'get_weather',
   description: 'Get the weather for a city',
@@ -178,8 +232,9 @@ const weatherTool = createTool({
   execute: async ({ city }: { city: string }) => ({ city, tempC: 21 }),
 });
 
-function buildMastra(testExporter: TestExporter, agent: Agent, variant: 'durable' | 'evented') {
-  const wrapped = variant === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+function buildMastra(testExporter: TestExporter, agent: Agent, variant: 'durable' | 'evented' | 'plain') {
+  const wrapped =
+    variant === 'plain' ? agent : variant === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const mastra = new Mastra({
     agents: { wrapped } as any,
     storage: new MockStore(),
@@ -213,6 +268,8 @@ const idOf = (s: any) => s.id ?? s.spanId;
 const parentOf = (s: any) => s.parentSpanId;
 const clockOf = (s: any) =>
   s?.attributes?.completionStartTime ? +new Date(s.attributes.completionStartTime) : undefined;
+const ttftAttributeOf = (s: any) => s?.attributes?.timeToFirstTokenMs;
+const startOf = (s: any) => +new Date(s.startTime);
 const byStart = (spans: any[]) => [...spans].sort((a, b) => +new Date(a.startTime) - +new Date(b.startTime));
 
 describe('durable-agent observability — full span tree (real exporter)', () => {
@@ -290,15 +347,25 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     expect(steps.map(clockOf)).toEqual(inferences.map(clockOf));
     expect(clockOf(testExporter.getSpansByType('model_generation' as any)[0])).toBe(first);
     expect(clockOf(testExporter.getSpansByType('agent_run' as any)[0])).toBe(first);
+    expect(steps.map(ttftAttributeOf)).toEqual(inferences.map(ttftAttributeOf));
+    expect(inferences.map(ttftAttributeOf)).toEqual(inferences.map(s => s.timeToFirstTokenMs));
 
     // Later iterations rebuild the generation and AGENT_RUN from the run-start
-    // snapshot; the second step's chunk must not overwrite the clock mid-run,
-    // so every exported update and end carries the first one.
+    // snapshot; the second step's chunk must not overwrite the clocks mid-run,
+    // so every exported update and end carries the first ones.
     for (const type of ['model_generation', 'agent_run']) {
-      const { events } = testExporter.getBySpanId(idOf(testExporter.getSpansByType(type as any)[0]));
-      const clocks = events.map(e => clockOf((e as any).exportedSpan)).filter(c => c !== undefined);
-      expect(clocks.length).toBeGreaterThan(0);
-      expect(new Set(clocks)).toEqual(new Set([first]));
+      const span = testExporter.getSpansByType(type as any)[0] as any;
+      expect(ttftAttributeOf(span)).toBe(inferences[0].timeToFirstTokenMs);
+      expect(span.timeToFirstTokenMs).toBe(inferences[0].timeToFirstTokenMs);
+      const { events } = testExporter.getBySpanId(idOf(span));
+      for (const [read, expected] of [
+        [clockOf, first],
+        [ttftAttributeOf, inferences[0].timeToFirstTokenMs],
+      ] as const) {
+        const clocks = events.map(e => read((e as any).exportedSpan)).filter(c => c !== undefined);
+        expect(clocks.length).toBeGreaterThan(0);
+        expect(new Set(clocks)).toEqual(new Set([expected]));
+      }
     }
   });
 
@@ -344,11 +411,16 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     clocks.forEach((clock, i) => {
       expect(clock).toBeGreaterThanOrEqual(+new Date((runs[i] as any).startTime));
       expect([clockOf(runs[i]), clockOf(generations[i])]).toEqual([clock, clock]);
+      const ttft = (inferences[i] as any).timeToFirstTokenMs;
+      expect(ttft).toBeTypeOf('number');
+      expect([ttftAttributeOf(runs[i]), ttftAttributeOf(generations[i])]).toEqual([ttft, ttft]);
     });
     for (const span of [...runs, ...generations]) {
       const { events } = testExporter.getBySpanId(idOf(span));
-      const spanClocks = events.map(e => clockOf((e as any).exportedSpan)).filter(c => c !== undefined);
-      expect(new Set(spanClocks)).toEqual(new Set([clockOf(span)]));
+      for (const read of [clockOf, ttftAttributeOf]) {
+        const spanClocks = events.map(e => read((e as any).exportedSpan)).filter(c => c !== undefined);
+        expect(new Set(spanClocks)).toEqual(new Set([read(span)]));
+      }
     }
   });
 
@@ -357,11 +429,147 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
     await runToCompletion(wrapped, 'hi', testExporter);
 
-    const first = clockOf(testExporter.getSpansByType('model_inference' as any)[0]);
+    const inference = testExporter.getSpansByType('model_inference' as any)[0] as any;
+    const first = clockOf(inference);
     expect(first).toBeTypeOf('number');
-    expect(clockOf(testExporter.getSpansByType('model_step' as any)[0])).toBe(first);
-    expect(clockOf(testExporter.getSpansByType('model_generation' as any)[0])).toBe(first);
-    expect(clockOf(testExporter.getSpansByType('agent_run' as any)[0])).toBe(first);
+    for (const type of ['model_step', 'model_generation', 'agent_run']) {
+      const span = testExporter.getSpansByType(type as any)[0] as any;
+      expect(clockOf(span)).toBe(first);
+      expect(ttftAttributeOf(span)).toBe(inference.timeToFirstTokenMs);
+      expect(span.timeToFirstTokenMs).toBe(inference.timeToFirstTokenMs);
+    }
+    expect(inference.timeToFirstTokenMs).toBe(first! - startOf(inference));
+  });
+
+  it('DurableAgent retry: time to first token counts from the attempt that streamed, not the failed one', async () => {
+    const failAfterMs = 200;
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: failOnceThenTextModel('Hello', failAfterMs) as any,
+      maxRetries: 1,
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'hi', testExporter);
+
+    const streamed = testExporter.getSpansByType('model_inference' as any).filter(span => clockOf(span) !== undefined);
+    expect(streamed).toHaveLength(1);
+    const inference = streamed[0] as any;
+    for (const type of ['model_generation', 'agent_run']) {
+      // The failed attempt ends its rebuilt generation too, so read the run's last end.
+      const { events } = testExporter.getBySpanId(idOf(testExporter.getSpansByType(type as any)[0]));
+      const ended = events.findLast(e => e.type === 'span_ended')!.exportedSpan as any;
+      expect(ttftAttributeOf(ended)).toBe(inference.timeToFirstTokenMs);
+      expect(ended.timeToFirstTokenMs).toBe(clockOf(inference)! - startOf(inference));
+      expect(ended.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+      const values = events.map(e => ttftAttributeOf((e as any).exportedSpan)).filter(c => c !== undefined);
+      expect(new Set(values)).toEqual(new Set([inference.timeToFirstTokenMs]));
+    }
+  });
+
+  // Not at parity yet: the in-process Agent retries inside the AI SDK call (p-retry in
+  // execute()), so one MODEL_INFERENCE covers the failed attempt and the backoff, and its
+  // time to first token includes both. DurableAgent owns its retry loop and opens one
+  // inference per attempt.
+  it.fails('Agent retry: time to first token counts from the attempt that streamed, as on DurableAgent', async () => {
+    const failAfterMs = 200;
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: failOnceThenTextModel('Hello', failAfterMs) as any,
+      maxRetries: 1,
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'plain');
+    await (await wrapped.stream('hi')).consumeStream();
+    await settle(testExporter);
+
+    const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;
+    expect(agentRun.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+  });
+
+  it.each(['plain', 'durable'] as const)(
+    '%s fallback: the model that streamed owns the time to first token and the inference label',
+    async variant => {
+      const failAfterMs = 200;
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'x',
+        model: [
+          { model: failingAfterModel('acme', 'acme-large', failAfterMs) as any, maxRetries: 0 },
+          { model: namedTextModel('globex', 'globex-mini', 'Hello') as any, maxRetries: 0 },
+        ],
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('hi')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'hi', testExporter);
+      }
+
+      const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+      expect(inferences.map(span => span.attributes?.model)).toEqual(['acme-large', 'globex-mini']);
+      const [failed, streamed] = inferences;
+      expect(failed.errorInfo?.message).toBe('acme-large is unavailable');
+      expect(clockOf(failed)).toBeUndefined();
+      expect(failed.timeToFirstTokenMs).toBeUndefined();
+      expect(streamed.timeToFirstTokenMs).toBeTypeOf('number');
+      expect(streamed.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+      for (const type of ['model_generation', 'agent_run']) {
+        const { events } = testExporter.getBySpanId(idOf(testExporter.getSpansByType(type as any)[0]));
+        const ended = events.findLast(e => e.type === 'span_ended')!.exportedSpan as any;
+        expect(ended.timeToFirstTokenMs).toBe(streamed.timeToFirstTokenMs);
+      }
+    },
+  );
+
+  it('Agent error-processor retry on one model: the attempt that streamed owns the value', async () => {
+    const failAfterMs = 200;
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: [{ model: failOnceThenTextModel('Hello', failAfterMs) as any, maxRetries: 0 }],
+      errorProcessors: [{ id: 'retry-once', name: 'Retry once', processAPIError: async () => ({ retry: true }) }],
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'plain');
+    await (await wrapped.stream('hi')).consumeStream();
+    await settle(testExporter);
+
+    const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+    expect(inferences.map(span => span.attributes?.finishReason)).toEqual(['retry', 'stop']);
+    const [failed, streamed] = inferences;
+    expect(failed.timeToFirstTokenMs).toBeUndefined();
+    expect(streamed.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+    const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;
+    expect(agentRun.timeToFirstTokenMs).toBe(streamed.timeToFirstTokenMs);
+  });
+
+  it('DurableAgent output processor abort: the ended generation and AGENT_RUN keep both timings', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: textModel('Hello') as any,
+      outputProcessors: [new AbortOnTextProcessor()],
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'hi', testExporter);
+
+    const spanOf = (type: string) => testExporter.getAllSpans().find(span => span.type === type) as any;
+    const inferenceStart = startOf(spanOf('model_inference'));
+    const first = clockOf(spanOf('model_step'));
+    expect(first).toBeTypeOf('number');
+    for (const type of ['model_generation', 'agent_run']) {
+      const ended = testExporter.getSpansByType(type as any)[0] as any;
+      expect(clockOf(ended)).toBe(first);
+      expect(ttftAttributeOf(ended)).toBe(first! - inferenceStart);
+      expect(ended.timeToFirstTokenMs).toBe(first! - inferenceStart);
+      expect(getTimeToFirstChunkMs(ended)).toBe(first! - startOf(ended));
+    }
   });
 
   it('DurableAgent fatal model error: root, generation, step AND inference all closed (no dangling)', async () => {

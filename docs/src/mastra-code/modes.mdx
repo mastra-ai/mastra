@@ -45,7 +45,7 @@ Approved plans are also persisted to disk as markdown files so you can archive a
 
 Files are named `<ISO-timestamp>-<slugified-title>.md` and contain the plan title, approval timestamp, and full plan body.
 
-To store plans in a project-local directory instead, set the `MASTRA_PLANS_DIR` environment variable:
+To store approved-plan archives in a different directory, set the `MASTRA_PLANS_DIR` environment variable. It replaces the global archive directory:
 
 ```sh
 export MASTRA_PLANS_DIR=.mastracode/plans

@@ -128,14 +128,14 @@ describe('OMSection', () => {
     await screen.findByDisplayValue('1,000');
     const observerTrigger = screen.getByRole('combobox', { name: 'Observer model' });
     const reflectorTrigger = screen.getByRole('combobox', { name: 'Reflector model' });
-    expect(observerTrigger).toHaveValue('Auto · GPT-5.4 Mini');
+    expect(observerTrigger).toHaveValue('Auto (GPT-5.4 Mini)');
     expect(reflectorTrigger).toHaveValue('Reflector X');
 
     await pickOption(user, reflectorTrigger, /^Auto/);
 
     await waitFor(() => expect(requestBody).toEqual({ modelId: 'auto' }));
-    await waitFor(() => expect(reflectorTrigger).toHaveValue('Auto · GPT-5.4 Mini'));
-    expect(observerTrigger).toHaveValue('Auto · GPT-5.4 Mini');
+    await waitFor(() => expect(reflectorTrigger).toHaveValue('Auto (GPT-5.4 Mini)'));
+    expect(observerTrigger).toHaveValue('Auto (GPT-5.4 Mini)');
   });
 
   it('finds a model by its provider and raw id as well as its name', async () => {

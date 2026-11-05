@@ -12,7 +12,7 @@ import { SankeySignals } from '../sankey-signals';
 import {
   getSignalRecordNodeId,
   getSignalRecordNodeLabel,
-  snapshotSummaryLabel,
+  snapshotSummaryParts,
   stabilizeThemeFlow,
   themeFlowToSankeyData,
 } from '../sankey-signals-data';
@@ -178,7 +178,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('snapshotSummaryLabel', () => {
+describe('snapshotSummaryParts', () => {
   describe('when the flow holds exactly one theme', () => {
     it('reports the theme count in the singular', () => {
       const firstStage = themeFlowResponse.stages[0];
@@ -190,9 +190,9 @@ describe('snapshotSummaryLabel', () => {
         links: [],
       };
 
-      const label = snapshotSummaryLabel(themeSnapshotsResponse.snapshots[0], singleThemeFlow);
+      const parts = snapshotSummaryParts(themeSnapshotsResponse.snapshots[0], singleThemeFlow);
 
-      expect(label.endsWith('· 1 theme')).toBe(true);
+      expect(parts).toEqual(['Jul 1 – 8, 2026', '50 traces', '1 theme']);
     });
   });
 });
@@ -563,7 +563,11 @@ describe('SankeySignals', () => {
     it('shows the selected snapshot date, trace count, and theme count in the timeline summary', async () => {
       renderSankeySignals();
 
-      expect(await screen.findByText('Jul 1 – 8, 2026 · 50 traces · 9 themes')).not.toBeNull();
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      const summary = screen.getByTestId('snapshot-summary');
+      expect(within(summary).getByText('Jul 1 – 8, 2026')).not.toBeNull();
+      expect(within(summary).getByText('50 traces')).not.toBeNull();
+      expect(within(summary).getByText('9 themes')).not.toBeNull();
       expect(screen.queryByText(/4 snapshots/)).toBeNull();
     });
 
@@ -608,7 +612,7 @@ describe('SankeySignals', () => {
     it('shows the selected snapshot context without controls for a single snapshot', async () => {
       renderSankeySignals();
 
-      expect(await screen.findByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces')).not.toBeNull();
       expect(screen.queryByRole('group', { name: 'Snapshot' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
     });
@@ -969,11 +973,11 @@ describe('SankeySignals', () => {
       renderSankeySignals();
       await screen.findByLabelText('Reorder Outcome');
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
-      await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces');
+      await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces');
 
       await reorderOutcomeAfterBehavior();
 
-      expect(await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces')).not.toBeNull();
       await waitFor(() => expect(reorderedFlowSnapshots).toContain('reordered-snapshot-3'));
     });
   });
@@ -991,7 +995,7 @@ describe('SankeySignals', () => {
 
       renderSankeySignals();
 
-      expect(await screen.findByText('Snapshot 4/4 · Jul 15, 2026 · 50 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 4/4. Jul 15, 2026. 50 traces')).not.toBeNull();
     });
   });
 
@@ -1027,11 +1031,9 @@ describe('SankeySignals', () => {
       const playButton = within(timeline).getByRole('button', { name: 'Play snapshots' });
       const summary = within(timeline).getByTestId('snapshot-summary');
 
-      await waitFor(() =>
-        expect(summary.textContent).toBe(
-          snapshotSummaryLabel(multiThemeSnapshotsResponse.snapshots[0], earlierThemeFlowResponse),
-        ),
-      );
+      expect(await within(summary).findByText('10 themes')).not.toBeNull();
+      expect(within(summary).getByText('Jun 24 – Jul 1, 2026')).not.toBeNull();
+      expect(within(summary).getByText('50 traces')).not.toBeNull();
       expect(summary.parentElement).toBe(playButton.parentElement);
       expect(playButton.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
       expect(track.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
@@ -1049,11 +1051,11 @@ describe('SankeySignals', () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
-      await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces');
+      await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces');
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
 
-      await screen.findByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces', undefined, { timeout: 2000 });
+      await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces', undefined, { timeout: 2000 });
       expect(screen.queryByRole('status', { name: 'Loading snapshot flow' })).toBeNull();
       expect(screen.getByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
@@ -1061,7 +1063,7 @@ describe('SankeySignals', () => {
     it('selects the first available ordinal and labels it without parsing its cursor', async () => {
       renderSankeySignals();
 
-      expect(await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces')).not.toBeNull();
       expect(screen.getByRole('group', { name: 'Snapshot landmarks' })).not.toBeNull();
     });
 
@@ -1071,7 +1073,7 @@ describe('SankeySignals', () => {
       await screen.findByRole('group', { name: 'Snapshot landmarks' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
 
-      expect(await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces')).not.toBeNull();
     });
 
     it('reports timeline snapshot clicks through onFrameIdChange with the snapshot id', async () => {
@@ -1101,13 +1103,13 @@ describe('SankeySignals', () => {
         </QueryClientProvider>,
       );
 
-      expect(await screen.findByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces')).not.toBeNull();
     });
 
     it('reports playback advancement through onFrameIdChange', async () => {
       const onFrameIdChange = vi.fn();
       renderSankeySignals({ onFrameIdChange });
-      await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces');
+      await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces');
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
 
@@ -1116,35 +1118,35 @@ describe('SankeySignals', () => {
 
     it('stops playback at the final snapshot instead of looping', async () => {
       renderSankeySignals();
-      await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces');
+      await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces');
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
 
-      await screen.findByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces', undefined, { timeout: 2000 });
+      await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces', undefined, { timeout: 2000 });
       expect(await screen.findByRole('button', { name: 'Play snapshots' }, { timeout: 2000 })).not.toBeNull();
-      expect(screen.getByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces')).not.toBeNull();
+      expect(screen.getByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces')).not.toBeNull();
     });
 
     it('restarts playback from the first snapshot when play is pressed at the end', async () => {
       renderSankeySignals();
-      await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces');
+      await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces');
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
-      await screen.findByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces');
+      await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces');
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
 
-      expect(await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces')).not.toBeNull();
     });
 
     it('plays forward through snapshots', async () => {
       renderSankeySignals();
-      await screen.findByText('Snapshot 3/4 · Jun 24 – Jul 1, 2026 · 40 traces');
+      await screen.findByText('Snapshot 3/4. Jun 24 – Jul 1, 2026. 40 traces');
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
       expect(screen.getByRole('button', { name: 'Pause snapshots' })).not.toBeNull();
 
       expect(
-        await screen.findByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces', undefined, { timeout: 2000 }),
+        await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces', undefined, { timeout: 2000 }),
       ).not.toBeNull();
     });
 
@@ -1204,7 +1206,7 @@ describe('SankeySignals', () => {
       );
       renderSankeySignals();
 
-      await screen.findByText('Snapshot 4/4 · Jul 1 – 8, 2026 · 50 traces');
+      await screen.findByText('Snapshot 4/4. Jul 1 – 8, 2026. 50 traces');
       expect(snapshotUrls[0]?.searchParams.get('presentation')).toBe('landmarks');
       expect(snapshotUrls[0]?.searchParams.get('limit')).toBe('24');
     });
@@ -1301,7 +1303,7 @@ describe('SankeySignals', () => {
       const timeline = screen.getByRole('region', { name: 'Snapshot timeline' });
       const summary = within(timeline).getByTestId('snapshot-summary');
       const play = within(timeline).getByRole('button', { name: 'Play snapshots' });
-      expect(summary.textContent).toContain('Jul 1, 2026, 4:00 AM ·');
+      expect(summary.textContent).toContain('Jul 1, 2026, 4:00 AM');
       expect(summary.parentElement).toBe(play.parentElement);
 
       const nextTick = within(timeline).getByRole('button', { name: /Snapshot 117 of 230/ });
@@ -1310,7 +1312,7 @@ describe('SankeySignals', () => {
       await waitFor(() =>
         expect(screen.getByRole('button', { name: /Snapshot 117 of 230/ }).getAttribute('aria-current')).toBe('true'),
       );
-      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Jul 4, 2026, 9:00 AM ·');
+      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Jul 4, 2026, 9:00 AM');
     });
   });
 
@@ -1334,7 +1336,7 @@ describe('SankeySignals', () => {
       );
       renderSankeySignals();
 
-      expect(await screen.findByText('Snapshot 273/303 · Jul 1 – 8, 2026 · 50 traces')).not.toBeNull();
+      expect(await screen.findByText('Snapshot 273/303. Jul 1 – 8, 2026. 50 traces')).not.toBeNull();
       expect(screen.queryByText(/812/)).toBeNull();
     });
   });

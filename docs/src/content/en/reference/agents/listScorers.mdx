@@ -49,9 +49,8 @@ await agent.listScorers()
   content={[
   {
     name: 'scorers',
-    type: 'MastraScorers | Promise<MastraScorers>',
-    description:
-      'The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.',
+    type: 'Promise<MastraScorers>',
+    description: 'A promise that resolves to the scoring configuration configured for the agent.',
   },
 ]}
 />

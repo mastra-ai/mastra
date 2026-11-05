@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -57,7 +58,10 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       onSubmit={event => void submit(event)}
     >
       <Txt as="span" variant="meta" tone="faint" className="truncate pr-14">
-        Manual · new
+        <Metadata singleLine>
+          <Metadata.Item>Manual</Metadata.Item>
+          <Metadata.Item>new</Metadata.Item>
+        </Metadata>
       </Txt>
       <div className="flex min-w-0 items-center gap-1.5">
         <IntakeIcon className="text-muted-foreground shrink-0" />
@@ -78,7 +82,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
             event.preventDefault();
             close();
           }}
-          placeholder="Type a name…"
+          placeholder="Type a name"
           readOnly={submitting}
           aria-invalid={error !== undefined || undefined}
         />

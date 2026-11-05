@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { dirname, isAbsolute, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
@@ -130,6 +130,9 @@ export async function extractMastraOption<T extends keyof MastraConfig>(
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    // Chunks are written outside any package with "type": "module", so a `.js` chunk would be loaded as CommonJS
+    // (#28491). The hash keeps them distinct from the main bundle's chunks in `.mastra/output`.
+    chunkFileNames: '[name]-[hash].mjs',
   });
 
   if (result.hasCustomConfig) {

@@ -2,16 +2,24 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardForWorkItem,
+  isPullRequestCard,
+  pullRequestReviewPhase,
+  reviewsPullRequest,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { SELF_REVIEW_ROUND_LIMIT } from '../boards/work.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { FACTORY_TRIAGE_TYPES } from './types.js';
+import { workItemSource } from './types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
@@ -29,23 +37,19 @@ const transitionInputSchema = z
       .transform(value =>
         value.length <= MAX_RATIONALE_LENGTH ? value : `${value.slice(0, MAX_RATIONALE_LENGTH - 1)}…`,
       ),
-    // Sessions are shared across role rotations, so a non-triage agent sees the triage
-    // agent's earlier call (with triageType) in its history and copies the shape. Accept
-    // the key here and drop it in execute rather than fail the whole call on it.
-    triageType: z.enum(FACTORY_TRIAGE_TYPES).optional(),
+    // Triage used to report a classification here, and sessions keep that call in their history
+    // across role rotations and restarts. Accept the stale key and ignore it, rather than fail a
+    // call an agent copied from that history and send it into a retry loop.
+    triageType: z.unknown().optional().describe('Ignored. Factory no longer records a triage classification.'),
   })
   .strict();
-
-const triageTransitionInputSchema = transitionInputSchema.extend({
-  triageType: z.enum(FACTORY_TRIAGE_TYPES),
-});
 
 export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   sessions?: FactorySessionSourceLookup;
-  boards?: BoardRegistry;
+  boards?: BoardRegistry | ProjectBoardSource;
 }): Promise<IntegrationTools> {
   const resolution = await resolveFactorySessionAddress({
     requestContext: options.requestContext,
@@ -65,7 +69,10 @@ export async function createFactoryTransitionTools(options: {
     const retired = await options.storage.findRunBindingBySession(resolution.address);
     if (retired && retired.status === 'revoked' && options.boards) {
       const item = await options.storage.get({ orgId: retired.orgId, id: retired.workItemId });
-      if (item && workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') {
+      if (
+        item &&
+        workItemPhaseSemantics(await toBoardSource(options.boards).load(retired), item)?.kind === 'terminal'
+      ) {
         return { factory_transition_work_item: createRetiredSessionTool(retired.workItemId, item.stages[0]) };
       }
     }
@@ -83,11 +90,11 @@ export async function createFactoryTransitionTools(options: {
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
-        ? 'Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Only bugs may request Planning autonomously; closure outcomes may request a terminal stage. Feature requests and other non-bug classifications that remain open must stay in their current Intake or Triage stage for maintainer approval.'
+        ? 'Request a governed stage transition for the Factory work item exactly bound to this thread, with your classification in the rationale. Move a confirmed bug to planning. Move feature requests and other open non-bugs to intake, where a maintainer decides whether to take them on. Move closures to done or canceled.'
         : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
-      inputSchema: isTriage ? triageTransitionInputSchema : transitionInputSchema,
+      inputSchema: transitionInputSchema,
       requireApproval: true,
-      execute: async ({ stage, expectedRevision, rationale, triageType: requestedTriageType }, execution) => {
+      execute: async ({ stage, expectedRevision, rationale }, execution) => {
         const currentResolution = await resolveFactorySessionAddress({
           requestContext: execution.requestContext,
           storage: options.storage,
@@ -111,8 +118,6 @@ export async function createFactoryTransitionTools(options: {
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
         const board = boardForWorkItem(item);
-        // Only a Work triage binding may classify; other roles can echo the key from history.
-        const triageType = board === 'work' && binding.role === 'triage' ? requestedTriageType : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
@@ -124,7 +129,6 @@ export async function createFactoryTransitionTools(options: {
           actor: { type: 'agent', bindingId: binding.id, role: binding.role },
           ingress: { type: 'agent', identity: `${binding.id}:${toolCallId}` },
           cause: rationale,
-          ...(triageType ? { triageType } : {}),
         });
 
         return result;
@@ -175,7 +179,7 @@ function createReviewVerdictTool(
     factory_record_review_verdict: createTool({
       id: 'factory_record_review_verdict',
       description:
-        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On a Review card it records the published PR verdict and the card stays in Reviewing. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
+        'Record the review verdict and the head SHA it covers on the card bound to this thread, ending the review pass. On the card of a pull request it records the published PR verdict and the card stays in Review. On a Work card in Review with no change request open yet (self-review), approve keeps the card in Review and wakes the builder to open the change request; request changes sends it back to Building with your findings.',
       inputSchema: reviewVerdictInputSchema,
       requireApproval: false,
       execute: async ({ verdict, reviewedHeadSha, findings }, execution) => {
@@ -190,8 +194,12 @@ function createReviewVerdictTool(
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        const board = boardForWorkItem(item);
+        const source = workItemSource(item.externalSource);
+        const pullRequestCard = isPullRequestCard({ source });
         if (
-          boardForWorkItem(item) === 'work' &&
+          board === 'work' &&
+          !pullRequestCard &&
           item.stages[0] === 'review' &&
           typeof item.metadata?.openPullRequestNumber !== 'number'
         ) {
@@ -206,7 +214,7 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (boardForWorkItem(item) !== 'review' || item.stages[0] !== 'review') {
+        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== pullRequestReviewPhase(board)) {
           throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();
@@ -263,7 +271,7 @@ async function recordSelfReviewVerdict(input: {
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   binding: { id: string; orgId: string; factoryProjectId: string; workItemId: string; role: string };
-  item: WorkItemRow;
+  item: Card;
   verdict: (typeof REVIEW_VERDICTS)[number];
   reviewedHeadSha: string;
   findings: string | undefined;

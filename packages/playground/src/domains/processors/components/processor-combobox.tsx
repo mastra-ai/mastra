@@ -15,6 +15,7 @@ export interface ProcessorComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -22,13 +23,14 @@ export interface ProcessorComboboxProps {
 export function ProcessorCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a processor...',
-  searchPlaceholder = 'Search processors...',
+  placeholder = 'Select a processor',
+  searchPlaceholder = 'Search processors',
   emptyText = 'No processors found.',
   className,
   disabled = false,
   variant,
   size,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
 }: ProcessorComboboxProps) {
@@ -77,6 +79,7 @@ export function ProcessorCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />
