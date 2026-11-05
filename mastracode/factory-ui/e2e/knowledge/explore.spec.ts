@@ -63,12 +63,11 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     }
     if (url.pathname.endsWith('/web/config/features')) return route.fulfill({ json: { knowledge: true } });
     if (url.pathname.endsWith('/web/factory/projects')) {
-      return route.fulfill({ json: { projects: [{ id: projectId, name: 'Proof Factory' }] } });
+      return route.fulfill({ json: { projects: [{ id: projectId, name: 'Proof Factory', repositories: [] }] } });
     }
     if (url.pathname.endsWith(`/web/factory/projects/${projectId}`)) {
       return route.fulfill({ json: { project: { id: projectId, name: 'Proof Factory' } } });
     }
-    if (url.pathname.endsWith('/source-control-connections')) return route.fulfill({ json: { connections: [] } });
     if (url.pathname.includes('/permissions')) return route.fulfill({ json: {} });
     if (url.pathname.endsWith('/work-items')) return route.fulfill({ json: { workItems: [] } });
     if (url.pathname.endsWith('/attention')) {

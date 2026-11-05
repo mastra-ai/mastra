@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
@@ -12,7 +13,7 @@ const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 
 function project(overrides: Record<string, unknown> = {}) {
-  return { id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, autoApprovePlans: false, ...overrides };
+  return { id: FACTORY_ID, name: 'Acme Factory', autoRunEnabled: false, ...overrides };
 }
 
 let patchBodies: unknown[];
@@ -23,21 +24,12 @@ function stubBoard({ items, factory }: { items: unknown[]; factory: Record<strin
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [factory] })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
+            ...factory,
+            repositories: [listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
           },
         ],
       }),
@@ -85,26 +77,27 @@ function renderBoard(board: 'work' | 'review') {
 }
 
 describe('Board automation settings', () => {
-  it('edits plan auto-approval in a dismissible settings popover', async () => {
-    stubBoard({ items: [], factory: project() });
+  it('edits automation in a dismissible settings popover that no longer offers plan auto-approval', async () => {
+    // A project that still has the retired switch on: every plan waits for a person anyway.
+    stubBoard({ items: [], factory: project({ autoApprovePlans: true }) });
     const user = userEvent.setup();
     const { client } = renderBoard('review');
 
     const settings = await screen.findByRole('button', { name: 'Automation settings' });
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
     await user.click(settings);
-    const autoApprove = await screen.findByRole('switch', { name: 'Auto-approve plans' });
-    expect(autoApprove).not.toBeChecked();
-    await user.click(autoApprove);
+    const autoRun = await screen.findByRole('switch', { name: 'Auto-start runs' });
+    expect(screen.queryByRole('switch', { name: 'Auto-approve plans' })).not.toBeInTheDocument();
+    await user.click(autoRun);
 
     await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ autoApprovePlans: true }]);
-    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
+    expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
+    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Automation settings' })).not.toBeInTheDocument());
     expect(settings).toHaveFocus();
     await user.click(settings);
-    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
+    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
   });
 
   it('turns review test checks on, defaulting to off for older projects', async () => {
@@ -147,6 +140,7 @@ describe('Board automation settings', () => {
 
     await waitForMutationsIdle(client);
     expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(screen.getByRole('switch', { name: 'Auto-approve plans' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Self-review before pull requests' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Publish review test checks' })).not.toBeChecked();
   });
 });

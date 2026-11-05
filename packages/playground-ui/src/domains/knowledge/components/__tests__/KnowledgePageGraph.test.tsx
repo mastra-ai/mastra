@@ -107,6 +107,29 @@ describe('KnowledgePageGraph', () => {
     });
   });
 
+  describe('with two thousand pages', () => {
+    it('highlights a hovered page at once, from an index and not a scan of every link', () => {
+      const many = [page('org', null, { name: 'Acme' })];
+      const links: Array<{ kind: 'link'; source: string; target: string; count: number }> = [];
+      for (let i = 0; i < 1999; i++) {
+        many.push(page(`p${i}`, 'org', { name: `Page ${i}`, key: `p${i}` }));
+        links.push({ kind: 'link', source: `p${i}`, target: `p${(i * 7 + 1) % 1999}`, count: 1 });
+      }
+      renderWithProviders(
+        <div style={{ width: 800, height: 600 }}>
+          <KnowledgePageGraph pages={many} edges={[]} knownLinks={links} onSelect={() => {}} />
+        </div>,
+      );
+      const target = document.querySelector<HTMLElement>('[data-page-id="p5"]');
+      expect(target).toBeTruthy();
+      const started = performance.now();
+      fireEvent.mouseEnter(target as HTMLElement);
+      const elapsed = performance.now() - started;
+      expect(document.querySelector('[data-emphasis]')).toBeTruthy();
+      expect(elapsed).toBeLessThan(1000);
+    });
+  });
+
   describe('when a page is pinned', () => {
     it('marks only that page as pinned', async () => {
       renderWithProviders(
@@ -274,6 +297,20 @@ describe('KnowledgePageGraph', () => {
           .map(item => item.textContent),
       ).toEqual(['Scope', 'Scope, above its pages', 'Page', 'Parent → child', 'Pinned']);
     });
+
+    it('shows again when the window narrows after it was collapsed', () => {
+      const graph = (collapsibleLegend: boolean) => (
+        <div style={{ width: 800, height: 600 }}>
+          <KnowledgePageGraph pages={pages} edges={[]} onSelect={() => {}} collapsibleLegend={collapsibleLegend} />
+        </div>
+      );
+      const { rerender } = renderWithProviders(graph(true));
+      expect(screen.getByRole('button', { name: 'Legend' }).getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('list', { name: 'Legend' })).toBeNull();
+      rerender(graph(false));
+      expect(screen.queryByRole('button', { name: 'Legend' })).toBeNull();
+      expect(screen.getByRole('list', { name: 'Legend' })).toBeTruthy();
+    });
   });
 
   describe('lines', () => {
@@ -396,7 +433,7 @@ describe('KnowledgePageGraph', () => {
       const dot = document.querySelector<HTMLElement>(`[data-testid="knowledge-page-dot"][data-page-id="${id}"]`);
       if (!dot) throw new Error(`no ${id} dot`);
       fireEvent.pointerEnter(dot);
-      return within(dot).getByRole('tooltip').textContent;
+      return within(dot).getByRole('tooltip');
     };
 
     it('draws its tooltip on a solid background with a tail pointing down at the dot', () => {
@@ -476,12 +513,16 @@ describe('KnowledgePageGraph', () => {
 
     it('names a farther page, its path and how many children it has on hover', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('ticket')).toBe('TicketPageAcme › Support4 children');
+      expect(hoverDot('ticket').textContent).toBe('TicketPageAcme › Support4 children');
     });
 
     it('tells how to open a collapsed group of scopes rather than counting it twice', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('group:support:thread')).toBe('3 thread scopesAcme › Support · Click to show them');
+      const tooltip = within(hoverDot('group:support:thread'));
+      expect(tooltip.getByText('3 thread scopes')).toBeTruthy();
+      expect(tooltip.getByText('Acme › Support')).toBeTruthy();
+      expect(tooltip.getByText('Click to show them')).toBeTruthy();
+      expect(tooltip.queryByText('3 children')).toBeNull();
     });
 
     describe('when a dot has links', () => {
@@ -503,7 +544,53 @@ describe('KnowledgePageGraph', () => {
 
       it('shows its kind, address and how many links go in and out', () => {
         renderGraph({ pages: linked, knownLinks: known });
-        expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in, 1 link out');
+        const tooltip = within(hoverDot('ticket'));
+        expect(tooltip.getByText('Ticket')).toBeTruthy();
+        expect(tooltip.getByText('Page')).toBeTruthy();
+        expect(tooltip.getByText('team:support#ticket')).toBeTruthy();
+        expect(tooltip.getByText('org:acme › team:support')).toBeTruthy();
+        expect(tooltip.getByText('1 link in, 1 link out')).toBeTruthy();
+      });
+
+      it('uses the store counts over the loaded ones, and says how many links lead to pages not drawn', () => {
+        const onHover = vi.fn();
+        renderGraph({
+          pages: linked,
+          knownLinks: known,
+          exactLinkCounts: new Map([['ticket', { in: 1, out: 7 }]]),
+          onHover,
+        });
+        fireEvent.mouseEnter(dot('ticket'));
+        fireEvent.pointerEnter(dot('ticket'));
+        expect(within(dot('ticket')).getByRole('tooltip').textContent).toContain(
+          '1 link in, 7 links out (6 not shown)',
+        );
+        expect(onHover).toHaveBeenLastCalledWith('ticket');
+        fireEvent.mouseLeave(dot('ticket'));
+        expect(onHover).toHaveBeenLastCalledWith(null);
+      });
+
+      it('draws links fetched for a hover without counting them, so the dots are not laid out again', () => {
+        const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
+        const fetched = [{ kind: 'link' as const, source: 'far', target: 'faq', count: 1 }];
+        const { rerender } = renderGraph({ pages: withFar, knownLinks: known, showCounts: true });
+        const widthOf = (id: string) => dot(id).style.width;
+        expect(widthOf('far')).toBe(`${KNOWLEDGE_DOT_SIZE}px`);
+        rerender(
+          <div style={{ width: 800, height: 600 }}>
+            <KnowledgePageGraph
+              pages={withFar}
+              edges={[]}
+              knownLinks={known}
+              fetchedLinks={fetched}
+              showCounts
+              onSelect={() => {}}
+            />
+          </div>,
+        );
+        expect(widthOf('far')).toBe(`${KNOWLEDGE_DOT_SIZE}px`);
+        fireEvent.mouseEnter(dot('far'));
+        expect(line('link:far->faq')).toBeTruthy();
       });
 
       it("draws no body-link lines until a dot is hovered, then draws that dot's own", () => {

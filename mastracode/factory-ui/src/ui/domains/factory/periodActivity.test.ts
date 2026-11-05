@@ -28,7 +28,6 @@ function card(id: string, createdAt: number, overrides: Partial<WorkItem> = {}):
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: new Date(createdAt).toISOString(),
     updatedAt: new Date(createdAt).toISOString(),

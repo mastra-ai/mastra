@@ -47,6 +47,8 @@ const projectPathSchema = z.object({ id: uuidSchema });
 const projectDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
 const boardPathSchema = z.object({ id: uuidSchema, boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH) });
 const boardRevisionSchema = z.number().int().min(1);
+/** Send the `revision` you read so a concurrent edit is not overwritten. */
+export const boardResetBodySchema = z.object({ expectedRevision: boardRevisionSchema });
 /** A board's definition; send the `revision` you read so a concurrent edit is not overwritten. */
 export const replaceBoardBodySchema = storedBoardDefinitionSchema.extend({ expectedRevision: boardRevisionSchema });
 export const boardDeleteQuerySchema = z.object({ expectedRevision: z.coerce.number().int().min(1) });
@@ -57,14 +59,38 @@ const storedBoardResponseSchema = z.object({
     description: z.string().nullable(),
     /** In order; the first phase is where cards start. */
     phases: z.array(storedPhaseInputSchema),
-    /** Send it back as `expectedRevision` when editing. Null for code boards, which are not stored. */
+    /**
+     * Send it back as `expectedRevision` when editing or resetting. Null for the legacy Review
+     * board, which is read-only and not stored.
+     */
     revision: z.number().int().nullable(),
     source: z.enum(['builtin', 'app', 'stored']),
-    /** False for built-in and app boards: they are defined in code and read-only here. */
+    /**
+     * True for boards the project created, the built-in Work board and app boards; their code
+     * behaviour stays attached. False for the legacy Review board, which is read-only.
+     */
     editable: z.boolean(),
+    /**
+     * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
+     * phase stays with its kind, phases with code handlers keep their runner context and skill,
+     * the exit tool id stays, and the moves code makes from it stay in nextPhases. Null for stored boards.
+     */
+    codeBehaviour: z
+      .record(
+        z.string(),
+        z.object({
+          handlers: z.boolean(),
+          exitToolId: z.string().nullable(),
+          requiredNextPhases: z.array(z.string()),
+        }),
+      )
+      .nullable()
+      .optional(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
     problems: z.array(z.string()),
   }),
+  /** Whether the caller may edit or reset this board: organization admins, or anyone with auth disabled. */
+  canEdit: z.boolean().optional(),
 });
 const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
 const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
@@ -138,7 +164,44 @@ const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema }
 
 const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
-const workItemResponseSchema = z.object({ workItem: entitySchema });
+
+/**
+ * A repository linked to a project, as the project list returns it: fields of the link and of the repository
+ * only, never the installation behind the connection.
+ */
+export const projectListRepositorySchema = z.object({
+  projectRepositoryId: z.string(),
+  connectionId: z.string(),
+  integrationId: z.string(),
+  repositoryId: z.string(),
+  // These three are null when the repository row behind the link is missing.
+  externalId: z.string().nullable(),
+  slug: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
+  /** The branch set on the link; null means the repository's default branch. */
+  branch: z.string().nullable(),
+  sandboxWorkdir: z.string(),
+});
+export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
+
+const projectListItemSchema = projectSchema.and(z.object({ repositories: z.array(projectListRepositorySchema) }));
+const cardSchema = z
+  .object({
+    workItem: z
+      .object({
+        provider: z.string(),
+        key: z.string().nullable(),
+        url: z.string().nullable(),
+        title: z.string(),
+        state: z.string().nullable(),
+        labels: z.array(z.string()),
+        author: z.string().nullable(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
 
 export const createProjectBodySchema = z.object({
@@ -155,6 +218,7 @@ export const updateProjectBodySchema = z
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
@@ -367,7 +431,6 @@ export const updateWorkItemBodySchema = z
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
-    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 
@@ -593,8 +656,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
     path: '/web/factory/projects',
-    description: 'List Factory projects for the current organization',
-    responseSchema: z.object({ projects: z.array(projectSchema) }),
+    description: 'List Factory projects for the current organization, each with its linked repositories',
+    responseSchema: z.object({ projects: z.array(projectListItemSchema) }),
   },
   projectCreate: {
     method: 'POST',
@@ -716,7 +779,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
           description: z.string().optional(),
           /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
           source: z.enum(['builtin', 'app', 'stored']).optional(),
-          /** False for built-in and app boards, which are defined in code and read-only. */
+          /** False only for the legacy Review board; built-in Work, app and stored boards can be edited. */
           editable: z.boolean().optional(),
           /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
@@ -752,7 +815,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
           ),
         }),
       ),
-      /** Stored boards that could not be loaded or are hidden by a code board with the same key, and why. */
+      /** Stored boards that could not be loaded or that a code board serves in their place, and why. */
       problems: z.array(z.string()).optional(),
     }),
   },
@@ -777,6 +840,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: "Replace a project board's definition",
     pathSchema: boardPathSchema,
     bodySchema: replaceBoardBodySchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardReset: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/boards/:boardKey/reset',
+    description: 'Reset a built-in or app board to its code definition',
+    pathSchema: boardPathSchema,
+    bodySchema: boardResetBodySchema,
     responseSchema: storedBoardResponseSchema,
   },
   boardDelete: {
@@ -839,7 +910,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
     responseSchema: z.object({
-      workItems: z.array(entitySchema),
+      workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
     }),

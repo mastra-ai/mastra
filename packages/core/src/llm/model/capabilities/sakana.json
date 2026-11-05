@@ -9,6 +9,11 @@
         "values": ["high", "xhigh"]
       }
     ],
+    "sakana-namazu": [
+      {
+        "type": "toggle"
+      }
+    ],
     "fugu": [
       {
         "type": "effort",
@@ -19,11 +24,6 @@
       {
         "type": "effort",
         "values": ["high", "xhigh"]
-      }
-    ],
-    "sakana-namazu": [
-      {
-        "type": "toggle"
       }
     ]
   }

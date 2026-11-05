@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw';
 
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../e2e/ui/render';
 
@@ -30,7 +31,6 @@ export function workItem(
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt,
     updatedAt: createdAt,
@@ -38,6 +38,7 @@ export function workItem(
 }
 
 export function stubWorkBoard() {
+  const repository = listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' });
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -45,26 +46,8 @@ export function stubWorkBoard() {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: FACTORY_ID, name: 'Acme Factory' },
-          { id: OTHER_FACTORY_ID, name: 'Other Factory' },
-        ],
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
-          },
+          { id: FACTORY_ID, name: 'Acme Factory', repositories: [repository] },
+          { id: OTHER_FACTORY_ID, name: 'Other Factory', repositories: [repository] },
         ],
       }),
     ),

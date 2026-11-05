@@ -123,6 +123,19 @@ export async function startTasksFixtureServer(options: { pollIntervalMs?: number
       }),
     );
     mcpServer.registerTool(
+      'confirm_twice',
+      { description: 'Asks before sending, then asks again' },
+      asTask('confirm_twice', async handle => {
+        if (!handle) return { content: [{ type: 'text', text: 'sent without asking' }] };
+        const first = await handle.requireInput({ approve: elicit('Send it?') });
+        const second = await handle.requireInput({ confirm: elicit('Really send it?') });
+        const ok = [first.approve, second.confirm].every(
+          answer => (answer as { content?: { ok?: boolean } }).content?.ok,
+        );
+        return { content: [{ type: 'text', text: ok ? 'sent twice confirmed' : 'not sent' }] };
+      }),
+    );
+    mcpServer.registerTool(
       'broken',
       { description: 'Fails in the tool' },
       asTask('broken', async () => ({ isError: true, content: [{ type: 'text', text: 'disk full' }] })),

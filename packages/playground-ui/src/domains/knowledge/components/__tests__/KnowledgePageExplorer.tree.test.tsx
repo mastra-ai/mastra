@@ -60,12 +60,15 @@ function Host({
   siteChildCount,
   siteCapped,
   extraSiblings = 0,
+  freshLeaf = false,
 }: {
   requested: KnowledgeExplorerTreeRequest[];
   siteChildCount?: number;
   siteCapped?: boolean;
   /** Extra pages under the site, each with one child waiting. */
   extraSiblings?: number;
+  /** A page under the site that no count covers yet, created just now. */
+  freshLeaf?: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<KnowledgeExplorerView>('graph');
@@ -82,7 +85,20 @@ function Host({
     }),
   );
   const levelOf = (parentId: string): KnowledgeExplorerTreeLevel => {
-    if (parentId === 'site') return { pages: [articles, pricing, ...extras] };
+    if (parentId === 'site')
+      return {
+        pages: [
+          articles,
+          pricing,
+          ...(freshLeaf
+            ? [
+                page('fresh', 'site', { name: 'Fresh', position: 'a2', createdAt: new Date().toISOString() }),
+                page('stale', 'site', { name: 'Stale', position: 'a3' }),
+              ]
+            : []),
+          ...extras,
+        ],
+      };
     if (parentId.startsWith('x'))
       return { pages: [page(`y-${parentId}`, parentId, { name: `Child of ${parentId}`, childCount: 0 })] };
     return levels[parentId] ?? { pages: [] };
@@ -148,6 +164,14 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(within(row('Pricing')).queryByRole('button')).toBeNull();
       expect(row('Pricing').getAttribute('aria-expanded')).toBeNull();
       expect(within(row('Articles')).getByRole('button', { name: 'Expand Articles' })).toBeTruthy();
+    });
+  });
+
+  describe('when a page was just created and no count covers it yet', () => {
+    it('offers no expand arrow, while an older uncounted page still does', () => {
+      renderWithProviders(<Host requested={[]} freshLeaf />);
+      expect(within(row('Fresh')).queryByRole('button')).toBeNull();
+      expect(within(row('Stale')).getByRole('button', { name: 'Expand Stale' })).toBeTruthy();
     });
   });
 
@@ -414,12 +438,14 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(graphNode('first').textContent).toContain('First article');
     });
 
-    it('counts the children it still does not draw', () => {
-      renderWithProviders(<Host requested={[]} siteChildCount={5} />);
+    it('counts the children it still does not draw on the "+N more" circle, not in a line that shifts the layout', () => {
+      const { container } = renderWithProviders(<Host requested={[]} siteChildCount={5} />);
       fireEvent.click(row('site:mastra'));
-      expect(screen.getByTestId('knowledge-graph-more-children').textContent).toBe(
-        '+3 more pages under site:mastra not drawn. Open the tree to see them all.',
+      expect(document.querySelector('.react-flow__node [data-page-id="rest:site"]')?.getAttribute('title')).toBe(
+        'Show 3 more of 3',
       );
+      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
+      expect(container.textContent ?? '').not.toMatch(/pages under .* not drawn/);
     });
 
     describe('when the "+N more" circle is clicked', () => {
@@ -446,12 +472,6 @@ describe('KnowledgePageExplorer tree with child counts', () => {
         expect(restNode()).toBeNull();
       });
     });
-
-    it('says nothing more when every child is drawn', () => {
-      renderWithProviders(<Host requested={[]} />);
-      fireEvent.click(row('site:mastra'));
-      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
-    });
   });
 
   describe('when the link counts toggle is pressed', () => {
@@ -476,12 +496,12 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(back().disabled).toBe(false);
     });
 
-    it('floats Back over the graph, with a solid background and a pointer cursor', () => {
+    it('floats Back over the graph with the other graph options', () => {
       renderWithProviders(<Host requested={[]} />);
       expect(screen.getByTestId('knowledge-graph-container').contains(back())).toBe(true);
-      expect(back().className).toMatch(/\bbg-card\b/);
-      expect(back().className).toMatch(/\bcursor-pointer\b/);
-      expect(back().className).toMatch(/\bhover:bg-fill-subtle\b/);
+      expect(within(screen.getByRole('group', { name: 'Graph options' })).getByRole('button', { name: 'Back' })).toBe(
+        back(),
+      );
     });
 
     it('goes back one focus at a time through the walk', () => {
@@ -505,12 +525,11 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(within(row('site:mastra')).getByTestId('knowledge-tree-count').textContent).toBe('1000+');
     });
 
-    it('says so in the graph instead of a short count of what is left', () => {
-      renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
+    it('adds no line above the graph, so refocusing never moves it', () => {
+      const { container } = renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
       fireEvent.click(row('site:mastra'));
-      expect(screen.getByTestId('knowledge-graph-more-children').textContent).toBe(
-        '1000+ pages under site:mastra, 2 drawn. Open the tree to see them all.',
-      );
+      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
+      expect(container.textContent ?? '').not.toMatch(/pages under .* drawn/);
     });
   });
 });

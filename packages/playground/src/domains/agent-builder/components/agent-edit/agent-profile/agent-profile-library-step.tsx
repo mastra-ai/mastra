@@ -66,7 +66,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
           </Button>
         )}
         <p className="max-w-md text-muted-foreground">
-          You can change this at any time from the agent&apos;s visibility settings — adding to the library now is
+          You can change this at any time in the agent&apos;s visibility settings. Adding to the library now is
           optional.
         </p>
         {dialog}

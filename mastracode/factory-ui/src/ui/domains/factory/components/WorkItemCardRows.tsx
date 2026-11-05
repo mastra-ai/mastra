@@ -1,10 +1,11 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
 import type { BoardCardStatus } from '../boardCardState';
 import type { CardAction } from '../cardPrimaryAction';
-import { workItemMeta } from '../boardItems';
+import { sourceMetadata, workItemMeta } from '../boardItems';
 import { itemStageLabel } from '../boardStages';
 import { reviewVerdict, selfReviewVerdict } from '../reviewVerdict';
 import type { ReviewVerdict } from '../reviewVerdict';
@@ -61,7 +62,16 @@ export function WorkItemCardRows({
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
           <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
-            {workItemMeta(item)}
+            <Metadata singleLine>
+              {workItemMeta(item).map((part, index, parts) => (
+                <Metadata.Item
+                  key={index}
+                  className={index === 0 || index === parts.length - 1 ? 'shrink-0' : undefined}
+                >
+                  {part}
+                </Metadata.Item>
+              ))}
+            </Metadata>
           </Txt>
           {relatedLinks}
           <CommentCount count={item.commentCount} />
@@ -73,7 +83,12 @@ export function WorkItemCardRows({
           </Txt>
         </div>
       </div>
-      <MetadataLabels metadata={item.metadata} />
+      {item.workItem?.provider !== 'factory' && item.workItem?.state && (
+        <Badge size="xs" variant="neutral" className="self-start" aria-label={`Source state: ${item.workItem.state}`}>
+          {item.workItem.state}
+        </Badge>
+      )}
+      <MetadataLabels metadata={sourceMetadata(item)} />
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (

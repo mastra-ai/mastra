@@ -88,10 +88,12 @@ export function AgentPlaygroundVersionBar({
       versions.map(v => {
         const isPublished = v.id === activeVersionId;
         const isDraftVersion = activeVersionNumber !== undefined && v.versionNumber > activeVersionNumber;
+        const versionName = `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber}`;
+        const createdAt = formatDate(v.createdAt, 'date-time');
 
         return {
           value: v.id,
-          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'date-time') ?? ''}`,
+          label: createdAt ? `${versionName} (${createdAt})` : versionName,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
             <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
