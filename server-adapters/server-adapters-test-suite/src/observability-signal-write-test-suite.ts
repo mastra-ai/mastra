@@ -18,6 +18,7 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
     let store: ObservabilityStorage;
     let trustedScope: Record<string, unknown>;
     let allowAccess: boolean;
+    let authorLookupFails: boolean;
 
     const isFeedback = collection === 'feedback';
     const field = isFeedback ? 'feedback' : 'score';
@@ -28,6 +29,7 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
     beforeEach(async () => {
       trustedScope = {};
       allowAccess = true;
+      authorLookupFails = false;
       const storage = new InMemoryStore();
       store = (await storage.getStore('observability'))!;
       server = await startServer(
@@ -37,6 +39,15 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
           server: {
             auth: {
               authenticateToken: async () => ({}),
+              ...{
+                getCurrentUser: async () => null,
+                getUser: async (id: string) => {
+                  if (authorLookupFails) throw new Error('Directory unavailable');
+                  return id === 'author-1'
+                    ? { id, name: 'Alice', email: 'alice@example.com', secret: 'private' }
+                    : null;
+                },
+              },
               authorize: async (_path, _method, _user, c) => {
                 for (const [key, value] of Object.entries(trustedScope)) c.get('requestContext').set(key, value);
                 return allowAccess;
@@ -98,6 +109,39 @@ export function createObservabilitySignalWriteTestSuite({ startServer }: Observa
         expect(response.status).toBe(403);
       });
     });
+
+    if (isFeedback) {
+      describe('single-record feedback enrichment and compatibility', () => {
+        it.each(['resolved', 'missing', 'failed', 'anonymous'])(
+          'returns feedback with %s author lookup consistently with the list',
+          async scenario => {
+            authorLookupFails = scenario === 'failed';
+            await store.createFeedback({
+              feedback: {
+                feedbackId: 'with-author',
+                traceId: 'trace-123',
+                timestamp: new Date('2026-11-05T12:00:00.000Z'),
+                feedbackType: 'thumbs',
+                value: 1,
+                feedbackUserId: scenario === 'anonymous' ? null : scenario === 'missing' ? 'deleted-user' : 'author-1',
+              },
+            });
+            const response = await server.request(`${path}/with-author`, {
+              headers: { authorization: 'Bearer test-token' },
+            });
+            expect(response.status).toBe(200);
+            const { feedback } = (await response.json()) as { feedback: Record<string, unknown> };
+            expect(feedback).toEqual((await list())[0]);
+            expect(feedback.feedbackId).toBe('with-author');
+            if (scenario === 'resolved') {
+              expect(feedback.author).toEqual({ id: 'author-1', name: 'Alice', email: 'alice@example.com' });
+            } else {
+              expect(feedback).not.toHaveProperty('author');
+            }
+          },
+        );
+      });
+    }
 
     it.each([undefined, null, '', ' ', '\t\n'])(
       'rejects traceId %j without persisting a record (OBS-788)',

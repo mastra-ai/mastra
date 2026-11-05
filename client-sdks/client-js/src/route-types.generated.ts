@@ -242,12 +242,12 @@ type InputShared_Auxiliary_806 = {
   children?: InputShared_Auxiliary_806[] | undefined;
 };
 
-type Shared_Auxiliary_793 = {
+type Shared_Auxiliary_795 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_793[] | undefined;
+  children?: Shared_Auxiliary_795[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -3856,6 +3856,14 @@ type Shared_Type_67 = {
     | undefined;
   /** Feedback review workflow status */
   reviewStatus: 'needs-review' | 'reviewed';
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
 };
 
 type Shared_Type_68 = {
@@ -4489,7 +4497,7 @@ type Shared_Type_88 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_793[] | undefined;
+  files?: Shared_Auxiliary_795[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -12084,71 +12092,7 @@ export type GetObservabilityFeedback_Response = {
   delta?: Shared_Type_59 | undefined;
   /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
-  feedback: {
-    /** Unique id for this feedback event */
-    feedbackId?: (string | null) | undefined;
-    /** When the feedback was recorded */
-    timestamp: Date;
-    /** Trace that anchors the feedback target when available */
-    traceId?: (string | null) | undefined;
-    /** Span ID this feedback applies to */
-    spanId?: (string | null) | undefined;
-    feedbackSource?: (string | null) | undefined;
-    source?: (string | null) | undefined;
-    /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
-    feedbackType: string;
-    /** Feedback value (rating number or correction text) */
-    value: number | string;
-    comment?: (string | null) | undefined;
-    feedbackUserId?: (string | null) | undefined;
-    entityType?: (Shared_Type_61 | null) | undefined;
-    entityId?: (string | null) | undefined;
-    entityName?: (string | null) | undefined;
-    parentEntityType?: (Shared_Type_61 | null) | undefined;
-    parentEntityId?: (string | null) | undefined;
-    parentEntityName?: (string | null) | undefined;
-    rootEntityType?: (Shared_Type_61 | null) | undefined;
-    rootEntityId?: (string | null) | undefined;
-    rootEntityName?: (string | null) | undefined;
-    userId?: (string | null) | undefined;
-    organizationId?: (string | null) | undefined;
-    resourceId?: (string | null) | undefined;
-    runId?: (string | null) | undefined;
-    sessionId?: (string | null) | undefined;
-    threadId?: (string | null) | undefined;
-    requestId?: (string | null) | undefined;
-    environment?: (string | null) | undefined;
-    serviceName?: (string | null) | undefined;
-    scope?:
-      | ({
-          [key: string]: unknown;
-        } | null)
-      | undefined;
-    entityVersionId?: (string | null) | undefined;
-    parentEntityVersionId?: (string | null) | undefined;
-    rootEntityVersionId?: (string | null) | undefined;
-    experimentId?: (string | null) | undefined;
-    executionSource?: (string | null) | undefined;
-    tags?: (string[] | null) | undefined;
-    /** ID of the source record this feedback is linked to (e.g. experiment result ID) */
-    sourceId?: (string | null) | undefined;
-    /** User-defined metadata */
-    metadata?:
-      | ({
-          [key: string]: unknown;
-        } | null)
-      | undefined;
-    /** Feedback review workflow status */
-    reviewStatus: 'needs-review' | 'reviewed';
-    author?:
-      | {
-          id: string;
-          name?: string | undefined;
-          email?: string | undefined;
-          avatarUrl?: string | undefined;
-        }
-      | undefined;
-  }[];
+  feedback: Shared_Type_67[];
 };
 
 export type GetObservabilityFeedback_Request = Simplify<
@@ -12178,7 +12122,6 @@ export type GetObservabilityFeedbackFeedbackId_PathParams = {
 };
 
 export type GetObservabilityFeedbackFeedbackId_Response = {
-  /** Feedback record as stored in the database */
   feedback: Shared_Type_67 | null;
 };
 
@@ -12337,7 +12280,63 @@ export type PatchObservabilityFeedbackFeedbackIdReviewStatus_Body = {
   reviewStatus: 'needs-review' | 'reviewed';
 };
 
-export type PatchObservabilityFeedbackFeedbackIdReviewStatus_Response = Shared_Type_67;
+export type PatchObservabilityFeedbackFeedbackIdReviewStatus_Response = {
+  /** Unique id for this feedback event */
+  feedbackId?: (string | null) | undefined;
+  /** When the feedback was recorded */
+  timestamp: Date;
+  /** Trace that anchors the feedback target when available */
+  traceId?: (string | null) | undefined;
+  /** Span ID this feedback applies to */
+  spanId?: (string | null) | undefined;
+  feedbackSource?: (string | null) | undefined;
+  source?: (string | null) | undefined;
+  /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
+  feedbackType: string;
+  /** Feedback value (rating number or correction text) */
+  value: number | string;
+  comment?: (string | null) | undefined;
+  feedbackUserId?: (string | null) | undefined;
+  entityType?: (Shared_Type_61 | null) | undefined;
+  entityId?: (string | null) | undefined;
+  entityName?: (string | null) | undefined;
+  parentEntityType?: (Shared_Type_61 | null) | undefined;
+  parentEntityId?: (string | null) | undefined;
+  parentEntityName?: (string | null) | undefined;
+  rootEntityType?: (Shared_Type_61 | null) | undefined;
+  rootEntityId?: (string | null) | undefined;
+  rootEntityName?: (string | null) | undefined;
+  userId?: (string | null) | undefined;
+  organizationId?: (string | null) | undefined;
+  resourceId?: (string | null) | undefined;
+  runId?: (string | null) | undefined;
+  sessionId?: (string | null) | undefined;
+  threadId?: (string | null) | undefined;
+  requestId?: (string | null) | undefined;
+  environment?: (string | null) | undefined;
+  serviceName?: (string | null) | undefined;
+  scope?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
+  entityVersionId?: (string | null) | undefined;
+  parentEntityVersionId?: (string | null) | undefined;
+  rootEntityVersionId?: (string | null) | undefined;
+  experimentId?: (string | null) | undefined;
+  executionSource?: (string | null) | undefined;
+  tags?: (string[] | null) | undefined;
+  /** ID of the source record this feedback is linked to (e.g. experiment result ID) */
+  sourceId?: (string | null) | undefined;
+  /** User-defined metadata */
+  metadata?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
+  /** Feedback review workflow status */
+  reviewStatus: 'needs-review' | 'reviewed';
+};
 
 export type PatchObservabilityFeedbackFeedbackIdReviewStatus_Request = Simplify<
   (PatchObservabilityFeedbackFeedbackIdReviewStatus_PathParams extends never
