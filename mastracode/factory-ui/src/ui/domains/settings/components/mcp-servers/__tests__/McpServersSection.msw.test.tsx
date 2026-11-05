@@ -635,6 +635,46 @@ describe('McpServersSection', () => {
       expect(within(docs).getByText('1 of 2 tools')).toBeInTheDocument();
     });
 
+    it("shows a tool a built-in tool's name keeps from sessions, and never counts or selects it", async () => {
+      const api = mockMcpServersApi({
+        servers: [
+          {
+            ...docsServer,
+            name: 'Web',
+            slug: 'web',
+            tools: [
+              { name: 'fetch', exposedName: 'web_fetch', selected: true, isNew: false },
+              { name: 'search', exposedName: 'web_search', selected: true, isNew: false, unavailable: 'reserved_name' },
+            ],
+          },
+        ],
+      });
+      const user = userEvent.setup();
+      renderSection();
+
+      const web = await row('Web');
+      expect(within(web).getByText('1 of 2 tools')).toBeInTheDocument();
+      await user.click(within(web).getByRole('button', { name: 'Choose tools' }));
+      const tools = within(web).getByRole('list', { name: 'Web tools' });
+      const search = within(tools).getByRole('checkbox', { name: 'search' });
+      expect(search).not.toBeChecked();
+      expect(search).toHaveAttribute('aria-disabled', 'true');
+      expect(within(tools).getByText('Not available')).toBeInTheDocument();
+      expect(
+        within(tools).getByText("Sessions don't get this tool: a built-in or Factory tool already has its name."),
+      ).toBeInTheDocument();
+      expect(within(web).getByText('1 of 2 tools go to sessions')).toBeInTheDocument();
+      expect(within(web).getByRole('button', { name: 'Save selection' })).toBeDisabled();
+
+      await user.click(within(web).getByRole('button', { name: 'Clear' }));
+      await user.click(within(web).getByRole('button', { name: 'Select all' }));
+      await user.click(within(tools).getByRole('checkbox', { name: 'fetch' }));
+      await user.click(within(web).getByRole('button', { name: 'Save selection' }));
+      await waitFor(() =>
+        expect(api.mutations()).toEqual([{ method: 'PUT', path: `/${DOCS_ID}/tools`, body: { selected: [] } }]),
+      );
+    });
+
     it("sends the admin to the server's sign-in page, returning to this Factory", async () => {
       const api = mockMcpServersApi();
       const user = userEvent.setup();

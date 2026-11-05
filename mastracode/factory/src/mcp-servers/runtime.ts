@@ -44,7 +44,7 @@ const BUILT_IN_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(MC_TOOLS)
  * `ask_user`) would also take its approval rule, and `factory_*` names are
  * allowed without approval on every Factory session.
  */
-function isReservedToolName(name: string): boolean {
+export function isReservedToolName(name: string): boolean {
   return getToolCategory(name) !== 'mcp' || BUILT_IN_TOOL_NAMES.has(name) || name.startsWith('factory_');
 }
 

@@ -279,7 +279,7 @@ function McpServerRow({
   onRemove: () => void;
 }) {
   const status = STATUS[server.status];
-  const selectedCount = server.tools.filter(tool => tool.selected).length;
+  const selectedCount = server.tools.filter(tool => tool.selected && !tool.unavailable).length;
   const newCount = server.tools.filter(tool => tool.isNew).length;
   const toolsId = `mcp-server-tools-${server.id}`;
   const signInFirst = needsSignIn(server);

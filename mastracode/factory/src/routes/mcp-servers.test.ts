@@ -541,6 +541,23 @@ describe('MCP server routes', () => {
     });
   });
 
+  it('tells admins which tools sessions never get because a built-in or Factory tool has the name', async () => {
+    const mcp = await startTestMcpServer({ bearerToken: TOKEN, extraToolNames: ['search'] });
+    const ctx = await setup();
+    // `web_search` is the built-in web search, with its own approval rule.
+    const server = await createServer(ctx, admin, bearerBody(mcp.url, 'Web'));
+    const discovered = await ctx.request(admin, 'POST', `/${server.id}/discover`);
+    const { tools } = ((await discovered.json()) as { server: McpServerInfo }).server;
+
+    expect(tools.map(({ exposedName, selected, unavailable }) => ({ exposedName, selected, unavailable }))).toEqual([
+      { exposedName: 'web_add', selected: true, unavailable: undefined },
+      { exposedName: 'web_echo', selected: true, unavailable: undefined },
+      { exposedName: 'web_search', selected: true, unavailable: 'reserved_name' },
+    ]);
+    const session = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    expect(Object.keys(session.tools).sort()).toEqual(['web_add', 'web_echo']);
+  });
+
   it("keeps every other server working, and the server fixable, when this instance can't read its credentials", async () => {
     const docsServer = await startTestMcpServer({ bearerToken: TOKEN });
     const crmServer = await startTestMcpServer({ bearerToken: TOKEN });

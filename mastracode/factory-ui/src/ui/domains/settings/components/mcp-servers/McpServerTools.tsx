@@ -15,9 +15,12 @@ import { useSetMcpServerTools } from '../../../../../hooks/use-mcp-servers';
  */
 export function McpServerTools({ server, canManage }: { server: McpServerInfo; canManage: boolean }) {
   const setTools = useSetMcpServerTools();
-  const saved = server.tools.filter(tool => tool.selected).map(tool => tool.name);
-  const [selected, setSelected] = useState(() => new Set(saved));
-  const changed = selected.size !== saved.length || saved.some(name => !selected.has(name));
+  // Tools a built-in or Factory tool's name keeps from sessions can't be chosen.
+  const available = server.tools.filter(tool => !tool.unavailable);
+  const [selected, setSelected] = useState(
+    () => new Set(available.filter(tool => tool.selected).map(tool => tool.name)),
+  );
+  const changed = available.some(tool => selected.has(tool.name) !== tool.selected);
   // Saving, even unchanged, marks new tools as reviewed: the admin can keep them off.
   const reviewing = server.tools.some(tool => tool.isNew);
   const disabled = !canManage || setTools.isPending;
@@ -49,7 +52,7 @@ export function McpServerTools({ server, canManage }: { server: McpServerInfo; c
               size="sm"
               variant="ghost"
               disabled={disabled}
-              onClick={() => setSelected(new Set(server.tools.map(tool => tool.name)))}
+              onClick={() => setSelected(new Set(available.map(tool => tool.name)))}
             >
               Select all
             </Button>
@@ -66,7 +69,7 @@ export function McpServerTools({ server, canManage }: { server: McpServerInfo; c
               className="mt-0.5"
               checked={selected.has(tool.name)}
               aria-label={tool.title ?? tool.name}
-              disabled={disabled}
+              disabled={disabled || Boolean(tool.unavailable)}
               onCheckedChange={checked => toggle(tool.name, checked === true)}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -77,6 +80,11 @@ export function McpServerTools({ server, canManage }: { server: McpServerInfo; c
                 {tool.isNew && (
                   <Badge size="sm" variant="info">
                     New
+                  </Badge>
+                )}
+                {tool.unavailable && (
+                  <Badge size="sm" variant="warning">
+                    Not available
                   </Badge>
                 )}
                 {tool.annotations?.readOnlyHint === true && (
@@ -93,6 +101,11 @@ export function McpServerTools({ server, canManage }: { server: McpServerInfo; c
               {tool.description && (
                 <Txt as="p" variant="caption" tone="muted" className="line-clamp-2">
                   {tool.description}
+                </Txt>
+              )}
+              {tool.unavailable && (
+                <Txt as="p" variant="caption" tone="muted">
+                  Sessions don't get this tool: a built-in or Factory tool already has its name.
                 </Txt>
               )}
               <Txt as="span" variant="meta" tone="muted" font="mono" className="truncate">

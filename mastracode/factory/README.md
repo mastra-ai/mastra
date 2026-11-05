@@ -1196,7 +1196,7 @@ Dynamic client registration isn't supported. A sign-in must finish within 10 min
 
 The first connection selects every tool the server lists. Later refreshes add new tools unselected and mark them **New** until an admin saves a selection, so a server can't hand sessions new tools by itself. Each server can list up to 500 tools, and an organization can have up to 50 servers.
 
-Sessions see each tool as `<server>_<tool>`, where `<server>` comes from the server's name when it was added (lowercase letters, digits and `-`, up to 40 characters), for example `crm_lookup_order`. Renaming a server doesn't change its tool names. Names longer than 64 characters are shortened with a hash. When a name matches a tool the session already has, the MCP tool is skipped.
+Sessions see each tool as `<server>_<tool>`, where `<server>` comes from the server's name when it was added (lowercase letters, digits and `-`, up to 40 characters), for example `crm_lookup_order`. Renaming a server doesn't change its tool names. Names longer than 64 characters are shortened with a hash. When a name matches a tool the session already has, the MCP tool is skipped. A name that belongs to a built-in or Factory tool, such as `web_search` or anything starting with `factory_`, is never given to sessions, because approval rules go by tool name; the tools list marks these tools as not available.
 
 #### Approving tool calls
 

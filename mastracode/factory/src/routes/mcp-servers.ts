@@ -13,6 +13,7 @@ import {
   mcpOAuthEndpoints,
   startMcpOAuth,
 } from '../mcp-servers/oauth.js';
+import { isReservedToolName } from '../mcp-servers/runtime.js';
 import type { McpServersRuntime } from '../mcp-servers/runtime.js';
 import { createMcpServerSchemas, MCP_SERVER_LIMITS, slugify } from '../mcp-servers/schemas.js';
 import { createGuardedFetch } from '../mcp-servers/url-policy.js';
@@ -49,6 +50,8 @@ export interface McpServerToolInfo {
   selected: boolean;
   /** Appeared on a refresh and was not reviewed yet; never selected automatically. */
   isNew: boolean;
+  /** Sessions never get this tool, selected or not: its exposed name belongs to a built-in or Factory tool. */
+  unavailable?: 'reserved_name';
   annotations?: {
     readOnlyHint?: boolean;
     destructiveHint?: boolean;
@@ -175,6 +178,7 @@ async function toMcpServerInfo(storage: McpServersStorage, record: McpServerReco
         ...(definition.description ? { description: definition.description } : {}),
         selected: selected.has(name),
         isNew: isNew.has(name),
+        ...(isReservedToolName(exposedName) ? { unavailable: 'reserved_name' as const } : {}),
         ...(annotations ? { annotations } : {}),
       };
     })
