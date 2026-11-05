@@ -262,6 +262,8 @@ export abstract class ExecutionEngine extends MastraBase {
     perStep?: boolean;
     /** How the run is stored. Engines that don't support version 2 ignore it. @experimental */
     storageVersion?: 1 | 2;
+    /** Called once the run is handed to workers. Engines that execute in-process ignore it. @internal */
+    onDispatched?: () => void;
     /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
     storedState?: { seq: number; patchBytes: number };
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
