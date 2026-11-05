@@ -216,7 +216,13 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
     const error = getErrorFromUnknown(failure ?? 'Workflow execution failed');
     const delivery =
       failure?.code === DURABLE_STOP_WHEN_ERROR_ID || failure?.id === DURABLE_STOP_WHEN_ERROR_ID ? 'reject' : undefined;
-    await emitErrorEvent(bindAgentPubSub(mastra.pubsub, claim.agentId!), event.runId, error, claim.generation, delivery);
+    await emitErrorEvent(
+      bindAgentPubSub(mastra.pubsub, claim.agentId!),
+      event.runId,
+      error,
+      claim.generation,
+      delivery,
+    );
   }
   // Storage-backed deletes are fenced; lease-only stores retain their existing best-effort write guarantees.
   if (event.type !== 'workflow.suspend') {
