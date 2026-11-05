@@ -52,7 +52,7 @@ it('asks the hosted store which scopes its instance shares with every reader', a
     apiUrl: 'http://localhost',
     instanceId: 'kn_1',
     accessToken: 'token',
-  }).getStorage()) as unknown as { listSharedScopeDeclarations(): Promise<string[]> };
+  }).getStorage())!;
   try {
     expect(await store.listSharedScopeDeclarations()).toEqual(['linear:$account:$connection']);
     expect(urls).toEqual(['http://localhost/v1/knowledge/kn_1/operations/listSharedScopeDeclarations']);
