@@ -67,10 +67,14 @@ function modernHandler() {
 /**
  * A stateful 2025-11-25 server: after the rejected `server/discover` probe, the client's
  * handshake also sends `initialize` and `notifications/initialized`, each a separate HTTP request.
+ * `mcpServers` holds the server of each session, so a test can send it a server-initiated request.
+ * With `logDuringHandshake`, the server sends a log on the `initialize` response, before the
+ * client's connect() returns.
  */
-function legacyHandler(options: { logOnEventStream?: boolean } = {}) {
+function legacyHandler(options: { logOnEventStream?: boolean; logDuringHandshake?: boolean } = {}) {
   const sessions = new Map<string, NodeStreamableHTTPServerTransport>();
-  return async (req: IncomingMessage, res: ServerResponse, body: unknown) => {
+  const mcpServers: McpServer[] = [];
+  const handler = async (req: IncomingMessage, res: ServerResponse, body: unknown) => {
     const sessionId = req.headers['mcp-session-id'];
     let transport = typeof sessionId === 'string' ? sessions.get(sessionId) : undefined;
     if (!transport) {
@@ -80,11 +84,28 @@ function legacyHandler(options: { logOnEventStream?: boolean } = {}) {
           sessions.set(id, created);
         },
       });
-      await buildMcpServer(options).connect(created);
+      const mcpServer = buildMcpServer({ logOnEventStream: options.logOnEventStream || options.logDuringHandshake });
+      await mcpServer.connect(created);
+      mcpServers.push(mcpServer);
+      const deliver = created.onmessage;
+      if (options.logDuringHandshake && deliver) {
+        created.onmessage = (message, extra) => {
+          if ('method' in message && message.method === 'initialize' && 'id' in message) {
+            const log = {
+              jsonrpc: '2.0' as const,
+              method: 'notifications/message',
+              params: { level: 'info', data: 'handshake log' },
+            };
+            void created.send(log, { relatedRequestId: message.id });
+          }
+          deliver.call(created, message, extra);
+        };
+      }
       transport = created;
     }
     await transport.handleRequest(req, res, body);
   };
+  return Object.assign(handler, { mcpServers });
 }
 
 type Handler = ReturnType<typeof modernHandler>;
@@ -282,6 +303,119 @@ describe('hydrated MCP tool on a 2025-11-25 server event stream (issue #29531)',
     const eventStreams = received.filter(request => request.method === EVENT_STREAM);
     expect(new Set(eventStreams.map(request => request.user))).toEqual(new Set(['alice']));
     expect(serverLogs.find('echo second')!.user).toBeNull();
+  });
+
+  it('sends the reply to a server request on the event stream as the call that opened it', async () => {
+    const handler = legacyHandler();
+    server = await startServer(handler);
+    const catalog = await cachedCatalog(server.url);
+    const client = new MCPClient({
+      id: `per-user-elicitation-client-${++clientId}`,
+      servers: {
+        demo: {
+          url: server.url,
+          inputRequests: async () => ({ action: 'accept', content: { approved: true } }),
+          fetch: (requestUrl, init, requestContext) => {
+            const user = requestContext?.get('user');
+            const headers = new Headers(init?.headers);
+            headers.set('x-user', typeof user === 'string' ? user : NO_REQUEST_CONTEXT);
+            return fetch(requestUrl, { ...init, headers });
+          },
+        },
+      },
+    });
+    clients.push(client);
+    const tools = await client.toolsFromDefinitions({ definitions: catalog });
+    server.received.length = 0;
+
+    await tools.demo_echo!.execute!({ text: 'first' }, callAs('alice'));
+    const { received } = server;
+    await vi.waitFor(() => expect(received.some(request => request.method === EVENT_STREAM)).toBe(true));
+    received.length = 0;
+    // No related request: the server sends it on the event stream alice's call opened.
+    const result = await handler.mcpServers.at(-1)!.server.elicitInput({
+      mode: 'form',
+      message: 'Approve?',
+      requestedSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+    });
+
+    expect(result).toMatchObject({ action: 'accept', content: { approved: true } });
+    expect(received.map(({ method, user }) => ({ method, user }))).toEqual([
+      { method: 'POST (no JSON-RPC method)', user: 'alice' },
+    ]);
+  });
+
+  it('does not send requests a server log on the event stream starts as the call that opened the stream', async () => {
+    server = await startServer(legacyHandler({ logOnEventStream: true }));
+    const catalog = await cachedCatalog(server.url);
+    const serverLogs = recordServerLogs();
+    let startedFromLog: Promise<unknown> | undefined;
+    const logger: LogHandler = entry => {
+      serverLogs.logger(entry);
+      // This log arrives on the event stream alice's call opened, but no call of alice's started
+      // what the callback does next: a tool call without a requestContext and a tools/list.
+      if (!startedFromLog && serverLogs.find('echo second')) {
+        startedFromLog = Promise.all([tools.demo_echo!.execute!({ text: 'from log' }, {}), client.listTools()]);
+      }
+    };
+    const client = perUserClient(server.url, logger);
+    const tools = await client.toolsFromDefinitions({ definitions: catalog });
+    server.received.length = 0;
+
+    await tools.demo_echo!.execute!({ text: 'first' }, callAs('alice'));
+    const { received } = server;
+    await vi.waitFor(() => expect(received.some(request => request.method === EVENT_STREAM)).toBe(true));
+    await tools.demo_echo!.execute!({ text: 'second' }, callAs('alice'));
+    await vi.waitFor(() => expect(startedFromLog).toBeDefined());
+    await startedFromLog;
+
+    const fromLog = received.filter(
+      request => request.method === 'tools/list' || (request.method === 'tools/call' && request.text === 'from log'),
+    );
+    expect(fromLog.map(({ method, user }) => ({ method, user }))).toEqual(
+      expect.arrayContaining([
+        { method: 'tools/call', user: NO_REQUEST_CONTEXT },
+        { method: 'tools/list', user: NO_REQUEST_CONTEXT },
+      ]),
+    );
+    expect(fromLog).toHaveLength(2);
+  });
+});
+
+/**
+ * The handshake runs as the call that opened the connection, but a server log delivered during it
+ * belongs to no call. A request the log's handler starts must not be sent as that call either.
+ */
+describe('hydrated MCP tool whose 2025-11-25 server logs during the handshake (issue #29531)', () => {
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+
+  afterEach(async () => {
+    await server?.close();
+    server = undefined;
+  });
+
+  it('does not send a request a handshake log starts as the call that opened the connection', async () => {
+    server = await startServer(legacyHandler({ logDuringHandshake: true }));
+    const catalog = await cachedCatalog(server.url);
+    let startedFromLog: Promise<unknown> | undefined;
+    const logger: LogHandler = entry => {
+      if (!startedFromLog && JSON.stringify(entry.details ?? {}).includes('handshake log')) {
+        startedFromLog = client.listTools();
+      }
+    };
+    const client = perUserClient(server.url, logger);
+    const tools = await client.toolsFromDefinitions({ definitions: catalog });
+    server.received.length = 0;
+
+    await tools.demo_echo!.execute!({ text: 'first' }, callAs('alice'));
+    expect(startedFromLog).toBeDefined();
+    await startedFromLog;
+
+    const { received } = server;
+    expect(received.filter(request => request.method === 'initialize').map(request => request.user)).toEqual(['alice']);
+    expect(received.filter(request => request.method === 'tools/list').map(request => request.user)).toEqual([
+      NO_REQUEST_CONTEXT,
+    ]);
   });
 });
 

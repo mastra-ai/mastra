@@ -185,6 +185,24 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
   }
 }
 
+/** Whether a request body is a single JSON-RPC response: the client's reply to a server request. */
+function isJsonRpcResponseBody(body: RequestInit['body']): boolean {
+  if (typeof body !== 'string') return false;
+  try {
+    const message: unknown = JSON.parse(body);
+    return (
+      typeof message === 'object' &&
+      message !== null &&
+      !Array.isArray(message) &&
+      !('method' in message) &&
+      'id' in message &&
+      ('result' in message || 'error' in message)
+    );
+  } catch {
+    return false;
+  }
+}
+
 const TASK_WAIT_ERROR_IDS = {
   timeout: 'MCP_CLIENT_TOOL_TASK_TIMEOUT',
   expired: 'MCP_CLIENT_TOOL_TASK_EXPIRED',
@@ -482,9 +500,16 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * The requestContext of the tool call whose execution opened the connection. Only the
    * transport's fetch reads it, so the handshake and the streams the connection keeps open are
-   * sent as that call, while server logs arriving on those streams are not labelled with it.
+   * sent as that call. Messages arriving on those streams are delivered outside it, so server logs
+   * are not labelled with it and requests their handlers send are not sent as that call.
    */
   private connectionContextStore = new AsyncLocalStorage<RequestContext | null>();
+  /**
+   * The connection context of the stream a server message arrived on, set while that message is
+   * delivered. The transport's fetch reads it only for the client's replies to server requests,
+   * which belong to the connection rather than to the handler that produced them.
+   */
+  private replyContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
@@ -710,7 +735,7 @@ export class InternalMastraMCPClient extends MastraBase {
     const policyUserFetch =
       userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
-      const requestContext = this.operationContextStore.getStore() ?? this.connectionContextStore.getStore() ?? null;
+      const requestContext = this.fetchRequestContext(init);
       const executeFetch = (): Promise<Response> => {
         if (allowedHosts === undefined) {
           return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
@@ -735,6 +760,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // transport that started the authorization flow (finishAuth must run on it).
     const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
     observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.deliverOutsideConnectionContext(transport);
     this.connectingTransport = transport;
     try {
       this.assertSameLifecycle(generation);
@@ -762,6 +788,52 @@ export class InternalMastraMCPClient extends MastraBase {
     } finally {
       if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
+  }
+
+  /**
+   * The requestContext the transport's fetch passes on for an outgoing request. An operation scope
+   * owns its requests, even when its requestContext is null. Outside one, the handshake and the
+   * streams the connection keeps open use the connection context, and a reply to a server request
+   * uses the context of the connection that delivered the request.
+   */
+  private fetchRequestContext(init?: RequestInit): RequestContext | null {
+    const operationContext = this.operationContextStore.getStore();
+    if (operationContext !== undefined) return operationContext;
+    const connectionContext = this.connectionContextStore.getStore();
+    if (connectionContext !== undefined) return connectionContext;
+    const replyContext = this.replyContextStore.getStore();
+    if (replyContext !== undefined && isJsonRpcResponseBody(init?.body)) return replyContext;
+    return null;
+  }
+
+  /**
+   * Delivers every message the server sends outside the connection context, from the handshake on.
+   * A server log, notification or request arriving on a stream the opening call started belongs to
+   * no call, so a request its handler sends must not be sent as that call. The client's reply to a
+   * server request still is, through `replyContextStore`.
+   *
+   * The SDK assigns `onmessage` during `connect()` and swaps it while probing the server, so every
+   * assignment is wrapped. The wrapper is idempotent: a handler that wraps an already wrapped one
+   * (`interceptTaskResults`, or the probe restoring its saved handler) keeps the reply context.
+   */
+  private deliverOutsideConnectionContext(transport: Transport): void {
+    let deliver: Transport['onmessage'];
+    Object.defineProperty(transport, 'onmessage', {
+      configurable: true,
+      enumerable: true,
+      get: () => deliver,
+      set: (handler: Transport['onmessage']) => {
+        deliver =
+          handler &&
+          ((message, extra) => {
+            const replyContext = this.connectionContextStore.getStore() ?? this.replyContextStore.getStore();
+            const dispatch = () => handler.call(transport, message, extra);
+            this.connectionContextStore.exit(() =>
+              replyContext === undefined ? dispatch() : this.replyContextStore.run(replyContext, dispatch),
+            );
+          });
+      },
+    });
   }
 
   /**
