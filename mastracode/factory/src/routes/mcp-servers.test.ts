@@ -459,6 +459,29 @@ describe('MCP server routes', () => {
     expect(mcp.methods.filter(method => method === 'server/discover' || method === 'initialize')).toHaveLength(3);
   });
 
+  it('does not save a connection made with headers an admin replaced while it was connecting', async () => {
+    const mcp = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    const server = await createServer(ctx, admin, bearerBody(mcp.url));
+
+    const held = mcp.holdNextRequest();
+    const discovering = ctx.request(admin, 'POST', `/${server.id}/discover`);
+    await held.arrived;
+    const patch = await ctx.request(admin, 'PATCH', `/${server.id}`, {
+      headers: [{ name: 'Authorization', value: 'Bearer mistyped-token' }],
+    });
+    expect(patch.status).toBe(200);
+    held.release();
+
+    const response = await discovering;
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ message: 'The server changed while connecting. Connect again.' });
+    expect(await ctx.storage.get({ orgId: 'org-a', id: server.id })).toMatchObject({
+      status: 'unknown',
+      toolCatalog: null,
+    });
+  });
+
   it('leaves the new connection working when a rotation cuts off a call made with the old credentials', async () => {
     const mcp = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();

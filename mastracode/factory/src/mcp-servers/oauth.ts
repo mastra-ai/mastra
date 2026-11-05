@@ -106,7 +106,7 @@ export function createMcpOAuthProvider(
       ...(record.oauthScopes.length > 0 ? { scope: record.oauthScopes.join(' ') } : {}),
     },
     ...(clientInformation ? { clientInformation } : { clientMetadataUrl: endpoints.clientMetadataUrl }),
-    storage: forSessions ? withoutSignInWrites(storage.oauthStorage(record.id)) : storage.oauthStorage(record.id),
+    storage: forSessions ? withoutSignInWrites(storage.oauthStorage(record)) : storage.oauthStorage(record),
     // Sessions never send anyone to sign in; a refused token surfaces as `needs_auth`.
     onRedirectToAuthorization: onRedirectToAuthorization ?? (() => undefined),
     ...(stateGenerator ? { stateGenerator } : {}),

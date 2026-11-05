@@ -185,6 +185,8 @@ export interface TestAuthorizationServer {
   grants: Array<'authorization_code' | 'refresh_token'>;
   /** Times the (never used) dynamic client registration endpoint was contacted. */
   registrationAttempts: number;
+  /** Hold the next token request until `release()`; `arrived` resolves once it has come in. */
+  holdNextTokenRequest(): { arrived: Promise<void>; release(): void };
   close(): Promise<void>;
 }
 
@@ -198,6 +200,7 @@ export async function startTestAuthorizationServer(): Promise<TestAuthorizationS
   const clients = new Map<string, { clientSecret?: string; redirectUris: string[] }>();
   const codes = new Map<string, { clientId: string; redirectUri: string; challenge: string }>();
   let issuer = '';
+  let heldToken: { arrived: () => void; released: Promise<void> } | undefined;
 
   const send = (res: ServerResponse, status: number, body: unknown) =>
     res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
@@ -256,6 +259,12 @@ export async function startTestAuthorizationServer(): Promise<TestAuthorizationS
       return res.writeHead(302, { location: location.toString() }).end();
     }
     if (url.pathname === '/token' && req.method === 'POST') {
+      if (heldToken) {
+        const { arrived, released } = heldToken;
+        heldToken = undefined;
+        arrived();
+        await released;
+      }
       const form = await readForm(req);
       if (server.echoTokenRequests === 'text') {
         return res.writeHead(500, { 'content-type': 'text/plain' }).end(`upstream rejected ${form.toString()}`);
@@ -313,6 +322,13 @@ export async function startTestAuthorizationServer(): Promise<TestAuthorizationS
     authorizeClientIds: [],
     grants: [],
     registrationAttempts: 0,
+    holdNextTokenRequest: () => {
+      let arrived!: () => void;
+      let release!: () => void;
+      const arrival = new Promise<void>(resolve => (arrived = resolve));
+      heldToken = { arrived, released: new Promise<void>(resolve => (release = resolve)) };
+      return { arrived: arrival, release };
+    },
     close: async () => {
       http.closeAllConnections();
       await new Promise<void>(resolve => http.close(() => resolve()));

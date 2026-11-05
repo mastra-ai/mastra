@@ -192,7 +192,7 @@ async function toMcpServerInfo(storage: McpServersStorage, record: McpServerReco
             clientId: record.oauthClientId,
             hasClientSecret: Boolean(record.oauthClientSecret),
             scopes: record.oauthScopes,
-            connected: await storage.hasOAuthTokens(record.id),
+            connected: await storage.hasOAuthTokens(record),
           },
         }
       : {}),
@@ -286,7 +286,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
         return record ? run(c, ctx, record) : notFound(c);
       };
 
-    /** Discover the server's tools and save the outcome; a discovery for an address the server no longer has is dropped. */
+    /** Discover the server's tools and save the outcome; a discovery for a version of the server it no longer has is dropped. */
     const connect = async (
       ctx: McpServersContext,
       record: McpServerRecord,
@@ -294,13 +294,18 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
       const result = await runtime.discover(record);
       const updated =
         result.status === 'connected'
-          ? await ctx.storage.saveDiscovery({ orgId: ctx.orgId, id: record.id, ifUrl: record.url, tools: result.tools })
+          ? await ctx.storage.saveDiscovery({
+              orgId: ctx.orgId,
+              id: record.id,
+              ifUpdatedAt: record.updatedAt,
+              tools: result.tools,
+            })
           : await ctx.storage.setStatus({
               orgId: ctx.orgId,
               id: record.id,
               status: result.status,
               lastError: result.error,
-              ifUrl: record.url,
+              ifUpdatedAt: record.updatedAt,
             });
       runtime.invalidate(record.id);
       if (updated) return updated;
@@ -312,7 +317,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
       if (outcome === 'not_found') return notFound(c);
       if (outcome === 'changed') {
         return c.json(
-          { error: 'mcp_server_changed', message: "The server's address changed while connecting. Connect again." },
+          { error: 'mcp_server_changed', message: 'The server changed while connecting. Connect again.' },
           409,
         );
       }
@@ -559,7 +564,7 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
             const signedIn = await ctx.storage.setAuthorizationServerHosts({
               orgId: ctx.orgId,
               id: record.id,
-              ifUrl: record.url,
+              ifOAuthGeneration: record.oauthGeneration,
               hosts: exchanged.authorizationServerHosts,
             });
             if (!signedIn) return back('changed', at);

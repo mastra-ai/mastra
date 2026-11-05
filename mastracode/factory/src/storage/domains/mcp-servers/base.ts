@@ -42,6 +42,12 @@ export interface McpServerRecord {
    * only hosts its connections may reach.
    */
   authorizationServerHosts: string[];
+  /**
+   * Starts over whenever the server's OAuth sign-in is reset (a new URL or
+   * client, sign-out). OAuth values are stored per generation, so a sign-in
+   * or token refresh that finishes after a reset is never read back.
+   */
+  oauthGeneration: number;
   toolCatalog: McpServerToolCatalog | null;
   selectedTools: string[];
   /** Tools that appeared on a refresh and have not been reviewed; never selected automatically. */
@@ -116,6 +122,7 @@ export const MCP_SERVERS_SCHEMA: CollectionSchema = {
     oauth_client_secret: { type: 'text', nullable: true },
     oauth_scopes: { type: 'json', nullable: true },
     authorization_server_hosts: { type: 'json', nullable: true },
+    oauth_generation: { type: 'integer', default: 0 },
     tool_catalog: { type: 'json', nullable: true },
     selected_tools: { type: 'json' },
     new_tools: { type: 'json' },
@@ -133,11 +140,12 @@ export const MCP_SERVER_OAUTH_SCHEMA: CollectionSchema = {
   columns: {
     id: { type: 'uuid-pk' },
     server_id: { type: 'text' },
+    generation: { type: 'integer', default: 0 },
     key: { type: 'text' },
     value: { type: 'text' },
     updated_at: { type: 'timestamp' },
   },
-  uniqueIndexes: [{ name: 'mcp_server_oauth_server_key', columns: ['server_id', 'key'] }],
+  uniqueIndexes: [{ name: 'mcp_server_oauth_generation_key', columns: ['server_id', 'generation', 'key'] }],
 };
 
 export const MCP_SERVER_OAUTH_FLOWS_SCHEMA: CollectionSchema = {
@@ -168,6 +176,7 @@ interface McpServerDbRow extends Record<string, unknown> {
   oauth_client_secret: string | null;
   oauth_scopes: string[] | null;
   authorization_server_hosts: string[] | null;
+  oauth_generation: number;
   tool_catalog: McpServerToolCatalog | null;
   selected_tools: string[];
   new_tools: string[];
@@ -181,6 +190,7 @@ interface McpServerDbRow extends Record<string, unknown> {
 interface McpServerOAuthDbRow extends Record<string, unknown> {
   id: string;
   server_id: string;
+  generation: number;
   key: string;
   value: string;
   updated_at: Date;
@@ -194,6 +204,16 @@ interface McpServerOAuthFlowDbRow extends Record<string, unknown> {
   factory_project_id: string | null;
   expires_at: Date;
   created_at: Date;
+}
+
+/**
+ * `updated_at` doubles as the row's version for conditional writes, so it
+ * always moves forward: also when two writes land in the same millisecond or
+ * another replica's clock is behind.
+ */
+function nextVersion(current: McpServerDbRow, now = new Date()): Date {
+  const previous = new Date(current.updated_at).getTime();
+  return now.getTime() > previous ? now : new Date(previous + 1);
 }
 
 function stringArray(value: unknown): string[] {
@@ -318,6 +338,7 @@ export class McpServersStorage extends FactoryStorageDomain {
         row.oauth_client_secret === null ? null : (await this.#decryptString(row.oauth_client_secret)).value,
       oauthScopes: stringArray(row.oauth_scopes),
       authorizationServerHosts: stringArray(row.authorization_server_hosts),
+      oauthGeneration: Number(row.oauth_generation ?? 0),
       toolCatalog: row.tool_catalog && typeof row.tool_catalog === 'object' ? row.tool_catalog : null,
       selectedTools: stringArray(row.selected_tools),
       newTools: stringArray(row.new_tools),
@@ -375,6 +396,7 @@ export class McpServersStorage extends FactoryStorageDomain {
         oauth_client_secret: oauth?.clientId ? await this.#encryptString(oauth.clientSecret) : null,
         oauth_scopes: oauth?.scopes ?? null,
         authorization_server_hosts: null,
+        oauth_generation: 0,
         tool_catalog: null,
         selected_tools: [],
         new_tools: [],
@@ -473,11 +495,13 @@ export class McpServersStorage extends FactoryStorageDomain {
           oauth_client_id: clientId,
           oauth_client_secret: clientSecret,
           oauth_scopes: scopes,
-          ...(clearsOAuth ? { authorization_server_hosts: null } : {}),
+          ...(clearsOAuth
+            ? { authorization_server_hosts: null, oauth_generation: Number(current.oauth_generation) + 1 }
+            : {}),
           ...(originChanged ? { tool_catalog: null, selected_tools: [], new_tools: [], discovered_at: null } : {}),
           ...(reconnect ? { status: 'unknown' as const, last_error: null } : {}),
           updated_by: userId,
-          updated_at: new Date(),
+          updated_at: nextVersion(current),
         };
       }),
     );
@@ -499,25 +523,26 @@ export class McpServersStorage extends FactoryStorageDomain {
    * Persist a successful discovery and mark the server connected. The first
    * discovery selects every tool; later ones keep the explicit selection,
    * drop tools that disappeared, and list newly appearing tools in
-   * `newTools` without selecting them. `ifUrl` discards results discovered
-   * against an address the server no longer has.
+   * `newTools` without selecting them. `ifUpdatedAt` discards results
+   * discovered with a version of the server (address, credentials) it no
+   * longer has.
    */
   async saveDiscovery({
     orgId,
     id,
-    ifUrl,
+    ifUpdatedAt,
     tools,
     now = new Date(),
   }: {
     orgId: string;
     id: string;
-    ifUrl: string;
+    ifUpdatedAt: Date;
     tools: SerializableMCPToolDefinition[];
     now?: Date;
   }): Promise<McpServerRecord | null> {
     let applied = false;
     const row = await this.#db.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, current => {
-      if (current.url !== ifUrl) return null;
+      if (new Date(current.updated_at).getTime() !== ifUpdatedAt.getTime()) return null;
       applied = true;
       // Tool names come from the server: `__proto__` must be a key, not a prototype.
       const catalog: McpServerToolCatalog = Object.create(null);
@@ -544,7 +569,7 @@ export class McpServersStorage extends FactoryStorageDomain {
         status: 'connected',
         last_error: null,
         discovered_at: now,
-        updated_at: now,
+        updated_at: nextVersion(current, now),
       };
     });
     return row && applied ? this.#toRecord(row) : null;
@@ -574,58 +599,59 @@ export class McpServersStorage extends FactoryStorageDomain {
         selected_tools: [...new Set(selected)],
         new_tools: [],
         updated_by: userId,
-        updated_at: new Date(),
+        updated_at: nextVersion(current),
       };
     });
     return row ? this.#toRecord(row) : null;
   }
 
-  /** `ifUrl` discards a status computed against an address the server no longer has. */
+  /** `ifUpdatedAt` discards a status computed for a version of the server it no longer has. */
   async setStatus({
     orgId,
     id,
     status,
     lastError = null,
-    ifUrl,
     ifUpdatedAt,
   }: {
     orgId: string;
     id: string;
     status: McpServerStatus;
     lastError?: string | null;
-    ifUrl?: string;
-    /** Only when the server has not changed since this version was read. */
-    ifUpdatedAt?: Date;
+    ifUpdatedAt: Date;
   }): Promise<McpServerRecord | null> {
     let applied = false;
     const row = await this.#db.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, current => {
-      if (ifUrl !== undefined && current.url !== ifUrl) return null;
-      if (ifUpdatedAt !== undefined && new Date(current.updated_at).getTime() !== ifUpdatedAt.getTime()) return null;
+      if (new Date(current.updated_at).getTime() !== ifUpdatedAt.getTime()) return null;
       applied = true;
-      return { status, last_error: lastError, updated_at: new Date() };
+      return { status, last_error: lastError, updated_at: nextVersion(current) };
     });
     return row && applied ? this.#toRecord(row) : null;
   }
 
   // ---- OAuth state ---------------------------------------------------------
 
-  /** `@mastra/mcp` OAuth storage for one server, with every value encrypted. */
-  oauthStorage(serverId: string): OAuthStorage {
+  /**
+   * `@mastra/mcp` OAuth storage for one server's current sign-in, with every
+   * value encrypted. Bound to the record's `oauthGeneration`: once the sign-in
+   * is reset, what this storage writes is never read again.
+   */
+  oauthStorage({ id, oauthGeneration }: Pick<McpServerRecord, 'id' | 'oauthGeneration'>): OAuthStorage {
+    const where = { server_id: id, generation: oauthGeneration };
     return {
       get: async key => {
-        const row = await this.#db.findOne<McpServerOAuthDbRow>('mcp_server_oauth', { server_id: serverId, key });
+        const row = await this.#db.findOne<McpServerOAuthDbRow>('mcp_server_oauth', { ...where, key });
         return row ? (await this.#decryptString(row.value)).value : undefined;
       },
       set: async (key, value) => {
-        await this.#db.upsertOne<McpServerOAuthDbRow>('mcp_server_oauth', ['server_id', 'key'], {
-          server_id: serverId,
+        await this.#db.upsertOne<McpServerOAuthDbRow>('mcp_server_oauth', ['server_id', 'generation', 'key'], {
+          ...where,
           key,
           value: await this.encryption.encrypt(value),
           updated_at: new Date(),
         });
       },
       delete: async key => {
-        await this.#db.deleteMany('mcp_server_oauth', { server_id: serverId, key });
+        await this.#db.deleteMany('mcp_server_oauth', { ...where, key });
       },
     };
   }
@@ -636,44 +662,51 @@ export class McpServersStorage extends FactoryStorageDomain {
    */
   async disconnectOAuth({ orgId, id }: { orgId: string; id: string }): Promise<McpServerRecord | null> {
     const row = await this.storage.withTransaction(ops =>
-      ops.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, async () => {
+      ops.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, async current => {
         await ops.deleteMany('mcp_server_oauth', { server_id: id });
         await ops.deleteMany('mcp_server_oauth_flows', { server_id: id });
         return {
           authorization_server_hosts: null,
+          oauth_generation: Number(current.oauth_generation) + 1,
           status: 'needs_auth' as const,
           last_error: 'Sign in to connect this server.',
-          updated_at: new Date(),
+          updated_at: nextVersion(current),
         };
       }),
     );
     return row ? this.#toRecord(row) : null;
   }
 
-  /** Record the hosts a completed sign-in talked to. `ifUrl` discards a sign-in for an address the server no longer has. */
+  /**
+   * Record the hosts a completed sign-in talked to. `ifOAuthGeneration`
+   * discards a sign-in that finished after the server's sign-in was reset.
+   */
   async setAuthorizationServerHosts({
     orgId,
     id,
-    ifUrl,
+    ifOAuthGeneration,
     hosts,
   }: {
     orgId: string;
     id: string;
-    ifUrl: string;
+    ifOAuthGeneration: number;
     hosts: string[];
   }): Promise<McpServerRecord | null> {
     let applied = false;
     const row = await this.#db.updateAtomic<McpServerDbRow>('mcp_servers', { org_id: orgId, id }, current => {
-      if (current.url !== ifUrl) return null;
+      if (Number(current.oauth_generation) !== ifOAuthGeneration) return null;
       applied = true;
-      return { authorization_server_hosts: [...new Set(hosts)], updated_at: new Date() };
+      return { authorization_server_hosts: [...new Set(hosts)], updated_at: nextVersion(current) };
     });
     return row && applied ? this.#toRecord(row) : null;
   }
 
-  /** Whether a sign-in stored tokens for the server (`tokens`, or `tokens:<issuer>` per authorization server). */
-  async hasOAuthTokens(serverId: string): Promise<boolean> {
-    const rows = await this.#db.findMany<McpServerOAuthDbRow>('mcp_server_oauth', { server_id: serverId });
+  /** Whether the server's current sign-in stored tokens (`tokens`, or `tokens:<issuer>` per authorization server). */
+  async hasOAuthTokens({ id, oauthGeneration }: Pick<McpServerRecord, 'id' | 'oauthGeneration'>): Promise<boolean> {
+    const rows = await this.#db.findMany<McpServerOAuthDbRow>('mcp_server_oauth', {
+      server_id: id,
+      generation: oauthGeneration,
+    });
     return rows.some(row => row.key === 'tokens' || row.key.startsWith('tokens:'));
   }
 

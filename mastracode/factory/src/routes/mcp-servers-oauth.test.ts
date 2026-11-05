@@ -301,6 +301,49 @@ describe('MCP server OAuth sign-in', () => {
     expect(await getServer(ctx, server.id)).toMatchObject({ oauth: { connected: false } });
   });
 
+  it("does not let a sign-in that finishes after the server's address changed sign in the new address", async () => {
+    const ctx = await setup();
+    const server = await addOAuthServer(ctx, ctx.mcp);
+    const callback = await authorize(await startSignIn(ctx, server.id));
+
+    // The code exchange is under way when an admin points the server somewhere else.
+    const held = ctx.authorizationServer.holdNextTokenRequest();
+    const finishing = deliverCallback(ctx, callback);
+    await held.arrived;
+    const other = await startTestMcpServer({ authorizationServer: ctx.authorizationServer });
+    const patch = await ctx.request(admin, 'PATCH', `/web/config/mcp-servers/${server.id}`, {
+      url: other.url,
+      oauth: { clientSecret: CLIENT_SECRET },
+    });
+    expect(patch.status).toBe(200);
+    held.release();
+    expect(await finishing).toBe(
+      `/factories/proj-1/settings/mcp-servers?mcpServer=${server.id}&oauth=error&reason=changed`,
+    );
+
+    // The tokens issued for the old address are never offered to the new one.
+    expect(await getServer(ctx, server.id)).toMatchObject({ oauth: { connected: false } });
+    const discover = await ctx.request(admin, 'POST', `/web/config/mcp-servers/${server.id}/discover`);
+    expect(((await discover.json()) as { server: McpServerInfo }).server).toMatchObject({ status: 'needs_auth' });
+  });
+
+  it('keeps a server signed out when a sign-in finishes after an admin signed it out', async () => {
+    const ctx = await setup();
+    const server = await addOAuthServer(ctx, ctx.mcp);
+    const callback = await authorize(await startSignIn(ctx, server.id));
+
+    const held = ctx.authorizationServer.holdNextTokenRequest();
+    const finishing = deliverCallback(ctx, callback);
+    await held.arrived;
+    expect((await ctx.request(admin, 'DELETE', `/web/config/mcp-servers/${server.id}/oauth`)).status).toBe(200);
+    held.release();
+    expect(await finishing).toBe(
+      `/factories/proj-1/settings/mcp-servers?mcpServer=${server.id}&oauth=error&reason=changed`,
+    );
+
+    expect(await getServer(ctx, server.id)).toMatchObject({ status: 'needs_auth', oauth: { connected: false } });
+  });
+
   it('reports a denied consent and an authorization response from the wrong issuer without exchanging a code', async () => {
     const ctx = await setup();
     const server = await addOAuthServer(ctx, ctx.mcp);

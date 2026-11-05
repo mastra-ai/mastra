@@ -545,7 +545,7 @@ describe('McpServersSection', () => {
       server.use(
         http.post(`${API}/:id/discover`, () =>
           HttpResponse.json(
-            { error: 'mcp_server_changed', message: "The server's address changed while connecting. Connect again." },
+            { error: 'mcp_server_changed', message: 'The server changed while connecting. Connect again.' },
             { status: 409 },
           ),
         ),
@@ -557,7 +557,7 @@ describe('McpServersSection', () => {
       await user.click(within(docs).getByRole('button', { name: 'Refresh tools' }));
 
       expect(await within(docs).findByRole('alert')).toHaveTextContent(
-        "The server's address changed while connecting. Connect again.",
+        'The server changed while connecting. Connect again.',
       );
       expect(within(await row('CRM')).queryByRole('alert')).not.toBeInTheDocument();
     });

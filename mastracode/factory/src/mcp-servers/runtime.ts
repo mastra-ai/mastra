@@ -125,7 +125,7 @@ export class McpServersRuntime {
         throw error;
       }
     };
-    const signedIn = record.authType === 'oauth' && (await this.#storage.hasOAuthTokens(record.id));
+    const signedIn = record.authType === 'oauth' && (await this.#storage.hasOAuthTokens(record));
     const client = new MCPClient({
       id: `factory-mcp-discover:${record.id}:${randomUUID()}`,
       servers: { [record.slug]: this.#buildDefinition(record, { fetch, signedIn }) },

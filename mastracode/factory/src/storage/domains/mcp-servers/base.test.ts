@@ -10,7 +10,7 @@ import { createFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 import { createFactoryStorageForTests } from '../../test-utils.js';
 import { McpServerInputError, McpServerSlugConflictError, McpServersStorage } from './base.js';
-import type { CreateMcpServerInput } from './base.js';
+import type { CreateMcpServerInput, McpServerRecord } from './base.js';
 
 const testKey = { id: 'v1', key: new Uint8Array(32).fill(9) };
 const BEARER = 'Bearer mcp-secret-token-4f9a2c';
@@ -84,7 +84,7 @@ describe('McpServersStorage', () => {
     const { backend, domain } = await makeStore(':memory:', createFactorySecretEncryption({ primary: testKey }));
     const headers = await domain.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
     const oauth = await domain.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
-    await domain.oauthStorage(oauth.id).set('tokens', JSON.stringify({ access_token: 'access-token-93ac1d' }));
+    await domain.oauthStorage(oauth).set('tokens', JSON.stringify({ access_token: 'access-token-93ac1d' }));
 
     const rawHeaders = await backend.ops.findOne<Record<string, unknown>>('mcp_servers', { id: headers.id });
     const rawOAuth = await backend.ops.findOne<Record<string, unknown>>('mcp_servers', { id: oauth.id });
@@ -99,29 +99,29 @@ describe('McpServersStorage', () => {
 
     expect((await domain.get({ orgId: 'org-a', id: headers.id }))?.headers).toEqual({ Authorization: BEARER });
     expect((await domain.get({ orgId: 'org-a', id: oauth.id }))?.oauthClientSecret).toBe(CLIENT_SECRET);
-    expect(await domain.oauthStorage(oauth.id).get('tokens')).toBe(
+    expect(await domain.oauthStorage(oauth).get('tokens')).toBe(
       JSON.stringify({ access_token: 'access-token-93ac1d' }),
     );
   });
 
   it('encrypts secrets written before encryption was configured on the next boot', async () => {
     const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-mcp-')), 'enable-encryption.db')}`;
-    let serverId: string;
+    let server: McpServerRecord;
     {
       const { backend, domain } = await makeStore(url);
-      serverId = (await domain.create({ orgId: 'org-a', userId: 'admin', input: oauthServer })).id;
-      await domain.oauthStorage(serverId).set('tokens', '{"access_token":"plain-token"}');
-      const raw = await backend.ops.findOne<Record<string, unknown>>('mcp_servers', { id: serverId });
+      server = await domain.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
+      await domain.oauthStorage(server).set('tokens', '{"access_token":"plain-token"}');
+      const raw = await backend.ops.findOne<Record<string, unknown>>('mcp_servers', { id: server.id });
       expect(raw!.oauth_client_secret).toContain(CLIENT_SECRET);
       await backend.close();
     }
 
     for (let boot = 0; boot < 2; boot++) {
       const { backend, domain } = await makeStore(url, createFactorySecretEncryption({ primary: testKey }));
-      expect((await domain.get({ orgId: 'org-a', id: serverId }))?.oauthClientSecret).toBe(CLIENT_SECRET);
-      expect(await domain.oauthStorage(serverId).get('tokens')).toBe('{"access_token":"plain-token"}');
-      const raw = await backend.ops.findOne<Record<string, unknown>>('mcp_servers', { id: serverId });
-      const rawToken = await backend.ops.findOne<Record<string, unknown>>('mcp_server_oauth', { server_id: serverId });
+      expect((await domain.get({ orgId: 'org-a', id: server.id }))?.oauthClientSecret).toBe(CLIENT_SECRET);
+      expect(await domain.oauthStorage(server).get('tokens')).toBe('{"access_token":"plain-token"}');
+      const raw = await backend.ops.findOne<Record<string, unknown>>('mcp_servers', { id: server.id });
+      const rawToken = await backend.ops.findOne<Record<string, unknown>>('mcp_server_oauth', { server_id: server.id });
       expect(raw!.oauth_client_secret).toMatch(/^mastra:factory-secret:v1:/);
       expect(rawToken!.value).toMatch(/^mastra:factory-secret:v1:/);
       await backend.close();
@@ -131,7 +131,12 @@ describe('McpServersStorage', () => {
   it('keeps stored headers and tools when an edit does not touch them', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
-    await mcpServers.saveDiscovery({ orgId: 'org-a', id: server.id, ifUrl: server.url, tools: [tool('search')] });
+    await mcpServers.saveDiscovery({
+      orgId: 'org-a',
+      id: server.id,
+      ifUpdatedAt: server.updatedAt,
+      tools: [tool('search')],
+    });
 
     const renamed = await mcpServers.update({
       orgId: 'org-a',
@@ -154,7 +159,12 @@ describe('McpServersStorage', () => {
   it('never lets saved headers follow a server to a new origin', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
-    await mcpServers.saveDiscovery({ orgId: 'org-a', id: server.id, ifUrl: server.url, tools: [tool('search')] });
+    await mcpServers.saveDiscovery({
+      orgId: 'org-a',
+      id: server.id,
+      ifUpdatedAt: server.updatedAt,
+      tools: [tool('search')],
+    });
 
     await expect(
       mcpServers.update({
@@ -186,7 +196,12 @@ describe('McpServersStorage', () => {
   it('makes a server connect again, keeping its headers, when only the URL path changes', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const headers = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
-    await mcpServers.saveDiscovery({ orgId: 'org-a', id: headers.id, ifUrl: headers.url, tools: [tool('search')] });
+    await mcpServers.saveDiscovery({
+      orgId: 'org-a',
+      id: headers.id,
+      ifUpdatedAt: headers.updatedAt,
+      tools: [tool('search')],
+    });
 
     // A gateway serving several MCP servers: the path picks a different one.
     const moved = await mcpServers.update({
@@ -205,12 +220,17 @@ describe('McpServersStorage', () => {
     });
 
     const oauth = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
-    await mcpServers.oauthStorage(oauth.id).set('tokens', '{"access_token":"t"}');
-    await mcpServers.saveDiscovery({ orgId: 'org-a', id: oauth.id, ifUrl: oauth.url, tools: [tool('issues')] });
+    await mcpServers.oauthStorage(oauth).set('tokens', '{"access_token":"t"}');
+    await mcpServers.saveDiscovery({
+      orgId: 'org-a',
+      id: oauth.id,
+      ifUpdatedAt: oauth.updatedAt,
+      tools: [tool('issues')],
+    });
     await mcpServers.setAuthorizationServerHosts({
       orgId: 'org-a',
       id: oauth.id,
-      ifUrl: oauth.url,
+      ifOAuthGeneration: oauth.oauthGeneration,
       hosts: ['auth.example.com'],
     });
 
@@ -226,15 +246,20 @@ describe('McpServersStorage', () => {
       oauthClientSecret: CLIENT_SECRET,
       authorizationServerHosts: [],
     });
-    expect(await mcpServers.oauthStorage(oauth.id).get('tokens')).toBeUndefined();
-    expect(await mcpServers.hasOAuthTokens(oauth.id)).toBe(false);
+    expect(await mcpServers.oauthStorage(oauth).get('tokens')).toBeUndefined();
+    expect(await mcpServers.hasOAuthTokens(oauth)).toBe(false);
   });
 
   it('clears OAuth tokens and requires the client secret again when the origin changes', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
-    await mcpServers.oauthStorage(server.id).set('tokens', '{"access_token":"t"}');
-    await mcpServers.saveDiscovery({ orgId: 'org-a', id: server.id, ifUrl: server.url, tools: [tool('issues')] });
+    await mcpServers.oauthStorage(server).set('tokens', '{"access_token":"t"}');
+    await mcpServers.saveDiscovery({
+      orgId: 'org-a',
+      id: server.id,
+      ifUpdatedAt: server.updatedAt,
+      tools: [tool('issues')],
+    });
 
     await expect(
       mcpServers.update({
@@ -245,13 +270,13 @@ describe('McpServersStorage', () => {
       }),
     ).rejects.toBeInstanceOf(McpServerInputError);
     // The rejected edit rolled back: tokens and catalog are intact.
-    expect(await mcpServers.oauthStorage(server.id).get('tokens')).toBe('{"access_token":"t"}');
+    expect(await mcpServers.oauthStorage(server).get('tokens')).toBe('{"access_token":"t"}');
     expect((await mcpServers.get({ orgId: 'org-a', id: server.id }))?.selectedTools).toEqual(['issues']);
 
     await mcpServers.setAuthorizationServerHosts({
       orgId: 'org-a',
       id: server.id,
-      ifUrl: server.url,
+      ifOAuthGeneration: server.oauthGeneration,
       hosts: ['auth.example.com'],
     });
     await mcpServers.createFlow({
@@ -277,7 +302,7 @@ describe('McpServersStorage', () => {
       status: 'unknown',
       authorizationServerHosts: [],
     });
-    expect(await mcpServers.oauthStorage(server.id).get('tokens')).toBeUndefined();
+    expect(await mcpServers.oauthStorage(server).get('tokens')).toBeUndefined();
     // A sign-in started for the old address can no longer finish.
     expect(await mcpServers.consumeFlow('pending-sign-in')).toBeNull();
   });
@@ -285,7 +310,7 @@ describe('McpServersStorage', () => {
   it('clears OAuth tokens when the client ID changes or the server stops using OAuth', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
-    await mcpServers.oauthStorage(server.id).set('tokens', '{"access_token":"t"}');
+    await mcpServers.oauthStorage(server).set('tokens', '{"access_token":"t"}');
 
     const rescoped = await mcpServers.update({
       orgId: 'org-a',
@@ -294,7 +319,7 @@ describe('McpServersStorage', () => {
       input: { oauth: { scopes: ['read', 'write'] } },
     });
     expect(rescoped).toMatchObject({ oauthScopes: ['read', 'write'], oauthClientSecret: CLIENT_SECRET });
-    expect(await mcpServers.oauthStorage(server.id).get('tokens')).toBe('{"access_token":"t"}');
+    expect(await mcpServers.oauthStorage(server).get('tokens')).toBe('{"access_token":"t"}');
 
     const newClient = await mcpServers.update({
       orgId: 'org-a',
@@ -303,9 +328,9 @@ describe('McpServersStorage', () => {
       input: { oauth: { clientId: 'other-client' } },
     });
     expect(newClient).toMatchObject({ oauthClientId: 'other-client', oauthClientSecret: null, status: 'unknown' });
-    expect(await mcpServers.oauthStorage(server.id).get('tokens')).toBeUndefined();
+    expect(await mcpServers.oauthStorage(server).get('tokens')).toBeUndefined();
 
-    await mcpServers.oauthStorage(server.id).set('tokens', '{"access_token":"t2"}');
+    await mcpServers.oauthStorage(server).set('tokens', '{"access_token":"t2"}');
     const plain = await mcpServers.update({
       orgId: 'org-a',
       id: server.id,
@@ -313,7 +338,7 @@ describe('McpServersStorage', () => {
       input: { authType: 'none' },
     });
     expect(plain).toMatchObject({ authType: 'none', oauthClientId: null, oauthScopes: [], headers: null });
-    expect(await mcpServers.oauthStorage(server.id).get('tokens')).toBeUndefined();
+    expect(await mcpServers.oauthStorage(server).get('tokens')).toBeUndefined();
   });
 
   it('requires headers when switching a server to header authentication', async () => {
@@ -331,8 +356,13 @@ describe('McpServersStorage', () => {
   it('treats tool names like `constructor` and `__proto__` as tools, not object internals', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
-    const discover = (names: string[]) =>
-      mcpServers.saveDiscovery({ orgId: 'org-a', id: server.id, ifUrl: server.url, tools: names.map(tool) });
+    const discover = async (names: string[]) =>
+      mcpServers.saveDiscovery({
+        orgId: 'org-a',
+        id: server.id,
+        ifUpdatedAt: (await mcpServers.get({ orgId: 'org-a', id: server.id }))!.updatedAt,
+        tools: names.map(tool),
+      });
 
     const first = await discover(['echo', '__proto__']);
     expect(Object.keys(first!.toolCatalog!).sort()).toEqual(['__proto__', 'echo']);
@@ -352,8 +382,13 @@ describe('McpServersStorage', () => {
   it('selects every tool on first discovery and never auto-selects tools added later', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
-    const discover = (names: string[]) =>
-      mcpServers.saveDiscovery({ orgId: 'org-a', id: server.id, ifUrl: server.url, tools: names.map(tool) });
+    const discover = async (names: string[]) =>
+      mcpServers.saveDiscovery({
+        orgId: 'org-a',
+        id: server.id,
+        ifUpdatedAt: (await mcpServers.get({ orgId: 'org-a', id: server.id }))!.updatedAt,
+        tools: names.map(tool),
+      });
 
     const first = await discover(['echo', 'add']);
     expect(first).toMatchObject({ status: 'connected', selectedTools: ['echo', 'add'], newTools: [] });
@@ -385,7 +420,28 @@ describe('McpServersStorage', () => {
     expect((await mcpServers.get({ orgId: 'org-a', id: server.id }))?.selectedTools).toEqual(['search']);
   });
 
-  it('discards discovery results and status from an address the server no longer has', async () => {
+  it("moves a server's version forward when a replica's clock is behind or two writes share a millisecond", async () => {
+    const { mcpServers } = await createFactoryStorageForTests();
+    const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
+
+    for (const now of [server.updatedAt, new Date(server.updatedAt.getTime() - 60_000)]) {
+      const before = (await mcpServers.get({ orgId: 'org-a', id: server.id }))!;
+      const after = await mcpServers.saveDiscovery({
+        orgId: 'org-a',
+        id: server.id,
+        ifUpdatedAt: before.updatedAt,
+        tools: [tool('search')],
+        now,
+      });
+      expect(after!.updatedAt.getTime()).toBeGreaterThan(before.updatedAt.getTime());
+      // A status worked out for the earlier version no longer applies.
+      expect(
+        await mcpServers.setStatus({ orgId: 'org-a', id: server.id, status: 'error', ifUpdatedAt: before.updatedAt }),
+      ).toBeNull();
+    }
+  });
+
+  it('discards discovery results and status computed for a version of the server it no longer has', async () => {
     const { mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
     await mcpServers.update({
@@ -396,10 +452,21 @@ describe('McpServersStorage', () => {
     });
 
     expect(
-      await mcpServers.saveDiscovery({ orgId: 'org-a', id: server.id, ifUrl: server.url, tools: [tool('stale')] }),
+      await mcpServers.saveDiscovery({
+        orgId: 'org-a',
+        id: server.id,
+        ifUpdatedAt: server.updatedAt,
+        tools: [tool('stale')],
+      }),
     ).toBeNull();
     expect(
-      await mcpServers.setStatus({ orgId: 'org-a', id: server.id, status: 'error', lastError: 'x', ifUrl: server.url }),
+      await mcpServers.setStatus({
+        orgId: 'org-a',
+        id: server.id,
+        status: 'error',
+        lastError: 'x',
+        ifUpdatedAt: server.updatedAt,
+      }),
     ).toBeNull();
     expect(await mcpServers.get({ orgId: 'org-a', id: server.id })).toMatchObject({
       toolCatalog: null,
@@ -416,8 +483,8 @@ describe('McpServersStorage', () => {
       userId: 'admin',
       input: { ...oauthServer, slug: 'other', name: 'Other' },
     });
-    const a = mcpServers.oauthStorage(serverA.id);
-    const b = mcpServers.oauthStorage(serverB.id);
+    const a = mcpServers.oauthStorage(serverA);
+    const b = mcpServers.oauthStorage(serverB);
     await a.set('tokens', 'a-tokens');
     await a.set('tokens', 'a-tokens-refreshed');
     await a.set('code_verifier', 'verifier');
@@ -428,11 +495,11 @@ describe('McpServersStorage', () => {
     await a.delete('code_verifier');
     expect(await a.get('code_verifier')).toBeUndefined();
 
-    expect(await mcpServers.hasOAuthTokens(serverA.id)).toBe(true);
+    expect(await mcpServers.hasOAuthTokens(serverA)).toBe(true);
     await mcpServers.setAuthorizationServerHosts({
       orgId: 'org-a',
       id: serverA.id,
-      ifUrl: serverA.url,
+      ifOAuthGeneration: serverA.oauthGeneration,
       hosts: ['auth.example.com', 'auth.example.com', 'tokens.example.com'],
     });
     await mcpServers.createFlow({
@@ -458,7 +525,7 @@ describe('McpServersStorage', () => {
       authorizationServerHosts: [],
     });
     expect(await a.get('tokens')).toBeUndefined();
-    expect(await mcpServers.hasOAuthTokens(serverA.id)).toBe(false);
+    expect(await mcpServers.hasOAuthTokens(serverA)).toBe(false);
     expect(await mcpServers.consumeFlow('pending-a')).toBeNull();
     expect(await b.get('tokens')).toBe('b-tokens');
   });
@@ -492,8 +559,8 @@ describe('McpServersStorage', () => {
     const { storage, mcpServers } = await createFactoryStorageForTests();
     const server = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: oauthServer });
     const other = await mcpServers.create({ orgId: 'org-a', userId: 'admin', input: headersServer });
-    await mcpServers.oauthStorage(server.id).set('tokens', 't');
-    await mcpServers.oauthStorage(other.id).set('tokens', 'other');
+    await mcpServers.oauthStorage(server).set('tokens', 't');
+    await mcpServers.oauthStorage(other).set('tokens', 'other');
     await mcpServers.createFlow({
       nonce: 'pending',
       orgId: 'org-a',
@@ -508,6 +575,6 @@ describe('McpServersStorage', () => {
     expect(await mcpServers.get({ orgId: 'org-a', id: server.id })).toBeNull();
     expect(await storage.ops.findMany('mcp_server_oauth', { server_id: server.id })).toEqual([]);
     expect(await storage.ops.findMany('mcp_server_oauth_flows', { server_id: server.id })).toEqual([]);
-    expect(await mcpServers.oauthStorage(other.id).get('tokens')).toBe('other');
+    expect(await mcpServers.oauthStorage(other).get('tokens')).toBe('other');
   });
 });

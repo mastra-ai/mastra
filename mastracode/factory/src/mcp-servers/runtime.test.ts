@@ -28,7 +28,12 @@ async function connectServer(
   const record = await storage.create({ orgId, userId: 'admin', input });
   const result = await runtime.discover(record);
   if (result.status !== 'connected') throw new Error(`discovery failed: ${result.error}`);
-  const saved = await storage.saveDiscovery({ orgId, id: record.id, ifUrl: record.url, tools: result.tools });
+  const saved = await storage.saveDiscovery({
+    orgId,
+    id: record.id,
+    ifUpdatedAt: record.updatedAt,
+    tools: result.tools,
+  });
   return saved!;
 }
 
@@ -49,7 +54,12 @@ describe('McpServersRuntime.discover', () => {
     });
     expect(JSON.stringify(tools)).not.toContain(TOKEN);
 
-    const saved = await ctx.storage.saveDiscovery({ orgId: 'org-a', id: record.id, ifUrl: record.url, tools });
+    const saved = await ctx.storage.saveDiscovery({
+      orgId: 'org-a',
+      id: record.id,
+      ifUpdatedAt: record.updatedAt,
+      tools,
+    });
     expect(saved!.toolCatalog!.echo!.exposedName).toBe('docs_echo');
     expect(saved!.toolCatalog!.add!.exposedName).toBe('docs_add');
   });
@@ -165,7 +175,12 @@ describe('McpServersRuntime.toolsFor', () => {
     const server = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();
     const failing = await connectServer(ctx, 'org-a', bearerServer(server.url, TOKEN, 'failing'));
-    await ctx.storage.setStatus({ orgId: 'org-a', id: failing.id, status: 'needs_auth' });
+    await ctx.storage.setStatus({
+      orgId: 'org-a',
+      id: failing.id,
+      status: 'needs_auth',
+      ifUpdatedAt: failing.updatedAt,
+    });
     const empty = await connectServer(ctx, 'org-a', bearerServer(server.url, TOKEN, 'empty'));
     await ctx.storage.setSelectedTools({ orgId: 'org-a', id: empty.id, userId: 'admin', selected: [] });
     await ctx.storage.create({ orgId: 'org-a', userId: 'admin', input: bearerServer(server.url, TOKEN, 'new') });

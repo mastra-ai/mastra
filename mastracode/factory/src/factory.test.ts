@@ -1680,7 +1680,7 @@ describe('MastraFactory.prepare', () => {
         onTestFinished(() => discovery.close());
         const result = await discovery.discover(record);
         if (result.status !== 'connected') throw new Error(`discovery failed: ${result.error}`);
-        await mcpServers.saveDiscovery({ orgId, id: record.id, ifUrl: record.url, tools: result.tools });
+        await mcpServers.saveDiscovery({ orgId, id: record.id, ifUpdatedAt: record.updatedAt, tools: result.tools });
         if (selected) await mcpServers.setSelectedTools({ orgId, id: record.id, userId: 'admin', selected });
         return record;
       }
