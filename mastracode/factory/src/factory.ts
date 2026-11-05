@@ -743,6 +743,8 @@ export class MastraFactory {
             oauthEndpoints: mcpOAuthEndpoints(publicOrigin),
           });
     this.#mcpServersRuntime = mcpServersRuntime;
+    // Each skipped MCP server tool is reported once per process, not every turn.
+    const reportedMcpServerToolSkips = new Set<string>();
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
@@ -1627,6 +1629,20 @@ export class MastraFactory {
         ...(vector ? { vector } : {}),
         extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
           const tools: IntegrationTools = {};
+          // Resolved once per turn; `undefined` until something asks for it.
+          let toolScope: Awaited<ReturnType<typeof resolveFactoryToolScope>> | undefined;
+          const resolveToolScope = async () => {
+            if (toolScope === undefined) {
+              toolScope = await resolveFactoryToolScope({
+                requestContext,
+                authEnabled: routeAuth.enabled(),
+                sessions: sourceControlSessions,
+                projects: factoryProjectsStorage,
+                workItems: workItemsStorage,
+              });
+            }
+            return toolScope;
+          };
           const toolOwners = new Map<string, string>();
           const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
             for (const [name, tool] of Object.entries(contributed)) {
@@ -1725,13 +1741,7 @@ export class MastraFactory {
               }),
             );
             if (storage.isDomainReady('source-control')) {
-              const scope = await resolveFactoryToolScope({
-                requestContext,
-                authEnabled: routeAuth.enabled(),
-                sessions: sourceControlSessions,
-                projects: factoryProjectsStorage,
-                workItems: workItemsStorage,
-              });
+              const scope = await resolveToolScope();
               if (scope) {
                 mergeTools(
                   'factory-tools',
@@ -1771,6 +1781,37 @@ export class MastraFactory {
             }
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
+            }
+          }
+          // The organization's MCP servers, for user and worker sessions alike,
+          // scoped by the verified session row rather than the thread tags.
+          // They come last and never displace a tool already here; a failure
+          // leaves the turn without them.
+          if (mcpServersRuntime && storage.isDomainReady('mcp-servers') && storage.isDomainReady('source-control')) {
+            try {
+              const scope = await resolveToolScope();
+              if (scope) {
+                const contributed = await mcpServersRuntime.toolsFor({
+                  orgId: scope.orgId,
+                  existingNames: new Set(Object.keys(tools)),
+                });
+                Object.assign(tools, contributed.tools);
+                for (const { serverId, toolName, exposedName, reason } of contributed.skipped) {
+                  const key = `${serverId}:${toolName}:${reason}`;
+                  if (reportedMcpServerToolSkips.has(key)) continue;
+                  reportedMcpServerToolSkips.add(key);
+                  console.warn(
+                    `[factory] MCP server tool "${toolName}" (as "${exposedName}") is not given to sessions: ` +
+                      (reason === 'name_conflict'
+                        ? 'another tool has that name.'
+                        : 'its stored definition is invalid.'),
+                  );
+                }
+              }
+            } catch (error) {
+              console.warn(
+                `[factory] MCP server tools are unavailable for this turn: ${error instanceof Error ? error.message : String(error)}`,
+              );
             }
           }
           return tools;

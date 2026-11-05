@@ -36,6 +36,8 @@ import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
 import type * as platformGithubModule from './integrations/platform/github/integration.js';
+import { McpServersRuntime } from './mcp-servers/runtime.js';
+import { startTestMcpServer } from './mcp-servers/test-utils.js';
 import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.js';
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
@@ -51,6 +53,7 @@ import { FactoryEnvironmentStateProcessor } from './session/environment-state-pr
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
+import type { McpServersStorage } from './storage/domains/mcp-servers/base.js';
 import { factoryMemorySettingsUserId } from './storage/domains/memory-settings/base.js';
 import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -1594,6 +1597,237 @@ describe('MastraFactory.prepare', () => {
       await expect(person.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
         'was not found in this Factory',
       );
+    });
+
+    describe('MCP server tools', () => {
+      type SessionTool = { execute: (input: unknown, context: unknown) => Promise<unknown> };
+      type ExtraTools = (args: { requestContext: RequestContext }) => Promise<Record<string, SessionTool>>;
+
+      async function seedSession(
+        storage: ReturnType<typeof fakeStorage>,
+        { orgId, userId, sessionId }: { orgId: string; userId: string; sessionId: string },
+      ) {
+        await storage.init();
+        const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+        const project = await storage
+          .getDomain<FactoryProjectsStorage>('projects')
+          .create({ orgId, userId, input: { name: `Project ${orgId}` } });
+        const installation = await sourceControl.installations.upsert({
+          orgId,
+          connectedByUserId: userId,
+          externalId: `installation-${orgId}`,
+        });
+        const repository = await sourceControl.repositories.upsert({
+          orgId,
+          input: {
+            installationId: installation.id,
+            externalId: `repository-${orgId}`,
+            slug: `${orgId}/app`,
+            defaultBranch: 'main',
+          },
+        });
+        const connection = await sourceControl.connections.create({
+          orgId,
+          factoryProjectId: project.id,
+          installationId: installation.id,
+          createdByUserId: userId,
+        });
+        const projectRepository = await sourceControl.projectRepositories.link({
+          orgId,
+          connectionId: connection.id,
+          repositoryId: repository.id,
+          createdByUserId: userId,
+          sandboxProvider: 'local',
+          sandboxWorkdir: '/sandbox/app',
+        });
+        await sourceControl.sessions.create({
+          sessionId,
+          projectRepositoryId: projectRepository.id,
+          factoryProjectId: project.id,
+          orgId,
+          userId,
+          branch: `user/${sessionId}`,
+          baseBranch: 'main',
+        });
+        return project;
+      }
+
+      function turn({ sessionId, user }: { sessionId: string; user?: { workosId: string; organizationId: string } }) {
+        const requestContext = new RequestContext();
+        if (user) requestContext.set('user', user);
+        requestContext.set('controller', {
+          sessionId,
+          resourceId: sessionId,
+          threadId: `thread-${sessionId}`,
+          getState: () => ({}),
+        });
+        return requestContext;
+      }
+
+      /** Add an organization server and connect it for real, with `selected` chosen. */
+      async function addServer(
+        storage: ReturnType<typeof fakeStorage>,
+        { orgId, slug, url, selected }: { orgId: string; slug: string; url: string; selected?: string[] },
+      ) {
+        const mcpServers = storage.getDomain<McpServersStorage>('mcp-servers');
+        const record = await mcpServers.create({
+          orgId,
+          userId: 'admin',
+          input: { slug, name: slug, url, authType: 'headers', headers: { Authorization: `Bearer ${MCP_TOKEN}` } },
+        });
+        const discovery = new McpServersRuntime({ storage: mcpServers, allowPrivateNetwork: true });
+        onTestFinished(() => discovery.close());
+        const result = await discovery.discover(record);
+        if (result.status !== 'connected') throw new Error(`discovery failed: ${result.error}`);
+        await mcpServers.saveDiscovery({ orgId, id: record.id, ifUrl: record.url, tools: result.tools });
+        if (selected) await mcpServers.setSelectedTools({ orgId, id: record.id, userId: 'admin', selected });
+        return record;
+      }
+
+      const MCP_TOKEN = 'session-mcp-token-e41f07';
+      const userOne = { workosId: 'user-1', organizationId: 'org-1' };
+
+      async function prepare(config: Partial<ConstructorParameters<typeof MastraFactory>[0]> = {}) {
+        const storage = fakeStorage();
+        const prepared = await prepareFactory({ storage, mcpServers: { allowPrivateNetwork: true }, ...config });
+        const project = await seedSession(storage, { orgId: 'org-1', userId: 'user-1', sessionId: 'session-1' });
+        return { storage, project, extraTools: prepared.extraTools as ExtraTools };
+      }
+
+      it("gives user and worker sessions their organization's selected tools, and nobody else's", async () => {
+        const { storage, project, extraTools } = await prepare();
+        const server = await startTestMcpServer({ bearerToken: MCP_TOKEN });
+        await addServer(storage, { orgId: 'org-1', slug: 'docs', url: server.url, selected: ['echo'] });
+
+        const user = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
+        expect(user).toHaveProperty('docs_echo');
+        // Deselected tools stay with the server.
+        expect(user).not.toHaveProperty('docs_add');
+        // Factory's own tools are all still there.
+        expect(user).toHaveProperty('factory_list_work_items');
+        expect(JSON.stringify(await user.docs_echo!.execute({ text: 'from a user session' }, {}))).toContain(
+          'from a user session',
+        );
+
+        // A dispatcher-driven worker turn carries no signed-in user; it acts as the session's owner.
+        await storage
+          .getDomain<SourceControlStorage>('source-control')
+          .forIntegration('github')
+          .sessions.create({
+            sessionId: 'session-worker',
+            projectRepositoryId: (await storage
+              .getDomain<SourceControlStorage>('source-control')
+              .forIntegration('github')
+              .sessions.getBySessionId('session-1'))!.projectRepositoryId,
+            factoryProjectId: project.id,
+            orgId: 'org-1',
+            userId: 'user-1',
+            branch: 'factory/worker',
+            baseBranch: 'main',
+          });
+        await storage.getDomain<WorkItemsStorage>('work-items').prepareRunStart({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          workItem: { input: { title: 'Bound item', stages: ['intake'] } },
+          role: 'work',
+          session: { sessionId: 'session-worker', branch: 'factory/worker', threadId: 'thread-session-worker' },
+          resourceId: 'session-worker',
+          kickoffKey: 'kickoff-session-worker',
+          kickoffMessage: null,
+        });
+        const worker = await extraTools({ requestContext: turn({ sessionId: 'session-worker' }) });
+        expect(worker).toHaveProperty('docs_echo');
+        expect(worker).not.toHaveProperty('docs_add');
+        expect(JSON.stringify(await worker.docs_echo!.execute({ text: 'from a worker' }, {}))).toContain(
+          'from a worker',
+        );
+        expect(server.calls).toEqual([
+          { tool: 'echo', args: { text: 'from a user session' } },
+          { tool: 'echo', args: { text: 'from a worker' } },
+        ]);
+
+        // Another organization's session gets its own servers, not org-1's.
+        await seedSession(storage, { orgId: 'org-2', userId: 'user-2', sessionId: 'session-2' });
+        const crm = await startTestMcpServer({ bearerToken: MCP_TOKEN });
+        await addServer(storage, { orgId: 'org-2', slug: 'crm', url: crm.url });
+        const userTwo = { workosId: 'user-2', organizationId: 'org-2' };
+        const mcpToolNames = (tools: Record<string, unknown>) =>
+          Object.keys(tools)
+            .filter(name => name.startsWith('docs_') || name.startsWith('crm_'))
+            .sort();
+        const otherOrg = await extraTools({ requestContext: turn({ sessionId: 'session-2', user: userTwo }) });
+        expect(otherOrg).toHaveProperty('factory_list_work_items');
+        expect(mcpToolNames(otherOrg)).toEqual(['crm_add', 'crm_echo']);
+
+        // Without a verified session scope nobody gets any organization's servers:
+        // not an org-2 caller on org-1's session, nor a turn with no stored session.
+        const crossOrg = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userTwo }) });
+        expect(mcpToolNames(crossOrg)).toEqual([]);
+        expect(crossOrg).not.toHaveProperty('factory_list_work_items');
+        const unknownSession = await extraTools({
+          requestContext: turn({ sessionId: 'session-unknown', user: userOne }),
+        });
+        expect(mcpToolNames(unknownSession)).toEqual([]);
+        expect(server.calls).toHaveLength(2);
+        expect(crm.calls).toEqual([]);
+      });
+
+      it('skips a server tool named like a tool the session already has', async () => {
+        const integrationEcho = { description: 'integration echo' };
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        onTestFinished(() => warn.mockRestore());
+        const { storage, extraTools } = await prepare({
+          integrations: [
+            fakeIntegration({ id: 'custom', agentTools: vi.fn(async () => ({ docs_echo: integrationEcho }) as never) }),
+          ],
+        });
+        const server = await startTestMcpServer({ bearerToken: MCP_TOKEN });
+        await addServer(storage, { orgId: 'org-1', slug: 'docs', url: server.url });
+
+        const tools = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
+        expect(tools.docs_echo).toBe(integrationEcho);
+        expect(tools).toHaveProperty('docs_add');
+        await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
+        // Reported once, not every turn.
+        expect(warn.mock.calls.filter(call => String(call[0]).includes('"echo" (as "docs_echo")'))).toHaveLength(1);
+      });
+
+      it("keeps a session's other tools when a server is down or the servers cannot be read", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        onTestFinished(() => warn.mockRestore());
+        const { storage, extraTools } = await prepare();
+        const down = await startTestMcpServer({ bearerToken: MCP_TOKEN });
+        const up = await startTestMcpServer({ bearerToken: MCP_TOKEN });
+        await addServer(storage, { orgId: 'org-1', slug: 'down', url: down.url, selected: ['echo'] });
+        await addServer(storage, { orgId: 'org-1', slug: 'up', url: up.url, selected: ['echo'] });
+        await down.close();
+
+        const tools = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
+        await expect(tools.down_echo!.execute({ text: 'lost' }, {})).rejects.toThrow();
+        expect(JSON.stringify(await tools.up_echo!.execute({ text: 'still works' }, {}))).toContain('still works');
+
+        // The storage read fails: the turn goes on with every non-MCP tool.
+        vi.spyOn(storage.getDomain<McpServersStorage>('mcp-servers'), 'list').mockRejectedValueOnce(
+          new Error('database unavailable'),
+        );
+        const degraded = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
+        expect(degraded).toHaveProperty('factory_list_work_items');
+        expect(degraded).not.toHaveProperty('up_echo');
+        expect(warn.mock.calls.map(call => String(call[0]))).toContain(
+          '[factory] MCP server tools are unavailable for this turn: database unavailable',
+        );
+      });
+
+      it('gives sessions no MCP server tools when the feature is off', async () => {
+        const { storage, extraTools } = await prepare({ mcpServers: false });
+        const server = await startTestMcpServer({ bearerToken: MCP_TOKEN });
+        await addServer(storage, { orgId: 'org-1', slug: 'docs', url: server.url });
+
+        const tools = await extraTools({ requestContext: turn({ sessionId: 'session-1', user: userOne }) });
+        expect(tools).toHaveProperty('factory_list_work_items');
+        expect(Object.keys(tools).filter(name => name.startsWith('docs_'))).toEqual([]);
+      });
     });
 
     it("wakes a messaged session as that session's owner, not the sender", async () => {
