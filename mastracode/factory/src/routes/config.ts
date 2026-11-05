@@ -37,13 +37,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
-import {
-  createGatewayKey,
-  getGatewayCredits,
-  MASTRA_SIGN_IN_REQUIRED,
-  MastraGatewayError,
-  revokeGatewayKey,
-} from './mastra-gateway.js';
+import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -1110,8 +1104,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
           try {
             if (!(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
-              const { apiKey, keyId } = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
-              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key: apiKey, keyId });
+              const apiKey = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
+              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key: apiKey });
               onCredentialsChanged(tenant);
             }
             const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
@@ -1152,21 +1146,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
-              const credentialId = getAuthProviderId(provider);
-              const stored =
-                credentialId === MASTRA_GATEWAY_PROVIDER
-                  ? await ctx.storage.getCredential(tenant, credentialId)
-                  : undefined;
-              if (stored?.type === 'api_key' && stored.keyId) {
-                const keyId = stored.keyId;
-                await revokeGatewayKey(auth, loose(c), ctx.orgId, keyId).catch(error => {
-                  console.warn('[factory] Mastra Gateway key left unrevoked on Mastra', {
-                    keyId,
-                    error: error instanceof Error ? error.message : String(error),
-                  });
-                });
-              }
-              await ctx.storage.removeCredential(tenant, credentialId);
+              await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
               onCredentialsChanged(tenant);
               const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });

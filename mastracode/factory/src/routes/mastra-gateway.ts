@@ -77,7 +77,7 @@ async function platformMember(auth: RouteAuth, c: Context, orgId: string) {
   return { email: me.user?.email ?? undefined, isAdmin: me.role === 'admin' || me.role === 'owner' };
 }
 
-const CreatedGatewayKey = z.object({ apiKey: z.string().min(1), keyId: z.string().nullish() });
+const CreatedGatewayKey = z.object({ apiKey: z.string().min(1) });
 
 export async function createGatewayKey(auth: RouteAuth, c: Context, orgId: string, scope: 'org' | 'user') {
   const { email } = await platformMember(auth, c, orgId);
@@ -94,19 +94,8 @@ export async function createGatewayKey(auth: RouteAuth, c: Context, orgId: strin
   }
   const failure = 'Could not create a Mastra Gateway key. Try again.';
   if (!res.ok) throw platformUnavailable(failure);
-  const { apiKey, keyId } = await readJson(res, CreatedGatewayKey, failure);
-  return { apiKey, keyId: keyId || undefined };
-}
-
-/** A key the platform no longer has counts as revoked; it answers 404 for another organization's key too. */
-export async function revokeGatewayKey(auth: RouteAuth, c: Context, orgId: string, keyId: string): Promise<void> {
-  await platformMember(auth, c, orgId);
-  const res = await platformFetch(auth, c, `${GATEWAY_KEYS_PATH}/${encodeURIComponent(keyId)}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok && res.status !== 404) {
-    throw platformUnavailable(`Mastra answered ${res.status} when revoking gateway key ${keyId}.`);
-  }
+  const { apiKey } = await readJson(res, CreatedGatewayKey, failure);
+  return apiKey;
 }
 
 const CustomerBalance = z.object({

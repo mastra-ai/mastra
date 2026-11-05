@@ -662,7 +662,7 @@ describe('Mastra Gateway routes with a tenant', () => {
 
   it("creates a gateway key on the user's Mastra organization and lists the gateway models", async () => {
     const platform = fakePlatform({
-      [`POST ${KEYS}`]: () => Response.json({ keyId: 'key_1', apiKey: 'msk_factory' }, { status: 201 }),
+      [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_factory' }, { status: 201 }),
     });
     const app = buildApp(platform);
 
@@ -680,7 +680,6 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'mastra-gateway')).toEqual({
       type: 'api_key',
       key: 'msk_factory',
-      keyId: 'key_1',
     });
     const { models } = (await (await app.request('/web/config/models')).json()) as { models: Array<{ id: string }> };
     expect(models.map(m => m.id)).toContain('mastra/anthropic/claude-opus-5.5');
@@ -701,7 +700,7 @@ describe('Mastra Gateway routes with a tenant', () => {
 
   it("creates no key while the user's Mastra session is on another organization than the Factory", async () => {
     const platform = fakePlatform(
-      { [`POST ${KEYS}`]: () => Response.json({ keyId: 'key_1', apiKey: 'msk_other_org' }, { status: 201 }) },
+      { [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_other_org' }, { status: 201 }) },
       { organizationId: 'org-other' },
     );
 
@@ -721,39 +720,15 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
   });
 
-  it.each([204, 403])(
-    "revokes the Factory's gateway key on Mastra and removes its credential (Mastra answers %i)",
-    async status => {
-      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
-        type: 'api_key',
-        key: 'msk_factory',
-        keyId: 'key_1',
-      });
-      const platform = fakePlatform({ [`DELETE ${KEYS}/key_1`]: () => new Response(null, { status }) });
-
-      const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
-
-      expect(res.status).toBe(200);
-      expect(platform.requests).toContainEqual({ method: 'DELETE', path: `${KEYS}/key_1` });
-      expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
-    },
-  );
-
-  it("sends no revoke while the user's Mastra session is on another organization, and still removes the credential", async () => {
-    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
-      type: 'api_key',
-      key: 'msk_factory',
-      keyId: 'key_1',
-    });
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const platform = fakePlatform({}, { organizationId: 'org-other' });
+  it('removes the gateway credential without calling Mastra, which has no way to revoke the key', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', { type: 'api_key', key: 'msk_factory' });
+    const platform = fakePlatform();
 
     const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
 
     expect(res.status).toBe(200);
-    expect(platform.requests.map(r => r.path)).toEqual(['/auth/me']);
+    expect(platform.requests).toEqual([]);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
-    warn.mockRestore();
   });
 
   it('reports the remaining gateway credits and where to add more', async () => {

@@ -91,8 +91,6 @@ export interface OAuthProviderInterface {
 export type ApiKeyCredential = {
   type: 'api_key';
   key: string;
-  /** Id of the key where it was minted, when it can be revoked there (e.g. a Mastra Gateway key Factory created). */
-  keyId?: string;
 };
 
 export type OAuthCredential = {

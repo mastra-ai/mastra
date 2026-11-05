@@ -1191,7 +1191,7 @@ describe('MastraAuthStudio', () => {
             headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
           }),
         )
-        .mockResolvedValueOnce(Response.json({ keyId: 'key-1', apiKey: 'msk_1' }, { status: 201 }));
+        .mockResolvedValueOnce(Response.json({ apiKey: 'msk_1' }, { status: 201 }));
       const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
 
       await auth.authenticateToken('', req);
