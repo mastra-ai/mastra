@@ -1,20 +1,14 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import type { ProviderInfo } from '../../../../../api/types';
-import { useOrgKeyAdminQuery, useProvidersQuery } from '../../../../../hooks/use-providers';
-import type { VoiceKeyStatus, VoiceSettings } from '../../../../../hooks/use-voice-settings';
-import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
+import type { ProviderInfo, VoiceSettingsResponse } from '../../../../../api/types';
+import { useProvidersQuery } from '../../../../../hooks/use-providers';
+import type { VoiceKeyStatus } from '../../../../../hooks/use-voice-settings';
 import { AddApiKeyDialog } from '../AddApiKeyDialog';
 import { ConnectedProviderRow } from '../models/providers/ConnectedProviderRow';
 import type { ProviderConnection } from '../models/providers/ConnectedProviderRow';
 import { ProviderRows, ProviderRowsSkeleton } from '../models/providers/ProviderRows';
-import {
-  CREDENTIAL_STATUS,
-  ORG_SCOPE_MEMBER_REASON,
-  sharedSourceStatus,
-  storedCredentialScope,
-} from '../provider-credential';
+import { CREDENTIAL_STATUS, sharedSourceStatus, useCredentialAccess } from '../provider-credential';
 import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
 
 /** Deepgram only transcribes, so the chat provider catalog does not list it. */
@@ -36,19 +30,16 @@ function voiceKeyConnection(status: VoiceKeyStatus, provider: ProviderInfo): Pro
     : { provider, status: CREDENTIAL_STATUS.api_key, credential: 'api_key', signInExpired: false };
 }
 
-export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scope: VoiceSettings['scope'] }) {
+export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scope: VoiceSettingsResponse['scope'] }) {
   const providersQuery = useProvidersQuery();
-  const authQuery = useFactoryAuth();
-  const orgKeyAdminQuery = useOrgKeyAdminQuery();
+  const { authEnabled, requestScope, actionsDisabled, memberReason } = useCredentialAccess(
+    scope === 'factory' ? 'org' : 'user',
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
 
   if (providersQuery.isPending) return <ProviderRowsSkeleton />;
 
-  const authEnabled = authQuery.data?.authEnabled === true;
-  const credentialScope = storedCredentialScope(scope === 'factory' ? 'org' : 'user', authEnabled);
-  const readOnly = credentialScope === 'org' && orgKeyAdminQuery.data === false;
-  const actionsDisabled = authQuery.isPending || readOnly;
   const options = keys.map(status => {
     const provider = speechProviderInfo(status, providersQuery.data);
     return { provider, connection: voiceKeyConnection(status, provider) };
@@ -67,7 +58,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
             <ConnectedProviderRow
               key={connection.provider.provider}
               connection={connection}
-              requestScope={authEnabled ? credentialScope : undefined}
+              requestScope={requestScope}
               disabled={actionsDisabled}
               onUpdateKey={() => setKeyDialogProvider(connection.provider)}
             />
@@ -76,9 +67,9 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
           ),
         )}
       </ProviderRows>
-      {readOnly && (
+      {memberReason && (
         <Txt as="p" variant="caption" tone="muted">
-          {ORG_SCOPE_MEMBER_REASON}
+          {memberReason}
         </Txt>
       )}
       <AddSpeechToTextKeyDrawer
@@ -91,7 +82,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
         <AddApiKeyDialog
           provider={keyDialogProvider}
           authEnabled={authEnabled}
-          fixedScope={authEnabled ? credentialScope : undefined}
+          fixedScope={requestScope}
           onClose={() => setKeyDialogProvider(undefined)}
         />
       )}

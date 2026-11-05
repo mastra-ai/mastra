@@ -51,7 +51,6 @@ import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
-import { voiceDictationSupported } from './useVoiceDictation';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
@@ -120,7 +119,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const updateDraft = setComposerDraft;
 
-  const [canDictate] = useState(voiceDictationSupported);
   const appendTranscript = (text: string) => {
     updateDraft(draft.trim() ? `${draft.trimEnd()} ${text}` : text);
     inputRef.current?.focus();
@@ -326,7 +324,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {canDictate && factoryId && (
+              {factoryId && (
                 <ComposerVoiceButton
                   factoryId={factoryId}
                   disabled={textareaDisabled || preview !== undefined}

@@ -1,7 +1,5 @@
-/** Voice input routes: the browser posts a recorded clip and the server transcribes it, so keys never reach the browser. */
-
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import { STT_MODELS, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
+import { findSTTModel, STT_MODELS, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
 import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
 import { sttApiKeyEnvVar } from '@mastra/code-sdk/voice/transcribe';
 import { registerApiRoute } from '@mastra/core/server';
@@ -30,23 +28,29 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
-const transcribeBodySchema = z.object({
-  audio: z.string().min(1),
-  mimeType: z.string().min(1),
-  factoryId: z.string().min(1).optional(),
-});
+const factoryIdSchema = z.string().min(1).optional();
 
-const settingsBodySchema = z.object({
-  factoryId: z.string().min(1).optional(),
-  provider: z.string().min(1).nullable(),
-  model: z.string().min(1).optional(),
-});
+const settingsBodySchema = z.union([
+  z
+    .object({ factoryId: factoryIdSchema, provider: z.null() })
+    .transform(({ factoryId }) => ({ factoryId, entry: null })),
+  z
+    .object({ factoryId: factoryIdSchema, provider: z.string().min(1), model: z.string().min(1) })
+    .transform(({ factoryId, provider, model }, ctx) => {
+      const entry = findSTTModel(provider, model);
+      if (!entry) {
+        ctx.addIssue({ code: 'custom', message: `${provider}/${model} is not a supported speech-to-text model.` });
+        return z.NEVER;
+      }
+      return { factoryId, entry };
+    }),
+]);
 
 export interface VoiceRoutesDeps extends RouteDependencies {
   authStorage?: AuthStorage;
   modelCredentials?: ModelCredentialsStorage;
-  voiceSettings?: VoiceSettingsStorage;
-  factoryProjects?: FactoryProjectsStorage;
+  voiceSettings: VoiceSettingsStorage;
+  factoryProjects: FactoryProjectsStorage;
 }
 
 interface VoiceRequest {
@@ -56,8 +60,37 @@ interface VoiceRequest {
   orgId?: string;
 }
 
-function choice(entry: STTModel | undefined): { provider: string; model: string } | null {
+type ModelChoice = { provider: string; model: string };
+
+function choice(entry: STTModel | undefined): ModelChoice | null {
   return entry ? { provider: entry.provider, model: entry.model } : null;
+}
+
+export interface VoiceSettingsResponse {
+  scope: VoicePolicy['scope'];
+  selected: ModelChoice | null;
+  canEdit: boolean;
+  effective: ModelChoice | null;
+  models: Array<ModelChoice & { label: string }>;
+  keys: Array<{ provider: string; envVar: string | undefined; saved: boolean }>;
+}
+
+export type TranscribeResponse = ModelChoice & { text: string };
+
+function settingsResponse(policy: VoicePolicy, saved: STTModel | undefined, canEdit: boolean): VoiceSettingsResponse {
+  const effective = chooseSTTModel(policy, saved);
+  return {
+    scope: policy.scope,
+    selected: choice(saved),
+    canEdit,
+    effective: 'error' in effective ? null : choice(effective.entry),
+    models: STT_MODELS.map(m => ({ provider: m.provider, model: m.model, label: m.label })),
+    keys: sttProviders().map(provider => ({
+      provider,
+      envVar: sttApiKeyEnvVar(provider),
+      saved: policy.keyFor(provider) !== undefined,
+    })),
+  };
 }
 
 export class VoiceRoutes extends Route<VoiceRoutesDeps> {
@@ -72,12 +105,11 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
     if (!factoryId) return { caller, orgId };
 
     const projects = this.deps.factoryProjects;
-    if (!projects) return { response: c.json({ error: 'factory_unavailable' }, 503) };
     await projects.ensureReady();
     // Local mode is single-user; tenants only ever see their own org's Factories.
     const project = orgId ? await projects.get({ orgId, id: factoryId }) : await projects.getById({ id: factoryId });
     if (!project) return { response: c.json({ error: 'factory_project_not_found' }, 404) };
-    return { caller, orgId, factory: { id: project.id, orgId: project.orgId, modelScope: project.modelScope } };
+    return { caller, orgId, factory: project };
   }
 
   async #canEdit(c: Context, request: VoiceRequest, policy: VoicePolicy): Promise<boolean> {
@@ -85,28 +117,9 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
     return this.deps.auth.isOrganizationAdmin(c, request.orgId);
   }
 
-  async #settings(c: Context, request: VoiceRequest) {
-    const storage = this.deps.voiceSettings;
-    const policy = voicePolicy(request.caller, request.factory);
-    const effective = await chooseSTTModel(policy, storage);
-    return {
-      scope: policy.scope,
-      selected: choice(await savedSTTModel(storage, policy.settingsKey)),
-      canEdit: await this.#canEdit(c, request, policy),
-      effective: 'error' in effective ? null : choice(effective.entry),
-      models: STT_MODELS.map(m => ({ provider: m.provider, model: m.model, label: m.label })),
-      keys: sttProviders().map(provider => ({
-        provider,
-        envVar: sttApiKeyEnvVar(provider),
-        saved: policy.keyFor(provider) !== undefined,
-      })),
-    };
-  }
-
   routes() {
-    // Base64 inflates the clip by a third; leave room for the JSON envelope.
     const limitBody = bodyLimit({
-      maxSize: Math.ceil((MAX_TRANSCRIBE_AUDIO_BYTES * 4) / 3) + 4096,
+      maxSize: MAX_TRANSCRIBE_AUDIO_BYTES,
       onError: c => c.json({ error: 'Recording is too long to transcribe.' }, 413),
     });
     return [
@@ -117,7 +130,9 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           const c = loose(context);
           const request = await this.#request(c, c.req.query('factoryId') || undefined);
           if ('response' in request) return request.response;
-          return c.json(await this.#settings(c, request));
+          const policy = voicePolicy(request.caller, request.factory);
+          const saved = await savedSTTModel(this.deps.voiceSettings, policy.settingsKey);
+          return c.json(settingsResponse(policy, saved, await this.#canEdit(c, request, policy)));
         },
       }),
       registerApiRoute('/web/voice/settings', {
@@ -126,53 +141,49 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
         handler: async context => {
           const c = loose(context);
           const parsed = settingsBodySchema.safeParse(await c.req.json().catch(() => undefined));
-          if (!parsed.success) return c.json({ error: 'Expected { provider, model }.' }, 400);
-          const { factoryId, provider, model } = parsed.data;
+          if (!parsed.success) {
+            const custom = parsed.error.issues.find(issue => issue.code === 'custom');
+            return c.json({ error: custom?.message ?? 'Expected { provider, model }.' }, 400);
+          }
+          const { factoryId, entry } = parsed.data;
 
           const request = await this.#request(c, factoryId);
           if ('response' in request) return request.response;
-          const storage = this.deps.voiceSettings;
-          if (!storage) return c.json({ error: 'Voice settings storage is unavailable.' }, 503);
           const policy = voicePolicy(request.caller, request.factory);
-          if (!(await this.#canEdit(c, request, policy))) {
-            return c.json({ error: 'organization_admin_required' }, 403);
-          }
-          const key = policy.settingsKey;
+          const canEdit = await this.#canEdit(c, request, policy);
+          if (!canEdit) return c.json({ error: 'organization_admin_required' }, 403);
+          const storage = this.deps.voiceSettings;
           await storage.ensureReady();
-          if (provider === null) {
-            await storage.clear(key);
-            return c.json(await this.#settings(c, request));
-          }
-          const entry = model
-            ? STT_MODELS.find(m => m.provider === provider && m.model === model)
-            : STT_MODELS.find(m => m.provider === provider);
-          if (!entry)
-            return c.json({ error: `${provider}/${model ?? ''} is not a supported speech-to-text model.` }, 400);
-          await storage.set({ ...key, provider: entry.provider, model: entry.model });
-          return c.json(await this.#settings(c, request));
+          if (entry) await storage.set({ ...policy.settingsKey, provider: entry.provider, model: entry.model });
+          else await storage.clear(policy.settingsKey);
+          return c.json(settingsResponse(policy, entry ?? undefined, canEdit));
         },
       }),
       registerApiRoute('/web/voice/transcribe', {
         method: 'POST',
         requiresAuth: false,
-        middleware: (context, next) => limitBody(loose(context), next),
         handler: async context => {
           const c = loose(context);
-          const parsed = transcribeBodySchema.safeParse(await c.req.json().catch(() => undefined));
-          if (!parsed.success) return c.json({ error: 'Expected { audio, mimeType }.' }, 400);
-          const audio = Buffer.from(parsed.data.audio, 'base64');
-          if (audio.length === 0) return c.json({ error: 'Recording is empty.' }, 400);
-          if (audio.length > MAX_TRANSCRIBE_AUDIO_BYTES) {
-            return c.json({ error: 'Recording is too long to transcribe.' }, 413);
+          const mimeType = c.req.header('content-type') ?? '';
+          if (!mimeType.trim().toLowerCase().startsWith('audio/')) {
+            return c.json({ error: 'Expected an audio recording.' }, 415);
           }
-
-          const request = await this.#request(c, parsed.data.factoryId);
+          const request = await this.#request(c, c.req.query('factoryId') || undefined);
           if ('response' in request) return request.response;
-          const chosen = await chooseSTTModel(voicePolicy(request.caller, request.factory), this.deps.voiceSettings);
+          const policy = voicePolicy(request.caller, request.factory);
+          const chosen = chooseSTTModel(policy, await savedSTTModel(this.deps.voiceSettings, policy.settingsKey));
           if ('error' in chosen) return c.json({ error: chosen.error }, 400);
+
+          let audio: Buffer | undefined;
+          const limited = await limitBody(c, async () => {
+            audio = Buffer.from(await c.req.arrayBuffer());
+          });
+          if (limited) return limited;
+          if (!audio || audio.length === 0) return c.json({ error: 'Recording is empty.' }, 400);
           try {
-            const text = await transcribeAudio(chosen, audio, parsed.data.mimeType);
-            return c.json({ text, provider: chosen.entry.provider, model: chosen.entry.model });
+            const text = await transcribeAudio(chosen, audio, mimeType);
+            const body: TranscribeResponse = { text, provider: chosen.entry.provider, model: chosen.entry.model };
+            return c.json(body);
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return c.json({ error: `Transcription failed: ${message}` }, 502);

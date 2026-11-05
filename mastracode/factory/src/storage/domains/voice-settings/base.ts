@@ -1,25 +1,12 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
-/**
- * A user's chosen speech-to-text model for voice input: one row per
- * `(org, user)`. No row means "auto" — the first provider the caller has a key for.
- */
 export interface VoiceSettingsRecord {
   orgId: string;
   userId: string;
   provider: string;
   model: string;
   updatedAt: Date;
-}
-
-/**
- * Sentinel `user_id` for a Factory's own voice model, stored in the same table
- * as personal choices (mirrors `factoryMemorySettingsUserId`). Real user ids
- * never start with this prefix.
- */
-export function factoryVoiceSettingsUserId(factoryProjectId: string): string {
-  return `factory-project:${factoryProjectId}`;
 }
 
 export const VOICE_SETTINGS_SCHEMA: CollectionSchema = {

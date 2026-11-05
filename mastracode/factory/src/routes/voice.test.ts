@@ -5,7 +5,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { audioFiletype, factoryVoiceSettingsKey, MAX_TRANSCRIBE_AUDIO_BYTES } from '../voice/transcription.js';
+import { factoryVoiceSettingsKey, MAX_TRANSCRIBE_AUDIO_BYTES } from '../voice/transcription.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { VoiceRoutes } from './voice.js';
 import type { VoiceRoutesDeps } from './voice.js';
@@ -67,7 +67,11 @@ function localAuthStorage(keys: Record<string, string>): AuthStorage {
   return { getStoredApiKey: (provider: string) => keys[provider] } as unknown as AuthStorage;
 }
 
-function mount(deps: Omit<VoiceRoutesDeps, 'auth'> & { auth?: VoiceRoutesDeps['auth'] }, user?: { org: string }) {
+async function mount(
+  deps: Partial<Omit<VoiceRoutesDeps, 'auth'>> & { auth?: VoiceRoutesDeps['auth'] },
+  user?: { org: string },
+) {
+  const seed = await createFactoryStorageForTests();
   const app = new Hono();
   if (user) {
     app.use('*', async (c, next) => {
@@ -77,26 +81,35 @@ function mount(deps: Omit<VoiceRoutesDeps, 'auth'> & { auth?: VoiceRoutesDeps['a
   }
   mountApiRoutes(
     app as never,
-    new VoiceRoutes({ auth: deps.auth ?? fakeRouteAuth({ enabled: false }), ...deps }).routes(),
+    new VoiceRoutes({
+      auth: deps.auth ?? fakeRouteAuth({ enabled: false }),
+      voiceSettings: seed.voiceSettings,
+      factoryProjects: seed.projects,
+      ...deps,
+    }).routes(),
   );
   return app;
 }
 
-function transcribe(app: Hono, body: Record<string, unknown>) {
-  return app.request('/web/voice/transcribe', {
+const clip = Buffer.from('fake opus bytes');
+
+function transcribe(
+  app: Hono,
+  { mimeType, factoryId, audio = clip }: { mimeType: string; factoryId?: string; audio?: Buffer },
+) {
+  const query = factoryId ? `?factoryId=${factoryId}` : '';
+  return app.request(`/web/voice/transcribe${query}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: { 'content-type': mimeType },
+    body: new Uint8Array(audio),
   });
 }
 
-const clip = Buffer.from('fake opus bytes').toString('base64');
-
 describe('POST /web/voice/transcribe (local mode)', () => {
   it('transcribes with the first provider that has a key and returns trimmed text', async () => {
-    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
+    const app = await mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm;codecs=opus' });
+    const res = await transcribe(app, { mimeType: 'audio/webm;codecs=opus' });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ text: 'hello from whisper', provider: 'openai', model: 'whisper-1' });
@@ -105,9 +118,9 @@ describe('POST /web/voice/transcribe (local mode)', () => {
 
   it('prefers the provider env var over a stored key', async () => {
     process.env.MISTRAL_API_KEY = 'env-mistral';
-    const app = mount({ authStorage: localAuthStorage({ mistral: 'stored-mistral' }) });
+    const app = await mount({ authStorage: localAuthStorage({ mistral: 'stored-mistral' }) });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4' });
+    const res = await transcribe(app, { mimeType: 'audio/mp4' });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ text: 'hello from voxtral', provider: 'mistral', model: 'voxtral-mini-latest' });
@@ -117,9 +130,9 @@ describe('POST /web/voice/transcribe (local mode)', () => {
   });
 
   it('explains how to fix a missing key without calling any provider', async () => {
-    const app = mount({ authStorage: localAuthStorage({}) });
+    const app = await mount({ authStorage: localAuthStorage({}) });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/speech-to-text API key/);
@@ -127,19 +140,28 @@ describe('POST /web/voice/transcribe (local mode)', () => {
     expect(calls.mistral).toHaveLength(0);
   });
 
-  it('rejects a malformed body', async () => {
-    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
+  it('rejects a body that is not an audio recording', async () => {
+    const app = await mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
 
-    const res = await transcribe(app, { mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'application/json' });
+
+    expect(res.status).toBe(415);
+    expect(calls.openai).toHaveLength(0);
+  });
+
+  it('rejects an empty recording', async () => {
+    const app = await mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
+
+    const res = await transcribe(app, { mimeType: 'audio/webm', audio: Buffer.alloc(0) });
 
     expect(res.status).toBe(400);
+    expect(calls.openai).toHaveLength(0);
   });
 
   it('rejects a recording over the size cap', async () => {
-    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
-    const tooBig = Buffer.alloc(MAX_TRANSCRIBE_AUDIO_BYTES + 1).toString('base64');
+    const app = await mount({ authStorage: localAuthStorage({ openai: 'sk-local' }) });
 
-    const res = await transcribe(app, { audio: tooBig, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm', audio: Buffer.alloc(MAX_TRANSCRIBE_AUDIO_BYTES + 1) });
 
     expect(res.status).toBe(413);
     expect(calls.openai).toHaveLength(0);
@@ -147,9 +169,9 @@ describe('POST /web/voice/transcribe (local mode)', () => {
 
   it('surfaces provider failures as 502', async () => {
     server.use(http.post(OPENAI_URL, () => HttpResponse.json({ error: { message: 'bad key' } }, { status: 401 })));
-    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-bad' }) });
+    const app = await mount({ authStorage: localAuthStorage({ openai: 'sk-bad' }) });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
 
     expect(res.status).toBe(502);
     expect((await res.json()).error).toMatch(/^Transcription failed:/);
@@ -164,9 +186,9 @@ describe('POST /web/voice/transcribe (tenant mode)', () => {
       type: 'api_key',
       key: 'personal-mistral',
     });
-    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
+    const app = await mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4' });
+    const res = await transcribe(app, { mimeType: 'audio/mp4' });
 
     expect(res.status).toBe(200);
     expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
@@ -175,9 +197,9 @@ describe('POST /web/voice/transcribe (tenant mode)', () => {
   it('never uses an organization key outside a factory-scoped Factory', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
-    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
+    const app = await mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/speech-to-text API key/);
@@ -193,9 +215,9 @@ describe('POST /web/voice/transcribe (tenant mode)', () => {
       access: 'access',
       expires: Date.now() + 60_000,
     });
-    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
+    const app = await mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials }, { org: 'org1' });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
 
     expect(res.status).toBe(400);
     expect(calls.openai).toHaveLength(0);
@@ -203,9 +225,9 @@ describe('POST /web/voice/transcribe (tenant mode)', () => {
 
   it('requires a signed-in user', async () => {
     const seed = await createFactoryStorageForTests();
-    const app = mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials });
+    const app = await mount({ auth: fakeRouteAuth(), modelCredentials: seed.credentials });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
 
     expect(res.status).toBe(401);
   });
@@ -222,7 +244,10 @@ function putSettings(app: Hono, body: Record<string, unknown>) {
 describe('/web/voice/settings', () => {
   it('lists every registry model, reports which providers have a key, and starts on auto', async () => {
     const seed = await createFactoryStorageForTests();
-    const app = mount({ authStorage: localAuthStorage({ mistral: 'sk-mistral' }), voiceSettings: seed.voiceSettings });
+    const app = await mount({
+      authStorage: localAuthStorage({ mistral: 'sk-mistral' }),
+      voiceSettings: seed.voiceSettings,
+    });
 
     const res = await app.request('/web/voice/settings');
 
@@ -248,7 +273,7 @@ describe('/web/voice/settings', () => {
 
   it('transcribes with the saved model instead of the first provider with a key', async () => {
     const seed = await createFactoryStorageForTests();
-    const app = mount({
+    const app = await mount({
       authStorage: localAuthStorage({ openai: 'sk-openai', mistral: 'sk-mistral' }),
       voiceSettings: seed.voiceSettings,
     });
@@ -260,7 +285,7 @@ describe('/web/voice/settings', () => {
       model: 'voxtral-mini-latest',
     });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/mp4' });
+    const res = await transcribe(app, { mimeType: 'audio/mp4' });
 
     expect(await res.json()).toMatchObject({ provider: 'mistral', model: 'voxtral-mini-latest' });
     expect(calls.openai).toEqual([]);
@@ -269,7 +294,7 @@ describe('/web/voice/settings', () => {
 
   it('goes back to auto when the choice is cleared', async () => {
     const seed = await createFactoryStorageForTests();
-    const app = mount({
+    const app = await mount({
       authStorage: localAuthStorage({ openai: 'sk-openai', mistral: 'sk-mistral' }),
       voiceSettings: seed.voiceSettings,
     });
@@ -278,7 +303,7 @@ describe('/web/voice/settings', () => {
     const cleared = await putSettings(app, { provider: null });
     expect(((await cleared.json()) as { selected: unknown }).selected).toBeNull();
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
     expect(await res.json()).toMatchObject({ provider: 'openai', model: 'whisper-1' });
   });
 
@@ -290,9 +315,12 @@ describe('/web/voice/settings', () => {
       provider: 'mistral',
       model: 'voxtral-mini-latest',
     });
-    const app = mount({ authStorage: localAuthStorage({ openai: 'sk-openai' }), voiceSettings: seed.voiceSettings });
+    const app = await mount({
+      authStorage: localAuthStorage({ openai: 'sk-openai' }),
+      voiceSettings: seed.voiceSettings,
+    });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm' });
+    const res = await transcribe(app, { mimeType: 'audio/webm' });
 
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toContain('mistral API key');
@@ -301,7 +329,7 @@ describe('/web/voice/settings', () => {
 
   it('rejects a model outside the registry', async () => {
     const seed = await createFactoryStorageForTests();
-    const app = mount({ authStorage: localAuthStorage({}), voiceSettings: seed.voiceSettings });
+    const app = await mount({ authStorage: localAuthStorage({}), voiceSettings: seed.voiceSettings });
 
     const res = await putSettings(app, { provider: 'mistral', model: 'whisper-1' });
 
@@ -309,14 +337,24 @@ describe('/web/voice/settings', () => {
     expect(await seed.voiceSettings.get({ orgId: 'local', userId: 'local' })).toBeNull();
   });
 
+  it('requires a model alongside a provider', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = await mount({ authStorage: localAuthStorage({}), voiceSettings: seed.voiceSettings });
+
+    const res = await putSettings(app, { provider: 'mistral' });
+
+    expect(res.status).toBe(400);
+    expect(await seed.voiceSettings.get({ orgId: 'local', userId: 'local' })).toBeNull();
+  });
+
   it("keeps each signed-in user's choice separate", async () => {
     const seed = await createFactoryStorageForTests();
-    const app = mount(
+    const app = await mount(
       { auth: fakeRouteAuth(), modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings },
       { org: 'org1' },
     );
 
-    await putSettings(app, { provider: 'mistral' });
+    await putSettings(app, { provider: 'mistral', model: 'voxtral-mini-latest' });
 
     expect(await seed.voiceSettings.get({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
       provider: 'mistral',
@@ -334,7 +372,7 @@ describe('Factory voice model and model scope', () => {
       userId: 'user-a',
       input: { name: 'Voice', modelScope },
     });
-    const app = mount(
+    const app = await mount(
       {
         auth: fakeRouteAuth({ isOrganizationAdmin: async () => isAdmin }),
         modelCredentials: seed.credentials,
@@ -357,11 +395,11 @@ describe('Factory voice model and model scope', () => {
   it('factory scope uses the Factory model with the org key and ignores personal choices', async () => {
     const { seed, app, factoryId } = await tenantFactory('factory');
     await keys(seed);
-    await putSettings(app, { provider: 'mistral' });
+    await putSettings(app, { provider: 'mistral', model: 'voxtral-mini-latest' });
     const saved = await putSettings(app, { factoryId, provider: 'openai', model: 'whisper-1' });
     expect(saved.status).toBe(200);
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+    const res = await transcribe(app, { mimeType: 'audio/webm', factoryId });
 
     expect(await res.json()).toMatchObject({ provider: 'openai', model: 'whisper-1' });
     expect(calls.openai[0]!.authorization).toBe('Bearer org-openai');
@@ -375,7 +413,7 @@ describe('Factory voice model and model scope', () => {
       key: 'personal-mistral',
     });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+    const res = await transcribe(app, { mimeType: 'audio/webm', factoryId });
 
     expect(res.status).toBe(400);
     expect(calls.mistral).toEqual([]);
@@ -388,13 +426,13 @@ describe('Factory voice model and model scope', () => {
       await keys(seed);
       await seed.voiceSettings.set({ ...factoryKey, provider: 'openai', model: 'whisper-1' });
 
-      const auto = await transcribe(app, { audio: clip, mimeType: 'audio/mp4', factoryId });
+      const auto = await transcribe(app, { mimeType: 'audio/mp4', factoryId });
       expect(await auto.json()).toMatchObject({ provider: 'mistral', model: 'voxtral-mini-latest' });
       expect(calls.mistral[0]!.authorization).toBe('Bearer personal-mistral');
       expect(calls.openai).toEqual([]);
 
       await putSettings(app, { factoryId, provider: 'openai', model: 'whisper-1' });
-      const chosen = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+      const chosen = await transcribe(app, { mimeType: 'audio/webm', factoryId });
       expect(chosen.status).toBe(400);
       expect(((await chosen.json()) as { error: string }).error).toContain('openai API key');
       expect(calls.openai).toEqual([]);
@@ -406,7 +444,7 @@ describe('Factory voice model and model scope', () => {
     await seed.credentials.setCredential({ orgId: 'org1' }, 'openai-codex', { type: 'api_key', key: 'org-openai' });
     await seed.voiceSettings.set({ ...factoryKey, provider: 'openai', model: 'whisper-1' });
 
-    const res = await transcribe(app, { audio: clip, mimeType: 'audio/webm', factoryId });
+    const res = await transcribe(app, { mimeType: 'audio/webm', factoryId });
 
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/speech-to-text API key/);
@@ -456,7 +494,7 @@ describe('Factory voice model and model scope', () => {
   it('only lets org admins change the Factory voice model under factory scope', async () => {
     const { seed, app, factoryId, factoryKey } = await tenantFactory('factory', false);
 
-    const res = await putSettings(app, { factoryId, provider: 'openai' });
+    const res = await putSettings(app, { factoryId, provider: 'openai', model: 'whisper-1' });
 
     expect(res.status).toBe(403);
     expect(await seed.voiceSettings.get(factoryKey)).toBeNull();
@@ -468,18 +506,25 @@ describe('Factory voice model and model scope', () => {
   it('lets any member save their own voice model under user scope', async () => {
     const { seed, app, factoryId, factoryKey } = await tenantFactory('user', false);
 
-    const res = await putSettings(app, { factoryId, provider: 'mistral' });
+    const res = await putSettings(app, { factoryId, provider: 'mistral', model: 'voxtral-mini-latest' });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ scope: 'user', canEdit: true, selected: { provider: 'mistral' } });
-    expect(await seed.voiceSettings.get({ orgId: 'org1', userId: 'user-a' })).toMatchObject({ provider: 'mistral' });
+    expect(await res.json()).toMatchObject({
+      scope: 'user',
+      canEdit: true,
+      selected: { provider: 'mistral', model: 'voxtral-mini-latest' },
+    });
+    expect(await seed.voiceSettings.get({ orgId: 'org1', userId: 'user-a' })).toMatchObject({
+      provider: 'mistral',
+      model: 'voxtral-mini-latest',
+    });
     expect(await seed.voiceSettings.get(factoryKey)).toBeNull();
   });
 
   it("does not reveal another org's Factory", async () => {
     const seed = await createFactoryStorageForTests();
     const other = await seed.projects.create({ orgId: 'org2', userId: 'user-z', input: { name: 'Other' } });
-    const app = mount(
+    const app = await mount(
       { auth: fakeRouteAuth(), modelCredentials: seed.credentials, factoryProjects: seed.projects },
       { org: 'org1' },
     );
@@ -487,18 +532,5 @@ describe('Factory voice model and model scope', () => {
     const res = await app.request(`/web/voice/settings?factoryId=${other.id}`);
 
     expect(res.status).toBe(404);
-  });
-});
-
-describe('audioFiletype', () => {
-  it.each([
-    ['audio/webm;codecs=opus', 'webm'],
-    ['audio/mp4', 'm4a'],
-    ['audio/mpeg', 'mp3'],
-    ['audio/wav', 'wav'],
-    ['audio/ogg;codecs=opus', 'ogg'],
-    ['application/octet-stream', 'webm'],
-  ])('maps %s to %s', (mimeType, expected) => {
-    expect(audioFiletype(mimeType)).toBe(expected);
   });
 });

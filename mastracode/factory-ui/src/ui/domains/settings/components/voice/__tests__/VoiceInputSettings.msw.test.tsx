@@ -52,9 +52,11 @@ function factorySettings(overrides: Partial<VoiceSettingsResponse> = {}): VoiceS
   });
 }
 
-function stubSettings(initial: VoiceSettingsResponse, onPut?: (body: unknown) => VoiceSettingsResponse) {
+type SettingsPut = { factoryId?: string } & ({ provider: null } | { provider: string; model: string });
+
+function stubSettings(initial: VoiceSettingsResponse, onPut?: (body: SettingsPut) => VoiceSettingsResponse) {
   const requested: string[] = [];
-  const saved: unknown[] = [];
+  const saved: SettingsPut[] = [];
   let current = initial;
   server.use(
     http.get(PROVIDERS_URL, () => HttpResponse.json({ orgKeyAdmin: true, providers: [] })),
@@ -62,7 +64,7 @@ function stubSettings(initial: VoiceSettingsResponse, onPut?: (body: unknown) =>
       requested.push(new URL(request.url).searchParams.get('factoryId') ?? '');
       return HttpResponse.json(current);
     }),
-    http.put(SETTINGS_URL, async ({ request }) => {
+    http.put<never, SettingsPut>(SETTINGS_URL, async ({ request }) => {
       const body = await request.json();
       saved.push(body);
       if (onPut) current = onPut(body);
@@ -118,9 +120,7 @@ describe('VoiceInputSettings', () => {
   it('lets a member of a personal-scoped Factory pick their own model from their personal keys and go back to auto', async () => {
     const { saved } = stubSettings(settings(), body =>
       settings({
-        selected: (body as { provider: string | null }).provider
-          ? { provider: 'mistral', model: 'voxtral-mini-latest' }
-          : null,
+        selected: body.provider ? { provider: 'mistral', model: 'voxtral-mini-latest' } : null,
       }),
     );
     const user = userEvent.setup();
@@ -155,7 +155,7 @@ describe('VoiceInputSettings', () => {
 
     const picker = await screen.findByRole('combobox', { name: 'Your voice model' });
     expect(picker).toHaveTextContent('Deepgram Nova 3');
-    expect(screen.getByText('No speech-to-text key yet')).toBeInTheDocument();
+    expect(screen.getByText('Needs a Deepgram key')).toBeInTheDocument();
     await user.click(picker);
     expect(await screen.findByRole('option', { name: 'Deepgram Nova 3 (no key)' })).toBeInTheDocument();
   });
@@ -203,6 +203,7 @@ describe('VoiceInputSettings', () => {
 
       expect(await screen.findByRole('combobox', { name: picker })).toBeDisabled();
       expect(screen.getByText(hint)).toBeInTheDocument();
+      expect(screen.getByText('No speech-to-text key yet')).toBeInTheDocument();
       await screen.findByRole('button', { name: 'Add provider' });
       expect(screen.queryByRole('button', { name: /actions$/ })).not.toBeInTheDocument();
     },
