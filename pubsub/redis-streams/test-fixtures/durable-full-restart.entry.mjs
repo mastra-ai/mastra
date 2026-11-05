@@ -63,8 +63,10 @@ const model = {
     throw new Error('stream only');
   },
   async doStream({ prompt }) {
-    // One tool call per step, sequentially, like `sleep N xK`.
-    const done = prompt.filter(message => message.role === 'tool').length;
+    // One tool call per step, sequentially, like `sleep N xK`. Count only this
+    // turn's results: memory history can carry an earlier run's tool messages.
+    const lastUser = prompt.findLastIndex(message => message.role === 'user');
+    const done = prompt.slice(lastUser + 1).filter(message => message.role === 'tool').length;
     const finished = done >= toolCalls;
     /** @type {Awaited<ReturnType<FixtureModel['doStream']>>['stream'] extends ReadableStream<infer Part> ? Part[] : never} */
     const chunks = finished

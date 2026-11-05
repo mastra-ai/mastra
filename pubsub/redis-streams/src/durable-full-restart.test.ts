@@ -140,10 +140,15 @@ describe('durable agent run recovered after the API and worker die together (COR
           30_000,
         );
         // A second run on the same thread (Doctor re-diagnosing a deploy) is admitted.
+        const countCompleted = async () =>
+          Number((await storage.db.one(`SELECT count(*) FROM "${schemaName}".tool_executions WHERE completed`)).count);
+        const completedBefore = await countCompleted();
         const followup = launch('followup', { RESTART_FOLLOWUP_RUN_ID: randomUUID() });
         await waitFor(async () => /followup-(completed|rejected):/.test(followup.stdout), 60_000);
         expect(followup.stdout).not.toContain('AgentThreadLeaseConflictError');
         expect(followup.stdout).toContain('followup-completed:All sleeps completed.');
+        // It does its own work rather than answering from the first run's history.
+        expect(await countCompleted()).toBeGreaterThan(completedBefore);
       } catch (error) {
         throw new Error(processes.map(child => `[${child.label}]\n${child.stdout}\n${child.stderr}`).join('\n'), {
           cause: error,

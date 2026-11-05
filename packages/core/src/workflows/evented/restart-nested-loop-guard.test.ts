@@ -106,6 +106,13 @@ describe('evented restart of a nested loop body', () => {
     runA.start({ inputData: { n: 0 } }).catch(() => {});
     await crashed.promise;
 
+    // The crashed iteration's leaf is guarded: `running` under a stored occurrence.
+    const workflows = (await storage.getStore('workflows'))!;
+    const crashedSnapshot = await workflows.loadWorkflowSnapshot({ workflowName: 'restart-loop-outer', runId });
+    const crashedLeaf = crashedSnapshot?.context['restart-loop-body'];
+    expect(crashedLeaf?.status).toBe('running');
+    expect(crashedLeaf?.metadata?.startedBy).toEqual(expect.any(String));
+
     // Host B: fresh instances over the same storage restart the run.
     const seen: number[] = [];
     const hostB = build(async n => {
@@ -119,7 +126,6 @@ describe('evented restart of a nested loop body', () => {
       new Promise<{ status: 'hung' }>(resolve => setTimeout(() => resolve({ status: 'hung' }), 10_000)),
     ]);
 
-    const workflows = (await storage.getStore('workflows'))!;
     const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: 'restart-loop-outer', runId });
     expect(result.status, `loop leaf: ${JSON.stringify(snapshot?.context['restart-loop-body'])}`).toBe('success');
     expect(result).toMatchObject({ result: { n: 3 } });
