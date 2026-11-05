@@ -25,6 +25,11 @@ function ignoreBrokenPipe(stream: NodeJS.WritableStream): void {
   });
 }
 
+/**
+ * Writes `value` as one JSON line. Only for one-shot output written after the work is done: the EPIPE
+ * listener stays on the stream for the rest of the process, so a long-running command that reused this
+ * would keep running after its reader left instead of stopping.
+ */
 export function writeJson(value: unknown, pretty: boolean, stream: NodeJS.WritableStream = process.stdout): void {
   ignoreBrokenPipe(stream);
   stream.write(`${JSON.stringify(value, null, pretty ? 2 : 0)}\n`);
