@@ -59,4 +59,31 @@ describe('MarkdownRenderer memoization', () => {
     expect(parsed.at(-1)).toBe('Last para.');
     expect(parsed.some(block => block.startsWith('Intro'))).toBe(false);
   });
+
+  it.each([
+    ['a tight list', Array.from({ length: 30 }, (_, index) => `- item ${index}`), '\n'],
+    [
+      'a spaced numbered list with nested points',
+      Array.from(
+        { length: 30 },
+        (_, index) => `${index + 1}. **Step ${index}**\n${' '.repeat(`${index + 1}. `.length)}- detail`,
+      ),
+      '\n\n',
+    ],
+  ])('re-parses only the item still being written in %s', (_, items, separator) => {
+    vi.useFakeTimers();
+    const list = items.join(separator);
+    const { rerender } = render(<MarkdownRenderer streaming>{list}</MarkdownRenderer>);
+    const reveal = () => {
+      for (let frame = 0; frame < 150; frame++) act(() => void vi.advanceTimersByTime(16));
+    };
+
+    reveal();
+    parsed.length = 0;
+
+    rerender(<MarkdownRenderer streaming>{`${list} more`}</MarkdownRenderer>);
+    reveal();
+
+    expect(new Set(parsed)).toEqual(new Set([`${items.at(-1)} more`]));
+  });
 });
