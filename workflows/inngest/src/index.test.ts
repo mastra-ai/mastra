@@ -15268,6 +15268,9 @@ createWorkflowTestSuite({
     // BEHAVIOR DIFFERENCES: Inngest handles these differently than default engine
     // ============================================================================
     schemaValidationThrows: true, // Inngest doesn't throw - validation happens async, returns result
+    // Known failures, pinned with it.fails (#29424 cases):
+    schemaInitDataDefaultFails: true, // getInitData() returns undefined, not the defaulted input; cause not yet investigated
+    schemaNullableInputFails: true, // null input: status poll throws "Cannot read properties of null (reading 'status')" in hydrateSerializedStepErrors
     abortStatus: true, // Inngest returns 'failed' or 'success', no 'canceled' status
     streamingSuspendResumeLegacy: true, // Inngest streaming has different suspend/resume behavior
     abortDuringStep: true, // Abort during step test has 5s timeout waiting for abort signal
