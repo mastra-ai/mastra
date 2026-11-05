@@ -95,6 +95,13 @@ interface BaseChunkType {
   traceId?: string;
   from: ChunkFrom;
   metadata?: Record<string, any>;
+  /**
+   * Position of the run-log entry this chunk came from, on durable and evented agent streams
+   * whose transport numbers its entries. To resume after a dropped connection, observe the run
+   * from the last received chunk's `index + 1`. Entries that send no chunk leave gaps, and an
+   * `abort` chunk shares its index with the `finish` chunk that follows it.
+   */
+  index?: number;
 }
 
 interface ResponseMetadataPayload {
@@ -898,6 +905,8 @@ export type DataChunkType = {
   id?: string;
   /** When true, the chunk is streamed to the client but not persisted to storage. */
   transient?: boolean;
+  /** Run-log index on durable and evented agent streams; see `BaseChunkType.index`. */
+  index?: number;
 };
 
 /**

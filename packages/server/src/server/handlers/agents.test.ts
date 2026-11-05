@@ -3058,7 +3058,7 @@ describe('Agent Routes Authorization', () => {
           data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
         });
         const reader = (await observe(runId)).getReader();
-        expect((await reader.read()).value).toEqual(chunk);
+        expect((await reader.read()).value).toEqual({ ...chunk, index: 0 });
         await expect(reader.read()).rejects.toThrow('Run superseded');
         reader.releaseLock();
       });
@@ -3083,7 +3083,7 @@ describe('Agent Routes Authorization', () => {
         return unsubscribe;
       });
 
-      expect(await collectWithDeadline(await observe(runId))).toEqual([event.data]);
+      expect(await collectWithDeadline(await observe(runId))).toEqual([{ ...event.data, index: 0 }]);
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 

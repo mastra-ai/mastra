@@ -31,6 +31,17 @@ createDurableDisconnectTestSuite({
     });
     return frames;
   },
+  streamWithClient: async (baseUrl, { messages, runId }) => {
+    const client = new MastraClient({ baseUrl, retries: 0 });
+    const response = await client.getAgent('agent').stream(messages, { runId });
+    const frames: ChunkType<unknown>[] = [];
+    await response.processDataStream({
+      onChunk: async chunk => {
+        frames.push(chunk);
+      },
+    });
+    return frames;
+  },
   setupModel: async () => ({
     model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` })('gpt-4o-mini'),
     addResponse: (sequenceIndex, response) => {

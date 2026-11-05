@@ -3029,7 +3029,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
+    'Reconnect to an existing agent stream to receive missed events. Every frame carries the run-log `index` it came from; pass `offset` as the last received frame index + 1 to resume without duplicates.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {

@@ -29,6 +29,8 @@ export interface DurableDisconnectTestConfig {
     close: () => Promise<void>;
   }>;
   observeWithClient?: (baseUrl: string, runId: string, offset?: number) => Promise<ChunkType<unknown>[]>;
+  /** Streams through client-js; implement together with observeWithClient. */
+  streamWithClient?: (baseUrl: string, body: { messages: string; runId: string }) => Promise<ChunkType<unknown>[]>;
   startServer: (
     mastra: Mastra,
     onDisconnect: (path: string) => void,
@@ -271,6 +273,16 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             expect(await collectPublicFrames(response)).toEqual(expected);
           }
           expect(expected).toHaveLength(terminal === 'error' ? 1 : 2);
+          // The terminal log entry is index 2. Its frames (abort + finish for an abort) all
+          // carry that index, so a client cut between abort and finish resumes at 2 and gets
+          // both again, and resuming past the entry returns nothing and closes (COR-1506).
+          expect(expected.map(frame => (frame as { index?: number }).index)).toEqual(expected.map(() => 2));
+          const pastEnd = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runId, offset: 3 }),
+          });
+          expect(await collectPublicFrames(pastEnd)).toEqual([]);
           if (config.observeWithClient) expect(await config.observeWithClient(server.baseUrl, runId)).toEqual(expected);
         },
       );
@@ -417,7 +429,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         });
         expect(response.status).toBe(200);
         const wire = await response.text();
-        expect(wire).toContain(JSON.stringify(prefix));
+        expect(wire).toContain(JSON.stringify({ ...prefix, index: 0 }));
         expect(wire).not.toContain('[DONE]');
         expect(wire).not.toContain('"type":"error"');
       });
@@ -525,6 +537,97 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         } finally {
           gate.resolve();
           await original;
+        }
+      });
+
+      it('resumes a multi-step tool loop after the last frame index received from /stream (COR-1506)', async () => {
+        fixture = await config.setupModel();
+        const tool = createTool({
+          id: 'lookup',
+          description: 'Look up a value',
+          inputSchema: z.object({ n: z.number() }),
+          execute: async ({ n }) => ({ value: n * 10 }),
+        });
+        const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+          agent: new Agent({
+            id: 'resume-agent',
+            name: 'Resume agent',
+            instructions: 'Look up values.',
+            model: fixture.model,
+            tools: { lookup: tool },
+          }),
+          cleanupTimeoutMs: 60_000,
+        });
+        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        server = await config.startServer(mastra, () => {});
+        fixture.addResponse(0, {
+          content: 'First',
+          toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { n: 1 } }],
+        });
+        fixture.addResponse(1, {
+          content: 'Second',
+          toolCalls: [{ id: 'call-2', name: 'lookup', arguments: { n: 2 } }],
+        });
+        fixture.addResponse(2, { content: 'Done: 10 and 20.' });
+        // For the client-js stream below; aimock only sequences fixtures registered before the first request.
+        fixture.addResponse(3, { content: 'Again: 30.' });
+        const runId = `observe-resume-${kind}`;
+        const post = async (route: string, body: object) => {
+          const response = await fetch(`${server!.baseUrl}/api/agents/agent/${route}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          return response;
+        };
+        const frames = await collectPublicFrames(
+          await post('stream', { messages: 'Look up 1 then 2', runId, maxSteps: 5 }),
+        );
+        expect(frames.filter(frame => frame.type === 'step-start')).toHaveLength(3);
+        expect(frames.at(-1)).toMatchObject({ type: 'finish' });
+        // Every frame carries its run-log index, and the tool loop's lifecycle records leave gaps.
+        expect(frames.every(frame => typeof frame.index === 'number')).toBe(true);
+        expect(frames.at(-1)!.index).toBeGreaterThan(frames.length - 1);
+
+        // Replay from 0 is the first connection again, frame for frame.
+        expect(await collectPublicFrames(await post('observe', { runId, offset: 0 }))).toEqual(frames);
+
+        // A client that lost its connection after `cut` frames resumes after the last index it saw.
+        const resumeAt = (cut: number) => (cut === 0 ? 0 : frames[cut - 1]!.index! + 1);
+        const mismatches: string[] = [];
+        for (let cut = 0; cut <= frames.length; cut++) {
+          const resumed = await collectPublicFrames(await post('observe', { runId, offset: resumeAt(cut) }));
+          const combined = [...frames.slice(0, cut), ...resumed];
+          if (JSON.stringify(combined) !== JSON.stringify(frames)) {
+            mismatches.push(`cut ${cut}/${frames.length}: ${combined.length - frames.length} extra`);
+          }
+        }
+        expect(mismatches).toEqual([]);
+
+        const cuts = [0, Math.floor(frames.length / 2), frames.length - 1, frames.length];
+        if (config.observeWithClient) {
+          for (const cut of cuts) {
+            expect([
+              ...frames.slice(0, cut),
+              ...(await config.observeWithClient(server.baseUrl, runId, resumeAt(cut))),
+            ]).toEqual(frames);
+          }
+        }
+        if (config.streamWithClient) {
+          const clientRunId = `${runId}-client`;
+          const clientFrames = await config.streamWithClient(server.baseUrl, {
+            messages: 'Say it again',
+            runId: clientRunId,
+          });
+          expect(clientFrames.at(-1)).toMatchObject({ type: 'finish' });
+          expect(clientFrames.some(frame => frame.type === 'error')).toBe(false);
+          expect(clientFrames.every(frame => typeof frame.index === 'number')).toBe(true);
+          const mid = Math.floor(clientFrames.length / 2);
+          expect([
+            ...clientFrames.slice(0, mid),
+            ...(await config.observeWithClient!(server.baseUrl, clientRunId, clientFrames[mid - 1]!.index! + 1)),
+          ]).toEqual(clientFrames);
         }
       });
     }

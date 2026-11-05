@@ -740,7 +740,12 @@ export const enhanceInstructionsResponseSchema = z.object({
  */
 export const observeAgentBodySchema = z.object({
   runId: z.string().describe('The run ID to observe/reconnect to'),
-  offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+  offset: z
+    .number()
+    .optional()
+    .describe(
+      'Run-log position to resume from. Every frame from /stream and /observe carries an `index`; pass the last received index + 1. An abort frame shares its index with the finish frame after it, so if the last frame received was an abort, pass its index. If omitted, replays all frames.',
+    ),
 });
 
 const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
