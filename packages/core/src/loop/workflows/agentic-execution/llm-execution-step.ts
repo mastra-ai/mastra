@@ -107,7 +107,7 @@ import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-m
 import { snapshotSignalOutcome } from '../../shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
-import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
+import { TERMINAL_FINISH_REASONS, TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 import type { TranscriptStep } from '../../shared/transcript-step';
 import { getTranscriptStepContent } from '../../shared/transcript-step';
@@ -3380,11 +3380,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // some models return finishReason='stop' alongside tool calls, which the
       // loop must process.
       const hasPendingToolCalls =
-        toolCalls &&
-        toolCalls.some(tc => !tc.providerExecuted) &&
-        finishReason !== 'error' &&
-        finishReason !== 'length' &&
-        finishReason !== 'content-filter';
+        toolCalls && toolCalls.some(tc => !tc.providerExecuted) && !TOOL_CALL_TERMINAL_FINISH_REASONS.has(finishReason);
       // A non-terminal finish reason only re-enters the loop when the step produced tool calls
       // (matching the durable engine). Without tool calls (e.g. openai-compatible reports 'other'
       // when the stream omits finish_reason) re-sending the same request would duplicate the

@@ -21,6 +21,7 @@ import { takeDelegationFailure } from '../../shared/delegation-outcome';
 import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
 import { commitToolResult, computeModelOutputProviderMetadata } from '../../shared/steps/tool-result-commit-core';
+import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError, getSubAgentErrorResult } from '../errors';
@@ -389,9 +390,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           }
         }
 
+        // A response that ended on an error, the output limit, or a content filter stays ended:
+        // asking again repeats it, even when its tool calls failed (#29518).
         if (
           errorResults?.length > 0 &&
           !hasPendingHITL &&
+          !TOOL_CALL_TERMINAL_FINISH_REASONS.has(initialResult.stepResult.reason) &&
           !(rest.options?.abortSignal?.aborted && inputData.some(toolCall => toolCall.aborted))
         ) {
           // Continue the loop — the error messages are already in the messageList,
