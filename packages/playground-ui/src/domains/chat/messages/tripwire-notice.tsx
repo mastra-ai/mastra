@@ -1,10 +1,11 @@
 import type { TripwireMetadata } from '@mastra/react';
 import { ChevronDown, ChevronRight, RefreshCw, ShieldAlert, Tag } from 'lucide-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
-import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+
+const CodeEditor = lazy(() => import('@/ds/components/CodeEditor/code-editor').then(m => ({ default: m.CodeEditor })));
 
 export interface TripwireNoticeProps {
   reason: string;
@@ -67,16 +68,18 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
                     <Txt as="span" variant="caption" className="opacity-70">
                       Metadata
                     </Txt>
-                    <CodeEditor
-                      value={JSON.stringify(tripwire.metadata, null, 2)}
-                      language="json"
-                      editable={false}
-                      lineNumbers={false}
-                      showCopyButton={false}
-                      variant="embedded"
-                      aria-label="Tripwire metadata"
-                      className="rounded-lg bg-current/10 p-2"
-                    />
+                    <Suspense fallback={null}>
+                      <CodeEditor
+                        value={JSON.stringify(tripwire.metadata, null, 2)}
+                        language="json"
+                        editable={false}
+                        lineNumbers={false}
+                        showCopyButton={false}
+                        variant="embedded"
+                        aria-label="Tripwire metadata"
+                        className="rounded-lg bg-current/10 p-2"
+                      />
+                    </Suspense>
                   </div>
                 )}
               </div>
