@@ -11,7 +11,7 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import { voiceRateLimiter } from '../voice/rate-limit.js';
-import { mintRealtimeSession } from '../voice/realtime.js';
+import { keyCannotTranscribe, mintRealtimeSession } from '../voice/realtime.js';
 import type { RealtimeSession } from '../voice/realtime.js';
 import {
   chooseSTTModel,
@@ -265,10 +265,10 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
             const body: LiveSessionResponse = { mode: 'live', ...session };
             return c.json(body, 200, { 'Cache-Control': 'no-store' });
           } catch (error) {
-            console.warn('[voice] realtime session request failed, recording instead', {
-              provider: chosen.entry.provider,
-              error,
-            });
+            console.warn('[voice] realtime session request failed', { provider: chosen.entry.provider, error });
+            if (keyCannotTranscribe(error)) {
+              return c.json({ error: `Transcription failed: ${transcriptionFailureReason(error)}.` }, 502);
+            }
             return c.json({ mode: 'batch' } satisfies LiveSessionResponse);
           }
         },

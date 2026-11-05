@@ -1,3 +1,4 @@
+import { classifyProviderError } from '@mastra/core/error';
 import { z } from 'zod';
 
 const CLIENT_SESSIONS_URL = 'https://api.mistral.ai/v1/client/sessions';
@@ -24,6 +25,12 @@ export class RealtimeSessionError extends Error {
     this.statusCode = statusCode;
     this.responseBody = responseBody;
   }
+}
+
+export function keyCannotTranscribe(error: unknown): boolean {
+  return (
+    (error instanceof RealtimeSessionError && error.statusCode === 401) || classifyProviderError(error) === 'quota'
+  );
 }
 
 function parseJson(text: string): unknown {

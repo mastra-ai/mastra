@@ -15,8 +15,6 @@ const STT_TIMEOUT_MS = 60_000;
 
 const STT_MAX_RETRIES = 1;
 
-const STT_ATTEMPT_TIMEOUT_MS = 25_000;
-
 export function sttApiKeyEnvVar(provider: string): string | undefined {
   return STT_ONLY_API_KEY_ENV_VARS[provider] ?? providerApiKeyEnvVar(provider);
 }
@@ -44,7 +42,7 @@ function listenWithFiletype(voice: VoiceListener): Listen {
 // The OpenAI SDK reads OPENAI_ORG_ID and OPENAI_PROJECT_ID, which belong to the OPENAI_API_KEY account only.
 function openAIClientOptions(entry: STTModel, apiKey: string): OpenAIConfig['options'] {
   return {
-    timeout: STT_ATTEMPT_TIMEOUT_MS,
+    timeout: STT_TIMEOUT_MS,
     maxRetries: STT_MAX_RETRIES,
     ...(apiKey === process.env.OPENAI_API_KEY?.trim() ? {} : { organization: null, project: null }),
     ...(entry.resolver === 'openai-compatible' && entry.baseURL ? { baseURL: entry.baseURL } : {}),
@@ -93,7 +91,7 @@ export async function createSTTTranscriber(entry: STTModel, apiKey: string): Pro
   return {
     async transcribe(audio, filetype) {
       let timer: NodeJS.Timeout | undefined;
-      // Only the OpenAI client takes a timeout; Mistral and Deepgram calls are abandoned here, not cancelled.
+      // Only the OpenAI client takes a timeout; Mistral and Deepgram calls, and an OpenAI retry after a slow attempt, are abandoned here, not cancelled.
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error('Speech-to-text timed out after 1 minute.')), STT_TIMEOUT_MS);
       });

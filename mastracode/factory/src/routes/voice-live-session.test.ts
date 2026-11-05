@@ -172,6 +172,32 @@ describe('POST /web/voice/live-session', () => {
     expect(batchKeys).toEqual(['Bearer personal-mistral']);
   });
 
+  it.each([
+    {
+      name: 'a rejected key',
+      reply: () =>
+        HttpResponse.json({ message: 'Unauthorized: key personal-mistral is revoked', code: '1000' }, { status: 401 }),
+      reason: 'the speech-to-text provider rejected the API key',
+    },
+    {
+      name: 'an account out of credit',
+      reply: () =>
+        HttpResponse.json(
+          { message: 'personal-mistral has no credit left', code: 'insufficient_quota' },
+          { status: 402 },
+        ),
+      reason: 'the speech-to-text provider account is out of credit',
+    },
+  ])('explains $name before recording, without echoing what Mistral said', async ({ reply, reason }) => {
+    server.use(http.post(CLIENT_SESSIONS_URL, reply));
+    const { app } = await tenantWithPersonalMistralKey();
+
+    const res = await liveSession(app);
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: `Transcription failed: ${reason}.` });
+  });
+
   it('records the clip instead when the token response is malformed', async () => {
     server.use(http.post(CLIENT_SESSIONS_URL, () => HttpResponse.json({ client_secret: null }, { status: 201 })));
     const { app } = await tenantWithPersonalMistralKey();
