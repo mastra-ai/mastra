@@ -9,6 +9,37 @@ import { bindAgentPubSub } from './agent-pubsub';
 import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
 
 describe('agent-scoped transport delivery', () => {
+  it('keeps UTF-8 tuple identities distinct and exposes transport-safe physical names to cache policies', async () => {
+    const physicalTopics: string[] = [];
+    const transport = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache(), {
+      shouldCache: topic => {
+        physicalTopics.push(topic);
+        return topic.startsWith('agent.');
+      },
+    });
+    const identities: [string, string][] = [
+      ["owner !'()* 日本語", 'run/with:\u0000delimiters'],
+      ['a,b', 'c'],
+      ['a', 'b,c'],
+    ];
+    for (const prefix of ['agent.stream.', 'agent.control.', 'agent.abort-ack.']) {
+      for (const [agentId, runId] of identities) {
+        const agent = bindAgentPubSub(transport, agentId);
+        const logical = `${prefix}${runId}`;
+        const physical = `${prefix}v2.${Buffer.from(JSON.stringify([agentId, runId]), 'utf8').toString('base64url')}`;
+        await agent.publish(logical, { type: 'owned', runId, data: {} });
+        expect(physicalTopics).toContain(physical);
+        expect(physical).toMatch(/^[A-Za-z][A-Za-z0-9._~+%-]*$/);
+        expect(JSON.parse(Buffer.from(physical.slice(`${prefix}v2.`.length), 'base64url').toString('utf8'))).toEqual([
+          agentId,
+          runId,
+        ]);
+        expect((await agent.getHistory(logical)).map(event => event.type)).toEqual(['owned']);
+      }
+    }
+    expect(new Set(physicalTopics).size).toBe(9);
+  });
+
   it('isolates retained replay, live delivery, offsets and cleanup on one cached transport', async () => {
     const transport = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
     const alice = bindAgentPubSub(transport, 'alice');

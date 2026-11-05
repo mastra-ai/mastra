@@ -58,7 +58,9 @@ describe('DurableAgent workflow.events.v2 topic cleanup (#20786)', () => {
     // cleanup() is what #clearPubsubTopic is wired through.
     cleanup();
 
-    expect(clearTopic).toHaveBeenCalledWith(`agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`);
+    expect(clearTopic).toHaveBeenCalledWith(
+      `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`,
+    );
     expect(clearTopic).toHaveBeenCalledWith(`workflow.events.v2.${runId}`);
 
     await pubsub.close();

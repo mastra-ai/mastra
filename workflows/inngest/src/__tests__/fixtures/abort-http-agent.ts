@@ -18,7 +18,6 @@ import { Inngest } from 'inngest';
 import { z } from 'zod';
 
 import { createInngestAgent } from '../../durable-agent';
-import { createInngestDurableAgenticWorkflow } from '../../durable-agent/create-inngest-agentic-workflow';
 
 export const ABORT_HTTP_TOOL_MS = 8_000;
 
@@ -44,15 +43,17 @@ export function buildAbortHttpAgent({
   const wait = createTool({
     id: 'wait',
     description: 'Wait for a while',
-    inputSchema: z.object({}),
-    execute: async (_input, context) => {
+    inputSchema: z.object({ marker: z.string().optional() }),
+    execute: async ({ marker = 'owner' }, context) => {
       mkdirSync(outDir, { recursive: true });
       writeFileSync(`${outDir}/tool-started`, '1');
+      writeFileSync(`${outDir}/tool-started-${marker}`, '1');
       const signal = context?.abortSignal;
       await new Promise<void>(resolve => {
         const timer = setTimeout(resolve, ABORT_HTTP_TOOL_MS);
         signal?.addEventListener('abort', () => {
           clearTimeout(timer);
+          writeFileSync(`${outDir}/tool-aborted-${marker}`, '1');
           resolve();
         });
       });
@@ -72,12 +73,10 @@ export function buildAbortHttpAgent({
   });
 
   const durableAgent = createInngestAgent({ agent, inngest });
-  const workflow = createInngestDurableAgenticWorkflow({ inngest });
 
   const mastra = new Mastra({
     storage,
     agents: { [agentId]: durableAgent } as any,
-    workflows: { [workflow.id]: workflow } as any,
     ...(auth ? { server: { auth } } : {}),
   });
 

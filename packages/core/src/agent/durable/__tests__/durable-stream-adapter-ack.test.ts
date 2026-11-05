@@ -97,7 +97,7 @@ describe('durable stream adapter acknowledges every delivery', () => {
     await output.consumeStream();
 
     const { AGENT_STREAM_TOPIC } = await import('../constants');
-    const topic = `agent.stream.v2.${JSON.stringify([durableAgent.id, runId])}`;
+    const topic = `agent.stream.v2.${Buffer.from(JSON.stringify([durableAgent.id, runId]), 'utf8').toString('base64url')}`;
     const deliveries = pubsub.deliveries.filter(d => d.topic === topic);
 
     // The run published real events, and the adapter was subscribed.

@@ -56,7 +56,9 @@ class OrderingPubSub extends EventEmitterPubSub {
   }
   override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
     if (topic.startsWith('agent.stream.')) {
-      const [agentId, runId] = JSON.parse(topic.slice('agent.stream.v2.'.length)) as [string, string];
+      const [agentId, runId] = JSON.parse(
+        Buffer.from(topic.slice('agent.stream.v2.'.length), 'base64url').toString('utf8'),
+      ) as [string, string];
       expect(agentId).toBe(this.agentId);
       const record = (await this.cache.get(agentRunRecordKey(this.agentId, runId))) as AgentRunRecord | null;
       this.seen.push({ type: event.type, status: record?.status });
@@ -292,7 +294,7 @@ describe('Agent run records', () => {
         expect(topics).toEqual(
           expect.arrayContaining(
             ['agent.stream.', 'agent.control.', 'agent.abort-ack.'].map(
-              prefix => `${prefix}v2.${JSON.stringify([agent.id, runId])}`,
+              prefix => `${prefix}v2.${Buffer.from(JSON.stringify([agent.id, runId]), 'utf8').toString('base64url')}`,
             ),
           ),
         );

@@ -318,7 +318,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'reused-run', data: {} });
     expect(
       await sharedCache.listLength(
-        `pubsub:agent.stream.v2.${JSON.stringify([agent.id, topic.slice('agent.stream.'.length)])}`,
+        `pubsub:agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, topic.slice('agent.stream.'.length)]), 'utf8').toString('base64url')}`,
       ),
     ).toBe(1);
 
@@ -362,12 +362,12 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     expect(delivered).toHaveLength(1);
     expect(
       await serverCache.listLength(
-        `pubsub:agent.stream.v2.${JSON.stringify([agent.id, topic.slice('agent.stream.'.length)])}`,
+        `pubsub:agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, topic.slice('agent.stream.'.length)]), 'utf8').toString('base64url')}`,
       ),
     ).toBe(1);
     expect(
       await agentCache.listLength(
-        `pubsub:agent.stream.v2.${JSON.stringify([agent.id, topic.slice('agent.stream.'.length)])}`,
+        `pubsub:agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, topic.slice('agent.stream.'.length)]), 'utf8').toString('base64url')}`,
       ),
     ).toBe(0);
 

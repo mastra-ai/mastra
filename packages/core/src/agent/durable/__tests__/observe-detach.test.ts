@@ -57,7 +57,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
   const spies = async (runId: string) => {
     // These tests observe an existing run, not an unavailable topic.
     await emitOwnershipClaimedEvent(agent.pubsub, runId, 1);
-    const topic = `agent.stream.v2.${JSON.stringify([agent.id, runId])}`;
+    const topic = `agent.stream.v2.${Buffer.from(JSON.stringify([agent.id, runId]), 'utf8').toString('base64url')}`;
     const unsubscribe = vi.spyOn((agent.pubsub as CachingPubSub).getInner(), 'unsubscribe');
     const clearTopic = vi.spyOn((agent.pubsub as CachingPubSub).getInner(), 'clearTopic');
     return {
@@ -201,7 +201,7 @@ describe('DurableAgent.observe() observer-only teardown (issue #25022)', () => {
     }) as DurableAgent;
     const runId = 'natural-end';
     await emitOwnershipClaimedEvent(noCleanup.pubsub, runId, 1);
-    const topic = `agent.stream.v2.${JSON.stringify([noCleanup.id, runId])}`;
+    const topic = `agent.stream.v2.${Buffer.from(JSON.stringify([noCleanup.id, runId]), 'utf8').toString('base64url')}`;
     const unsubscribe = vi.spyOn((noCleanup.pubsub as CachingPubSub).getInner(), 'unsubscribe');
     const { fullStream } = await noCleanup.observe(runId);
     const consumed = (async () => {

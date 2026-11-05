@@ -161,7 +161,8 @@ describe('DurableAgent.__abortRunAcknowledged', () => {
     await expect(createAgent(pubsub).__abortRunAcknowledged(runId)).resolves.toBe(true);
     const abortRequests = publish.mock.calls.filter(
       ([topic, event]) =>
-        topic === `agent.control.v2.${JSON.stringify(['abort-ack-agent', runId])}` &&
+        topic ===
+          `agent.control.v2.${Buffer.from(JSON.stringify(['abort-ack-agent', runId]), 'utf8').toString('base64url')}` &&
         event.type === AgentControlEventTypes.ABORT_REQUEST,
     );
     expect(abortRequests).toHaveLength(1);

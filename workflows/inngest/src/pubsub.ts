@@ -20,10 +20,15 @@ function buildTopicRef(channel: string, topic: string) {
  * - "workflow.events.v2.{runId}" - workflow events
  * - "agent.stream.{runId}" - agent stream events
  * - "agent.control.{runId}" - agent control events (cross-process abort)
+ * - "agent.abort-ack.{runId}" - acknowledgements on a separate agent-ack channel
  *
  * @returns { runId, topicType } or null if not a recognized format
  */
-function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'agent-stream' | 'agent-control' } | null {
+function parseTopic(topic: string): {
+  runId: string;
+  topicType: 'workflow' | 'agent-stream' | 'agent-control';
+  acknowledgement?: boolean;
+} | null {
   // Try workflow format first
   const workflowMatch = topic.match(/^workflow\.events\.v2\.(.+)$/);
   if (workflowMatch && workflowMatch[1]) {
@@ -40,6 +45,11 @@ function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'ag
   const agentControlMatch = topic.match(/^agent\.control\.(.+)$/);
   if (agentControlMatch && agentControlMatch[1]) {
     return { runId: agentControlMatch[1], topicType: 'agent-control' };
+  }
+
+  const agentAckMatch = topic.match(/^agent\.abort-ack\.(.+)$/);
+  if (agentAckMatch && agentAckMatch[1]) {
+    return { runId: agentAckMatch[1], topicType: 'agent-control', acknowledgement: true };
   }
 
   return null;
@@ -196,6 +206,8 @@ function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string;
  *   -> Inngest channel: "agent:{runId}", topic: "agent-stream"
  * - "agent.control.{runId}" - agent control events (cross-process abort)
  *   -> Inngest channel: "agent:{runId}", topic: "agent-control"
+ * - "agent.abort-ack.{runId}" - acknowledgements
+ *   -> Inngest channel: "agent-ack:{runId}", topic: "agent-control"
  */
 export class InngestPubSub extends PubSub {
   private inngest: Inngest;
@@ -231,6 +243,8 @@ export class InngestPubSub extends PubSub {
    *   (Note: agent stream uses runId-only channel so nested workflows can publish to same channel)
    * - "agent.control.{runId}" - agent control events (cross-process abort)
    *   -> channel: "agent:{runId}", topic: "agent-control"
+   * - "agent.abort-ack.{runId}" - acknowledgements
+   *   -> channel: "agent-ack:{runId}", topic: "agent-control"
    */
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
     const parsed = parseTopic(topic);
@@ -246,7 +260,9 @@ export class InngestPubSub extends PubSub {
     // traffic never reaches stream consumers.
     const isAgentTopic = topicType === 'agent-stream' || topicType === 'agent-control';
     const inngestTopic = isAgentTopic ? topicType : 'watch';
-    const channel = isAgentTopic ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
+    const channel = isAgentTopic
+      ? `${parsed.acknowledgement ? 'agent-ack' : 'agent'}:${runId}`
+      : `workflow:${this.workflowId}:${runId}`;
 
     try {
       // For agent stream/control events, send the full event structure so subscribers can access type/runId/data
@@ -290,6 +306,8 @@ export class InngestPubSub extends PubSub {
    *   (Note: agent stream uses runId-only channel so nested workflows can publish to same channel)
    * - "agent.control.{runId}" - agent control events (cross-process abort)
    *   -> channel: "agent:{runId}", topic: "agent-control"
+   * - "agent.abort-ack.{runId}" - acknowledgements
+   *   -> channel: "agent-ack:{runId}", topic: "agent-control"
    */
   async subscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
     const parsed = parseTopic(topic);
@@ -313,7 +331,9 @@ export class InngestPubSub extends PubSub {
     // traffic never reaches stream consumers.
     const isAgentTopic = topicType === 'agent-stream' || topicType === 'agent-control';
     const inngestTopic = isAgentTopic ? topicType : 'watch';
-    const channel = isAgentTopic ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
+    const channel = isAgentTopic
+      ? `${parsed.acknowledgement ? 'agent-ack' : 'agent'}:${runId}`
+      : `workflow:${this.workflowId}:${runId}`;
 
     // Await the subscribe call to ensure the WebSocket connection is established
     // before we consider the subscription "ready". This prevents race conditions
