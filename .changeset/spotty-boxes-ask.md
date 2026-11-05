@@ -2,7 +2,7 @@
 '@mastra/react': minor
 ---
 
-Added explicit feedback author and context-mode options to useCreateFeedback while retaining the server response identity and timestamp.
+Added explicit feedback author and context-mode options to useCreateFeedback. The hook returns the server response, including its identity and timestamp.
 
 ```tsx
 const mutation = useCreateFeedback({ traceId, contextMode: 'resolve', feedbackUserId: null });

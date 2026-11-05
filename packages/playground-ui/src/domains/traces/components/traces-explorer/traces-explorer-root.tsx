@@ -227,6 +227,8 @@ export function TracesExplorerRoot({
   );
 
   const listId = listIdForScope(scope);
+  const hasFeedbackOptions = feedbackOptions !== undefined;
+  const { contextMode, feedbackUserId, allowDelete, allowReview } = feedbackOptions ?? {};
   const configValue = useMemo<TracesConfigContextValue>(
     () => ({
       listId,
@@ -234,7 +236,7 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
-      feedbackOptions,
+      feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,
@@ -255,7 +257,11 @@ export function TracesExplorerRoot({
       hiddenFieldIds,
       withQueryTrace,
       withFeedback,
-      feedbackOptions,
+      hasFeedbackOptions,
+      contextMode,
+      feedbackUserId,
+      allowDelete,
+      allowReview,
       withSpanQuery,
       withThreadQuery,
       withRootDuration,

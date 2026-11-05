@@ -35,24 +35,3 @@ See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/client
 ## Support
 
 We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
-
-## Feedback creation
-
-`useCreateFeedback` accepts optional host-selected context and author information:
-
-```tsx
-const createFeedback = useCreateFeedback({
-  traceId,
-  spanId,
-  contextMode: 'resolve',
-  feedbackUserId: null,
-});
-const created = await createFeedback.mutateAsync({ text: 'Useful response' });
-```
-
-Import the hook from `@mastra/react/hooks/traces`. Omit `spanId` for trace-level feedback.
-Omitting `contextMode` preserves the server default; `resolve` requires a supporting server.
-An explicit null author is sent unchanged, without an authentication lookup.
-The client generates missing feedback IDs and timestamps before its HTTP retries.
-The mutation returns the server response, including creation identity when supplied by the server.
-Keep that identity and original timestamp (or use the fetched feedback record) for subsequent replacement writes.

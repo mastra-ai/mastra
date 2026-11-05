@@ -29,10 +29,7 @@ export function SpanFeedbackTab({ traceId, spanId, feedbackOptions }: SpanFeedba
     contextMode: feedbackOptions?.contextMode,
     feedbackUserId: feedbackOptions?.feedbackUserId,
   });
-  const { mutateAsync: deleteFeedback, isPending: isDeleting } = useDeleteFeedback({
-    traceId,
-    spanId,
-  });
+  const { mutateAsync: deleteFeedback, isPending: isDeleting } = useDeleteFeedback({ traceId, spanId });
   const updateReviewStatus = useUpdateFeedbackReviewStatus();
 
   return (
@@ -54,3 +51,5 @@ export function SpanFeedbackTab({ traceId, spanId, feedbackOptions }: SpanFeedba
     />
   );
 }
+
+export type { FeedbackOptions } from './feedback-options';

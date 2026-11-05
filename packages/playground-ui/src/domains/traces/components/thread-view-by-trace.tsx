@@ -216,3 +216,5 @@ function ThreadTraceRowContent({
     </>
   );
 }
+
+export type { FeedbackOptions } from './feedback-options';

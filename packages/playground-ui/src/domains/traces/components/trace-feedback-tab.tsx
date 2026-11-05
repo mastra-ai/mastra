@@ -48,3 +48,5 @@ export function TraceFeedbackTab({ traceId, variant, feedbackOptions }: TraceFee
     />
   );
 }
+
+export type { FeedbackOptions } from './feedback-options';
