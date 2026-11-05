@@ -2228,12 +2228,10 @@ export class DurableAgent<
    * Whether new runs of this agent's loop are stored as workflow storage
    * version 2 where the engine and store support it (see the workflow's
    * `autoStorageVersion` option). A resumed run stays in its stored version.
-   * Off until resume claims are tested on version 2: resume-claim-loser.test.ts
-   * still stores runs in v1.
    * @internal
    */
   protected get storesRunsInJournal(): boolean {
-    return false;
+    return true;
   }
 
   /**

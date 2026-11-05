@@ -13,6 +13,10 @@ const workflow = createWorkflow({
 });
 ```
 
+**Durable agents**
+
+Durable agents now store new runs in version 2 when their storage adapter supports it. Runs stored before upgrading keep their version, so a suspended run still resumes.
+
 **Limitations**
 
 - Version 2 requires the default engine and a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. Creating a run on another adapter throws.
