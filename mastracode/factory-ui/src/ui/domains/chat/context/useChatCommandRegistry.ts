@@ -23,7 +23,7 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
-import { findCommand, parseSlashCommand } from '../services/commands';
+import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import type { ThinkingDefault } from '../services/thinkingLevels';
@@ -307,7 +307,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const commands = [...commandsWithoutHelp, helpCommand];
 
   const runComposerCommand = async (text: string): Promise<boolean> => {
-    if (!text.startsWith('/')) return false;
+    if (!isSlashCommand(text)) return false;
     const command = findCommand(commands, text);
     const parsed = parseSlashCommand(text);
     if (!command) {

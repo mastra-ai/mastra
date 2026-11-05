@@ -13,7 +13,7 @@ import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { AgentSignalInput } from '../../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { ConsoleLogger } from '../../logger';
+import { ConsoleLogger, noopLogger } from '../../logger';
 import type { IMastraLogger, LogFilter } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
@@ -326,6 +326,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -342,6 +343,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -360,6 +362,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -397,6 +400,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       try {
@@ -448,6 +452,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       try {
@@ -494,7 +499,11 @@ describe('AgentChannels', () => {
       channels.__setAgent(mockAgent);
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });
-      const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+        getLogger: () => noopLogger,
+      } as any;
       const event = { command: '/help' } as any;
 
       try {
@@ -521,7 +530,11 @@ describe('AgentChannels', () => {
       channels.__setAgent(mockAgent);
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });
-      const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+        getLogger: () => noopLogger,
+      } as any;
 
       try {
         await channels.initialize(mockMastra);
@@ -536,7 +549,11 @@ describe('AgentChannels', () => {
     function makeMastra() {
       const db = new InMemoryDB();
       const memoryStore = new InMemoryMemory({ db });
-      return { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+        getLogger: () => noopLogger,
+      } as any;
     }
 
     function makeActionEvent(adapter: any, actionId: string) {
@@ -924,6 +941,7 @@ describe('AgentChannels', () => {
         const { channels, dispatchApproval, click } = await setup({}, {
           getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
           getServer: () => null,
+          getLogger: () => noopLogger,
         } as any);
         (channels as any).pendingApprovalCards.clear();
 
@@ -956,6 +974,7 @@ describe('AgentChannels', () => {
         const { channels, dispatchApproval, click } = await setup({}, {
           getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
           getServer: () => null,
+          getLogger: () => noopLogger,
         } as any);
         (channels as any).pendingApprovalCards.clear();
 
@@ -986,6 +1005,7 @@ describe('AgentChannels', () => {
         const mastra = {
           getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
           getServer: () => null,
+          getLogger: () => noopLogger,
         } as any;
         const { channels, dispatchApproval, click } = await setup({}, mastra, 'anyone');
         (channels as any).pendingApprovalCards.clear();
@@ -1015,6 +1035,7 @@ describe('AgentChannels', () => {
         const { dispatchApproval, click } = await setup({ requesterId: 'alice' }, {
           getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
           getServer: () => null,
+          getLogger: () => noopLogger,
         } as any);
 
         await click('tool_approve:tool-call-1', 'bob');
@@ -1066,6 +1087,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1167,7 +1189,11 @@ describe('AgentChannels', () => {
         channels.__setAgent(mockAgent);
         channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
         const memoryStore = new InMemoryMemory({ db: new InMemoryDB() });
-        const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+        const mockMastra = {
+          getStorage: () => ({ getStore: () => memoryStore }),
+          getServer: () => null,
+          getLogger: () => noopLogger,
+        } as any;
         await channels.initialize(mockMastra);
         return { channels, mockMastra };
       }
@@ -1276,6 +1302,7 @@ describe('AgentChannels', () => {
         const mockMastra = {
           getStorage: () => ({ getStore: () => memoryStore }),
           getServer: () => null,
+          getLogger: () => noopLogger,
         } as any;
         await channels.initialize(mockMastra);
         const chatThread = {
@@ -1348,6 +1375,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1381,6 +1409,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1413,6 +1442,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1457,6 +1487,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1494,6 +1525,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1533,6 +1565,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1571,6 +1604,7 @@ describe('AgentChannels', () => {
       const mockMastra = {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
 
       await agentChannels.initialize(mockMastra);
@@ -1632,6 +1666,7 @@ describe('AgentChannels', () => {
       return {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
     }
 
@@ -1910,6 +1945,7 @@ describe('AgentChannels', () => {
       return {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
     }
 
@@ -2073,6 +2109,7 @@ describe('AgentChannels', () => {
       return {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
     }
 
@@ -2263,6 +2300,7 @@ describe('AgentChannels', () => {
       return {
         getStorage: () => ({ getStore: () => memoryStore }),
         getServer: () => null,
+        getLogger: () => noopLogger,
       } as any;
     }
 
@@ -3393,7 +3431,11 @@ describe('thread history', () => {
   function makeMastra() {
     const db = new InMemoryDB();
     const memoryStore = new InMemoryMemory({ db });
-    return { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+    return {
+      getStorage: () => ({ getStore: () => memoryStore }),
+      getServer: () => null,
+      getLogger: () => noopLogger,
+    } as any;
   }
 
   const trigger = makeMessage({

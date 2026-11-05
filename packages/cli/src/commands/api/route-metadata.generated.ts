@@ -2383,6 +2383,7 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "contextMode",
       "score"
     ],
     "hasQuery": false,
@@ -2554,6 +2555,7 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "contextMode",
       "feedback"
     ],
     "hasQuery": false,

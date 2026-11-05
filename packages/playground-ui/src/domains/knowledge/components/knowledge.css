@@ -4,16 +4,14 @@
   transition: border-color var(--duration-fast) var(--ease-out-custom);
 }
 
-.knowledge-circle[data-selected='true'],
 .react-flow__node:focus-visible .knowledge-circle {
   outline: 2px solid var(--knowledge-color);
   outline-offset: 5px;
 }
 
-/* The focused page: a heavier border and a soft halo, so it reads as the centre of the graph. */
+/* The focused page: a heavier border, so it reads as the centre of the graph. */
 .knowledge-circle[data-selected='true'] {
   border-width: 4px;
-  box-shadow: 0 0 22px 4px color-mix(in srgb, var(--knowledge-color) 45%, transparent);
 }
 
 /* A refocus: pages in both views glide and resize to their new place, new ones fade in, and ones that

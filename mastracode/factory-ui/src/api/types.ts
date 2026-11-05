@@ -16,6 +16,10 @@ import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
 export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
 export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGet.responseSchema>;
+export type StoredBoardInfo = StoredBoardResponse['board'];
+export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
+export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
 
 import type {
   CustomProviderInfo,
@@ -42,6 +46,7 @@ import type {
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
 import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
+import type { TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
@@ -62,6 +67,7 @@ export type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 };
+export type { TranscribeResponse, VoiceSettingsResponse };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
 
@@ -186,3 +192,5 @@ export interface UpdateOMResponse {
   ok: true;
   config: OMConfigInfo;
 }
+
+export type VoiceChoice = NonNullable<VoiceSettingsResponse['selected']>;

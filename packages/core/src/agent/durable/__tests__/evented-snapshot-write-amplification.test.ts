@@ -22,6 +22,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
+import { storeRunsInV2 } from './storage-version';
 
 /**
  * Mock model that drives `toolIterations` sequential tool calls before
@@ -115,8 +116,12 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
     tools: { echoTool },
   });
 
-  const durableAgent =
-    engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent });
+  // Measures v1 writes. The default engine's v1 and v2 writes are compared in
+  // workflows/__tests__/snapshot-write-amplification.test.ts.
+  const durableAgent = storeRunsInV2(
+    engine === 'evented' ? createEventedAgent({ agent: baseAgent }) : createDurableAgent({ agent: baseAgent }),
+    false,
+  );
 
   const store = new InMemoryStore();
   const mastra = new Mastra({

@@ -22,6 +22,7 @@ function invalidateCredentialDependentQueries(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.voiceSettingsAll() }),
   ]);
 }
 

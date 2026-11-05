@@ -11,13 +11,11 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import { useConnectMastraGateway, useStartProviderOAuth } from '../../../../../../hooks/use-providers';
 import { MastraGatewayBilling } from '../../../../workspaces/components/MastraGatewayBilling';
-import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import {
   CREDENTIAL_LABEL,
   SHARED_SOURCE,
@@ -27,6 +25,7 @@ import {
   signInRequest,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
+import { ProviderOptionRow } from './ProviderRows';
 
 const AUDIENCE: Record<CredentialScope, string> = {
   user: 'Only you can use it.',
@@ -202,18 +201,7 @@ function AddProviderRow({
     connectionLabel(provider, credentialScope) ?? (isGateway(provider) ? <MastraGatewayBilling /> : undefined);
   const starting = startingProvider !== undefined;
   return (
-    <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="caption" className="truncate">
-          {displayName}
-        </Txt>
-        {label && (
-          <Txt as="span" variant="meta" tone="muted">
-            {label}
-          </Txt>
-        )}
-      </span>
+    <ProviderOptionRow provider={provider.provider} label={label}>
       {takesApiKey(provider) && (
         <Button size="sm" aria-label={`Add API key for ${displayName}`} disabled={starting} onClick={onAddKey}>
           API key
@@ -241,6 +229,6 @@ function AddProviderRow({
           {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
         </Button>
       )}
-    </li>
+    </ProviderOptionRow>
   );
 }
