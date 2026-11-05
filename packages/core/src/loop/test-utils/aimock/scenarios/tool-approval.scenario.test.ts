@@ -1,5 +1,5 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { MockMemory } from '../../../../memory';
@@ -194,6 +194,92 @@ describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engi
     expect(resumedTypes).not.toContain('error');
     expect(resumedTypes).toContain('finish');
     expect(executions).toBe(1);
+  });
+
+  /** Parks an `archive` call for approval on a shared agent and returns what the Inngest-only cases need. */
+  const parkArchive = async (threadId: string) => {
+    let executions = 0;
+    const archiveTool = createTool({
+      id: 'archive',
+      description: 'Archive an item',
+      inputSchema: z.object({ item: z.string() }),
+      requireApproval: true,
+      execute: async () => {
+        executions += 1;
+        return { archived: true };
+      },
+    });
+    const llm = getMock();
+    const memory = new MockMemory();
+    const shared = await createSharedAgent(llm, { tools: { archive: archiveTool }, memory, engine });
+    const { output } = await runLoopScenario({
+      engine,
+      llm,
+      sharedAgent: shared,
+      prompt: 'Archive a',
+      memory,
+      threadId,
+      resourceId: `${threadId}-resource`,
+      collectChunks: true,
+      fixtures: mock => {
+        mock.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_archive', name: 'archive', arguments: { item: 'a' } }] },
+        );
+        mock.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Archived.' });
+      },
+    });
+    const approve = async () => {
+      const resumed = await shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
+      for await (const _ of resumed.fullStream) {
+        // drain
+      }
+      return resumed;
+    };
+    return { shared, runId: output.runId, llm, approve, executions: () => executions };
+  };
+
+  // Technical: Inngest claims a suspension by marking it `running`. A resume whose process died after
+  // claiming left it there with no live lease, and every later approval failed. Core's durable engines
+  // cover their own claim in resume-claim-after-crash.scenario.test.ts.
+  (engine === 'inngest' ? it : it.skip)('approves a run whose previous resume died after claiming it', async () => {
+    const { shared, runId, approve, executions } = await parkArchive('dead-claim-thread');
+    const workflows = await shared.mastra.getStorage().getStore('workflows');
+    const loop = 'inngest:durable-agentic-loop';
+    // Claims are only taken on the suspension written last, which has no active paths.
+    await vi.waitFor(async () => {
+      const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: loop, runId });
+      expect(snapshot).toMatchObject({ status: 'suspended', activePaths: [] });
+    });
+    // What a resume killed between claiming the run and sending its event leaves behind.
+    await workflows.updateWorkflowState({
+      workflowName: loop,
+      runId,
+      opts: { status: 'running', expectedStatus: 'suspended' },
+    });
+
+    const resumed = await approve();
+    expect(await resumed.text).toBe('Archived.');
+    expect(executions()).toBe(1);
+  });
+
+  // Technical: a send can fail after Inngest accepted the event, and the caller may send it again.
+  // The resume event's id lets Inngest drop the copy instead of running the tool twice.
+  (engine === 'inngest' ? it : it.skip)('runs the tool once when the resume event is delivered twice', async () => {
+    const { shared, llm, approve, executions } = await parkArchive('double-delivery-thread');
+    const inngest = (shared.agent as unknown as { inngest: { send: (payload: any) => Promise<unknown> } }).inngest;
+    const send = inngest.send.bind(inngest);
+    inngest.send = async payload => {
+      const result = await send(payload);
+      if (payload?.data?.resume) await send(payload);
+      return result;
+    };
+
+    await approve();
+    // A duplicate segment would run the tool and call the model again after this one finished.
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    expect(executions()).toBe(1);
+    expect(llm.getRequests()).toHaveLength(2);
   });
 
   it('requireToolApproval in agent defaultOptions gates tool calls', async () => {

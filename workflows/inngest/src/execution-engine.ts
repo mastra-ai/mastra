@@ -7,6 +7,7 @@ import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
+import type { RunFence } from '@mastra/core/storage';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -18,6 +19,7 @@ import type {
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
+import { RESUME_CLAIM_LEASE_MS } from './durable-event-payload';
 import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
 import { workflowTermination } from './observability-compat';
@@ -70,6 +72,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
     private parentStream?: { workflowId: string; runId: string },
+    /** The InngestAgent resume claim this invocation runs under, renewed while step code runs. */
+    private resumeClaim?: RunFence,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -241,6 +245,24 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     return this.runDurably(operationId, operationFn, Error);
   }
 
+  /** Keeps the resume claim's lease alive while step code runs, which can outlast it (e.g. a slow tool). */
+  private async withResumeClaimRenewed<T>(fn: () => Promise<T>): Promise<T> {
+    const claim = this.resumeClaim;
+    if (!claim) return fn();
+    const timer = setInterval(() => {
+      void this.mastra
+        ?.getStorage()
+        ?.getStore('workflows')
+        .then(store => store?.renewRunOwnership({ ...claim, leaseMs: RESUME_CLAIM_LEASE_MS }))
+        .catch(() => {});
+    }, RESUME_CLAIM_LEASE_MS / 4);
+    try {
+      return await fn();
+    } finally {
+      clearInterval(timer);
+    }
+  }
+
   /**
    * Runs `operationFn` in step.run() and throws failures as `ErrorType` with the
    * serialized failure in the cause. Step code passes NonRetriableError because Inngest
@@ -254,7 +276,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   ): Promise<T> {
     const result = await this.inngestStep.run(operationId, async () => {
       try {
-        const fnResult = await operationFn();
+        const fnResult = await this.withResumeClaimRenewed(operationFn);
         return fnResult;
       } catch (e) {
         const errorInstance = getErrorFromUnknown(e, {
@@ -654,6 +676,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     // Resumes only the labelled foreach iteration, as core `Run.resume` does (#27925).
                     label: resume.label,
                     forEachIndex: resume.label ? snapshot?.resumeLabels?.[resume.label]?.foreachIndex : undefined,
+                    // The child runs as its own function while this one waits, so it renews the claim.
+                    claim: this.resumeClaim,
                   },
                 }),
             outputOptions: { includeState: true, includeResumeLabels: true },

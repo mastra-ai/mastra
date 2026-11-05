@@ -2,6 +2,13 @@ import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { TracingOptions } from '@mastra/core/observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { RunFence } from '@mastra/core/storage';
+
+/**
+ * Lease on an InngestAgent resume claim. The worker running the resumed segment renews it, so a
+ * claim whose segment died lapses and a later resume can take the run over.
+ */
+export const RESUME_CLAIM_LEASE_MS = 60_000;
 
 /**
  * Single source of truth for the `data` payload of the `workflow.<id>` events
@@ -105,6 +112,8 @@ export function buildDurableResumeEventData(
       resumePath?: any;
       /** Resume label (the tool call id for agent runs) that picks one parked step. */
       label?: string;
+      /** The InngestAgent resume claim the worker renews while it runs the resumed segment. */
+      claim?: RunFence;
     };
     tracingOptions?: TracingOptions;
     workflowId?: string;

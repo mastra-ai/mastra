@@ -5,7 +5,7 @@ import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { RunFence, WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
   Step,
@@ -19,6 +19,7 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
+import { RESUME_CLAIM_LEASE_MS } from './durable-event-payload';
 import { InngestExecutionEngine } from './execution-engine';
 import {
   compactNestedWorkflowResult,
@@ -501,6 +502,17 @@ export class InngestWorkflow<
           );
         }
 
+        // An InngestAgent resume runs under a claim on the run. Renew it on every invocation, and stop
+        // before any step when a later resume took the run over after this one's lease lapsed.
+        const resumeClaim: RunFence | undefined = resume?.claim;
+        if (resumeClaim) {
+          const store = await this.#mastra?.getStorage()?.getStore('workflows');
+          const lease = await store?.renewRunOwnership({ ...resumeClaim, leaseMs: RESUME_CLAIM_LEASE_MS });
+          if (!lease?.renewed) {
+            throw new NonRetriableError(`Workflow "${this.id}" run ${runId} was taken over by a later resume.`);
+          }
+        }
+
         if (resume && (initialState === undefined || resume.stepResults === undefined)) {
           const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
           const snapshot = await workflowsStore?.loadWorkflowSnapshot({
@@ -560,7 +572,7 @@ export class InngestWorkflow<
           return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
+        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream, resumeClaim);
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
