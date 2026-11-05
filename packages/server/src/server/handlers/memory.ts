@@ -969,6 +969,10 @@ export const LIST_THREADS_ROUTE = createRoute({
         });
       }
 
+      if (agent && isGateway && process.env.MASTRA_GATEWAY_VERSION === 'v2' && !agentSupportsMemory(agent)) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
       // Fallback to storage (covers stored agents whose memory can't be resolved)
       const storage = getStorageFromContext({ mastra });
       if (storage) {
