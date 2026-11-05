@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
+import { chmod, mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import getPort from 'get-port';
@@ -297,6 +297,47 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
       ],
       { cwd: appDir },
     );
+  });
+
+  // `mastra dev` extracts the `server` option, whose api routes import installed packages (#28645). Rollup loads modules
+  // with `fs/promises` `readFile` and copies that module's functions when it is first imported, so the patch must run
+  // before the deployer import. The module reads recorded during extraction are the files that entered the graph.
+  it('extracts the server option without loading installed packages (#28645)', async () => {
+    const appDir = join(fixturePath, 'apps', 'custom');
+    const entryFile = join(appDir, 'src', 'mastra', 'index.ts');
+    const outputDir = join(appDir, '.mastra', 'option-extraction-e2e');
+
+    try {
+      const { stdout } = await execa(
+        'node',
+        [
+          '--input-type=module',
+          '-e',
+          `import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+const reads = [];
+const readFile = fs.readFile;
+fs.readFile = (path, ...args) => (reads.push(String(path)), readFile(path, ...args));
+syncBuiltinESMExports();
+const { extractMastraOption } = await import('@mastra/deployer/build');
+const result = await extractMastraOption('server', ${JSON.stringify(entryFile)}, ${JSON.stringify(outputDir)});
+fs.readFile = readFile;
+syncBuiltinESMExports();
+const server = await result.getConfig();
+console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.path) }));`,
+        ],
+        { cwd: appDir },
+      );
+      const { reads, routes }: { reads: string[]; routes: string[] } = JSON.parse(stdout.trim().split('\n').at(-1)!);
+      const modules = reads.filter(file => !file.endsWith('package.json'));
+      const routeFile = join('src', 'mastra', 'api', 'route', 'test.ts');
+
+      expect(modules.some(file => file.endsWith(routeFile))).toBe(true);
+      expect(modules.filter(file => file.includes('node_modules'))).toEqual([]);
+      expect(routes).toEqual(expect.arrayContaining(['/test', '/transitive-workspace']));
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
   });
 
   function runApiTests(port: number) {
@@ -1608,6 +1649,9 @@ export const mastra = new Mastra({
 
       // read-excel-file/node/package.json is named "read-excel-file/node" at 1.0.0 (#28828).
       expect(dependencies['read-excel-file']).toBe('9.3.12');
+
+      // Only reachable through pino transport detection in the analyzed bundle.
+      expect(dependencies['pino-pretty']).toBe('13.2.0');
     });
   });
 
@@ -1706,6 +1750,8 @@ class AliasDeployer extends Deployer {
           );
           expect(output).toContain('MASTRA_BROWSER_CJS_ALIAS_SHIM');
           expect(output).not.toContain('MASTRA_NODE_ALIAS_SHIM');
+          // #29572: the deployer is stripped from the entry
+          expect(output).not.toContain('alias-test');
 
           const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
           expect(outputPackageJson.dependencies ?? {}).not.toHaveProperty('ajv');
@@ -1756,7 +1802,116 @@ class AliasDeployer extends Deployer {
     );
   });
 
+  describe('app without "type": "module" running under tsx (#28491)', { concurrent: false }, () => {
+    // `mastra dev` and `mastra build` import options extracted from the Mastra config. Chunks split from them were
+    // written as `.js`, which an app without "type": "module" treats as CommonJS, and tsx 4.21 then loads them
+    // without their named exports. Newer tsx releases load them on Node 24, so the app pins tsx 4.21.0.
+    const tsxEnv = { NODE_OPTIONS: '--import tsx', LOAD_OPTIONAL: 'true' };
+    const getAppDir = () => join(fixturePath, 'apps', 'typeless');
+
+    it(
+      'applies the bundler options during `mastra build`',
+      async () => {
+        const buildResult = await execa('mastra', ['build'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          env: { ...tsxEnv, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+        });
+        expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+        const outputFiles = await readdir(join(getAppDir(), '.mastra', 'output'));
+        expect(outputFiles, buildResult.stdout).toContain('index.mjs.map');
+      },
+      timeout,
+    );
+
+    it(
+      'serves api routes from `mastra dev`',
+      async () => {
+        const port = await getPort();
+        const controller = new AbortController();
+        const proc = execa('mastra', ['dev'], {
+          cwd: getAppDir(),
+          preferLocal: true,
+          reject: false,
+          cancelSignal: controller.signal,
+          gracefulCancel: true,
+          env: { ...tsxEnv, PORT: port.toString() },
+        });
+        activeProcesses.push({ controller, proc });
+
+        let output = '';
+        proc.stderr?.on('data', data => {
+          output += data.toString();
+        });
+        const started = new Promise<void>(resolve => {
+          proc.stdout?.on('data', data => {
+            output += data.toString();
+            if (output.includes(`http://localhost:${port}`)) {
+              resolve();
+            }
+          });
+        });
+
+        try {
+          const outcome = await Promise.race([started.then(() => 'started'), proc.then(() => 'exited')]);
+          expect(outcome, output).toBe('started');
+
+          const res = await fetch(`http://localhost:${port}/typeless`);
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toEqual({ message: 'typeless app (optional)' });
+        } finally {
+          controller.abort();
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(getAppDir());
+        }
+      },
+      timeout,
+    );
+  });
+
   describe('workspace subpath externals', { concurrent: false }, () => {
+    it(
+      'should copy the pnpm lockfile unchanged when packing workspace packages for an app outside the workspace root',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-lockfile-copy-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // Skip only the output install, so the lockfile copy stays as the deployer wrote it.
+          // pnpm rewrites it on install and drops the importers outside the output directory.
+          const binDir = join(isolatedFixturePath, 'stub-bin');
+          await mkdir(binDir);
+          const realPackageManager = (await execa('which', [pkgManager])).stdout;
+          await writeFile(
+            join(binDir, pkgManager),
+            `#!/bin/sh\nif [ "$1" = install ]; then exit 0; fi\nexec "${realPackageManager}" "$@"\n`,
+          );
+          await chmod(join(binDir, pkgManager), 0o755);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const buildResult = await execa(join(appDir, 'node_modules', '.bin', 'mastra'), ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputDir = join(appDir, '.mastra', 'output');
+          expect(await readdir(join(outputDir, 'workspace-module'))).toContain('inner-subpath-only-1.0.0.tgz');
+          // An edited lockfile makes pnpm 11 recheck every entry against the registry, which fails
+          // without credentials for private registries (#29279).
+          expect(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).toBe(
+            await readFile(join(isolatedFixturePath, 'pnpm-lock.yaml'), 'utf-8'),
+          );
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
     it(
       'should package an external workspace dependency without an optimized workspace parent',
       async () => {
@@ -2403,7 +2558,9 @@ assert.equal(subpathOnlyValue, 'c');`,
           await writeFile(
             workspacePath,
             // read-excel-file asks for fflate ^0.8.3, so only the override can install 0.8.2 (#29192).
-            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n\noverrides:\n  fflate: 0.8.2\n`,
+            // The output package has another name, so the app-scoped nodemailer override must be retargeted
+            // to keep winning over the repo-wide one (#29348).
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n\noverrides:\n  fflate: 0.8.2\n  nodemailer: 10.0.0\n  '@inner/app>nodemailer': 10.2.1\n`,
           );
           // The new patch and override entries change the lockfile config, which CI's default frozen install rejects.
           await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
@@ -2432,6 +2589,11 @@ assert.equal(subpathOnlyValue, 'c');`,
           const readExcelFileDir = await realpath(join(outputDir, 'node_modules', 'read-excel-file'));
           const fflate = JSON.parse(await readFile(join(readExcelFileDir, '..', 'fflate', 'package.json'), 'utf8'));
           expect(fflate.version).toBe('0.8.2');
+
+          const nodemailer = JSON.parse(
+            await readFile(join(outputDir, 'node_modules', 'nodemailer', 'package.json'), 'utf8'),
+          );
+          expect(nodemailer.version).toBe('10.2.1');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }

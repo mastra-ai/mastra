@@ -22,3 +22,7 @@ const count = new Intl.NumberFormat('en-US');
 export function pluralize(amount: number, singular: string, plural = `${singular}s`): string {
   return `${count.format(amount)} ${pluralRules.select(amount) === 'one' ? singular : plural}`;
 }
+
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

@@ -2,7 +2,6 @@
 title: "Reference: Hallucination scorer | Evals"
 description: "The createHallucinationScorer() function evaluates whether an LLM generates factually correct information by comparing its output against the provided context."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -34,7 +33,7 @@ The `createHallucinationScorer()` function accepts a single options object with 
           {
             name: 'scale',
             type: 'number',
-            description: 'Maximum score value.',
+            description: 'Maximum score value. A value of `0` falls back to `1`.',
             defaultValue: '1',
           },
           {
@@ -125,7 +124,7 @@ The scorer evaluates hallucination through contradiction detection and unsupport
    - Divides by total statements
    - Scales to configured range
 
-Final score: `min(1, hallucinated_statements / total_statements) * scale` when `total_statements > 0`, otherwise `0`.
+Final score: `min(1, hallucinated_statements / total_statements) * (scale || 1)`, rounded to two decimal places, when `total_statements > 0`, otherwise `0`.
 
 ### Important Considerations
 

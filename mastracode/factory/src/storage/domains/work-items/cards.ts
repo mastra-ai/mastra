@@ -154,9 +154,22 @@ export class Cards {
         sources.set(source.work_item_id, group);
       }
     }
-    return boards.map(board =>
-      joinCard(board, items.get(board.work_item_id) ?? null, sources.get(board.work_item_id) ?? []),
-    );
+    const deletedMidRead = await this.#deletedBoardIds(boards.filter(board => !items.has(board.work_item_id)));
+    return boards
+      .filter(board => !deletedMidRead.has(board.id))
+      .map(board => joinCard(board, items.get(board.work_item_id) ?? null, sources.get(board.work_item_id) ?? []));
+  }
+
+  async #deletedBoardIds(boards: readonly BoardItemDbRecord[]): Promise<Set<string>> {
+    const deleted = new Set(boards.map(board => board.id));
+    const ids = [...deleted];
+    for (let index = 0; index < ids.length; index += ID_BATCH) {
+      const page = await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, {
+        id: { in: ids.slice(index, index + ID_BATCH) },
+      });
+      for (const board of page) deleted.delete(board.id);
+    }
+    return deleted;
   }
 
   async findOne(where: CollectionWhere): Promise<WorkItemDbRow | null> {
@@ -164,7 +177,7 @@ export class Cards {
     const boardWhere = await this.#where(where);
     if (!boardWhere) return null;
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, boardWhere);
-    return board ? (await this.#join([board]))[0]! : null;
+    return board ? ((await this.#join([board]))[0] ?? null) : null;
   }
 
   async findMany(where: CollectionWhere, options?: CollectionListOptions): Promise<WorkItemDbRow[]> {
@@ -198,6 +211,11 @@ export class Cards {
   async updateAtomic(
     where: CollectionWhere,
     updater: (card: WorkItemDbRow) => Partial<WorkItemDbRow> | null | Promise<Partial<WorkItemDbRow> | null>,
+    /**
+     * Moves the board item's `updated_at` forward even when only work or source facts changed,
+     * without bumping its revision, so a revision-and-time guarded delete sees the write.
+     */
+    { touch = false }: { touch?: boolean } = {},
   ): Promise<WorkItemDbRow | null> {
     if (this.legacyMode) return this.ops.updateAtomic(WORK_ITEMS_SCHEMA.name, where, updater);
     const boardWhere = await this.#where(where);
@@ -272,7 +290,10 @@ export class Cards {
           ([key, value]) =>
             !['revision', 'updated_at'].includes(key) && JSON.stringify(row[key]) !== JSON.stringify(value),
         );
-      if (!boardChanged) return null;
+      if (!boardChanged) {
+        if (!touch) return null;
+        return { updated_at: new Date(Math.max(Date.now(), new Date(row.updated_at).getTime() + 1)) };
+      }
       return {
         ...columns,
         ...(nativeTitleChanged
@@ -280,7 +301,7 @@ export class Cards {
           : {}),
       };
     });
-    return board ? (await this.#join([board]))[0]! : null;
+    return board ? ((await this.#join([board]))[0] ?? null) : null;
   }
 
   async updateMany(where: CollectionWhere, patch: Partial<WorkItemDbRow>): Promise<number> {
@@ -295,6 +316,7 @@ export class Cards {
     const boardWhere = await this.#where(where);
     if (!boardWhere) return 0;
     const boards = await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, boardWhere, { orderBy: [['id', 'asc']] });
+    let deleted = 0;
     for (const board of boards) {
       const scope = { org_id: board.org_id, factory_project_id: board.factory_project_id };
       const guard = await this.ops.updateAtomic(
@@ -303,8 +325,11 @@ export class Cards {
         () => null,
       );
       if (!guard) await this.ops.insertOne(FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name, { ...scope, id: board.id });
-      const locked = await this.ops.updateAtomic(BOARD_ITEMS, { ...scope, id: board.id }, () => null);
+      // Re-check the whole filter under the row lock, so a write that landed since the read
+      // above (e.g. a bumped revision) keeps the row.
+      const locked = await this.ops.updateAtomic(BOARD_ITEMS, { ...boardWhere, ...scope, id: board.id }, () => null);
       if (!locked) continue;
+      deleted++;
       await this.ops.updateAtomic(WORK_ITEMS, { ...scope, id: board.work_item_id }, () => null);
       const sources = await this.ops.findMany<WorkItemSourceDbRecord>(
         SOURCES,
@@ -317,6 +342,6 @@ export class Cards {
       await this.ops.deleteMany(WORK_ITEMS, { ...scope, id: board.work_item_id });
       await this.ops.upsertOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, ['id'], { ...scope, id: board.id });
     }
-    return boards.length;
+    return deleted;
   }
 }

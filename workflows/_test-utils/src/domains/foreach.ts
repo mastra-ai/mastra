@@ -7,8 +7,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
+import { stepsOf } from '../steps';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
  * Create all workflows needed for foreach tests.
@@ -1063,7 +1064,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
           );
           expect(result.status, 'run status after a foreach iteration failed').toBe('failed');
           expect(result.error?.message).toBe('first failure');
-          expect(result.steps.boom.status).toBe('failed');
+          expect((await stepsOf(result)).boom.status).toBe('failed');
         } finally {
           unwatch();
         }
@@ -1118,7 +1119,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
             );
             expect(replay.status, 'time-travel replay status').toBe('failed');
             expect(replay.error?.message).toBe('always fails');
-            expect(replay.steps.boom.status).toBe('failed');
+            expect((await stepsOf(replay)).boom.status).toBe('failed');
 
             await within(item2Succeeded, 'the replayed second iteration was never reported');
             const stored: any = await workflow.getWorkflowRunById(run.runId);

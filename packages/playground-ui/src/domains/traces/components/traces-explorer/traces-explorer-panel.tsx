@@ -33,7 +33,7 @@ export function TracesExplorerPanel({
   traceHref,
   withAddTraceToDataset = true,
 }: TracesExplorerPanelProps) {
-  const { withQueryTrace, withFeedback } = useTracesConfig();
+  const { withQueryTrace, withFeedback, feedbackOptions } = useTracesConfig();
   const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
   const { selection, selectTrace, closeTrace, selectSpan, setSpanTab, setSpanView, selectScore, highlightSpans } =
     useTracesSelection();
@@ -118,6 +118,7 @@ export function TracesExplorerPanel({
         isFullThreadOpen={isFullThreadOpen}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
+        feedbackOptions={feedbackOptions}
         onOpenScore={onOpenScore}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
         onSpanSelect={id => selectSpan(id ?? null)}
@@ -129,7 +130,11 @@ export function TracesExplorerPanel({
         featuredSpanIds={selection.highlightSpanIds}
         onHighlightSpans={highlightSpans}
         feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
+        feedbackTabSlot={
+          withFeedback
+            ? ({ traceId: tid }) => <TraceFeedbackTab key={tid} traceId={tid} feedbackOptions={feedbackOptions} />
+            : undefined
+        }
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresList traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null
@@ -142,7 +147,9 @@ export function TracesExplorerPanel({
         spanFeedbackTabSlot={
           withFeedback
             ? ({ traceId: tid, spanId: sid }) =>
-                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+                tid && sid ? (
+                  <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} feedbackOptions={feedbackOptions} />
+                ) : null
             : undefined
         }
         headerActionsSlot={traceId && headerActionsSlot ? headerActionsSlot({ traceId, spans }) : undefined}

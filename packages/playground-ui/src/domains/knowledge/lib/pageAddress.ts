@@ -1,4 +1,34 @@
+import type { ComponentType, SVGProps } from 'react';
+
 import type { KnowledgePagePayload } from '../pageTypes';
+
+import { ConfluenceIcon, GithubIcon, GoogleIcon, LinearIcon, NotionIcon, SlackIcon, ZendeskIcon } from '@/ds/icons';
+
+type KnowledgeSource = { label: string; icon?: ComponentType<SVGProps<SVGSVGElement>> };
+
+const SOURCES: Record<string, KnowledgeSource> = {
+  linear: { label: 'Linear', icon: LinearIcon },
+  notion: { label: 'Notion', icon: NotionIcon },
+  confluence: { label: 'Confluence', icon: ConfluenceIcon },
+  zendesk: { label: 'Zendesk', icon: ZendeskIcon },
+  fireflies: { label: 'Fireflies' },
+  github: { label: 'GitHub', icon: GithubIcon },
+  slack: { label: 'Slack', icon: SlackIcon },
+  google: { label: 'Google', icon: GoogleIcon },
+};
+
+/** The source an imported scope came from, read from its address prefix (`linear:…`). */
+export function scopeSource(page: KnowledgePagePayload) {
+  if (!page.isScope || !page.address) return undefined;
+  const prefix = page.address.slice(0, page.address.indexOf(':'));
+  return Object.hasOwn(SOURCES, prefix) ? SOURCES[prefix] : undefined;
+}
+
+/** A scope's readable name: an imported scope named only by its address reads as its source, e.g. "Linear". */
+export function scopeTitle(page: KnowledgePagePayload): string {
+  const source = scopeSource(page);
+  return source && page.name === page.address ? source.label : page.name;
+}
 
 /** The page's place from its root scope down, through the pages the graph holds. */
 export function pagePath(page: KnowledgePagePayload, byId: ReadonlyMap<string, KnowledgePagePayload>): string {

@@ -22,8 +22,9 @@ Mastra Code saves the objective on the current thread, runs the normal assistant
 | `done` | The goal is complete. Mastra Code records the result and exits goal mode. |
 | `continue` | The goal is not complete. Mastra Code adds the judge feedback as a system reminder and starts another turn. |
 | `waiting` | The goal requires user input or a checkpoint. Mastra Code stays in goal mode and waits for you. |
+| `paused` | The goal reached its attempt limit without completing or waiting, or the judge failed. Mastra Code pauses the goal until you run `/goal resume`. |
 
-The status line shows goal progress as `goal attempt N/M`. On narrow terminals, it shortens to `attempt N/M`.
+While a goal is active and the judge isn't evaluating it, the status line shows `goal` followed by the time spent working on it, such as `goal 12m`. When the goal started with the current run, it shows only `goal`.
 
 ## Configure the judge
 
@@ -116,6 +117,6 @@ Mastra Code uses the skill instructions as the goal objective and appends any ar
 
 ## Persistence
 
-Goals are saved in thread metadata. If you switch threads or restart Mastra Code, the current thread restores its goal state, including the objective, judge model, status, attempt count, and attempt limit.
+Goals are saved in the thread state. If you switch threads or restart Mastra Code, the current thread restores its goal state, including the objective, judge model, status, attempt count, and attempt limit.
 
 Goal setup messages and final judge results are stored as system reminders in the conversation so resumed threads keep the goal context visible.

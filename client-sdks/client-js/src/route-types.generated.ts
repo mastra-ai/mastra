@@ -242,12 +242,12 @@ type InputShared_Auxiliary_805 = {
   children?: InputShared_Auxiliary_805[] | undefined;
 };
 
-type Shared_Auxiliary_790 = {
+type Shared_Auxiliary_792 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_790[] | undefined;
+  children?: Shared_Auxiliary_792[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -3198,7 +3198,7 @@ type Shared_Type_46 = {
         [key: string]: unknown;
       }
     | undefined;
-  /** Whether this agent is hydrated with durable execution enabled */
+  /** Persisted resumable-stream configuration, including legacy durable execution options */
   durable?:
     | (
         | boolean
@@ -4431,7 +4431,7 @@ type Shared_Type_87 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_790[] | undefined;
+  files?: Shared_Auxiliary_792[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -11633,11 +11633,13 @@ export interface GetObservabilityScores_RouteContract {
 // Route: POST /observability/scores
 // ============================================================================
 export type PostObservabilityScores_Body = {
+  /** Context handling; defaults to provided on OSS and resolve on Platform */
+  contextMode?: ('resolve' | 'provided') | undefined;
   score: {
     /** Unique id for this score event */
     scoreId?: (string | null) | undefined;
-    /** Trace that anchors the scored target when available */
-    traceId?: (string | null) | undefined;
+    /** Unique trace identifier */
+    traceId: string;
     /** Span ID this score applies to */
     spanId?: (string | null) | undefined;
     /** Identifier of the scorer (e.g., relevance, accuracy) */
@@ -11686,10 +11688,22 @@ export type PostObservabilityScores_Body = {
           [key: string]: unknown;
         } | null)
       | undefined;
+    /** Original record timestamp; preserve across retries and replacements */
+    timestamp?: string | undefined;
   };
 };
 
-export type PostObservabilityScores_Response = PostAuthRefresh_Response;
+export type PostObservabilityScores_Response = {
+  success: boolean;
+  data?:
+    | {
+        scoreId: string;
+        traceId: string;
+        spanId: string | null;
+        timestamp: string;
+      }
+    | undefined;
+};
 
 export type PostObservabilityScores_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -12102,11 +12116,13 @@ export interface GetObservabilityFeedback_RouteContract {
 // Route: POST /observability/feedback
 // ============================================================================
 export type PostObservabilityFeedback_Body = {
+  /** Context handling; defaults to provided on OSS and resolve on Platform */
+  contextMode?: ('resolve' | 'provided') | undefined;
   feedback: {
     /** Unique id for this feedback event */
     feedbackId?: (string | null) | undefined;
-    /** Trace that anchors the feedback target when available */
-    traceId?: (string | null) | undefined;
+    /** Unique trace identifier */
+    traceId: string;
     /** Span ID this feedback applies to */
     spanId?: (string | null) | undefined;
     feedbackSource?: (string | null) | undefined;
@@ -12156,10 +12172,22 @@ export type PostObservabilityFeedback_Body = {
       | undefined;
     /** Feedback review workflow status */
     reviewStatus?: ('needs-review' | 'reviewed') | undefined;
+    /** Original record timestamp; preserve across retries and replacements */
+    timestamp?: string | undefined;
   };
 };
 
-export type PostObservabilityFeedback_Response = PostAuthRefresh_Response;
+export type PostObservabilityFeedback_Response = {
+  success: boolean;
+  data?:
+    | {
+        feedbackId: string;
+        traceId: string;
+        spanId: string | null;
+        timestamp: string;
+      }
+    | undefined;
+};
 
 export type PostObservabilityFeedback_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -16013,13 +16041,12 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | (
             | boolean
             | {
-                maxSteps?: number | undefined;
                 cleanupTimeoutMs?: number | undefined;
               }
           )
@@ -16181,13 +16208,12 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | (
             | boolean
             | {
-                maxSteps?: number | undefined;
                 cleanupTimeoutMs?: number | undefined;
               }
           )
@@ -16397,12 +16423,11 @@ export type PostStoredAgents_Body = {
         [key: string]: unknown;
       }
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | boolean
         | {
-            maxSteps?: number | undefined;
             cleanupTimeoutMs?: number | undefined;
           }
       )
@@ -16566,13 +16591,12 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
-  /** Opt this agent into durable execution when it is hydrated. Cache and pubsub are inherited from the Mastra instance; without distributed backends durability is process-local. Does not enable automatic recovery — that stays `recovery.durableAgents`. */
+  /** Enable resumable streams when this agent is hydrated. Does not enable durable execution or checkpoint recovery. */
   durable?:
     | (
         | (
             | boolean
             | {
-                maxSteps?: number | undefined;
                 cleanupTimeoutMs?: number | undefined;
               }
           )

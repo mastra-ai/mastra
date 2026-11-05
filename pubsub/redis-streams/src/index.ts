@@ -1,12 +1,51 @@
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
-import { createClient, createCluster } from 'redis';
+import {
+  ClientOfflineError,
+  ConnectionTimeoutError,
+  createClient,
+  createCluster,
+  SocketClosedUnexpectedlyError,
+  SocketTimeoutError,
+} from 'redis';
 import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClusterType } from 'redis';
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
 const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIM_PAGE_SIZE = 500;
+// A restarted Redis answers `-LOADING` until it has replayed its RDB/AOF, which
+// takes from seconds to minutes, and a dropped connection fails the commands in
+// flight on it. node-redis retries neither, so a publish that fails there loses
+// the event (e.g. a finished step's step.end, whose step then runs again).
+const PUBLISH_RETRY_BUDGET_MS = 120_000;
+const PUBLISH_RETRY_DELAY_MS = 250;
+const TRANSIENT_SOCKET_CODES = new Set(['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'ECONNREFUSED']);
+
+function isLoadingError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('LOADING');
+}
+
+/**
+ * Whether a publish failed for a reason that a later attempt can get past: the
+ * server is still loading, or the connection dropped. Other server replies
+ * (wrong type, OOM, auth) are not retried.
+ */
+function isTransientPublishError(error: unknown): boolean {
+  if (isLoadingError(error)) return true;
+  if (
+    error instanceof SocketClosedUnexpectedlyError ||
+    error instanceof ClientOfflineError ||
+    error instanceof ConnectionTimeoutError ||
+    error instanceof SocketTimeoutError
+  ) {
+    return true;
+  }
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && TRANSIENT_SOCKET_CODES.has(code);
+}
+
+type XaddTrimOptions = { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } };
 
 /**
  * Heartbeat: reset a pending entry's idle time only if this consumer still
@@ -292,6 +331,23 @@ export interface RedisStreamsPubSubConfig {
    * operators can see what's happening without noise on the happy path.
    */
   logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
+  /**
+   * How long `publish` keeps retrying a write that failed with a transient
+   * connection error (or `-LOADING`) before giving up. Defaults to 120000.
+   */
+  publishRetryBudgetMs?: number;
+}
+
+/**
+ * Thrown when a publish could not reach Redis before the retry budget ran
+ * out, including when an attempt never settled (node-redis parks commands in
+ * its offline queue while disconnected).
+ */
+export class PublishRetryBudgetExhaustedError extends Error {
+  constructor(budgetMs: number, options?: { cause?: unknown }) {
+    super(`redis-streams: publish did not reach Redis within ${budgetMs}ms`, options);
+    this.name = 'PublishRetryBudgetExhaustedError';
+  }
 }
 
 export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
@@ -324,6 +380,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #reclaimIdleMs: number;
   #maxDeliveryAttempts: number;
   #inFlightTimeoutMs: number;
+  #publishRetryBudgetMs: number;
   #logger?: RedisStreamsPubSubConfig['logger'];
   // Keyed by `${topic}::${cbId}` so the same callback can be subscribed to
   // multiple topics independently. Without the topic in the key,
@@ -392,6 +449,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       );
     }
     this.#inFlightTimeoutMs = inFlightTimeout;
+    this.#publishRetryBudgetMs = options.publishRetryBudgetMs ?? PUBLISH_RETRY_BUDGET_MS;
   }
 
   /**
@@ -571,6 +629,38 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     };
     const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
+    // A retry after a lost reply can append the event twice. Both copies carry
+    // the same event id; a duplicate workflow.step.run is dropped by the step
+    // fence, and other events are already handled as at-least-once deliveries.
+    const budgetMs = this.#publishRetryBudgetMs;
+    const deadline = Date.now() + budgetMs;
+    let lastError: unknown;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw lastError ?? new PublishRetryBudgetExhaustedError(budgetMs);
+      // While disconnected, node-redis parks commands in its offline queue and
+      // their promises never settle, so each attempt is bounded by what is left
+      // of the budget. Running out is final: the caller nacks as before.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const budgetExhausted = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new PublishRetryBudgetExhaustedError(budgetMs, { cause: lastError })),
+          remaining,
+        );
+      });
+      try {
+        return await Promise.race([this.#xaddEvent(streamKey, payload, xaddOptions), budgetExhausted]);
+      } catch (error) {
+        if (!isTransientPublishError(error) || this.#closed || Date.now() >= deadline) throw error;
+        lastError = error;
+        await new Promise(resolve => setTimeout(resolve, PUBLISH_RETRY_DELAY_MS));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  async #xaddEvent(streamKey: string, payload: Event, xaddOptions: XaddTrimOptions): Promise<void> {
     // When a TTL is configured the write and its PEXPIRE run in one MULTI
     // transaction. A detached PEXPIRE could fail or be skipped (process exit)
     // after a successful XADD — and on the *last* write before a topic is
@@ -598,7 +688,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     await promise;
   }
 
-  #xaddTrimOptions(): { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } {
+  #xaddTrimOptions(): XaddTrimOptions {
     if (this.#maxStreamLength <= 0) return {};
     return { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: this.#maxStreamLength } };
   }
@@ -1241,6 +1331,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
       arguments: [fromOwner, toOwner, String(ttlMs)],
     });
     return result === 1;
+  }
+
+  /** A server replaying its dataset after a restart answers `LOADING` to every client. */
+  isUnavailableToAll(error: unknown): boolean {
+    return isLoadingError(error);
   }
 
   /**
