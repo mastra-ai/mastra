@@ -800,9 +800,7 @@ describe('console component outcomes', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
     });
     expect(view.textContent).toContain('/first-24');
-    const detail = Array.from(view.querySelectorAll('section')).find(
-      section => section.querySelector('h2')?.textContent === 'Scan scan-1',
-    );
+    const detail = view.querySelector('dialog[aria-label="Scan scan-1"]');
     const next = Array.from(detail?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Next');
     await act(async () => {
       next?.click();

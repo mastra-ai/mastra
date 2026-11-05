@@ -231,7 +231,7 @@ export function PoliciesView() {
         )}
       </Section>
       {selected && (
-        <Section title="Revision history" action={<button onClick={() => setSelected(undefined)}>Close</button>}>
+        <Dialog title="Revision history" onClose={() => setSelected(undefined)} variant="details">
           <Notice code={revisions.error} stale={revisions.stale} onRetry={revisions.reload} />
           {revisions.loading ? (
             <Loading />
@@ -249,7 +249,7 @@ export function PoliciesView() {
           ) : revisions.data && !revisions.error ? (
             <Empty>No revisions recorded.</Empty>
           ) : null}
-        </Section>
+        </Dialog>
       )}
       {editing && (
         <PolicyForm
@@ -1170,7 +1170,7 @@ export function TargetsView() {
             policies.reload();
           }}
         />
-        {records.loading ? (
+        {records.loading && !records.data ? (
           <Loading />
         ) : records.data?.items.length ? (
           <div className="table-wrap">
@@ -1217,9 +1217,9 @@ export function TargetsView() {
         )}
       </Section>
       {target && (
-        <Section title={target.name} action={<button onClick={() => setSelected(undefined)}>Close</button>}>
+        <Dialog title={target.name} onClose={() => setSelected(undefined)} variant="details">
           <TargetDetail key={`${target.id}-${target.revision}`} target={target} onChanged={records.reload} />
-        </Section>
+        </Dialog>
       )}
       {editing && (
         <TargetForm
@@ -1336,9 +1336,10 @@ export function ScansView() {
         ) : null}
       </Section>
       {assessment && (
-        <Section
+        <Dialog
           title={`Assessment ${assessment.id.slice(0, 8)}`}
-          action={<button onClick={() => setSelectedAssessment(undefined)}>Close</button>}
+          onClose={() => setSelectedAssessment(undefined)}
+          variant="details"
         >
           <p>
             <Status value={assessment.outcome ?? assessment.state} /> · {assessment.reason ?? 'In progress'}
@@ -1394,7 +1395,7 @@ export function ScansView() {
           <p className="hint">
             An incomplete comparison is inconclusive. A protected response does not create a finding.
           </p>
-        </Section>
+        </Dialog>
       )}
       <Section title="Scans" action={<button onClick={records.reload}>Refresh</button>}>
         <Notice
@@ -1402,7 +1403,7 @@ export function ScansView() {
           stale={records.stale}
           onRetry={!records.error && error === 'SCAN_BINDING_CHANGED' ? undefined : records.reload}
         />
-        {message && (
+        {message && !scan && (
           <p className="success" role="status">
             {message}
           </p>
@@ -1478,10 +1479,12 @@ export function ScansView() {
         )}
       </Section>
       {scan && (
-        <Section
-          title={`Scan ${scan.id.slice(0, 8)}`}
-          action={<button onClick={() => setSelected(undefined)}>Close</button>}
-        >
+        <Dialog title={`Scan ${scan.id.slice(0, 8)}`} onClose={() => setSelected(undefined)} variant="details">
+          {message && (
+            <p className="success" role="status">
+              {message}
+            </p>
+          )}
           <div className="detail-grid">
             <div>
               <span className="eyebrow">Outcome</span>
@@ -1568,7 +1571,7 @@ export function ScansView() {
             />
           )}
           <ScanInvestigations key={`${scan.id}-${investigationVersion}`} scanId={scan.id} />
-        </Section>
+        </Dialog>
       )}
     </>
   );

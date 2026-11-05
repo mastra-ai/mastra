@@ -212,6 +212,11 @@ async function visible(locator: Locator) {
 }
 
 async function navigate(page: Page, view: string) {
+  const dialog = page.getByRole('dialog');
+  if (await dialog.count()) {
+    await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+  }
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: view, exact: true }).click();
   await visible(page.getByRole('main').getByRole('heading', { name: view, exact: true, level: 1 }));
 }
@@ -316,7 +321,11 @@ describe('real security console browser journeys', () => {
     expect(created.status()).toBe(201);
     const target = await created.json();
     await navigate(page, 'Targets');
-    await page.getByRole('button', { name: target.name, exact: true }).click();
+    const targetLink = page.getByRole('button', { name: target.name, exact: true });
+    await targetLink.click();
+    const details = page.getByRole('dialog', { name: target.name, exact: true });
+    await visible(details);
+    expect(await details.evaluate(element => element.matches(':modal'))).toBe(true);
     for (const kind of ['public', 'bearer', 'header']) {
       await page.getByRole('button', { name: 'Add profile' }).click();
       const form = page.getByRole('dialog', { name: 'Add profile' });
@@ -345,6 +354,36 @@ describe('real security console browser journeys', () => {
       expect(current.schedule).toEqual(target.schedule);
       expect(current.authenticationDrivers).toEqual([]);
     }
+    await details.getByRole('button', { name: 'Add profile' }).click();
+    const nested = page.getByRole('dialog', { name: 'Add profile', exact: true });
+    await visible(nested);
+    await page.keyboard.press('Escape');
+    await nested.waitFor({ state: 'hidden' });
+    expect(
+      await details
+        .getByRole('button', { name: 'Add profile' })
+        .evaluate(element => element === document.activeElement),
+    ).toBe(true);
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 640 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const bounds = await details.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.y).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+      await page.keyboard.press('Escape');
+      await details.waitFor({ state: 'hidden' });
+      expect(await targetLink.evaluate(element => element === document.activeElement)).toBe(true);
+      await targetLink.click();
+      await visible(details);
+    }
+    await details.getByRole('button', { name: 'Close dialog' }).click();
+    await details.waitFor({ state: 'hidden' });
+    expect(await targetLink.evaluate(element => element === document.activeElement)).toBe(true);
   }, 45000);
 
   it('edits unauthorized status codes character by character and persists submit without blur', async () => {
@@ -567,6 +606,7 @@ describe('real security console browser journeys', () => {
     const browserTarget = z
       .object({
         id: z.string().uuid(),
+        name: z.string(),
         owner: z.string(),
         revision: z.number(),
         permittedMethods: z.array(z.string()),
@@ -611,6 +651,7 @@ describe('real security console browser journeys', () => {
       .parse((await lab.request(`/api/targets/${target.id}`)).data);
     expect(originalBinding.policyId).toBe(policy.id);
     expect(originalBinding.policyRevision).toBe(policy.revision);
+    await page.getByRole('dialog', { name: target.name }).getByRole('button', { name: 'Close dialog' }).click();
     await page
       .getByRole('row')
       .filter({ hasText: 'Owned browser target' })
@@ -644,6 +685,7 @@ describe('real security console browser journeys', () => {
       .parse((await lab.request(`/api/targets/${target.id}`)).data);
     expect(editedBinding).toEqual(originalBinding);
 
+    await page.getByRole('button', { name: 'Owned browser target updated', exact: true }).click();
     await page.getByRole('button', { name: 'Add profile' }).click();
     dialog = page.getByRole('dialog', { name: 'Add profile' });
     await dialog.getByLabel('Name').fill('Public inventory');
@@ -716,6 +758,7 @@ describe('real security console browser journeys', () => {
     const scanRow = page.getByRole('row').filter({ hasText: scan.id.slice(0, 8) });
     await visible(scanRow);
     await scanRow.getByRole('button', { name: 'Investigate' }).click();
+    await visible(page.getByRole('dialog', { name: `Scan ${scan.id.slice(0, 8)}` }));
     await visible(page.getByRole('status').filter({ hasText: 'Investigation admitted' }));
     const investigation = await waitFor(async () => {
       const items = z
@@ -935,6 +978,15 @@ describe('real security console browser journeys', () => {
                       ? 'ssrf'
                       : '';
       if (expected) await visible(page.getByText(expected, { exact: false }).first());
+      if (view === 'Policies') {
+        await page.getByRole('button', { name: 'Owned browser policy', exact: true }).click();
+        await visible(page.getByRole('dialog', { name: 'Revision history' }).getByText('Revision 1', { exact: true }));
+      }
+      if (view === 'Evaluations') {
+        await page.getByRole('button', { name: 'Inspect', exact: true }).first().click();
+        const dialog = page.getByRole('dialog', { name: /^Evaluation / });
+        await visible(dialog.getByText('Approved scope', { exact: false }));
+      }
       if (view === 'Agents') {
         const runRow = page
           .getByRole('row')
@@ -1023,7 +1075,7 @@ describe('real security console browser journeys', () => {
     const discoveryEvidenceId = selectedHypothesis.evidenceIds[0];
     expect(discoveryEvidenceId).toBeDefined();
     await firstFinding.click();
-    await visible(page.getByRole('heading', { name: `Finding ${selectedFinding.id.slice(0, 8)}` }));
+    await visible(page.getByRole('dialog', { name: `Finding ${selectedFinding.id.slice(0, 8)}` }));
     await visible(page.getByText('Playbook / catalog provenance'));
     await visible(
       page.getByText(

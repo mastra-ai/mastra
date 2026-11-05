@@ -100,6 +100,7 @@ it('lets a signed-in operator triage an unsupported CVE in Chrome without creati
   await visible(advisoryMetric.getByText(/Last imported page/));
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Vulnerabilities' }).click();
   await page.getByRole('button', { name: id }).click();
+  await visible(page.getByRole('dialog', { name: id, exact: true }));
   await visible(page.getByText('review_vendor_guidance').first());
   await visible(page.getByText('Target relevance: unknown'));
   await visible(page.getByText(/Advisory importance: high/));
@@ -122,6 +123,7 @@ it('lets a signed-in operator triage an unsupported CVE in Chrome without creati
   });
   expect(((await findings.json()) as { items: unknown[] }).items).toHaveLength(0);
   rotationUnavailable = true;
+  await page.getByRole('dialog', { name: id, exact: true }).getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: 'Synchronize advisories' }).click();
   await visible(page.getByText(/Advisory synchronization skipped/));
   expect(await page.getByText('Advisory synchronization completed.', { exact: true }).count()).toBe(0);

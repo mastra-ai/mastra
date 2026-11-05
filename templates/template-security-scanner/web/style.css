@@ -651,16 +651,35 @@ dialog {
 dialog::backdrop {
   background: #000b;
 }
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+.detail-dialog {
+  width: min(960px, calc(100vw - 24px));
+  overflow: hidden;
+}
+.detail-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.dialog-body {
+  padding: 19px 21px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  min-height: 0;
+}
 .dialog-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 17px 21px;
   border-bottom: 1px solid #333439;
+  flex-shrink: 0;
 }
 .dialog-head h2 {
   margin: 0;
   font-size: 18px;
+  overflow-wrap: anywhere;
 }
 .form {
   padding: 19px 21px;

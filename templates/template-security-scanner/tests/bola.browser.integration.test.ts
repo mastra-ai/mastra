@@ -91,6 +91,11 @@ describe('one-button REST assessment in the real console', () => {
       await page.getByRole('button', { name: 'Sign in' }).click();
       const nav = page.getByRole('navigation', { name: 'Primary' });
       const view = async (name: string) => {
+        const dialog = page.getByRole('dialog');
+        if (await dialog.count()) {
+          await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+          await dialog.waitFor({ state: 'hidden' });
+        }
         await nav.getByRole('button', { name, exact: true }).click();
         await page.getByRole('heading', { name, exact: true, level: 1 }).waitFor({ state: 'visible' });
       };
@@ -164,6 +169,9 @@ describe('one-button REST assessment in the real console', () => {
       expect(assessment?.candidates.length).toBeGreaterThanOrEqual(2);
       await view('Scans');
       await page.getByRole('button', { name: assessment!.id.slice(0, 8), exact: true }).click();
+      await page
+        .getByRole('dialog', { name: `Assessment ${assessment!.id.slice(0, 8)}` })
+        .waitFor({ state: 'visible' });
       await page.getByText('Checker: bola_rest_read', { exact: false }).waitFor({ state: 'visible' });
       await page.getByText('Gateway requests: 2', { exact: false }).waitFor({ state: 'visible' });
       await view('Findings');

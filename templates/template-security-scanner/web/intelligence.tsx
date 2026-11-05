@@ -522,12 +522,9 @@ export function FindingsView() {
         )}
       </Section>
       {finding && (
-        <Section
-          title={`Finding ${finding.id.slice(0, 8)}`}
-          action={<button onClick={() => setSelected(undefined)}>Close</button>}
-        >
+        <Dialog title={`Finding ${finding.id.slice(0, 8)}`} onClose={() => setSelected(undefined)} variant="details">
           <FindingDetail key={`${finding.id}:${finding.availability?.state ?? 'unknown'}`} finding={finding} />
-        </Section>
+        </Dialog>
       )}
     </>
   );
@@ -592,9 +589,10 @@ export function EvaluationsView() {
         )}
       </Section>
       {evaluation && (
-        <Section
+        <Dialog
           title={`Evaluation ${evaluation.id.slice(0, 8)}`}
-          action={<button onClick={() => setSelected(undefined)}>Close</button>}
+          onClose={() => setSelected(undefined)}
+          variant="details"
         >
           <Notice code={job.error} stale={job.stale} onRetry={job.reload} />
           <div className="detail-grid">
@@ -643,7 +641,7 @@ export function EvaluationsView() {
               </p>
             </div>
           </div>
-        </Section>
+        </Dialog>
       )}
     </>
   );
@@ -905,7 +903,8 @@ export function VulnerabilitiesView() {
         )}
       </Section>
       {item && (
-        <Section title={item.id} action={<button onClick={() => setSelected(undefined)}>Close</button>}>
+        <Dialog title={item.id} onClose={() => setSelected(undefined)} variant="details">
+          <Notice code={error} />
           <div className="detail-grid">
             <div>
               <span className="eyebrow">Source status</span>
@@ -1093,7 +1092,7 @@ export function VulnerabilitiesView() {
           ) : events.data && !events.error ? (
             <Empty>No events recorded.</Empty>
           ) : null}
-        </Section>
+        </Dialog>
       )}
     </>
   );

@@ -160,8 +160,18 @@ export function Pager({
   );
 }
 
-/** Render the modal form boundary and route supported close interactions to its owner. */
-export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+/** Render a modal form or record detail and restore focus when its owner closes it. */
+export function Dialog({
+  title,
+  onClose,
+  children,
+  variant = 'form',
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  variant?: 'form' | 'details';
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   useEffect(() => {
@@ -173,14 +183,27 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
     };
   }, []);
   return (
-    <dialog ref={ref} onClose={onClose} onCancel={onClose} aria-label={title}>
+    <dialog
+      ref={ref}
+      onClose={event => {
+        event.stopPropagation();
+        onClose();
+      }}
+      onCancel={event => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
+      aria-label={title}
+      className={variant === 'details' ? 'detail-dialog' : undefined}
+    >
       <div className="dialog-head">
         <h2>{title}</h2>
         <button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}>
           ×
         </button>
       </div>
-      {children}
+      {variant === 'details' ? <div className="dialog-body">{children}</div> : children}
     </dialog>
   );
 }
