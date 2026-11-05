@@ -209,6 +209,28 @@ describe('Agent durable resumable streams option', () => {
       expect(tail.types.at(-1)).toBe('finish');
     });
 
+    it.each([
+      ['at the next index', (last: number) => last + 1],
+      ['far past the end', () => 100],
+    ])('closes a finished run resumed %s', async (_label, offsetFor) => {
+      const pubsub = new RecordingPubSub();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, logger: false });
+
+      const runId = await run(agent);
+      await waitForFinish(pubsub, runId);
+
+      const indexes: number[] = [];
+      for await (const chunk of (await agent.observe(runId)).fullStream) {
+        if (chunk.index !== undefined) indexes.push(chunk.index);
+      }
+
+      const observed = await agent.observe(runId, { offset: offsetFor(indexes.at(-1)!) });
+      const timeout = new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 2_000).unref());
+      const result = await Promise.race([collect(observed.fullStream), timeout]);
+      expect(result).toEqual({ types: [], text: '' });
+    });
+
     it('stays open across a tool-approval suspension and follows the approved run to its finish', async () => {
       const pubsub = new RecordingPubSub();
       getMock().on(

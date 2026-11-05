@@ -3029,7 +3029,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Every frame except abort carries the run-log `index` it came from; pass `offset` as the index + 1 of the last frame that has one to resume without repeating indexed frames.',
+    'Reconnect to an existing agent stream to receive missed events. Every frame except abort carries the run-log `index` it came from; pass `offset` as the index + 1 of the last frame that has one to resume without repeating indexed frames. Frames whose replay-cache write failed, or all frames when caching is off, carry no index and cannot be replayed.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {

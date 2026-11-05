@@ -6710,8 +6710,10 @@ export class Agent<
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -6856,8 +6858,10 @@ export class Agent<
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
                     if (chunk.type.startsWith('data-')) {
-                      // Write data chunks directly to original stream to bubble up
-                      await context.writer.custom(chunk as any);
+                      // Write data chunks directly to original stream to bubble up. A durable
+                      // sub-agent's run-log index means nothing in the parent's stream.
+                      const { index: _childIndex, ...parentChunk } = chunk as any;
+                      await context.writer.custom(parentChunk);
                     } else {
                       await context.writer.write(chunk);
                     }
@@ -12412,6 +12416,28 @@ export class Agent<
     } catch (error) {
       detach();
       throw error;
+    }
+
+    // Resuming past the run's last entry replays nothing; if that entry ended the
+    // run, nothing more will arrive, so close (matches the HTTP /observe route).
+    // Read after subscribing so a terminal entry racing attachment is not lost; a
+    // failed read only means we can't close early. An error *chunk* can precede the
+    // finish, so only an error event ends the run.
+    const offset = options?.offset;
+    if (offset !== undefined && offset > 0) {
+      const topic = AGENT_STREAM_TOPIC(runId);
+      const last = await bus.pubsub
+        .getHistory(topic, offset - 1)
+        .then(async window => (window.length > 0 ? window : await bus.pubsub.getHistory(topic, 0)).at(-1))
+        .catch(() => undefined);
+      const type = last?.type === 'chunk' ? (last.data as { type?: string } | undefined)?.type : last?.type;
+      if (
+        typeof last?.index === 'number' &&
+        last.index < offset &&
+        (type === 'finish' || last.type === 'error' || type === 'abort')
+      ) {
+        detach();
+      }
     }
 
     return {
