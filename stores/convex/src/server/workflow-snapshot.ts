@@ -122,6 +122,16 @@ export function mergeWorkflowStepResult({
       },
     };
   }
+  // Same for iteration results saved before their step.end was published.
+  if (existingResult?.metadata?.foreachCompletedIterations || result.metadata?.foreachCompletedIterations) {
+    snapshot.context[stepId].metadata = {
+      ...snapshot.context[stepId].metadata,
+      foreachCompletedIterations: {
+        ...existingResult?.metadata?.foreachCompletedIterations,
+        ...snapshot.context[stepId].metadata?.foreachCompletedIterations,
+      },
+    };
+  }
 
   if (state !== undefined) {
     snapshot.context.__state = state;

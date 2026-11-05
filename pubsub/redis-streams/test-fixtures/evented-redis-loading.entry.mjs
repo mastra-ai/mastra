@@ -1,6 +1,7 @@
 // @ts-check
-// API or worker process for evented-redis-loading.test.ts (COR-1502). Both talk
-// to Redis through the test's LOADING proxy and to Postgres directly.
+// API or worker process for evented-redis-loading.test.ts (COR-1502) and
+// evented-step-end-fault.test.ts (#29504). Both talk to Redis (through the
+// test's LOADING proxy for COR-1502) and to Postgres directly.
 import { Agent } from '@mastra/core/agent';
 import { createEventedAgent } from '@mastra/core/agent/durable';
 import { ConsoleLogger } from '@mastra/core/logger';
@@ -31,6 +32,29 @@ const pubsub = new RedisStreamsPubSub({
   logger: { warn: (...args) => console.error('[pubsub warn]', ...args) },
 });
 await storage.init();
+
+// #29504: fail the first `workflow.step.end` publish for a finished tool call,
+// either by throwing a non-LOADING transport error or by dying before it is sent.
+const stepEndFault = process.env.LOADING_STEP_END_FAULT;
+if (stepEndFault) {
+  const publish = pubsub.publish.bind(pubsub);
+  let faulted = false;
+  pubsub.publish = async (topic, event) => {
+    const prevResult = /** @type {any} */ (event.data)?.prevResult;
+    if (
+      !faulted &&
+      event.type === 'workflow.step.end' &&
+      prevResult?.status === 'success' &&
+      prevResult.output?.toolCallId === 'operation-0'
+    ) {
+      faulted = true;
+      console.info('step-end-fault');
+      if (stepEndFault === 'exit') process.exit(1);
+      throw new Error('read ECONNRESET');
+    }
+    return publish(topic, event);
+  };
+}
 
 const tool = createTool({
   id: 'recordedTool',

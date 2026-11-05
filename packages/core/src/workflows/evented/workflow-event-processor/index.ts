@@ -2333,6 +2333,17 @@ export class WorkflowEventProcessor extends EventProcessor {
       !timeTravel &&
       !resumeSteps?.length &&
       step.type !== 'foreach';
+    // A foreach iteration has no start guard; instead its successful result is
+    // saved under this event's id before step.end is published, so a redelivery
+    // of the same event reuses it rather than running the step body again.
+    const guardIteration =
+      workflowsStore?.supportsWorkflowStepGuards() &&
+      args.eventId &&
+      !restart &&
+      !timeTravel &&
+      !resumeSteps?.length &&
+      step.type === 'foreach' &&
+      !nestedWorkflowStep;
     let nestedRunId = '';
     let authorizedEventId: string | undefined;
     let nestedDispatch: 'resume-single' | 'resume-many' | 'time-travel' | 'restart' | 'start' = 'start';
@@ -2656,6 +2667,12 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         },
       });
+    }
+
+    if (guardIteration) {
+      const snapshot = await workflowsStore!.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+      const saved = snapshot?.context[leafId]?.metadata?.foreachCompletedIterations?.[executionPath[1]!];
+      if (saved?.eventId === args.eventId) completedResult = saved.result;
     }
 
     // Run nested workflow - only a plain `step` entry can wrap a live Workflow
@@ -3401,6 +3418,26 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else {
       // Extract updated state from step result
       const updatedState = (stepResult as any).__state ?? currentState;
+
+      if (guardIteration && !completedResult && stepResult.status === 'success') {
+        const snapshot = await workflowsStore!.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        const storedResult = readForeachResult({ ...stepResults, ...snapshot?.context }, leafId);
+        await workflowsStore!.updateWorkflowResults({
+          workflowName: workflowId,
+          runId,
+          stepId: leafId,
+          requestContext: withoutAuthToken(requestContext),
+          result: {
+            ...(storedResult as StepResult<any, any, any, any>),
+            // Null slots leave every iteration's persisted output unchanged.
+            ...(Array.isArray(storedResult?.output) ? { output: storedResult.output.map(() => null) } : {}),
+            metadata: {
+              ...(storedResult?.metadata as Record<string, unknown> | undefined),
+              foreachCompletedIterations: { [executionPath[1]!]: { eventId: args.eventId, result: stepResult } },
+            },
+          },
+        });
+      }
 
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.end',
