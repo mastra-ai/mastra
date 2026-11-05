@@ -810,6 +810,57 @@ describe('F4 offline intelligence through protected HTTP and file libSQL', () =>
     expect((await app.request<{ items: unknown[] }>('/api/advisories')).body.items).toHaveLength(3);
   }, 120000);
 
+  it.each([
+    { status: 404, code: 'ADVISORY_DETAIL_PRIMARY_404' },
+    { status: 200, body: {}, code: 'ADVISORY_SCHEMA_UNKNOWN' },
+  ])(
+    'advances rotation past invalid detail items while preserving skipped cycles: $code',
+    async failure => {
+      const fixture = await startAdvisoryFixture();
+      const missing = 'CVE-2026-25001',
+        healthy = detail('CVE-2026-25002'),
+        later = detail('CVE-2026-25003');
+      fixture.page(null, [], 'history');
+      fixture.page('history', [missing, healthy.id], 'older');
+      fixture.page('older', [later.id], null);
+      fixture.details.set(missing, failure);
+      fixture.setDetail(healthy);
+      fixture.setDetail(later);
+      let modelCalls = 0;
+      const app = await startHarness(fixture, {
+        async plan() {
+          modelCalls++;
+          return {
+            value: { recommendation: 'monitor_advisory', rationaleCode: 'VERSION_UNVERIFIED', confidence: 'low' },
+            modelId: 'owned-local-model',
+          };
+        },
+      });
+      const skipped = await app.request('/api/advisories/sync', 'POST', {});
+      expect(skipped).toMatchObject({
+        status: 200,
+        body: { outcome: 'SKIPPED', phase: 'rotation', reasonCode: failure.code },
+      });
+      expect(modelCalls).toBe(0);
+      expect(skipped.body).not.toHaveProperty('hypotheses');
+      expect((await app.request(`/api/advisories/${healthy.id}`)).status).toBe(200);
+      expect((await app.query('SELECT rotation_cursor FROM scanner_advisory_checkpoint'))[0]?.rotation_cursor).toBe(
+        'older',
+      );
+      expect((await app.request('/api/advisories/quarantine')).body.items).toMatchObject([
+        { sourceId: missing, reason: failure.code },
+      ]);
+      const misses = fixture.requests.filter(path => path.endsWith(missing)).length;
+      await app.restart();
+      await waitForAdvisoryRetry(app);
+      expect((await app.request('/api/advisories/sync', 'POST', {})).body.outcome).toBe('COMPLETED');
+      expect((await app.request(`/api/advisories/${later.id}`)).status).toBe(200);
+      expect(fixture.requests.filter(path => path.endsWith(missing))).toHaveLength(misses);
+      expect((await app.request('/api/advisories/status')).body).toMatchObject({ stale: false, failureCount: 0 });
+    },
+    60000,
+  );
+
   it('skips an inconsistent upstream cycle and retries without planning on the skipped attempt', async () => {
     const fixture = await startAdvisoryFixture();
     const head = detail('CVE-2026-23101');

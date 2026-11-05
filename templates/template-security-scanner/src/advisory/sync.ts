@@ -3,10 +3,24 @@ import { AdvisorySource } from './source.js';
 import { AdvisoryStore, type CursorKind } from './store.js';
 
 class UpstreamCycleFailure extends Error {
-  constructor(readonly code: string) {
+  constructor(
+    readonly code: string,
+    readonly quarantined = false,
+  ) {
     super(code);
   }
 }
+
+const itemFailures = new Set([
+  'ADVISORY_DETAIL_PRIMARY_404',
+  'ADVISORY_DETAIL_CDN_404',
+  'ADVISORY_SCHEMA_UNKNOWN',
+  'ADVISORY_ALIAS_MISMATCH',
+  'ADVISORY_JSON_INVALID',
+  'ADVISORY_BODY_TOO_LARGE',
+  'ADVISORY_BODY_INVALID',
+  'ADVISORY_CONTENT_TYPE_INVALID',
+]);
 
 export class AdvisorySync {
   private active?: Promise<unknown>;
@@ -40,34 +54,55 @@ export class AdvisorySync {
     }
   }
 
-  private async hydratePage(kind: CursorKind, signal: AbortSignal, onSourceId: (id?: string) => void, cursor?: string) {
+  private async hydratePage(
+    kind: CursorKind,
+    signal: AbortSignal,
+    onSourceId: (id?: string) => void,
+    cursor?: string,
+    quarantined = new Set<string>(),
+  ) {
     onSourceId();
     const page = await this.fromSource(() => this.source.list(cursor, signal));
     if (page.entries.length > 30) throw new UpstreamCycleFailure('ADVISORY_PAGE_TOO_LARGE');
     const seen = new Set<string>();
     const details = [];
+    const skipped: { id: string; code: string }[] = [];
     for (const entry of page.entries) {
       const id = entry.id.toUpperCase();
       if (seen.has(id)) throw new UpstreamCycleFailure('ADVISORY_PAGE_DUPLICATE');
       seen.add(id);
       onSourceId(id);
-      details.push(await this.fromSource(() => this.source.detail(id, signal)));
+      try {
+        details.push(await this.fromSource(() => this.source.detail(id, signal)));
+      } catch (error) {
+        if (!(error instanceof UpstreamCycleFailure) || !itemFailures.has(error.code)) throw error;
+        skipped.push({ id, code: error.code });
+      }
       onSourceId();
     }
     if (page.nextCursor && page.nextCursor === cursor) throw new UpstreamCycleFailure('ADVISORY_CURSOR_STALLED');
-    return this.importPage(kind, details, page.nextCursor);
+    const imported = await this.importPage(kind, details, page.nextCursor);
+    for (const item of skipped) {
+      const key = `${item.id}:${item.code}`;
+      if (!quarantined.has(key)) {
+        await this.store.quarantineItem(item.id, item.code);
+        quarantined.add(key);
+      }
+    }
+    return { ...imported, skipped };
   }
 
   private async run(signal: AbortSignal) {
     let phase = 'status';
     let sourceId: string | undefined;
+    const quarantined = new Set<string>();
     const setSourceId = (id?: string) => {
       sourceId = id;
     };
     try {
       await this.fromSource(() => this.source.status(signal));
       phase = 'head';
-      const head = await this.hydratePage('head', signal, setSourceId);
+      const head = await this.hydratePage('head', signal, setSourceId, undefined, quarantined);
       const checkpoint = await this.store.checkpoint();
       phase = 'rotation';
       const rotation = await this.hydratePage(
@@ -75,6 +110,7 @@ export class AdvisorySync {
         signal,
         setSourceId,
         checkpoint.rotationCursor ?? head.nextCursor ?? undefined,
+        quarantined,
       );
       phase = 'refresh';
       const ids = await this.store.knownIdsForRefresh(2);
@@ -89,6 +125,14 @@ export class AdvisorySync {
         }
         await this.importPage('rotation', [detail], rotation.nextCursor, id);
         sourceId = undefined;
+      }
+      const skipped = head.skipped[0] ?? rotation.skipped[0];
+      if (skipped) {
+        phase = head.skipped.length ? 'head' : 'rotation';
+        // Each item was already quarantined; the cycle remains skipped and no
+        // model planning or import callback is authorized by partial progress.
+        sourceId = undefined;
+        throw new UpstreamCycleFailure(skipped.code, true);
       }
       await this.store.markSuccess();
       return {
@@ -117,7 +161,10 @@ export class AdvisorySync {
         'ADVISORY_BODY_INVALID',
         'ADVISORY_BODY_TOO_LARGE',
       ]);
-      await this.store.markFailure(code, quarantineCodes.has(code) ? (sourceId ?? phase) : undefined);
+      await this.store.markFailure(
+        code,
+        !error.quarantined && quarantineCodes.has(code) ? (sourceId ?? phase) : undefined,
+      );
       if (this.closed || this.controller?.signal.aborted) throw new ControlPlaneError('ADVISORY_SYNC_CLOSED', 503);
       const checkpoint = await this.store.checkpoint();
       return {

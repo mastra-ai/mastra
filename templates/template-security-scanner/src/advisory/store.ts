@@ -448,6 +448,20 @@ export class AdvisoryStore {
     if ('canonicalChanged' in result) throw new ControlPlaneError('ADVISORY_CANONICAL_CHANGED', 503);
     return result;
   }
+  private async insertQuarantine(tx: Transaction, sourceId: string, reason: string, now: string) {
+    await tx.execute({
+      sql: 'INSERT INTO scanner_advisory_quarantine(source_id,reason,occurred_at) VALUES (?,?,?)',
+      args: [sourceId, reason, now],
+    });
+    await tx.execute(
+      'DELETE FROM scanner_advisory_quarantine WHERE id NOT IN (SELECT id FROM scanner_advisory_quarantine ORDER BY id DESC LIMIT 200)',
+    );
+  }
+  async quarantineItem(sourceId: string, code: string) {
+    const id = advisoryId.parse(sourceId).toUpperCase();
+    if (!/^[A-Z0-9_]{1,80}$/.test(code)) throw new ControlPlaneError('ADVISORY_SYNC_INVALID', 503);
+    await this.write(tx => this.insertQuarantine(tx, id, code, new Date().toISOString()));
+  }
   async markFailure(code: string, sourceId?: string) {
     const now = new Date().toISOString();
     const reason = /^[A-Z0-9_]{1,80}$/.test(code) ? code : 'ADVISORY_SYNC_INVALID';
@@ -461,15 +475,7 @@ export class AdvisoryStore {
         sql: 'UPDATE scanner_advisory_checkpoint SET last_attempt_at = ?, next_retry_at = ?, failure_count = ?, stale = 1, incomplete = 1, failure_code = ? WHERE singleton = 1',
         args: [now, nextRetryAt, failures, reason],
       });
-      if (safeSourceId) {
-        await tx.execute({
-          sql: 'INSERT INTO scanner_advisory_quarantine(source_id,reason,occurred_at) VALUES (?,?,?)',
-          args: [safeSourceId, reason, now],
-        });
-        await tx.execute(
-          'DELETE FROM scanner_advisory_quarantine WHERE id NOT IN (SELECT id FROM scanner_advisory_quarantine ORDER BY id DESC LIMIT 200)',
-        );
-      }
+      if (safeSourceId) await this.insertQuarantine(tx, safeSourceId, reason, now);
     });
   }
   async markSuccess() {
