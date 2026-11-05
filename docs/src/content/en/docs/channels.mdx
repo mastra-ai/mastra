@@ -311,7 +311,7 @@ When a `chatOptions.concurrency` strategy (`burst`, `debounce`, or `queue`) batc
 
 ## Logging
 
-Chat SDK logs use the [logger](/docs/observability/logging) on your Mastra instance by default, so they follow its format, level, and `redact` setting. Each record has a `component` field set to `chat-sdk`. To send them elsewhere, set `chatOptions.logger`, which overrides this default.
+Chat SDK logs use the [logger](/docs/observability/logging) on your Mastra instance by default, so they follow its format, level, and `redact` setting. Each record has a `component` field set to `chat-sdk`. With `PinoLogger`, Mastra's own channel logs have `component` set to `CHANNEL`, so you can filter the two apart. To send them elsewhere, set `chatOptions.logger`, which overrides this default.
 
 Adapters have their own logger, and it defaults to the console. Your app creates each adapter before the Mastra instance exists, so Mastra can't set that logger for you. Pass [`toChatLogger()`](/reference/agents/channels#tochatlogger) when you create the adapter:
 

@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Chat SDK logs from channels now use your Mastra logger, so they follow its format, level, and redact settings. Use the new `toChatLogger` export to send adapter logs to the same logger.
+Chat SDK logs from channels now use your Mastra logger, so they follow its format, level, and redact settings. These logs no longer print with the `[chat-sdk]` console prefix. To filter them, use `component: 'chat-sdk'`. Use the new `toChatLogger` export to send adapter logs to the same logger.
 
 ```ts
 import { toChatLogger } from '@mastra/core/channels';

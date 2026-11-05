@@ -207,6 +207,28 @@ describe('channel logging', () => {
     expect(logger.records.map(r => r.message)).toContain('Chat instance initialized');
   });
 
+  it('keeps the app running when the logger throws while the Chat SDK logs a failed handler', async () => {
+    class BrokenLogger extends RecordingLogger {
+      override error() {
+        throw new Error('transport down');
+      }
+    }
+    const { channels } = await startChannels(new BrokenLogger());
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      // Adapters call this with no waitUntil, so a throwing log call would reject with nothing to catch it.
+      const failed = channels.sdk!.processMessage(createAdapter('discord'), 'discord:1:2', async () => {
+        throw new Error('handler blew up');
+      });
+      await expect(failed).rejects.toThrow('handler blew up');
+      await new Promise(resolve => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
   it('moves Chat SDK logs to a logger set after startup', async () => {
     const first = new RecordingLogger();
     const { mastra, channels } = await startChannels(first);

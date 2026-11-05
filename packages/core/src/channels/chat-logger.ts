@@ -47,7 +47,11 @@ export function createChatLogger(getLogger: () => IMastraLogger, options: ToChat
         logger[level](message, { ...toFields(args), component });
       } catch {
         // A value the logger can't serialize must not break the Chat SDK code that logged it.
-        logger[level](message, { component });
+        try {
+          logger[level](message, { component });
+        } catch {
+          // The logger itself failed, and Chat SDK code can't recover from that.
+        }
       }
     };
 
