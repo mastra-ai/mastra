@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { WorkspaceChangePatches } from '../../../../../api/types';
+import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { useWorkspacePanel } from '../../context/useWorkspacePanel';
@@ -187,6 +188,24 @@ describe('WorkspaceFiles on a user session route', () => {
 
 describe('WorkspaceFiles', () => {
   describe('given a chat wide enough for the card beside the transcript', () => {
+    it('keeps the loaded workspace usable when refreshing session details fails', async () => {
+      stubContainerWidth(1200);
+      const { client } = renderPanel();
+      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
+      await waitForMutationsIdle(client);
+
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/user-sessions/${WORKSPACE}`, () =>
+          HttpResponse.json({ error: 'Temporarily unavailable' }, { status: 500 }),
+        ),
+      );
+      await act(() => client.invalidateQueries({ queryKey: queryKeys.userSession(WORKSPACE) }));
+      await waitForMutationsIdle(client);
+
+      expect(screen.getByRole('button', { name: 'Files' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /^Changes\s?No changes/ })).toBeEnabled();
+    });
+
     it('opens the overview immediately and lets the header toggle close it', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();

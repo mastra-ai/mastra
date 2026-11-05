@@ -76,7 +76,7 @@ function SessionUnavailableMain({
 }) {
   const navigate = useNavigate();
   // The server answers a missing session and a teammate's private one with the same 404.
-  const notFound = (error as { status?: number }).status === 404;
+  const notFound = 'status' in error && error.status === 404;
   return (
     <ChatPageLayout>
       <div className="grid min-h-0 place-items-center">

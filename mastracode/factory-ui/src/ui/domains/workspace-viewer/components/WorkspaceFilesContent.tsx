@@ -16,7 +16,7 @@ export function WorkspaceFilesContent() {
   const session = useUserSessionQuery(viewedSessionId);
   if (!workspacePath || !threadId) return null;
   if (session.isPending) return <WorkspaceOverviewSkeleton />;
-  if (session.isError) return null;
+  if (session.isError && !session.data) return null;
 
   return (
     <div className="flex min-h-0 w-full min-w-0 grow flex-col overflow-hidden" data-testid="workspace-viewer-panel">
