@@ -408,6 +408,16 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   async #findIssue(input: GetIntakeIssueInput): Promise<{ context: JiraConnectionContext; issue: JiraIssue } | null> {
     const issueReference = decodeIssueReference(input.issueId);
     const source = input.sourceId ? decodeSourceId(input.sourceId) : null;
+    // A reference that names a different connection or project than the source scope
+    // cannot widen that scope.
+    if (
+      issueReference &&
+      source &&
+      (issueReference.connectionId !== source.connectionId ||
+        (issueReference.projectId !== undefined && issueReference.projectId !== source.projectId))
+    ) {
+      return null;
+    }
     const connectionId =
       issueReference?.connectionId ?? source?.connectionId ?? connectionIdFromConnection(input.connection);
     const issueId = issueReference?.issueId ?? input.issueId;
