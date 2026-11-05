@@ -451,6 +451,13 @@ describe('linear_list_projects / linear_list_issues — execute', () => {
     expect(result.issues.map((issue: { identifier: string }) => issue.identifier)).toEqual(['ENG-42']);
   });
 
+  it('rejects whitespace-only labels instead of silently dropping the filter', async () => {
+    const tools = await getTools();
+    const schema = tools.linear_list_issues!.inputSchema as any;
+    expect(schema.safeParse({ source: 'linear-team:team-1', labels: ['  '] }).success).toBe(false);
+    expect(schema.parse({ source: 'linear-team:team-1', labels: [' bug '] }).labels).toEqual(['bug']);
+  });
+
   it('reports a Linear failure as a tool error', async () => {
     vi.spyOn(linear, 'listActiveIssues').mockRejectedValue(new Error('Linear GraphQL error: Entity not found'));
     const tools = await getTools();
