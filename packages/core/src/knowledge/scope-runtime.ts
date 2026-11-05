@@ -63,17 +63,30 @@ export class KnowledgeScopeRuntime {
     if (key === this.#resolved.stored) return this.#resolved.compiled;
     let merged = this.#config;
     let compiled = this.#configCompiled;
-    for (const [name, declaration] of Object.entries(stored)) {
-      if (Object.hasOwn(this.#config, name)) continue;
-      const next = { ...merged, [name]: declaration };
-      try {
-        compiled = compileKnowledgeScopes(structuredClone(next));
-        merged = next;
-      } catch (error) {
-        this.warn(
-          `Knowledge skipped the store's scope declaration "${name}": ${error instanceof Error ? error.message : String(error)}`,
-        );
+    // A declaration can name a type the store declares after it, so skipped ones are retried until
+    // a pass adds none.
+    let pending = Object.entries(stored).filter(([name]) => !Object.hasOwn(this.#config, name));
+    let failures = new Map<string, unknown>();
+    while (pending.length) {
+      const skipped: typeof pending = [];
+      failures = new Map();
+      for (const [name, declaration] of pending) {
+        const next = { ...merged, [name]: declaration };
+        try {
+          compiled = compileKnowledgeScopes(structuredClone(next));
+          merged = next;
+        } catch (error) {
+          skipped.push([name, declaration]);
+          failures.set(name, error);
+        }
       }
+      if (skipped.length === pending.length) break;
+      pending = skipped;
+    }
+    for (const [name, error] of failures) {
+      this.warn(
+        `Knowledge skipped the store's scope declaration "${name}": ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     this.#resolved = { stored: key, compiled };
     this.#declarationsChecked = undefined;

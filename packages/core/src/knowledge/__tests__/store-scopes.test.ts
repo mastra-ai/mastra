@@ -96,6 +96,19 @@ describe('Knowledge scope declarations a store supplies', () => {
     expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).toContain('notion:acme:conn_2');
   });
 
+  it('keeps a store declaration whose rule names a type the store declares after it', async () => {
+    const { knowledge, call } = await setup({
+      'linear:$account:$connection': {
+        access: [{ principal: 'crew:$account', role: 'viewer' }, ...everyone],
+        children: [{ name: 'archive', access: everyone }],
+      },
+      'crew:$account': {},
+    });
+    const warn = vi.spyOn((knowledge as unknown as { logger: { warn: (message: string) => void } }).logger, 'warn');
+    expect(names(await call('knowledge_search', { query: 'Roadmap' }))).toEqual(['Roadmap']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("lists no open root scope a store returns that the run can't read", async () => {
     const { storage, call } = await setup();
     const { scope: secret } = await storage.materializeScope({
