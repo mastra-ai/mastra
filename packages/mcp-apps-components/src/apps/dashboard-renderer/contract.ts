@@ -1,3 +1,4 @@
+import type { McpAppContract } from '../../define-mcp-app-ui';
 import { dashboardInputSchema } from './input';
 
 /**
@@ -23,4 +24,4 @@ export const dashboardContract = {
     getScoreTimeSeries: 'POST /observability/scores/timeseries',
     getScorePercentiles: 'POST /observability/scores/percentiles',
   },
-} as const;
+} as const satisfies McpAppContract;

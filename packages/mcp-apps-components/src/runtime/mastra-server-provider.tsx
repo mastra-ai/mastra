@@ -1,24 +1,28 @@
 import { MastraReactProvider } from '@mastra/react';
-import type { App } from '@modelcontextprotocol/ext-apps';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import type { McpAppContract } from '../define-mcp-app-ui';
+import { createMcpAppDataFetch } from './data-fetch';
 import { useMcpApp } from './mcp-app-context';
 
 /**
- * Points playground-ui's data hooks at the server behind the app's MCP server. `createFetch` sends
- * their requests over the host's MCP connection, so the iframe never connects to the server itself.
+ * Points playground-ui's data hooks at the server behind the app's MCP server. Their requests
+ * become the contract's reads, sent over the host's MCP connection, so the iframe never connects
+ * to the server itself.
  */
 export function MastraServerProvider({
-  createFetch,
+  contract,
+  projectId,
   children,
 }: {
-  createFetch: (app: App) => typeof fetch;
+  contract: Pick<McpAppContract, 'name' | 'dataTool' | 'reads'>;
+  projectId?: string;
   children: ReactNode;
 }) {
   const app = useMcpApp();
   const [queryClient] = useState(() => new QueryClient());
-  const [fetchThroughHost] = useState(() => createFetch(app));
+  const [fetchThroughHost] = useState(() => createMcpAppDataFetch(app, { ui: contract, projectId }));
 
   return (
     <QueryClientProvider client={queryClient}>

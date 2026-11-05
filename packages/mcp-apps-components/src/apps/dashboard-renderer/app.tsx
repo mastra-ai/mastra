@@ -3,13 +3,10 @@ import type { DashboardRendererProps, OnDashboardDrilldown } from '@mastra/playg
 import { MetricsProvider } from '@mastra/playground-ui/domains/metrics';
 import type { DatePreset } from '@mastra/playground-ui/domains/metrics';
 import { useRef, useState } from 'react';
-import { createMcpAppDataFetch } from '../../runtime/data-fetch';
 import { defineMcpApp } from '../../runtime/define-mcp-app';
-import { MastraServerProvider } from '../../runtime/mastra-server-provider';
 import { useMcpApp } from '../../runtime/mcp-app-context';
 import { dashboardContract } from './contract';
 import { drilldownContext, drilldownMessage, drilldownPrompt } from './drilldown';
-import { dashboardInputSchema } from './input';
 import type { DashboardInput } from './input';
 import { dashboardModelContext } from './model-context';
 import type { DrilldownModelContext } from './model-context';
@@ -62,24 +59,19 @@ function Dashboard({ input }: { input: DashboardInput }) {
   const pin = pinState ? { onPin, isPinned: pinState.isPinned } : {};
 
   return (
-    <MastraServerProvider
-      createFetch={hostApp => createMcpAppDataFetch(hostApp, { ui: dashboardContract, projectId: input.projectId })}
+    <MetricsProvider
+      preset={preset}
+      onPresetChange={setPreset}
+      filterTokens={filterTokens}
+      onFilterTokensChange={setFilterTokens}
     >
-      <MetricsProvider
-        preset={preset}
-        onPresetChange={setPreset}
-        filterTokens={filterTokens}
-        onFilterTokensChange={setFilterTokens}
-      >
-        <DashboardRenderer definition={input.definition} scope={input.scope} onDrilldown={onDrilldown} {...pin} />
-      </MetricsProvider>
-    </MastraServerProvider>
+      <DashboardRenderer definition={input.definition} scope={input.scope} onDrilldown={onDrilldown} {...pin} />
+    </MetricsProvider>
   );
 }
 
 export const app = defineMcpApp({
-  name: dashboardContract.name,
-  schema: dashboardInputSchema,
+  contract: dashboardContract,
   loadingTitle: 'Loading dashboard',
   errorTitle: "Couldn't show this dashboard",
   render: input => <Dashboard input={input} />,
