@@ -482,7 +482,7 @@ describe('MCP server routes', () => {
     });
   });
 
-  it('leaves the new connection working when a rotation cuts off a call made with the old credentials', async () => {
+  it('cuts off a call still using the old credentials when an admin rotates them, and the new connection works', async () => {
     const mcp = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();
     const server = await createServer(ctx, admin, bearerBody(mcp.url));
@@ -501,7 +501,10 @@ describe('MCP server routes', () => {
     expect((await ctx.request(admin, 'POST', `/${server.id}/discover`)).status).toBe(200);
     const turnB = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
     held.release();
-    await call;
+    // Reconnecting closed the old connection under the call; it isn't resent, since it may have run.
+    expect(await call).toMatchObject({
+      message: expect.stringContaining('failed before tool "echo" returned a result'),
+    });
 
     const result = await turnB.tools.docs_echo!.execute!({ text: 'new token' }, {} as never);
     expect(JSON.stringify(result)).toContain('new token');

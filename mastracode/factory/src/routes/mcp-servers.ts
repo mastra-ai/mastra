@@ -569,6 +569,8 @@ export class McpServerRoutes extends Route<McpServerRoutesDeps> {
             });
             if (!signedIn) return back('changed', at);
             const connected = await connect(ctx, signedIn);
+            // Signed in either way; an edit during discovery only means the tools need loading again.
+            if (connected === 'changed') return back('connect_failed', at);
             if (typeof connected === 'string') return back(connected, at);
             return back(connected.status === 'connected' ? 'connected' : 'connect_failed', at);
           } catch (error) {

@@ -344,6 +344,27 @@ describe('MCP server OAuth sign-in', () => {
     expect(await getServer(ctx, server.id)).toMatchObject({ status: 'needs_auth', oauth: { connected: false } });
   });
 
+  it('reports a sign-in that an edit raced during tool discovery as signed in, with tools to refresh', async () => {
+    const ctx = await setup();
+    const server = await addOAuthServer(ctx, ctx.mcp);
+    const callback = await authorize(await startSignIn(ctx, server.id));
+
+    // The sign-in has finished and its discovery is under way when an admin renames the server.
+    const held = ctx.mcp.holdNextRequest();
+    const finishing = deliverCallback(ctx, callback);
+    await held.arrived;
+    const rename = await ctx.request(admin, 'PATCH', `/web/config/mcp-servers/${server.id}`, { name: 'Orders v2' });
+    expect(rename.status).toBe(200);
+    held.release();
+    expect(await finishing).toBe(
+      `/factories/proj-1/settings/mcp-servers?mcpServer=${server.id}&oauth=error&reason=connect_failed`,
+    );
+
+    expect(await getServer(ctx, server.id)).toMatchObject({ name: 'Orders v2', oauth: { connected: true } });
+    const discover = await ctx.request(admin, 'POST', `/web/config/mcp-servers/${server.id}/discover`);
+    expect(((await discover.json()) as { server: McpServerInfo }).server).toMatchObject({ status: 'connected' });
+  });
+
   it('reports a denied consent and an authorization response from the wrong issuer without exchanging a code', async () => {
     const ctx = await setup();
     const server = await addOAuthServer(ctx, ctx.mcp);
