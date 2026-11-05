@@ -66,6 +66,109 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Email / Calendar',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'email-calendar/google-mail',
+          label: 'Gmail',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/gmail?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'email-calendar/google-calendar',
+          label: 'Google Calendar',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googlecalendar?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'email-calendar/outlook',
+          label: 'Microsoft Outlook',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/outlook.svg',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Documents',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'documents/google-docs',
+          label: 'Google Docs',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googledocs?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/google-sheet',
+          label: 'Google Sheets',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googlesheets?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/microsoft-excel',
+          label: 'Microsoft Excel',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/microsoft-excel.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/microsoft-powerpoint',
+          label: 'Microsoft PowerPoint',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/microsoft-word',
+          label: 'Microsoft Word',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/microsoft-word.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/notion',
+          label: 'Notion',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/notion/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/notion/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/one-drive',
+          label: 'OneDrive',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/one-drive.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'documents/sharepoint-online',
+          label: 'SharePoint Online',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/sharepoint-online.svg',
+          },
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Frameworks',
       collapsed: true,
       items: [
@@ -1103,121 +1206,9 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Productivity',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'productivity/fireflies',
-          label: 'Fireflies.ai',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/fireflies.svg',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/google-mail',
-          label: 'Gmail',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/gmail?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/google-calendar',
-          label: 'Google Calendar',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/googlecalendar?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/google-docs',
-          label: 'Google Docs',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/googledocs?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/google-sheet',
-          label: 'Google Sheets',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/googlesheets?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/microsoft-excel',
-          label: 'Microsoft Excel',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/microsoft-excel.svg',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/outlook',
-          label: 'Microsoft Outlook',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/outlook.svg',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/microsoft-powerpoint',
-          label: 'Microsoft PowerPoint',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/microsoft-word',
-          label: 'Microsoft Word',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/microsoft-word.svg',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/notion',
-          label: 'Notion',
-          customProps: {
-            icon: 'https://cdn.simpleicons.org/notion/black?viewbox=auto&size=28',
-            iconDark: 'https://cdn.simpleicons.org/notion/white?viewbox=auto&size=28',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/one-drive',
-          label: 'OneDrive',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/one-drive.svg',
-          },
-        },
-        {
-          type: 'doc',
-          id: 'productivity/sharepoint-online',
-          label: 'SharePoint Online',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/sharepoint-online.svg',
-          },
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Project management',
       collapsed: true,
       items: [
-        {
-          type: 'doc',
-          id: 'project-management/incident-io',
-          label: 'incident.io',
-          customProps: {
-            icon: 'https://app.nango.dev/images/template-logos/incident-io.svg',
-          },
-        },
         {
           type: 'doc',
           id: 'project-management/jira',
@@ -1278,6 +1269,22 @@ const sidebars = {
           label: 'Canva',
           customProps: {
             icon: 'https://svgl.app/library/canva.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/fireflies',
+          label: 'Fireflies.ai',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/fireflies.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/incident-io',
+          label: 'incident.io',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/incident-io.svg',
           },
         },
         {

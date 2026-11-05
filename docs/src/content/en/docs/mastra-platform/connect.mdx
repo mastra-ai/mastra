@@ -174,8 +174,9 @@ A raw credential is different. `credential()` returns the secret to your applica
 Each integration page shows the provider ID, what the provider offers, and its setup steps. Some pages also cover setup without Connect.
 
 <IntegrationGrid
-  section="Productivity"
+  section="Email / Calendar"
   additionalItems={[
+  ...getIntegrationItems('Documents'),
   ...getIntegrationItems('Project management'),
   ...getIntegrationItems('CRM'),
   ...getIntegrationItems('Other providers'),
