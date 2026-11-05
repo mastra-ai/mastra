@@ -2,7 +2,21 @@
 '@mastra/ai-sdk': minor
 ---
 
-Added reconnectable AI SDK chat routes. Enable `chatRoute({ reconnect: true })` to register a companion `GET <path>/runs/:runId` endpoint that replays and follows a client-owned run through `agent.observe(runId)`.
+Added reconnectable AI SDK chat routes.
+
+Before:
+
+```ts
+chatRoute({ path: '/chat/:agentId' });
+```
+
+After:
+
+```ts
+chatRoute({ path: '/chat/:agentId', reconnect: true });
+```
+
+Enabling reconnect registers a companion `GET <path>/runs/:runId` endpoint that replays and follows a client-owned run through `agent.observe(runId)`.
 
 Generate a fresh `runId` for each POST and retain it for reconnects. When using AI SDK's `DefaultChatTransport`, configure `prepareReconnectToStreamRequest` to point to `<path>/runs/<runId>`; its default `<api>/<chatId>/stream` URL does not match this run-based endpoint.
 
