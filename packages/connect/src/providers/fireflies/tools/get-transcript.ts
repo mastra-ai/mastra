@@ -46,11 +46,16 @@ const SummarySchema = z.object({
 
 const ProviderSummarySchema = SummarySchema.extend({
   action_items: z.union([z.string(), z.array(z.string())]).nullish(),
+  keywords: z.union([z.string(), z.array(z.string())]).nullish(),
 });
 
 const SpeakerSchema = z.object({
   id: z.string().nullish(),
   name: z.string().nullish(),
+});
+
+const ProviderSpeakerSchema = SpeakerSchema.extend({
+  id: z.union([z.string(), z.number()]).nullish(),
 });
 
 const MeetingInfoSchema = z.object({
@@ -104,7 +109,7 @@ const TranscriptSchema = z.object({
   title: z.string().nullish(),
   sentences: z.array(ProviderSentenceSchema).nullish(),
   summary: ProviderSummarySchema.nullable().optional(),
-  speakers: z.array(SpeakerSchema).nullish(),
+  speakers: z.array(ProviderSpeakerSchema).nullish(),
   meeting_info: MeetingInfoSchema.nullable().optional(),
   meeting_attendees: z.array(MeetingAttendeeSchema).nullish(),
   analytics: AnalyticsSchema.nullable().optional(),
@@ -140,6 +145,14 @@ export const getTranscriptOutputSchema = z.object({
 
 function normalizeActionItems(actionItems: string | string[]): string {
   return Array.isArray(actionItems) ? actionItems.join('\n') : actionItems;
+}
+
+function normalizeKeywords(keywords: string | string[]): string {
+  return Array.isArray(keywords) ? keywords.join(', ') : keywords;
+}
+
+function normalizeSpeaker(speaker: z.infer<typeof ProviderSpeakerSchema>): z.infer<typeof SpeakerSchema> {
+  return { ...speaker, id: speaker.id != null ? String(speaker.id) : speaker.id };
 }
 
 function toFiniteNumber(value: string | number | null | undefined): number | undefined {
@@ -285,9 +298,13 @@ export function getTranscriptTool(proxy: PlatformProxy) {
                 transcript.summary.action_items != null
                   ? normalizeActionItems(transcript.summary.action_items)
                   : transcript.summary.action_items,
+              keywords:
+                transcript.summary.keywords != null
+                  ? normalizeKeywords(transcript.summary.keywords)
+                  : transcript.summary.keywords,
             }
           : undefined,
-        speakers: transcript.speakers ?? undefined,
+        speakers: transcript.speakers ? transcript.speakers.map(normalizeSpeaker) : undefined,
         meeting_info: transcript.meeting_info ?? undefined,
         meeting_attendees: transcript.meeting_attendees ?? undefined,
         analytics: transcript.analytics ?? undefined,
