@@ -5,11 +5,12 @@ import type { CreateSpanRecord, ObservabilityStorageStrategy, UpdateSpanRecord }
 /** Mixin interface that tracks how many times a buffered event has been retried. */
 export interface RetryCount {
   retryCount: number;
-  /** Epoch milliseconds before which a failed attempt doesn't count as a retry */
-  nextRetryAt?: number;
 }
 
-/** How many ended spans a buffer remembers, so a long-lived worker doesn't grow the set forever */
+/**
+ * How many ended spans a buffer remembers, so a long-lived worker doesn't grow the set forever.
+ * A second end of a forgotten span looks like a span that isn't stored yet, so it's retried before it's dropped.
+ */
 const MAX_ENDED_SPANS = 10_000;
 
 /** A partial span update record keyed by trace and span ID. */
@@ -31,6 +32,8 @@ export class EventBuffer {
   #preInit: BufferedEvent[] = [];
   #creates: BufferedEvent[] = [];
   #updates: BufferedEvent[] = [];
+  /** Span ends storage didn't apply, each held until its retry time. Outside `totalSize`, so they can't trigger a flush. */
+  #heldRetries: { event: BufferedEvent; retryAt: number }[] = [];
   #allCreatedSpans: Set<string> = new Set();
   /** Spans whose SPAN_STARTED this buffer has seen but whose create isn't confirmed yet */
   #pendingCreateSpans: Set<string> = new Set();
@@ -156,21 +159,13 @@ export class EventBuffer {
     return dropped;
   }
 
-  /**
-   * Re-add failed update events to the buffer, returning events that exceed max retries.
-   * With `retryDelay`, an attempt made before the delay has passed doesn't count, so
-   * flushes triggered by other events can't use up the retries early.
-   */
-  reAddUpdates(events: BufferedEvent[], retryDelay?: (retryCount: number) => number): BufferedEvent[] {
-    const now = Date.now();
+  /** Re-add failed update events to the buffer, returning events that exceed max retries. */
+  reAddUpdates(events: BufferedEvent[]): BufferedEvent[] {
     const retryable: BufferedEvent[] = [];
     const dropped: BufferedEvent[] = [];
 
     for (const e of events) {
-      if (e.nextRetryAt !== undefined && e.nextRetryAt > now) {
-        retryable.push(e);
-      } else if (++e.retryCount <= this.#maxRetries) {
-        if (retryDelay) e.nextRetryAt = now + retryDelay(e.retryCount);
+      if (++e.retryCount <= this.#maxRetries) {
         retryable.push(e);
       } else {
         dropped.push(e);
@@ -183,6 +178,47 @@ export class EventBuffer {
     }
 
     return dropped;
+  }
+
+  /** Hold span ends storage didn't apply until their retry time, returning events that exceed max retries. */
+  holdForRetry(events: BufferedEvent[], retryDelay: (retryCount: number) => number): BufferedEvent[] {
+    const now = Date.now();
+    const dropped: BufferedEvent[] = [];
+
+    for (const event of events) {
+      if (++event.retryCount <= this.#maxRetries) {
+        this.#heldRetries.push({ event, retryAt: now + retryDelay(event.retryCount) });
+      } else {
+        dropped.push(event);
+      }
+    }
+
+    return dropped;
+  }
+
+  /** Move held ends whose retry time is at or before `until` into the update buffer. */
+  releaseHeldRetries(until = Date.now()): void {
+    const due = this.#heldRetries.filter(held => held.retryAt <= until);
+    if (due.length === 0) return;
+
+    this.#heldRetries = this.#heldRetries.filter(held => held.retryAt > until);
+    this.setFirstEventTime();
+    this.#updates.push(...due.map(held => held.event));
+  }
+
+  /** Remove and return every held end. */
+  takeHeldRetries(): BufferedEvent[] {
+    const events = this.#heldRetries.map(held => held.event);
+    this.#heldRetries = [];
+    return events;
+  }
+
+  /** Epoch milliseconds of the earliest held retry. */
+  get nextRetryAt(): number | undefined {
+    return this.#heldRetries.reduce<number | undefined>(
+      (earliest, { retryAt }) => (earliest === undefined ? retryAt : Math.min(earliest, retryAt)),
+      undefined,
+    );
   }
 
   /** Snapshot of buffered create events. */
