@@ -1,0 +1,28 @@
+{
+  "url": "https://api.openai.com/v1/responses",
+  "body": {
+    "model": "gpt-5-mini",
+    "input": [
+      {
+        "role": "developer",
+        "content": "Keep this instruction (meaning Oct 26, 2026 - today)."
+      },
+      {
+        "role": "developer",
+        "content": "<observations>"
+      },
+      {
+        "role": "developer",
+        "content": "Date: Oct 26, 2026\n* User asked about Lisbon weather (meaning Oct 26, 2026 - today)"
+      },
+      {
+        "role": "developer",
+        "content": "<current-task>\nKeep this task (meaning Oct 26, 2026 - today).\n</current-task>"
+      },
+      {
+        "role": "user",
+        "content": "Please keep my note (meaning Oct 26, 2026 - today) unchanged."
+      }
+    ]
+  }
+}

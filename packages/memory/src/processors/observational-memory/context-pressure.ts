@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
 import type { TokenCounter } from './token-counter';
 
 export type ContextRequest = {
@@ -7,8 +8,7 @@ export type ContextRequest = {
   model: string;
   parts: string[];
   system: string;
-  /** Our estimate of the message tokens in this request (system messages and tool definitions excluded). */
-  messageEstimate: number;
+  fixedTokens: number;
 };
 
 export type ContextUsageAnchor = {
@@ -16,12 +16,6 @@ export type ContextUsageAnchor = {
   inputTokens: number;
   outputTokens: number;
   outputEstimate: number;
-  /**
-   * Provider-measured tokens charged to everything except messages: system prompt, observations, tool
-   * definitions and provider-added prompt text. Tracked as the smallest input-minus-message-estimate seen
-   * in the run, so hidden growth (e.g. encrypted reasoning) is not mistaken for fixed overhead.
-   */
-  overheadTokens: number;
 };
 
 function hash(value: unknown): string {
@@ -42,23 +36,58 @@ function parts(messages: MastraDBMessage[]): string[] {
   );
 }
 
+/**
+ * Estimate what the tool definitions add to a request. They are sent on every call and are
+ * not message content, so they must not count against the message budget.
+ */
+export function countToolDefinitionTokens(
+  tools: Record<string, unknown> | undefined,
+  activeTools: string[] | undefined,
+  counter: TokenCounter,
+): number {
+  if (!tools) return 0;
+  try {
+    const definitions = Object.entries(tools)
+      .filter(([name]) => !activeTools || activeTools.includes(name))
+      .map(([name, tool]) => {
+        const { description, inputSchema, parameters } = (tool ?? {}) as Record<string, unknown>;
+        const schema = inputSchema ?? parameters;
+        const jsonSchema = isStandardSchemaWithJSON(schema)
+          ? standardSchemaToJSONSchema(schema, { io: 'input' })
+          : ((schema as { jsonSchema?: unknown } | undefined)?.jsonSchema ?? schema);
+        return { name, description, parameters: jsonSchema };
+      });
+    return counter.countString(JSON.stringify(definitions));
+  } catch {
+    // Pressure is a safeguard; an unserializable tool must not stop the run.
+    return 0;
+  }
+}
+
 export function snapshotContextRequest(
   messageList: MessageList,
   step: number,
   model: string,
   counter: TokenCounter,
+  toolTokens = 0,
 ): ContextRequest {
-  // Tagged system messages hold OM's own observations; they are prompt overhead, not message pressure.
+  // Tagged system messages (e.g. the observations block) are part of the prompt the provider
+  // counts, so they belong to the overhead as well as to the invalidation hash.
   const system = messageList.getAllSystemMessages();
   return {
     step,
     model,
     parts: parts(messageList.get.all.db()),
     system: hash(system),
-    messageEstimate: counter.countMessages(messageList.get.all.db()),
+    // Keep full-prompt pressure separate from the unobserved-message budget.
+    fixedTokens: counter.countString(JSON.stringify(system)) + toolTokens,
   };
 }
 
+/**
+ * Message-only pressure: the provider-reported size of the anchored request and its output,
+ * minus the system and tool overhead measured with that request, plus what was added since.
+ */
 export function contextPressure(
   anchor: ContextUsageAnchor | undefined,
   current: ContextRequest,
@@ -74,33 +103,11 @@ export function contextPressure(
     return undefined;
   // Output usage already includes reasoning; cached input is already in inputTokens.
   // Only additions after output-step (tool results, new signals) are estimated.
-  // Subtract the measured non-message overhead (system, observations, tool definitions); it is not
-  // unobserved-message pressure.
-  return (
+  return Math.max(
+    0,
     anchor.inputTokens -
-    anchor.overheadTokens +
-    anchor.outputTokens +
-    Math.max(0, currentEstimate - anchor.outputEstimate)
+      anchor.request.fixedTokens +
+      anchor.outputTokens +
+      Math.max(0, currentEstimate - anchor.outputEstimate),
   );
-}
-
-export type OverheadBasis = { system: string; model: string; tokens: number };
-
-/**
- * Track the provider-charged non-message overhead as the smallest input-minus-message-estimate seen
- * while the system prompt and model are unchanged. A new system prompt (e.g. after an observation
- * rollover) or model starts over from this request, so a stale low floor cannot understate pressure.
- */
-export function nextOverhead(
-  previous: OverheadBasis | undefined,
-  request: ContextRequest,
-  inputTokens: number,
-): OverheadBasis {
-  const residual = Math.max(0, inputTokens - request.messageEstimate);
-  const sameBasis = previous?.system === request.system && previous.model === request.model;
-  return {
-    system: request.system,
-    model: request.model,
-    tokens: sameBasis ? Math.min(previous.tokens, residual) : residual,
-  };
 }

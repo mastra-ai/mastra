@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, expect, it } from 'vitest';
-import { contextPressure, nextOverhead, snapshotContextRequest } from '../context-pressure';
+import { contextPressure, snapshotContextRequest } from '../context-pressure';
 import { TokenCounter } from '../token-counter';
 
 const counter = new TokenCounter();
@@ -16,72 +16,51 @@ const message: MastraDBMessage = {
   createdAt: new Date(0),
   content: { format: 2, parts: [{ type: 'text', text: 'Read the file.' }] },
 };
-const anchor = {
-  request: snapshot([message]),
-  inputTokens: 10_000,
-  outputTokens: 2_000,
-  outputEstimate: 100,
-  overheadTokens: 0,
-};
-
-describe('measured overhead', () => {
-  const request = (system: string, model = 'provider/model', messageEstimate = 100) => ({
-    ...snapshot([message], 0, model),
-    system,
-    messageEstimate,
-  });
-
-  it('keeps the smallest residual while the system prompt and model are unchanged', () => {
-    const first = nextOverhead(undefined, request('a'), 600); // residual 500
-    expect(first.tokens).toBe(500);
-    // Hidden growth (e.g. encrypted reasoning) raises the residual; the floor must not follow it.
-    expect(nextOverhead(first, request('a'), 900).tokens).toBe(500);
-    expect(nextOverhead(first, request('a'), 450).tokens).toBe(350);
-  });
-
-  it('starts over when the system prompt or model changes', () => {
-    const first = nextOverhead(undefined, request('a'), 200); // residual 100
-    expect(nextOverhead(first, request('b'), 3_100).tokens).toBe(3_000);
-    expect(nextOverhead(first, request('a', 'provider/other'), 3_100).tokens).toBe(3_000);
-  });
-});
+const anchor = { request: snapshot([message]), inputTokens: 10_000, outputTokens: 2_000, outputEstimate: 100 };
 
 describe('context usage anchors', () => {
-  it('does not count tagged system messages (OM observations) as message pressure', () => {
-    const observations = 'Observed: '.concat('the user prefers short answers. '.repeat(400));
-    const withObservations = (step: number) => {
-      const list = new MessageList();
-      list.add([message], 'memory');
-      list.addSystem({ role: 'system', content: observations }, 'observational-memory');
-      return snapshotContextRequest(list, step, 'provider/model', counter);
-    };
-    const request = withObservations(0);
-    // The provider charged 3,000 tokens for observations, tools and prompt text, plus the message.
-    const overheadTokens = 3_000;
-    const pressure = contextPressure(
-      {
-        request,
-        inputTokens: overheadTokens + request.messageEstimate,
-        outputTokens: 50,
-        outputEstimate: 100,
-        overheadTokens,
-      },
-      withObservations(1),
-      100,
-    );
-    expect(pressure).toBe(request.messageEstimate + 50);
-    // Observations are tagged system content: the old untagged-only snapshot hashed none of them.
-    expect(request.system).not.toBe(snapshot([message]).system);
-  });
-
   it('uses input and output once, estimating only additions after output-step', () => {
     const current = snapshot(
       [message, { ...message, id: 'new', content: { format: 2, parts: [{ type: 'text', text: 'new result' }] } }],
       1,
     );
-    expect(contextPressure(anchor, current, 150)).toBe(12_050);
-    expect(contextPressure(anchor, current, 80)).toBe(12_000);
+    const overhead = anchor.request.fixedTokens;
+    expect(contextPressure(anchor, current, 150)).toBe(12_050 - overhead);
+    expect(contextPressure(anchor, current, 80)).toBe(12_000 - overhead);
     expect(contextPressure(undefined, current, 150)).toBeUndefined();
+  });
+
+  it('excludes the anchored request overhead: every system message and the tool definitions', () => {
+    const observations = '<observations>' + 'Read the file and continue the task. '.repeat(200) + '</observations>';
+    const listWith = (messages: MastraDBMessage[]) => {
+      const list = new MessageList();
+      list.addSystem('You read files.');
+      list.addSystem(observations, 'observational-memory');
+      list.add(messages, 'memory');
+      return list;
+    };
+    const next: MastraDBMessage = {
+      ...message,
+      id: 'new',
+      content: { format: 2, parts: [{ type: 'text', text: 'new' }] },
+    };
+    const withOverhead = {
+      request: snapshotContextRequest(listWith([message]), 0, 'provider/model', counter, 500),
+      inputTokens: 10_000,
+      outputTokens: 2_000,
+      outputEstimate: 100,
+    };
+    const overhead = withOverhead.request.fixedTokens;
+    expect(overhead, 'the tagged observations block and the 500 tool tokens are both counted').toBeGreaterThan(
+      500 + counter.countString(observations) - 1,
+    );
+    const current = snapshotContextRequest(listWith([message, next]), 1, 'provider/model', counter);
+    expect(contextPressure(withOverhead, current, 150)).toBe(12_050 - overhead);
+    // A tagged system message that changed since the request is a different prompt: no anchor.
+    const rewritten = listWith([message, next]).clearSystemMessages('observational-memory');
+    rewritten.addSystem('<observations>shorter</observations>', 'observational-memory');
+    const stale = snapshotContextRequest(rewritten, 1, 'provider/model', counter);
+    expect(contextPressure(withOverhead, stale, 150)).toBeUndefined();
   });
 
   it('invalidates after removal, content edits, model changes, system changes or nonconsecutive steps', () => {

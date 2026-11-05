@@ -3313,6 +3313,11 @@ ${formattedMessages}
     messages?: MastraDBMessage[];
     /** Pre-loaded record to skip the initial storage read. */
     record?: ObservationalMemoryRecord;
+    /**
+     * Provider-measured message pressure. Pending tokens are never below it, so the threshold,
+     * the threshold→blockAfter band and the buffer trigger all follow the measurement.
+     */
+    measuredPendingTokens?: number;
   }): Promise<{
     record: ObservationalMemoryRecord;
     pendingTokens: number;
@@ -3337,7 +3342,7 @@ ${formattedMessages}
     inAsyncObservationBand: boolean;
     scope: 'resource' | 'thread';
   }> {
-    const { threadId, resourceId, record: providedRecord, messages } = opts;
+    const { threadId, resourceId, record: providedRecord, messages, measuredPendingTokens } = opts;
     const record = providedRecord ?? (await this.getOrCreateRecord(threadId, resourceId));
     const currentObservationTokens = record.observationTokenCount ?? 0;
 
@@ -3361,7 +3366,7 @@ ${formattedMessages}
       const otherContext = await this.getOtherThreadsContext(resourceId, threadId);
       otherThreadTokens = otherContext ? this.tokenCounter.countString(otherContext) : 0;
     }
-    const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
+    const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens, measuredPendingTokens ?? 0);
 
     // Calculate observation threshold (use per-record override if set)
     const threshold = calculateDynamicThreshold(this.getEffectiveMessageTokens(record), currentObservationTokens);

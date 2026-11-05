@@ -163,6 +163,7 @@ export class ObservationStep {
       resourceId,
       record: this.turn.record,
       messages: getObservableMessages(messageList),
+      measuredPendingTokens: contextPressure,
     });
 
     if (statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate && !hasIncompleteToolCalls) {
@@ -175,6 +176,7 @@ export class ObservationStep {
         resourceId,
         record: this.turn.record,
         messages: getObservableMessages(messageList),
+        measuredPendingTokens: contextPressure,
       });
     }
 
@@ -271,18 +273,15 @@ export class ObservationStep {
     // In the threshold→blockAfter band nothing may block: run the threshold pipeline only to
     // activate an already-buffered chunk (activate() doesn't wait on an in-flight buffer op in
     // the band). Without a ready chunk, defer to a later step.
-    // Measured pressure follows the same bands as the estimate: with async observation on, it forces
-    // a blocking observation only at blockAfter; between the threshold and blockAfter nothing blocks.
-    const measuredAtThreshold = contextPressure !== undefined && contextPressure >= statusSnapshot.threshold;
-    const measuredBlocks =
-      measuredAtThreshold &&
-      (statusSnapshot.observationBlockAfter === undefined || contextPressure! >= statusSnapshot.observationBlockAfter);
-    const measuredInBand = measuredAtThreshold && !measuredBlocks;
-    const measuredPressure = measuredBlocks;
-    const bandDefersObservation =
-      !measuredPressure && (statusSnapshot.inAsyncObservationBand || measuredInBand) && !statusSnapshot.canActivate;
-    const willObserveNow =
-      (statusSnapshot.shouldObserve || measuredPressure) && !hasIncompleteToolCalls && !bandDefersObservation;
+    // The status already follows the measurement: measured pressure inside the band stays in the
+    // band. Only pressure that reaches blockAfter (or any pressure without async buffering) forces
+    // the observation, because the re-check inside runThresholdObservation uses the estimate.
+    const measuredPressure =
+      contextPressure !== undefined &&
+      contextPressure >= statusSnapshot.threshold &&
+      !statusSnapshot.inAsyncObservationBand;
+    const bandDefersObservation = statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
+    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
     /**
      * In-flight message ids cleanup must never remove from live context: the turn's own
      * request, plus whatever the model has not read yet (the pending messages at step 0, the
@@ -375,8 +374,9 @@ export class ObservationStep {
       if (willObserveNow) {
         const preObsGeneration = this.turn.record.generationCount;
         const obsResult = await this.runThresholdObservation(
-          statusSnapshot.inAsyncObservationBand && !measuredPressure,
+          statusSnapshot.inAsyncObservationBand,
           measuredPressure,
+          contextPressure,
         );
         observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
@@ -506,6 +506,7 @@ export class ObservationStep {
   private async runThresholdObservation(
     inAsyncObservationBand?: boolean,
     force = false,
+    measuredPendingTokens?: number,
   ): Promise<{
     succeeded: boolean;
     record: any;
@@ -535,12 +536,14 @@ export class ObservationStep {
       ? getObservableMessages(messageList).filter(msg => msg.id !== this.turn.responseMessageId)
       : getObservableMessages(messageList);
 
-    // Re-check status with fresh state
+    // Re-check status with fresh state. Only this first check carries the measurement: it
+    // described the prompt before any activation below.
     let status = await om.getStatus({
       threadId,
       resourceId,
       record: this.turn.record,
       messages: observableMessages,
+      measuredPendingTokens,
     });
 
     if (!status.shouldObserve && !force) {
