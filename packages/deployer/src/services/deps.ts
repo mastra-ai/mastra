@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@internal/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
 import type { BundlerConfig } from '@internal/deployer';
+import { findWorkspaces } from '@internal/find-workspaces';
 import { parsePkgAndParentSelector } from '@pnpm/config.parse-overrides';
 import type { PackageSelector } from '@pnpm/config.parse-overrides';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
@@ -1136,11 +1137,12 @@ export class Deps extends MastraBase {
       return;
     }
 
+    const sourceRoot = path.dirname(this.lockFile.path);
     let rootManifest: unknown;
     let outputManifest: unknown;
     const outputManifestPath = path.join(dir, 'package.json');
     try {
-      rootManifest = await readJSON(path.join(path.dirname(this.lockFile.path), 'package.json'));
+      rootManifest = await readJSON(path.join(sourceRoot, 'package.json'));
       outputManifest = await readJSON(outputManifestPath);
     } catch {
       return;
@@ -1167,12 +1169,19 @@ export class Deps extends MastraBase {
         rootManifest,
         warn,
       );
+    // Bun matches a `name@range` key nested under a workspace package against the version in that package's
+    // manifest, and matches none when the manifest has no version.
+    const workspaces = packed.size > 0 ? await findWorkspaces(sourceRoot) : null;
+    const workspaceVersions = new Map(workspaces?.map(({ package: pkg }) => [pkg.name, pkg.version]));
     const carried: Record<string, BunOverride> = {};
-    // Bun applies a `name@range` key over the bare `name` key, so bare keys are merged first.
-    const entries = Object.entries(source.entries).sort(
-      ([a], [b]) =>
-        Number(parseBunOverrideKey(a).range !== undefined) - Number(parseBunOverrideKey(b).range !== undefined),
-    );
+    // Bun applies a `name@range` key over the bare `name` key. When several `name@range` keys match, each
+    // nested entry comes from the key that sorts first, whatever the manifest order (Bun 1.4.4). Merging bare
+    // keys first, then `name@range` keys in reverse sort order, lets the key Bun picked be merged last.
+    const entries = Object.entries(source.entries).sort(([a], [b]) => {
+      const qualified =
+        Number(parseBunOverrideKey(a).range !== undefined) - Number(parseBunOverrideKey(b).range !== undefined);
+      return qualified || (a < b ? 1 : a > b ? -1 : 0);
+    });
     const skip = (selector: string, reason: string) =>
       this.logger.debug(`Not copying Bun override "${selector}" into the build output: ${reason}.`);
     for (const [selector, spec] of entries) {
@@ -1195,13 +1204,11 @@ export class Deps extends MastraBase {
         const value = toPortableBunOverride(selector, name, spec, rootManifest, warn);
         if (value !== undefined) mergeBunOverride(carried, selector, value);
       } else if (source.field === 'overrides' && isRecord(spec)) {
-        // Packed tarballs are named `<name>-<version>.tgz` (`getWorkspaceDependencyPath`).
-        const version = /-(\d+\.\d+\.\d+[^/]*)\.tgz$/.exec(tarball)?.[1];
-        if (bunOverrideKeyMatches(range, version)) {
+        if (bunOverrideKeyMatches(range, workspaceVersions.get(name))) {
           const nested = nestedOnly(selector, name, spec);
           if (typeof nested === 'object') mergeBunOverride(carried, name, { ...nested, '.': tarball });
         } else {
-          skip(selector, `the packed version doesn't satisfy "${range}"`);
+          skip(selector, `the workspace package's version doesn't satisfy "${range}"`);
         }
       } else {
         skip(selector, 'the packed workspace tarball replaces this package');

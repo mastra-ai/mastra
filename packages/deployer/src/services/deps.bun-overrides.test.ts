@@ -59,11 +59,14 @@ async function createWorkspace({
   rootManifest,
   outputManifest,
   appManifest = { name: 'api', version: '1.0.0' },
+  workspacePackage = { name: 'foo', version: '1.0.0' },
 }: {
   lockfile: string;
   rootManifest: Record<string, unknown>;
   outputManifest: Record<string, unknown>;
   appManifest?: Record<string, unknown>;
+  /** The manifest of the workspace package the app depends on, which `mastra build` packs. */
+  workspacePackage?: Record<string, unknown>;
 }) {
   const root = await mkdtemp(join(tmpdir(), 'mastra-deps-bun-overrides-'));
   tempDirs.push(root);
@@ -76,6 +79,9 @@ async function createWorkspace({
   );
   await writeFile(join(root, lockfile), lockfile === 'pnpm-lock.yaml' ? "lockfileVersion: '9.0'\n" : '{}');
   await writeFile(join(appDir, 'package.json'), JSON.stringify(appManifest));
+  const workspacePackageDir = join(root, 'packages', 'foo');
+  await mkdir(workspacePackageDir, { recursive: true });
+  await writeFile(join(workspacePackageDir, 'package.json'), JSON.stringify(workspacePackage));
   const outputManifestSource = JSON.stringify(outputManifest, null, 2);
   await writeFile(join(outputDir, 'package.json'), outputManifestSource);
   currentOutputDir = outputDir;
@@ -84,10 +90,17 @@ async function createWorkspace({
 
 async function installBun(
   rootManifest: Record<string, unknown>,
-  outputManifest = packedOutputManifest,
+  outputManifest: Record<string, unknown> = packedOutputManifest,
   appManifest?: Record<string, unknown>,
+  workspacePackage?: Record<string, unknown>,
 ) {
-  const workspace = await createWorkspace({ lockfile: 'bun.lock', rootManifest, outputManifest, appManifest });
+  const workspace = await createWorkspace({
+    lockfile: 'bun.lock',
+    rootManifest,
+    outputManifest,
+    appManifest,
+    workspacePackage,
+  });
   const warn = vi.spyOn(noopLogger, 'warn');
   const deps = new DepsService(workspace.appDir);
   deps.__setLogger(noopLogger);
@@ -222,15 +235,74 @@ describe('Bun output install keeps the project overrides (#29311)', () => {
     );
   });
 
-  it('drops a version-qualified packed override when the tarball version is unknown', async () => {
+  // Checked with Bun 1.4.4: when several `name@range` keys match the same package, Bun applies each nested entry
+  // from the key that sorts first by its characters, whatever their order in the manifest and however narrow
+  // the range. So `foo@1.0.0` beats `foo@^1.0.0`, `foo@*` beats `foo@^1.0.0`, and `foo@^1.0.0` beats `foo@~1.0.0`.
+  it.each([
+    ['foo@1.0.0', 'foo@^1.0.0'],
+    ['foo@*', 'foo@^1.0.0'],
+    ['foo@^1.0.0', 'foo@~1.0.0'],
+    ['foo@>=1.0.0', 'foo@^1.0.0'],
+  ])('lets %s win over %s for a packed package in either order, as Bun does', async (winner, loser) => {
+    for (const overrides of [
+      { [winner]: { uuid: '^11.1.1' }, [loser]: { uuid: '^8.3.2', exceljs: '4.3.0' } },
+      { [loser]: { uuid: '^8.3.2', exceljs: '4.3.0' }, [winner]: { uuid: '^11.1.1' } },
+    ]) {
+      runChildProcess.mockClear();
+      await installBun({ overrides });
+      // Entries only one key sets still apply.
+      expect(installedManifest).toMatchObject({
+        overrides: { foo: { uuid: '^11.1.1', exceljs: '4.3.0', '.': PACKED_FOO } },
+      });
+    }
+  });
+
+  it('lets the app override from the first sorting key win in either order, as Bun does', async () => {
+    const winner = { 'api@1.0.0': { uuid: '^11.1.1' } };
+    const loser = { 'api@^1.0.0': { uuid: '^8.3.2' } };
+    for (const overrides of [
+      { ...winner, ...loser },
+      { ...loser, ...winner },
+    ]) {
+      runChildProcess.mockClear();
+      await installBun({ overrides });
+      expect(installedManifest).toMatchObject({ overrides: { server: { uuid: '^11.1.1' } } });
+    }
+  });
+
+  it('drops version-qualified overrides for a packed package that declares no version, as Bun does', async () => {
+    // The tarball gets a placeholder version, but Bun matched no `foo@range` key against the versionless
+    // workspace package, not even `foo@*`.
+    const placeholder = 'file:./workspace-module/foo-0.0.0.tgz';
     await installBun(
-      { overrides: { 'foo@^1.0.0': { uuid: '^11.1.1' }, exceljs: '4.4.0' } },
-      { ...packedOutputManifest, resolutions: { foo: 'file:./workspace-module/foo.tgz' } },
+      { overrides: { 'foo@*': { uuid: '^11.1.1' }, 'foo@0.0.0': { uuid: '^11.1.1' }, exceljs: '4.4.0' } },
+      { ...packedOutputManifest, dependencies: { foo: placeholder }, resolutions: { foo: placeholder } },
+      undefined,
+      { name: 'foo' },
+    );
+
+    expect(installedManifest).toEqual(expect.objectContaining({ overrides: { foo: placeholder, exceljs: '4.4.0' } }));
+  });
+
+  it('matches version-qualified overrides against the version of a packed package whose name ends in a version', async () => {
+    const tarball = 'file:./workspace-module/foo-1.2.3-2.0.0.tgz';
+    await installBun(
+      { overrides: { 'foo-1.2.3@^2.0.0': { uuid: '^11.1.1' } } },
+      { ...packedOutputManifest, dependencies: { 'foo-1.2.3': tarball }, resolutions: { 'foo-1.2.3': tarball } },
+      undefined,
+      { name: 'foo-1.2.3', version: '2.0.0' },
     );
 
     expect(installedManifest).toEqual(
-      expect.objectContaining({ overrides: { foo: 'file:./workspace-module/foo.tgz', exceljs: '4.4.0' } }),
+      expect.objectContaining({ overrides: { 'foo-1.2.3': { uuid: '^11.1.1', '.': tarball } } }),
     );
+  });
+
+  it('does not replace a packed package with a version-qualified plain override, as Bun does', async () => {
+    // Bun applies `foo@^1.0.0: "2.0.0"` only to registry versions of `foo`, never to the workspace package.
+    await installBun({ overrides: { 'foo@^1.0.0': '2.0.0', uuid: '^11.1.1' } });
+
+    expect(installedManifest).toEqual(expect.objectContaining({ overrides: { uuid: '^11.1.1', foo: PACKED_FOO } }));
   });
 
   it("never rewrites the project's own manifest when installing in the project directory", async () => {
