@@ -65,7 +65,10 @@ type ComboboxSharedProps = {
   /** A fixed popup width for long options (e.g. model ids). Without it the popup takes the trigger's width, at least 11rem. */
   popupWidth?: ComboboxPopupWidth;
   showChevron?: boolean;
-  /** The trigger's chevron: `down` (default), or `up-down` for a switcher between peers. */
+  /**
+   * The compact trigger's chevron: `down` (default), or `up-down` for a switcher between peers. A
+   * field (inside a `Field`) always ends with its round down chevron.
+   */
   chevron?: TriggerChevronShape;
   iconOnlyValue?: boolean;
   allowCustomValue?: boolean;

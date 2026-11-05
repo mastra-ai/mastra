@@ -15,13 +15,11 @@ export interface BreadcrumbProps {
   listClassName?: string;
 }
 
-/**
- * To truncate a long trail, pass `overflow-clip` (not `overflow-hidden`): the nav keeps a 4px clip
- * margin so the crumbs' focus rings aren't cut off at the top and bottom.
- */
 export const Breadcrumb = ({ children, label, className, listClassName }: BreadcrumbProps) => {
   return (
-    <nav aria-label={label} className={cn('[overflow-clip-margin:4px]', className)}>
+    // 4px of padding (cancelled by a negative margin) keeps the crumbs' focus rings inside the
+    // nav, so a caller's `overflow-hidden` doesn't cut them off at the edges.
+    <nav aria-label={label} className={cn('-m-1 p-1', className)}>
       <ol className={cn('flex items-center', listClassName)}>{children}</ol>
     </nav>
   );
