@@ -21,6 +21,7 @@ describe('matchesUriTemplate', () => {
     ['users://{id}{/sub}', 'users://1/', true],
     ['repo://{owner}{/path*}', 'repo://me/src/index.ts', true],
     ['file://data{?tags*}', 'file://data?tags=a&tags=b', true],
+    ['file://data{;tags*}', 'file://data;tags=a;tags=b', true],
     ['file://data/{id}{?format}', 'file://data/123?format=', true],
     ['file://data/{id}{?format,lang}', 'file://data/123', true],
     ['file://data/{id}{?format,lang}', 'file://data/123?format=json&lang=en', true],

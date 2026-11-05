@@ -71,7 +71,9 @@ function expression(body: string): Segment[] {
     case '.':
       return specs.map(() => optional(literal('.'), run(encoded)));
     case ';':
-      return specs.map(({ name }) => optional(literal(`;${name}`), optional(literal('='), run(encoded))));
+      return specs.map(({ name, exploded }) =>
+        (exploded ? repeat : optional)(literal(`;${name}`), optional(literal('='), run(encoded))),
+      );
     default: {
       // The first pair present starts with the operator (`?` or `&`); every later pair starts with `&`.
       const pair = ({ name, exploded }: (typeof specs)[number], separator: string): Segment[] => {
