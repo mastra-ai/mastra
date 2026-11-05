@@ -1203,15 +1203,25 @@ export class Deps extends MastraBase {
       } else if (tarball === undefined) {
         const value = toPortableBunOverride(selector, name, spec, rootManifest, warn);
         if (value !== undefined) mergeBunOverride(carried, selector, value);
-      } else if (source.field === 'overrides' && isRecord(spec)) {
-        if (bunOverrideKeyMatches(range, workspaceVersions.get(name))) {
-          const nested = nestedOnly(selector, name, spec);
-          if (typeof nested === 'object') mergeBunOverride(carried, name, { ...nested, '.': tarball });
-        } else {
-          skip(selector, `the workspace package's version doesn't satisfy "${range}"`);
-        }
       } else {
-        skip(selector, 'the packed workspace tarball replaces this package');
+        // A bare key that gives the package itself a version (`foo: "npm:x@1"` or `foo: { ".": ... }`) can replace
+        // the workspace package in the source install. The build packs every workspace package it imports from
+        // source, so the output keeps the tarball.
+        if (range === undefined && typeof (isRecord(spec) ? spec['.'] : spec) === 'string') {
+          warn(
+            `Bun override "${selector}" may replace the workspace package "${name}" in the project, but the build output installs the packed workspace package.`,
+          );
+        }
+        if (source.field === 'overrides' && isRecord(spec)) {
+          if (bunOverrideKeyMatches(range, workspaceVersions.get(name))) {
+            const nested = nestedOnly(selector, name, spec);
+            if (typeof nested === 'object') mergeBunOverride(carried, name, { ...nested, '.': tarball });
+          } else {
+            skip(selector, `the workspace package's version doesn't satisfy "${range}"`);
+          }
+        } else {
+          skip(selector, 'the packed workspace tarball replaces this package');
+        }
       }
     }
     if (Object.keys(carried).length === 0) return;

@@ -125,14 +125,19 @@ describe('Bun output install keeps the project overrides (#29311)', () => {
     });
   });
 
-  it('keeps the packed tarball over a project override for the same package', async () => {
-    await installBun({ overrides: { foo: '2.0.0', uuid: '^11.1.1' } });
+  // In the project, Bun 1.4.4 lets a bare `foo: "npm:..."` override replace the workspace package `foo`. The build
+  // always packs the workspace package from source, so the output installs that instead, and the user is told.
+  it('keeps the packed tarball over a project override for the same package and warns about it', async () => {
+    const { warn } = await installBun({ overrides: { foo: 'npm:ms@2.1.1', uuid: '^11.1.1' } });
 
     expect(installedManifest).toMatchObject({ overrides: { foo: PACKED_FOO, uuid: '^11.1.1' } });
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      expect.stringContaining('the build output installs the packed workspace package'),
+    ]);
   });
 
   it("keeps overrides nested under a packed package for that package's dependencies", async () => {
-    await installBun({ overrides: { foo: { '.': '2.0.0', uuid: '^11.1.1' } } });
+    const { warn } = await installBun({ overrides: { foo: { '.': '2.0.0', uuid: '^11.1.1' } } });
 
     // `.` is the package's own version in Bun's nested overrides, so the tarball replaces only that. Bun 1.4.4
     // installs the tarball and the overridden dependency from this shape.
@@ -140,6 +145,7 @@ describe('Bun output install keeps the project overrides (#29311)', () => {
       overrides: { foo: { '.': PACKED_FOO, uuid: '^11.1.1' } },
       resolutions: { foo: PACKED_FOO },
     });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"foo"'));
   });
 
   it('installs a Bun project without workspace packages using the root overrides', async () => {
@@ -300,9 +306,11 @@ describe('Bun output install keeps the project overrides (#29311)', () => {
 
   it('does not replace a packed package with a version-qualified plain override, as Bun does', async () => {
     // Bun applies `foo@^1.0.0: "2.0.0"` only to registry versions of `foo`, never to the workspace package.
-    await installBun({ overrides: { 'foo@^1.0.0': '2.0.0', uuid: '^11.1.1' } });
+    const { warn } = await installBun({ overrides: { 'foo@^1.0.0': '2.0.0', uuid: '^11.1.1' } });
 
     expect(installedManifest).toEqual(expect.objectContaining({ overrides: { uuid: '^11.1.1', foo: PACKED_FOO } }));
+    // The output matches the project here, so there is nothing to warn about.
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("never rewrites the project's own manifest when installing in the project directory", async () => {
