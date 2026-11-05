@@ -20,7 +20,7 @@ export type { AggregateGateInput, BlockedFields, DashboardEnvironment, PendingGa
 export * from './kinds';
 export { dashboardDefaults } from './lib/definition';
 export type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
-export { buildRequest, requestKey, sendRequest } from './lib/requests';
+export { buildRequest, emptyAnswer, requestKey, sendRequest } from './lib/requests';
 export type { DashboardAnswer, DashboardPageContext, DashboardRequest, DashboardResult } from './lib/requests';
 export { defineWidgetKind } from './widget-kind';
 export type {

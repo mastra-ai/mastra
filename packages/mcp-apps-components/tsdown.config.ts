@@ -9,7 +9,7 @@ const RAW = '?raw';
 // package imports each app's page with `?raw`, which inlines the HTML as a string, so it carries no
 // file reference that bundling could break.
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/host.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
@@ -17,6 +17,11 @@ export default defineConfig({
   dts: false,
   treeshake: true,
   sourcemap: true,
+  // Only the iframe apps import these, and Vite already inlines them into each app's page; listing
+  // them keeps them bundled, never a runtime dependency, if the package entry ever imports them.
+  deps: {
+    alwaysBundle: ['@mastra/core', '@mastra/playground-ui'],
+  },
   plugins: [
     {
       name: 'raw-html',
