@@ -334,7 +334,7 @@ describe('durable agent version pinning across suspend/resume', () => {
     const fullOutput = result.output.getFullOutput();
 
     try {
-      await emitChunkEvent(pubsub, runId, {
+      await emitChunkEvent(durableAgent.pubsub, runId, {
         type: 'step-finish',
         payload: {
           stepResult: { reason: 'stop', warnings: [], isContinued: false },
@@ -344,7 +344,7 @@ describe('durable agent version pinning across suspend/resume', () => {
         },
       } as any);
       await refreshStarted;
-      await emitFinishEvent(pubsub, runId, {
+      await emitFinishEvent(durableAgent.pubsub, runId, {
         output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
         stepResult: { reason: 'stop', warnings: [], isContinued: false },
       });
