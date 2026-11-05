@@ -4,14 +4,14 @@ import {
   validateModelInputSync,
   validateSchemaSync,
 } from '@mastra/client-js/gen-ui';
-import type { JSONObject, JSONValue, StandardSchemaV1 } from '@mastra/client-js/gen-ui';
+import type { GenUISurface, JSONObject, JSONValue, StandardSchemaV1 } from '@mastra/client-js/gen-ui';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { DataPart, DynamicToolPart, MessageRenderers, ToolInvocationPart } from '../ui/MessageFactory/types';
 import { GenUIProvider, GenUIToolCallScope, useGenUIController, useGenUIToolApproval } from './context';
 import type { GenUIController } from './controller';
 import type { GenUIToolCallProps, GenUIToolPhase } from './registry';
-import { GenUIErrorBoundary, GenUISurfaceView, resolveFallbacks } from './surface';
+import { GenUIErrorBoundary, SurfaceFrame, resolveFallbacks } from './surface';
 import { normalizeToolPart } from './tool-parts';
 import type { NormalizedToolCall } from './tool-parts';
 
@@ -35,8 +35,11 @@ function partialArgsOf(call: NormalizedToolCall): JSONObject | undefined {
   return isJSONObject(value) ? value : undefined;
 }
 
-/** Inline anchor for a `data-gen-ui` part: draws the surface this event created, nothing otherwise. */
-function SurfaceAnchor({ eventId, envelope }: { eventId: string; envelope?: object }) {
+/**
+ * Inline anchor for a `data-gen-ui` part: draws the surface this event created, nothing otherwise.
+ * `preview` stands in until the controller has that surface.
+ */
+function SurfaceAnchor({ eventId, envelope, preview }: { eventId: string; envelope?: object; preview?: GenUISurface }) {
   const controller = useGenUIController();
   // A reconnect may replay an event in a later message; only its first part draws the surface.
   const isAnchor = () => !envelope || controller.isAnchor(eventId, envelope);
@@ -55,7 +58,8 @@ function SurfaceAnchor({ eventId, envelope }: { eventId: string; envelope?: obje
   const rejection = useSyncExternalStore(controller.subscribe, getRejection, getRejection);
   const placement = useSyncExternalStore(controller.subscribe, getPlacement, getPlacement);
   const { Fallback } = resolveFallbacks(controller.registry.fallbacks);
-  if (surfaceId) return placement === 'inline' ? <GenUISurfaceView surfaceId={surfaceId} /> : null;
+  if (surfaceId) return placement === 'inline' ? <SurfaceFrame surfaceId={surfaceId} /> : null;
+  if (preview) return <SurfaceFrame surfaceId={preview.id} preview={preview} />;
   if (rejection)
     return <Fallback kind="invalid-surface" reason={`This interface could not be displayed: ${rejection}`} />;
   return null;
@@ -141,8 +145,11 @@ function ComponentToolView({ call, componentName }: { call: NormalizedToolCall; 
 function SurfaceToolView({ call }: { call: NormalizedToolCall }) {
   const controller = useGenUIController();
   const { Loading } = resolveFallbacks(controller.registry.fallbacks);
-  if (call.phase === 'input-streaming') return <Loading />;
-  return <SurfaceAnchor eventId={`tool:${call.toolCallId}`} />;
+  const preview = controller.previewSurface(call);
+  // Surfaces placed outside the message show up in their outlet once complete.
+  const inlinePreview = preview?.placement === 'inline' ? preview : undefined;
+  if (call.phase === 'input-streaming' && !inlinePreview) return <Loading />;
+  return <SurfaceAnchor eventId={`tool:${call.toolCallId}`} preview={inlinePreview} />;
 }
 
 function renderToolCall(controller: GenUIController, call: NormalizedToolCall): ReactNode | undefined {

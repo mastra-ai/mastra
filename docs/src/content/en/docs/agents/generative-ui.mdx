@@ -219,6 +219,8 @@ export const genUI = createGenUI({
 })
 ```
 
+While the model writes the call, inline surfaces render node by node from the arguments streamed so far. Once the call completes, the checked surface replaces the preview without remounting your components.
+
 The tool runs in the browser. It checks the model's operations against the current surfaces and your registry before applying them. When the operations reference an unregistered component or produce an invalid tree, the tool returns `{ ok: false }` with the reason, so the model can retry. Rejected calls aren't applied.
 
 Set `declarative: false` on a component to keep it out of the surface tool.

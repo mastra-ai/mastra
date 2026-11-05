@@ -5,8 +5,10 @@ import {
   createGenUIActionDispatcher,
   createGenUIContextStore,
   createGenUISession,
+  createGenUIState,
   createGenUIStateStore,
   parseGenUIOperations,
+  parsePartialJSON,
   resolveGenUILimits,
   validateModelInput,
   validateModelInputSync,
@@ -36,7 +38,7 @@ import type { SendMessageArgs } from '../agent/hooks';
 import type { ClientToolsInput } from '../agent/types';
 import type { GenUIManifestComponent, GenUIRegistry, GenUIToolApproval } from './registry';
 import { collectToolCallMeta, normalizeToolPart } from './tool-parts';
-import type { ToolCallMeta } from './tool-parts';
+import type { NormalizedToolCall, ToolCallMeta } from './tool-parts';
 
 /** Chat operations available to action handlers. Bound to the `useGenUIChat` instance that owns the controller. */
 export interface GenUIChatServices {
@@ -121,6 +123,11 @@ export interface GenUIController {
   respond(toolCallId: string, value: unknown): Promise<GenUIValidationResult<unknown>>;
   /** Validate a node's props against its component schema. `undefined` when the component is not registered. */
   validateNodeProps(node: GenUINode): GenUIValidationResult<unknown> | undefined;
+  /**
+   * Display-only surface built from a surface tool call the model is still writing. Never enters
+   * controller state; `undefined` until the arguments contain a `createSurface`.
+   */
+  previewSurface(call: NormalizedToolCall): GenUISurface | undefined;
   setServices(services: GenUIChatServices): void;
   threadScope(): GenUIStateScope;
   /** Keep the controller alive. Disposal happens after the last release, so StrictMode remounts are safe. */
@@ -225,6 +232,17 @@ const dropOptionalNulls = (operations: unknown[]): unknown[] =>
     }
     return cleaned;
   });
+
+/**
+ * Streamed arguments stop anywhere, so the last operation (or the last node of its `nodes`) may be
+ * cut mid-value: a half-written component name or id. Leave it out until the next one starts.
+ */
+const withoutTrailingPartial = (operations: unknown[]): unknown[] => {
+  const rest = operations.slice(0, -1);
+  const last = operations.at(-1);
+  if (!isRecord(last) || !Array.isArray(last.nodes) || last.nodes.length < 2) return rest;
+  return [...rest, { ...last, nodes: last.nodes.slice(0, -1) }];
+};
 
 export function createGenUIController(options: GenUIControllerOptions): GenUIController {
   const { registry } = options;
@@ -429,6 +447,45 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
     };
   };
 
+  /** Completed surface tool calls the session has seen; tool call ids are unique, so this survives resets. */
+  const syncedSurfaceCalls = new Set<string>();
+  const previewSurface = (call: NormalizedToolCall): GenUISurface | undefined => {
+    // A completed call is synced into the controller one commit after it renders; the preview bridges
+    // that gap so the switch keeps every mounted component. Rejected calls never become surfaces.
+    const rejected =
+      call.phase === 'output-error' ||
+      call.phase === 'output-denied' ||
+      (call.phase === 'output-available' && isRecord(call.output) && call.output.ok === false);
+    let input: { value: unknown; complete: boolean } | undefined;
+    if (call.phase === 'input-streaming') {
+      if (call.argsText !== undefined) input = parsePartialJSON(call.argsText);
+    } else if (!rejected) {
+      input = { value: call.args, complete: true };
+    }
+    if (!input || !isRecord(input.value)) return undefined;
+    const { surfaceId, operations } = input.value;
+    if (typeof surfaceId !== 'string' || !Array.isArray(operations)) return undefined;
+    if (input.complete && syncedSurfaceCalls.has(call.toolCallId)) return undefined;
+    const parsed = parseGenUIOperations(
+      dropOptionalNulls(input.complete ? operations : withoutTrailingPartial(operations)),
+      resolvedLimits,
+    );
+    if (!parsed.ok || parsed.value[0]?.op !== 'createSurface') return undefined;
+    const envelope: GenUIEnvelope = {
+      version: GENUI_PROTOCOL_VERSION,
+      eventId: surfaceToolEventId(call.toolCallId),
+      surfaceId,
+      operations: parsed.value,
+    };
+    const surface = accumulateGenUI(createGenUIState(), envelope, { limits }).surfaces[surfaceId];
+    if (!surface) return undefined;
+    // `setRoot` usually comes last; show the first node as the root until it does.
+    const firstNode = parsed.value.flatMap(op =>
+      op.op === 'upsertNodes' || op.op === 'createSurface' ? (op.nodes ?? []) : [],
+    )[0];
+    return { ...surface, status: 'streaming', rootId: surface.rootId ?? firstNode?.id ?? null };
+  };
+
   const describeOutcome = (result: GenUIState, envelope: GenUIEnvelope): string | undefined => {
     const diagnostic = [...result.diagnostics].reverse().find(d => d.eventId === envelope.eventId);
     if (diagnostic) return diagnostic.message;
@@ -510,6 +567,8 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
         return;
       }
       const call = normalizeToolPart(part);
+      if (call?.toolName === surfaceToolName && call.phase !== 'input-streaming')
+        syncedSurfaceCalls.add(call.toolCallId);
       // A call the tool rejected must not linger in state, or the model's retry would hit `surface-exists`.
       const rejected =
         call?.phase === 'output-error' ||
@@ -641,6 +700,7 @@ export function createGenUIController(options: GenUIControllerOptions): GenUICon
       return { ok: true, value: result };
     },
     validateNodeProps,
+    previewSurface,
     setServices(next) {
       services = next;
     },
