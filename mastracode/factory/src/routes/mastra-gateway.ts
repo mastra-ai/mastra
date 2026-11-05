@@ -74,7 +74,7 @@ async function platformMember(auth: RouteAuth, c: Context, orgId: string) {
       'Your Mastra sign-in is on a different organization than this Factory. Sign in again with this Factory’s organization.',
     );
   }
-  return { email: me.user?.email ?? undefined, isAdmin: me.role === 'admin' };
+  return { email: me.user?.email ?? undefined, isAdmin: me.role === 'admin' || me.role === 'owner' };
 }
 
 const CreatedGatewayKey = z.object({ apiKey: z.string().min(1), keyId: z.string().nullish() });

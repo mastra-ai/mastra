@@ -788,6 +788,17 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(await res.json()).toMatchObject({ canAddCredits: false });
   });
 
+  it('lets the organization owner add credits', async () => {
+    const platform = fakePlatform(
+      { 'GET /billing/customer': () => Response.json({ customer: null }) },
+      { role: 'owner' },
+    );
+
+    const res = await buildApp(platform).request('/web/config/providers/mastra/credits');
+
+    expect(await res.json()).toMatchObject({ canAddCredits: true });
+  });
+
   it('reports unknown credits, not zero, when the platform has no balance for the pool', async () => {
     const platform = fakePlatform({ 'GET /billing/customer': () => Response.json({ customer: null }) });
 
@@ -795,18 +806,6 @@ describe('Mastra Gateway routes with a tenant', () => {
 
     expect(await res.json()).not.toHaveProperty('remaining');
   });
-
-  const buyCredits = (app: Hono, amount: unknown) =>
-    app.request('/web/config/providers/mastra/credits', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ amount }),
-    });
-
-  const teamsCustomer = () =>
-    Response.json({
-      customer: { creditPool: { featureId: 'gateway_credits_teams' } },
-    });
 
   it('offers the one-click gateway only when auth can act on the Mastra platform', async () => {
     const gatewayRow = async (app: Hono) => {

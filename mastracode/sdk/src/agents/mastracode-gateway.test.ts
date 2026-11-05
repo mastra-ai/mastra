@@ -194,6 +194,53 @@ describe('MastraCodeGateway', () => {
     });
   });
 
+  describe('custom providers', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("keeps the gateway key away from a custom provider named like the gateway model's provider", async () => {
+      const requests: Array<{ url: string; auth: string | null }> = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: unknown, init?: RequestInit) => {
+          const headers = new Headers(init?.headers);
+          requests.push({ url: String(url), auth: headers.get('authorization') ?? headers.get('x-api-key') });
+          return new Response('{}', { status: 500 });
+        }),
+      );
+      const gateway = new MastraCodeGateway({
+        mastraGatewayBaseUrl: 'https://gateway.example.com',
+        mastraGatewayApiKey: 'org-gateway-key',
+        routeThroughMastraGateway: true,
+        customProviders: [
+          {
+            name: 'Anthropic',
+            url: 'https://custom.example.com/v1',
+            apiKey: 'custom-key',
+            models: ['claude-opus-5.5'],
+          },
+        ],
+        settingsPath: join(tmpdir(), 'nonexistent-settings.json'),
+      });
+
+      const model = gateway.resolveLanguageModel({
+        providerId: 'anthropic',
+        modelId: 'claude-opus-5.5',
+        apiKey: gateway.resolveAuth({
+          gatewayId: 'mastracode',
+          providerId: 'anthropic',
+          modelId: 'claude-opus-5.5',
+          routerId: 'mastracode/anthropic/claude-opus-5.5',
+        })!.apiKey!,
+      });
+      await (model as any)
+        .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
+        .catch(() => undefined);
+
+      expect(requests.length).toBeGreaterThan(0);
+      expect(requests.every(request => !request.url.startsWith('https://custom.example.com'))).toBe(true);
+    });
+  });
+
   describe('gateway API key accessors', () => {
     it('keeps the previous accessor as a compatibility alias', () => {
       writeAuthJson({

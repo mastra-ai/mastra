@@ -495,9 +495,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    const customProvider = this.#getCustomProviders().find(
-      provider => args.providerId === getCustomProviderId(provider.name),
-    );
+    // A gateway model carries the gateway key, so it must never reach a custom
+    // provider whose name matches the model's provider (e.g. one named "Anthropic").
+    const customProvider = this.#routeThroughMastraGateway
+      ? undefined
+      : this.#getCustomProviders().find(provider => args.providerId === getCustomProviderId(provider.name));
     if (customProvider) {
       const provider = createOpenAICompatible({
         name: args.providerId,
