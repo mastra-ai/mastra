@@ -7,7 +7,7 @@ import type {
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
 import { timeToFirstTokenSupported } from '../../features';
-import { payloadColumnSql } from './helpers';
+import { payloadColumnSql, timeRangeOf } from './helpers';
 import { missingPreviewSql, readPreview } from './preview-compat';
 import { compileThreadQueryPredicate } from './trace-query';
 
@@ -217,7 +217,8 @@ export async function queryThreadRows(
   const selected = await run<Selected>(compiled.sql, compiled.values);
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { threads: [], page: { next: null } };
-  const values: unknown[] = [];
+  const endedAts = page.flatMap(row => [row.firstEndedAt, row.lastEndedAt]);
+  const values: unknown[] = [...timeRangeOf(endedAts), ...endedAts];
   const keys = page.flatMap(row =>
     (['first', 'last'] as const).map(which => {
       const entries = {
@@ -237,17 +238,17 @@ export async function queryThreadRows(
         .join(' AND ')})`;
     }),
   );
-  // A chat's first and last traces can be months apart, so one range over the page's keys can cover
-  // the whole table. DuckDB cannot prune on an OR of keys, so each key gets its own scan to prune on.
-  const payloadSelect = `SELECT organizationId, traceId, cursorId,
+  // A chat's first and last traces can be months apart, so the range alone can cover the whole table.
+  // The IN list lets DuckDB also skip the row groups between them.
+  const payloads = await run<Record<string, unknown>>(
+    `SELECT organizationId, traceId, cursorId,
     ${contextFields.map(field => (field === 'executionSource' ? 'source AS executionSource' : field)).join(', ')},
     CASE WHEN spanType = 'agent_run' THEN timeToFirstChunkMs END AS timeToFirstChunkMs,
     CASE WHEN spanType = 'agent_run' THEN timeToFirstTokenMs END AS timeToFirstTokenMs,
     CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
     ${(['input', 'output', 'error'] as const).map(field => `${field}Preview, CASE WHEN ${missingPreviewSql(`${field}Preview`)} THEN CAST(${field === 'error' ? field : payloadColumnSql(field)} AS VARCHAR) END AS ${field}`).join(', ')}
-    FROM span_events WHERE`;
-  const payloads = await run<Record<string, unknown>>(
-    keys.map(key => `${payloadSelect} ${key}`).join(' UNION ALL '),
+    FROM span_events
+    WHERE endedAt BETWEEN ? AND ? AND endedAt IN (${endedAts.map(() => '?').join(', ')}) AND (${keys.join(' OR ')})`,
     values,
   );
   const key = (org: unknown, trace: unknown, version: unknown) => JSON.stringify([org, trace, String(version)]);
