@@ -646,8 +646,10 @@ function formatSignalResult({
 const NEAR_PEER_MIN_THREAD_EDITS = 2;
 const NEAR_PEER_MAX_SUGGESTIONS = 3;
 
-// A third of the thread id: catches a spliced stretch of a UUID (about 9 edits) while ids of two
-// different peers, which differ in 25 or more characters, never qualify.
+// A third of the thread id: catches a spliced stretch of a UUID (about 9 edits). This is a
+// heuristic, not a guarantee of identity: the registry accepts any thread id, so a different
+// legitimate peer whose id is close enough can be suggested too. That is tolerable because the
+// suggestion is only text; nothing is ever sent to a guess.
 function maxNearPeerThreadEdits(a: string, b: string): number {
   return Math.max(NEAR_PEER_MIN_THREAD_EDITS, Math.floor(Math.max(a.length, b.length) / 3));
 }
