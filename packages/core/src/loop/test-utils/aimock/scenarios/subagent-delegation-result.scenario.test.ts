@@ -1,9 +1,11 @@
 import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
+import { MockMemory } from '../../../../memory/mock';
+import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
@@ -98,13 +100,14 @@ describe.each(['durable', 'evented'] as const)(
   kind => {
     const getMock = useLoopScenarioAimock();
 
-    function setup() {
+    function setup({ requireApproval = false } = {}) {
       const llm = getMock();
       const toolRuns: string[] = [];
       const lookupOrder = createTool({
         id: 'lookup-order',
         description: 'Look up an order',
         inputSchema: z.object({ orderId: z.string() }),
+        requireApproval,
         execute: async ({ orderId }) => {
           toolRuns.push(orderId);
           return { orderId, status: 'shipped' };
@@ -148,8 +151,8 @@ describe.each(['durable', 'evented'] as const)(
 
       // Register the worker on the same Mastra as the supervisor, as an app would:
       // the durable run resolves its agent by id from Mastra.
-      const buildSupervisor = async () => {
-        const shared = await createSharedAgent(llm, { agents: { worker: worker as unknown as Agent } });
+      const buildSupervisor = async (memory?: MockMemory) => {
+        const shared = await createSharedAgent(llm, { agents: { worker: worker as unknown as Agent }, memory });
         shared.mastra.addAgent(worker, 'worker');
         return shared;
       };
@@ -201,6 +204,88 @@ describe.each(['durable', 'evented'] as const)(
       expect(toolRuns).toEqual(['42']);
       expect(delegationResultSeenBySupervisor()).toMatchObject({ role: 'tool', content: 'Order 42 has shipped.' });
       expect(result.text).toBe('Your order 42 has shipped.');
+    });
+
+    type RunHandle = { fullStream: AsyncIterable<ChunkType> };
+
+    // A durable worker keeps its stream open across a suspension unless asked to
+    // close it, so the supervisor would wait forever for the worker's approval.
+    async function streamToApproval() {
+      const { toolRuns, delegationResultSeenBySupervisor, buildSupervisor } = setup({ requireApproval: true });
+      const memory = new MockMemory();
+      const { agent } = await buildSupervisor(memory);
+      const thread = `durable-worker-approval-${kind}`;
+      const resource = 'durable-worker-approval-user';
+
+      const run = (await agent.stream('Where is order 42?', {
+        memory: { thread, resource },
+        maxSteps: 3,
+      })) as unknown as RunHandle;
+      // Bounded so a stalled stream fails on the assertion below instead of the test timeout.
+      const firstTypes: string[] = [];
+      const ended = (async () => {
+        for await (const chunk of run.fullStream) firstTypes.push(chunk.type);
+        return true;
+      })();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<false>(resolve => {
+        timer = setTimeout(() => resolve(false), 10_000);
+      });
+      const streamEnded = await Promise.race([ended, stalled]);
+      clearTimeout(timer);
+      expect(streamEnded, `first stream chunks: ${firstTypes.join(', ')}`).toBe(true);
+      expect(firstTypes, `first stream chunks: ${firstTypes.join(', ')}`).toContain('tool-call-approval');
+      expect(toolRuns).toEqual([]);
+
+      const entry = await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: thread, resourceId: resource });
+        const pending = [...messages].reverse().find((m: any) => m.content?.metadata?.pendingToolApprovals) as any;
+        expect(pending).toBeDefined();
+        return Object.values(pending.content.metadata.pendingToolApprovals)[0] as { runId: string; toolCallId: string };
+      });
+
+      return { agent, entry, thread, resource, toolRuns, delegationResultSeenBySupervisor };
+    }
+
+    async function drainText(stream: AsyncIterable<ChunkType>) {
+      const types: string[] = [];
+      let text = '';
+      for await (const chunk of stream) {
+        types.push(chunk.type);
+        if (chunk.type === 'text-delta') text += (chunk.payload as { text: string }).text;
+      }
+      return { types, text };
+    }
+
+    it('a streaming supervisor surfaces the sub-agent tool approval and finishes after it is approved', async () => {
+      const { agent, entry, thread, resource, toolRuns, delegationResultSeenBySupervisor } = await streamToApproval();
+
+      const resumed = (await agent.approveToolCall({
+        runId: entry.runId,
+        toolCallId: entry.toolCallId,
+        memory: { thread, resource },
+      } as any)) as unknown as RunHandle;
+      const { types, text } = await drainText(resumed.fullStream);
+
+      expect(types, `resumed chunks: ${types.join(', ')}`).not.toContain('error');
+      expect(toolRuns).toEqual(['42']);
+      expect(delegationResultSeenBySupervisor()).toMatchObject({ role: 'tool', content: 'Order 42 has shipped.' });
+      expect(text).toBe('Your order 42 has shipped.');
+    });
+
+    it('a streaming supervisor finishes without running the sub-agent tool after it is declined', async () => {
+      const { agent, entry, thread, resource, toolRuns } = await streamToApproval();
+
+      const resumed = (await agent.declineToolCall({
+        runId: entry.runId,
+        toolCallId: entry.toolCallId,
+        memory: { thread, resource },
+      } as any)) as unknown as RunHandle;
+      const { types, text } = await drainText(resumed.fullStream);
+
+      expect(types, `resumed chunks: ${types.join(', ')}`).not.toContain('error');
+      expect(toolRuns).toEqual([]);
+      expect(text).toBe('Your order 42 has shipped.');
     });
   },
 );
