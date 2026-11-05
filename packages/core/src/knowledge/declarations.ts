@@ -345,6 +345,32 @@ export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: R
   return prefix;
 }
 
+/**
+ * What every run reads in a store's shared scope declarations (see
+ * `KnowledgeStorage.listSharedScopeDeclarations`): every scope of a pattern key, a concrete key's own
+ * address, and for a template child key (`<parent>/<name>`) the children of that name. A malformed
+ * key reaches nothing.
+ */
+export function knowledgeSharedReadScope(keys: readonly string[]): {
+  addresses: string[];
+  prefixes: Array<{ declaration: string; prefix: string }>;
+} {
+  const addresses: string[] = [];
+  const prefixes: Array<{ declaration: string; prefix: string }> = [];
+  for (const key of new Set(keys)) {
+    const slash = key.indexOf('/');
+    let pattern: KnowledgeScopePattern;
+    try {
+      pattern = parsePattern(slash === -1 ? key : key.slice(0, slash), 'Shared Knowledge scope key');
+    } catch {
+      continue;
+    }
+    if (pattern.params.length === 0) addresses.push(key);
+    else prefixes.push({ declaration: key, prefix: knowledgePatternPrefix(pattern, {})! });
+  }
+  return { addresses, prefixes };
+}
+
 /** Sample address for a pattern, used to check that a principal pattern fits its declared type. */
 function sampleAddress(pattern: KnowledgeScopePattern): string {
   return bindKnowledgePattern(pattern, Object.fromEntries(pattern.params.map((param, i) => [param, `p${i}`])))!;
