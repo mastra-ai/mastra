@@ -707,6 +707,23 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         await patch(id, { each: [progress(1, 20)] });
         expect(await stepsOf(id)).toEqual({ each: running({ 1: { output: 20 } }) });
       });
+
+      it('merges a result into the step as patched, keeping the progress the patches added', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id, { context: { each: { ...running({}), output: [null, null] } } }));
+        await patch(id, { each: [progress(0, 10), { op: 'set', path: ['output', 0], value: 10 }] });
+
+        const { metadata: _, ...iteration } = { ...running({}), output: [null, 20] };
+        const merged = await store.mergeWorkflowRunStepResult({
+          workflowName,
+          runId: id,
+          stepId: 'each',
+          result: iteration,
+        });
+        const each = { ...running({ 0: { output: 10 } }), output: [10, 20] };
+        expect(merged!.result).toEqual(each);
+        expect(await stepsOf(id)).toEqual({ each });
+      });
     });
 
     describe('state patches', () => {
