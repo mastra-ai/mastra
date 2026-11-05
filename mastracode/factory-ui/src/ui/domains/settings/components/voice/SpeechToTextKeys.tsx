@@ -11,15 +11,14 @@ import { ProviderRows, ProviderRowsSkeleton } from '../models/providers/Provider
 import { CREDENTIAL_STATUS, sharedSourceStatus, useCredentialAccess } from '../provider-credential';
 import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
 
-/** Deepgram only transcribes, so the chat provider catalog does not list it. */
+/**
+ * Deepgram only transcribes, so the chat provider catalog does not list it. An env key wins over a stored one
+ * for transcription, so it is shown as such even when the catalog reports the stored key.
+ */
 function speechProviderInfo(status: VoiceKeyStatus, catalog: ProviderInfo[] | undefined): ProviderInfo {
-  return (
-    catalog?.find(p => p.provider === status.provider) ?? {
-      provider: status.provider,
-      source: status.fromEnv ? 'env' : 'stored',
-      envVar: status.envVar,
-    }
-  );
+  const listed = catalog?.find(p => p.provider === status.provider);
+  if (status.fromEnv) return { ...listed, provider: status.provider, source: 'env', envVar: status.envVar };
+  return listed ?? { provider: status.provider, source: 'stored', envVar: status.envVar };
 }
 
 function voiceKeyConnection(status: VoiceKeyStatus, provider: ProviderInfo): ProviderConnection | undefined {

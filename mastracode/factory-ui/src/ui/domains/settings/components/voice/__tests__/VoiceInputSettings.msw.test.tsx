@@ -189,6 +189,27 @@ describe('VoiceInputSettings', () => {
     expect(screen.getByRole('button', { name: 'Mistral actions' })).toBeInTheDocument();
   });
 
+  it('shows an env key as From env even when the catalog also lists a stored key for that provider', async () => {
+    stubSettings(
+      settings({
+        keys: keys(['mistral', 'openai']).map(k => (k.provider === 'openai' ? { ...k, fromEnv: true } : k)),
+      }),
+    );
+    server.use(
+      http.get(PROVIDERS_URL, () =>
+        HttpResponse.json({
+          orgKeyAdmin: true,
+          providers: [{ provider: 'openai', source: 'stored', envVar: 'OPENAI_API_KEY' }],
+        }),
+      ),
+    );
+    renderVoiceSettings();
+
+    expect(await screen.findByText('From env')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'OpenAI actions' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mistral actions' })).toBeInTheDocument();
+  });
+
   it('keeps a saved model whose key was removed visible, flagged as missing a key', async () => {
     stubSettings(settings({ selected: { provider: 'deepgram', model: 'nova-3' }, effective: null }));
     const user = userEvent.setup();
