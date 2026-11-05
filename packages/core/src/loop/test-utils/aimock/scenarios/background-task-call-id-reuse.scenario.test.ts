@@ -3,7 +3,13 @@ import { it, expect } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 /**
  * Regression class: provider tool-call id reuse across memory-backed turns.
@@ -79,6 +85,12 @@ describeForAllEngines(
             llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: `Turn ${turn} dispatched.` });
           },
         });
+
+        // Durable engines wait for the task before the follow-up model call, so
+        // that call sees the real result instead of the placeholder.
+        if (isDurableEngineVariant(engine)) {
+          expect(JSON.stringify(getMock().getRequests()[1]!.body!.messages)).toContain(`turn-${turn} done`);
+        }
       }
 
       // The tool ran once per turn — turn 2+ did not hang or get dropped.

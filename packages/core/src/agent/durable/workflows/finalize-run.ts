@@ -26,6 +26,7 @@ import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../
 import { getRunRegistryEntry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
+import { foldBackgroundResults } from './shared/background-results';
 
 type GenerateThreadTitleArgs = Parameters<NonNullable<RunRegistryEntry['generateThreadTitle']>>[0];
 type AnyAgent = Agent<any, any, any, any>;
@@ -180,6 +181,8 @@ export async function runDurableFinishSideEffects({
   if (registryEntry) {
     registryEntry.messageList = messageList;
   }
+  // A background result that landed after the last background check is still a placeholder here.
+  await foldBackgroundResults(registryEntry, messageList);
 
   // The caller-side MastraModelOutput only sees the finish event after this step has
   // persisted messages, and remote/recovered runs have no caller at all. Attach the
