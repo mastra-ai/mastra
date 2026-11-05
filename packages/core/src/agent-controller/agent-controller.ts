@@ -1897,7 +1897,8 @@ export class AgentController<TState = {}> {
 
   /**
    * Make the next {@link listAvailableModels} call check configured gateways and
-   * auth again. Call it after credentials or custom providers change.
+   * auth again, and download remote catalogs again in the background. Call it
+   * after credentials or custom providers change.
    */
   invalidateAvailableModelsCache(): void {
     this.#modelCatalog.invalidate();

@@ -49,7 +49,7 @@ function createFakeGateway(options?: {
 }
 
 function createController(
-  gateway: MastraModelGatewayInterface,
+  gateway: MastraModelGatewayInterface | MastraModelGatewayInterface[],
   defaultModelId?: string,
   useCounts: () => Record<string, number> = () => ({
     'test-gateway/acme/sonic-fast': 3,
@@ -67,7 +67,7 @@ function createController(
     id: 'test-controller',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent, defaultModelId }],
-    gateways: [gateway],
+    gateways: [gateway].flat(),
     omConfig: defaultModelId ? { defaultObserverModelId: defaultModelId } : undefined,
     modelUseCountProvider: useCounts,
   });
@@ -343,24 +343,56 @@ describe('AgentController.listAvailableModels catalog refresh', () => {
     expect(modelsDev.calls).toBe(2);
   });
 
-  it('notices API key changes without downloading models.dev again', async () => {
+  it('notices a key set outside the app after the short window, without downloading models.dev again', async () => {
     const controller = createController(createFakeGateway());
     expect(rocket(await controller.listAvailableModels())).toMatchObject({
       hasApiKey: false,
       apiKeyEnvVar: 'ACME_CLOUD_API_KEY',
     });
 
-    // A key set outside the app shows up once the short catalog window passes.
     process.env.ACME_CLOUD_API_KEY = 'sk-acme';
     advance(11_000);
     expect(rocket(await controller.listAvailableModels())).toMatchObject({ hasApiKey: true });
+    expect(modelsDev.calls).toBe(1);
+  });
 
-    // A key the app removes shows up on the next call after invalidation.
+  it('after invalidation, shows a key change right away and downloads models.dev again in the background', async () => {
+    process.env.ACME_CLOUD_API_KEY = 'sk-acme';
+    const controller = createController(createFakeGateway());
+    expect(rocket(await controller.listAvailableModels())).toMatchObject({ hasApiKey: true });
+
+    const download = Promise.withResolvers<Response>();
+    modelsDev.respond = () => download.promise;
     delete process.env.ACME_CLOUD_API_KEY;
     controller.invalidateAvailableModelsCache();
-    expect(rocket(await controller.listAvailableModels())).toMatchObject({ hasApiKey: false });
 
-    expect(modelsDev.calls).toBe(1);
+    expect(rocket(await withinOneSecond(controller.listAvailableModels()))).toMatchObject({ hasApiKey: false });
+    expect(modelsDev.calls).toBe(2);
+
+    download.resolve(modelsDevCatalog(['rocket-1', 'rocket-2']));
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-2');
+    });
+  });
+
+  it('loads configured gateways one after another, so each sees what the previous one wrote', async () => {
+    let credentialWritten = false;
+    const writer = createFakeGateway();
+    writer.fetchProviders.mockImplementation(async () => {
+      await Promise.resolve();
+      credentialWritten = true;
+      return {};
+    });
+    let readAfterWrite: boolean | undefined;
+    const reader = { ...createFakeGateway(), id: 'reader-gateway' };
+    reader.fetchProviders.mockImplementation(async () => {
+      readAfterWrite = credentialWritten;
+      return {};
+    });
+
+    await createController([writer, reader]).listAvailableModels();
+
+    expect(readAfterWrite).toBe(true);
   });
 
   it('reports current use counts on every call', async () => {

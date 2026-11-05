@@ -73,13 +73,14 @@ export class ModelCatalogCache {
 
   /**
    * Rebuild configured gateways and auth on the next call (for example after a
-   * credential change). Remote catalogs don't depend on credentials and keep
-   * their own refresh schedule.
+   * credential change), and download the remote catalogs again in the
+   * background.
    */
   invalidate(): void {
     this.#generation += 1;
     this.#built = undefined;
     this.#build = undefined;
+    for (const snapshot of this.#remote.values()) snapshot.nextFetchAt = 0;
   }
 
   #rebuild(): Promise<GatewayModel[]> {
@@ -95,12 +96,11 @@ export class ModelCatalogCache {
     const gateways = this.#manager.gateways;
     const local = gateways.filter(gateway => !this.#isRemote(gateway));
 
-    const [localResults] = await Promise.all([
-      Promise.all(local.map(gateway => this.#manager.fetchGatewayProviders(gateway))),
+    const [localProviders] = await Promise.all([
+      this.#fetchLocal(local),
       this.#mustWaitForRemote() ? this.#refreshRemote() : undefined,
     ]);
 
-    const localProviders = new Map(local.map((gateway, index) => [gateway, localResults[index]] as const));
     const remoteVersion = this.#remoteVersion;
     const registry = this.#manager.mergeProviders(
       gateways.map(gateway => ({
@@ -112,6 +112,15 @@ export class ModelCatalogCache {
 
     if (generation === this.#generation) this.#built = { models, builtAt: Date.now(), remoteVersion };
     return models;
+  }
+
+  async #fetchLocal(
+    gateways: MastraModelGatewayInterface[],
+  ): Promise<Map<MastraModelGatewayInterface, Providers | undefined>> {
+    const providers = new Map<MastraModelGatewayInterface, Providers | undefined>();
+    // One at a time: a gateway can write credentials the next one reloads (Copilot token refresh, MastraCodeGateway).
+    for (const gateway of gateways) providers.set(gateway, await this.#manager.fetchGatewayProviders(gateway));
+    return providers;
   }
 
   #dueRemoteGateways(): MastraModelGatewayInterface[] {
