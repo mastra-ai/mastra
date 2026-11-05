@@ -705,6 +705,28 @@ export class ExecutionFence implements RunFenceScope {
     if (!claim.agentId) return undefined;
     const executionBackend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
     if (!executionBackend) return undefined;
+    // Called only after run ownership was renewed for this claim. For a generation-fenced claim that renewal already
+    // excludes any successor, so the thread lease cannot have been handed on: a missing lease lapsed (e.g. Redis
+    // restarted) and is taken back unless someone else holds it, and a lease backend refusing every client (so
+    // nobody else can acquire from it either) does not fence the execution. Any other backend error still does.
+    const holdsThreadLease = async (threadId: string): Promise<boolean> => {
+      const lease = [mastra.pubsub, runId, threadId, claim.resourceId, claim.generation, claim.executionId] as const;
+      if (claim.generation === undefined) return agentThreadStreamRuntime.renewDurableThreadLease(...lease);
+      try {
+        return (
+          (await agentThreadStreamRuntime.renewDurableThreadLease(...lease)) ||
+          (await agentThreadStreamRuntime.reclaimDurableThreadLease(...lease))
+        );
+      } catch (error) {
+        if (!agentThreadStreamRuntime.isThreadLeaseBackendUnavailableToAll(mastra.pubsub, error)) throw error;
+        mastra
+          .getLogger()
+          ?.warn(`[DurableAgent] run ${runId}: thread lease backend unavailable, relying on run ownership`, {
+            error,
+          });
+        return true;
+      }
+    };
     const backend: OwnershipBackend = {
       ...executionBackend,
       renew: async current => {
@@ -719,17 +741,7 @@ export class ExecutionFence implements RunFenceScope {
           }
           return result;
         }
-        if (
-          claim.threadId &&
-          !(await agentThreadStreamRuntime.renewDurableThreadLease(
-            mastra.pubsub,
-            runId,
-            claim.threadId,
-            claim.resourceId,
-            claim.generation,
-            claim.executionId,
-          ))
-        ) {
+        if (claim.threadId && !(await holdsThreadLease(claim.threadId))) {
           throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
             agentId: claim.agentId!,
             runId,

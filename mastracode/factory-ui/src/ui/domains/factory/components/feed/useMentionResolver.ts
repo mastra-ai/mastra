@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../../api/config';
-import { mentionRosterQuery } from '../../../../../hooks/useFactoryMembers';
+import { mentionRosterQueryOptions } from '../../../../../hooks/useFactoryMembers';
 import type { CommentMentionRef } from '../../services/commentsWire';
 import { resolveMentions } from './mentions';
 
@@ -18,7 +18,10 @@ export function useMentionResolver(factoryProjectId: string | undefined) {
     if (!body.includes('@')) return [];
     if (!factoryProjectId) return undefined;
     try {
-      const roster = await queryClient.ensureQueryData(mentionRosterQuery(baseUrl, factoryProjectId));
+      const roster = await queryClient.query({
+        ...mentionRosterQueryOptions(baseUrl, factoryProjectId),
+        staleTime: 'static',
+      });
       return resolveMentions(body, roster);
     } catch {
       return undefined;

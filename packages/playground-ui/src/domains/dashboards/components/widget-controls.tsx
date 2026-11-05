@@ -1,4 +1,5 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
+import { PinIcon, PinOffIcon } from 'lucide-react';
 import {
   OpenErrorsInLogsButton,
   OpenInLogsButton,
@@ -8,6 +9,18 @@ import {
 } from '../../metrics/components/card-action-buttons';
 import { viewDrilldown, targetScope } from '../lib/definition';
 import type { OnDashboardDrilldown } from '../lib/definition';
+import type { WidgetPin } from '../widget-kind';
+import { Button } from '@/ds/components/Button';
+
+/** Pins or unpins the widget; it shows the host's state, not the click. */
+export function PinAction({ isPinned, onPin, name }: WidgetPin) {
+  const label = `${isPinned ? 'Unpin' : 'Pin'} ${name}`;
+  return (
+    <Button variant="ghost" size="icon-sm" tooltip={label} aria-label={label} onClick={() => onPin(!isPinned)}>
+      {isPinned ? <PinOffIcon /> : <PinIcon />}
+    </Button>
+  );
+}
 
 /** The view's action button, named for the page it opens (Logs names errors only when the target keeps to them). */
 export function DrilldownAction({
