@@ -30,6 +30,8 @@ export class KnowledgeNotFoundError extends Error {
 
 const NAME_CANDIDATES = 5;
 const CLOSE_MATCHES = 3;
+/** Most shared root scopes a run lists at its root. */
+const SHARED_ROOT_SCOPES = 100;
 
 /**
  * One call's view of Knowledge: the run's principals, its read scope and its provenance. Built per
@@ -43,6 +45,8 @@ export class KnowledgeRun {
     readonly principals: string[],
     readonly read: Exclude<KnowledgeReadScope, 'all'>,
     readonly provenance: KnowledgeProvenance,
+    /** What every run reads in the store's shared scopes; part of {@link read}. */
+    readonly shared: Exclude<KnowledgeReadScope, 'all'>,
   ) {}
 
   static async start(
@@ -62,8 +66,27 @@ export class KnowledgeRun {
     if (options.write) {
       for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
     }
-    const read = (await runtime.readScopeFor(principals)) as Exclude<KnowledgeReadScope, 'all'>;
-    return new KnowledgeRun(runtime, storage, principals, read, provenance);
+    const shared = await runtime.sharedReadScope();
+    const read = await runtime.readScopeFor(principals, shared);
+    return new KnowledgeRun(runtime, storage, principals, read, provenance, shared);
+  }
+
+  /**
+   * The scopes the run holds at the root of its listings: its own held scopes, in principal order,
+   * then up to {@link SHARED_ROOT_SCOPES} of the store's shared root scopes.
+   */
+  async rootScopes(): Promise<KnowledgePage[]> {
+    const held = await this.storage.getScopesByAddress(this.principals);
+    const order = (scope: KnowledgePage) => this.principals.indexOf(scope.address ?? '');
+    const own = held.filter(scope => knowledgeScopeReadable(scope, this.read)).sort((a, b) => order(a) - order(b));
+    if (!this.shared.addresses.length && !this.shared.prefixes.length) return own;
+    const { pages } = await this.storage.listChildScopes({
+      parentId: null,
+      read: this.shared,
+      limit: SHARED_ROOT_SCOPES,
+    });
+    const seen = new Set(own.map(scope => scope.id));
+    return [...own, ...pages.filter(scope => !scope.deletedAt && !seen.has(scope.id))];
   }
 
   /** The strongest role on a scope page, or null. */
@@ -130,7 +153,7 @@ export class KnowledgeRun {
       return page;
     }
 
-    if (this.runtime.compiled.match(ref)) {
+    if (this.runtime.compiled.match(ref) || this.shared.addresses.length || this.shared.prefixes.length) {
       const scope = await this.#readableScope(ref, createAt);
       if (scope) return scope;
     }

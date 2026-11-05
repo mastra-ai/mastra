@@ -190,6 +190,17 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
     throw new Error('This Knowledge storage adapter does not support an explicit Knowledge-only reset.');
   }
 
+  /**
+   * Scope declaration keys the store declares itself and shares with every reader, such as the scopes
+   * a hosted store's importers write to. Every run reads their scopes and holds them at the root of
+   * its listings, and their stored scopes don't need declaring in config. None by default.
+   *
+   * @experimental
+   */
+  async listSharedScopeDeclarations(): Promise<string[]> {
+    return [];
+  }
+
   // Schema-4 page store (see ./pages.ts). Adapters override every method; the defaults refuse, so an
   // adapter that hasn't moved to schema 4 fails loudly instead of returning empty results.
   materializeScope(

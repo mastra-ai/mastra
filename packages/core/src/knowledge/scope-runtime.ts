@@ -11,6 +11,7 @@ import {
   compileKnowledgeScopes,
   KnowledgeDeclarationError,
   knowledgeRunScopes,
+  knowledgeSharedReadScope,
   strongerKnowledgeRole,
 } from './declarations';
 import type { CompiledKnowledgeScopes, KnowledgeRole, KnowledgeScopeDeclarations } from './declarations';
@@ -67,8 +68,13 @@ export class KnowledgeScopeRuntime {
 
   async #checkDeclarations(): Promise<void> {
     const storage = await this.getStorage();
-    const orphans = (await storage.listScopeDeclarations()).filter(
-      ({ declaration }) => !this.compiled.declarations.has(declaration),
+    const [stored, shared] = await Promise.all([
+      storage.listScopeDeclarations(),
+      storage.listSharedScopeDeclarations(),
+    ]);
+    const storeDeclared = new Set(shared);
+    const orphans = stored.filter(
+      ({ declaration }) => !this.compiled.declarations.has(declaration) && !storeDeclared.has(declaration),
     );
     if (orphans.length === 0) return;
     const listed = orphans
@@ -113,11 +119,29 @@ export class KnowledgeScopeRuntime {
     return renamed;
   }
 
-  async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+  /** What every run reads in the store's shared scope declarations. See {@link KnowledgeStorage.listSharedScopeDeclarations}. */
+  async sharedReadScope(): Promise<Exclude<KnowledgeReadScope, 'all'>> {
+    const storage = await this.getStorage();
+    return { ...knowledgeSharedReadScope(await storage.listSharedScopeDeclarations()), children: [] };
+  }
+
+  /** What `principals` read: what their rules reach, plus the store's shared scopes. */
+  async readScopeFor(
+    principals: readonly string[],
+    shared?: Exclude<KnowledgeReadScope, 'all'>,
+  ): Promise<Exclude<KnowledgeReadScope, 'all'>> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
     const storage = await this.getStorage();
-    return knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses));
+    const [own, open] = await Promise.all([
+      knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses)),
+      shared ?? this.sharedReadScope(),
+    ]);
+    return {
+      addresses: [...new Set([...own.addresses, ...open.addresses])],
+      prefixes: [...own.prefixes, ...open.prefixes],
+      children: [...own.children, ...open.children],
+    };
   }
 
   async roleOn(principals: readonly string[], scope: KnowledgePage): Promise<KnowledgeRole | null> {
