@@ -141,6 +141,7 @@ export async function verifyBrowserRead(input: {
       .finally(() => {
         finished = true;
       });
+    void running.catch(() => undefined);
     // Never retain browser stdout/stderr. Only fixed normalized CDP results leave
     // the owned browser; native retained process buffers are disabled.
     for (let attempt = 0; attempt < 80; attempt++) {
@@ -155,7 +156,10 @@ export async function verifyBrowserRead(input: {
     }
     throw new Error('BROWSER_START_TIMEOUT');
   } finally {
-    if (sandbox) await sandbox.destroy();
-    await running;
+    try {
+      if (sandbox) await sandbox.destroy();
+    } finally {
+      await running?.catch(() => undefined);
+    }
   }
 }
