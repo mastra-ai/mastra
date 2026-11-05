@@ -16,7 +16,7 @@ function speechProviderInfo(status: VoiceKeyStatus, catalog: ProviderInfo[] | un
   return (
     catalog?.find(p => p.provider === status.provider) ?? {
       provider: status.provider,
-      source: 'none',
+      source: status.fromEnv ? 'env' : 'stored',
       envVar: status.envVar,
     }
   );

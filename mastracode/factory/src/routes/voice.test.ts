@@ -2,7 +2,7 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { Hono } from 'hono';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { factoryVoiceSettingsKey, MAX_TRANSCRIBE_AUDIO_BYTES } from '../voice/transcription.js';
@@ -271,6 +271,39 @@ describe('/web/voice/settings', () => {
     expect(body.keys.find(k => k.provider === 'openai')?.saved).toBe(false);
   });
 
+  it('flags env-backed keys in local mode so the UI does not offer to update or remove them', async () => {
+    process.env.DEEPGRAM_API_KEY = 'dg-env';
+    const app = await mount({ authStorage: localAuthStorage({ mistral: 'sk-mistral' }) });
+
+    const body = (await (await app.request('/web/voice/settings')).json()) as {
+      keys: Array<{ provider: string; saved: boolean; fromEnv: boolean }>;
+    };
+
+    expect(body.keys.find(k => k.provider === 'deepgram')).toMatchObject({ saved: true, fromEnv: true });
+    expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({ saved: true, fromEnv: false });
+  });
+
+  it('returns a named 503 on every route when voice settings storage cannot start', async () => {
+    const seed = await createFactoryStorageForTests();
+    vi.spyOn(seed.voiceSettings, 'ensureReady').mockRejectedValue(new Error('db down'));
+    const app = await mount({
+      authStorage: localAuthStorage({ openai: 'sk-openai' }),
+      voiceSettings: seed.voiceSettings,
+    });
+
+    const responses = [
+      await app.request('/web/voice/settings'),
+      await putSettings(app, { provider: 'openai', model: 'whisper-1' }),
+      await transcribe(app, { mimeType: 'audio/webm' }),
+    ];
+
+    for (const res of responses) {
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: 'voice_settings_unavailable' });
+    }
+    expect(calls.openai).toEqual([]);
+  });
+
   it('transcribes with the saved model instead of the first provider with a key', async () => {
     const seed = await createFactoryStorageForTests();
     const app = await mount({
@@ -469,6 +502,7 @@ describe('Factory voice model and model scope', () => {
       provider: 'openai',
       envVar: 'OPENAI_API_KEY',
       saved: true,
+      fromEnv: false,
     });
     expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({ provider: 'mistral', saved: false });
   });
