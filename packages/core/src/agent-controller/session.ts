@@ -4064,7 +4064,14 @@ export class SessionBus {
    * subscribers that attach after the status changed so they receive the current
    * workspace ready or error state.
    */
-  #lastWorkspaceEvents: AgentControllerEvent[] = [];
+  #lastWorkspaceEvents: Array<{ event: AgentControllerEvent; seq: number }> = [];
+  /** Random start, like a TCP initial sequence number: a recreated bus never continues an old one's numbering. */
+  #lastSeq = Math.floor(Math.random() * 2 ** 52);
+
+  /** Number of the last event dispatched. A subscriber whose stream resumes at this number missed nothing. */
+  get lastSeq(): number {
+    return this.#lastSeq;
+  }
 
   /** Attach the display-state reducer the bus folds events into. Set once by the Session. */
   setDisplayState(displayState: SessionDisplayState): void {
@@ -4074,16 +4081,7 @@ export class SessionBus {
   subscribe(listener: AgentControllerEventListener): () => void {
     // Replay buffered workspace lifecycle events so late subscribers learn the
     // current workspace status regardless of when initialization occurs.
-    for (const event of this.#lastWorkspaceEvents) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
-      }
-    }
+    for (const { event, seq } of this.#lastWorkspaceEvents) deliver(listener, event, seq);
     this.#listeners.push(listener);
     return () => {
       const index = this.#listeners.indexOf(listener);
@@ -4099,17 +4097,6 @@ export class SessionBus {
   }
 
   emit(event: AgentControllerEvent): void {
-    if (
-      event.type === 'workspace_status_changed' ||
-      event.type === 'workspace_ready' ||
-      event.type === 'workspace_error'
-    ) {
-      if (event.type === 'workspace_status_changed') {
-        this.#lastWorkspaceEvents = [event];
-      } else {
-        this.#lastWorkspaceEvents.push(event);
-      }
-    }
     this.#displayState?.apply(event);
 
     // A pending snapshot describes state that predates this event, so it must
@@ -4117,6 +4104,12 @@ export class SessionBus {
     // coalesced snapshot can never arrive after the event that superseded it.
     if (!COALESCIBLE_DISPLAY_STATE_EVENTS.has(event.type)) {
       this.#flushDisplayState();
+    }
+
+    if (event.type === 'workspace_status_changed') {
+      this.#lastWorkspaceEvents = [{ event, seq: this.#lastSeq + 1 }];
+    } else if (event.type === 'workspace_ready' || event.type === 'workspace_error') {
+      this.#lastWorkspaceEvents.push({ event, seq: this.#lastSeq + 1 });
     }
 
     this.#dispatch(event);
@@ -4169,16 +4162,19 @@ export class SessionBus {
   }
 
   #dispatch(event: AgentControllerEvent): void {
-    for (const listener of [...this.#listeners]) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
-      }
+    const seq = ++this.#lastSeq;
+    for (const listener of [...this.#listeners]) deliver(listener, event, seq);
+  }
+}
+
+function deliver(listener: AgentControllerEventListener, event: AgentControllerEvent, seq: number): void {
+  try {
+    const result = listener(event, seq);
+    if (result && typeof result === 'object' && 'catch' in result) {
+      (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
     }
+  } catch (err) {
+    console.error('Error in session event listener:', err);
   }
 }
 
@@ -4403,6 +4399,11 @@ export class Session<TState = unknown> {
    */
   subscribe(listener: AgentControllerEventListener): () => void {
     return this.#bus.subscribe(listener);
+  }
+
+  /** Number of the last event this session dispatched; see {@link AgentControllerEventListener}. */
+  get lastEventSeq(): number {
+    return this.#bus.lastSeq;
   }
 
   /** Subscribe to work that must complete before the terminal agent event is exposed. */

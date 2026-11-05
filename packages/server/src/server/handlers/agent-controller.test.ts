@@ -1193,7 +1193,10 @@ describe('agent-controller routes', () => {
       const second = await reader.read();
       await reader.cancel();
 
-      expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
+      expect([first.value, second.value]).toEqual([
+        { type: 'agent_start', seq: expect.any(Number) },
+        { type: 'agent_end', seq: expect.any(Number) },
+      ]);
     });
 
     it('still sends live display state changes by default', async () => {
@@ -1218,7 +1221,7 @@ describe('agent-controller routes', () => {
       await reader.cancel();
 
       expect((initial.value as any).type).toBe('display_state_changed');
-      expect(event.value).toEqual({ type: 'agent_start' });
+      expect(event.value).toEqual({ type: 'agent_start', seq: expect.any(Number) });
       expect((snapshot.value as any).type).toBe('display_state_changed');
     });
 
@@ -1334,9 +1337,14 @@ describe('agent-controller routes', () => {
       await reader.cancel();
 
       expect(received).toEqual([
-        { type: 'message_start', message },
-        { type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'later' } },
-        { type: 'message_end', id: message.id },
+        { type: 'message_start', message, seq: expect.any(Number) },
+        {
+          type: 'message_update',
+          id: message.id,
+          event: { type: 'text-delta', delta: 'later' },
+          seq: expect.any(Number),
+        },
+        { type: 'message_end', id: message.id, seq: expect.any(Number) },
       ]);
     });
 
@@ -1447,8 +1455,13 @@ describe('agent-controller routes', () => {
       await reader.cancel();
 
       expect(JSON.parse(JSON.stringify(delivered))).toEqual([
-        { type: 'error', error: { name: 'Error', message: 'Bad Request' }, errorType: 'provider' },
-        { type: 'agent_end', reason: 'error' },
+        {
+          type: 'error',
+          error: { name: 'Error', message: 'Bad Request' },
+          errorType: 'provider',
+          seq: expect.any(Number),
+        },
+        { type: 'agent_end', reason: 'error', seq: expect.any(Number) },
       ]);
     });
 
@@ -1530,6 +1543,78 @@ describe('agent-controller routes', () => {
       expect(wire.displayState.pendingApprovals['call-2']).toMatchObject({
         toolName: 'edit_file',
         args: { path: 'b.ts' },
+      });
+    });
+
+    describe('event numbering', () => {
+      type NumberedEvent = { type: string; seq: number };
+
+      async function openStream(sessionId: string) {
+        const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId,
+          abortSignal: new AbortController().signal,
+        } as any)) as ReadableStream<unknown>;
+        const reader = stream.getReader();
+        return {
+          async next(): Promise<NumberedEvent> {
+            for (;;) {
+              const { value } = await reader.read();
+              if (value && typeof value === 'object') return value as NumberedEvent;
+            }
+          },
+          close: () => reader.cancel(),
+        };
+      }
+
+      async function createNumberedSession(id: string) {
+        const controller = mastra.getAgentController('code')!;
+        await controller.init();
+        return controller.createSession({ resourceId: id, id, ownerId: 'code' });
+      }
+
+      it('given a live stream, when events are emitted, then each carries the next number', async () => {
+        const session = await createNumberedSession('user-numbered');
+        const stream = await openStream('user-numbered');
+        const seed = await stream.next();
+
+        session.emit({ type: 'agent_start' } as any);
+        const events = [await stream.next(), await stream.next()];
+        await stream.close();
+
+        expect(events.map(event => event.type)).toEqual(['agent_start', 'display_state_changed']);
+        expect(events.map(event => event.seq)).toEqual([seed.seq + 1, seed.seq + 2]);
+      });
+
+      it('given a client that read up to an event, when it reconnects and nothing was emitted, then the first event repeats that number', async () => {
+        const session = await createNumberedSession('user-resume-quiet');
+        const first = await openStream('user-resume-quiet');
+        await first.next();
+        session.emit({ type: 'agent_start' } as any);
+        await first.next();
+        const lastRead = await first.next();
+        await first.close();
+
+        const second = await openStream('user-resume-quiet');
+        const seed = await second.next();
+        await second.close();
+
+        expect(seed).toMatchObject({ type: 'display_state_changed', seq: lastRead.seq });
+      });
+
+      it('given a client that read up to an event, when events are emitted while it is away, then the first event on reconnect is numbered past it', async () => {
+        const session = await createNumberedSession('user-resume-gap');
+        const first = await openStream('user-resume-gap');
+        const lastRead = await first.next();
+        await first.close();
+
+        session.emit({ type: 'agent_end' } as any);
+        const second = await openStream('user-resume-gap');
+        const seed = await second.next();
+        await second.close();
+
+        expect(seed.seq).toBeGreaterThan(lastRead.seq);
       });
     });
   });

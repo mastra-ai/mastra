@@ -1085,9 +1085,10 @@ export type AgentControllerEvent =
   | { type: 'display_state_changed'; displayState: AgentControllerDisplayState };
 
 /**
- * Listener function for controller events.
+ * Listener function for controller events. `seq` numbers the event in its
+ * session's stream, one higher per event, so a gap means events were missed.
  */
-export type AgentControllerEventListener = (event: AgentControllerEvent) => void | Promise<void>;
+export type AgentControllerEventListener = (event: AgentControllerEvent, seq?: number) => void | Promise<void>;
 
 // =============================================================================
 // Request Context

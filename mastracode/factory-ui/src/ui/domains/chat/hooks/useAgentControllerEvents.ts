@@ -10,7 +10,8 @@ interface UseAgentControllerEventsArgs {
   session: AgentControllerSession | null;
   enabled: boolean;
   epoch: number;
-  onEvent: (event: AgentControllerEvent) => void;
+  /** `opensStream` marks the first event of each stream, which the server seeds with the session's current state. */
+  onEvent: (event: AgentControllerEvent, opensStream: boolean) => void;
   onConnectedChange: (connected: boolean) => void;
 }
 
@@ -18,7 +19,7 @@ interface SharedSubscription {
   state: SseConnectionState;
   /** A subscribe attempt is in flight — do not start another. */
   connecting: boolean;
-  eventListeners: Set<(event: AgentControllerEvent) => void>;
+  eventListeners: Set<(event: AgentControllerEvent, opensStream: boolean) => void>;
   stateListeners: Set<(state: SseConnectionState) => void>;
   unsubscribe?: () => void;
   teardown?: ReturnType<typeof setTimeout>;
@@ -51,11 +52,14 @@ function ensureConnected(session: AgentControllerSession, subscription: SharedSu
   subscription.unsubscribe?.();
   subscription.unsubscribe = undefined;
   subscription.connecting = true;
+  let opened = false;
 
   void session
     .subscribe({
       onEvent: event => {
-        for (const listener of subscription.eventListeners) listener(event);
+        const opensStream = !opened;
+        opened = true;
+        for (const listener of subscription.eventListeners) listener(event, opensStream);
       },
       onError: () => {
         if (subscription.state === 'connected') setState(subscription, 'dropped');
@@ -122,7 +126,7 @@ export function useAgentControllerEvents({
     if (!enabled || !session || !epoch || !visible) return;
 
     const subscription = getSubscription(session);
-    const handleEvent = (event: AgentControllerEvent) => onEventRef.current(event);
+    const handleEvent = (event: AgentControllerEvent, opensStream: boolean) => onEventRef.current(event, opensStream);
     const handleState = (state: SseConnectionState) => {
       onConnectedChangeRef.current(state === 'connected');
       setConnectionState(state);

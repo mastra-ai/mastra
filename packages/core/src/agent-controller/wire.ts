@@ -45,5 +45,5 @@ export type ErrorCarryingAgentControllerEvent = ErrorCarrying<AgentControllerEve
 /** An event once the server has reshaped what JSON cannot carry (display-state Maps, `Error`s); `@mastra/server` types its transform against this. */
 export type JsonReadyAgentControllerEvent = WireShape<AgentControllerEvent>;
 
-/** An {@link AgentControllerEvent} as it arrives on a client, after JSON. */
-export type AgentControllerWireEvent = Jsonify<JsonReadyAgentControllerEvent>;
+/** An {@link AgentControllerEvent} as it arrives on a client, after JSON, with its `seq` in the session's stream. */
+export type AgentControllerWireEvent = Jsonify<JsonReadyAgentControllerEvent> & { seq?: number };

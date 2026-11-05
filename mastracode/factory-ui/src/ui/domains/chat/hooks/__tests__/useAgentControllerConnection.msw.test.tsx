@@ -696,9 +696,16 @@ describe('useAgentControllerConnection', () => {
             { headers: { 'content-type': 'text/event-stream' } },
           );
         }
-        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        });
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              const seed = { type: 'display_state_changed', seq: 3, displayState: { isRunning: false } };
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(seed)}\n\n`));
+            },
+            cancel() {},
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
       }),
     );
 
@@ -747,9 +754,16 @@ describe('useAgentControllerConnection', () => {
             { headers: { 'content-type': 'text/event-stream' } },
           );
         }
-        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        });
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              const seed = { type: 'display_state_changed', seq: 3, displayState: { isRunning: false } };
+              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(seed)}\n\n`));
+            },
+            cancel() {},
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
       }),
     );
 
@@ -798,25 +812,23 @@ describe('useAgentControllerConnection', () => {
     await waitFor(() => expect(client.getQueryState(messagesKey)?.isInvalidated).toBe(true));
   });
 
-  it.each([
-    { streamed: 'the whole run', initiallyRunning: false, events: ['agent_start', 'agent_end'], reads: 1 },
-    { streamed: 'only the end of a run it joined', initiallyRunning: true, events: ['agent_end'], reads: 2 },
-  ] as const)(
-    'given the stream delivered $streamed, when the run ends, then the message window is read $reads time(s)',
-    async ({ initiallyRunning, events, reads }) => {
+  describe('message window recovery', () => {
+    async function openThreadPage({ running = false } = {}) {
       const encoder = new TextEncoder();
-      let emit: (event: AgentControllerEvent) => void = () => {};
-      let messageReads = 0;
+      const streams: Array<{ emit: (event: AgentControllerEvent) => void; drop: () => void }> = [];
+      const serverState = { running };
+      const reads = { messages: 0 };
+      const onEvent = vi.fn();
 
       server.use(
         http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
           HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
         ),
         http.get(sessionUrl, () =>
-          HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1', running: initiallyRunning }),
+          HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1', running: serverState.running }),
         ),
         http.get(`${sessionUrl}/threads/thread-1/messages`, () => {
-          messageReads += 1;
+          reads.messages += 1;
           return HttpResponse.json({ messages: [] });
         }),
         http.get(
@@ -825,7 +837,10 @@ describe('useAgentControllerConnection', () => {
             new Response(
               new ReadableStream<Uint8Array>({
                 start(controller) {
-                  emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                  streams.push({
+                    emit: event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)),
+                    drop: () => controller.error(new Error('stream dropped')),
+                  });
                 },
                 cancel() {},
               }),
@@ -841,21 +856,88 @@ describe('useAgentControllerConnection', () => {
           threadId: 'thread-1',
           baseUrl: TEST_BASE_URL,
         });
-        return useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent: vi.fn() });
+        return useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent });
       });
       await waitFor(() => expect(result.current.status).toBe('ready'));
-      await waitFor(() => expect(messageReads).toBe(1));
+      await waitFor(() => expect(reads.messages).toBe(1));
 
-      for (const type of events) {
-        emit({ type });
-        await waitFor(() => expect(result.current.state?.running).toBe(type === 'agent_start'));
-      }
-      await new Promise(resolve => setTimeout(resolve, 50));
-      await waitFor(() => expect(client.isFetching()).toBe(0));
+      const deliver = async (event: AgentControllerEvent, stream = streams.at(-1)!) => {
+        stream.emit(event);
+        await waitFor(() => expect(onEvent).toHaveBeenLastCalledWith(expect.objectContaining(event)));
+      };
+      const settled = async () => {
+        await waitFor(() => expect(client.isFetching()).toBe(0));
+        return reads.messages;
+      };
+      return { client, result, streams, serverState, deliver, settled };
+    }
 
-      expect(messageReads).toBe(reads);
-    },
-  );
+    const snapshot = (seq: number, isRunning = false) =>
+      ({ type: 'display_state_changed', seq, displayState: { isRunning } }) as AgentControllerEvent;
+
+    it('given the stream delivered the whole run, when the run ends, then the message window is not read again', async () => {
+      const page = await openThreadPage();
+
+      await page.deliver({ type: 'agent_start', seq: 1 });
+      await page.deliver({ type: 'agent_end', seq: 2 });
+      await waitFor(() => expect(page.result.current.state?.running).toBe(false));
+
+      expect(await page.settled()).toBe(1);
+    });
+
+    it('given the stream joined a run already going, when the run ends, then the message window is read again', async () => {
+      const page = await openThreadPage({ running: true });
+
+      await page.deliver({ type: 'agent_end', seq: 5 });
+      await waitFor(() => expect(page.result.current.state?.running).toBe(false));
+
+      expect(await page.settled()).toBe(2);
+    });
+
+    it('given the stream saw a run start but not its end, when the state poll reports it finished, then the message window is read again', async () => {
+      const page = await openThreadPage();
+
+      await page.deliver({ type: 'agent_start', seq: 1 });
+      await waitFor(() => expect(page.result.current.state?.running).toBe(true));
+      page.serverState.running = false;
+      await page.client.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(controllerId, sessionId),
+      });
+      await waitFor(() => expect(page.result.current.state?.running).toBe(false));
+
+      expect(await page.settled()).toBe(2);
+    });
+
+    it('given a run whose events skip a number, then the message window is read when the gap shows and again when the run ends', async () => {
+      const page = await openThreadPage({ running: true });
+
+      await page.deliver({ type: 'agent_start', seq: 1 });
+      await page.deliver({ type: 'message_end', id: 'assistant-1', seq: 3 });
+      expect(await page.settled()).toBe(2);
+
+      page.serverState.running = false;
+      await page.deliver({ type: 'agent_end', seq: 4 });
+      await waitFor(() => expect(page.result.current.state?.running).toBe(false));
+      expect(await page.settled()).toBe(3);
+    });
+
+    it.each([
+      { away: 'nothing happened', resumedAt: 7, reads: 1 },
+      { away: 'events were emitted', resumedAt: 9, reads: 2 },
+    ])(
+      'given the stream dropped after event 7, when it reconnects and $away, then the message window is read $reads time(s)',
+      async ({ resumedAt, reads }) => {
+        const page = await openThreadPage();
+        await page.deliver(snapshot(7));
+
+        page.streams[0].drop();
+        await waitFor(() => expect(page.streams).toHaveLength(2), { timeout: 2500 });
+        await page.deliver(snapshot(resumedAt), page.streams[1]);
+
+        expect(await page.settled()).toBe(reads);
+      },
+    );
+  });
 
   it('reports the thread a switch bound the session to, not the thread its state is read for', async () => {
     let activeThreadId = 'primary-thread';
