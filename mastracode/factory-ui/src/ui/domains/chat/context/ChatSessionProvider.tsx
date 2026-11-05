@@ -107,8 +107,7 @@ export function ChatSessionConfigProvider({
   // server materializes sandboxes lazily on first use (and revives dead ones),
   // so nothing here waits on a sandbox existing.
   const sandboxReady = addressOverride ? Boolean(addressOverride) : Boolean(storedSession) && !resolvingSession;
-  // A denied or missing session (404 from the session query) is fatal and must
-  // surface the error state, not the eternal preparing loader.
+  // An unreadable session must surface its error, not the eternal preparing loader.
   const sessionError = sessionUnavailableError(sessionQuery);
   // `resourceReady` — safe to address the agent-controller session by its
   // session id for reads/streaming as soon as server-side session metadata
