@@ -257,15 +257,46 @@ describe('transcribeVoiceClips', () => {
     expect(agentReads(msg)).toMatch(/"huge\.m4a".*too long/);
   });
 
-  it('surfaces a provider failure as a note on the clip', async () => {
-    server.use(http.post(MISTRAL_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+  it('keeps the provider response out of the note', async () => {
+    server.use(
+      http.post(MISTRAL_URL, () => HttpResponse.json({ message: 'boom', account: 'acct-internal-42' }, { status: 500 })),
+    );
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
     const msg = message('m1', [voiceClip()]);
 
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*Status 500/);
+    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: /);
+    expect(agentReads(msg)).not.toMatch(/boom|acct-internal-42|Status 500/);
+  });
+
+  it('says when the provider rejects the key', async () => {
+    server.use(http.post(MISTRAL_URL, () => HttpResponse.json({ detail: 'Invalid API Key' }, { status: 401 })));
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral-revoked' });
+    const msg = message('m1', [voiceClip()]);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(agentReads(msg)).toMatch(/not transcribed: .*rejected the API key/);
+    expect(agentReads(msg)).not.toContain('sk-mistral-revoked');
+  });
+
+  it('keeps the Slack file URL out of a download failure note', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const clip = voiceClip({
+      fetchData: async () => {
+        throw new Error('Received HTML from https://files.slack.com/files-pri/T1-F9/audio_message.m4a');
+      },
+    });
+    const msg = message('m1', [clip]);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(agentReads(msg)).toMatch(/not transcribed: the clip could not be downloaded$/);
+    expect(calls.mistral).toEqual([]);
   });
 
   it('leaves an uploaded audio file as an attachment without calling a provider', async () => {
@@ -278,6 +309,18 @@ describe('transcribeVoiceClips', () => {
 
     expect(msg.attachments).toEqual([upload]);
     expect(agentReads(msg)).toBe('');
+    expect(calls.mistral).toEqual([]);
+  });
+
+  it('leaves a non-audio upload named like a clip as an attachment', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const upload = voiceClip({ type: 'file', name: 'audio_message.pdf', mimeType: 'application/pdf' });
+    const msg = message('m1', [upload], []);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(msg.attachments).toEqual([upload]);
     expect(calls.mistral).toEqual([]);
   });
 

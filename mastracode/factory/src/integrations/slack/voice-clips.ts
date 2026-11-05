@@ -1,4 +1,6 @@
 import type { ChannelHandler } from '@mastra/core/channels';
+import { classifyProviderError } from '@mastra/core/error';
+import type { ProviderFailureKind } from '@mastra/core/error';
 import { z } from 'zod';
 
 import { tenantOrgId } from '../../routes/provider-credentials.js';
@@ -40,7 +42,8 @@ function voiceClips(message: HandlerMessage): HandlerAttachment[] {
   return message.attachments.filter(
     attachment =>
       (attachment.url !== undefined && recorded.has(attachment.url)) ||
-      (attachment.name?.startsWith('audio_message') ?? false),
+      ((attachment.type === 'audio' || attachment.type === 'video') &&
+        (attachment.name?.startsWith('audio_message') ?? false)),
   );
 }
 
@@ -53,6 +56,19 @@ function note(message: HandlerMessage, clip: HandlerAttachment, reason: string):
   say(message, `Voice clip${clip.name ? ` "${clip.name}"` : ''} not transcribed: ${reason}`);
 }
 
+const PROVIDER_FAILURES: Partial<Record<ProviderFailureKind, string>> = {
+  auth: 'the speech-to-text provider rejected the API key',
+  quota: 'the speech-to-text provider account is out of credit',
+  rate_limited: 'the speech-to-text provider is rate limiting requests, try again shortly',
+  timeout: 'speech-to-text timed out',
+  unavailable: 'the speech-to-text provider is unavailable, try again shortly',
+};
+
+/** Slack threads can include guests, so raw provider text (bodies, key fragments) stays in the server log. */
+function failureReason(error: unknown): string {
+  return PROVIDER_FAILURES[classifyProviderError(error)] ?? 'the speech-to-text provider returned an error';
+}
+
 function replaceWithTranscript(message: HandlerMessage, clip: HandlerAttachment, transcript: string): void {
   message.attachments = message.attachments.filter(attachment => attachment !== clip);
   say(message, transcript);
@@ -63,7 +79,11 @@ async function transcribeClip(
   fetchData: () => Promise<Buffer | ArrayBuffer>,
   mimeType: string,
 ): Promise<{ transcript: string } | { problem: string }> {
-  const data = await fetchData();
+  const data = await fetchData().catch((error: unknown) => {
+    console.warn('[slack] voice clip download failed', { error });
+    return undefined;
+  });
+  if (data === undefined) return { problem: 'the clip could not be downloaded' };
   const audio = data instanceof ArrayBuffer ? Buffer.from(data) : data;
   if (audio.byteLength > MAX_TRANSCRIBE_AUDIO_BYTES) return { problem: 'the clip is too long' };
   const transcript = await transcribeAudio(selection, audio, mimeType);
@@ -110,7 +130,7 @@ export async function transcribeVoiceClips(
       else note(message, clip, outcome.problem);
     } catch (error) {
       console.warn('[slack] voice clip transcription failed', { messageId: message.id, error });
-      note(message, clip, error instanceof Error ? error.message : String(error));
+      note(message, clip, failureReason(error));
     }
   }
 }
