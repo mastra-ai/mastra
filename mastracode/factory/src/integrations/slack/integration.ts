@@ -292,6 +292,8 @@ export class SlackIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       sourceControls,
       modelDefaults: ctx.storage.modelDefaults,
+      modelCredentials: ctx.storage.modelCredentials,
+      voiceSettings: ctx.storage.voiceSettings,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
       adapterOptions: this.#adapterOptions,

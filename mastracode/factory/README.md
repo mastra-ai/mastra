@@ -1106,6 +1106,8 @@ Voice input resolves its model and key the way an interactive chat in the same F
 
 Either side starts on auto, the first registry provider with a key. OAuth subscriptions are never used. With sign-in enabled, keys come only from stored credentials; in local mode the provider env var applies before a stored key. `GET`/`PUT /web/voice/settings` back **Settings → Models → Voice input**.
 
+Voice clips recorded in Slack and sent to a Factory session (a mention, a DM, or a thread the bot is in) are transcribed the same way under the thread's Factory, with the sender as the member, before the agent sees the message. A thread with no Factory session uses the sender's own voice model and key. The transcript replaces the clip; a clip that can't be transcribed stays attached with a note saying why. Uploaded audio files stay attachments.
+
 ### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
