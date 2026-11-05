@@ -139,6 +139,9 @@ export const buttonVariants = cva(
         'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'w-control-md rounded-full'),
         'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
+        // Inside a line of text (a breadcrumb's switcher or copy): a 20px circle that takes only
+        // its 14px glyph's slot, so it lines up with the text and leaves the text's spacing alone.
+        'icon-inline': '-m-0.75 size-5 rounded-full',
       },
     },
     compoundVariants: [
@@ -214,6 +217,7 @@ const iconSizeMap: Record<ButtonSize, IconSize> = {
   'icon-sm': 'sm',
   'icon-md': 'md',
   'icon-lg': 'lg',
+  'icon-inline': 'sm',
 };
 
 function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {

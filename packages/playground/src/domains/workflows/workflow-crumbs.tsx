@@ -31,5 +31,5 @@ export function WorkflowRunCopyAction() {
   const { runId } = useParams<{ runId: string }>();
   if (!runId) return null;
 
-  return <CopyButton content={runId} tooltip="Copy run id" variant="ghost" size="icon-sm" />;
+  return <CopyButton content={runId} tooltip="Copy run id" variant="ghost" size="icon-inline" />;
 }
