@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { EditorView } from '@codemirror/view';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,7 +30,7 @@ describe('TripwireNotice', () => {
       metadata: { category: 'violence' },
     };
 
-    it('loads the metadata editor only once the details are expanded', async () => {
+    it('never loads the code editor, even with the details open', async () => {
       const loadEditor = vi.fn();
       vi.resetModules();
       vi.doMock('@/ds/components/CodeEditor/code-editor', importOriginal => {
@@ -41,12 +40,9 @@ describe('TripwireNotice', () => {
       const { TripwireNotice } = await import('./tripwire-notice');
       render(<TripwireNotice reason="blocked for safety" tripwire={tripwire} />);
 
-      expect(loadEditor).not.toHaveBeenCalled();
-
       fireEvent.click(screen.getByRole('button', { name: 'Details' }));
 
-      await screen.findByRole('textbox', { name: 'Tripwire metadata' });
-      expect(loadEditor).toHaveBeenCalledOnce();
+      expect(loadEditor).not.toHaveBeenCalled();
     });
 
     it('keeps the details collapsed until requested', () => {
@@ -56,18 +52,15 @@ describe('TripwireNotice', () => {
       expect(screen.queryByText('Not allowed')).toBeNull();
     });
 
-    it('reveals retry, processor and metadata once expanded', async () => {
-      render(<TripwireNotice reason="blocked for safety" tripwire={tripwire} />);
+    it('reveals retry, processor and metadata as read-only text once expanded', () => {
+      const { container } = render(<TripwireNotice reason="blocked for safety" tripwire={tripwire} />);
 
       fireEvent.click(screen.getByRole('button', { name: 'Details' }));
 
       expect(screen.getByText('Not allowed')).not.toBeNull();
       expect(screen.getByText('moderation')).not.toBeNull();
-      const editor = (await screen.findByRole('textbox', { name: 'Tripwire metadata' })).closest<HTMLElement>(
-        '.cm-editor',
-      );
-      const view = editor ? EditorView.findFromDOM(editor) : null;
-      expect(view?.state.doc.toString()).toBe(JSON.stringify({ category: 'violence' }, null, 2));
+      expect(container.querySelector('pre')?.textContent).toBe(JSON.stringify({ category: 'violence' }, null, 2));
+      expect(screen.queryByRole('textbox')).toBeNull();
     });
   });
 
