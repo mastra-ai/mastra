@@ -1,10 +1,11 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useMastraClient } from '../../mastra-client-context';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
 import type { MastraQueryOptions } from '../shared/query-options';
+import { reconcileSubmittedFeedback } from './submitted-feedback';
 
 type SpanFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
@@ -28,16 +29,19 @@ export const useSpanFeedback = <TData = SpanFeedbackResponse,>({
   queryOptions,
 }: UseSpanFeedbackProps<TData>): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
+  const queryClient = useQueryClient();
   const pageNumber = page ?? 0;
   return useQuery({
     // `spanId` must stay in the key, otherwise React Query serves the previously
     // selected span's feedback when switching spans within the same trace.
     queryKey: ['span-feedback', traceId, spanId, pageNumber],
-    queryFn: () =>
-      client.listFeedback({
+    queryFn: async () => {
+      const response = await client.listFeedback({
         filters: { traceId, spanId },
         pagination: { page: pageNumber, perPage: 10 },
-      }),
+      });
+      return reconcileSubmittedFeedback(queryClient, traceId, spanId, response);
+    },
     refetchInterval: getFeedbackRefetchInterval,
     gcTime: 0,
     staleTime: 0,

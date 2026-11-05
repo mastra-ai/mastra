@@ -1,4 +1,9 @@
-import type { CreateFeedbackResponse, RouteResponse } from '@mastra/client-js';
+import type {
+  CreateFeedbackResponse,
+  FeedbackItem,
+  ListFeedbackResponse as SerializedListFeedbackResponse,
+  RouteResponse,
+} from '@mastra/client-js';
 
 type ListFeedbackResponse = RouteResponse<'GET /observability/feedback'>;
 
@@ -66,5 +71,21 @@ export function createdFeedbackResponse(spanId?: string): CreateFeedbackResponse
       spanId: spanId ?? null,
       timestamp: '2026-11-05T12:00:00.000Z',
     },
+  };
+}
+
+export const emptySerializedFeedbackResponse: SerializedListFeedbackResponse = {
+  feedback: [],
+  pagination: { page: 0, perPage: 10, total: 0, hasMore: false },
+};
+
+export function submittedFeedbackRecord(value: string, feedbackId: string, spanId?: string): FeedbackItem {
+  return {
+    ...createdFeedbackResponse(spanId).data!,
+    feedbackId,
+    feedbackType: 'comment',
+    feedbackSource: 'user',
+    value,
+    reviewStatus: 'needs-review',
   };
 }

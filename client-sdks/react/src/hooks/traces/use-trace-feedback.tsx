@@ -1,9 +1,10 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import { getFeedbackRefetchInterval } from '../feedback/feedback-refetch-interval';
 import type { MastraQueryOptions } from '../shared/query-options';
+import { reconcileSubmittedFeedback } from './submitted-feedback';
 
 type TraceFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
@@ -23,14 +24,17 @@ export const useTraceFeedback = <TData = TraceFeedbackResponse,>({
   queryOptions,
 }: UseTraceFeedbackProps<TData>): UseQueryResult<TData, Error> => {
   const client = useMastraClient();
+  const queryClient = useQueryClient();
   const pageNumber = page ?? 0;
   return useQuery({
     queryKey: ['trace-feedback', traceId, pageNumber],
-    queryFn: () =>
-      client.listFeedback({
+    queryFn: async () => {
+      const response = await client.listFeedback({
         filters: { traceId },
         pagination: { page: pageNumber, perPage: 10 },
-      }),
+      });
+      return reconcileSubmittedFeedback(queryClient, traceId, undefined, response);
+    },
     // The API can't express "spanId is null", so trace-level records are isolated client-side.
     // Note: this runs after server-side pagination, so a page may hold fewer than `perPage` rows.
     select: data => {

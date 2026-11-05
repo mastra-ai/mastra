@@ -2,6 +2,7 @@ import type { MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraMutationOptions } from '../shared/query-options';
+import { forgetSubmittedFeedback } from './submitted-feedback';
 
 type DeleteFeedbackResponse = Awaited<ReturnType<MastraClient['deleteFeedback']>>;
 
@@ -21,10 +22,12 @@ export const useDeleteFeedback = ({ traceId, spanId, queryOptions }: UseDeleteFe
 
   return useMutation({
     mutationFn: ({ feedbackId }: { feedbackId: string }) => client.deleteFeedback({ feedbackIds: [feedbackId] }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
+    onSuccess: async (_response, { feedbackId }) => {
+      forgetSubmittedFeedback(queryClient, traceId, spanId, new Set([feedbackId]));
+      await queryClient.invalidateQueries({
         queryKey: spanId ? ['span-feedback', traceId, spanId] : ['trace-feedback', traceId],
-      }),
+      });
+    },
     ...queryOptions,
   });
 };

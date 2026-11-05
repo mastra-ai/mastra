@@ -2,6 +2,7 @@ import type { CreateFeedbackBody, MastraClient } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraMutationOptions } from '../shared/query-options';
+import { feedbackListKey, rememberSubmittedFeedback } from './submitted-feedback';
 
 type CreateFeedbackResponse = Awaited<ReturnType<MastraClient['createFeedback']>>;
 
@@ -18,7 +19,7 @@ type UseCreateFeedbackProps = FeedbackWriteOptions & {
 
 /**
  * Submits a free-text comment as a feedback record, scoped to the trace or to a
- * single span, then invalidates the matching feedback list so it refreshes.
+ * single span. Keeps acknowledged comments visible until the refreshed list includes them.
  */
 export const useCreateFeedback = ({
   traceId,
@@ -43,10 +44,22 @@ export const useCreateFeedback = ({
           value: text,
         },
       }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: spanId ? ['span-feedback', traceId, spanId] : ['trace-feedback', traceId],
-      }),
+    onSuccess: async (response, { text }) => {
+      const queryKey = feedbackListKey(traceId, spanId);
+      if (response.success && response.data?.feedbackId && response.data.timestamp) {
+        // An already-running list request must not overwrite the acknowledged comment.
+        await queryClient.cancelQueries({ queryKey });
+        rememberSubmittedFeedback(queryClient, traceId, spanId, {
+          ...response.data,
+          feedbackType: 'comment',
+          feedbackSource: 'user',
+          value: text,
+          reviewStatus: 'needs-review',
+          ...(feedbackUserId !== undefined ? { feedbackUserId } : {}),
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey });
+    },
     ...queryOptions,
   });
 };
