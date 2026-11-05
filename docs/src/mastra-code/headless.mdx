@@ -91,7 +91,7 @@ mastracode -c --prompt "Continue where you left off"
 
 ## Programmatic usage
 
-Bootstrap Mastra Code with [`createMastraCode()`](/reference), then pass the returned `controller` and `session` to `runMC()`. `createMastraCode()` is async; `runMC()` is synchronous and returns a run handle immediately. Pass `planApprovalStartsGoal: false` because `runMC()` approves submitted plans without starting a goal, so the agent shouldn't be told one will start.
+Bootstrap Mastra Code with [`createMastraCode()`](/reference), then pass the returned `controller` and `session` to `runMC()`. `createMastraCode()` is async; `runMC()` is synchronous and returns a run handle immediately. Pass `planApprovalStartsGoal: false` because `runMC()`'s default `autoApprovePolicy` approves submitted plans without starting a goal, so the agent shouldn't be told one will start.
 
 ```typescript title="src/run.ts"
 import { createMastraCode, runMC } from 'mastracode'
