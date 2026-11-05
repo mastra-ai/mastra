@@ -43,6 +43,7 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, Card as FactoryCard, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
+import type { VoiceFactory } from '../../voice/transcription.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
 import { markNewChannelSession } from './channel-session-link-processor.js';
@@ -101,6 +102,16 @@ interface SlackChannelDeps extends VoiceClipDeps {
    * has so an `aside` can land on it. New threads never create cards.
    */
   workItems?: WorkItemsStorage;
+  /**
+   * Factory projects domain. When provided (alongside `accountLinks`), a
+   * linked sender's run must also resolve to a Factory project before it
+   * dispatches: their link's default factory, else their tenant's only
+   * factory (stamped back onto the link), else a "pick a default factory"
+   * card posted in the thread and no run. Unset → no factory routing (runs
+   * dispatch as before). The run's Factory also decides whose model and key
+   * transcribe a voice clip.
+   */
+  projects?: FactoryProjectsStorage;
   /**
    * Work-item feed. With it (and `workItems`), an `aside` lands as a comment on
    * the card the thread already has. Unset → asides stay ignored, as before.
@@ -751,8 +762,14 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
 
 type InternalThread = Awaited<ReturnType<typeof findInternalThread>>;
 
+/**
+ * The Factory a run belongs to: none for a chat-only thread, the routed one for
+ * a thread the session resolver has yet to create, else the existing session's.
+ */
+type RunFactory = { kind: 'none' } | { kind: 'new-thread' } | { kind: 'session'; resolve: () => Promise<string> };
+
 type ExistingSessionOwnerContext =
-  | { status: 'ready'; factoryProjectId?: string }
+  | { status: 'ready'; runFactory: RunFactory }
   | { status: 'organization-mismatch' }
   | { status: 'access-denied' };
 
@@ -769,7 +786,9 @@ async function prepareExistingSessionOwnerContext(
   },
 ): Promise<ExistingSessionOwnerContext> {
   const sourceControls = configuredSourceControls(deps);
-  if (sourceControls.length === 0 && !options.requireInternalThread) return { status: 'ready' };
+  if (sourceControls.length === 0 && !options.requireInternalThread) {
+    return { status: 'ready', runFactory: { kind: 'none' } };
+  }
 
   const internalThread =
     options.internalThread !== undefined ? options.internalThread : await findInternalThread(ctx.mastra, thread);
@@ -777,9 +796,11 @@ async function prepareExistingSessionOwnerContext(
     if (options.requireInternalThread) {
       throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
     }
-    return { status: 'ready' };
+    return { status: 'ready', runFactory: sourceControls.length === 0 ? { kind: 'none' } : { kind: 'new-thread' } };
   }
-  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return { status: 'ready' };
+  if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) {
+    return { status: 'ready', runFactory: { kind: 'none' } };
+  }
   const sessions = createSourceControlSessionLookup(sourceControls);
   const memory = await ctx.mastra?.getStorage()?.getStore('memory');
   const resolved = await slackThreadSessionId(
@@ -819,15 +840,20 @@ async function prepareExistingSessionOwnerContext(
         : 'its source-control session row has no organization';
     throw new Error(`Could not authorize the owner of Slack Factory session ${sessionId}: ${reason}.`);
   }
-  if (!sessionRow?.factoryProjectId) return { status: 'ready' };
-  const { factoryProjectId } = await sessionRunFactory(deps.workItems, {
-    orgId: options.expectedOrgId,
-    factoryProjectId: sessionRow.factoryProjectId,
-    resourceId: internalThread.resourceId,
-    sessionId,
-    threadId: internalThread.id,
-  });
-  return { status: 'ready', factoryProjectId };
+  const sessionFactoryId = sessionRow?.factoryProjectId;
+  if (!sessionFactoryId) return { status: 'ready', runFactory: { kind: 'none' } };
+  const expectedOrgId = options.expectedOrgId;
+  const resolve = async () => {
+    const { factoryProjectId } = await sessionRunFactory(deps.workItems, {
+      orgId: expectedOrgId,
+      factoryProjectId: sessionFactoryId,
+      resourceId: internalThread.resourceId,
+      sessionId,
+      threadId: internalThread.id,
+    });
+    return factoryProjectId;
+  };
+  return { status: 'ready', runFactory: { kind: 'session', resolve } };
 }
 
 /**
@@ -838,8 +864,8 @@ async function prepareExistingSessionOwnerContext(
 /**
  * Run the account-link + factory-routing gates for one inbound message.
  * Returns `null` when the run must not dispatch (a prompt card was posted
- * where possible); otherwise the linked sender, if any, and the Factory the
- * run belongs to: an existing session's own, else the sender's route.
+ * where possible); otherwise the linked sender, if any, and a lookup of the
+ * Factory the run belongs to (see {@link RunFactory}).
  */
 async function gateDispatch(
   thread: HandlerThread,
@@ -847,7 +873,7 @@ async function gateDispatch(
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
   options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
-): Promise<{ link?: ChannelAccountLink; factoryProjectId?: string } | null> {
+): Promise<{ link?: ChannelAccountLink; voiceFactory?: () => Promise<VoiceFactory | undefined> } | null> {
   const { accountLinks, projects } = deps;
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
@@ -882,16 +908,25 @@ async function gateDispatch(
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
-    if (route.status === 'resolved') {
+    if (route.status === 'resolved' && sender.link.orgId) {
       // The model runs with the session owner's credentials, but Factory tools
       // must act as the authenticated Slack sender, not the session owner.
-      if (sender.link.orgId) {
-        ctx.requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: sender.link.userId, orgId: sender.link.orgId });
-        ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
-      }
-      return { link: sender.link, factoryProjectId: ownerContext.factoryProjectId ?? route.factoryProjectId };
+      ctx.requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: sender.link.userId, orgId: sender.link.orgId });
+      ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
     }
-    return { link: sender.link, factoryProjectId: ownerContext.factoryProjectId };
+    const { runFactory } = ownerContext;
+    const factoryId =
+      runFactory.kind === 'session'
+        ? runFactory.resolve
+        : runFactory.kind === 'new-thread' && route.status === 'resolved'
+          ? async () => route.factoryProjectId
+          : undefined;
+    const orgId = sender.link.orgId ?? '';
+    const voiceFactory =
+      factoryId && projects
+        ? async () => (await projects.get({ orgId, id: await factoryId() })) ?? undefined
+        : undefined;
+    return { link: sender.link, voiceFactory };
   }
   return {};
 }
@@ -1008,7 +1043,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       // after the agent's first reply.
       if (!(await thread.isSubscribed())) markNewChannelSession(ctx.requestContext);
       acknowledgeReceipt(thread, deps);
-      await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.factoryProjectId);
+      await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.voiceFactory);
     } catch (error) {
       await reportPreDispatchError(thread, message, ctx, error);
       return;
@@ -1101,7 +1136,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
       acknowledgeReceipt(thread, deps);
       try {
-        await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.factoryProjectId);
+        await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.voiceFactory);
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);
         return;

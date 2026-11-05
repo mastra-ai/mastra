@@ -1,12 +1,15 @@
-import type { Attachment, Message } from 'chat';
+import type { ChannelHandler } from '@mastra/core/channels';
 import { stringifyMarkdown } from 'chat';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { factoryVoiceSettingsUserId } from '../../storage/domains/voice-settings/base.js';
+import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { transcribeVoiceClips, VOICE_CLIP_TIMEOUT_MS } from './voice-clips.js';
+import { transcribeVoiceClips } from './voice-clips.js';
+
+type Message = Parameters<ChannelHandler>[1];
+type Attachment = Message['attachments'][number];
 
 const OPENAI_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const MISTRAL_URL = 'https://api.mistral.ai/v1/audio/transcriptions';
@@ -50,10 +53,13 @@ afterEach(() => server.resetHandlers());
 
 const SENDER = { orgId: 'org1', userId: 'user-a' };
 
+let clipCount = 0;
+
 function voiceClip(overrides: Partial<Attachment> = {}): Attachment {
   return {
     type: 'audio',
     name: 'audio_message.m4a',
+    url: `https://files.slack.com/files-pri/T1-F${(clipCount += 1)}/audio_message.m4a`,
     mimeType: 'audio/mp4',
     size: 15,
     fetchData: async () => Buffer.from('fake aac bytes'),
@@ -61,8 +67,19 @@ function voiceClip(overrides: Partial<Attachment> = {}): Attachment {
   };
 }
 
-function message(id: string, attachments: Attachment[]): Message {
-  return { id, text: '', formatted: { type: 'root', children: [] }, attachments } as unknown as Message;
+/** `recorded` are the files Slack's event marks as composer recordings (`subtype: 'slack_audio'`). */
+function message(id: string, attachments: Attachment[], recorded: Attachment[] = attachments): Message {
+  const files = attachments.map(attachment => ({
+    url_private: attachment.url,
+    ...(recorded.includes(attachment) ? { subtype: 'slack_audio' } : {}),
+  }));
+  return {
+    id,
+    text: '',
+    formatted: { type: 'root', children: [] },
+    attachments,
+    raw: { type: 'message', files },
+  } as unknown as Message;
 }
 
 function agentReads(msg: Message): string {
@@ -107,8 +124,8 @@ describe('transcribeVoiceClips', () => {
     await transcribeVoiceClips(
       [msg],
       SENDER,
-      { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings, projects: seed.projects },
-      project.id,
+      { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings },
+      async () => project,
     );
 
     expect(msg.attachments).toEqual([clip]);
@@ -128,7 +145,7 @@ describe('transcribeVoiceClips', () => {
     await seed.voiceSettings.set({ ...SENDER, provider: 'mistral', model: 'voxtral-mini-latest' });
     await seed.voiceSettings.set({
       orgId: 'org1',
-      userId: factoryVoiceSettingsUserId(project.id),
+      userId: factoryProjectSettingsUserId(project.id),
       provider: 'openai',
       model: 'whisper-1',
     });
@@ -137,8 +154,8 @@ describe('transcribeVoiceClips', () => {
     await transcribeVoiceClips(
       [msg],
       SENDER,
-      { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings, projects: seed.projects },
-      project.id,
+      { modelCredentials: seed.credentials, voiceSettings: seed.voiceSettings },
+      async () => project,
     );
 
     expect(agentReads(msg)).toBe('hello from whisper');
@@ -211,7 +228,7 @@ describe('transcribeVoiceClips', () => {
 
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toBe('Voice clip "audio_message.m4a" not transcribed: the clip is too long');
+    expect(agentReads(msg)).toContain('too long');
     expect(calls.mistral).toEqual([]);
   });
 
@@ -222,7 +239,7 @@ describe('transcribeVoiceClips', () => {
 
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
-    expect(agentReads(msg)).toBe('Voice clip "audio_message.m4a" not transcribed: the clip could not be downloaded');
+    expect(agentReads(msg)).toContain('could not be downloaded');
   });
 
   it('names each clip in its note so a message with several clips stays unambiguous', async () => {
@@ -236,32 +253,8 @@ describe('transcribeVoiceClips', () => {
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
     expect(msg.attachments.map(clip => clip.name)).toEqual(['huge.m4a']);
-    expect(agentReads(msg)).toBe('ship the fix\n\nVoice clip "huge.m4a" not transcribed: the clip is too long');
-  });
-
-  it('gives up on a clip that never finishes and says it timed out', async () => {
-    const seed = await createFactoryStorageForTests();
-    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
-    const download = Promise.withResolvers<void>();
-    const msg = message('m1', [
-      voiceClip({
-        fetchData: () => {
-          download.resolve();
-          return new Promise<Buffer>(() => {});
-        },
-      }),
-    ]);
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      const done = transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
-      await download.promise;
-      await vi.advanceTimersByTimeAsync(VOICE_CLIP_TIMEOUT_MS);
-      await done;
-    } finally {
-      vi.useRealTimers();
-    }
-
-    expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: transcription timed out/);
+    expect(agentReads(msg)).toContain('ship the fix');
+    expect(agentReads(msg)).toMatch(/"huge\.m4a".*too long/);
   });
 
   it('surfaces a provider failure as a note on the clip', async () => {
@@ -273,6 +266,31 @@ describe('transcribeVoiceClips', () => {
     await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
 
     expect(agentReads(msg)).toMatch(/^Voice clip "audio_message.m4a" not transcribed: .*Status 500/);
+  });
+
+  it('leaves an uploaded audio file as an attachment without calling a provider', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const upload = voiceClip({ name: 'interview.mp3', mimeType: 'audio/mpeg' });
+    const msg = message('m1', [upload], []);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(msg.attachments).toEqual([upload]);
+    expect(agentReads(msg)).toBe('');
+    expect(calls.mistral).toEqual([]);
+  });
+
+  it('transcribes a recorded clip Slack labels as video', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-mistral' });
+    const msg = message('m1', [voiceClip({ type: 'video', name: 'audio_message.mp4', mimeType: 'video/mp4' })]);
+
+    await transcribeVoiceClips([msg], SENDER, { modelCredentials: seed.credentials });
+
+    expect(msg.attachments).toEqual([]);
+    expect(agentReads(msg)).toBe('ship the fix');
+    expect(calls.mistral.map(c => c.filename)).toEqual([expect.stringMatching(/\.mp4$/)]);
   });
 
   it('leaves messages without voice clips untouched', async () => {

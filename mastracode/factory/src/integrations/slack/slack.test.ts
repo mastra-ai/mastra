@@ -6,7 +6,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
-import { factoryVoiceSettingsUserId } from '../../storage/domains/voice-settings/base.js';
+import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
@@ -2552,17 +2552,24 @@ describe('Slack voice clips', () => {
     return { seed, thread, ctx, deps, defaultHandler, defaultFactory, saveInternalThread };
   }
 
+  const CLIP_URL = 'https://files.slack.com/files-pri/T-1-F1/audio_message.m4a';
+
   function voiceMessage({ isMention = false, rawText }: { isMention?: boolean; rawText?: string } = {}) {
     return {
       ...makeMessage('T-1'),
       id: '1700.43',
       text: '',
       isMention,
-      raw: { team_id: 'T-1', ...(rawText ? { text: rawText } : {}) },
+      raw: {
+        team_id: 'T-1',
+        files: [{ subtype: 'slack_audio', url_private: CLIP_URL }],
+        ...(rawText ? { text: rawText } : {}),
+      },
       formatted: { type: 'root', children: [] },
       attachments: [
         {
           type: 'audio',
+          url: CLIP_URL,
           mimeType: 'audio/mp4',
           name: 'audio_message.m4a',
           size: 15,
@@ -2570,6 +2577,20 @@ describe('Slack voice clips', () => {
         },
       ],
     };
+  }
+
+  async function factoryScopeDefault(f: Awaited<ReturnType<typeof fixture>>) {
+    const project = await f.seed.projects.create({ ...SENDER, input: { name: 'Shared', modelScope: 'factory' } });
+    await f.defaultFactory(project.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    await f.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
+    await f.seed.voiceSettings.set({
+      orgId: 'org-1',
+      userId: factoryProjectSettingsUserId(project.id),
+      provider: 'openai',
+      model: 'whisper-1',
+    });
+    return project;
   }
 
   it("answers a subscribed follow-up clip as its transcript on the sender's key, after showing typing", async () => {
@@ -2588,6 +2609,31 @@ describe('Slack voice clips', () => {
     expect(events).toEqual(['typing', 'mistral Bearer sk-personal']);
   });
 
+  it("bills a chat-only thread's clip to the sender, even when their default Factory spends org keys", async () => {
+    const f = await fixture();
+    await f.saveInternalThread('thread-1', 'channel:slack-thread-1');
+    await factoryScopeDefault(f);
+    const message = voiceMessage();
+
+    await createHandlers(f.deps).onSubscribedMessage!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(message.text).toBe('ship the fix');
+    expect(events).toEqual(['typing', 'mistral Bearer sk-personal']);
+  });
+
+  it("transcribes a clip that starts a repo-backed thread under the sender's routed Factory", async () => {
+    const f = await fixture();
+    await factoryScopeDefault(f);
+    f.thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    const sourceControl = { sessions: { getBySessionId: vi.fn(async () => null) } } as any;
+    const message = voiceMessage({ isMention: true });
+
+    await createHandlers({ ...f.deps, sourceControl }).onMention!(f.thread, message, f.defaultHandler, f.ctx);
+
+    expect(message.text).toBe('hello from whisper');
+    expect(events).toEqual(['typing', 'openai Bearer sk-org']);
+  });
+
   it("transcribes under the thread's session Factory, not the sender's default Factory", async () => {
     const f = await fixture();
     const sessionFactory = await f.seed.projects.create({
@@ -2601,7 +2647,7 @@ describe('Slack voice clips', () => {
     await f.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', { type: 'api_key', key: 'sk-org' });
     await f.seed.voiceSettings.set({
       orgId: 'org-1',
-      userId: factoryVoiceSettingsUserId(sessionFactory.id),
+      userId: factoryProjectSettingsUserId(sessionFactory.id),
       provider: 'openai',
       model: 'whisper-1',
     });
@@ -2626,6 +2672,32 @@ describe('Slack voice clips', () => {
 
     expect(message.text).toBe('hello from whisper');
     expect(events).toEqual(['typing', 'openai Bearer sk-org']);
+  });
+
+  it("looks up the session's run binding only for a message that carries a clip", async () => {
+    const f = await fixture();
+    const sessionFactory = await f.seed.projects.create({ ...SENDER, input: { name: 'Shared', modelScope: 'user' } });
+    await f.saveInternalThread('session-1', sessionFactory.id);
+    await f.defaultFactory(sessionFactory.id);
+    await f.seed.credentials.setCredential(SENDER, 'mistral', { type: 'api_key', key: 'sk-personal' });
+    const sessionRow = {
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: sessionFactory.id,
+      branch: 'slack/1700-42',
+      visibility: 'org',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (id: string) => (id === 'session-1' ? sessionRow : null)) },
+    } as any;
+    const findRunBinding = vi.spyOn(f.seed.workItems, 'findRunBindingByThread');
+    const handlers = createHandlers({ ...f.deps, sourceControl, workItems: f.seed.workItems });
+
+    await handlers.onSubscribedMessage!(f.thread, { ...makeMessage('T-1'), id: '1700.44' }, f.defaultHandler, f.ctx);
+    expect(findRunBinding).not.toHaveBeenCalled();
+
+    await handlers.onSubscribedMessage!(f.thread, voiceMessage(), f.defaultHandler, f.ctx);
+    expect(findRunBinding).toHaveBeenCalledTimes(1);
   });
 
   it('spends no key on a clip sent with `@bot mute`', async () => {

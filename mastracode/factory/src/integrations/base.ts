@@ -152,7 +152,7 @@ export interface IntegrationContext {
     channelIdentity: ChannelIdentityStorage;
     /** Tenant model credentials, so a channel can transcribe a voice clip with the sender's STT key. */
     modelCredentials: ModelCredentialsStorage;
-    /** Per-user speech-to-text model choice (Settings → Voice input). */
+    /** Per-user and per-Factory speech-to-text model choice (Settings → Models → Voice input). */
     voiceSettings: VoiceSettingsStorage;
   };
   /**
