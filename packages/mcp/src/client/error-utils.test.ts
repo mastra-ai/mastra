@@ -1,4 +1,4 @@
-import { SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
+import { ProtocolError, SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -156,6 +156,7 @@ describe('isUnsentRequestError', () => {
     ['response cut off', new Error('TypeError: terminated'), false],
     ['transport closed', new Error('Connection closed'), false],
     ['not reconnectable', new Error('Validation failed'), false],
+    ['JSON-RPC error quoting a refused connection', new ProtocolError(-32603, 'connect ECONNREFUSED 10.0.0.2:5432'), false],
   ])('%s -> %s', (_label, error, unsent) => {
     expect(isUnsentRequestError(error)).toBe(unsent);
   });

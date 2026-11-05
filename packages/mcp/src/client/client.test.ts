@@ -3385,7 +3385,7 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
   let mcpServer: McpServer;
   let baseUrl: URL;
   let failing = false;
-  let dropPingDuringWrite = false;
+  let dropDuringWrite: string | undefined;
   let toolCallsReceived: Record<string, number> = {};
   let ticketsCreated = 0;
   let writeStarted: Promise<void>;
@@ -3396,22 +3396,35 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
 
   beforeEach(async () => {
     failing = false;
-    dropPingDuringWrite = false;
+    dropDuringWrite = undefined;
     toolCallsReceived = {};
     ticketsCreated = 0;
     writeStarted = new Promise(resolve => (markWriteStarted = resolve));
     writeMayFinish = new Promise(resolve => (finishWrite = resolve));
-    mcpServer = new McpServer({ name: 'wedge-repro-server', version: '0.0.1' }, { capabilities: { tools: {} } });
-    mcpServer.registerTool('ping', { description: 'ping', inputSchema: z.object({}) }, async () => ({
-      content: [{ type: 'text', text: 'pong' }],
-    }));
-    mcpServer.registerTool('createTicket', { description: 'create a ticket', inputSchema: z.object({}) }, async () => {
-      ticketsCreated++;
-      markWriteStarted();
-      await writeMayFinish;
-      return { content: [{ type: 'text', text: `ticket-${ticketsCreated}` }] };
-    });
-    const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
+    // A fresh instance per request, like MCPServer, so a slow call doesn't block a concurrent one.
+    const buildServer = () => {
+      const server = new McpServer({ name: 'wedge-repro-server', version: '0.0.1' }, { capabilities: { tools: {} } });
+      server.registerTool('ping', { description: 'ping', inputSchema: z.object({}) }, async () => ({
+        content: [{ type: 'text', text: 'pong' }],
+      }));
+      for (const [name, annotations] of [
+        ['lookup', { readOnlyHint: true }],
+        ['setStatus', { readOnlyHint: false, idempotentHint: true }],
+      ] as const) {
+        server.registerTool(name, { description: name, inputSchema: z.object({}), annotations }, async () => ({
+          content: [{ type: 'text', text: 'pong' }],
+        }));
+      }
+      server.registerTool('createTicket', { description: 'create a ticket', inputSchema: z.object({}) }, async () => {
+        ticketsCreated++;
+        markWriteStarted();
+        await writeMayFinish;
+        return { content: [{ type: 'text', text: `ticket-${ticketsCreated}` }] };
+      });
+      return server;
+    };
+    mcpServer = buildServer();
+    const handler = toNodeHandler(createMcpHandler(() => buildServer().server, { legacy: 'reject' }));
 
     httpServer = createServer(async (req, res) => {
       if (failing) {
@@ -3430,8 +3443,8 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
       if (body?.method === 'tools/call') {
         const name = body.params?.name;
         toolCallsReceived[name] = (toolCallsReceived[name] ?? 0) + 1;
-        if (name === 'ping' && dropPingDuringWrite) {
-          dropPingDuringWrite = false;
+        if (name === dropDuringWrite) {
+          dropDuringWrite = undefined;
           await writeStarted;
           req.socket.destroy();
           return;
@@ -3587,26 +3600,35 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
   }, 20000);
 
   // A dropped socket can follow a request the server already ran, and reconnecting closed the
-  // shared transport, aborting the in-flight write so it was sent again. (#28415)
-  it('creates one ticket when a parallel call loses its connection while the write runs (#28415)', async () => {
-    client = new InternalMastraMCPClient({
-      name: 'replay-safety',
-      server: { url: baseUrl },
-    });
-    await client.connect();
-    const tools = await client.tools();
+  // shared transport, aborting the in-flight write so it was sent again. Tools annotated
+  // read-only or idempotent are still retried, on the open transport. (#28415)
+  it.each([
+    ['an unannotated', 'ping', 1, { status: 'rejected', reason: { id: 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN' } }],
+    ['a read-only', 'lookup', 2, { status: 'fulfilled', value: { content: [{ type: 'text', text: 'pong' }] } }],
+    ['an idempotent', 'setStatus', 2, { status: 'fulfilled', value: { content: [{ type: 'text', text: 'pong' }] } }],
+  ])(
+    'creates one ticket when %s parallel call loses its connection while the write runs (#28415)',
+    async (_label, droppedTool, droppedToolCalls, droppedOutcome) => {
+      client = new InternalMastraMCPClient({
+        name: 'replay-safety',
+        server: { url: baseUrl },
+      });
+      await client.connect();
+      const tools = await client.tools();
 
-    dropPingDuringWrite = true;
-    const write = tools['createTicket'].execute!({});
-    const [ping] = await Promise.allSettled([tools['ping'].execute!({})]);
-    finishWrite();
-    const [ticket] = await Promise.allSettled([write]);
+      dropDuringWrite = droppedTool;
+      const write = tools['createTicket'].execute!({});
+      const [dropped] = await Promise.allSettled([tools[droppedTool].execute!({})]);
+      finishWrite();
+      const [ticket] = await Promise.allSettled([write]);
 
-    expect(ticketsCreated).toBe(1);
-    expect(toolCallsReceived).toEqual({ createTicket: 1, ping: 1 });
-    expect(ticket).toMatchObject({ status: 'fulfilled', value: { content: [{ type: 'text', text: 'ticket-1' }] } });
-    expect(ping).toMatchObject({ status: 'rejected', reason: { id: 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN' } });
-  }, 20000);
+      expect(ticketsCreated).toBe(1);
+      expect(toolCallsReceived).toEqual({ createTicket: 1, [droppedTool]: droppedToolCalls });
+      expect(ticket).toMatchObject({ status: 'fulfilled', value: { content: [{ type: 'text', text: 'ticket-1' }] } });
+      expect(dropped).toMatchObject(droppedOutcome);
+    },
+    20000,
+  );
 });
 
 describe('InternalMastraMCPClient - concurrent tool reconnects', () => {

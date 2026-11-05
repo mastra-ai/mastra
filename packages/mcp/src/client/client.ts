@@ -1967,9 +1967,19 @@ export class InternalMastraMCPClient extends MastraBase {
                 (e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED' || e.id.startsWith('MCP_CLIENT_TOOL_TASK_'));
 
               if (!isToolExecutionError && isReconnectableMCPError(e) && !isUnsentRequestError(e)) {
-                // The server may already have run the tool, so sending it again could repeat
-                // a write. Reconnecting is skipped too: closing the shared transport would
-                // abort healthy calls in flight on it.
+                // Closing a transport that is still open would abort healthy calls in flight on
+                // it, so only reconnect when this failure already closed or replaced it.
+                if (annotations?.readOnlyHint === true || annotations?.idempotentHint === true) {
+                  this.log('debug', `Retrying replay-safe tool ${tool.name} after a transport error`, {
+                    error: errorKind(e),
+                  });
+                  if (this.transport !== failedTransport) {
+                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
+                  }
+                  return await executeToolCall();
+                }
+
+                // The server may already have run the tool, so sending it again could repeat a write.
                 this.log('error', `Lost the connection during tool ${tool.name}; it may have run`, {
                   error: errorKind(e),
                 });
