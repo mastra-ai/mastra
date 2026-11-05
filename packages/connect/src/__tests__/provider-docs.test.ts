@@ -185,6 +185,29 @@ describe('Connect provider docs generation', () => {
     );
   });
 
+  it('uses a bare apostrophe for possessive names ending in s', () => {
+    const metadata = meta();
+    metadata.mcpProviders['remote-mcp'] = { ...metadata.mcpProviders['remote-mcp']!, name: 'Remote Docs' };
+    generate(metadata);
+    const page = read(join(INTEGRATIONS_DIR, 'providers/remote.mdx'));
+
+    expect(page).toContain("discovers Remote Docs' tools");
+    expect(page).toContain("through Remote Docs' authorization");
+    expect(page).not.toContain("Docs's");
+  });
+
+  it('renders an optional warning on MCP and tool provider pages', () => {
+    const metadata = meta();
+    metadata.mcpProviders['remote-mcp'] = { ...metadata.mcpProviders['remote-mcp']!, warning: 'Calls move money.' };
+    metadata.toolProviders.acme = { ...metadata.toolProviders.acme!, warning: 'Calls delete events.' };
+    generate(metadata);
+
+    expect(read(join(INTEGRATIONS_DIR, 'providers/remote.mdx'))).toContain(':::warning\n\nCalls move money.\n\n:::');
+    const acme = read(join(INTEGRATIONS_DIR, 'providers/acme.mdx'));
+    expect(acme).toContain(':::warning\n\nCalls delete events.\n\n:::');
+    expect(acme).toContain('Shared accounts can only read events.');
+  });
+
   it('emits only providers explicitly opted in', () => {
     const written = generate();
     expect(written).toEqual([

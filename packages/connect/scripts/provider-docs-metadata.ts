@@ -42,6 +42,8 @@ export interface ProviderDocs {
   summary?: string;
   /** Explicit output allowlist: only providers with `emit: true` produce a page or partial. */
   emit?: boolean;
+  /** Security concern or destructive consequence shown as a warning in the provider's page or partial. */
+  warning?: string;
 }
 
 export interface ToolProviderDocs extends ProviderDocs {
@@ -392,6 +394,8 @@ export const MCP_PROVIDERS: Record<string, McpProviderDocs> = {
     category: 'Other providers',
     summary: 'read account and market data and place trades',
     emit: true,
+    warning:
+      'These tools can place real trades with real money. Require approval for trading tools with `requireApproval` so a person confirms each order before it runs. See [MCP providers](/reference/connect/tools#mcp-providers).',
     mcpDocsUrl: 'https://robinhood.com/us/en/support/agentic-trading',
     mcpDocsLabel: 'Agentic Trading',
   },

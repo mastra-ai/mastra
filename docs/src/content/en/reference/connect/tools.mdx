@@ -236,15 +236,15 @@ export const opsAgent = new Agent({
   tools: async ctx => {
     const all = await connectTools(ctx)
 
-    if (ctx.requestContext?.get('role') === 'viewer') {
-      return Object.fromEntries(Object.entries(all).filter(([key]) => viewerTools.has(key)))
+    if (ctx.requestContext?.get('role') === 'admin') {
+      return all
     }
-    return all
+    return Object.fromEntries(Object.entries(all).filter(([key]) => viewerTools.has(key)))
   },
 })
 ```
 
-Set `role` in trusted server-side code based on the authenticated user. [Vary tools by channel](/reference/connect/channels#vary-tools-by-channel) applies the same pattern to channel messages.
+Only the `admin` role gets every tool. Any other or missing role gets the viewer subset. Set `role` in trusted server-side code based on the authenticated user. [Vary tools by channel](/reference/connect/channels#vary-tools-by-channel) applies the same pattern to channel messages.
 
 Error handling depends on the cause:
 

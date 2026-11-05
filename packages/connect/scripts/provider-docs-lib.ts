@@ -161,6 +161,15 @@ function noteBlock(note: string | undefined): string {
   return note ? `:::note\n\n${note}\n\n:::\n\n` : '';
 }
 
+function admonitions(docs: ProviderDocs, mcp: boolean): string {
+  const warning = docs.warning ? `:::warning\n\n${docs.warning}\n\n:::\n\n` : '';
+  return warning + (mcp ? '' : noteBlock((docs as ToolProviderDocs).note));
+}
+
+function possessive(name: string): string {
+  return name.endsWith('s') ? `${name}'` : `${name}'s`;
+}
+
 /** Escapes text for a single-quoted TypeScript string literal. */
 function tsString(text: string): string {
   return `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
@@ -191,7 +200,7 @@ function toolsetSummary(id: string, docs: ToolProviderDocs, tools: Tool[]): stri
 }
 
 function mcpSummary(id: string, docs: McpProviderDocs): string {
-  return `Mastra discovers ${docs.name}'s tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your \`@mastra/connect\` version. Tool keys start with \`${id}_\`.
+  return `Mastra discovers ${possessive(docs.name)} tools from its MCP server when the agent runs. The available tools depend on the server and the connected account, not on your \`@mastra/connect\` version. Tool keys start with \`${id}_\`.
 
 To see which tools ${docs.name} provides, read the [${docs.mcpDocsLabel}](${docs.mcpDocsUrl}) documentation. To require approval before a call runs, see [MCP providers](${TOOLS_REFERENCE}#mcp-providers) in the \`tools()\` reference.`;
 }
@@ -207,7 +216,7 @@ export function renderProviderPage(id: string, docs: ProviderDocs, meta: DocsMet
   const mcp = tools === undefined;
   const description = `Give Mastra agents ${docs.name} tools through Mastra Connect to ${docs.summary}.`;
   const usage = mcp ? mcpSummary(id, docs as McpProviderDocs) : toolsetSummary(id, docs, tools);
-  const note = mcp ? '' : noteBlock((docs as ToolProviderDocs).note);
+  const note = admonitions(docs, mcp);
 
   return `---
 title: ${yamlString(`${docs.name} | ${docs.category}`)}
@@ -232,7 +241,7 @@ Run this command from the directory that contains your \`.env\` file:
 
 ${connectCommand(id)}
 
-The CLI guides you through ${docs.name}'s authorization and waits until the connection is active.
+The CLI guides you through ${possessive(docs.name)} authorization and waits until the connection is active.
 
 ### Add tools to an agent
 
@@ -247,8 +256,8 @@ ${usage}
 export function renderPartial(id: string, docs: ProviderDocs, tools?: Tool[]): string {
   const mcp = tools === undefined;
   const usage = mcp ? mcpSummary(id, docs as McpProviderDocs) : toolsetSummary(id, docs, tools);
-  const note = mcp ? '' : noteBlock((docs as ToolProviderDocs).note);
-  const source = mcp ? ` from ${docs.name}'s hosted Model Context Protocol (MCP) server` : '';
+  const note = admonitions(docs, mcp);
+  const source = mcp ? ` from ${possessive(docs.name)} hosted Model Context Protocol (MCP) server` : '';
 
   return `${GENERATED_MARKER}
 
