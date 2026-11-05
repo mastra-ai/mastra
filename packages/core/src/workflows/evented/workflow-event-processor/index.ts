@@ -158,16 +158,17 @@ type ForeachStepResult = {
   [key: string]: unknown;
 };
 
-/** Whether a live step result has the same output as its stored (serialized) copy. */
+/** Whether a live step result has the same status and output as its stored (serialized) copy. */
 function isSameAsStored(
   live: StepResult<any, any, any, any>,
   stored: StepResult<any, any, any, any> | undefined,
 ): boolean {
+  if (!stored || live.status !== stored.status) return false;
   const output = (live as { output?: unknown }).output;
   try {
     return deepEqual(
       output === undefined ? undefined : JSON.parse(JSON.stringify(output)),
-      (stored as { output?: unknown } | undefined)?.output,
+      (stored as { output?: unknown }).output,
     );
   } catch {
     return false;
