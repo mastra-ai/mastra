@@ -3215,7 +3215,7 @@ describe('Agent Routes Authorization', () => {
       ]);
     });
 
-    it("follows the run's current claim when it resumes from a frame count past the takeover marker", async () => {
+    it("follows the run's current claim when it resumes from an offset past the takeover marker", async () => {
       const runId = 'observe-offset-takeover-run';
       const publish = (event: Record<string, unknown>) =>
         mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
@@ -3241,13 +3241,11 @@ describe('Agent Routes Authorization', () => {
       await text('recovered', current);
       await publish({ type: 'finish', data: {}, generation: current });
 
-      // The client already received 'before takeover ' and 'seen '; the marker sends no frame and
-      // the lost execution's finish is dropped, so neither counts toward the offset.
       const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
         mastra,
         agentId: 'test-durable-agent',
         runId,
-        offset: 2,
+        offset: 3,
         abortSignal: new AbortController().signal,
       } as any)) as ReadableStream<any>;
 

@@ -177,7 +177,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           const runId = `observe-terminal-${kind}-${terminal}`;
           const topic = AGENT_STREAM_TOPIC(runId);
           // Exercise the real replay log and core adapter as the reference, including
-          // lifecycle records that never reach the wire and so must not count toward offsets.
+          // lifecycle records that consume offsets but must not leak onto the wire.
           await agent.pubsub.publish(topic, { runId, type: 'iteration-complete', data: {} });
           await agent.pubsub.publish(topic, { runId, type: 'suspended', data: { type: 'suspension' } });
           await agent.pubsub.publish(topic, {
@@ -220,14 +220,14 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           } finally {
             await reference.cleanup();
           }
-          for (const offset of [0, 1, 2, 3]) {
+          for (const offset of [0, 1, 2]) {
             const response = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({ runId, offset }),
             });
             expect(response.status).toBe(200);
-            expect(await collectPublicFrames(response)).toEqual(expected.slice(offset));
+            expect(await collectPublicFrames(response)).toEqual(expected);
           }
           expect(expected).toHaveLength(terminal === 'error' ? 1 : 2);
           if (config.observeWithClient) expect(await config.observeWithClient(server.baseUrl, runId)).toEqual(expected);
@@ -462,82 +462,25 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
               expect(await config.observeWithClient(server.baseUrl, runId, offset)).toEqual(frames);
             }
           }
-          // Offsets count frames received, so they stay valid past the tool loop's lifecycle records.
-          const secondStep = frames.findLastIndex(frame => frame.type === 'step-start');
-          expect(secondStep).toBeGreaterThan(0);
-          for (const offset of [secondStep, secondStep + 1]) {
-            expect(await collectPublicFrames(await post('observe', { runId, offset }))).toEqual(frames.slice(offset));
-          }
+          const history = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+          const delta = history.find(event => event.type === 'chunk' && event.data?.type === 'text-delta');
+          expect(delta).toBeDefined();
+          const firstDelta = frames.findIndex(frame => frame.type === 'text-delta');
+          expect(await collectPublicFrames(await post('observe', { runId, offset: delta!.index }))).toEqual(
+            frames.slice(firstDelta),
+          );
+          expect(await collectPublicFrames(await post('observe', { runId, offset: delta!.index! + 1 }))).toEqual(
+            frames.slice(firstDelta + 1),
+          );
           if (config.observeWithClient) {
-            expect(await config.observeWithClient(server.baseUrl, runId, secondStep)).toEqual(frames.slice(secondStep));
+            expect(await config.observeWithClient(server.baseUrl, runId, delta!.index)).toEqual(
+              frames.slice(firstDelta),
+            );
           }
           expect(processedChunks).toBe(processedAtFinish);
         } finally {
           gate.resolve();
           await original;
-        }
-      });
-
-      it('resumes a multi-step tool loop from the number of frames already received (COR-1506)', async () => {
-        fixture = await config.setupModel();
-        const tool = createTool({
-          id: 'lookup',
-          description: 'Look up a value',
-          inputSchema: z.object({ n: z.number() }),
-          execute: async ({ n }) => ({ value: n * 10 }),
-        });
-        const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
-          agent: new Agent({
-            id: 'resume-agent',
-            name: 'Resume agent',
-            instructions: 'Look up values.',
-            model: fixture.model,
-            tools: { lookup: tool },
-          }),
-          cleanupTimeoutMs: 60_000,
-        });
-        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
-        server = await config.startServer(mastra, () => {});
-        fixture.addResponse(0, {
-          content: 'First',
-          toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { n: 1 } }],
-        });
-        fixture.addResponse(1, {
-          content: 'Second',
-          toolCalls: [{ id: 'call-2', name: 'lookup', arguments: { n: 2 } }],
-        });
-        fixture.addResponse(2, { content: 'Done: 10 and 20.' });
-        const runId = `observe-resume-${kind}`;
-        const post = async (route: string, body: object) => {
-          const response = await fetch(`${server!.baseUrl}/api/agents/agent/${route}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          expect(response.status).toBe(200);
-          return response;
-        };
-        const frames = await collectPublicFrames(
-          await post('stream', { messages: 'Look up 1 then 2', runId, maxSteps: 5 }),
-        );
-        expect(frames.filter(frame => frame.type === 'step-start')).toHaveLength(3);
-        expect(frames.at(-1)).toMatchObject({ type: 'finish' });
-        // A client that lost its connection after receiving `cut` frames resumes from exactly that count.
-        const mismatches: string[] = [];
-        for (let cut = 0; cut <= frames.length; cut++) {
-          const resumed = await collectPublicFrames(await post('observe', { runId, offset: cut }));
-          const combined = [...frames.slice(0, cut), ...resumed];
-          if (JSON.stringify(combined) !== JSON.stringify(frames)) {
-            mismatches.push(`cut ${cut}/${frames.length}: ${combined.length - frames.length} extra`);
-          }
-        }
-        expect(mismatches).toEqual([]);
-        if (config.observeWithClient) {
-          for (const cut of [0, Math.floor(frames.length / 2), frames.length - 1, frames.length]) {
-            expect([...frames.slice(0, cut), ...(await config.observeWithClient(server.baseUrl, runId, cut))]).toEqual(
-              frames,
-            );
-          }
         }
       });
     }

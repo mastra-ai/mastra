@@ -740,12 +740,7 @@ export const enhanceInstructionsResponseSchema = z.object({
  */
 export const observeAgentBodySchema = z.object({
   runId: z.string().describe('The run ID to observe/reconnect to'),
-  offset: z
-    .number()
-    .optional()
-    .describe(
-      'Number of stream frames already received for this run, from /stream or an earlier /observe that started at 0. The response skips that many frames and sends the rest. If omitted, replays all frames.',
-    ),
+  offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
 });
 
 const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
