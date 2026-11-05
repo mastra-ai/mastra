@@ -19,7 +19,7 @@ const FAILURE_MESSAGES: Record<string, string> = {
   not_found: 'That MCP server was removed.',
   denied: "Access was denied on the server's sign-in page.",
   failed: FAILED,
-  changed: "The server's address changed during sign-in. Sign in again.",
+  changed: 'The server changed while you were signing in. Sign in again.',
   connect_failed: "Signed in, but the server's tools could not be loaded. Refresh its tools to try again.",
 };
 
