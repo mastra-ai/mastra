@@ -3416,7 +3416,8 @@ export class Agent extends BaseResource {
    * @param params.runId - The run ID to observe
    * @param params.offset - Run-log position to resume from. Chunks from `observe()`, and from `stream()` on
    *   durable and evented agents, carry an `index`; pass the last received chunk's `index + 1`. An `abort` chunk shares its
-   *   index with the `finish` chunk after it, so if the last chunk received was `abort`, pass its `index`. If omitted,
+   *   index with the `finish` chunk after it, so if the last chunk received was `abort`, pass its `index`. Chunks without an `index`
+   *   (such as structured-output `object` chunks) are skipped when choosing the offset. If omitted,
    *   replays all chunks.
    * @returns Promise containing a streaming Response
    *
@@ -3425,7 +3426,7 @@ export class Agent extends BaseResource {
    * // Resume after the last chunk received
    * const response = await client.agents('my-agent').observe({
    *   runId: 'run-123',
-   *   offset: lastChunk.index + 1,
+   *   offset: lastIndexedChunk.index + 1,
    * });
    *
    * await response.processDataStream({

@@ -11,7 +11,7 @@ let lastIndex: number | undefined;
 const response = await agent.stream(messages, { runId });
 await response.processDataStream({
   onChunk: async chunk => {
-    lastIndex = chunk.index;
+    if (chunk.index !== undefined) lastIndex = chunk.index;
   },
 });
 
