@@ -255,8 +255,9 @@ describe('AgentController session state', () => {
     expect(session.displayState.get().activeTools.size).toBe(0);
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'tool_suspended', threadId: 'a', resourceId: session.identity.getResourceId() }),
+      expect.any(Number),
     );
-    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'workspace_ready' }));
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'workspace_ready' }), expect.any(Number));
     source.release();
   });
 
