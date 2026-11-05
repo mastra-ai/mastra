@@ -12,7 +12,7 @@ export default defineConfig({
           // Browser-side tests opt into jsdom with a `@vitest-environment jsdom` comment.
           environment: 'node',
           include: ['src/**/*.test.{ts,tsx}'],
-          setupFiles: ['./src/test/setup.ts'],
+          setupFiles: ['./src/__tests__/setup.ts'],
           testTimeout: 15000,
         },
       },

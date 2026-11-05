@@ -8,7 +8,7 @@ Prebuilt [MCP Apps](https://mastra.ai/docs/connections/mcp) that you register as
 npm install @mastra/mcp-apps-components
 ```
 
-## Greeting app
+## Usage
 
 `greetingApp` greets someone by name. It talks to its host with standard MCP Apps messages only:
 
@@ -53,6 +53,15 @@ export const greetingServer = new MCPServer({
 });
 ```
 
-## License
+## Documentation
 
-Apache-2.0
+- [MCP Apps in Mastra](https://mastra.ai/docs/connections/mcp)
+- [MCP Apps spec](https://github.com/modelcontextprotocol/ext-apps)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packages/mcp-apps-components/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

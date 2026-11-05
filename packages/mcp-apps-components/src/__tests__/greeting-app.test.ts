@@ -1,7 +1,7 @@
 // The built package, as consumers install it.
 import { greetingApp } from '@mastra/mcp-apps-components';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { GREETING_URI, greetingServer, serveAndConnect } from '../test/greeting-server';
+import { GREETING_URI, greetingServer, serveAndConnect } from './greeting-server';
 
 let host: Awaited<ReturnType<typeof serveAndConnect>>;
 beforeAll(async () => {

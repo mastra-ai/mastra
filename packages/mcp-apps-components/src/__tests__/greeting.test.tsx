@@ -5,8 +5,8 @@ import type { Client, Transport } from '@modelcontextprotocol/client';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
-import { greetingServer, serveAndConnect } from '../../../test/greeting-server';
-import { Greeting } from '../greeting';
+import { Greeting } from '../apps/greeting/greeting';
+import { greetingServer, serveAndConnect } from './greeting-server';
 
 let host: Awaited<ReturnType<typeof serveAndConnect>>;
 beforeAll(async () => {
