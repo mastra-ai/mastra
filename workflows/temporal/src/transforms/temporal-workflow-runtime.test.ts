@@ -7,8 +7,8 @@ const sleep = vi.fn(async () => {});
 const logInfo = vi.fn();
 const defineQuery = vi.fn((name: string) => name);
 const defineSignal = vi.fn((name: string) => name);
-const signalHandlers = new Map<string, (...args: unknown[]) => void>();
-const setHandler = vi.fn((signal: string, handler: (...args: unknown[]) => void) => {
+const signalHandlers = new Map<string, (...args: unknown[]) => unknown>();
+const setHandler = vi.fn((signal: string, handler: (...args: unknown[]) => unknown) => {
   signalHandlers.set(signal, handler);
 });
 const condition = vi.fn(async (predicate: () => boolean) => {
@@ -379,11 +379,16 @@ describe('temporal workflow runtime helper module', () => {
 
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('approval-workflow').then('approval').commit();
-    const run = workflow({ inputData: { orderId: 'order-1' }, runId: 'run-1' });
+    const run = workflow({
+      inputData: { orderId: 'order-1' },
+      requestContext: { tenant: 'source-tenant', mastra__authToken: 'stale-token' },
+      runId: 'run-1',
+    });
 
     await vi.waitFor(() => expect(condition).toHaveBeenCalledOnce());
     expect(signalHandlers.get('mastra.status')?.()).toMatchObject({
       status: 'suspended',
+      requestContext: { tenant: 'source-tenant' },
       resumeLabels: { approveOrder: { stepId: 'approval' } },
     });
     signalHandlers.get('mastra.resume')?.({ label: 'approveOrder', resumeData: { approved: true } });
@@ -395,6 +400,33 @@ describe('temporal workflow runtime helper module', () => {
         approval: expect.objectContaining({ resumeData: { approved: true } }),
       },
     });
+  });
+
+  it('atomically claims a suspended execution for time travel', async () => {
+    const approval = vi
+      .fn()
+      .mockResolvedValueOnce({
+        __temporalSuspension: true,
+        suspendPayload: { reason: 'approval' },
+      })
+      .mockResolvedValueOnce({ approved: true });
+    proxyActivities.mockReturnValue({ approval });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('approval-workflow').then('approval').commit();
+    const run = workflow({ inputData: { orderId: 'order-1' }, runId: 'run-1' });
+
+    await vi.waitFor(() => expect(condition).toHaveBeenCalledOnce());
+    const claimTimeTravel = signalHandlers.get('mastra.claimTimeTravel');
+    expect(claimTimeTravel).toBeTypeOf('function');
+    expect(claimTimeTravel?.({ action: 'claim', token: 'claim-1' })).toBe(true);
+    expect(claimTimeTravel?.({ action: 'claim', token: 'claim-2' })).toBe(false);
+    expect(claimTimeTravel?.({ action: 'release', token: 'claim-2' })).toBe(false);
+    expect(claimTimeTravel?.({ action: 'release', token: 'claim-1' })).toBe(true);
+    expect(claimTimeTravel?.({ action: 'claim', token: 'claim-2' })).toBe(true);
+
+    signalHandlers.get('mastra.resume')?.({ step: 'approval', resumeData: { approved: true } });
+    await run;
   });
 
   it('preserves resume signals per concurrently suspended step', async () => {

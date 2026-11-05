@@ -13,7 +13,10 @@ import {
 } from '@temporalio/workflow';
 
 const resumeSignal = defineSignal('mastra.resume');
+const claimTimeTravelSignal = defineSignal('mastra.claimTimeTravel');
 const statusQuery = defineQuery('mastra.status');
+const timeTravelClaimQuery = defineQuery('mastra.timeTravelClaim');
+const authTokenKey = 'mastra__authToken';
 
 // The step error an Activity or child Workflow put in its failure details. Failures without them
 // (timeouts, Activities from an older Worker) give the innermost cause's type and message.
@@ -55,6 +58,8 @@ export class TemporalExecutionEngine {
   suspendedSteps = new Set();
   resumeLabels = new Map();
   currentResult;
+  queryRequestContext;
+  timeTravelClaim;
   initData;
   initialState;
 
@@ -70,13 +75,36 @@ export class TemporalExecutionEngine {
         this.resumePayloads.set(id, payload);
       }
     });
-    setHandler(statusQuery, () => this.currentResult);
+    const updateTimeTravelClaim = ({ action, token }) => {
+      if (action === 'release') {
+        if (this.timeTravelClaim !== token) return false;
+        this.timeTravelClaim = undefined;
+        return true;
+      }
+      if (this.timeTravelClaim !== undefined) return false;
+      this.timeTravelClaim = token;
+      return true;
+    };
+    setHandler(claimTimeTravelSignal, updateTimeTravelClaim);
+    setHandler(timeTravelClaimQuery, () => this.timeTravelClaim);
+    setHandler(statusQuery, () =>
+      this.currentResult
+        ? {
+            ...this.currentResult,
+            ...(this.queryRequestContext !== undefined && { requestContext: this.queryRequestContext }),
+          }
+        : this.currentResult,
+    );
   }
 
   async execute(params) {
     const timeTravel = params.timeTravel;
     this.initData = params.input;
     this.initialState = timeTravel?.state ?? params.initialState;
+    if (params.requestContext !== undefined) {
+      const { [authTokenKey]: _authToken, ...queryRequestContext } = params.requestContext;
+      this.queryRequestContext = queryRequestContext;
+    }
     this.executionContext = {
       ...(params.requestContext !== undefined && { requestContext: params.requestContext }),
       ...(params.runId !== undefined && { runId: params.runId }),

@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { ObservabilityContext, TracingOptions } from '@mastra/core/observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
 import { createTimeTravelExecutionParams, getStepIds, Run } from '@mastra/core/workflows';
 import type {
   Step,
@@ -84,16 +86,23 @@ export class TemporalRun<
     this.taskQueue = temporalParams.taskQueue;
   }
 
-  private startWorkflow(
+  private workflowStartOptions(
     args: Record<string, unknown>,
     options: Pick<WorkflowOptions, 'workflowIdReusePolicy' | 'workflowIdConflictPolicy'> = {},
   ) {
-    return this.client.workflow.start(toWorkflowType(this.workflowId), {
+    return {
       taskQueue: this.taskQueue,
       workflowId: this.runId,
       args: [args],
       ...options,
-    });
+    };
+  }
+
+  private startWorkflow(
+    args: Record<string, unknown>,
+    options: Pick<WorkflowOptions, 'workflowIdReusePolicy' | 'workflowIdConflictPolicy'> = {},
+  ) {
+    return this.client.workflow.start(toWorkflowType(this.workflowId), this.workflowStartOptions(args, options));
   }
 
   async start(args: TemporalRunStartArgs<TState, TInput, TRequestContext> = {}) {
@@ -471,7 +480,7 @@ export class TemporalRun<
       status: status.status,
       result: status.result,
       error: status.error,
-      requestContext: {},
+      requestContext: status.requestContext ?? {},
       value: status.state ?? {},
       context: { input: status.input, ...(status.steps ?? {}) },
       serializedStepGraph: this.serializedStepGraph,
@@ -530,12 +539,30 @@ export class TemporalRun<
         timeTravel.stepResults[stepId] ??= sourceStepResult;
       }
     }
-    const previousTemporalRunId = (await sourceHandle.describe()).runId;
-    const requestContext = args.requestContext ?? new RequestContext<TRequestContext>();
+    const storedRequestContext = { ...(status.requestContext ?? {}) };
+    delete storedRequestContext[MASTRA_AUTH_TOKEN_KEY];
+    const requestContext = new RequestContext<TRequestContext>();
+    const mutableRequestContext = requestContext as RequestContext<any>;
+    for (const [key, value] of Object.entries(storedRequestContext)) {
+      mutableRequestContext.set(key, value);
+    }
+    for (const [key, value] of args.requestContext?.entries() ?? []) {
+      mutableRequestContext.set(key, value);
+    }
     await this._validateRequestContext(requestContext as RequestContext<unknown>);
 
-    const handle = await this.startWorkflow(
-      {
+    const claimToken = status.status === 'suspended' ? randomUUID() : undefined;
+    if (claimToken) {
+      await sourceHandle.signal('mastra.claimTimeTravel', { action: 'claim', token: claimToken });
+      const claimedToken = await sourceHandle.query('mastra.timeTravelClaim');
+      if (claimedToken !== claimToken) {
+        throw new Error(`Temporal time travel for run "${this.runId}" was already claimed.`);
+      }
+    }
+
+    try {
+      const previousTemporalRunId = (await sourceHandle.describe()).runId;
+      const workflowArgs = {
         inputData: status.input,
         initialState: timeTravel.state,
         requestContext: Object.fromEntries(requestContext.entries()),
@@ -547,18 +574,36 @@ export class TemporalRun<
         validateInputs: this.validateInputs,
         timeTravel,
         timeTravelLineage: { previousTemporalRunId, target: steps },
-      },
-      status.status === 'suspended'
-        ? { workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' }
-        : { workflowIdReusePolicy: 'ALLOW_DUPLICATE' },
-    );
+      };
+      let handle: WorkflowHandle;
+      if (claimToken) {
+        handle = await this.startWorkflow(workflowArgs, { workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' });
+      } else {
+        const replacementClaimToken = randomUUID();
+        handle = await this.client.workflow.signalWithStart(toWorkflowType(this.workflowId), {
+          ...this.workflowStartOptions(workflowArgs, { workflowIdReusePolicy: 'ALLOW_DUPLICATE' }),
+          workflowIdConflictPolicy: 'USE_EXISTING',
+          signal: 'mastra.claimTimeTravel',
+          signalArgs: [{ action: 'claim', token: replacementClaimToken }],
+        });
+        const claimedToken = await handle.query('mastra.timeTravelClaim');
+        if (claimedToken !== replacementClaimToken) {
+          throw new Error(`Temporal time travel for run "${this.runId}" was already claimed.`);
+        }
+      }
 
-    return this.awaitResultOrSuspended(
-      handle,
-      status.input as TInput,
-      timeTravel.state as TState,
-      requestContext as RequestContext,
-    ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
+      return this.awaitResultOrSuspended(
+        handle,
+        status.input as TInput,
+        timeTravel.state as TState,
+        requestContext as RequestContext,
+      ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
+    } catch (error) {
+      if (claimToken) {
+        await sourceHandle.signal('mastra.claimTimeTravel', { action: 'release', token: claimToken }).catch(() => {});
+      }
+      throw error;
+    }
   }
 
   override timeTravelStream(..._args: unknown[]): never {
