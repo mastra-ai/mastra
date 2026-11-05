@@ -2,7 +2,6 @@
 title: "Reference: Faithfulness scorer | Evals"
 description: "The createFaithfulnessScorer() function evaluates how factually accurate an LLM's output is compared to the provided context."
 packages:
-  - "@mastra/core"
   - "@mastra/evals"
 ---
 
@@ -18,7 +17,7 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
   content={[
   {
     name: 'model',
-    type: 'LanguageModel',
+    type: 'MastraModelConfig',
     required: true,
     description: 'Configuration for the model used to evaluate faithfulness.',
   },
