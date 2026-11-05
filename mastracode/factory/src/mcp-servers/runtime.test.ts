@@ -195,6 +195,20 @@ describe('McpServersRuntime.toolsFor', () => {
     expect(server.calls).toEqual([{ tool: 'toString', args: { text: 'hi' } }]);
   });
 
+  it('does not rebuild a connection from a read that was in flight when the server changed', async () => {
+    const server = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    const record = await connectServer(ctx, 'org-a', bearerServer(server.url));
+
+    // The routes invalidate after every change; this turn's read began before that one.
+    const turn = ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    ctx.runtime.invalidate(record.id);
+
+    expect((await turn).tools).toEqual({});
+    const next = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    expect(Object.keys(next.tools).sort()).toEqual(['docs_add', 'docs_echo']);
+  });
+
   it('skips a tool whose name is already taken instead of failing the session', async () => {
     const server = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();

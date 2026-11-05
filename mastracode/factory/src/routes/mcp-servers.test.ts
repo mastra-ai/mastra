@@ -459,6 +459,32 @@ describe('MCP server routes', () => {
     expect(mcp.methods.filter(method => method === 'server/discover' || method === 'initialize')).toHaveLength(3);
   });
 
+  it('leaves the new connection working when a rotation cuts off a call made with the old credentials', async () => {
+    const mcp = await startTestMcpServer({ bearerToken: TOKEN });
+    const ctx = await setup();
+    const server = await createServer(ctx, admin, bearerBody(mcp.url));
+    await ctx.request(admin, 'POST', `/${server.id}/discover`);
+    const turnA = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    await turnA.tools.docs_echo!.execute!({ text: 'connected' }, {} as never);
+
+    // Turn A's next call is on the way with the old token while an admin rotates it and reconnects.
+    const held = mcp.holdNextRequest();
+    const call = turnA.tools.docs_echo!.execute!({ text: 'old token' }, {} as never).catch((error: unknown) => error);
+    await held.arrived;
+    await ctx.request(admin, 'PATCH', `/${server.id}`, {
+      headers: [{ name: 'Authorization', value: 'Bearer rotated-token-8d2f' }],
+    });
+    mcp.acceptToken('rotated-token-8d2f');
+    expect((await ctx.request(admin, 'POST', `/${server.id}/discover`)).status).toBe(200);
+    const turnB = await ctx.runtime.toolsFor({ orgId: 'org-a', existingNames: new Set() });
+    held.release();
+    await call;
+
+    const result = await turnB.tools.docs_echo!.execute!({ text: 'new token' }, {} as never);
+    expect(JSON.stringify(result)).toContain('new token');
+    expect(await ctx.storage.get({ orgId: 'org-a', id: server.id })).toMatchObject({ status: 'connected' });
+  });
+
   it('does not mark a server as needing sign-in when another replica just replaced the refused credentials', async () => {
     const mcp = await startTestMcpServer({ bearerToken: TOKEN });
     const ctx = await setup();

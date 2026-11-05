@@ -66,6 +66,15 @@ export class McpServersRuntime {
   readonly #oauthEndpoints: McpOAuthEndpoints | undefined;
   readonly #fetch: GuardedFetch;
   readonly #clients = new Map<string, CachedClient>();
+  /**
+   * Counts changes to this replica's connections. A read that began before a
+   * server's connection last changed may hold an older version of the server
+   * (or one since deleted), so it must neither rebuild nor release that
+   * connection. Local and monotonic, unlike `updatedAt`, which another
+   * replica's clock stamps.
+   */
+  #connectionChanges = 0;
+  readonly #connectionChangedAt = new Map<string, number>();
 
   constructor({ storage, allowPrivateNetwork, oauthEndpoints }: McpServersRuntimeOptions) {
     this.#storage = storage;
@@ -163,6 +172,7 @@ export class McpServersRuntime {
     orgId: string;
     existingNames: ReadonlySet<string>;
   }): Promise<{ tools: Record<string, Tool<any, any, any, any>>; skipped: SkippedMcpServerTool[] }> {
+    const readAt = this.#connectionChanges;
     const records = await this.#storage.list({ orgId });
     const tools: Record<string, Tool<any, any, any, any>> = {};
     const skipped: SkippedMcpServerTool[] = [];
@@ -172,7 +182,9 @@ export class McpServersRuntime {
     for (const record of records) {
       if (record.status !== 'connected' || !record.toolCatalog || record.selectedTools.length === 0) continue;
       active.add(record.id);
-      const client = this.#clientFor(record);
+      const client = this.#clientFor(record, readAt);
+      // Changed since this read began: the next turn gets its tools.
+      if (!client) continue;
       for (const toolName of record.selectedTools) {
         const entry = Object.hasOwn(record.toolCatalog, toolName) ? record.toolCatalog[toolName] : undefined;
         if (!entry) continue;
@@ -201,13 +213,16 @@ export class McpServersRuntime {
 
     // Servers removed or disconnected (possibly by another replica) release their connection.
     for (const [serverId, cached] of this.#clients) {
-      if (cached.orgId === orgId && !active.has(serverId)) this.invalidate(serverId);
+      if (cached.orgId === orgId && !active.has(serverId) && !this.#changedSince(serverId, readAt)) {
+        this.invalidate(serverId);
+      }
     }
     return { tools, skipped };
   }
 
   /** Drop the cached connection for a server after it changes or is removed. */
   invalidate(serverId: string): void {
+    this.#connectionChangedAt.set(serverId, ++this.#connectionChanges);
     const cached = this.#clients.get(serverId);
     if (!cached) return;
     this.#clients.delete(serverId);
@@ -217,13 +232,16 @@ export class McpServersRuntime {
   async close(): Promise<void> {
     const clients = [...this.#clients.values()];
     this.#clients.clear();
+    this.#connectionChangedAt.clear();
     await Promise.allSettled(clients.map(cached => cached.client.disconnect()));
   }
 
   /**
-   * Calls only go through the server's current connection: once the server is
-   * edited, removed, or signed out, a tool a turn already holds refuses instead
-   * of reconnecting with the old address and credentials.
+   * Calls only go through the server's current connection on this replica:
+   * once the server is edited, removed, or signed out here, a tool a turn
+   * already holds refuses instead of reconnecting with the old address and
+   * credentials. A change made on another replica reaches this one's turns at
+   * their next `toolsFor`.
    *
    * A call the server refuses with a 401 means the saved credentials or tokens
    * stopped working (an OAuth refresh was already attempted): mark the server
@@ -244,6 +262,8 @@ export class McpServersRuntime {
       } catch (error) {
         const oauth = findOAuthFailure(error);
         if (isUnauthorized(error) || oauth?.signInAgain) {
+          // Only the connection that was refused, checked before awaiting: a newer one has its own credentials.
+          if (current()) this.invalidate(record.id);
           await this.#storage
             .setStatus({
               orgId: record.orgId,
@@ -254,7 +274,6 @@ export class McpServersRuntime {
               ifUpdatedAt: record.updatedAt,
             })
             .catch(() => undefined);
-          this.invalidate(record.id);
         }
         // The authorization server's own text can echo tokens; keep it out of the session.
         if (oauth) throw new Error(`MCP server "${record.name}" sign-in failed: ${oauth.message}`);
@@ -263,10 +282,11 @@ export class McpServersRuntime {
     };
   }
 
-  #clientFor(record: McpServerRecord): MCPClient {
+  #clientFor(record: McpServerRecord, readAt: number): MCPClient | undefined {
     const updatedAt = record.updatedAt.getTime();
     const cached = this.#clients.get(record.id);
     if (cached?.updatedAt === updatedAt) return cached.client;
+    if (this.#changedSince(record.id, readAt)) return undefined;
     // Disconnect first: it also removes the stale instance from MCPClient's id cache.
     if (cached) this.invalidate(record.id);
     const client = new MCPClient({
@@ -276,7 +296,12 @@ export class McpServersRuntime {
       registerProcessHooks: false,
     });
     this.#clients.set(record.id, { orgId: record.orgId, updatedAt, client });
+    this.#connectionChangedAt.set(record.id, ++this.#connectionChanges);
     return client;
+  }
+
+  #changedSince(serverId: string, readAt: number): boolean {
+    return (this.#connectionChangedAt.get(serverId) ?? 0) > readAt;
   }
 }
 
