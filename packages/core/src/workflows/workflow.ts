@@ -3645,10 +3645,11 @@ export class Workflow<
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         } as any);
-        handBackBase = startedFrom;
+        if (startedFrom) handBackBase = run.startedFromState;
       }
     } finally {
       run.resumedFromState = undefined;
+      run.startedFromState = undefined;
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
       abortSignal.removeEventListener('abort', parentAbortCb);
       unwatch();
@@ -4208,6 +4209,13 @@ export class Run<
    */
   resumedFromState?: Record<string, unknown>;
   /**
+   * For a nested run its parent starts: the state it started from after its `stateSchema` parsed
+   * it, as JSON. Its changes are taken relative to this, so a schema default or transform isn't
+   * mistaken for one. Set by `_start`, taken by the parent's step.
+   * @internal
+   */
+  startedFromState?: Record<string, unknown>;
+  /**
    * The store calls this run makes, for its `storageVersion`.
    * @internal
    */
@@ -4627,6 +4635,7 @@ export class Run<
       workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
       throw error;
     });
+    if (this.parentWorkflow) this.startedFromState = toJsonState(initialStateToUse);
 
     if (onDispatched) {
       const shouldPersistSnapshot =
