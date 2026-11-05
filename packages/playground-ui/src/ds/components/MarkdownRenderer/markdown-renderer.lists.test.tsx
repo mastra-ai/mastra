@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { Root } from 'mdast';
 import { renderToStaticMarkup } from 'react-dom/server';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
@@ -49,6 +50,8 @@ describe('MarkdownRenderer lists', () => {
     ['a fence whose info string holds a backtick', '- ``` a`b\n  ```\n\n- b\n- c'],
     ['raw HTML holding a blank line', '- <pre>\n  x\n\n  y\n  </pre>\n- b\n- c'],
     ['an HTML comment before the next item', '- a <!--\n  <!-- note\n\n- b\n- c'],
+    ['raw HTML opened by a nested item, before a blank line', '- a\n  - <pre>\n    x\n\n- b\n- c'],
+    ['an HTML comment opened in a nested quote, before a blank line', '- a\n  > <!-- c\n\n- b\n- c'],
     ['a quote closing an item before a spaced one', '- > quote\n\n- b\n- c'],
     ['a table closing an item before a spaced one', '- | a |\n  | - |\n  | 1 |\n\n- b\n- c'],
     ['indented code closing an item before a spaced one', '- a\n\n      code\n\n- b\n- c'],
@@ -67,11 +70,14 @@ describe('MarkdownRenderer lists', () => {
     ['emphasis that never closes across items', '- **a\n- b**\n- c'],
     ['blank lines after the list', '- a\n- b\n\n\n'],
     ['an empty item', '- a\n-\n- c'],
+    ['markers that land before their text', '- a\n- b\n- \n- c\n\n-'],
+    ['numbers that land before their text', '1. a\n2.\n\n3.'],
     ['an item that opens on indented code', '-     code\n- b\n- c'],
     ['a setext heading inside an item', '- foo\n  ===\n- bar\n- baz'],
     ['raw HTML inside an item', '- <b>x</b>\n- y\n- z'],
     ['a link reference resolved across items', '- [a][r]\n- b\n\n[r]: https://mastra.ai'],
     ['a link reference defined deep inside a later item', '9. see [r]\n\n10. x\n\n    [r]: https://mastra.ai'],
+    ['a definition whose label spans lines', '- [foo bar]\n\n- second\n\n  [foo\n  bar]: https://mastra.ai'],
     ['tab-indented items', '-\ta\n-\tb\n\t- c'],
     ['an item that starts with a blank line', '-\n  a\n- b\n- c'],
     ['a hard line break inside an item', '- one  \n  two\n- three'],
@@ -97,6 +103,17 @@ describe('MarkdownRenderer lists', () => {
           </Markdown>
         </div>,
       ),
+    );
+  });
+
+  it('keeps what a host plugin does to the list itself', () => {
+    const tagLists = () => (tree: Root) => {
+      for (const node of tree.children) if (node.type === 'list') node.data = { hProperties: { className: 'host' } };
+    };
+    const markdown = '- one\n- two\n- three';
+
+    expect(renderToStaticMarkup(<MarkdownRenderer remarkPlugins={[tagLists]}>{markdown}</MarkdownRenderer>)).toContain(
+      '<ul class="host">',
     );
   });
 });

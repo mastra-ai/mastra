@@ -86,4 +86,25 @@ describe('MarkdownRenderer memoization', () => {
 
     expect(new Set(parsed)).toEqual(new Set([`${items.at(-1)} more`]));
   });
+
+  it.each([
+    ['a bullet', '- a\n- b', '\n- ', 'c'],
+    ['a number', '1. a\n2. b', '\n3.', ' c'],
+  ])('re-parses no earlier item when %s lands before its text', (_, list, marker, text) => {
+    vi.useFakeTimers();
+    const { rerender } = render(<MarkdownRenderer streaming>{list}</MarkdownRenderer>);
+    const reveal = () => {
+      for (let frame = 0; frame < 150; frame++) act(() => void vi.advanceTimersByTime(16));
+    };
+
+    reveal();
+    parsed.length = 0;
+
+    rerender(<MarkdownRenderer streaming>{`${list}${marker}`}</MarkdownRenderer>);
+    rerender(<MarkdownRenderer streaming>{`${list}${marker}${text}`}</MarkdownRenderer>);
+    reveal();
+
+    expect(parsed.filter(block => block.includes(' a'))).toEqual([]);
+    expect(parsed.at(-1)).toBe(`${marker.slice(1)}${text}`);
+  });
 });

@@ -3,15 +3,18 @@ const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 const LIST_ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
 const INDENTED = /^(?:\t| {2,})/;
 const DEFINITION = /^ {0,3}\[[^\]]+\]:/;
-// A definition at any depth of any item resolves across the whole list.
-const NESTED_DEFINITION = /\[[^\]]+\]:/;
+// The end of a definition's label, at any depth of any item and on any of its lines: it resolves across the whole list.
+const DEFINITION_LABEL_END = /\]:/;
 const ITEM = /^( {0,3})(?:([-*+])|(\d{1,9})([.)]))( {1,4})(?=\S)/;
+// A marker the stream has not written any text after yet.
+const EMPTY_ITEM = /^ {0,3}(?:([-*+])|(\d{1,9})([.)])) *$/;
 const THEMATIC_BREAK = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const CHECKBOX = /^\[[ \txX]\](.*)$/;
 // Unlike FENCE_OPEN, exact: a backtick in the info string makes the line inline code, not a fence.
 const ITEM_FENCE = /^ {0,3}(?:(`{3,})[^`]*|(~{3,}).*)$/;
-// A fence the item does not open itself, or raw HTML: either can hold a blank line the lines cannot place.
-const OPAQUE = /```|~~~|^\s*</;
+// A fence the item does not open itself, or raw HTML, here or behind a nested marker or quote: either can
+// hold a blank line the lines cannot place.
+const OPAQUE = /```|~~~|^(?:\s*(?:(?:[-*+]|\d{1,9}[.)])(?=\s)|>))*\s*</;
 
 function fenceOpenedBy(line: string): string | undefined {
   return FENCE_OPEN.exec(line)?.[1];
@@ -93,13 +96,19 @@ interface ListItemStart {
   start: number;
 }
 
-function listItemStart(line: string): ListItemStart | undefined {
+/** `last` admits an item with nothing after its marker yet, which only the last line can be: no content follows it. */
+function listItemStart(line: string, last = false): ListItemStart | undefined {
   const match = ITEM.exec(line);
-  if (!match || THEMATIC_BREAK.test(line)) return undefined;
+  if (match && !THEMATIC_BREAK.test(line)) {
+    const [prefix, , bullet, digits, delimiter] = match;
 
-  const [prefix, , bullet, digits, delimiter] = match;
+    return { kind: bullet ?? delimiter ?? '', width: prefix.length, start: Number(digits ?? 1) };
+  }
 
-  return { kind: bullet ?? delimiter ?? '', width: prefix.length, start: Number(digits ?? 1) };
+  const empty = last ? EMPTY_ITEM.exec(line) : null;
+  if (!empty) return undefined;
+
+  return { kind: empty[1] ?? empty[3] ?? '', width: line.length, start: Number(empty[2] ?? 1) };
 }
 
 /**
@@ -136,6 +145,7 @@ export function splitList(block: string): ListBlock | undefined {
   if (!head) return undefined;
 
   const starts: number[] = [];
+  const last = lines.findLastIndex(line => line.trim() !== '');
   let width = 0;
   let fence: string | undefined;
   let opaque = false;
@@ -151,12 +161,12 @@ export function splitList(block: string): ListBlock | undefined {
     }
 
     const indent = line.length - line.trimStart().length;
-    if (line.slice(0, indent).includes('\t') || NESTED_DEFINITION.test(line)) return undefined;
+    if (line.slice(0, indent).includes('\t') || DEFINITION_LABEL_END.test(line)) return undefined;
 
     let content = line.slice(width);
 
     if (index === 0 || indent < width) {
-      const item = listItemStart(line);
+      const item = listItemStart(line, index === last);
       if (item?.kind !== head.kind || (blank && (fence || opaque))) return undefined;
 
       content = line.slice(item.width);

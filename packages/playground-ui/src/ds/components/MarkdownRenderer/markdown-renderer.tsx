@@ -72,11 +72,12 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
     () => (extraComponents ? { ...baseComponents, ...extraComponents } : baseComponents),
     [baseComponents, extraComponents],
   );
-  // A list cut into items draws its own `<ul>`/`<ol>`, which an override of either would not reach.
-  const listsOverridden = Boolean(components.ul ?? components.ol);
+  // A list cut into items draws its own `<ul>`/`<ol>`, which neither an override of either nor a host plugin
+  // rewriting the list would reach.
+  const listsWhole = Boolean(components.ul ?? components.ol ?? extraRemarkPlugins?.length);
   const blocks = useMemo(
-    () => splitBlocks(shown).map(block => (listsOverridden ? block : (splitList(block) ?? block))),
-    [shown, listsOverridden],
+    () => splitBlocks(shown).map(block => (listsWhole ? block : (splitList(block) ?? block))),
+    [shown, listsWhole],
   );
   const pieces = blocks.flatMap(block => (typeof block === 'string' ? block : block.items));
   const last = pieces.length - 1;
