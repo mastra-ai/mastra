@@ -8,7 +8,7 @@ import type {
   FeedbackEvent,
 } from '@mastra/core/observability';
 import type { CreateSpanRecord } from '@mastra/core/storage';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { EventBuffer } from './event-buffer';
 
 function createTracingEvent(
@@ -399,6 +399,17 @@ describe('EventBuffer', () => {
   });
 
   describe('span tracking', () => {
+    it('should forget the oldest ended span past its bound', () => {
+      const buffer = new EventBuffer({ maxRetries: 3 });
+
+      buffer.rememberEndedSpans(
+        Array.from({ length: 10_001 }, (_, i) => ({ traceId: 'trace-1', spanId: `span-${i}` })),
+      );
+
+      expect(buffer.wasEnded({ traceId: 'trace-1', id: 'span-0' } as AnyExportedSpan)).toBe(false);
+      expect(buffer.wasEnded({ traceId: 'trace-1', id: 'span-10000' } as AnyExportedSpan)).toBe(true);
+    });
+
     it('should track created spans for batch-with-updates', () => {
       const buffer = new EventBuffer({ maxRetries: 3 });
       buffer.init({ strategy: 'batch-with-updates' });
@@ -516,112 +527,6 @@ describe('EventBuffer', () => {
       snapshot.push({ type: 'metric', metric: {} as any, retryCount: 0 });
 
       expect(buffer.updates).toHaveLength(1);
-    });
-  });
-
-  describe('take', () => {
-    it('holds a re-added update back until its backoff passes', () => {
-      vi.useFakeTimers();
-      try {
-        const buffer = new EventBuffer({ maxRetries: 3 });
-        buffer.init({ strategy: 'batch-with-updates' });
-        buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
-        const { updates } = buffer.take();
-        expect(updates).toHaveLength(1);
-
-        buffer.reAddUpdates(updates, retryCount => 1000 * retryCount);
-
-        expect(buffer.take().updates).toHaveLength(0);
-        expect(buffer.totalSize).toBe(1);
-        expect(buffer.dueSize).toBe(0);
-        expect(buffer.hasDueEvents).toBe(false);
-        expect(buffer.nextRetryAt).toBe(Date.now() + 1000);
-        vi.advanceTimersByTime(1000);
-        expect(buffer.take().updates).toEqual([expect.objectContaining({ retryCount: 1 })]);
-        expect(buffer.totalSize).toBe(0);
-        expect(buffer.nextRetryAt).toBeUndefined();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('hands out a waiting update when asked for everything', () => {
-      const buffer = new EventBuffer({ maxRetries: 3 });
-      buffer.init({ strategy: 'batch-with-updates' });
-      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
-      buffer.reAddUpdates(buffer.take().updates, () => 60_000);
-
-      expect(buffer.take().updates).toHaveLength(0);
-      expect(buffer.take({ all: true }).updates).toHaveLength(1);
-      expect(buffer.totalSize).toBe(0);
-    });
-
-    it('hands out re-added creates and updates without a backoff at once', () => {
-      const buffer = new EventBuffer({ maxRetries: 3 });
-      buffer.init({ strategy: 'batch-with-updates' });
-      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_STARTED));
-      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
-      const taken = buffer.take();
-      buffer.reAddCreates(taken.creates);
-      buffer.reAddUpdates(taken.updates);
-
-      const again = buffer.take();
-      expect(again.creates).toHaveLength(1);
-      expect(again.updates).toHaveLength(1);
-      expect(buffer.nextRetryAt).toBeUndefined();
-    });
-
-    it('counts only the events a flush would send toward a batch', () => {
-      const buffer = new EventBuffer({ maxRetries: 3 });
-      buffer.init({ strategy: 'batch-with-updates' });
-      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
-      buffer.reAddUpdates(buffer.take().updates, () => 60_000);
-      expect(buffer.dueSize).toBe(0);
-      expect(buffer.elapsed).toBe(0);
-
-      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_STARTED));
-      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_UPDATED));
-
-      expect(buffer.dueSize).toBe(2);
-      expect(buffer.totalSize).toBe(3);
-      expect(buffer.hasDueEvents).toBe(true);
-    });
-
-    it('hands out a retried update before one that arrived after it', () => {
-      vi.useFakeTimers();
-      try {
-        const buffer = new EventBuffer({ maxRetries: 3 });
-        buffer.init({ strategy: 'batch-with-updates' });
-        buffer.addEvent(createTracingEvent(TracingEventType.SPAN_UPDATED));
-        buffer.reAddUpdates(buffer.take().updates, () => 1000);
-        buffer.addEvent(createTracingEvent(TracingEventType.SPAN_UPDATED));
-
-        vi.advanceTimersByTime(1000);
-        expect(buffer.take().updates.map(update => update.retryCount)).toEqual([1, 0]);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-  });
-
-  describe('rememberEndedSpans', () => {
-    const span = (spanId: string) => ({ traceId: 'trace-1', spanId });
-    const exported = (spanId: string) =>
-      createTracingEvent(TracingEventType.SPAN_ENDED, 'trace-1', spanId).exportedSpan;
-
-    it('knows a span whose end it stored and forgets the oldest past its bound', () => {
-      const buffer = new EventBuffer({ maxRetries: 3, maxEndedSpans: 2 });
-      buffer.init({ strategy: 'batch-with-updates' });
-
-      buffer.rememberEndedSpans([span('a'), span('b')]);
-      expect(buffer.wasEnded(exported('a'))).toBe(true);
-      expect(buffer.wasEnded(exported('b'))).toBe(true);
-      expect(buffer.wasEnded(exported('c'))).toBe(false);
-
-      buffer.rememberEndedSpans([span('c')]);
-      expect(buffer.wasEnded(exported('a'))).toBe(false);
-      expect(buffer.wasEnded(exported('b'))).toBe(true);
-      expect(buffer.wasEnded(exported('c'))).toBe(true);
     });
   });
 });

@@ -1188,9 +1188,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
     }
 
-    // Phase 3: an exporter can report drops while it shuts down. Deliver them before we return.
-    await this.observabilityBus.drainPendingHandlers();
-
     this.logger.info(`[Observability] Shutdown completed [name=${this.name}]`);
   }
 }

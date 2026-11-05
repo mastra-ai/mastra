@@ -187,7 +187,7 @@ For both batch strategies (`batch-with-updates` and `insert-only`), traces are f
 
 1. **Size trigger**: Buffer reaches `maxBatchSize` spans
 1. **Time trigger**: `maxBatchWaitMs` elapsed since first event
-1. **Emergency flush**: Due events reach `maxBufferSize`. Updates waiting out a retry delay aren't counted
+1. **Emergency flush**: Buffer approaches `maxBufferSize` limit
 1. **Shutdown**: Force flush all pending events
 
 ### Error handling
@@ -206,8 +206,8 @@ The MastraStorageExporter includes reliable error handling for production use:
 Events are dropped for these reasons:
 
 - `unsupported-storage`: The storage provider doesn't implement the signal type.
-- `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it, or shut down while a retry was still waiting.
-- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but found no open span to apply to, because ended spans never change. An update for a span this exporter still tracks as open, or whose end it already stored, is dropped at once, since its row exists and has already ended. Any other update is retried up to `maxRetries` times with the exporter's backoff between attempts, which lets a worker end a span whose create the API process hasn't written yet. A call to `flush()` sends a waiting update too, so a worker that flushes before it exits ends the span as soon as its row is stored, and a miss on that flush doesn't spend a retry.
+- `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
+- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but didn't apply, because the span was never stored or had already ended. Ended spans don't change. An update for a span another process started is retried first, because that process may not have stored the span yet.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 
