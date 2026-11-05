@@ -7,7 +7,7 @@ import type {
   SendAgentSignalOptions,
   SendAgentSignalResult,
 } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, bindAgentPubSub, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
 import { matchesPermission } from '@mastra/core/auth/ee';
 import type { VersionOverrides } from '@mastra/core/di';
@@ -3041,8 +3041,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       await authorizeRunObservation({ mastra, agent, runId, requestContext });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
-      const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
-      const topic = AGENT_STREAM_TOPIC(agent.id, runId);
+      const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? bindAgentPubSub(mastra.pubsub, agent.id);
+      const topic = AGENT_STREAM_TOPIC(runId);
 
       // A durable agent subscribes for us so the client never sees what an
       // execution that lost the run still publishes. Agents without it, such as

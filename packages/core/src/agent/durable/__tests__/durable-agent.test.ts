@@ -640,12 +640,12 @@ describe('DurableAgent pubsub integration', () => {
     const runId = 'test-run-123';
 
     // Subscribe to events
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       receivedEvents.push(event as unknown as AgentStreamEvent);
     });
 
     // Publish a test event
-    await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
+    await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
       type: AgentStreamEventTypes.CHUNK,
       runId,
       data: { type: 'text-delta', payload: { text: 'Hello' } },
@@ -662,24 +662,24 @@ describe('DurableAgent pubsub integration', () => {
     const receivedEvents: AgentStreamEvent[] = [];
     const runId = 'test-run-multi-events';
 
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       receivedEvents.push(event as unknown as AgentStreamEvent);
     });
 
     // Publish different event types
-    await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
+    await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
       type: AgentStreamEventTypes.STEP_START,
       runId,
       data: { stepId: 'step-1' },
     });
 
-    await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
+    await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
       type: AgentStreamEventTypes.CHUNK,
       runId,
       data: { type: 'text-delta', payload: { text: 'Hello' } },
     });
 
-    await pubsub.publish(AGENT_STREAM_TOPIC('test-agent', runId), {
+    await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
       type: AgentStreamEventTypes.STEP_FINISH,
       runId,
       data: { stepResult: { reason: 'stop' } },
@@ -718,7 +718,6 @@ describe('createDurableAgentStream', () => {
     const receivedChunks: any[] = [];
 
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-123',
@@ -749,7 +748,6 @@ describe('createDurableAgentStream', () => {
       await callbackBlocked;
     });
     const { cleanup, ready, waitForEventDelivery } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId: 'test-delivery-barrier',
       messageId: 'msg-delivery-barrier',
@@ -758,7 +756,7 @@ describe('createDurableAgentStream', () => {
     });
     await ready;
 
-    await emitChunkEvent(pubsub, 'test-agent', 'test-delivery-barrier', {
+    await emitChunkEvent(pubsub, 'test-delivery-barrier', {
       type: 'text-delta',
       payload: { text: 'test' },
     } as any);
@@ -796,7 +794,6 @@ describe('createDurableAgentStream', () => {
     const onFinish = vi.fn();
     const runId = 'test-finish-chunk-delivery';
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-finish-chunk-delivery',
@@ -867,7 +864,6 @@ describe('createDurableAgentStream', () => {
     const onError = vi.fn();
     const runId = 'test-finish-delivery-idle-timer';
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-finish-delivery-idle-timer',
@@ -880,12 +876,12 @@ describe('createDurableAgentStream', () => {
 
     try {
       await ready;
-      await emitChunkEvent(pubsub, 'test-agent', runId, {
+      await emitChunkEvent(pubsub, runId, {
         type: 'text-delta',
         payload: { text: 'test' },
       } as any);
       await callbackStarted;
-      await emitFinishEvent(pubsub, 'test-agent', runId, {
+      await emitFinishEvent(pubsub, runId, {
         output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
         stepResult: { reason: 'stop', warnings: [], isContinued: false },
       });
@@ -913,7 +909,6 @@ describe('createDurableAgentStream', () => {
     vi.spyOn(pubsub, 'subscribeWithReplay').mockRejectedValueOnce(subscribeError);
 
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId: 'test-subscription-failure',
       messageId: 'msg-subscription-failure',
@@ -937,7 +932,6 @@ describe('createDurableAgentStream', () => {
     const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
 
     const { cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId: 'test-live-tail-resume',
       messageId: 'msg-live-tail',
@@ -947,13 +941,9 @@ describe('createDurableAgentStream', () => {
 
     await ready;
 
-    expect(subscribeSpy).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC('test-agent', 'test-live-tail-resume'),
-      expect.any(Function),
-      {
-        startFrom: 'latest',
-      },
-    );
+    expect(subscribeSpy).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('test-live-tail-resume'), expect.any(Function), {
+      startFrom: 'latest',
+    });
     expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
     cleanup();
   });
@@ -964,7 +954,6 @@ describe('createDurableAgentStream', () => {
     const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
 
     const { cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId: 'test-offset-resume',
       messageId: 'msg-offset',
@@ -975,7 +964,7 @@ describe('createDurableAgentStream', () => {
     await ready;
 
     expect(subscribeFromOffsetSpy).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC('test-agent', 'test-offset-resume'),
+      AGENT_STREAM_TOPIC('test-offset-resume'),
       3,
       expect.any(Function),
     );
@@ -989,7 +978,6 @@ describe('createDurableAgentStream', () => {
     const subscribeFromOffsetSpy = vi.spyOn(pubsub, 'subscribeFromOffset');
 
     const { cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId: 'test-cache-miss-resume',
       messageId: 'msg-cache-miss',
@@ -999,13 +987,9 @@ describe('createDurableAgentStream', () => {
 
     await ready;
 
-    expect(subscribeSpy).toHaveBeenCalledWith(
-      AGENT_STREAM_TOPIC('test-agent', 'test-cache-miss-resume'),
-      expect.any(Function),
-      {
-        startFrom: 'latest',
-      },
-    );
+    expect(subscribeSpy).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('test-cache-miss-resume'), expect.any(Function), {
+      startFrom: 'latest',
+    });
     expect(subscribeFromOffsetSpy).not.toHaveBeenCalled();
     cleanup();
   });
@@ -1014,10 +998,9 @@ describe('createDurableAgentStream', () => {
     const { createDurableAgentStream } = await import('../stream-adapter');
 
     const runId = 'test-cancel-race';
-    const topic = AGENT_STREAM_TOPIC('test-agent', runId);
+    const topic = AGENT_STREAM_TOPIC(runId);
 
     const { cleanup } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-race',
@@ -1052,7 +1035,6 @@ describe('createDurableAgentStream', () => {
     const finishes: any[] = [];
 
     const { cleanup } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-callbacks',
@@ -1063,8 +1045,8 @@ describe('createDurableAgentStream', () => {
     });
 
     // Emit various events
-    await emitChunkEvent(pubsub, 'test-agent', runId, { type: 'text-delta', payload: { text: 'test' } } as any);
-    await emitStepFinishEvent(pubsub, 'test-agent', runId, {
+    await emitChunkEvent(pubsub, runId, { type: 'text-delta', payload: { text: 'test' } } as any);
+    await emitStepFinishEvent(pubsub, runId, {
       stepResult: { reason: 'stop', warnings: [], isContinued: false },
     });
 
@@ -1084,7 +1066,6 @@ describe('createDurableAgentStream', () => {
     const runId = 'test-duplicate-finish';
     const onFinish = vi.fn();
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-duplicate-finish',
@@ -1097,8 +1078,8 @@ describe('createDurableAgentStream', () => {
       output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
       stepResult: { reason: 'stop' as const, warnings: [], isContinued: false },
     };
-    await emitFinishEvent(pubsub, 'test-agent', runId, finishData);
-    await emitFinishEvent(pubsub, 'test-agent', runId, finishData);
+    await emitFinishEvent(pubsub, runId, finishData);
+    await emitFinishEvent(pubsub, runId, finishData);
 
     const chunks: any[] = [];
     for await (const chunk of output.fullStream) chunks.push(chunk);
@@ -1116,7 +1097,6 @@ describe('createDurableAgentStream', () => {
     const onFinish = vi.fn();
     const onError = vi.fn();
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-finish-abort',
@@ -1127,7 +1107,7 @@ describe('createDurableAgentStream', () => {
     });
     await ready;
 
-    await emitFinishEvent(pubsub, 'test-agent', runId, {
+    await emitFinishEvent(pubsub, runId, {
       output: { text: 'partial', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
       stepResult: { reason: 'abort', warnings: [], isContinued: false },
     });
@@ -1152,7 +1132,6 @@ describe('createDurableAgentStream', () => {
     const onFinish = vi.fn();
     const onError = vi.fn();
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-finish-error',
@@ -1163,11 +1142,11 @@ describe('createDurableAgentStream', () => {
     });
     await ready;
 
-    await emitChunkEvent(pubsub, 'test-agent', runId, {
+    await emitChunkEvent(pubsub, runId, {
       type: 'error',
       payload: { error: new Error('terminal failure') },
     } as any);
-    await emitFinishEvent(pubsub, 'test-agent', runId, {
+    await emitFinishEvent(pubsub, runId, {
       output: { text: 'partial', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
       stepResult: { reason: 'error', warnings: [], isContinued: false },
     });
@@ -1189,7 +1168,6 @@ describe('createDurableAgentStream', () => {
     const runId = 'test-abort-event';
     const onAbort = vi.fn();
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'msg-abort-event',
@@ -1198,7 +1176,7 @@ describe('createDurableAgentStream', () => {
     });
     await ready;
 
-    await emitAbortEvent(pubsub, 'test-agent', runId, { steps: [], text: 'partial' });
+    await emitAbortEvent(pubsub, runId, { steps: [], text: 'partial' });
 
     const chunks: any[] = [];
     for await (const chunk of output.fullStream) chunks.push(chunk);
@@ -1447,11 +1425,11 @@ describe('emit helper functions', () => {
     const runId = 'test-emit-chunk';
     const received: any[] = [];
 
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       received.push(event);
     });
 
-    await emitChunkEvent(pubsub, 'test-agent', runId, { type: 'text-delta', payload: { text: 'test' } } as any);
+    await emitChunkEvent(pubsub, runId, { type: 'text-delta', payload: { text: 'test' } } as any);
     await new Promise(resolve => setTimeout(resolve, 10));
 
     expect(received.length).toBe(1);
@@ -1463,13 +1441,13 @@ describe('emit helper functions', () => {
     const runId = 'test-emit-error';
     const received: any[] = [];
 
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       received.push(event);
     });
 
     const error = new Error('Test error');
     error.stack = 'test stack';
-    await emitErrorEvent(pubsub, 'test-agent', runId, error);
+    await emitErrorEvent(pubsub, runId, error);
     await new Promise(resolve => setTimeout(resolve, 10));
 
     expect(received.length).toBe(1);
@@ -1484,11 +1462,11 @@ describe('emit helper functions', () => {
     const runId = 'test-emit-suspended';
     const received: any[] = [];
 
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       received.push(event);
     });
 
-    await emitSuspendedEvent(pubsub, 'test-agent', runId, {
+    await emitSuspendedEvent(pubsub, runId, {
       type: 'approval',
       toolCallId: 'tc-1',
       toolName: 'myTool',

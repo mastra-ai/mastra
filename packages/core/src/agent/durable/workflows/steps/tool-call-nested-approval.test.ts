@@ -55,7 +55,6 @@ describe('durable agent-as-tool nested approval details', () => {
 
     expect(emitChunkEvent).toHaveBeenCalledWith(
       expect.anything(),
-      'supervisor',
       RUN_ID,
       expect.objectContaining({
         type: 'tool-call-approval',
@@ -68,7 +67,6 @@ describe('durable agent-as-tool nested approval details', () => {
     );
     expect(emitSuspendedEvent).toHaveBeenCalledWith(
       expect.anything(),
-      'supervisor',
       RUN_ID,
       expect.objectContaining({
         toolCallId: TOOL_CALL_ID,

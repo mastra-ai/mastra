@@ -456,7 +456,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = result;
       const stream = collect(result.fullStream);
       const events: string[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC('fence-agent', runId), (event: any) => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
       });
 
@@ -562,7 +562,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const { runId } = result;
         const stream = collect(result.fullStream);
         const events: string[] = [];
-        await pubsub.subscribe(AGENT_STREAM_TOPIC('fence-agent', runId), (event: any) => {
+        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
           events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
         });
 
@@ -666,15 +666,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // A frame reaches the transport only after it is in the run log, so a reader
         // that attaches after stream() started reads the log (which is what replay
         // from an offset does) instead of racing the live publish of frame 0.
-        await (agentA.pubsub as unknown as CachingPubSub).subscribeWithReplay(
-          AGENT_STREAM_TOPIC('fence-agent', runId),
-          event => {
-            events.push({
-              type: event.type === 'chunk' ? `chunk:${(event.data as any)?.type}` : event.type,
-              generation: event.generation,
-            });
-          },
-        );
+        await (agentA.pubsub as unknown as CachingPubSub).subscribeWithReplay(AGENT_STREAM_TOPIC(runId), event => {
+          events.push({
+            type: event.type === 'chunk' ? `chunk:${(event.data as any)?.type}` : event.type,
+            generation: event.generation,
+          });
+        });
         await original.entered;
         await waitForCheckpoint(storage, runId);
 
@@ -696,7 +693,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         // ---- The original execution publishes before it notices the takeover.
         await runInRunFenceScope({ fenceFor: () => undefined, generationFor: () => originalGeneration }, () =>
-          emitChunkEvent(pubsub, 'fence-agent', runId, {
+          emitChunkEvent(pubsub, runId, {
             type: 'text-delta',
             payload: { id: 'text-1', text: 'late stale chunk' },
           } as any),
@@ -773,7 +770,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = started;
       const stream = collect(started.fullStream);
       const events: string[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC('fence-agent', runId), (event: any) => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
       });
       await stuck.entered;
@@ -914,7 +911,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         expect(persist).not.toHaveBeenCalled();
         expect(remove).not.toHaveBeenCalled();
         const events = publish.mock.calls
-          .filter(([topic]) => topic === AGENT_STREAM_TOPIC('fence-agent', runId))
+          .filter(([topic]) => topic === AGENT_STREAM_TOPIC(runId))
           .map(([, event]) => (event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type));
         expect(events).not.toContain('finish');
         expect(events).not.toContain('error');
@@ -1253,7 +1250,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = result;
       const stream = collect(result.fullStream);
       const errors: any[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC('fence-agent', runId), (event: any) => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         if (event.type === 'error') errors.push(event);
       });
       await model.entered;
@@ -1366,13 +1363,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // A lost lease is reported by the execution itself; a run taken over
         // ends when the execution that took it ends.
         if (loss === 'takeOver') {
-          await emitErrorEvent(
-            durableAgent.pubsub,
-            'fence-agent',
-            runId,
-            new Error('ended elsewhere'),
-            (fence.generation ?? 0) + 1,
-          );
+          await emitErrorEvent(durableAgent.pubsub, runId, new Error('ended elsewhere'), (fence.generation ?? 0) + 1);
         }
         await ended.catch(() => {});
 
@@ -1381,7 +1372,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         await vi.waitFor(() => expect(globalRunRegistry.get(runId)).toBeUndefined());
         for (const cleanup of cleanups) cleanup();
         // ...but left the topics alone.
-        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC('fence-agent', runId));
+        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
         expect(clearTopic).not.toHaveBeenCalledWith(`workflow.events.v2.${runId}`);
       },
     );
@@ -1541,12 +1532,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         if (recoveryStarts === 'before') await generated;
         expect(globalRunRegistry.get(runId)).toBe(recoveredEntry);
         expect(durableAgent.runRegistry.get(runId)).toBe(recoveredLocalEntry);
-        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC('fence-agent', runId));
+        expect(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
 
         // The recovery's own cleanup still finds its state, and clears it.
         recovered.cleanup();
         expect(globalRunRegistry.get(runId)).toBeUndefined();
-        expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC('fence-agent', runId));
+        expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
       },
     );
 
@@ -1610,7 +1601,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const { runId } = result;
       const stream = collect(result.fullStream);
       const events: string[] = [];
-      await pubsub.subscribe(AGENT_STREAM_TOPIC('fence-agent', runId), (event: any) => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
         events.push(event.type === 'chunk' ? `chunk:${event.data?.type}` : event.type);
       });
 

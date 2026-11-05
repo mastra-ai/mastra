@@ -51,7 +51,7 @@ describe('DurableAgent cross-process abort', () => {
     globalRunRegistry.set(runId, entry);
 
     try {
-      await ensureRemoteAbortListener(pubsub, 'cross-process-abort-agent', runId);
+      await ensureRemoteAbortListener(pubsub, runId);
 
       // The listener gives the worker a signal of its own, which is what every
       // downstream model/tool call in the step already reads.
@@ -62,7 +62,7 @@ describe('DurableAgent cross-process abort', () => {
         entry.abortSignal!.addEventListener('abort', () => resolve(), { once: true });
       });
 
-      await publishAbortRequest(pubsub, 'cross-process-abort-agent', runId);
+      await publishAbortRequest(pubsub, runId);
       await aborted;
 
       expect(entry.abortSignal!.aborted).toBe(true);
@@ -80,7 +80,7 @@ describe('DurableAgent cross-process abort', () => {
     const pubsub = new EventEmitterPubSub();
 
     try {
-      await ensureRemoteAbortListener(pubsub, 'cross-process-abort-agent', runId);
+      await ensureRemoteAbortListener(pubsub, runId);
 
       const entry = globalRunRegistry.get(runId);
       expect(entry).toBeDefined();
@@ -92,7 +92,7 @@ describe('DurableAgent cross-process abort', () => {
         entry!.abortSignal!.addEventListener('abort', () => resolve(), { once: true });
       });
 
-      await publishAbortRequest(pubsub, 'cross-process-abort-agent', runId);
+      await publishAbortRequest(pubsub, runId);
       await aborted;
 
       expect(entry!.abortSignal!.aborted).toBe(true);
@@ -108,12 +108,12 @@ describe('DurableAgent cross-process abort', () => {
     globalRunRegistry.set(runId, { isPlaceholder: true } as RunRegistryEntry);
 
     try {
-      await ensureRemoteAbortListener(pubsub, 'cross-process-abort-agent', runId);
+      await ensureRemoteAbortListener(pubsub, runId);
       const firstSignal = globalRunRegistry.get(runId)!.abortSignal;
 
       // A run runs many steps in the same process; each one calls this.
-      await ensureRemoteAbortListener(pubsub, 'cross-process-abort-agent', runId);
-      await ensureRemoteAbortListener(pubsub, 'cross-process-abort-agent', runId);
+      await ensureRemoteAbortListener(pubsub, runId);
+      await ensureRemoteAbortListener(pubsub, runId);
 
       // Same controller reused — a replacement would strand the signal already
       // handed to an in-flight model call.
@@ -141,17 +141,15 @@ describe('DurableAgent cross-process abort', () => {
     try {
       // A transient transport failure must not leave the run permanently deaf:
       // the next step gets to try again.
-      await expect(ensureRemoteAbortListener(pubsub, 'cross-process-abort-agent', runId)).rejects.toThrow(
-        'pubsub down',
-      );
+      await expect(ensureRemoteAbortListener(pubsub, runId)).rejects.toThrow('pubsub down');
       expect(globalRunRegistry.get(runId)!.remoteAbortListenerInstalled).toBe(false);
 
-      await ensureRemoteAbortListener(pubsub, 'cross-process-abort-agent', runId);
+      await ensureRemoteAbortListener(pubsub, runId);
       const entry = globalRunRegistry.get(runId)!;
       const aborted = new Promise<void>(resolve => {
         entry.abortSignal!.addEventListener('abort', () => resolve(), { once: true });
       });
-      await publishAbortRequest(pubsub, 'cross-process-abort-agent', runId);
+      await publishAbortRequest(pubsub, runId);
       await aborted;
       expect(entry.abortSignal!.aborted).toBe(true);
     } finally {
@@ -175,7 +173,7 @@ describe('DurableAgent cross-process abort', () => {
     const { output, runId, cleanup } = await durableAgent.stream('Go');
 
     const terminalEvents: string[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('cross-process-abort-agent', runId), (event: any) => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
       if (event?.type === 'finish' || event?.type === 'abort' || event?.type === 'error') {
         terminalEvents.push(event.type);
       }
@@ -188,7 +186,7 @@ describe('DurableAgent cross-process abort', () => {
     // and proves nothing about a caller living somewhere else. Publishing the
     // request straight to pubsub is what a different pod's abort() looks like
     // from here — the executing process must pick it up on its own.
-    await publishAbortRequest(pubsub, 'cross-process-abort-agent', runId);
+    await publishAbortRequest(pubsub, runId);
 
     // The run must actually end, and it must end with a terminal event. A hard
     // workflow cancel would stop the work but skip the event, leaving every

@@ -4,12 +4,10 @@
 
 /**
  * Generate the pubsub topic name for agent streaming events
- * @param agentId - The agent owning the run
  * @param runId - The unique run identifier
  * @returns The topic name for subscribing/publishing agent stream events
  */
-export const AGENT_STREAM_TOPIC = (agentId: string, runId: string): string =>
-  `agent.stream.v2.${JSON.stringify([agentId, runId])}`;
+export const AGENT_STREAM_TOPIC = (runId: string): string => `agent.stream.${runId}`;
 
 /**
  * Generate the pubsub topic name for agent control messages.
@@ -19,12 +17,10 @@ export const AGENT_STREAM_TOPIC = (agentId: string, runId: string): string =>
  * flow caller -> worker. Keeping them apart means stream consumers never see
  * control traffic and vice versa.
  *
- * @param agentId - The agent owning the run
  * @param runId - The unique run identifier
  * @returns The topic name for publishing/subscribing agent control events
  */
-export const AGENT_CONTROL_TOPIC = (agentId: string, runId: string): string =>
-  `agent.control.v2.${JSON.stringify([agentId, runId])}`;
+export const AGENT_CONTROL_TOPIC = (runId: string): string => `agent.control.${runId}`;
 
 /**
  * Event type constants for agent control events

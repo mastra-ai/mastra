@@ -21,6 +21,7 @@ import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
+import { bindAgentPubSub } from '../../streams/agent-pubsub';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import {
   isExecutionFenceError,
@@ -89,6 +90,23 @@ function withParams<T extends object, O extends object>(params: T, overrides: O)
     descriptors[key] = { value, enumerable: true, configurable: true, writable: true };
   }
   return Object.defineProperties({}, descriptors) as Omit<T, keyof O> & O;
+}
+
+function withAgentPubSub<TStep extends { execute: (params: any) => Promise<any> }>(step: TStep): TStep {
+  const execute = step.execute;
+  return {
+    ...step,
+    execute: params => {
+      const agentId = params.getInitData?.()?.agentId;
+      const pubsub = params[PUBSUB_SYMBOL] as PubSub | undefined;
+      if (!pubsub || !agentId) return execute(params);
+      return execute(
+        Object.defineProperties(withParams(params, {}), {
+          [PUBSUB_SYMBOL]: { value: bindAgentPubSub(pubsub, agentId), enumerable: true, configurable: true },
+        }),
+      );
+    },
+  };
 }
 
 export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
@@ -304,7 +322,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // runId is pre-bound at registry-entry creation; scope defaults to
       // 'pending' in the underlying stream runtime.
       drainPendingSignals: registryEntry?.drainPendingSignals,
-      pubsub: predicateParams[PUBSUB_SYMBOL] as PubSub | undefined,
+      pubsub: predicateParams[PUBSUB_SYMBOL]
+        ? bindAgentPubSub(predicateParams[PUBSUB_SYMBOL] as PubSub, state.agentId ?? initData.agentId)
+        : undefined,
     };
   }
 
@@ -317,7 +337,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    */
   protected override emitChunk(runtime: DurableLoopRuntime, chunk: unknown): void | Promise<void> {
     if (!runtime.pubsub) return;
-    return emitChunkEvent(runtime.pubsub, runtime.agentId, runtime.runId, chunk as any);
+    return emitChunkEvent(runtime.pubsub, runtime.runId, chunk as any);
   }
 
   // ── Step factories ─────────────────────────────────────────────────────
@@ -433,13 +453,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     // Every step that calls a model, runs tools, or writes memory checks that
     // its execution still owns the run (#23734), so a superseded execution
     // stops at the next step boundary instead of overwriting the new owner.
-    const llmExecutionStep = withExecutionFence(this.llmExecutionStep());
-    const toolCallStep = withExecutionFence(this.toolCallStep());
-    const llmMappingStep = withExecutionFence(this.llmMappingStep());
-    const backgroundTaskCheckStep = withExecutionFence(this.backgroundTaskCheckStep());
-    const signalDrainStep = withExecutionFence(this.signalDrainStep());
-    const isTaskCompleteStep = withExecutionFence(this.isTaskCompleteStep());
-    const goalStep = withExecutionFence(this.goalStep());
+    const llmExecutionStep = withAgentPubSub(withExecutionFence(this.llmExecutionStep()));
+    const toolCallStep = withAgentPubSub(withExecutionFence(this.toolCallStep()));
+    const llmMappingStep = withAgentPubSub(withExecutionFence(this.llmMappingStep()));
+    const backgroundTaskCheckStep = withAgentPubSub(withExecutionFence(this.backgroundTaskCheckStep()));
+    const signalDrainStep = withAgentPubSub(withExecutionFence(this.signalDrainStep()));
+    const isTaskCompleteStep = withAgentPubSub(withExecutionFence(this.isTaskCompleteStep()));
+    const goalStep = withAgentPubSub(withExecutionFence(this.goalStep()));
     const executeLLM = llmExecutionStep.execute;
     llmExecutionStep.execute = async params => {
       let workflowState = params.state;
@@ -939,7 +959,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // continuation decision.
       if (rt.pubsub) {
         const lastStep = steps[steps.length - 1];
-        await emitIterationCompleteEvent(rt.pubsub, rt.agentId, state.runId, {
+        await emitIterationCompleteEvent(rt.pubsub, state.runId, {
           iteration: state.iterationCount,
           maxIterations: runMaxSteps,
           text: lastStep?.text,
@@ -1053,7 +1073,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const state = inputData as IterationState;
             const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
-            const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+            const transport = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+            const pubsub = transport ? bindAgentPubSub(transport, initData.agentId) : undefined;
             const logger = mastra?.getLogger?.();
 
             const storedSteps = readAccumulatedSteps(params.state, state);
@@ -1099,21 +1120,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const tripwire = finishResult.tripwire;
             if (pubsub && !tripwire) {
               for (const chunk of finishResult.structuredOutputChunks ?? []) {
-                await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
-                  ...chunk,
-                  runId: state.runId,
-                } as any);
+                await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
               }
             }
 
             if (pubsub) {
               for (const chunk of finishResult.outputResultChunks ?? []) {
-                await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, chunk, true);
+                await emitChunkEvent(pubsub, state.runId, chunk, true);
               }
             }
 
             if (tripwire && pubsub) {
-              await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
+              await emitChunkEvent(pubsub, state.runId, {
                 type: 'tripwire',
                 runId: state.runId,
                 from: ChunkFrom.AGENT,
@@ -1126,7 +1144,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             if (pubsub && !tripwire && finishResult.titleForStream) {
               const title = await finishResult.titleForStream;
               if (title && initData.state?.threadId) {
-                await emitChunkEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
+                await emitChunkEvent(pubsub, state.runId, {
                   type: 'data-thread-title',
                   data: { threadId: initData.state.threadId, title },
                   transient: true,
@@ -1154,7 +1172,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             };
 
             if (pubsub) {
-              await emitFinishEvent(pubsub, state.agentId ?? initData.agentId, state.runId, {
+              await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
                 messages: finishMessages,

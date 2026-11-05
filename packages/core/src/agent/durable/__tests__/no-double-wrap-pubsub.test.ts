@@ -51,7 +51,7 @@ describe('durable/evented agent — no double-wrapping of an already-caching pub
     // The already-caching pubsub must be reused, not wrapped again.
     expect(agent.pubsub).toBe(mastra.pubsub);
 
-    const topic = AGENT_STREAM_TOPIC('demo-agent', 'run-1');
+    const topic = AGENT_STREAM_TOPIC('run-1');
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { c: '0' } });
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { c: '1' } });
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { c: '2' } });
@@ -75,7 +75,7 @@ describe('durable/evented agent — no double-wrapping of an already-caching pub
     const mastra = new Mastra({ agents: { 'demo-agent-2': agent as any } });
     void mastra;
 
-    const topic = AGENT_STREAM_TOPIC('demo-agent-2', 'run-2');
+    const topic = AGENT_STREAM_TOPIC('run-2');
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-2', data: { c: '0' } });
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-2', data: { c: '1' } });
 

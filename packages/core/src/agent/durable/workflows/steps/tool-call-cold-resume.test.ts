@@ -71,7 +71,7 @@ describe('cold durable tool-call resume (#25978)', () => {
     });
     expect(result.error).toBeUndefined();
     expect(execute).not.toHaveBeenCalled();
-    const chunks = vi.mocked(emitChunkEvent).mock.calls.map(call => call[3]);
+    const chunks = vi.mocked(emitChunkEvent).mock.calls.map(call => call[2]);
     expect(chunks.map(chunk => chunk.type)).toEqual(['tool-call-resumed', 'tool-output-denied']);
     for (const chunk of chunks) {
       const display = JSON.stringify(chunk.metadata?.mastra?.toolPayloadTransform?.display);
@@ -175,7 +175,7 @@ describe('cold durable tool-call resume (#25978)', () => {
       );
       expect(persistedMessage.content.metadata[metadataKey]?.['call-1']).toBeUndefined();
       expect(recall).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'user-1', perPage: false });
-      const chunks = vi.mocked(emitChunkEvent).mock.calls.map(call => call[3]);
+      const chunks = vi.mocked(emitChunkEvent).mock.calls.map(call => call[2]);
       expect(chunks.map(chunk => chunk.type).slice(0, 2)).toEqual(['tool-call-resumed', 'tool-result']);
       expect(chunks.filter(chunk => chunk.type === 'tool-call-resumed')).toHaveLength(1);
       const ack = chunks[0];

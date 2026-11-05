@@ -63,7 +63,7 @@ runPeer<T79PeerArgs>(async peer => {
   // that ignored the abort.
   let receivedByPeer = 0;
   const echoed = gate<void>();
-  await peer.pubsub().subscribe(AGENT_CONTROL_TOPIC(runner.id, runId), async (event, ack) => {
+  await peer.pubsub().subscribe(AGENT_CONTROL_TOPIC(runId), async (event, ack) => {
     receivedByPeer++;
     if (event.type === AgentControlEventTypes.ABORT_REQUEST) echoed.resolve();
     await ack?.();

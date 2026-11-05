@@ -286,14 +286,14 @@ describe('DurableAgent streaming execution', () => {
       const preparation = await durableAgent.prepare('Test message');
 
       // Subscribe to events for this run
-      await pubsub.subscribe(AGENT_STREAM_TOPIC('pubsub-test-agent', preparation.runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(preparation.runId), event => {
         receivedEvents.push(event as unknown as AgentStreamEvent);
       });
 
       // Now we need to manually emit events since the workflow isn't actually running
       // In a real integration test, the workflow would emit these
       // EventEmitter.emit is synchronous; awaiting publish is sufficient.
-      await pubsub.publish(AGENT_STREAM_TOPIC('pubsub-test-agent', preparation.runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC(preparation.runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId: preparation.runId,
         data: { type: 'text-delta', payload: { text: 'test' } },
@@ -320,17 +320,17 @@ describe('DurableAgent streaming execution', () => {
       const prep1 = await durableAgent.prepare('Message 1');
       const prep2 = await durableAgent.prepare('Message 2');
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC('isolation-test-agent', prep1.runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(prep1.runId), event => {
         eventsRun1.push(event as unknown as AgentStreamEvent);
       });
 
-      await pubsub.subscribe(AGENT_STREAM_TOPIC('isolation-test-agent', prep2.runId), event => {
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(prep2.runId), event => {
         eventsRun2.push(event as unknown as AgentStreamEvent);
       });
 
       // Emit event to run1 only. EventEmitter.emit is synchronous; awaiting
       // publish is sufficient — no wall-clock wait needed.
-      await pubsub.publish(AGENT_STREAM_TOPIC('isolation-test-agent', prep1.runId), {
+      await pubsub.publish(AGENT_STREAM_TOPIC(prep1.runId), {
         type: AgentStreamEventTypes.CHUNK,
         runId: prep1.runId,
         data: { type: 'text-delta', payload: { text: 'for run 1' } },
@@ -475,7 +475,7 @@ describe('DurableAgent error handling', () => {
     const runId = 'error-emit-test';
     const receivedErrors: any[] = [];
 
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       const streamEvent = event as unknown as AgentStreamEvent;
       if (streamEvent.type === AgentStreamEventTypes.ERROR) {
         receivedErrors.push(streamEvent.data);
@@ -485,7 +485,7 @@ describe('DurableAgent error handling', () => {
     const testError = new Error('Test error message');
     testError.name = 'TestError';
     // EventEmitter.emit is synchronous; awaiting emit is sufficient.
-    await emitErrorEvent(pubsub, 'test-agent', runId, testError);
+    await emitErrorEvent(pubsub, runId, testError);
 
     expect(receivedErrors.length).toBe(1);
     expect(receivedErrors[0].error.name).toBe('TestError');
@@ -497,7 +497,6 @@ describe('DurableAgent error handling', () => {
     const runId = 'reject-error-event';
     const onError = vi.fn();
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'reject-error-message',
@@ -511,7 +510,7 @@ describe('DurableAgent error handling', () => {
 
     await ready;
     const error = new TypeError('stopWhen failed');
-    await emitErrorEvent(pubsub, 'test-agent', runId, error, undefined, 'reject');
+    await emitErrorEvent(pubsub, runId, error, undefined, 'reject');
 
     await expect(consumption).rejects.toMatchObject({ name: 'TypeError', message: 'stopWhen failed' });
     expect(chunks).toEqual([]);
@@ -534,7 +533,6 @@ describe('DurableAgent error handling', () => {
     const runId = 'chunk-error-event';
     const onError = vi.fn();
     const { output, cleanup, ready } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: 'chunk-error-message',
@@ -547,7 +545,7 @@ describe('DurableAgent error handling', () => {
     })();
 
     await ready;
-    await emitErrorEvent(pubsub, 'test-agent', runId, new Error('ordinary failure'));
+    await emitErrorEvent(pubsub, runId, new Error('ordinary failure'));
     await consumption;
 
     expect(chunks).toHaveLength(1);

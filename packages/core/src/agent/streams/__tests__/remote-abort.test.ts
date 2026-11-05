@@ -132,7 +132,7 @@ describe('Agent streams remote abort', () => {
     const unsubscribing = new Promise<void>(resolve => (releaseUnsubscribe = resolve));
     class SlowUnsubscribePubSub extends EventEmitterPubSub {
       override async unsubscribe(topic: string, cb: Parameters<EventEmitterPubSub['unsubscribe']>[1]) {
-        if (topic === AGENT_CONTROL_TOPIC('abort-agent', 'ended-run')) await unsubscribing;
+        if (topic === AGENT_CONTROL_TOPIC('ended-run')) await unsubscribing;
         return super.unsubscribe(topic, cb);
       }
     }
@@ -142,7 +142,7 @@ describe('Agent streams remote abort', () => {
     publisher.publish({ type: 'finish', runId: 'ended-run', from: 'AGENT', payload: {} } as any);
     await publisher.close();
 
-    expect(await requestAcknowledgedAbort(pubsub, 'abort-agent', 'ended-run', 300)).toBe(false);
+    expect(await requestAcknowledgedAbort(pubsub, 'ended-run', 300)).toBe(false);
     expect(publisher.abortSignal.aborted).toBe(false);
     releaseUnsubscribe();
   });

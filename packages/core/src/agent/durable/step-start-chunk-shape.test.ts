@@ -113,11 +113,11 @@ describe('durable step-start chunk shape', () => {
   it('emitStepStartEvent publishes the canonical ChunkType shape', async () => {
     const runId = 'run-shape-test';
     const events: Event[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       events.push(event);
     });
 
-    await emitStepStartEvent(pubsub, 'test-agent', runId, {
+    await emitStepStartEvent(pubsub, runId, {
       stepId: 'llm-execution',
       messageId: 'msg-1',
       startedAt: 0,
@@ -145,11 +145,11 @@ describe('durable step-start chunk shape', () => {
   it('emitStepStartEvent defaults request/warnings like the regular engine', async () => {
     const runId = 'run-shape-defaults';
     const events: Event[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('test-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       events.push(event);
     });
 
-    await emitStepStartEvent(pubsub, 'test-agent', runId, { stepId: 'llm-execution' });
+    await emitStepStartEvent(pubsub, runId, { stepId: 'llm-execution' });
     await new Promise(resolve => setImmediate(resolve));
 
     const data = events[0]?.data as any;

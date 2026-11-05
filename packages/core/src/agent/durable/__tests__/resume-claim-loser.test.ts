@@ -143,7 +143,7 @@ describe('DurableAgent resume claim loser (#27365)', () => {
 
   async function watchTopicErrors(runId: string) {
     const errors: unknown[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('loser-agent', runId), (event: any) => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
       if (event?.type === AgentStreamEventTypes.ERROR) errors.push(event.data);
     });
     return errors;

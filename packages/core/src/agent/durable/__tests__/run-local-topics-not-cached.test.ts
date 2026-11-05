@@ -82,7 +82,7 @@ describe('durable/evented agent — run-local topics are never written to the ca
 
   it('still caches agent stream events, which observe/replay depends on', async () => {
     const { agent, writes } = makeRegisteredAgent('run-local-agent-3');
-    const topic = AGENT_STREAM_TOPIC('test-agent', 'run-3');
+    const topic = AGENT_STREAM_TOPIC('run-3');
 
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-3', data: { c: '0' } });
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-3', data: { c: '1' } });
@@ -134,7 +134,7 @@ describe('durable/evented agent — run-local topics are never written to the ca
 
     it('still caches agent stream events', async () => {
       const { agent, writes } = makeReusedAgent('reused-run-local-agent-2');
-      const topic = AGENT_STREAM_TOPIC('test-agent', 'run-5');
+      const topic = AGENT_STREAM_TOPIC('run-5');
 
       await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-5', data: { c: '0' } });
       await new Promise(resolve => setTimeout(resolve, 10));

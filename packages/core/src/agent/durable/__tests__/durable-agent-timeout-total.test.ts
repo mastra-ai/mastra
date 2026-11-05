@@ -151,10 +151,10 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     // Fails through the error path — not a clean stop, and not masked as a
     // caller abort.
     expect(chunks.some((c: any) => c.type === 'finish')).toBe(false);
-    expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(durableAgent.id, result.runId))).not.toHaveLength(0);
+    expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).not.toHaveLength(0);
     result.cleanup();
     await vi.waitFor(async () => {
-      expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(durableAgent.id, result.runId))).toHaveLength(0);
+      expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).toHaveLength(0);
     });
   });
 
@@ -165,7 +165,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     const releaseSubscription = Promise.withResolvers<void>();
     const originalSubscribe = pubsub.subscribe.bind(pubsub);
     const subscribeSpy = vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, callback, options) => {
-      if (topic === AGENT_STREAM_TOPIC(durableAgent.id, runId)) {
+      if (topic === AGENT_STREAM_TOPIC(runId)) {
         subscribing.resolve();
         await releaseSubscription.promise;
       }
@@ -462,7 +462,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       const secondDurable = build();
       const subscribe = pubsub.subscribe.bind(pubsub);
       vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, callback, options) => {
-        if (lateReader && topic === AGENT_STREAM_TOPIC('timeout-restart-agent', runId)) {
+        if (lateReader && topic === AGENT_STREAM_TOPIC(runId)) {
           await globalRunRegistry.get(runId)?.executionFence?.whenSettled;
         }
         return subscribe(topic, callback, options);
@@ -492,9 +492,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       }
       recovered.cleanup();
       await vi.waitFor(async () => {
-        expect(await secondDurable.pubsub.getHistory(AGENT_STREAM_TOPIC('timeout-restart-agent', runId))).toHaveLength(
-          0,
-        );
+        expect(await secondDurable.pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toHaveLength(0);
       });
     },
     30000,

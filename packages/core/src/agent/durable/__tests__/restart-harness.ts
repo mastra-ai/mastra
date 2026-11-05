@@ -477,7 +477,7 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       const agent = graph.agent;
       let finishEvents = 0;
       await graph.mastra.pubsub.subscribe(
-        AGENT_STREAM_TOPIC(agent.id, options.runId),
+        AGENT_STREAM_TOPIC(options.runId),
         async (event: { type: string }, ack?: () => Promise<void>) => {
           if (event.type === AgentStreamEventTypes.FINISH) finishEvents++;
           await ack?.();

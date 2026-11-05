@@ -268,7 +268,6 @@ async function processChunkThroughOutputProcessors(
   registryEntry: RunRegistryEntry | undefined,
   pubsub: PubSub | undefined,
   runId: string,
-  agentId: string,
   agentName: string,
   logger: any,
   messageList?: MessageList,
@@ -307,7 +306,7 @@ async function processChunkThroughOutputProcessors(
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
             try {
-              await emitChunkEvent(pubsub, agentId, runId, data as ChunkType);
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
             } catch (error) {
               throw new DurableChunkPublishError(error);
             }
@@ -320,7 +319,7 @@ async function processChunkThroughOutputProcessors(
         // them again. Without a runner (no processors, or none in this process)
         // the chunk goes out unmarked and the consumer processes it.
         try {
-          await emitChunkEvent(pubsub, agentId, runId, c, !!runner);
+          await emitChunkEvent(pubsub, runId, c, !!runner);
         } catch (error) {
           throw new DurableChunkPublishError(error);
         }
@@ -704,7 +703,7 @@ export function createDurableToolCallStep() {
           message: `Tool "${toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
         };
         if (pubsub) {
-          await emitChunkEvent(pubsub, initData.agentId, runId, {
+          await emitChunkEvent(pubsub, runId, {
             type: 'tool-error',
             runId,
             from: ChunkFrom.AGENT,
@@ -725,7 +724,7 @@ export function createDurableToolCallStep() {
           ),
         );
         if (pubsub) {
-          await emitChunkEvent(pubsub, initData.agentId, runId, {
+          await emitChunkEvent(pubsub, runId, {
             type: 'tool-error',
             runId,
             from: ChunkFrom.AGENT,
@@ -1051,7 +1050,7 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await emitChunkEvent(pubsub, initData.agentId, runId, {
+          await emitChunkEvent(pubsub, runId, {
             type: 'tool-call-resumed',
             runId,
             from: ChunkFrom.AGENT,
@@ -1112,7 +1111,6 @@ export function createDurableToolCallStep() {
                 pubsub,
                 runId,
                 initData.agentId,
-                initData.agentId,
                 logger,
                 messageList,
                 processorObservabilityContext,
@@ -1167,13 +1165,13 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await publishAfterPersist(() => emitChunkEvent(pubsub, initData.agentId, runId, approvalChunk));
+          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
         }
 
         // Emit suspended event for the stream adapter
         if (pubsub) {
           await publishAfterPersist(() =>
-            emitSuspendedEvent(pubsub, initData.agentId, runId, {
+            emitSuspendedEvent(pubsub, runId, {
               toolCallId,
               toolName,
               args,
@@ -1274,7 +1272,6 @@ export function createDurableToolCallStep() {
                 registryEntry,
                 pubsub,
                 runId,
-                initData.agentId,
                 initData.agentId,
                 logger,
                 messageList,
@@ -1419,7 +1416,7 @@ export function createDurableToolCallStep() {
             if (typeof chunk?.type === 'string' && chunk.type.startsWith('data-') && !chunk.transient) {
               collectProcessorDataPart({ type: chunk.type, data: chunk.data, messageId: chunk.messageId });
             }
-            await emitChunkEvent(pubsub, initData.agentId, runId, chunk as ChunkType);
+            await emitChunkEvent(pubsub, runId, chunk as ChunkType);
           }
         : undefined;
 
@@ -1536,12 +1533,12 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await publishAfterPersist(() => emitChunkEvent(pubsub, initData.agentId, runId, approvalChunk));
+              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
             }
 
             if (pubsub) {
               await publishAfterPersist(() =>
-                emitSuspendedEvent(pubsub, initData.agentId, runId, {
+                emitSuspendedEvent(pubsub, runId, {
                   toolCallId,
                   toolName: approvalToolName,
                   args: approvalArgs,
@@ -1610,8 +1607,8 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
-            await publishAfterPersist(() => emitChunkEvent(pubsub, initData.agentId, runId, suspensionChunk));
-            await publishAfterPersist(() => emitSuspendedEvent(pubsub, initData.agentId, runId, suspendedEventData));
+            await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+            await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
           }
 
           endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
@@ -1684,7 +1681,7 @@ export function createDurableToolCallStep() {
         emitTaskStarted: async task => {
           // Emit background-task-started chunk via PubSub
           if (pubsub) {
-            await emitChunkEvent(pubsub, initData.agentId, runId, {
+            await emitChunkEvent(pubsub, runId, {
               type: 'background-task-started' as any,
               runId,
               from: ChunkFrom.AGENT,
@@ -1754,7 +1751,7 @@ export function createDurableToolCallStep() {
               const bgRunId = chunk.payload.runId;
               // Emit tool-call chunk so UIs can render the invocation inline
               if (bgRunId !== runId || (bgRunId === runId && resumeData != null)) {
-                void emitChunkEvent(pubsub, initData.agentId, bgRunId, {
+                void emitChunkEvent(pubsub, bgRunId, {
                   type: 'tool-call',
                   runId: bgRunId,
                   from: ChunkFrom.AGENT,
@@ -1768,7 +1765,7 @@ export function createDurableToolCallStep() {
               }
 
               if (chunk.type === 'background-task-completed') {
-                void emitChunkEvent(pubsub, initData.agentId, bgRunId, {
+                void emitChunkEvent(pubsub, bgRunId, {
                   type: 'tool-result',
                   runId: bgRunId,
                   from: ChunkFrom.AGENT,
@@ -1786,7 +1783,7 @@ export function createDurableToolCallStep() {
                   },
                 });
               } else if (chunk.type === 'background-task-failed') {
-                void emitChunkEvent(pubsub, initData.agentId, bgRunId, {
+                void emitChunkEvent(pubsub, bgRunId, {
                   type: 'tool-error',
                   runId: bgRunId,
                   from: ChunkFrom.AGENT,
@@ -2141,7 +2138,7 @@ export function createDurableToolCallStep() {
                           messageId: writerOptions?.messageId,
                         });
                       }
-                      await emitChunkEvent(pubsub, initData.agentId, runId, data as ChunkType);
+                      await emitChunkEvent(pubsub, runId, data as ChunkType);
                     },
                   }
                 : undefined,
@@ -2170,7 +2167,7 @@ export function createDurableToolCallStep() {
               };
               if (pubsub) {
                 try {
-                  await emitChunkEvent(pubsub, initData.agentId, runId, {
+                  await emitChunkEvent(pubsub, runId, {
                     type: 'tripwire',
                     runId,
                     from: ChunkFrom.AGENT,
@@ -2237,7 +2234,6 @@ export function createDurableToolCallStep() {
               registryEntry,
               pubsub,
               runId,
-              initData.agentId,
               initData.agentId,
               logger,
               messageList,
@@ -2317,7 +2313,6 @@ export function createDurableToolCallStep() {
               registryEntry,
               pubsub,
               runId,
-              initData.agentId,
               initData.agentId,
               logger,
               messageList,

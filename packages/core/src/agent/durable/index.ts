@@ -262,3 +262,6 @@ export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
 export { endRunSpansWithError } from './run-registry';
 /** @internal Runtime instrumentation helpers. */
 export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
+
+/** @internal Agent-scoped transport delivery view. */
+export { bindAgentPubSub } from '../streams/agent-pubsub';

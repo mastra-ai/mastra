@@ -3051,12 +3051,8 @@ describe('Agent Routes Authorization', () => {
       it('drains replay before rejecting a superseded observer', async () => {
         const runId = 'observe-reject';
         const chunk = { type: 'text-delta', runId, from: 'AGENT', payload: { text: 'before rejection' } };
-        await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(mockDurableAgent.id, runId), {
-          runId,
-          type: 'chunk',
-          data: chunk,
-        });
-        await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(mockDurableAgent.id, runId), {
+        await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'chunk', data: chunk });
+        await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
           runId,
           type: 'error',
           data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
@@ -3070,7 +3066,7 @@ describe('Agent Routes Authorization', () => {
 
     it('closes after replay even when the offset is past the terminal event', async () => {
       const runId = 'observe-past-finish';
-      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(mockDurableAgent.id, runId), {
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
         runId,
         type: 'finish',
         data: {},
@@ -3153,7 +3149,7 @@ describe('Agent Routes Authorization', () => {
       const abort = new AbortController();
       const reader = (await observe(runId, { abortSignal: abort.signal })).getReader();
       const next = reader.read();
-      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(mockDurableAgent.id, runId), {
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
         runId,
         type: 'chunk',
         data: { type: 'step-finish' },
@@ -3252,11 +3248,7 @@ describe('Agent Routes Authorization', () => {
     it('drops what a superseded execution publishes after another execution claims the run, and does not forward the claim marker', async () => {
       const runId = 'observe-takeover-run';
       const publish = (event: Record<string, unknown>) =>
-        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(mockDurableAgent.id, runId), {
-          runId,
-          data: {},
-          ...event,
-        } as any);
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
       const text = (value: string, generation: number) =>
         publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
 
@@ -3287,11 +3279,7 @@ describe('Agent Routes Authorization', () => {
     it("follows the run's current claim when it resumes from an offset past the takeover marker", async () => {
       const runId = 'observe-offset-takeover-run';
       const publish = (event: Record<string, unknown>) =>
-        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(mockDurableAgent.id, runId), {
-          runId,
-          data: {},
-          ...event,
-        } as any);
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
       const text = (value: string, generation: number) =>
         publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
 
@@ -3337,11 +3325,7 @@ describe('Agent Routes Authorization', () => {
       (mockDurableAgent as any).__subscribeToRunStream = undefined;
       const subscribeWithReplay = vi.spyOn(mockDurableAgent.pubsub, 'subscribeWithReplay');
       const publish = (event: Record<string, unknown>) =>
-        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(mockDurableAgent.id, runId), {
-          runId,
-          data: {},
-          ...event,
-        } as any);
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
 
       await publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: 'answer' } } });
       await publish({ type: 'finish', data: {} });
@@ -3356,10 +3340,7 @@ describe('Agent Routes Authorization', () => {
       const events: any[] = [];
       for await (const event of stream as any) events.push(event);
 
-      expect(subscribeWithReplay).toHaveBeenCalledWith(
-        AGENT_STREAM_TOPIC(mockDurableAgent.id, runId),
-        expect.any(Function),
-      );
+      expect(subscribeWithReplay).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
       expect(events.map(event => [event.type, event.payload?.text])).toEqual([
         ['text-delta', 'answer'],
         ['finish', undefined],
@@ -5125,7 +5106,7 @@ describe('plain Agent resumable streams', () => {
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
     vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ status: 'running' });
     const runId = 'plain-observe';
-    await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC('plain-agent', runId), {
+    await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
       runId,
       type: AgentStreamEventTypes.FINISH,
       data: { output: {}, stepResult: { reason: 'stop' } },
@@ -5156,12 +5137,12 @@ describe('plain Agent resumable streams', () => {
     const runId = 'plain-suspended';
     const bus = agent.__getStreamBus()!.pubsub;
     // What a plain run publishes when a tool needs approval (pinned in core parity.test.ts).
-    await bus.publish(AGENT_STREAM_TOPIC('plain-agent', runId), {
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
       runId,
       type: AgentStreamEventTypes.CHUNK,
       data: { type: 'tool-call-approval', runId, payload: { toolCallId: 'call-1', toolName: 'lookup', args: {} } },
     });
-    await bus.publish(AGENT_STREAM_TOPIC('plain-agent', runId), {
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
       runId,
       type: AgentStreamEventTypes.SUSPENDED,
       data: { type: 'approval', toolCallId: 'call-1', toolName: 'lookup', args: {} },
@@ -5191,12 +5172,12 @@ describe('plain Agent resumable streams', () => {
     expect(events.map(event => event.type)).toEqual(['tool-call-approval']);
 
     // The approved run resumes on the same topic.
-    await bus.publish(AGENT_STREAM_TOPIC('plain-agent', runId), {
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
       runId,
       type: AgentStreamEventTypes.CHUNK,
       data: { type: 'text-delta', runId, payload: { id: 't1', text: 'Done.' } },
     });
-    await bus.publish(AGENT_STREAM_TOPIC('plain-agent', runId), {
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
       runId,
       type: AgentStreamEventTypes.FINISH,
       data: { output: { text: 'Done.', steps: [] }, stepResult: { reason: 'stop' } },
@@ -5230,7 +5211,7 @@ describe('plain Agent resumable streams', () => {
       const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
       vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' });
       const runId = 'owned-run';
-      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
         runId,
         type: AgentStreamEventTypes.FINISH,
         data: { output: {}, stepResult: { reason: 'stop' } },
@@ -5273,7 +5254,7 @@ describe('plain Agent resumable streams', () => {
     it('lets an authorized unscoped Studio caller observe a run', async () => {
       const { agent, mastra } = setup();
       const runId = 'studio-observe';
-      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
         runId,
         type: AgentStreamEventTypes.FINISH,
         data: { output: {}, stepResult: { reason: 'stop' } },
@@ -5333,7 +5314,7 @@ describe('plain Agent resumable streams', () => {
       const applyStoredOverrides = vi.fn(async (resolved: Agent) => resolved);
       vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as any);
       const runId = 'context-lookup';
-      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
         runId,
         type: AgentStreamEventTypes.FINISH,
         data: { output: {}, stepResult: { reason: 'stop' } },

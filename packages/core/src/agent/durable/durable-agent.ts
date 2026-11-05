@@ -880,6 +880,7 @@ export class DurableAgent<
     this.#streams = new AgentStreamBus(
       { pubsub, cache, cleanupTimeoutMs, shouldCache },
       {
+        getAgentId: () => this.id,
         getMastra: () => this.#mastra,
         usesSharedRunLog: () => this.resolveWorkflowEngine() === 'evented',
         warn: message => this.logger.warn(`[DurableAgent:${this.id}] ${message}`),
@@ -1288,7 +1289,6 @@ export class DurableAgent<
       this.#assertRecoveryActive();
       executionFence.throwIfLost();
       const stream = createDurableAgentStream<TOutput>({
-        agentId: this.id,
         pubsub: this.pubsub,
         runId,
         minGeneration: executionFence.generation,
@@ -2541,7 +2541,7 @@ export class DurableAgent<
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
     await runOutsideRunFenceScope(() =>
-      emitErrorEvent(this.pubsub, this.id, runId, error, generation, shouldRejectStream(error) ? 'reject' : undefined),
+      emitErrorEvent(this.pubsub, runId, error, generation, shouldRejectStream(error) ? 'reject' : undefined),
     );
   }
 
@@ -2785,7 +2785,7 @@ export class DurableAgent<
     // queued input before the run ends and drains it, so only the thread request goes.
     await Promise.all([
       agentThreadStreamRuntime.requestThreadRunAbort(this.getPubSub(), options, runId),
-      options.clearPendingSignals ? undefined : publishAbortRequest(this.pubsub, this.id, runId),
+      options.clearPendingSignals ? undefined : publishAbortRequest(this.pubsub, runId),
     ]);
     return true;
   }
@@ -2836,7 +2836,7 @@ export class DurableAgent<
       return true;
     }
     try {
-      return await requestAcknowledgedAbort(this.pubsub, this.id, runId);
+      return await requestAcknowledgedAbort(this.pubsub, runId);
     } finally {
       this.#abortLocalController(runId);
     }
@@ -2870,7 +2870,7 @@ export class DurableAgent<
           : persisted?.snapshot;
       if (snapshot?.status !== 'suspended') return;
       await this.deleteRunSnapshots(runId);
-      await emitAbortEvent(this.pubsub, this.id, runId, { steps: [], text: '' });
+      await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`Failed to delete snapshot of aborted suspended run ${runId}`, {
         runId,
@@ -2926,7 +2926,7 @@ export class DurableAgent<
    */
   protected async requestRemoteAbort(runId: string): Promise<void> {
     try {
-      await publishAbortRequest(this.pubsub, this.id, runId);
+      await publishAbortRequest(this.pubsub, runId);
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.('Failed to publish durable agent abort request', {
         agentId: this.id,
@@ -3204,7 +3204,6 @@ export class DurableAgent<
       waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
-      agentId: this.id,
       pubsub: this.pubsub,
       runId,
       minGeneration: executionFence.generation,
@@ -3262,7 +3261,7 @@ export class DurableAgent<
           if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
           // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
           // Only the initial stream() path emits 'start'; resume() does not.
-          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), this.id, runId, {
+          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
             type: 'start',
             runId,
             from: ChunkFrom.AGENT,
@@ -3992,7 +3991,6 @@ export class DurableAgent<
       waitForEventDelivery,
       ready,
     } = createDurableAgentStream<TOutput>({
-      agentId: this.id,
       pubsub: this.pubsub,
       runId,
       minGeneration: executionFence.generation,
@@ -4395,7 +4393,7 @@ export class DurableAgent<
     if (executionFence.generation !== undefined) {
       // Readers of the run's stream, including the superseded execution's own
       // caller, drop what that execution still publishes from here on.
-      await emitOwnershipClaimedEvent(this.pubsub, this.id, runId, executionFence.generation).catch(error => {
+      await emitOwnershipClaimedEvent(this.pubsub, runId, executionFence.generation).catch(error => {
         this.logger.warn(`[DurableAgent] recover(${runId}) failed to announce its claim on the run stream`, {
           runId,
           error,
@@ -4517,7 +4515,7 @@ export class DurableAgent<
             // Keep unknown until the authoritative termination is recovered (OBS-754).
             recoverModelSpan?.end();
             recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
-            await emitFinishEvent(recoveryPubsub, this.id, runId, { output: finalOutput, stepResult });
+            await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
           }
           if (result?.status === 'suspended' && options?.closeOnSuspend) {
             // Same contract as resume(): close on the persisted suspension,
@@ -4823,7 +4821,6 @@ export class DurableAgent<
       cleanup: streamCleanup,
       ready,
     } = createDurableAgentStream<TOutput>({
-      agentId: this.id,
       pubsub: this.pubsub,
       runId,
       minGeneration: executionFence.generation,
@@ -4876,7 +4873,7 @@ export class DurableAgent<
           if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
           // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
           // Only the initial generate()/stream() path emits 'start'; resume() does not.
-          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), this.id, runId, {
+          await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
             type: 'start',
             runId,
             from: ChunkFrom.AGENT,
@@ -5329,7 +5326,7 @@ export class DurableAgent<
   ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration'>> {
     if (!offset) return {};
     try {
-      const skipped = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(this.id, runId), 0)).slice(0, offset);
+      const skipped = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).slice(0, offset);
       if (skipped.length === offset) {
         let floor: number | undefined;
         for (const event of skipped) {
@@ -5354,7 +5351,7 @@ export class DurableAgent<
       // Read twice before concluding absence/completion. In particular a newer
       // claim must win over terminal replay from the execution it superseded.
       for (let attempt = 0; attempt < 2; attempt++) {
-        const history = await this.pubsub.getHistory(AGENT_STREAM_TOPIC(this.id, runId), 0);
+        const history = await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
         // A newer segment's nonterminal history keeps the observer attached even
         // when ownership reads fail or an older segment ended with suspension.
         const historyGeneration = history.reduce<number | undefined>(
@@ -5448,7 +5445,7 @@ export class DurableAgent<
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>> {
     const keepGeneration = createRunGenerationFilter(await this.#readReplayFloor(runId, options.offset));
-    const topic = AGENT_STREAM_TOPIC(this.id, runId);
+    const topic = AGENT_STREAM_TOPIC(runId);
     let subscribed = true;
     let activityVersion = 0;
 
@@ -5820,7 +5817,6 @@ export class DurableAgent<
     const replayFloor = await this.#readReplayFloor(runId, options?.offset);
 
     const stream = createDurableAgentStream<TOutput>({
-      agentId: this.id,
       pubsub: this.pubsub,
       runId,
       messageId: crypto.randomUUID(),
@@ -5985,7 +5981,7 @@ export class DurableAgent<
    * which reschedules deletion on that run's terminal end.
    */
   #clearPubsubTopic(runId: string): void {
-    void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(this.id, runId));
+    void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
     void this.pubsub.clearTopic(`workflow.events.v2.${runId}`);
   }
 
@@ -6001,7 +5997,7 @@ export class DurableAgent<
     };
     if (typeof pubsub.getHistory !== 'function') return 'latest';
     try {
-      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(this.id, runId));
+      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
       return Array.isArray(history) && history.length > 0 ? history.length : 'latest';
     } catch {
       return 'latest';

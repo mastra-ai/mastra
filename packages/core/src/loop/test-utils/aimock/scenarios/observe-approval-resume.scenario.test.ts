@@ -82,7 +82,7 @@ describeForAllEngines('AIMock loop scenario: observe across approval and resume'
     let resumed: any;
     try {
       const bus = runBus(agent);
-      const topic = AGENT_STREAM_TOPIC(agent.id, run.runId);
+      const topic = AGENT_STREAM_TOPIC(run.runId);
       let suspensionIndex: number | undefined;
       await vi.waitFor(async () => {
         const history: any[] = await bus.getHistory(topic);

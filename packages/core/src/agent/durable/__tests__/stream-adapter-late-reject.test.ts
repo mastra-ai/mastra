@@ -9,7 +9,6 @@ describe('durable stream adapter rejection', () => {
     const runId = 'late-reject-run';
 
     const { output, ready, waitForEventDelivery } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -17,20 +16,20 @@ describe('durable stream adapter rejection', () => {
     }) as DurableAgentStreamResult<any>;
     await ready;
 
-    await emitChunkEvent(pubsub, 'test-agent', runId, { type: 'start', runId, from: 'AGENT', payload: {} } as any);
-    await emitChunkEvent(pubsub, 'test-agent', runId, {
+    await emitChunkEvent(pubsub, runId, { type: 'start', runId, from: 'AGENT', payload: {} } as any);
+    await emitChunkEvent(pubsub, runId, {
       type: 'step-start',
       runId,
       from: 'AGENT',
       payload: { messageId: `msg-${runId}`, request: {}, warnings: [] },
     } as any);
-    await emitChunkEvent(pubsub, 'test-agent', runId, {
+    await emitChunkEvent(pubsub, runId, {
       type: 'tool-call',
       runId,
       from: 'AGENT',
       payload: { toolCallId: 'call-1', toolName: 'step', args: {} },
     } as any);
-    await emitErrorEvent(pubsub, 'test-agent', runId, new Error('late failure'), undefined, 'reject');
+    await emitErrorEvent(pubsub, runId, new Error('late failure'), undefined, 'reject');
     await waitForEventDelivery();
 
     const types: string[] = [];
@@ -62,15 +61,14 @@ describe('durable stream adapter rejection', () => {
     const runId = 'late-subscribe-failure-run';
 
     const { output, ready, waitForEventDelivery } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
     }) as DurableAgentStreamResult<any>;
 
-    await emitChunkEvent(pubsub, 'test-agent', runId, { type: 'start', runId, from: 'AGENT', payload: {} } as any);
-    await emitChunkEvent(pubsub, 'test-agent', runId, {
+    await emitChunkEvent(pubsub, runId, { type: 'start', runId, from: 'AGENT', payload: {} } as any);
+    await emitChunkEvent(pubsub, runId, {
       type: 'step-start',
       runId,
       from: 'AGENT',
@@ -107,21 +105,20 @@ describe('durable stream adapter rejection', () => {
     const runId = 'run-error-then-subscribe-failure';
 
     const { output, ready, waitForEventDelivery } = createDurableAgentStream({
-      agentId: 'test-agent',
       pubsub,
       runId,
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
     }) as DurableAgentStreamResult<any>;
 
-    await emitChunkEvent(pubsub, 'test-agent', runId, { type: 'start', runId, from: 'AGENT', payload: {} } as any);
-    await emitChunkEvent(pubsub, 'test-agent', runId, {
+    await emitChunkEvent(pubsub, runId, { type: 'start', runId, from: 'AGENT', payload: {} } as any);
+    await emitChunkEvent(pubsub, runId, {
       type: 'step-start',
       runId,
       from: 'AGENT',
       payload: { messageId: `msg-${runId}`, request: {}, warnings: [] },
     } as any);
-    await emitErrorEvent(pubsub, 'test-agent', runId, new Error('run failed'), undefined, 'reject');
+    await emitErrorEvent(pubsub, runId, new Error('run failed'), undefined, 'reject');
     await waitForEventDelivery();
     failSubscribe();
     await expect(ready).rejects.toThrow('subscribe failed');

@@ -313,7 +313,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     expect((agent.pubsub as CachingPubSub).getInner()).toBe(transport);
     expect((agent.pubsub as CachingPubSub).getInner()).not.toBe(mastraPubsub);
 
-    const topic = AGENT_STREAM_TOPIC('reuse-wrapper-agent', 'reused-run');
+    const topic = AGENT_STREAM_TOPIC('reused-run');
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'reused-run', data: {} });
     expect(await sharedCache.listLength(`pubsub:${topic}`)).toBe(1);
 
@@ -347,11 +347,11 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     });
 
     const delivered: unknown[] = [];
-    await runTransport.subscribe(AGENT_STREAM_TOPIC('custom-wrapper-agent', 'moved-run'), event => {
+    await runTransport.subscribe(AGENT_STREAM_TOPIC('moved-run'), event => {
       delivered.push(event);
     });
 
-    const topic = AGENT_STREAM_TOPIC('custom-wrapper-agent', 'moved-run');
+    const topic = AGENT_STREAM_TOPIC('moved-run');
     await agent.pubsub.publish(topic, { type: 'chunk', runId: 'moved-run', data: {} });
 
     expect(delivered).toHaveLength(1);
@@ -386,7 +386,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
 
     const onRunBus: unknown[] = [];
     const onAgentBus: unknown[] = [];
-    const topic = AGENT_STREAM_TOPIC('no-cache-agent', 'no-cache-run');
+    const topic = AGENT_STREAM_TOPIC('no-cache-run');
     await runTransport.subscribe(topic, event => {
       onRunBus.push(event);
     });
@@ -428,7 +428,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
 
     const onRunBus: unknown[] = [];
     const onAgentBus: unknown[] = [];
-    const topic = AGENT_STREAM_TOPIC('early-no-cache-agent', 'early-no-cache-run');
+    const topic = AGENT_STREAM_TOPIC('early-no-cache-run');
     await runTransport.subscribe(topic, event => {
       onRunBus.push(event);
     });

@@ -40,7 +40,7 @@ describe('durable workflow failed-status error surfacing', () => {
 
     const runId = 'failed-status-run';
     const received: any[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('failed-run-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       received.push(event);
     });
 
@@ -88,7 +88,7 @@ describe('durable workflow failed-status error surfacing', () => {
 
     const runId = 'failed-stop-when-run';
     const received: any[] = [];
-    await pubsub.subscribe(AGENT_STREAM_TOPIC('failed-stop-when-agent', runId), event => {
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
       received.push(event);
     });
 

@@ -30,12 +30,11 @@ function generationTag(runId: string, generation?: number): { generation?: numbe
  */
 export async function emitChunkEvent<OUTPUT = undefined>(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   chunk: ChunkType<OUTPUT> | DataChunkType,
   outputProcessed?: boolean,
 ): Promise<void> {
-  const topic = AGENT_STREAM_TOPIC(agentId, runId);
+  const topic = AGENT_STREAM_TOPIC(runId);
   await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
@@ -64,13 +63,8 @@ export async function emitChunkEvent<OUTPUT = undefined>(
  * offset. Readers swallow it and never forward it as a chunk. Readers that
  * reconnect past it read the claim's generation from storage instead.
  */
-export async function emitOwnershipClaimedEvent(
-  pubsub: PubSub,
-  agentId: string,
-  runId: string,
-  generation: number,
-): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+export async function emitOwnershipClaimedEvent(pubsub: PubSub, runId: string, generation: number): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
     runId,
     data: {},
@@ -90,7 +84,6 @@ export async function emitOwnershipClaimedEvent(
  */
 export async function emitStepStartEvent(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   data: {
     stepId?: string;
@@ -103,7 +96,7 @@ export async function emitStepStartEvent(
   },
   outputProcessed?: boolean,
 ): Promise<void> {
-  await publishStepStartChunk(pubsub, agentId, runId, createStepStartChunk(runId, data), outputProcessed);
+  await publishStepStartChunk(pubsub, runId, createStepStartChunk(runId, data), outputProcessed);
 }
 
 /**
@@ -112,7 +105,7 @@ export async function emitStepStartEvent(
  */
 export function createStepStartChunk(
   runId: string,
-  data: Parameters<typeof emitStepStartEvent>[3],
+  data: Parameters<typeof emitStepStartEvent>[2],
 ): Extract<ChunkType, { type: 'step-start' }> {
   return {
     type: 'step-start',
@@ -134,12 +127,11 @@ export function createStepStartChunk(
  */
 export async function publishStepStartChunk(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   chunk: ChunkType,
   outputProcessed?: boolean,
 ): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
@@ -153,11 +145,10 @@ export async function publishStepStartChunk(
  */
 export async function emitStepFinishEvent(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   data: AgentStepFinishEventData,
 ): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_FINISH,
     runId,
     data,
@@ -168,13 +159,8 @@ export async function emitStepFinishEvent(
 /**
  * Helper to emit a finish event to pubsub
  */
-export async function emitFinishEvent(
-  pubsub: PubSub,
-  agentId: string,
-  runId: string,
-  data: AgentFinishEventData,
-): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+export async function emitFinishEvent(pubsub: PubSub, runId: string, data: AgentFinishEventData): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.FINISH,
     runId,
     data,
@@ -187,13 +173,12 @@ export async function emitFinishEvent(
  */
 export async function emitErrorEvent(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   error: Error,
   generation?: number,
   delivery?: AgentErrorEventData['delivery'],
 ): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ERROR,
     runId,
     data: {
@@ -212,13 +197,8 @@ export async function emitErrorEvent(
 /**
  * Helper to emit a suspended event to pubsub
  */
-export async function emitSuspendedEvent(
-  pubsub: PubSub,
-  agentId: string,
-  runId: string,
-  data: AgentSuspendedEventData,
-): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+export async function emitSuspendedEvent(pubsub: PubSub, runId: string, data: AgentSuspendedEventData): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.SUSPENDED,
     runId,
     data,
@@ -229,13 +209,8 @@ export async function emitSuspendedEvent(
 /**
  * Helper to emit an abort event to pubsub
  */
-export async function emitAbortEvent(
-  pubsub: PubSub,
-  agentId: string,
-  runId: string,
-  data: AgentAbortEventData,
-): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+export async function emitAbortEvent(pubsub: PubSub, runId: string, data: AgentAbortEventData): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ABORT,
     runId,
     data,
@@ -248,11 +223,10 @@ export async function emitAbortEvent(
  */
 export async function emitIterationCompleteEvent(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   data: AgentIterationCompleteEventData,
 ): Promise<void> {
-  await pubsub.publish(AGENT_STREAM_TOPIC(agentId, runId), {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ITERATION_COMPLETE,
     runId,
     data,

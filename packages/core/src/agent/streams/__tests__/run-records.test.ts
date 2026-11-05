@@ -18,7 +18,7 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import type { AgentConfig } from '../../types';
-import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { AGENT_RUN_RECORD_TTL_MS, agentRunRecordKey } from '../run-records';
 import type { AgentRunRecord } from '../run-records';
 
@@ -56,7 +56,7 @@ class OrderingPubSub extends EventEmitterPubSub {
   }
   override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
     if (topic.startsWith('agent.stream.')) {
-      const runId = event.runId!;
+      const runId = topic.slice('agent.stream.'.length);
       const record = (await this.cache.get(agentRunRecordKey(this.agentId, runId))) as AgentRunRecord | null;
       this.seen.push({ type: event.type, status: record?.status });
     }
@@ -289,11 +289,7 @@ describe('Agent run records', () => {
       () => {
         const topics = cleared.mock.calls.map(([topic]) => topic);
         expect(topics).toEqual(
-          expect.arrayContaining([
-            AGENT_STREAM_TOPIC(agent.id, runId),
-            AGENT_CONTROL_TOPIC(agent.id, runId),
-            `${AGENT_CONTROL_TOPIC(agent.id, runId)}.ack`,
-          ]),
+          expect.arrayContaining([`agent.stream.${runId}`, `agent.control.${runId}`, `agent.control.${runId}.ack`]),
         );
       },
       { timeout: 2000 },
@@ -326,7 +322,7 @@ describe('Agent run records', () => {
       expect(await agentB.__getRunRecord(output.runId)).toMatchObject({ resourceId: 'user-1', status: 'finished' }),
     );
     // No replay log was written: only the record.
-    expect(await cache.listLength(AGENT_STREAM_TOPIC('records-agent', output.runId))).toBe(0);
+    expect(await cache.listLength(AGENT_STREAM_TOPIC(output.runId))).toBe(0);
   });
 
   it('rejects when the record cache cannot be read', async () => {

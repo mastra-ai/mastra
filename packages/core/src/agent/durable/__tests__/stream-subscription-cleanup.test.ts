@@ -85,7 +85,7 @@ describe('DurableAgent auto-cleanup unsubscribes the stream reader (issue #24070
     const { runId, output, cleanup } = await agent.stream('Hi');
     await output.consumeStream();
 
-    const topic = AGENT_STREAM_TOPIC('stream-cleanup-agent', runId);
+    const topic = AGENT_STREAM_TOPIC(runId);
 
     // The auto-cleanup timer (armed on stream finish) must unsubscribe the
     // reader. Before the fix it never did — the topic was deleted while the
@@ -114,7 +114,7 @@ describe('DurableAgent auto-cleanup unsubscribes the stream reader (issue #24070
     const { output, cleanup } = await agent.resume(runId, { approved: true });
     await output.consumeStream();
 
-    const topic = AGENT_STREAM_TOPIC('stream-cleanup-agent', runId);
+    const topic = AGENT_STREAM_TOPIC(runId);
 
     await vi.waitFor(
       () => {
@@ -138,7 +138,7 @@ describe('DurableAgent auto-cleanup unsubscribes the stream reader (issue #24070
 
     cleanup();
 
-    const topic = AGENT_STREAM_TOPIC('stream-cleanup-agent', runId);
+    const topic = AGENT_STREAM_TOPIC(runId);
     await vi.waitFor(() => {
       expect(unsubscribeSpy).toHaveBeenCalledWith(topic, expect.any(Function));
     });

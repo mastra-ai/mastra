@@ -68,7 +68,7 @@ async function recordRun(getMock: () => any, engine: Engine, scenario: Scenario)
   getMock().resetMatchCounts();
   const pubsub = new RecordingPubSub();
   const abort = new AbortController();
-  const { output, agent } = await runLoopScenario({
+  const { output } = await runLoopScenario({
     engine,
     llm: getMock(),
     pubsub,
@@ -81,7 +81,7 @@ async function recordRun(getMock: () => any, engine: Engine, scenario: Scenario)
     ...(scenario.requireToolApproval !== undefined ? { requireToolApproval: scenario.requireToolApproval } : {}),
   });
 
-  const topic = AGENT_STREAM_TOPIC(agent.id, output.runId);
+  const topic = AGENT_STREAM_TOPIC(output.runId);
   await vi.waitFor(() => expect((pubsub.published.get(topic) ?? []).some(e => TERMINAL.has(e.type))).toBe(true));
   await pubsub.flush();
   const events = pubsub.published.get(topic)!;

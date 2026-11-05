@@ -205,7 +205,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
           server = await config.startServer(mastra, () => {});
           const runId = `observe-terminal-${kind}-${terminal}`;
-          const topic = AGENT_STREAM_TOPIC(agent.id, runId);
+          const topic = AGENT_STREAM_TOPIC(runId);
           // Exercise the real replay log and core adapter as the reference, including
           // lifecycle records that consume offsets but must not leak onto the wire.
           await agent.pubsub.publish(topic, { runId, type: 'iteration-complete', data: {} });
@@ -235,7 +235,6 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
                     },
           });
           const reference = createDurableAgentStream({
-            agentId: agent.id,
             pubsub: agent.pubsub,
             runId,
             messageId: 'reference',
@@ -288,23 +287,18 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
         const output = { text: '', steps: [], usage };
         const stepResult = { reason: 'error', warnings: [], isContinued: false };
-        await agent.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
           runId,
           type: 'chunk',
           data: { type: 'error', runId, from: 'AGENT', payload: { error: { message: 'Provider unavailable' } } },
         });
-        await agent.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
           runId,
           type: 'chunk',
           data: { type: 'step-finish', runId, from: 'AGENT', payload: { output, stepResult, metadata: {} } },
         });
-        await agent.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
-          runId,
-          type: 'finish',
-          data: { output, stepResult },
-        });
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'finish', data: { output, stepResult } });
         const reference = createDurableAgentStream({
-          agentId: agent.id,
           pubsub: agent.pubsub,
           runId,
           messageId: 'reference',
@@ -347,7 +341,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
           const raw = { source: 'first step' };
           const steps = [{ usage: { ...usage, raw } }, { usage }];
           for (const step of steps) {
-            await agent.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+            await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
               runId,
               type: 'chunk',
               data: {
@@ -362,7 +356,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
               },
             });
           }
-          await agent.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+          await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
             runId,
             type: 'finish',
             data: {
@@ -371,7 +365,6 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             },
           });
           const reference = createDurableAgentStream({
-            agentId: agent.id,
             pubsub: agent.pubsub,
             runId,
             messageId: 'reference',
@@ -411,8 +404,8 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         const runId = `observe-reject-${kind}`;
         await persistReplayOwner(mastra, runId, agent.id);
         const prefix = { type: 'text-delta', runId, from: 'AGENT', payload: { text: 'before rejection' } };
-        await agent.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), { runId, type: 'chunk', data: prefix });
-        await agent.pubsub.publish(AGENT_STREAM_TOPIC(agent.id, runId), {
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'chunk', data: prefix });
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
           runId,
           type: 'error',
           data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
@@ -513,7 +506,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
               expect(await config.observeWithClient(server.baseUrl, runId, offset)).toEqual(frames);
             }
           }
-          const history = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(agent.id, runId));
+          const history = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
           const delta = history.find(event => event.type === 'chunk' && event.data?.type === 'text-delta');
           expect(delta).toBeDefined();
           const firstDelta = frames.findIndex(frame => frame.type === 'text-delta');

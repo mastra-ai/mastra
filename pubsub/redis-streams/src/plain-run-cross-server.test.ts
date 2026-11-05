@@ -19,7 +19,6 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import { LLMock } from '@copilotkit/aimock';
-import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import { createClient } from 'redis';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -511,7 +510,7 @@ describe('plain Agent runs across two servers (LibSQL file + Redis)', () => {
 
       // No replay cache is written; whatever history the observer gets comes
       // from the transport itself (Redis Streams keeps its entries).
-      expect(await redis.exists(`${keyPrefix}:cache:pubsub:${AGENT_STREAM_TOPIC(AGENT_ID, runId)}`)).toBe(0);
+      expect(await redis.exists(`${keyPrefix}:cache:pubsub:${`agent.stream.v2.${JSON.stringify([AGENT_ID, runId])}`}`)).toBe(0);
       expect(text(live.frames)).toBe('Approved and done.');
       expect(types(live.frames).at(-1)).toBe('finish');
     });

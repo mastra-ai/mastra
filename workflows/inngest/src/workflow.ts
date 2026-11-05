@@ -646,14 +646,7 @@ export class InngestWorkflow<
             if (result.status === 'failed' && durableAgentInput) {
               const { error, delivery } = durableAgentWorkflowError(result.error);
               try {
-                await emitErrorEvent(
-                  pubsub,
-                  durableAgentInput.agentId,
-                  durableAgentInput.runId,
-                  error,
-                  undefined,
-                  delivery,
-                );
+                await emitErrorEvent(pubsub, durableAgentInput.runId, error, undefined, delivery);
               } catch (e) {
                 this.logger.debug?.('Failed to emit error event:', e);
               }

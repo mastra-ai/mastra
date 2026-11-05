@@ -98,7 +98,7 @@ function backend() {
     // Agent run topics keep their replay window for cleanupTimeoutMs by design; this checks the thread stream.
     runEntries: () =>
       [...topics]
-        .filter(topic => !topic.startsWith('agent.stream.'))
+        .filter(topic => !topic.startsWith(AGENT_STREAM_TOPIC('')))
         .flatMap(topic => pubsub.retainedEvents(topic))
         .filter(event => event.runId !== undefined),
   };

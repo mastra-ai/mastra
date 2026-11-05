@@ -17,8 +17,8 @@ import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
  * when nobody is listening — an unheard request is a no-op, exactly like
  * aborting a run that already finished.
  */
-export async function publishAbortRequest(pubsub: PubSub, agentId: string, runId: string): Promise<void> {
-  await pubsub.publish(AGENT_CONTROL_TOPIC(agentId, runId), {
+export async function publishAbortRequest(pubsub: PubSub, runId: string): Promise<void> {
+  await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
     type: AgentControlEventTypes.ABORT_REQUEST,
     runId,
     data: {},
@@ -30,7 +30,7 @@ export async function publishAbortRequest(pubsub: PubSub, agentId: string, runId
  * carried a `requestId`. Kept apart from the control topic so a requester never
  * has to read (or replay) the control history to wait for its own reply.
  */
-export const abortAckTopic = (agentId: string, runId: string): string => `${AGENT_CONTROL_TOPIC(agentId, runId)}.ack`;
+export const abortAckTopic = (runId: string): string => `agent.abort-ack.${runId}`;
 const ABORT_ACK = 'abort-ack';
 
 /** How long `requestAcknowledgedAbort` waits for the executing process to answer. */
@@ -49,12 +49,11 @@ const ABORT_ACK_TIMEOUT_MS = 2_000;
  */
 export async function requestAcknowledgedAbort(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   timeoutMs: number = ABORT_ACK_TIMEOUT_MS,
 ): Promise<boolean> {
   const requestId = globalThis.crypto.randomUUID();
-  const topic = abortAckTopic(agentId, runId);
+  const topic = abortAckTopic(runId);
   let acknowledge!: () => void;
   const acknowledged = new Promise<boolean>(resolve => {
     acknowledge = () => resolve(true);
@@ -81,7 +80,7 @@ export async function requestAcknowledgedAbort(
   const subscribed = pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1], { startFrom: 'latest' });
   const exchange = (async () => {
     await subscribed;
-    await pubsub.publish(AGENT_CONTROL_TOPIC(agentId, runId), {
+    await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
       type: AgentControlEventTypes.ABORT_REQUEST,
       runId,
       data: { requestId },
@@ -114,11 +113,10 @@ export async function requestAcknowledgedAbort(
  */
 export async function subscribeToAbortRequests(
   pubsub: PubSub,
-  agentId: string,
   runId: string,
   onAbortRequested: () => boolean | void,
 ): Promise<() => Promise<void>> {
-  const topic = AGENT_CONTROL_TOPIC(agentId, runId);
+  const topic = AGENT_CONTROL_TOPIC(runId);
   // Every delivery is acknowledged, including control events this listener
   // ignores. An ignored delivery is still a delivery, and a durable transport
   // keeps unacknowledged entries pending for the life of the subscription.
@@ -130,7 +128,7 @@ export async function subscribeToAbortRequests(
         // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
         // acknowledgement only makes the requester retry; the abort has applied.
         await pubsub
-          .publish(abortAckTopic(agentId, runId), {
+          .publish(abortAckTopic(runId), {
             type: ABORT_ACK,
             runId,
             data: { requestId },

@@ -322,7 +322,7 @@ for (const spec of CELLS) {
         // `control-receive` by main).
         let controlReceivedByMain = 0;
         if (xprocEnv) {
-          await xprocEnv.pubsub().subscribe(AGENT_CONTROL_TOPIC(runner.id, runId), () => {
+          await xprocEnv.pubsub().subscribe(AGENT_CONTROL_TOPIC(runId), () => {
             controlReceivedByMain++;
           });
         }

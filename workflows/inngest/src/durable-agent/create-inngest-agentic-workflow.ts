@@ -388,7 +388,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
             }
             await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
-              await emitChunkEvent(pubsub, state.agentId, state.runId, deferredChunk);
+              await emitChunkEvent(pubsub, state.runId, deferredChunk);
             });
           }
         };
@@ -504,16 +504,16 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const tripwire = finishResult.tripwire;
           if (pubsub && !tripwire) {
             for (const chunk of finishResult.structuredOutputChunks ?? []) {
-              await emitChunkEvent(pubsub, state.agentId, state.runId, { ...chunk, runId: state.runId } as any);
+              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
             }
           }
           if (pubsub) {
             for (const chunk of finishResult.outputResultChunks ?? []) {
-              await emitChunkEvent(pubsub, state.agentId, state.runId, chunk, true);
+              await emitChunkEvent(pubsub, state.runId, chunk, true);
             }
           }
           if (tripwire && pubsub) {
-            await emitChunkEvent(pubsub, state.agentId, state.runId, {
+            await emitChunkEvent(pubsub, state.runId, {
               type: 'tripwire',
               runId: state.runId,
               from: ChunkFrom.AGENT,
@@ -526,7 +526,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           if (pubsub && !tripwire && finishResult.titleForStream) {
             const title = await finishResult.titleForStream;
             if (title && initData.state?.threadId) {
-              await emitChunkEvent(pubsub, state.agentId, state.runId, {
+              await emitChunkEvent(pubsub, state.runId, {
                 type: 'data-thread-title',
                 data: { threadId: initData.state.threadId, title },
                 transient: true,
@@ -630,7 +630,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           // Emit finish event via pubsub
           if (pubsub) {
-            await emitFinishEvent(pubsub, state.agentId, state.runId, {
+            await emitFinishEvent(pubsub, state.runId, {
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
             });

@@ -51,7 +51,7 @@ export function createDurableGoalStep() {
       if (state.lastStepResult?.signalPreempted) return state;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
-        agentId: string;
+        agentId?: string;
         agentName?: string;
         state?: { threadId?: string; resourceId?: string };
         requestContextEntries?: Record<string, unknown>;
@@ -112,12 +112,12 @@ export function createDurableGoalStep() {
         rotateMessageId: current => list().rotateResponseMessageId(current),
         writeSignal: pubsub
           ? async data => {
-              await emitChunkEvent(pubsub, initData.agentId, state.runId, data as ChunkType);
+              await emitChunkEvent(pubsub, state.runId, data as ChunkType);
             }
           : undefined,
         emitChunk: chunk => {
           if (!pubsub) return;
-          return emitChunkEvent(pubsub, initData.agentId, state.runId, chunk as any);
+          return emitChunkEvent(pubsub, state.runId, chunk as any);
         },
       });
 

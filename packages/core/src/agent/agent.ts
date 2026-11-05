@@ -1794,6 +1794,7 @@ export class Agent<
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
+          getAgentId: () => this.id,
           getMastra: () => this.#mastra,
           // Plain agent runs execute and publish in this process.
           usesSharedRunLog: () => false,
@@ -1874,7 +1875,6 @@ export class Agent<
     const bus = this.#ownStreamBus();
     if (!bus) return undefined;
     const publisher = createAgentStreamPublisher({
-      agentId: this.id,
       pubsub: bus.pubsub,
       runId,
       cleanupTimeoutMs: bus.cleanupTimeoutMs,
@@ -1935,7 +1935,7 @@ export class Agent<
    */
   async #requestStreamAbort(bus: AgentStreamBus, runId: string): Promise<void> {
     try {
-      await publishAbortRequest(bus.pubsub, this.id, runId);
+      await publishAbortRequest(bus.pubsub, runId);
     } catch (error) {
       this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
     }
@@ -9397,7 +9397,7 @@ export class Agent<
     // get the previous finish event and close before the new run says anything. Suspended
     // runs keep their log, because that is the history the resume continues.
     if (priorRunRecord?.status === 'finished') {
-      await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(this.id, runId));
+      await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
     }
 
     const streamPublisher = this.#createStreamPublisher(runId, {
@@ -10154,7 +10154,6 @@ export class Agent<
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<any>,
       threadStreamPubSub,
       () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
-      this.id,
     );
 
     const executeOptions = {
@@ -10577,7 +10576,7 @@ export class Agent<
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
-    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub(), { agentId: this.id });
+    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
     return aborted;
   }
@@ -10594,7 +10593,7 @@ export class Agent<
     if (this.#abortLocalRun(runId)) return true;
     const bus = this.#ownStreamBus();
     if (!bus) return false;
-    return requestAcknowledgedAbort(bus.pubsub, this.id, runId);
+    return requestAcknowledgedAbort(bus.pubsub, runId);
   }
 
   /**
@@ -11159,7 +11158,6 @@ export class Agent<
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
       () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
-      this.id,
     );
 
     const executeOptions = {
@@ -11557,7 +11555,6 @@ export class Agent<
         { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
         () => this.#deleteAbortedSuspendedRun(runId),
-        this.id,
       );
 
       const result = await this.#execute({
@@ -12541,7 +12538,6 @@ export class Agent<
     options: Parameters<Agent<TAgentId, TTools, TOutput>['observe']>[1],
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
     const stream = createDurableAgentStream<TOutput>({
-      agentId: this.id,
       pubsub: bus.pubsub,
       runId,
       messageId: globalThis.crypto.randomUUID(),

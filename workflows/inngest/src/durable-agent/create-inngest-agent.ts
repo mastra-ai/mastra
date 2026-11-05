@@ -39,6 +39,7 @@
 import type { Agent, AgentExecutionOptions, StructuredOutputOptions } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
+  bindAgentPubSub,
   AgentStreamEventTypes,
   agentThreadStreamRuntime,
   applyReservedMemoryContextKeys,
@@ -110,7 +111,11 @@ class InngestAgentPubSubRouter extends PubSub {
   }
 
   private resolve(topic: string): PubSub {
-    if (topic.startsWith('agent.stream.') || topic.startsWith('agent.control.')) {
+    if (
+      topic.startsWith('agent.stream.') ||
+      topic.startsWith('agent.control.') ||
+      topic.startsWith('agent.abort-ack.')
+    ) {
       return this.getAgentPubsub();
     }
     return this.defaultPubsub;
@@ -837,6 +842,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   //
   // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
   // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
+  let deliveryPubsub: CachingPubSub | undefined;
   function getPubsub(): CachingPubSub {
     if (!_cachingPubsub) {
       if (innerPubsub instanceof CachingPubSub) {
@@ -846,11 +852,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         _cachingPubsub = new CachingPubSub(innerPubsub, resolveCache());
       }
     }
-    return _cachingPubsub;
+    return (deliveryPubsub ??= bindAgentPubSub(_cachingPubsub, agentId));
   }
 
   async function getPubsubOffset(runId: string): Promise<number> {
-    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(agentId, runId));
+    const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
     return history.length;
   }
 
@@ -861,7 +867,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    */
   async function isObservationComplete(runId: string): Promise<boolean> {
     try {
-      const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(agentId, runId), 0);
+      const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId), 0);
       const latest = history.at(-1);
       if (latest) {
         const type = latest.type === AgentStreamEventTypes.CHUNK ? latest.data?.type : latest.type;
@@ -902,7 +908,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (snapshot?.status !== 'suspended') return;
       await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
       await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
-      await emitAbortEvent(getPubsub(), agentId, runId, { steps: [], text: '' });
+      await emitAbortEvent(getPubsub(), runId, { steps: [], text: '' });
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to delete snapshot of aborted suspended Inngest run', {
         agentId,
@@ -1134,7 +1140,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    */
   async function emitError(runId: string, error: Error): Promise<void> {
     try {
-      await emitErrorEvent(getPubsub(), agentId, runId, error);
+      await emitErrorEvent(getPubsub(), runId, error);
     } catch (publishError) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent error event', {
         agentId,
@@ -1175,7 +1181,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   async function requestRemoteAbort(runId: string): Promise<void> {
     try {
-      await publishAbortRequest(getPubsub(), agentId, runId);
+      await publishAbortRequest(getPubsub(), runId);
     } catch (error) {
       mastra?.getLogger?.()?.warn?.('Failed to publish Inngest durable agent abort request', {
         agentId,
@@ -1369,7 +1375,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         fail: failStream,
         ready,
       } = createDurableAgentStream<TOutput>({
-        agentId: agentId,
         pubsub: getPubsub(),
         runId,
         messageId,
@@ -1440,7 +1445,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const workflowExecution = ready
         .then(async () => {
           // Only initial runs open a message; resume continues the existing stream.
-          await emitChunkEvent(getPubsub(), agentId, runId, {
+          await emitChunkEvent(getPubsub(), runId, {
             type: 'start',
             runId,
             from: ChunkFrom.AGENT,
@@ -1810,7 +1815,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         detach: detachStream,
         ready,
       } = createDurableAgentStream<TOutput>({
-        agentId: agentId,
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
@@ -2041,7 +2045,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     async observe(runId, observeOptions) {
       // Create the stream subscription with offset support
       const stream = createDurableAgentStream<TOutput>({
-        agentId: agentId,
         pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
@@ -2489,7 +2492,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Same split as DurableAgent: the thread request also releases a parked run.
       await Promise.all([
         agentThreadStreamRuntime.requestThreadRunAbort(threadPubSub, abortOptions, runId),
-        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), agentId, runId),
+        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
       ]);
       return true;
     },
@@ -2520,7 +2523,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         return true;
       }
       try {
-        return await requestAcknowledgedAbort(getPubsub(), agentId, runId);
+        return await requestAcknowledgedAbort(getPubsub(), runId);
       } finally {
         abortLocalController(runId);
       }
