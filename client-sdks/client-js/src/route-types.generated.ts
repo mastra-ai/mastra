@@ -3198,11 +3198,12 @@ type Shared_Type_46 = {
         [key: string]: unknown;
       }
     | undefined;
-  /** Whether this agent publishes resumable streams */
+  /** Persisted resumable-stream configuration, including legacy durable execution options */
   durable?:
     | (
         | boolean
         | {
+            maxSteps?: number | undefined;
             cleanupTimeoutMs?: number | undefined;
           }
       )

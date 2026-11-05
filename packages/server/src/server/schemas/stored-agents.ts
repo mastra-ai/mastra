@@ -522,7 +522,16 @@ export const storedAgentSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('JSON Schema defining valid request context variables'),
-  durable: durableConfigSchema.optional().describe('Whether this agent publishes resumable streams'),
+  durable: z
+    .union([
+      z.boolean(),
+      z.object({
+        maxSteps: z.number().int().positive().optional(),
+        cleanupTimeoutMs: z.number().int().nonnegative().optional(),
+      }),
+    ])
+    .optional()
+    .describe('Persisted resumable-stream configuration, including legacy durable execution options'),
 });
 
 /**
