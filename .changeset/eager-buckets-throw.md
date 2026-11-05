@@ -2,7 +2,7 @@
 '@mastra/mcp-apps-components': minor
 ---
 
-Replaced the 11 observability tools with one data tool. Create it with `createDashboardDataTool({ baseUrl })` and register it as `dashboardDataTool` next to the dashboard app, instead of spreading `observabilityAppTools`. The `@mastra/mcp-apps-components/observability-tools` entry point is removed.
+Replaced the 11 observability tools with one data tool. Create it with `createDashboardDataTool({ prepareRequest })` and register it as `dashboardDataTool` next to the dashboard app, instead of spreading `observabilityAppTools`. The `@mastra/mcp-apps-components/observability-tools` entry point is removed.
 
 **Before**
 
@@ -28,12 +28,14 @@ new MCPServer({
   appResources: { 'ui://mastra/dashboard': dashboardRendererApp() },
   tools: {
     showDashboard,
-    dashboardDataTool: createDashboardDataTool({ baseUrl: 'http://localhost:4111' }),
+    dashboardDataTool: createDashboardDataTool({
+      prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
+    }),
   },
 });
 ```
 
-The tool sends each read to the Mastra server's observability API over HTTP, forwarding the signed-in caller's bearer token, so the route's own validation and permission checks apply. Agents don't see it. The MCP server serving the dashboard no longer needs to be registered on a Mastra instance.
+For each read, `prepareRequest` returns the URL to send it to and any headers to add. The tool sends the read over HTTP with the signed-in caller's bearer token, so the route's own validation and permission checks apply. Agents don't see it. The MCP server serving the dashboard no longer needs to be registered on a Mastra instance.
 
 **Clearer errors in dashboard widgets**
 
@@ -46,7 +48,7 @@ The tool sends each read to the Mastra server's observability API over HTTP, for
 
 Hosts that answer the dashboard's reads themselves can import the contract from `@mastra/mcp-apps-components/dashboard-renderer`: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema`, and `dashboardDataOutputSchema`.
 
-Set `projectId` in the dashboard's tool result to tell such a host which project to read. The app sends it as `projectId` on every data tool call:
+Set `projectId` in the dashboard's tool result to read a given project. The app sends it on every data tool call, and `prepareRequest` receives it, so a host serving several projects can check access, pick the server and add headers, or refuse with `{ response }`:
 
 ```ts
 execute: async () => ({ definition, scope: 'project' as const, projectId: 'proj_123' }),

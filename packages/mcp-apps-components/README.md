@@ -70,31 +70,38 @@ export const dashboardServer = new MCPServer({
   appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
   tools: {
     showAgentRuns,
-    dashboardDataTool: createDashboardDataTool({ baseUrl: 'http://localhost:4111' }),
+    dashboardDataTool: createDashboardDataTool({
+      prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
+    }),
   },
 });
 ```
 
 ### Data tool
 
-Create the data tool with `createDashboardDataTool({ baseUrl })`, from `@mastra/mcp-apps-components/dashboard-data-tool`, and register it under the key `dashboardDataTool`, next to the app. The app calls it by name for every read its dashboard makes, such as `getMetricAggregate`. Without it, each widget fails with a message telling you to register it.
+Create the data tool with `createDashboardDataTool({ prepareRequest })`, from `@mastra/mcp-apps-components/dashboard-data-tool`, and register it under the key `dashboardDataTool`, next to the app. The app calls it by name for every read its dashboard makes, such as `getMetricAggregate`. Without it, each widget fails with a message telling you to register it.
 
-The tool sends each read to the matching observability route of the Mastra server at `baseUrl`, so the route's own validation, authentication, permission and FGA checks apply and the app sees the same data the signed-in user can. It only sends the reads in `DASHBOARD_DATA_OPERATIONS`, and it's app-only, so hosts keep it away from the model. The MCP server serving it doesn't need a Mastra instance.
+For each read, the tool calls `prepareRequest` with the read's `operation`, its Mastra route `path` (such as `/observability/metrics/aggregate`), the `projectId` the app asked for and the caller's `token`. `prepareRequest` returns the `url` to send the read to and any `headers` to add. The tool adds the route's method, query parameters and JSON body, sends the read, and hands the response to the app. It only sends the reads in `DASHBOARD_DATA_OPERATIONS`, and it's app-only, so hosts keep it away from the model. The MCP server serving it doesn't need a Mastra instance.
 
-| Option      | Default        | Description                                                                          |
-| ----------- | -------------- | ------------------------------------------------------------------------------------ |
-| `baseUrl`   | —              | Origin of the Mastra server, such as `http://localhost:4111`.                        |
-| `apiPrefix` | `/api`         | The server's `server.apiPrefix`.                                                     |
-| `headers`   | `{}`           | Headers sent with every read. An `authorization` header replaces the caller's token. |
-| `fetch`     | global `fetch` | The `fetch` used to send reads.                                                      |
+The tool sends the caller's bearer token as `authorization`: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. An `authorization` header returned by `prepareRequest` replaces it. When a Mastra server has authentication configured, reads that carry no token, such as over stdio, answer with `401`. When the server can't be reached, reads answer with `502`.
 
-Without an `authorization` header, the tool forwards the caller's bearer token: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. When the Mastra server has authentication configured, reads that carry no token, such as over stdio, answer with `401`. When the server can't be reached, reads answer with `502`.
+### Serving several projects
 
-### Answering the data tool yourself
+Set `projectId` in the dashboard's tool result. The app sends it on every data tool call, and `prepareRequest` decides where it goes. The app's `projectId` isn't trusted: check the caller can read the project, and return `{ response }` to answer without sending anything.
 
-A host that reads observability data its own way, such as one serving several projects, can register its own `dashboardDataTool` instead. Import the contract from `@mastra/mcp-apps-components/dashboard-renderer`: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema` and `dashboardDataOutputSchema`.
+```typescript
+const REGIONS = { us: 'https://us.example.com', eu: 'https://eu.example.com' };
 
-To tell the tool which project to read, set `projectId` in the dashboard's tool result. The app sends it as `projectId` on every data tool call. The tool from `createDashboardDataTool()` reads the one project its Mastra server holds and ignores it.
+createDashboardDataTool({
+  prepareRequest: async ({ path, projectId, token }) => {
+    const project = projectId && (await findProjectFor(token, projectId));
+    if (!project) return { response: { status: 403, body: { error: 'Not your project' } } };
+    return { url: `${REGIONS[project.region]}/api${path}`, headers: { 'x-mastra-project-id': project.id } };
+  },
+});
+```
+
+To send a read to a different path, map its `operation`, typed as `DashboardDataOperation`, to your own route. A host whose API answers reads differently can register its own `dashboardDataTool` instead, from the contract in `@mastra/mcp-apps-components/dashboard-renderer`: `DASHBOARD_DATA_TOOL_NAME`, `DASHBOARD_DATA_OPERATIONS`, `DASHBOARD_DATA_REQUESTS`, `dashboardDataInputSchema` and `dashboardDataOutputSchema`.
 
 ### Pinning widgets
 

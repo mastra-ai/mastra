@@ -34,12 +34,12 @@ const SUM = { name: [METRIC], aggregation: 'sum' as const };
 
 type TestUser = { id: string; role: string };
 
-async function seededStorage() {
+async function seededStorage(values: number[]) {
   const storage = new InMemoryStore();
   const observability = storage.stores.observability;
   assert(observability);
   await observability.batchCreateMetrics({
-    metrics: [5, 7].map((value, index) => ({
+    metrics: values.map((value, index) => ({
       metricId: `metric-${index}`,
       timestamp: new Date(),
       name: METRIC,
@@ -50,14 +50,26 @@ async function seededStorage() {
   return storage;
 }
 
-/** A Mastra server with auth and RBAC, whose `apps` MCP server reads back from it over HTTP. */
-async function startMastra() {
+/** Sends every read to the Mastra server at `origin`, as a host serving one project does. */
+const toMastra =
+  (origin: string): DashboardDataToolOptions['prepareRequest'] =>
+  ({ path }) => ({ url: `${origin}/api${path}` });
+
+/**
+ * A Mastra server with auth and RBAC, whose `apps` MCP server reads back from it over HTTP. It
+ * records the requests it receives, so tests can see what crossed the wire.
+ */
+async function startMastra(values = [5, 7]) {
   // Listen first: the data tool needs the server's origin before Mastra is built.
   let handle: (request: Request) => Response | Promise<Response> = () => new Response(null, { status: 503 });
-  const server = await listen(request => handle(request));
+  const received: Request[] = [];
+  const server = await listen(request => {
+    received.push(request.clone());
+    return handle(request);
+  });
   const mastra = new Mastra({
     logger: false,
-    storage: await seededStorage(),
+    storage: await seededStorage(values),
     server: {
       auth: new SimpleAuth<TestUser>({
         tokens: { [READER]: { id: 'reader', role: 'reader' }, [GUEST]: { id: 'guest', role: 'guest' } },
@@ -72,7 +84,7 @@ async function startMastra() {
         id: 'apps',
         name: 'Apps',
         version: '1.0.0',
-        tools: { dashboardDataTool: createDashboardDataTool({ baseUrl: server.origin }) },
+        tools: { dashboardDataTool: createDashboardDataTool({ prepareRequest: toMastra(server.origin) }) },
       }),
       empty: new MCPServer({ id: 'empty', name: 'Empty', version: '1.0.0', tools: {} }),
     },
@@ -80,7 +92,11 @@ async function startMastra() {
   const app = new Hono();
   await new MastraServer({ app, mastra }).init();
   handle = app.fetch;
-  return { ...server, mcpUrl: (serverId: string) => new URL(`${server.origin}/api/mcp/${serverId}/mcp`) };
+  return {
+    ...server,
+    received,
+    mcpUrl: (serverId: string) => new URL(`${server.origin}/api/mcp/${serverId}/mcp`),
+  };
 }
 
 async function listen(fetch: (request: Request) => Response | Promise<Response>) {
@@ -203,16 +219,6 @@ describe('createDashboardDataTool', () => {
     });
   });
 
-  describe('when the dashboard names a project, as hosts serving several do', () => {
-    it("reads the server's own project, which is the only one it holds", async () => {
-      const { client } = await dashboardClient(reader, undefined, { projectId: 'proj_1' });
-
-      const aggregate = await client.getMetricAggregate(SUM);
-
-      expect(aggregate).toEqual(expect.objectContaining({ value: 12 }));
-    });
-  });
-
   describe('when the dashboard lists scores through the GET route', () => {
     it('passes the query to the route', async () => {
       const { client } = await dashboardClient(reader);
@@ -290,7 +296,7 @@ describe('createDashboardDataTool', () => {
       const { client, toolCalls } = await dashboardClient(readerOfEmptyServer);
 
       await expect(client.getMetricAggregate(SUM)).rejects.toThrow(
-        /404.*dashboardDataTool: createDashboardDataTool\(\{ baseUrl \}\)/,
+        /404.*dashboardDataTool: createDashboardDataTool\(\{ prepareRequest \}\)/,
       );
       expect(toolCalls()).toBe(1);
     });
@@ -305,7 +311,7 @@ describe('createDashboardDataTool', () => {
       });
 
       await expect(client.getMetricAggregate(SUM)).rejects.toThrow(
-        /404.*dashboardDataTool: createDashboardDataTool\(\{ baseUrl \}\)/,
+        /404.*dashboardDataTool: createDashboardDataTool\(\{ prepareRequest \}\)/,
       );
       expect(toolCalls()).toBe(1);
     });
@@ -359,7 +365,7 @@ describe('createDashboardDataTool on an MCP server without a Mastra instance', (
 
   describe('when the dashboard reads metrics as a user allowed to', () => {
     it('answers from the Mastra server, read as that user', async () => {
-      const { client } = await dashboardClient(await standalone({ baseUrl: mastra.origin }, READER));
+      const { client } = await dashboardClient(await standalone({ prepareRequest: toMastra(mastra.origin) }, READER));
 
       const aggregate = await client.getMetricAggregate(SUM);
 
@@ -369,17 +375,24 @@ describe('createDashboardDataTool on an MCP server without a Mastra instance', (
 
   describe("when the user lacks the route's permission", () => {
     it("fails the dashboard's request with 403 and doesn't retry it", async () => {
-      const { client, toolCalls } = await dashboardClient(await standalone({ baseUrl: mastra.origin }, GUEST));
+      const { client, toolCalls } = await dashboardClient(
+        await standalone({ prepareRequest: toMastra(mastra.origin) }, GUEST),
+      );
 
       await expect(client.getMetricAggregate(SUM)).rejects.toThrow(/403.*observability:read/);
       expect(toolCalls()).toBe(1);
     });
   });
 
-  describe('when the host sends its own authorization header', () => {
+  describe('when prepareRequest sends its own authorization header', () => {
     it("reads with it instead of the caller's token", async () => {
       const server = await standalone(
-        { baseUrl: mastra.origin, headers: { Authorization: `Bearer ${READER}` } },
+        {
+          prepareRequest: ({ path }) => ({
+            url: `${mastra.origin}/api${path}`,
+            headers: { Authorization: `Bearer ${READER}` },
+          }),
+        },
         GUEST,
       );
       const { client } = await dashboardClient(server);
@@ -390,11 +403,53 @@ describe('createDashboardDataTool on an MCP server without a Mastra instance', (
     });
   });
 
+  describe('when the dashboard names a project, as hosts serving several do', () => {
+    // Two regions, each a Mastra server holding different data.
+    let eu: Awaited<ReturnType<typeof startMastra>>;
+
+    beforeAll(async () => {
+      eu = await startMastra([1, 2]);
+    });
+
+    afterAll(async () => {
+      await eu.close();
+    });
+
+    const byProject: DashboardDataToolOptions['prepareRequest'] = ({ path, projectId, token }) => {
+      if (token !== READER || !projectId?.startsWith('org1_')) {
+        return { response: { status: 403, body: { error: `You can't read project ${projectId}` } } };
+      }
+      const region = projectId.endsWith('_eu') ? eu.origin : mastra.origin;
+      return { url: `${region}/api${path}`, headers: { 'x-mastra-project-id': projectId } };
+    };
+
+    it('reads it from the server prepareRequest picks for it, with the headers it adds', async () => {
+      const server = await standalone({ prepareRequest: byProject }, READER);
+      const { client: euDashboard } = await dashboardClient(server, undefined, { projectId: 'org1_eu' });
+      const { client: usDashboard } = await dashboardClient(server, undefined, { projectId: 'org1_us' });
+
+      expect(await euDashboard.getMetricAggregate(SUM)).toEqual(expect.objectContaining({ value: 3 }));
+      expect(await usDashboard.getMetricAggregate(SUM)).toEqual(expect.objectContaining({ value: 12 }));
+      expect(eu.received.at(-1)?.headers.get('x-mastra-project-id')).toBe('org1_eu');
+      expect(eu.received.at(-1)?.headers.get('authorization')).toBe(`Bearer ${READER}`);
+    });
+
+    it("fails the dashboard's request with prepareRequest's answer, without reaching any server", async () => {
+      const server = await standalone({ prepareRequest: byProject }, READER);
+      const { client, toolCalls } = await dashboardClient(server, undefined, { projectId: 'org2_eu' });
+      const sent = eu.received.length + mastra.received.length;
+
+      await expect(client.getMetricAggregate(SUM)).rejects.toThrow(/403.*project org2_eu/);
+      expect(toolCalls()).toBe(1);
+      expect(eu.received.length + mastra.received.length).toBe(sent);
+    });
+  });
+
   describe('when the Mastra server is unreachable', () => {
     it('answers 502 naming the server it tried', async () => {
       const gone = await listen(() => new Response(null));
       await gone.close();
-      const server = await standalone({ baseUrl: gone.origin }, READER);
+      const server = await standalone({ prepareRequest: toMastra(gone.origin) }, READER);
 
       const result = await server.callTool({
         name: DASHBOARD_DATA_TOOL_NAME,
@@ -403,7 +458,7 @@ describe('createDashboardDataTool on an MCP server without a Mastra instance', (
 
       expect(result.structuredContent).toEqual({
         status: 502,
-        body: { error: expect.stringContaining(`Couldn't reach the Mastra server at ${gone.origin}/api`) },
+        body: { error: expect.stringContaining(`Couldn't reach ${gone.origin}`) },
       });
     });
   });

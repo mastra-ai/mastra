@@ -15,7 +15,7 @@ const OPERATION_BY_REQUEST = new Map<string, DashboardDataOperation>(
 // MastraClient builds absolute URLs; only their path and query matter here.
 const ORIGIN = 'http://mastra.internal';
 
-const MISSING_TOOL = `The MCP server serving this app has no ${DASHBOARD_DATA_TOOL_NAME} tool. Register it next to the app: \`tools: { ${DASHBOARD_DATA_TOOL_NAME}: createDashboardDataTool({ baseUrl }) }\`, imported from @mastra/mcp-apps-components/dashboard-data-tool.`;
+const MISSING_TOOL = `The MCP server serving this app has no ${DASHBOARD_DATA_TOOL_NAME} tool. Register it next to the app: \`tools: { ${DASHBOARD_DATA_TOOL_NAME}: createDashboardDataTool({ prepareRequest }) }\`, imported from @mastra/mcp-apps-components/dashboard-data-tool.`;
 
 const failure = (error: string, status: number) => Response.json({ error }, { status });
 

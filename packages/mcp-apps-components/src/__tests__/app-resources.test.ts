@@ -231,7 +231,10 @@ describe('dashboardRendererApp', () => {
         operation: 'getMetricAggregate',
         body: {},
       });
-      expect(bundled.createDashboardDataTool({ baseUrl: 'http://localhost:4111' }).id).toBe(DASHBOARD_DATA_TOOL_NAME);
+      expect(
+        bundled.createDashboardDataTool({ prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }) })
+          .id,
+      ).toBe(DASHBOARD_DATA_TOOL_NAME);
     });
   });
 });

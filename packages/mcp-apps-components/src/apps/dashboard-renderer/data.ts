@@ -4,7 +4,7 @@ import { z } from 'zod';
  * The app-only tool the dashboard reads its data through. The app runs in a sandboxed iframe that
  * hosts may forbid from reaching the server, so each read travels as a call to this tool over the
  * host's existing MCP connection. An MCP server names a tool by the key it's registered under, so
- * hosts register it as `tools: { dashboardDataTool: createDashboardDataTool({ baseUrl }) }`.
+ * hosts register it as `tools: { dashboardDataTool: createDashboardDataTool({ prepareRequest }) }`.
  */
 export const DASHBOARD_DATA_TOOL_NAME = 'dashboardDataTool';
 

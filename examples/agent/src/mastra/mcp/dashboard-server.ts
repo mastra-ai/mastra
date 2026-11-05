@@ -22,7 +22,9 @@ export const dashboardMcpServer = new MCPServer({
   },
   tools: {
     showObservabilityDashboard,
-    dashboardDataTool: createDashboardDataTool({ baseUrl: MASTRA_SERVER_URL }),
+    dashboardDataTool: createDashboardDataTool({
+      prepareRequest: ({ path }) => ({ url: `${MASTRA_SERVER_URL}/api${path}` }),
+    }),
   },
 });
 

@@ -422,14 +422,14 @@ Tools loaded through `listTools()` include a `serverId` in `_meta.ui`, allowing 
 The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps that render Mastra UI. `dashboardRendererApp` renders a dashboard definition with live observability data, such as agent runs, token usage, or scores.
 
 ```bash npm2yarn
-npm install @mastra/mcp-apps-components @mastra/server
+npm install @mastra/mcp-apps-components
 ```
 
 The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to `dashboardDataTool` over the host's MCP connection. The tool sends that read to the matching observability route of a Mastra server over HTTP, as the signed-in caller, so the route's own validation, permission, and authorization checks apply. The app sees the same data the user can.
 
 `dashboardDataTool` is app-only, so `MCPClient.listTools()` hides it from agents. App-only visibility doesn't stop a direct call. The tool only answers the reads in `DASHBOARD_DATA_OPERATIONS` and rejects any other operation.
 
-Create the data tool with `createDashboardDataTool()`, from the `dashboard-data-tool` entry, passing the URL of the Mastra server that holds the observability data. Register it and the app on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI. The app calls the data tool by name. Use `dashboardDataTool` as its key:
+Create the data tool with `createDashboardDataTool()`, from the `dashboard-data-tool` entry. Its `prepareRequest` option returns, for each read, the URL of the Mastra route to send it to. Register it and the app on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI. The app calls the data tool by name. Use `dashboardDataTool` as its key:
 
 ```typescript title="src/mastra/mcp/dashboard-server.ts"
 import type { DashboardDefinition } from '@mastra/core/storage/dashboards'
@@ -492,14 +492,18 @@ export const dashboardServer = new MCPServer({
   appResources: { [DASHBOARD_APP_URI]: dashboardRendererApp() },
   tools: {
     showAgentRuns,
-    dashboardDataTool: createDashboardDataTool({ baseUrl: 'http://localhost:4111' }),
+    dashboardDataTool: createDashboardDataTool({
+      prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
+    }),
   },
 })
 ```
 
 :::note
 
-The MCP server doesn't need to be registered on a Mastra instance. When the Mastra server has auth configured, the tool forwards the caller's bearer token: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. To read with a fixed credential instead, pass an `authorization` header in `headers`. Calls without a token return `401`.
+The MCP server doesn't need to be registered on a Mastra instance. When the Mastra server has auth configured, the tool forwards the caller's bearer token: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. To read with a fixed credential instead, return an `authorization` header from `prepareRequest`. Calls without a token return `401`.
+
+To serve several projects, set `projectId` in the dashboard's tool result. `prepareRequest` receives it with each read, so it can check the caller can read the project, pick the server, and add headers. Return `{ response }` to answer a read without sending it.
 
 :::
 
