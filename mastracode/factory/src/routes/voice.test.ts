@@ -283,6 +283,20 @@ describe('/web/voice/settings', () => {
     expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({ saved: true, fromEnv: false });
   });
 
+  it('does not flag a key saved from the UI as env-backed, even though saving copies it into process.env', async () => {
+    // AuthStorage.setStoredApiKey writes the saved key into process.env so model resolution finds it.
+    process.env.OPENAI_API_KEY = 'sk-saved';
+    process.env.MISTRAL_API_KEY = 'sk-env';
+    const app = await mount({ authStorage: localAuthStorage({ openai: 'sk-saved', mistral: 'sk-stored' }) });
+
+    const body = (await (await app.request('/web/voice/settings')).json()) as {
+      keys: Array<{ provider: string; saved: boolean; fromEnv: boolean }>;
+    };
+
+    expect(body.keys.find(k => k.provider === 'openai')).toMatchObject({ saved: true, fromEnv: false });
+    expect(body.keys.find(k => k.provider === 'mistral')).toMatchObject({ saved: true, fromEnv: true });
+  });
+
   it('returns a named 503 on every route when voice settings storage cannot start', async () => {
     const seed = await createFactoryStorageForTests();
     vi.spyOn(seed.voiceSettings, 'ensureReady').mockRejectedValue(new Error('db down'));

@@ -83,6 +83,7 @@ function settingsResponse(
   policy: VoicePolicy,
   saved: STTModel | undefined,
   canEdit: boolean,
+  authStorage: AuthStorage | undefined,
 ): VoiceSettingsResponse {
   const effective = chooseSTTModel(policy, saved);
   return {
@@ -93,12 +94,14 @@ function settingsResponse(
     models: STT_MODELS.map(m => ({ provider: m.provider, model: m.model, label: m.label })),
     keys: sttProviders().map(provider => {
       const envVar = sttApiKeyEnvVar(provider);
+      const envKey = envVar ? process.env[envVar]?.trim() : undefined;
       return {
         provider,
         envVar,
         saved: policy.keyFor(provider) !== undefined,
-        // Tenant mode never reads deployment env keys for transcription.
-        fromEnv: !request.orgId && envVar !== undefined && Boolean(process.env[envVar]?.trim()),
+        // Tenant mode never reads deployment env keys for transcription. Saving a key in local mode also copies it
+        // into process.env, so an env value equal to the stored key is the stored key, not an environment one.
+        fromEnv: !request.orgId && Boolean(envKey) && envKey !== authStorage?.getStoredApiKey(provider)?.trim(),
       };
     }),
   };
@@ -163,7 +166,9 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           if ('response' in storage) return storage.response;
           const policy = voicePolicy(request.caller, request.factory);
           const saved = await savedSTTModel(storage, policy.settingsKey);
-          return c.json(settingsResponse(request, policy, saved, await this.#canEdit(c, request, policy)));
+          return c.json(
+            settingsResponse(request, policy, saved, await this.#canEdit(c, request, policy), this.deps.authStorage),
+          );
         },
       }),
       registerApiRoute('/web/voice/settings', {
@@ -187,7 +192,7 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           if ('response' in storage) return storage.response;
           if (entry) await storage.set({ ...policy.settingsKey, provider: entry.provider, model: entry.model });
           else await storage.clear(policy.settingsKey);
-          return c.json(settingsResponse(request, policy, entry ?? undefined, canEdit));
+          return c.json(settingsResponse(request, policy, entry ?? undefined, canEdit, this.deps.authStorage));
         },
       }),
       registerApiRoute('/web/voice/transcribe', {
