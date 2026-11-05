@@ -45,15 +45,18 @@ function createContext({
   method,
   runId,
   requestContext,
+  signal,
 }: {
   mastra: Mastra;
   method: 'POST' | 'GET';
   runId: string;
   requestContext?: RequestContext;
+  signal?: AbortSignal;
 }) {
   const body = { messages, runId };
   const request = new Request(`http://localhost/chat/test-agent${method === 'GET' ? `/runs/${runId}` : ''}`, {
     method,
+    signal,
     ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
   });
 
@@ -164,10 +167,15 @@ describe('chatRoute reconnect', () => {
         server: { apiRoutes: [route] },
       });
       const runId = `client-owned-run-id-${version}`;
+      const requestAbort = new AbortController();
 
-      const postResponse = await invoke(getRoute(mastra, 'POST'), createContext({ mastra, method: 'POST', runId }));
+      const postResponse = await invoke(
+        getRoute(mastra, 'POST'),
+        createContext({ mastra, method: 'POST', runId, signal: requestAbort.signal }),
+      );
       const postReader = postResponse.body!.getReader();
       await readUntil(postReader, 'Hello from a resumable run');
+      requestAbort.abort();
       await postReader.cancel();
 
       await vi.waitFor(async () =>
@@ -285,14 +293,97 @@ describe('chatRoute reconnect', () => {
     const missingScopeResponse = await invoke(getRoute(mastra, 'GET'), createContext({ mastra, method: 'GET', runId }));
     expect(missingScopeResponse.status).toBe(404);
 
+    const ownerReconnectContext = new RequestContext();
+    ownerReconnectContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
     const ownerResponse = await invoke(
       getRoute(mastra, 'GET'),
-      createContext({ mastra, method: 'GET', runId, requestContext: ownerContext }),
+      createContext({ mastra, method: 'GET', runId, requestContext: ownerReconnectContext }),
     );
     expect(ownerResponse.status).toBe(200);
+    expect(ownerReconnectContext.get(MASTRA_THREAD_ID_KEY)).toBe('owner-thread');
     const ownerBody = ownerResponse.text();
     controlled.finish();
     expect(await ownerBody).toContain('Hello from a resumable run');
+  });
+
+  it('enforces thread FGA before reconnecting', async () => {
+    const controlled = createControlledModel();
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Help the user.',
+      model: controlled.model,
+    });
+    const fga = {
+      check: vi.fn(),
+      require: vi.fn().mockResolvedValueOnce(undefined).mockRejectedValue(new Error('denied')),
+      filterAccessible: vi.fn(),
+      clearCache: vi.fn(),
+    } as any;
+    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agent.id]: agent },
+      server: { apiRoutes: [route], fga },
+    });
+    const runId = 'fga-owned-run';
+    const ownerContext = new RequestContext();
+    ownerContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
+    ownerContext.set(MASTRA_THREAD_ID_KEY, 'owner-thread');
+    ownerContext.set('user', { id: 'owner-user' });
+    const postResponse = await invoke(
+      getRoute(mastra, 'POST'),
+      createContext({ mastra, method: 'POST', runId, requestContext: ownerContext }),
+    );
+    const postReader = postResponse.body!.getReader();
+    await readUntil(postReader, 'Hello from a resumable run');
+    await postReader.cancel();
+
+    const reconnectContext = new RequestContext();
+    reconnectContext.set(MASTRA_RESOURCE_ID_KEY, 'owner-resource');
+    reconnectContext.set('user', { id: 'owner-user' });
+    const response = await invoke(
+      getRoute(mastra, 'GET'),
+      createContext({ mastra, method: 'GET', runId, requestContext: reconnectContext }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(fga.require).toHaveBeenCalled();
+    controlled.finish();
+  });
+
+  it('rejects an owner-less run for a tenant-scoped caller', async () => {
+    const controlled = createControlledModel();
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Help the user.',
+      model: controlled.model,
+    });
+    const route = chatRoute({ path: '/chat/:agentId', reconnect: true });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agent.id]: agent },
+      server: {
+        apiRoutes: [route],
+        auth: { mapUserToResourceId: () => 'tenant-resource' } as any,
+      },
+    });
+    const runId = 'owner-less-run';
+    const postResponse = await invoke(getRoute(mastra, 'POST'), createContext({ mastra, method: 'POST', runId }));
+    const postReader = postResponse.body!.getReader();
+    await readUntil(postReader, 'Hello from a resumable run');
+    await postReader.cancel();
+
+    const tenantContext = new RequestContext();
+    tenantContext.set(MASTRA_RESOURCE_ID_KEY, 'tenant-resource');
+    const response = await invoke(
+      getRoute(mastra, 'GET'),
+      createContext({ mastra, method: 'GET', runId, requestContext: tenantContext }),
+    );
+
+    expect(response.status).toBe(404);
+    controlled.finish();
   });
 
   it('returns 204 when the client-owned run is unknown', async () => {

@@ -16,6 +16,7 @@ import {
 import type { UIMessageStreamOptions as UIMessageStreamOptionsV7 } from '@internal/ai-v7';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { MastraMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute, registerApiRouteGroup } from '@mastra/core/server';
@@ -226,6 +227,31 @@ export type ChatStreamDefaultOptions<OUTPUT = undefined> = AgentExecutionOptions
  */
 export type AgentVersionOptions = NonNullable<Parameters<Mastra['getAgentById']>[1]>;
 
+type QueryReader = (name: string) => string | undefined;
+
+/** Resolves one Editor agent version selector from the route query. */
+function resolveAgentVersionFromQuery(
+  query: QueryReader,
+  fallback?: AgentVersionOptions,
+): AgentVersionOptions | undefined {
+  const versionId = query('versionId');
+  const status = query('status');
+  if (versionId && status) {
+    throw new Error('Query parameters "versionId" and "status" are mutually exclusive');
+  }
+  if (status && status !== 'draft' && status !== 'published') {
+    throw new Error('Query parameter "status" must be "draft" or "published"');
+  }
+  return versionId ? { versionId } : status ? { status: status as 'draft' | 'published' } : fallback;
+}
+
+/** Wraps a UI message stream in the response implementation for its AI SDK version. */
+function createChatUIMessageStreamResponse(stream: ReadableStream<any>, version: 'v5' | 'v6' | 'v7'): Response {
+  if (version === 'v7') return createUIMessageStreamResponseV7({ stream });
+  if (version === 'v6') return createUIMessageStreamResponseV6({ stream });
+  return createUIMessageStreamResponseV5({ stream });
+}
+
 export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage, OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
@@ -277,6 +303,7 @@ type ChatStreamHandlerOptionsV7<UI_MESSAGE extends V7UIMessage = V7UIMessage, OU
   messageMetadata?: WithTraceId<UIMessageStreamOptionsV7<UI_MESSAGE>['messageMetadata']>;
 };
 
+/** Resolves the configured agent, including Editor-stored overrides and explicit version selectors. */
 async function resolveChatAgent({
   mastra,
   agentId,
@@ -305,6 +332,61 @@ async function resolveChatAgent({
   return baseAgent;
 }
 
+/** Authorizes replay using the same resource ownership and thread FGA rules as run observation. */
+async function authorizeChatRunObservation({
+  mastra,
+  agent,
+  runRecord,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agent: Awaited<ReturnType<typeof resolveChatAgent>>;
+  runRecord: { resourceId?: string; threadId?: string };
+  requestContext?: RequestContext;
+}): Promise<boolean> {
+  const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  const server = mastra.getServer();
+  const tenancy =
+    typeof (server?.auth as { mapUserToResourceId?: unknown } | undefined)?.mapUserToResourceId === 'function';
+
+  if (tenancy) {
+    if (resourceId) {
+      if (runRecord.resourceId !== resourceId) return false;
+    } else if (!server?.fga || !runRecord.threadId) {
+      return false;
+    }
+  } else if (runRecord.resourceId && runRecord.resourceId !== resourceId) {
+    return false;
+  }
+
+  if (!runRecord.threadId) return true;
+
+  requestContext?.set(MASTRA_THREAD_ID_KEY, runRecord.threadId);
+  const memory = await agent.getMemory({ requestContext });
+  const thread = await memory?.getThreadById({ threadId: runRecord.threadId });
+  if (resourceId && thread?.resourceId && thread.resourceId !== resourceId) return false;
+
+  if (server?.fga) {
+    const user = requestContext?.get('user');
+    if (!user || typeof user !== 'object') return false;
+    try {
+      await MastraMemory.checkThreadFGA({
+        mastra,
+        user: user as Record<string, unknown>,
+        threadId: runRecord.threadId,
+        resourceId: (thread?.resourceId as string | undefined) ?? runRecord.resourceId ?? resourceId,
+        requestContext,
+        fgaProvider: server.fga,
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** Converts a Mastra agent stream to the requested AI SDK UI message stream version. */
 function createChatUIMessageStream({
   result,
   messages,
@@ -813,24 +895,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         throw new Error('Agent ID is required');
       }
 
-      // Resolve agent version from query params, falling back to static option
-      const queryVersionId = c.req.query('versionId');
-      const rawStatus = c.req.query('status');
-
-      if (queryVersionId && rawStatus) {
-        throw new Error('Query parameters "versionId" and "status" are mutually exclusive');
-      }
-
-      if (rawStatus && rawStatus !== 'draft' && rawStatus !== 'published') {
-        throw new Error('Query parameter "status" must be "draft" or "published"');
-      }
-
-      const queryStatus = rawStatus as 'draft' | 'published' | undefined;
-      const effectiveAgentVersion: AgentVersionOptions | undefined = queryVersionId
-        ? { versionId: queryVersionId }
-        : queryStatus
-          ? { status: queryStatus }
-          : agentVersion;
+      const effectiveAgentVersion = resolveAgentVersionFromQuery(name => c.req.query(name), agentVersion);
 
       const handlerOptions = {
         mastra,
@@ -839,7 +904,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         params: {
           ...params,
           requestContext: effectiveRequestContext,
-          abortSignal: c.req.raw.signal,
+          ...(!reconnect && { abortSignal: c.req.raw.signal }),
         } as any,
         defaultOptions,
         experimentalTransform,
@@ -851,30 +916,25 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         onError,
       };
 
-      let response: Response;
-      if (version === 'v7') {
-        const uiMessageStream = await handleChatStream({
-          ...handlerOptions,
-          version: 'v7',
-          messageMetadata: messageMetadata as UIMessageStreamOptionsV7<V7UIMessage>['messageMetadata'],
-        });
-        response = createUIMessageStreamResponseV7({ stream: uiMessageStream });
-      } else if (version === 'v6') {
-        const uiMessageStream = await handleChatStream({
-          ...handlerOptions,
-          version: 'v6',
-          messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
-        });
-        response = createUIMessageStreamResponseV6({ stream: uiMessageStream });
-      } else {
-        const uiMessageStream = await handleChatStream({
-          ...handlerOptions,
-          messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
-        });
-        response = createUIMessageStreamResponseV5({ stream: uiMessageStream });
-      }
+      const uiMessageStream =
+        version === 'v7'
+          ? await handleChatStream({
+              ...handlerOptions,
+              version: 'v7',
+              messageMetadata: messageMetadata as UIMessageStreamOptionsV7<V7UIMessage>['messageMetadata'],
+            })
+          : version === 'v6'
+            ? await handleChatStream({
+                ...handlerOptions,
+                version: 'v6',
+                messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
+              })
+            : await handleChatStream({
+                ...handlerOptions,
+                messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
+              });
 
-      return withSseHeartbeat(response, heartbeatMs);
+      return withSseHeartbeat(createChatUIMessageStreamResponse(uiMessageStream, version), heartbeatMs);
     },
   });
 
@@ -946,19 +1006,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         return new Response(null, { status: 204 });
       }
 
-      const queryVersionId = c.req.query('versionId');
-      const rawStatus = c.req.query('status');
-      if (queryVersionId && rawStatus) {
-        throw new Error('Query parameters "versionId" and "status" are mutually exclusive');
-      }
-      if (rawStatus && rawStatus !== 'draft' && rawStatus !== 'published') {
-        throw new Error('Query parameter "status" must be "draft" or "published"');
-      }
-      const effectiveAgentVersion: AgentVersionOptions | undefined = queryVersionId
-        ? { versionId: queryVersionId }
-        : rawStatus
-          ? { status: rawStatus as 'draft' | 'published' }
-          : agentVersion;
+      const effectiveAgentVersion = resolveAgentVersionFromQuery(name => c.req.query(name), agentVersion);
 
       const agentObj = await resolveChatAgent({
         mastra,
@@ -971,12 +1019,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         return new Response(null, { status: 204 });
       }
 
-      const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
-      const threadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
-      if (
-        (runRecord.resourceId && resourceId !== runRecord.resourceId) ||
-        (runRecord.threadId && threadId !== runRecord.threadId)
-      ) {
+      if (!(await authorizeChatRunObservation({ mastra, agent: agentObj, runRecord, requestContext }))) {
         return new Response(null, { status: 404 });
       }
 
@@ -995,16 +1038,7 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         messageMetadata,
       });
 
-      let response: Response;
-      if (version === 'v7') {
-        response = createUIMessageStreamResponseV7({ stream: uiMessageStream });
-      } else if (version === 'v6') {
-        response = createUIMessageStreamResponseV6({ stream: uiMessageStream });
-      } else {
-        response = createUIMessageStreamResponseV5({ stream: uiMessageStream });
-      }
-
-      return withSseHeartbeat(response, heartbeatMs);
+      return withSseHeartbeat(createChatUIMessageStreamResponse(uiMessageStream, version), heartbeatMs);
     },
   });
 

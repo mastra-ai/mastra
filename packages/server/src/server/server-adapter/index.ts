@@ -5,7 +5,7 @@ import { hasPermission } from '@mastra/core/auth/ee';
 import type { FGARouteConfig, FGARouteInfo, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { MastraServerBase } from '@mastra/core/server';
+import { flattenApiRoutes, MastraServerBase } from '@mastra/core/server';
 import type {
   ApiRoute,
   HttpLoggingConfig,
@@ -568,7 +568,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
-    this.customApiRoutes = customApiRoutes;
+    this.customApiRoutes = customApiRoutes ? flattenApiRoutes(customApiRoutes) : undefined;
     this.mcpOptions = mcpOptions;
 
     // Parse HTTP logging configuration
