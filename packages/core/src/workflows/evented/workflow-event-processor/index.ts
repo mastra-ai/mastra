@@ -201,8 +201,11 @@ function storedContext(snapshot: WorkflowRunState | undefined): Record<string, a
 const WORKFLOW_CONTROL_TOPIC = 'workflow.control';
 const WORKFLOW_CONTROL_ABORT = 'workflow.control.abort';
 
-/** Control-path state taken by `#dispatch` before its state load for a `workflow.step.run`. */
-type ControlAtDispatch = { ready?: boolean; missedAborts?: number };
+/**
+ * What `#dispatch` takes for a `workflow.step.run`: control-path state from before its state
+ * load, and the run that load read.
+ */
+type ControlAtDispatch = { ready?: boolean; missedAborts?: number; storedRun?: WorkflowRunState | null };
 
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
@@ -2490,8 +2493,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         // exists while the whole run sits in 'suspended'. Read-then-write
         // narrows the race window rather than closing it — closing it needs
         // an expectedStatus compare-and-set on `updateWorkflowResults` across
-        // all storage adapters.
-        const snapshot = await runStorage.loadStep(leafId);
+        // all storage adapters. A plain leaf reads the run its dispatch just
+        // loaded; a nested workflow's leaf can wait on authorization since, and
+        // merges the authorizations stored meanwhile, so it reads again.
+        const snapshot =
+          control.storedRun !== undefined && !nestedWorkflowStep
+            ? control.storedRun
+            : await runStorage.loadStep(leafId);
         if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
           return;
         }
@@ -4883,6 +4891,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       workflowId: data.workflowId,
       runId: data.runId,
     });
+    if (type === 'workflow.step.run') control.storedRun = currentState ?? null;
     if (storageVersion === 2) {
       data = hydrateEventData(type, data, currentState);
     }
