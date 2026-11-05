@@ -111,7 +111,7 @@ describe('KnowledgePageExplorer', () => {
         onViewChange={() => {}}
       />,
     );
-    const tree = screen.getByRole('tree');
+    const tree = screen.getByRole('tree', { name: 'Knowledge pages' });
     const pinned = within(tree)
       .getAllByRole('treeitem')
       .filter(row => within(row).queryByLabelText('Pinned'));
@@ -130,7 +130,7 @@ describe('KnowledgePageExplorer', () => {
     it('opens the page selected in the tree', () => {
       renderWithProviders(<Host />);
       expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
-      fireEvent.click(within(screen.getByRole('tree')).getByText('Refunds'));
+      fireEvent.click(within(screen.getByRole('tree', { name: 'Knowledge pages' })).getByText('Refunds'));
       const detail = screen.getByRole('region', { name: 'Selected page' });
       expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();
     });

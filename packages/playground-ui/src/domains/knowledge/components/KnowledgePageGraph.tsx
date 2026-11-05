@@ -44,7 +44,7 @@ import {
 import type { GraphLevel, GraphNodeForm } from '../lib/graphShape';
 import { runLayout } from '../lib/layout';
 import { linkCountsText } from '../lib/linkCountsText';
-import { pagePath, pageRef } from '../lib/pageAddress';
+import { pagePath, pageRef, scopeTitle } from '../lib/pageAddress';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
 import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
 import { childCountLabel } from '../lib/pageTree';
@@ -53,6 +53,7 @@ import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide
 import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 import { KnowledgePageCard } from './KnowledgePageCard';
+import { KnowledgeTooltip } from './KnowledgeTooltip';
 
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -385,6 +386,17 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
   // A smaller circle gets smaller type and fewer lines, and the text keeps to the width of the circle's middle.
   const compact = size < COMPACT_CIRCLE_SIZE;
   const fit = Math.max(4, Math.floor((size * CIRCLE_TEXT_SHARE) / (compact ? 6.5 : 7.5)));
+  const tip = placeholder
+    ? `${kind}: ${page.address}. Nothing written to it yet.`
+    : rest
+      ? `Show ${Math.min(REST_BATCH, page.childCount ?? REST_BATCH)} more of ${page.childCount ?? 'the rest'}`
+      : group
+        ? `${page.name}: click to show them`
+        : page.isScope && page.address
+          ? `${kind}: ${scopeTitle(page)}`
+          : data.links && data.links.in + data.links.out > 0
+            ? `${page.name}: ${linkCountsText(data.links, data.notShown)}`
+            : page.name;
   return (
     <div
       data-testid="knowledge-page-node"
@@ -392,87 +404,86 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       data-page-type={placeholder ? 'placeholder' : rest ? 'rest' : group ? 'group' : page.isScope ? 'scope' : 'page'}
       className={`relative transition-opacity ${placeholder ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ width: size, height: size }}
-      title={
-        placeholder
-          ? `${kind}: ${page.address}. Nothing written to it yet.`
-          : rest
-            ? `Show ${Math.min(REST_BATCH, page.childCount ?? REST_BATCH)} more of ${page.childCount ?? 'the rest'}`
-            : group
-              ? `${page.name}: click to show them`
-              : page.isScope && page.address
-                ? `${kind}: ${page.address}`
-                : data.links && data.links.in + data.links.out > 0
-                  ? `${page.name}: ${linkCountsText(data.links, data.notShown)}`
-                  : page.name
-      }
+      aria-label={tip}
     >
-      <div
-        className={`knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 text-center shadow-raised ${rest ? 'hover:border-foreground' : ''}`}
-        data-selected={selected || undefined}
-        data-far={data.far || undefined}
-        style={{
-          ...(placeholder || rest ? PLACEHOLDER_STYLE : data.far ? FAR_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE),
-          paddingInline: size * ((1 - CIRCLE_TEXT_SHARE) / 2),
-        }}
-      >
-        {data.far ? null : (
+      <KnowledgeTooltip label={tip}>
+        <div
+          className={`knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 text-center shadow-raised ${rest ? 'hover:border-foreground' : ''}`}
+          data-selected={selected || undefined}
+          data-far={data.far || undefined}
+          style={{
+            ...(placeholder || rest
+              ? PLACEHOLDER_STYLE
+              : data.far
+                ? FAR_STYLE
+                : page.isScope
+                  ? SCOPE_STYLE
+                  : PAGE_STYLE),
+            paddingInline: size * ((1 - CIRCLE_TEXT_SHARE) / 2),
+          }}
+        >
+          {data.far ? null : (
+            <Txt
+              as="span"
+              variant="meta"
+              tone={page.isScope ? undefined : 'muted'}
+              className="pointer-events-none inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap uppercase"
+              style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
+              data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
+            >
+              {data.level ? <LevelIcon level={data.level} /> : null}
+              <span className="truncate">{rest ? 'More' : data.isParent ? 'Parent' : kind}</span>
+            </Txt>
+          )}
           <Txt
             as="span"
-            variant="meta"
-            tone={page.isScope ? undefined : 'muted'}
-            className="pointer-events-none inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap uppercase"
-            style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
-            data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
+            variant={compact ? 'meta' : 'label'}
+            tone="ink"
+            className={`pointer-events-none max-w-full overflow-hidden [overflow-wrap:normal] ${compact ? 'line-clamp-2' : 'line-clamp-3'}`}
+            style={data.far ? { color: 'var(--background)' } : undefined}
+            data-testid="knowledge-circle-name"
           >
-            {data.level ? <LevelIcon level={data.level} /> : null}
-            <span className="truncate">{rest ? 'More' : data.isParent ? 'Parent' : kind}</span>
+            {page.isScope && page.address && !group && scopeTitle(page) === page.name ? (
+              <BreakAtColons text={fitWords(page.address, fit)} />
+            ) : (
+              fitWords(scopeTitle(page), fit)
+            )}
           </Txt>
-        )}
-        <Txt
-          as="span"
-          variant={compact ? 'meta' : 'label'}
-          tone="ink"
-          className={`pointer-events-none max-w-full overflow-hidden [overflow-wrap:normal] ${compact ? 'line-clamp-2' : 'line-clamp-3'}`}
-          style={data.far ? { color: 'var(--background)' } : undefined}
-          data-testid="knowledge-circle-name"
-        >
-          {page.isScope && page.address && !group ? (
-            <BreakAtColons text={fitWords(page.address, fit)} />
-          ) : (
-            fitWords(page.name, fit)
-          )}
-        </Txt>
-      </div>
+        </div>
+      </KnowledgeTooltip>
       {pinned ? <PinBadge size={size} /> : null}
       {data.hiddenLinks && (data.hiddenLinks.in > 0 || data.hiddenLinks.out > 0) ? (
-        <span
-          data-testid="knowledge-hidden-links"
-          title={linkCountsText(data.hiddenLinks)}
-          aria-label={linkCountsText(data.hiddenLinks)}
-          className="absolute bottom-full left-1/2 -mb-1 flex -translate-x-1/2 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
-        >
-          {data.hiddenLinks.in > 0 ? (
-            <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
-              →{data.hiddenLinks.in}
-            </Txt>
-          ) : null}
-          {data.hiddenLinks.out > 0 ? (
-            <Txt as="span" variant="meta" style={{ color: LINK_EDGE_COLOR }}>
-              {data.hiddenLinks.out}→
-            </Txt>
-          ) : null}
-        </span>
+        <KnowledgeTooltip label={linkCountsText(data.hiddenLinks)}>
+          <span
+            data-testid="knowledge-hidden-links"
+            aria-label={linkCountsText(data.hiddenLinks)}
+            className="absolute bottom-full left-1/2 -mb-1 flex -translate-x-1/2 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
+          >
+            {data.hiddenLinks.in > 0 ? (
+              <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
+                →{data.hiddenLinks.in}
+              </Txt>
+            ) : null}
+            {data.hiddenLinks.out > 0 ? (
+              <Txt as="span" variant="meta" style={{ color: LINK_EDGE_COLOR }}>
+                {data.hiddenLinks.out}→
+              </Txt>
+            ) : null}
+          </span>
+        </KnowledgeTooltip>
       ) : null}
       {badge ? (
-        <span
-          data-testid="knowledge-child-count-badge"
-          aria-label={`${badge} children, not all drawn`}
-          className="absolute top-full left-1/2 -mt-1 -translate-x-1/2 rounded-full border border-border bg-card px-1.5 shadow-raised"
-        >
-          <Txt as="span" variant="meta" tone="ink">
-            {badge}
-          </Txt>
-        </span>
+        <KnowledgeTooltip label={`${badge} children, not all drawn`}>
+          <span
+            data-testid="knowledge-child-count-badge"
+            aria-label={`${badge} children, not all drawn`}
+            className="absolute top-full left-1/2 -mt-1 -translate-x-1/2 rounded-full border border-border bg-card px-1.5 shadow-raised"
+          >
+            <Txt as="span" variant="meta" tone="ink">
+              {badge}
+            </Txt>
+          </span>
+        </KnowledgeTooltip>
       ) : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
@@ -626,13 +637,19 @@ function GraphLegend({
 }) {
   const [open, setOpen] = useState(!collapsible);
   return (
-    <div className="absolute top-3 left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
+    <div
+      className="absolute top-3 left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none"
+      onPointerEnter={collapsible ? () => setOpen(true) : undefined}
+      onPointerLeave={collapsible ? () => setOpen(false) : undefined}
+    >
       {collapsible ? (
         <Button
           size="sm"
           icon={<Info />}
           aria-expanded={open}
           className="shadow-overlay"
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
           onClick={() => setOpen(current => !current)}
         >
           Legend
@@ -673,11 +690,7 @@ function GraphLegend({
         </li>
         {focused ? (
           <li className="flex items-center gap-2" data-testid="knowledge-legend-focused">
-            <span
-              className={LEGEND_SWATCH}
-              style={{ ...PAGE_STYLE, outline: '2px solid var(--knowledge-color)', outlineOffset: 2, borderWidth: 3 }}
-              aria-hidden
-            />
+            <span className={LEGEND_SWATCH} style={{ ...PAGE_STYLE, borderWidth: 3 }} aria-hidden />
             <Txt as="span" variant="meta" tone="muted">
               Focused page
             </Txt>
@@ -699,9 +712,15 @@ function GraphLegend({
               style={{ background: branch.color }}
               aria-hidden
             />
-            <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate" title={branch.name}>
-              {branches.length > 1 ? `Under ${branch.name}` : branch.scope ? 'Under parent scope' : 'Under parent page'}
-            </Txt>
+            <KnowledgeTooltip label={branch.name}>
+              <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate">
+                {branches.length > 1
+                  ? `Under ${branch.name}`
+                  : branch.scope
+                    ? 'Under parent scope'
+                    : 'Under parent page'}
+              </Txt>
+            </KnowledgeTooltip>
           </li>
         ))}
         {branches.length > LEGEND_BRANCH_CAP ? (
@@ -1101,7 +1120,7 @@ function KnowledgePageGraphInner({
       const color = branch ? laidOut.colors.get(branch) : undefined;
       const owner = branch ? pageById.get(branch) : undefined;
       if (branch && color && owner && !seen.has(branch))
-        seen.set(branch, { id: branch, name: owner.displayLabel ?? owner.name, color, scope: !!owner.isScope });
+        seen.set(branch, { id: branch, name: owner.displayLabel ?? scopeTitle(owner), color, scope: !!owner.isScope });
     }
     return [...seen.values()];
   }, [laidOut, pageById]);
@@ -1590,8 +1609,8 @@ function KnowledgePageGraphInner({
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
       </ReactFlow>
-      <div className="absolute bottom-3 left-3 z-10 translate-x-(--knowledge-pane-left) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
-        <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom className="shadow-overlay">
+      <div className="absolute bottom-3 left-3 z-10 translate-x-(--knowledge-tree-drawer-inset,0px) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
+        <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom className="rounded-full shadow-overlay">
           <Button
             size="icon-sm"
             tooltip="Zoom out"

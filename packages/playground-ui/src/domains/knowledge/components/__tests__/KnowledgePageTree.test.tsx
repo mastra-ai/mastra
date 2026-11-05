@@ -157,7 +157,7 @@ describe('KnowledgePageDetail', () => {
       />,
     );
     const detail = screen.getByRole('article', { name: 'Refunds' });
-    expect(within(detail).getByText('in org:acme')).toBeTruthy();
+    expect(within(detail).getByText('In Acme')).toBeTruthy();
     expect(within(detail).getByText('How refunds work')).toBeTruthy();
     expect(within(detail).getByText('Pinned for org:acme')).toBeTruthy();
     expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();
@@ -201,7 +201,7 @@ describe('KnowledgePageDetail', () => {
   it('says so when a page has no notes', () => {
     renderWithProviders(<KnowledgePageDetail page={orgPage} notes={[]} pagesById={pagesById} onPageClick={() => {}} />);
     expect(screen.getByText('Scope')).toBeTruthy();
-    expect(screen.getByText('org:acme')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Acme' })).toBeTruthy();
     expect(screen.getByText('No notes on this page.')).toBeTruthy();
   });
 });

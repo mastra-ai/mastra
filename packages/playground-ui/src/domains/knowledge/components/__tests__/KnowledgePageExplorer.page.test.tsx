@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -185,9 +186,10 @@ describe('KnowledgePageExplorer page view', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Graph' }));
       expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
       expect(screen.getByTestId('knowledge-graph-container')).toBeTruthy();
-      expect(within(screen.getByRole('tree')).getByRole('treeitem', { selected: true }).textContent).toContain(
-        'Refund Policy',
-      );
+      expect(
+        within(screen.getByRole('tree', { name: 'Knowledge pages' })).getByRole('treeitem', { selected: true })
+          .textContent,
+      ).toContain('Refund Policy');
     });
 
     it('renders the body as markdown without letting raw HTML or script links through', () => {
@@ -201,15 +203,19 @@ describe('KnowledgePageExplorer page view', () => {
       expect((window as { __pwned?: number }).__pwned).toBeUndefined();
     });
 
-    it('shows where the page lives, its version and who last changed it', () => {
+    it('shows where the page lives, its version and who last changed it', async () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       const view = within(pageView());
-      expect(view.getByTestId('knowledge-page-path').textContent).toBe('org:acme#policies/refund');
+      await userEvent.hover(view.getByTestId('knowledge-page-title'));
+      expect((await screen.findByRole('tooltip')).textContent).toBe('org:acme#policies/refund');
+      await userEvent.unhover(view.getByTestId('knowledge-page-title'));
       const version = view.getByTestId('knowledge-page-version');
       expect(Array.from(version.querySelectorAll('[data-slot="metadata-item"]'), item => item.textContent)).toEqual([
-        'Version 3',
-        expect.stringMatching(/^Updated .+ by admin$/),
+        'In Acme',
+        expect.stringMatching(/^Updated .+$/),
       ]);
+      expect(view.getByRole('heading', { name: 'Refund Policy' }).parentElement?.textContent).toContain('v3');
+      expect(version.textContent).toContain('Updated by admin');
       const crumbs = within(view.getByRole('navigation', { name: 'Breadcrumb' }));
       expect(crumbs.getAllByRole('button').map(button => button.textContent)).toEqual(['Acme', 'Policies']);
     });
@@ -217,14 +223,14 @@ describe('KnowledgePageExplorer page view', () => {
     it('lists child pages a page at a time and opens one', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       const childList = within(within(pageView()).getByRole('region', { name: 'Pages' }));
-      expect(childList.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Child 0', 'Child 1']);
+      expect(childList.getAllByRole('treeitem').map(item => item.textContent)).toEqual(['Child 0', 'Child 1']);
       fireEvent.click(childList.getByRole('button', { name: 'Load more' }));
-      expect(childList.getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      expect(childList.getAllByRole('treeitem').map(item => item.textContent)).toEqual([
         'Child 0',
         'Child 1',
         'Child 2',
       ]);
-      fireEvent.click(childList.getByRole('button', { name: 'Child 2' }));
+      fireEvent.click(childList.getByRole('treeitem', { name: 'Child 2' }));
       expect(within(pageView()).getByRole('heading', { name: 'Child 2' })).toBeTruthy();
     });
 
@@ -237,7 +243,7 @@ describe('KnowledgePageExplorer page view', () => {
       const crumbs = within(within(pageView()).getByRole('navigation', { name: 'Breadcrumb' }));
       fireEvent.click(crumbs.getByRole('button', { name: 'Policies' }));
       const policyChildren = within(within(pageView()).getByRole('region', { name: 'Pages' }));
-      expect(policyChildren.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Refund Policy']);
+      expect(policyChildren.getAllByRole('treeitem').map(item => item.textContent)).toEqual(['Refund Policy']);
       expect(policyChildren.getByRole('button', { name: 'Load more' })).toBeTruthy();
     });
 
@@ -355,7 +361,7 @@ describe('KnowledgePageExplorer page view', () => {
   describe('the tree, loaded a level at a time', () => {
     it('opens levels on demand and pages through long ones', () => {
       renderWithProviders(<Host />);
-      const tree = within(screen.getByRole('tree'));
+      const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
       expect(tree.getAllByRole('treeitem').map(row => row.textContent)).toEqual(['Acmeorg:acme', 'Policies']);
       fireEvent.click(tree.getByRole('button', { name: 'Expand Policies' }));
       expect(tree.getByRole('treeitem', { name: /Refund Policy/ })).toBeTruthy();
@@ -366,14 +372,14 @@ describe('KnowledgePageExplorer page view', () => {
 
     it('opens the path to a page selected outside the loaded levels', () => {
       renderWithProviders(<Host initial="child-2" initialView="page" />);
-      const tree = within(screen.getByRole('tree'));
+      const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
       expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Child 2');
     });
 
     describe('when a parent of the selected page is collapsed', () => {
       it('stays collapsed, hiding the selected page', () => {
         renderWithProviders(<Host initial="child-2" initialView="page" />);
-        const tree = within(screen.getByRole('tree'));
+        const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
         fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
         expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('false');
         expect(tree.queryByRole('treeitem', { selected: true })).toBeNull();
@@ -381,7 +387,7 @@ describe('KnowledgePageExplorer page view', () => {
 
       it('opens the path again when another page is selected under it', async () => {
         renderWithProviders(<Host initial="child-2" initialView="page" />);
-        const tree = within(screen.getByRole('tree'));
+        const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
         fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
         fireEvent.click(within(pageView()).getByRole('button', { name: /Refund Policy/ }));
         expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Refund Policy');
@@ -389,7 +395,7 @@ describe('KnowledgePageExplorer page view', () => {
 
       it('opens the path again when the same page is picked after the selection was cleared', () => {
         renderWithProviders(<OutsidePickerHost />);
-        const tree = within(screen.getByRole('tree'));
+        const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
         fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
         fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick child-2' }));
