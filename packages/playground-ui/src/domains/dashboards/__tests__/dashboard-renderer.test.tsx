@@ -890,6 +890,13 @@ describe('DashboardRenderer', () => {
         ]);
       });
 
+      it('names a part shared with a series of its own by that series', async () => {
+        const { alert, spy } = linkEach();
+        const { container } = renderDashboard(definition(metricsWidget('token-usage')), { alert });
+        await openMenu(cell(container, 'token-usage'));
+        expect(labels(lastTarget(spy))).toEqual(['Input: input', 'Cache read', 'Output']);
+      });
+
       it('hands the host a series by its value over the range, where it has one', async () => {
         serveCapabilities(traceAggregateCapabilities);
         const { alert, spy } = linkEach();

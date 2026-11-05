@@ -45,21 +45,25 @@ const refKey = ({ query, measure, field, percentile, groups, notGroups }: ValueR
   JSON.stringify([query, measure, field, percentile, groups, notGroups]);
 
 /**
- * Each distinct ref the view's values read, labelled: a bare ref by its value's label, a part of a
- * combined value by the value's label, its query and what it picks. The first label wins a repeat.
+ * Each distinct ref the view's values read, labelled: by the label of a value that is just that ref
+ * if there is one, else as a part of the first combined value reading it (the value's label, its
+ * query and what it picks). In the order the values first read them.
  */
 export function alertRefs(values: LabelledValue[]): { label: string; ref: ValueRef }[] {
+  const own = new Map<string, string>();
+  for (const { label, value } of values) {
+    if ('query' in value && !own.has(refKey(value))) own.set(refKey(value), label);
+  }
   const seen = new Set<string>();
-  return values.flatMap(({ label, value }) => {
-    const bare = 'query' in value;
-    return exprRefs(value).flatMap(ref => {
+  return values.flatMap(({ label, value }) =>
+    exprRefs(value).flatMap(ref => {
       const key = refKey(ref);
       if (seen.has(key)) return [];
       seen.add(key);
       const { query: _query, ...rest } = ref;
-      return [{ label: bare ? label : `${label}: ${ref.query}${refDetail(rest)}`, ref }];
-    });
-  });
+      return [{ label: own.get(key) ?? `${label}: ${ref.query}${refDetail(rest)}`, ref }];
+    }),
+  );
 }
 
 type Located = { label: string; ref: DashboardAlertRef; query: DashboardQuery | 'unsatisfiable' };
