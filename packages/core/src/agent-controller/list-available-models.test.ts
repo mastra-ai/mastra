@@ -210,6 +210,7 @@ describe('AgentController.listAvailableModels catalog refresh', () => {
   // router gateways (models.dev, Netlify) parse these responses.
   const MODELS_DEV_URL = 'https://models.dev/api.json';
   let modelsDev: { calls: number; respond: () => Promise<Response> };
+  let netlify: { calls: number; respond: () => Promise<Response> };
 
   function modelsDevCatalog(models: string[]): Response {
     return Response.json({
@@ -241,6 +242,7 @@ describe('AgentController.listAvailableModels catalog refresh', () => {
     vi.setSystemTime(new Date('2026-11-04T09:00:00Z'));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     modelsDev = { calls: 0, respond: async () => modelsDevCatalog(['rocket-1']) };
+    netlify = { calls: 0, respond: async () => Response.json({ providers: {} }) };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -249,7 +251,10 @@ describe('AgentController.listAvailableModels catalog refresh', () => {
           modelsDev.calls += 1;
           return modelsDev.respond();
         }
-        if (url.startsWith('https://api.netlify.com/')) return Response.json({ providers: {} });
+        if (url.startsWith('https://api.netlify.com/')) {
+          netlify.calls += 1;
+          return netlify.respond();
+        }
         throw new Error(`unexpected request in test: ${url}`);
       }),
     );
@@ -330,6 +335,29 @@ describe('AgentController.listAvailableModels catalog refresh', () => {
       expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-2');
     });
     expect(modelsDev.calls).toBe(3);
+  });
+
+  it('keeps refreshing models.dev while a Netlify download hangs', async () => {
+    const controller = createController(createFakeGateway());
+    await controller.listAvailableModels();
+
+    advance(6 * 60_000);
+    netlify.respond = () => new Promise(() => {});
+    modelsDev.respond = async () => modelsDevCatalog(['rocket-1', 'rocket-2']);
+    await withinOneSecond(controller.listAvailableModels());
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-2');
+    });
+
+    advance(6 * 60_000);
+    modelsDev.respond = async () => modelsDevCatalog(['rocket-1', 'rocket-2', 'rocket-3']);
+    await withinOneSecond(controller.listAvailableModels());
+    await vi.waitFor(async () => {
+      expect(ids(await controller.listAvailableModels())).toContain('acme-cloud/rocket-3');
+    });
+    expect(modelsDev.calls).toBe(3);
+    // Still one Netlify download in flight, not a new one per refresh.
+    expect(netlify.calls).toBe(2);
   });
 
   it('waits for models.dev while it has never answered, so the first call after an outage lists its models', async () => {

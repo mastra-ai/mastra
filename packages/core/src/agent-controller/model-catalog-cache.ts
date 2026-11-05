@@ -41,14 +41,16 @@ interface BuiltCatalog {
  * most every {@link MODEL_CATALOG_TTL_MS}, or on the next call after
  * {@link invalidate}, on top of the latest remote snapshot.
  *
- * Concurrent callers share one build and one remote download.
+ * Concurrent callers share one build. Each remote gateway downloads on its
+ * own, so a slow or stalled one never holds back the others.
  */
 export class ModelCatalogCache {
   readonly #manager: GatewayManager;
   readonly #isRemote: (gateway: MastraModelGatewayInterface) => boolean;
   readonly #remote = new Map<MastraModelGatewayInterface, RemoteSnapshot>();
   #remoteVersion = 0;
-  #remoteRefresh: Promise<void> | undefined;
+  /** In-flight download per remote gateway, so a stalled gateway never holds back the others. */
+  readonly #remoteRefreshes = new Map<MastraModelGatewayInterface, Promise<void>>();
   #built: BuiltCatalog | undefined;
   #build: Promise<GatewayModel[]> | undefined;
   /** Bumped by {@link invalidate} so builds started before it are not kept. */
@@ -134,31 +136,37 @@ export class ModelCatalogCache {
     return this.#dueRemoteGateways().some(gateway => !this.#remote.get(gateway)?.providers);
   }
 
+  /**
+   * Starts a download for each due remote gateway that is not already
+   * downloading. Resolves once the gateways with nothing to serve yet have
+   * answered; the others finish in the background.
+   */
   #refreshRemote(): Promise<void> {
-    this.#remoteRefresh ??= this.#fetchRemote().finally(() => {
-      this.#remoteRefresh = undefined;
-    });
-    return this.#remoteRefresh;
+    const waits: Promise<void>[] = [];
+    for (const gateway of this.#dueRemoteGateways()) {
+      let refresh = this.#remoteRefreshes.get(gateway);
+      if (!refresh) {
+        refresh = this.#fetchRemote(gateway).finally(() => this.#remoteRefreshes.delete(gateway));
+        this.#remoteRefreshes.set(gateway, refresh);
+      }
+      if (!this.#remote.get(gateway)?.providers) waits.push(refresh);
+    }
+    return Promise.all(waits).then(() => {});
   }
 
-  async #fetchRemote(): Promise<void> {
-    const due = this.#dueRemoteGateways();
-    if (due.length === 0) return;
-
-    const results = await Promise.all(due.map(gateway => this.#manager.fetchGatewayProviders(gateway)));
+  /** Downloads one remote gateway and publishes its result as soon as it lands. */
+  async #fetchRemote(gateway: MastraModelGatewayInterface): Promise<void> {
+    const providers = await this.#manager.fetchGatewayProviders(gateway);
     const fetchedAt = Date.now();
-    due.forEach((gateway, index) => {
-      const providers = results[index];
-      const previous = this.#remote.get(gateway)?.providers;
-      if (providers) {
-        this.#remote.set(gateway, { providers, nextFetchAt: fetchedAt + REMOTE_CATALOG_REFRESH_MS });
-      } else if (previous) {
-        this.#remote.set(gateway, { providers: previous, nextFetchAt: fetchedAt + REMOTE_CATALOG_RETRY_MS });
-      } else {
-        // Nothing to fall back on yet: retry at the normal catalog cadence.
-        this.#remote.set(gateway, { providers: undefined, nextFetchAt: fetchedAt + MODEL_CATALOG_TTL_MS });
-      }
-    });
+    const previous = this.#remote.get(gateway)?.providers;
+    if (providers) {
+      this.#remote.set(gateway, { providers, nextFetchAt: fetchedAt + REMOTE_CATALOG_REFRESH_MS });
+    } else if (previous) {
+      this.#remote.set(gateway, { providers: previous, nextFetchAt: fetchedAt + REMOTE_CATALOG_RETRY_MS });
+    } else {
+      // Nothing to fall back on yet: retry at the normal catalog cadence.
+      this.#remote.set(gateway, { providers: undefined, nextFetchAt: fetchedAt + MODEL_CATALOG_TTL_MS });
+    }
     this.#remoteVersion += 1;
   }
 }
