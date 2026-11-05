@@ -153,7 +153,6 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
   return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
 }
 
-// Rescheduling a failure that can never succeed only delays the moment a person sees why.
 /** A pull request review run: the only runs that keep a status comment on the pull request. */
 function isReviewRun(decision: unknown): boolean {
   if (!decision || typeof decision !== 'object') return false;
@@ -161,6 +160,7 @@ function isReviewRun(decision: unknown): boolean {
   return value.type === 'invokeSkill' && value.role === 'review';
 }
 
+// Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
   return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
 }
@@ -668,6 +668,9 @@ export class FactoryDecisionDispatcher {
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #reportReviewStatus?: FactoryReviewStatusReporter;
+  /** Review attempts that already said `queued`, and those that watched their run start. */
+  readonly #reviewQueued = new WeakSet<FactoryDeferredDecisionRecord>();
+  readonly #reviewWatched = new WeakSet<FactoryDeferredDecisionRecord>();
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
   readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
@@ -999,7 +1002,10 @@ export class FactoryDecisionDispatcher {
         return;
       }
       await this.#supersedeProposals(record, decision);
-      await this.#reviewStatus(record, decision, { phase: 'queued' });
+      // A first claim cannot have delivered its kickoff yet, so it may say `queued` right
+      // away. A re-claim may find the run already going; it says `queued` only once the
+      // replay guard proves the kickoff never landed.
+      if (record.attempts <= 1) await this.#reviewQueuedOnce(record, decision);
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
@@ -1008,7 +1014,11 @@ export class FactoryDecisionDispatcher {
       executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
-      await this.#reviewStatus(record, decision, { phase: 'completed', endedAt: new Date() });
+      // A replayed delivery returns without watching the run; only the attempt that saw
+      // the run end may say it finished.
+      if (this.#reviewWatched.has(record)) {
+        await this.#reviewStatus(record, decision, { phase: 'completed', endedAt: new Date() });
+      }
     } catch (error) {
       if (error instanceof FactoryDecisionSuperseded) {
         await this.#storage.supersedeLeasedDecision(leaseIdentity(record, this.#ownerId), new Date());
@@ -1033,6 +1043,12 @@ export class FactoryDecisionDispatcher {
         reason: factoryDispatchFailureMetadata(failureCode).label,
       });
     }
+  }
+
+  async #reviewQueuedOnce(record: FactoryDeferredDecisionRecord, decision: unknown): Promise<void> {
+    if (this.#reviewQueued.has(record)) return;
+    this.#reviewQueued.add(record);
+    await this.#reviewStatus(record, decision, { phase: 'queued' });
   }
 
   /** Best-effort: a status comment is never worth failing or delaying the review it describes. */
@@ -1311,6 +1327,7 @@ export class FactoryDecisionDispatcher {
           // The feed read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) return;
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
+          await this.#reviewQueuedOnce(record, decision);
           if (decision.cancelInFlight && session.stream.isActive()) session.abort();
           const precedingMessage = decision.precedingMessage;
           if (precedingMessage) {
@@ -1413,6 +1430,7 @@ export class FactoryDecisionDispatcher {
               run.endReason,
               item?.title,
             );
+            this.#reviewWatched.add(record);
             await this.#reviewStatus(record, decision, { phase: 'reviewing', startedAt: since });
             // A landed `deliver` still runs on the in-flight session, so the run's
             // terminal outcome matters as much as a fresh wake's: a run that ends

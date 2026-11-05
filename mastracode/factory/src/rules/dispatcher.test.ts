@@ -7804,4 +7804,55 @@ describe('review status comment lifecycle', () => {
     expect((await failing.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
     warn.mockRestore();
   });
+
+  it('leaves a running review alone when a re-claimed delivery finds its kickoff already landed', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const queued = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'review',
+      prompt: 'Review this pull request.',
+      idempotencyKey: 'review-status-replay',
+    });
+    await bindReviewRun(storage, queued.item.id);
+    // A worker claimed the review, delivered its kickoff and said `reviewing`, then lost its lease.
+    const lostAt = new Date('2030-01-01T00:00:00Z');
+    const [lost] = await storage.claimDeferredDecisions({
+      ownerId: 'lost-worker',
+      now: lostAt,
+      leaseExpiresAt: new Date(lostAt.getTime() + 1_000),
+      limit: 1,
+    });
+    const conversation = pullRequestConversation();
+    await conversation.publish({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: queued.item.id,
+      run: lost!.id,
+      requestedAt: lost!.createdAt,
+      generation: lost!.deliveryGeneration,
+      attempt: lost!.attempts,
+      phase: 'reviewing',
+      startedAt: lostAt,
+    });
+
+    const { controller } = createSession(undefined, {
+      agentEndReason: 'complete',
+      initialDeliveredSignalIds: [lost!.id],
+    });
+    await new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService: queued.transitionService,
+      storage,
+      ownerId: 'worker-2',
+      isAutoRunEnabled: async () => true,
+      reportReviewStatus: conversation.reportReviewStatus,
+    }).runOnce(new Date(lostAt.getTime() + 2_000));
+
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record).toMatchObject({ status: 'succeeded', attempts: 2 });
+    expect(conversation.events).toEqual([]);
+    expect(conversation.comments()).toHaveLength(1);
+    expect(conversation.comments()[0]!.body).toContain('Reviewing…');
+    expect(conversation.comments()[0]!.body).not.toContain('Review finished');
+  });
 });
