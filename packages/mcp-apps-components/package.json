@@ -15,6 +15,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./host": {
+      "import": {
+        "types": "./dist/host.d.ts",
+        "default": "./dist/host.js"
+      },
+      "require": {
+        "types": "./dist/host.d.ts",
+        "default": "./dist/host.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -40,12 +50,17 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
+    "@mastra/playground-ui": "workspace:*",
+    "@mastra/react": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/core": "2.4.0",
     "@modelcontextprotocol/ext-apps": "^2.0.3",
     "@modelcontextprotocol/server": "2.4.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-query": "^5.104.5",
     "@testing-library/react": "^16.3.3",
     "@types/node": "22.19.15",
     "@types/react": "^19.3.0",
@@ -54,6 +69,7 @@
     "jsdom": "^30.1.3",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "tailwindcss": "4.3.3",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
