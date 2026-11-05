@@ -2,7 +2,7 @@
 '@mastra/code-sdk': minor
 ---
 
-Added `@mastra/code-sdk/voice/transcribe`, which transcribes audio with any model in the speech-to-text registry, including Mistral Voxtral (`voxtral-mini-latest`).
+Added `@mastra/code-sdk/voice/transcribe`, which transcribes audio with any model in the speech-to-text registry, including Mistral Voxtral (`voxtral-mini-latest`), and gives up after 2 minutes if the provider doesn't answer.
 
 ```ts
 import { resolveSTTModel } from '@mastra/code-sdk/voice/stt-registry';
