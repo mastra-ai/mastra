@@ -102,7 +102,7 @@ function getPackageInfo(packageRoot: string): PackageInfo | undefined {
 
   try {
     const coreFloorVersion = semver.minVersion(resolveCoreSemverRange(coreRange), { includePrerelease: true })?.version;
-    const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
+    const corePackVersion = coreFloorVersion?.replace(/-.*/, '');
 
     if (!coreFloorVersion || !corePackVersion) {
       return {
