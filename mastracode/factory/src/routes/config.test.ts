@@ -12,7 +12,7 @@ import type { ModelReasoningOption } from '@mastra/core/llm';
 import { Hono } from 'hono';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod';
 
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
@@ -1956,6 +1956,27 @@ describe('custom provider routes', () => {
     const res = await buildApp(userA, { withStorage: false }).request('/web/config/custom-providers');
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('custom_providers_unavailable');
+  });
+
+  it('retries a failed storage init every 15 seconds, not on every settings request', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+    const ensureReady = vi.spyOn(seed.customProviders, 'ensureReady').mockRejectedValue(new Error('db down'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const app = buildApp(userA);
+
+    for (let request = 0; request < 3; request++) {
+      expect((await app.request('/web/config/custom-providers')).status).toBe(503);
+      expect((await app.request('/web/config/providers')).status).toBe(200);
+    }
+    expect(ensureReady).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(Date.now() + 15_000);
+    await app.request('/web/config/custom-providers');
+    expect(ensureReady).toHaveBeenCalledTimes(2);
   });
 
   it('validates the payload', async () => {

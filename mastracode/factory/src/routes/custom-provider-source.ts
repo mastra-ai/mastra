@@ -26,6 +26,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import { tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
+import { ensureReadyWithBackoff } from './storage-init-backoff.js';
 
 /** How long a hydrated snapshot is considered fresh. */
 const SNAPSHOT_TTL_MS = 15_000;
@@ -58,7 +59,7 @@ class OrgCustomProvidersSnapshot {
   }
 
   async #hydrate(): Promise<void> {
-    await this.#storage.ensureReady();
+    if (!(await customProvidersReady(this.#storage))) return;
     const records = await this.#storage.list({ orgId: this.#orgId });
     this.#snapshot = records.map(record => ({
       name: record.name,
@@ -76,6 +77,11 @@ class OrgCustomProvidersSnapshot {
     }
     return this.#snapshot;
   }
+}
+
+/** Whether the custom providers domain is ready; a failed init retries at most every 15 seconds. */
+export function customProvidersReady(storage: CustomProvidersStorage): Promise<boolean> {
+  return ensureReadyWithBackoff(storage, 'custom provider storage is unavailable; custom providers will not resolve');
 }
 
 const orgSnapshots = new Map<string, OrgCustomProvidersSnapshot>();
