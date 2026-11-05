@@ -3,14 +3,14 @@ import { parseReads } from './reads';
 import type { McpAppReads } from './reads';
 
 /** What an MCP App's page and its host agree on. The page is built from it, and so is the server side. */
-export interface McpAppContract<Input extends z.ZodType = z.ZodType, Reads extends McpAppReads = McpAppReads> {
+export interface McpAppContract<Input extends z.ZodObject = z.ZodObject, Reads extends McpAppReads = McpAppReads> {
   /** The `ui://` URI the page is served under. */
   uri: `ui://${string}`;
   name: string;
   description: string;
   /** The tool the page reads its data through. The name is built into the page. */
   dataTool: string;
-  /** What the tool that opens the page returns as `structuredContent`. */
+  /** What the tool that opens the page returns as `structuredContent`. An object, as MCP requires. */
   input: Input;
   /** Every read the page makes, by name. */
   reads: Reads;
@@ -21,7 +21,7 @@ export interface McpAppContract<Input extends z.ZodType = z.ZodType, Reads exten
  * `createMcpApp`.
  */
 export interface McpAppUi<
-  Input extends z.ZodType = z.ZodType,
+  Input extends z.ZodObject = z.ZodObject,
   Reads extends McpAppReads = McpAppReads,
 > extends McpAppContract<Input, Reads> {
   /**
@@ -32,7 +32,7 @@ export interface McpAppUi<
 }
 
 /** Declares an MCP App's UI. Throws if a request could match two of its reads. */
-export function defineMcpAppUi<Input extends z.ZodType, const Reads extends McpAppReads>(
+export function defineMcpAppUi<Input extends z.ZodObject, const Reads extends McpAppReads>(
   ui: McpAppUi<Input, Reads>,
 ): McpAppUi<Input, Reads> {
   parseReads(ui.reads);

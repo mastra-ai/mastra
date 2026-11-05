@@ -32,7 +32,7 @@ afterEach(async () => {
 /** A MastraClient inside an app whose host answers every tool call with `answer`. */
 async function clientBehindHost(
   answer: McpAppDataOutput,
-  { ui = dashboardContract, projectId }: { ui?: UiContract; projectId?: string } = {},
+  { ui = dashboardContract, context }: { ui?: UiContract; context?: Record<string, unknown> } = {},
 ) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, { serverTools: {} });
@@ -54,7 +54,7 @@ async function clientBehindHost(
     baseUrl: 'http://mastra.test',
     apiPrefix: '',
     retries: 0,
-    fetch: createMcpAppDataFetch(app, { ui, projectId }),
+    fetch: createMcpAppDataFetch(app, { ui, context }),
   });
   return { client, calls, app };
 }
@@ -84,6 +84,7 @@ describe('createMcpAppDataFetch', () => {
               ...args,
               filters: { timestamp: { start: '2026-11-01T00:00:00.000Z', end: '2026-11-02T00:00:00.000Z' } },
             },
+            context: {},
           },
         },
       ]);
@@ -101,22 +102,22 @@ describe('createMcpAppDataFetch', () => {
       expect(calls).toEqual([
         {
           name: dashboardContract.dataTool,
-          arguments: { read: 'listScores', query: { page: '0', perPage: '100' } },
+          arguments: { read: 'listScores', query: { page: '0', perPage: '100' }, context: {} },
         },
       ]);
     });
   });
 
-  describe("when the app knows the dashboard's project", () => {
-    it('sends the project with every read, posted or listed', async () => {
-      const { client, calls } = await clientBehindHost({ status: 200, body: {} }, { projectId: 'proj_1' });
+  describe('when the tool that opened the app returned a context', () => {
+    it('sends it back with every read, posted or listed', async () => {
+      const { client, calls } = await clientBehindHost({ status: 200, body: {} }, { context: { projectId: 'proj_1' } });
 
       await client.getMetricAggregate({ name: ['mastra_agent_duration_ms'], aggregation: 'count' });
       await client.listScores({ pagination: { page: 0, perPage: 100 } });
 
       expect(calls.map(call => call.arguments)).toEqual([
-        expect.objectContaining({ read: 'getMetricAggregate', projectId: 'proj_1' }),
-        expect.objectContaining({ read: 'listScores', projectId: 'proj_1' }),
+        expect.objectContaining({ read: 'getMetricAggregate', context: { projectId: 'proj_1' } }),
+        expect.objectContaining({ read: 'listScores', context: { projectId: 'proj_1' } }),
       ]);
     });
   });
@@ -127,7 +128,9 @@ describe('createMcpAppDataFetch', () => {
       const { client, calls } = await clientBehindHost({ status: 200, body: trace }, { ui: traceUi });
 
       expect(await client.getTrace('trace-1')).toEqual(trace);
-      expect(calls).toEqual([{ name: 'traceData', arguments: { read: 'getTrace', params: { traceId: 'trace-1' } } }]);
+      expect(calls).toEqual([
+        { name: 'traceData', arguments: { read: 'getTrace', params: { traceId: 'trace-1' }, context: {} } },
+      ]);
     });
 
     it('decodes an encoded slash instead of reading another path', async () => {
@@ -138,7 +141,9 @@ describe('createMcpAppDataFetch', () => {
       );
 
       expect(response.status).toBe(200);
-      expect(calls).toEqual([{ name: 'traceData', arguments: { read: 'getTrace', params: { traceId: 'a/b' } } }]);
+      expect(calls).toEqual([
+        { name: 'traceData', arguments: { read: 'getTrace', params: { traceId: 'a/b' }, context: {} } },
+      ]);
     });
 
     it('fails a malformed encoding with 404 without calling the server', async () => {

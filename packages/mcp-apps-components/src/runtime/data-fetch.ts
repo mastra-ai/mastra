@@ -58,7 +58,14 @@ function isUnknownTool(error: unknown) {
  */
 export function createMcpAppDataFetch(
   app: App,
-  { ui, projectId }: { ui: Pick<McpAppUi, 'name' | 'dataTool' | 'reads'>; projectId?: string },
+  {
+    ui,
+    context = {},
+  }: {
+    ui: Pick<McpAppUi, 'name' | 'dataTool' | 'reads'>;
+    /** The context the tool that opened the UI returned, sent back with each read. */
+    context?: Record<string, unknown>;
+  },
 ): typeof fetch {
   const reads = parseReads(ui.reads);
   const missingTool = `The MCP server serving this app has no ${ui.dataTool} tool. Build the app with \`createMcpApp\` from @mastra/mcp-apps-components, which registers it.`;
@@ -71,7 +78,7 @@ export function createMcpAppDataFetch(
     const match = matchRead(reads, method, url.pathname);
     if (!match) return failure(`${ui.name} doesn't read ${request}.`, 404);
 
-    const call: Record<string, unknown> = { read: match.read, ...(projectId && { projectId }) };
+    const call: Record<string, unknown> = { read: match.read, context };
     if (Object.keys(match.params).length) call.params = match.params;
     if (method === 'GET') {
       if (url.searchParams.size) call.query = queryArguments(url.searchParams);

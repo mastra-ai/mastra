@@ -3,6 +3,7 @@ import type { DashboardDefinition } from '@mastra/client-js';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
+import { MCP_APP_CONTEXT_KEY } from '../../../reads';
 import { MASTRA_SERVER, renderWithHost } from '../../../test/host';
 import { server } from '../../../test/msw-server';
 import { app } from '../app';
@@ -52,33 +53,38 @@ describe('dashboard renderer app', () => {
           }),
         ),
       );
-      // A dashboard without a project leaves the server to pick its own.
-      expect(host.toolCalls.filter(({ call }) => call && 'projectId' in call)).toEqual([]);
+      // A tool result without a context sends an empty one, leaving the server to pick its project.
+      expect(host.toolCalls.map(({ call }) => call?.context)).toEqual(host.toolCalls.map(() => ({})));
     });
   });
 
-  describe("when the tool result names the dashboard's project", () => {
+  describe('when the tool result carries a context, such as the project', () => {
     it('reads every widget from that project', async () => {
       server.use(http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)));
       const host = await renderWithHost(app);
 
       await host.sendToolResult({
         content: [],
-        structuredContent: { definition: agentRunsDashboard, projectId: 'proj_1' },
+        structuredContent: { definition: agentRunsDashboard, [MCP_APP_CONTEXT_KEY]: { projectId: 'proj_1' } },
       });
 
       expect(await screen.findByText('693')).toBeTruthy();
       expect(host.toolCalls.length).toBeGreaterThan(0);
-      expect(host.toolCalls.map(({ call }) => call?.projectId)).toEqual(host.toolCalls.map(() => 'proj_1'));
+      expect(host.toolCalls.map(({ call }) => call?.context)).toEqual(
+        host.toolCalls.map(() => ({ projectId: 'proj_1' })),
+      );
     });
 
-    it('explains an empty project instead of reading without one', async () => {
+    it('explains a context that is not an object instead of reading without it', async () => {
       const host = await renderWithHost(app);
 
-      await host.sendToolResult({ content: [], structuredContent: { definition: agentRunsDashboard, projectId: '' } });
+      await host.sendToolResult({
+        content: [],
+        structuredContent: { definition: agentRunsDashboard, [MCP_APP_CONTEXT_KEY]: 'proj_1' },
+      });
 
       expect(await screen.findByText("Couldn't show this dashboard")).toBeTruthy();
-      expect(screen.getByText(/`projectId`/)).toBeTruthy();
+      expect(screen.getByText(new RegExp(MCP_APP_CONTEXT_KEY))).toBeTruthy();
       expect(host.toolCalls).toEqual([]);
     });
   });

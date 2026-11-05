@@ -202,6 +202,6 @@ export const showObservabilityDashboard: McpAppTool<typeof inputSchema, typeof d
       chart && CHART_SECTIONS.has(section) ? withChart(WIDGETS[section], chart) : WIDGETS[section],
     );
     const definition: DashboardDefinition = { schemaVersion: 1, defaults: { datePreset }, rows: layout(widgets) };
-    return { definition, scope: 'project' };
+    return { input: { definition, scope: 'project' } };
   },
 };

@@ -428,7 +428,7 @@ npm install @mastra/mcp-apps-components
 Turn a UI into an MCP App with `createMcpApp()`. It takes three options:
 
 - `ui`: The prebuilt UI, such as `dashboardUi`.
-- `tool`: The tool the model calls to open the UI. Its `execute` function turns the model's request into the UI's input.
+- `tool`: The tool the model calls to open the UI. Its `execute` function turns the model's request into `{ input }`, the UI's input, and optionally a `context` for the UI's reads.
 - `prepareRequest`: Returns, for each read the UI makes, the URL to send it to.
 
 Register the `appResources` and `tools` it returns on an `MCPServer`:
@@ -478,7 +478,7 @@ const dashboard = createMcpApp({
     id: 'showAgentRuns',
     description: 'Shows how many agent runs happened in the last 7 days',
     inputSchema: z.object({}),
-    execute: () => ({ definition: agentRuns }),
+    execute: () => ({ input: { definition: agentRuns } }),
   },
   prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
 })
@@ -492,7 +492,7 @@ export const dashboardServer = new MCPServer({
 })
 ```
 
-The UI never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to the `dashboardData` tool over the host's MCP connection. That tool calls `prepareRequest` with the read's name, its route `path`, its decoded route `params`, the `projectId` the UI asked for, and the caller's `token`, then sends the read to the returned URL as the signed-in caller. The Mastra route's own validation, permission, and authorization checks apply, so the UI sees the same data the user can.
+The UI never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to the `dashboardData` tool over the host's MCP connection. That tool calls `prepareRequest` with the read's name, its route `path`, its decoded route `params`, the tool's `context`, and the caller's `token`, then sends the read to the returned URL as the signed-in caller. The Mastra route's own validation, permission, and authorization checks apply, so the UI sees the same data the user can.
 
 The data tool is app-only, so `MCPClient.listTools()` hides it from agents. App-only visibility doesn't stop a direct call. The tool only sends the reads the UI declares and rejects any other read. Call `createMcpApp()` once per UI on a server, since the data tool's name is built into the UI.
 
@@ -500,7 +500,7 @@ The data tool is app-only, so `MCPClient.listTools()` hides it from agents. App-
 
 The MCP server doesn't need to be registered on a Mastra instance. When the Mastra server has auth configured, the data tool forwards the caller's bearer token: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. To read with a fixed credential instead, return an `authorization` header from `prepareRequest`. Calls without a token return `401`.
 
-To serve several projects, set `projectId` in the UI's input from your tool's `execute` function. `prepareRequest` receives it with each read, so it can check the caller can read the project, pick the server, and add headers. Return `{ response }` to answer a read without sending it.
+To serve several projects, declare a `context` schema on the tool, such as `z.object({ projectId: z.string() })`, and return `{ input, context }` from its `execute` function. The UI sends the context back with each read and `prepareRequest` receives it, so it can check the caller can read the project, pick the server, and add headers. The context passes through the iframe and the model sees it, so check it in `prepareRequest` and keep secrets out of it. Return `{ response }` to answer a read without sending it.
 
 :::
 

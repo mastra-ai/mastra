@@ -13,16 +13,17 @@ import { useMcpApp } from './mcp-app-context';
  */
 export function MastraServerProvider({
   contract,
-  projectId,
+  context,
   children,
 }: {
   contract: Pick<McpAppContract, 'name' | 'dataTool' | 'reads'>;
-  projectId?: string;
+  /** Sent with each read, for the server's `prepareRequest`. */
+  context: Record<string, unknown>;
   children: ReactNode;
 }) {
   const app = useMcpApp();
   const [queryClient] = useState(() => new QueryClient());
-  const [fetchThroughHost] = useState(() => createMcpAppDataFetch(app, { ui: contract, projectId }));
+  const [fetchThroughHost] = useState(() => createMcpAppDataFetch(app, { ui: contract, context }));
 
   return (
     <QueryClientProvider client={queryClient}>

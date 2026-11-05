@@ -15,7 +15,7 @@ npm install @mastra/mcp-apps-components
 `createMcpApp` takes three things:
 
 - `ui`: the prebuilt UI, such as `dashboardUi`. It carries its HTML, its `ui://` URI, the input it renders and the reads it makes.
-- `tool`: the tool the model calls to open the UI. Its `execute` turns the model's request into the UI's input, typed against `ui.input`.
+- `tool`: the tool the model calls to open the UI. Its `execute` turns the model's request into `{ input }`, the UI's input typed against `ui.input`, and optionally a `context` for the UI's reads.
 - `prepareRequest`: where each of the UI's reads goes.
 
 It returns `appResources` and `tools` to register on an `MCPServer`.
@@ -63,7 +63,7 @@ const dashboard = createMcpApp({
     id: 'showAgentRuns',
     description: 'Shows how many agent runs happened in the last 7 days',
     inputSchema: z.object({}),
-    execute: () => ({ definition: agentRuns }),
+    execute: () => ({ input: { definition: agentRuns } }),
   },
   prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
 });
@@ -88,25 +88,36 @@ For each read, the data tool calls `prepareRequest` with:
 - `read`: the read's name.
 - `params`: the route's parameters, decoded.
 - `path`: the route path with its parameters encoded, without the API prefix, such as `/observability/metrics/aggregate`.
-- `projectId`: the project the UI asked for, if any.
+- `context`: the context the tool returned when it opened the UI, checked against the tool's `context` schema.
 - `token`: the caller's bearer token, if any.
 
 `prepareRequest` returns the `url` to send the read to and any `headers` to add, or `{ response }` to answer without sending anything. The data tool adds the route's method, query parameters and JSON body, sends the read, and hands the response to the UI. It refuses reads the UI doesn't declare, and parameters that are empty, `.` or `..`. It's app-only, so hosts keep it away from the model. The MCP server serving it doesn't need a Mastra instance.
 
 The data tool sends the caller's bearer token as `authorization`: from the MCP transport's `authInfo`, or from the request context when Studio relays the call. An `authorization` header returned by `prepareRequest` replaces it. When a Mastra server has authentication configured, reads that carry no token, such as over stdio, answer with `401`. When the server can't be reached, reads answer with `502`.
 
-### Serving several projects
+### Context for reads
 
-Set `projectId` in the UI's input from your tool's `execute`. The UI sends it with every read, and `prepareRequest` decides where it goes. The `projectId` comes from the iframe, so it isn't trusted: check the caller can read the project, and return `{ response }` to answer without sending anything.
+When the reads need something the UI doesn't, such as the project they're for, declare a `context` schema on the tool and return a `context` from `execute`. The tool result carries it next to the UI's input, the UI sends it back with every read, and `prepareRequest` receives it typed against the schema. The UI itself never sees or needs it.
+
+The context comes back from the iframe, so it isn't trusted: the data tool checks it against the schema, and `prepareRequest` must check the caller may use it. The model sees it in the tool result, so keep secrets out of it.
 
 ```typescript
 const REGIONS = { us: 'https://us.example.com', eu: 'https://eu.example.com' };
 
 createMcpApp({
   ui: dashboardUi,
-  tool: showAgentRuns,
-  prepareRequest: async ({ path, projectId, token }) => {
-    const project = projectId && (await findProjectFor(token, projectId));
+  tool: {
+    id: 'showAgentRuns',
+    description: 'Shows how many agent runs happened in a project',
+    inputSchema: z.object({}),
+    context: z.object({ projectId: z.string().min(1) }),
+    execute: (_, { requestContext }) => ({
+      input: { definition: agentRuns },
+      context: { projectId: requestContext?.get('projectId') as string },
+    }),
+  },
+  prepareRequest: async ({ path, context: { projectId }, token }) => {
+    const project = await findProjectFor(token, projectId);
     if (!project) return { response: { status: 403, body: { error: 'Not your project' } } };
     return { url: `${REGIONS[project.region]}/api${path}`, headers: { 'x-mastra-project-id': project.id } };
   },

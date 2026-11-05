@@ -29,7 +29,7 @@ const dashboard = createMcpApp({
     id: 'showDashboard',
     description: 'Shows the agent runs dashboard',
     inputSchema: z.object({}),
-    execute: () => ({ definition }),
+    execute: () => ({ input: { definition } }),
   },
   prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
 });
@@ -41,15 +41,18 @@ new MCPServer({
 });
 ```
 
-`tool.execute` turns the model's request into the UI's input, typed against `dashboardUi.input`; you no longer link the tool to the `ui://` URI yourself. For each read the UI makes, `prepareRequest` returns the URL to send it to and any headers to add. The data tool sends the read over HTTP with the signed-in caller's bearer token, so the route's own validation and permission checks apply. Agents don't see it. The MCP server serving the dashboard no longer needs to be registered on a Mastra instance, and `@mastra/server` is no longer a peer dependency.
+`tool.execute` turns the model's request into `{ input }`, the UI's input typed against `dashboardUi.input`; you no longer link the tool to the `ui://` URI yourself. For each read the UI makes, `prepareRequest` returns the URL to send it to and any headers to add. The data tool sends the read over HTTP with the signed-in caller's bearer token, so the route's own validation and permission checks apply. Agents don't see it. The MCP server serving the dashboard no longer needs to be registered on a Mastra instance, and `@mastra/server` is no longer a peer dependency.
 
-**Serving several projects**
+**Context for reads, such as the project**
 
-Set `projectId` in the UI's input from `tool.execute`. The UI sends it with every read, and `prepareRequest` receives it, so a host serving several projects can check access, pick the server and add headers, or refuse with `{ response }`:
+Declare a `context` schema on the tool and return `{ input, context }` from `tool.execute`. The UI sends the context back with every read, and `prepareRequest` receives it typed against the schema, so a host serving several projects can check access, pick the server and add headers, or refuse with `{ response }`. The dashboard's input no longer has a `projectId`; pass it as context instead:
 
 ```ts
-prepareRequest: async ({ path, projectId, token }) => {
-  const project = projectId && (await findProjectFor(token, projectId));
+context: z.object({ projectId: z.string().min(1) }),
+execute: (_, { requestContext }) => ({ input: { definition }, context: { projectId: requestContext?.get('projectId') as string } }),
+// ...
+prepareRequest: async ({ path, context: { projectId }, token }) => {
+  const project = await findProjectFor(token, projectId);
   if (!project) return { response: { status: 403, body: { error: 'Not your project' } } };
   return { url: `${project.apiUrl}/api${path}`, headers: { 'x-mastra-project-id': project.id } };
 },

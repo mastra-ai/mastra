@@ -29,6 +29,9 @@ afterEach(async () => {
 const once = (bridge: AppBridge, event: 'initialized' | 'sizechange') =>
   new Promise<void>(resolve => bridge.addEventListener(event, () => resolve()));
 
+/** The context the test host's tool returns; a tool result can carry it to the app. */
+const hostContextSchema = z.object({ projectId: z.string().min(1).optional() });
+
 // The host's server: the dashboard's real data tool, sending each read to MASTRA_SERVER.
 const { tools } = createMcpApp({
   ui: defineMcpAppUi({ ...dashboardContract, html: '' }),
@@ -36,6 +39,7 @@ const { tools } = createMcpApp({
     id: 'showDashboard',
     description: 'Shows a dashboard',
     inputSchema: z.object({}),
+    context: hostContextSchema,
     execute: () => ({}) as never,
   },
   prepareRequest: ({ path }) => ({ url: `${MASTRA_SERVER}${path}` }),
@@ -43,7 +47,9 @@ const { tools } = createMcpApp({
 const serverDataTool = tools[dashboardContract.dataTool]!;
 
 /** A data tool call the app made, as the tool's input schema parses it. */
-export type DataToolCall = z.output<ReturnType<typeof mcpAppDataInputSchema<typeof dashboardContract.reads>>>;
+export type DataToolCall = z.output<
+  ReturnType<typeof mcpAppDataInputSchema<typeof dashboardContract.reads, typeof hostContextSchema>>
+>;
 
 async function relayToServer(
   name: string,

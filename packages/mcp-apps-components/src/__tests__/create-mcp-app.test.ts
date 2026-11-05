@@ -9,7 +9,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { MastraServer } from '@mastra/hono';
 import { MCPServer } from '@mastra/mcp';
 // The built package, as consumers install it.
-import { createMcpApp, defineMcpAppUi } from '@mastra/mcp-apps-components';
+import { createMcpApp, defineMcpAppUi, MCP_APP_CONTEXT_KEY } from '@mastra/mcp-apps-components';
 import type { McpAppDataOutput, McpAppPreparedRequest, McpAppRequest } from '@mastra/mcp-apps-components';
 import { dashboardUi } from '@mastra/mcp-apps-components/dashboard-renderer';
 import {
@@ -51,7 +51,12 @@ async function seededStorage(values: number[]) {
   return storage;
 }
 
-type PrepareRequest = (request: McpAppRequest<typeof dashboardUi.reads>) => McpAppPreparedRequest;
+/** What a host serving several projects has its dashboard's reads carry. */
+const projectContext = z.object({ projectId: z.string().min(1).optional() });
+
+type PrepareRequest = (
+  request: McpAppRequest<typeof dashboardUi.reads, typeof projectContext>,
+) => McpAppPreparedRequest;
 
 /** Sends every read to the Mastra server at `origin`, as a host serving one project does. */
 const toMastra =
@@ -68,7 +73,8 @@ const dashboardApp = (prepareRequest: PrepareRequest) =>
       id: 'showDashboard',
       description: 'Shows the agent runs dashboard',
       inputSchema: z.object({ projectId: z.string().optional() }),
-      execute: ({ projectId }) => ({ definition: agentRunsDashboard, ...(projectId && { projectId }) }),
+      context: projectContext,
+      execute: ({ projectId }) => ({ input: { definition: agentRunsDashboard }, context: { projectId } }),
     },
     prepareRequest,
   });
@@ -183,7 +189,7 @@ type RelayToolCall = (params: Parameters<Client['callTool']>[0]) => ReturnType<C
 async function dashboardClient(
   server: Client,
   relay: RelayToolCall = params => server.callTool(params),
-  options?: { projectId?: string },
+  context?: z.input<typeof projectContext>,
 ) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, { serverTools: {} });
@@ -204,7 +210,7 @@ async function dashboardClient(
   const client = new MastraClient({
     baseUrl: 'http://mastra.test',
     apiPrefix: '',
-    fetch: createMcpAppDataFetch(app, { ui: dashboardUi, ...options }),
+    fetch: createMcpAppDataFetch(app, { ui: dashboardUi, context }),
   });
   return { client, toolCalls: () => toolCalls };
 }
@@ -253,7 +259,7 @@ describe('createMcpApp', () => {
 
       const result = await studio
         .getMcpServerTool('apps', DATA_TOOL)
-        .execute({ data: { read: 'getMetricAggregate', body: SUM } });
+        .execute({ data: { read: 'getMetricAggregate', body: SUM, context: {} } });
 
       expect(result).toEqual({ result: { status: 200, body: expect.objectContaining({ value: 12 }) } });
     });
@@ -283,7 +289,7 @@ describe('createMcpApp', () => {
     it('fails with 400 and a readable message instead of a serialized error', async () => {
       const result = await reader.callTool({
         name: DATA_TOOL,
-        arguments: { read: 'listScores', body: {} },
+        arguments: { read: 'listScores', body: {}, context: {} },
       });
       expect(result.isError).toBe(true);
 
@@ -349,7 +355,7 @@ describe('createMcpApp', () => {
       for (const [read, route] of Object.entries(dashboardUi.reads)) {
         const result = await reader.callTool({
           name: DATA_TOOL,
-          arguments: route.startsWith('GET ') ? { read, query: {} } : { read, body: {} },
+          arguments: route.startsWith('GET ') ? { read, query: {}, context: {} } : { read, body: {}, context: {} },
         });
 
         expect(result.isError, read).toBeFalsy();
@@ -366,9 +372,10 @@ describe('createMcpApp', () => {
       expect(tools.find(tool => tool.name === 'showDashboard')?._meta).toEqual(
         expect.objectContaining({ ui: { resourceUri: dashboardUi.uri } }),
       );
-      expect(dashboardUi.input.parse(result.structuredContent)).toEqual(
-        expect.objectContaining({ definition: agentRunsDashboard, projectId: 'proj_1' }),
+      expect(result.structuredContent).toEqual(
+        expect.objectContaining({ definition: agentRunsDashboard, [MCP_APP_CONTEXT_KEY]: { projectId: 'proj_1' } }),
       );
+      expect(dashboardUi.input.parse(result.structuredContent)).not.toHaveProperty(MCP_APP_CONTEXT_KEY);
     });
   });
 });
@@ -439,7 +446,7 @@ describe('createMcpApp on an MCP server without a Mastra instance', () => {
       await eu.close();
     });
 
-    const byProject: PrepareRequest = ({ path, projectId, token }) => {
+    const byProject: PrepareRequest = ({ path, context: { projectId }, token }) => {
       if (token !== READER || !projectId?.startsWith('org1_')) {
         return { response: { status: 403, body: { error: `You can't read project ${projectId}` } } };
       }
@@ -477,7 +484,7 @@ describe('createMcpApp on an MCP server without a Mastra instance', () => {
 
       const result = await server.callTool({
         name: DATA_TOOL,
-        arguments: { read: 'getMetricAggregate', body: SUM },
+        arguments: { read: 'getMetricAggregate', body: SUM, context: {} },
       });
 
       expect(result.structuredContent).toEqual({
@@ -497,6 +504,8 @@ describe('createMcpApp on an MCP server without a Mastra instance', () => {
       input: z.object({ traceId: z.string() }),
       reads: { getTrace: 'GET /observability/traces/:traceId' },
     });
+    // A context other than a project: which deployment the trace lives in.
+    const environmentContext = z.object({ environment: z.enum(['staging', 'production']) });
 
     async function traceServer() {
       const received: string[] = [];
@@ -504,19 +513,20 @@ describe('createMcpApp on an MCP server without a Mastra instance', () => {
         received.push(new URL(request.url).pathname);
         return Response.json({ spans: [] });
       });
-      const prepared: Array<McpAppRequest<typeof traceUi.reads>> = [];
+      const prepared: Array<McpAppRequest<typeof traceUi.reads, typeof environmentContext>> = [];
       const served = await startStandaloneMcp(
         createMcpApp({
           ui: traceUi,
           tool: {
             id: 'showTrace',
             description: 'Shows a trace',
-            inputSchema: z.object({ traceId: z.string() }),
-            execute: input => input,
+            inputSchema: z.object({ traceId: z.string(), environment: z.enum(['staging', 'production']) }),
+            context: environmentContext,
+            execute: ({ traceId, environment }) => ({ input: { traceId }, context: { environment } }),
           },
           prepareRequest: request => {
             prepared.push(request);
-            return { url: `${api.origin}/api${request.path}` };
+            return { url: `${api.origin}/${request.context.environment}/api${request.path}` };
           },
         }),
       );
@@ -534,20 +544,50 @@ describe('createMcpApp on an MCP server without a Mastra instance', () => {
 
       const result = await client.callTool({
         name: 'traceData',
-        arguments: { read: 'getTrace', params: { traceId: 'a/b' } },
+        arguments: { read: 'getTrace', params: { traceId: 'a/b' }, context: { environment: 'staging' } },
       });
 
       expect(result.structuredContent).toEqual({ status: 200, body: { spans: [] } });
       expect(prepared).toEqual([
         expect.objectContaining({ read: 'getTrace', params: { traceId: 'a/b' }, path: '/observability/traces/a%2Fb' }),
       ]);
-      expect(received).toEqual(['/api/observability/traces/a%2Fb']);
+      expect(received).toEqual(['/staging/api/observability/traces/a%2Fb']);
     });
+
+    it('returns the context with the UI input when the model opens the UI', async () => {
+      const { client } = await traceServer();
+
+      const result = await client.callTool({
+        name: 'showTrace',
+        arguments: { traceId: 't1', environment: 'production' },
+      });
+
+      expect(result.structuredContent).toEqual({ traceId: 't1', [MCP_APP_CONTEXT_KEY]: { environment: 'production' } });
+    });
+
+    it.each([{}, { environment: 'dev' }])(
+      'refuses a read carrying the context %j, which its schema rejects, without calling prepareRequest',
+      async context => {
+        const { client, received, prepared } = await traceServer();
+
+        const result = await client.callTool({
+          name: 'traceData',
+          arguments: { read: 'getTrace', params: { traceId: 't1' }, context },
+        });
+
+        expect(result.isError).toBe(true);
+        expect(prepared).toEqual([]);
+        expect(received).toEqual([]);
+      },
+    );
 
     it.each(['', '.', '..'])('refuses the parameter %j without calling prepareRequest', async traceId => {
       const { client, received, prepared } = await traceServer();
 
-      const result = await client.callTool({ name: 'traceData', arguments: { read: 'getTrace', params: { traceId } } });
+      const result = await client.callTool({
+        name: 'traceData',
+        arguments: { read: 'getTrace', params: { traceId }, context: { environment: 'staging' } },
+      });
 
       expect(result.isError).toBe(true);
       expect(prepared).toEqual([]);
@@ -592,7 +632,7 @@ describe('createMcpApp with a tool named after the data tool', () => {
           id: DATA_TOOL,
           description: 'Shows a dashboard',
           inputSchema: z.object({}),
-          execute: () => ({ definition: agentRunsDashboard }),
+          execute: () => ({ input: { definition: agentRunsDashboard } }),
         },
         prepareRequest: toMastra('http://localhost:4111'),
       }),

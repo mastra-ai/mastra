@@ -22,7 +22,7 @@ function dashboardApp(ui: McpAppUi = dashboardUi) {
       id: 'showDashboard',
       description: 'Shows a dashboard',
       inputSchema: z.object({}),
-      execute: () => ({ definition: agentRunsDashboard }),
+      execute: () => ({ input: { definition: agentRunsDashboard } }),
     },
     prepareRequest: () => ({ response: { status: 200, body: {} } }),
   });
@@ -236,7 +236,7 @@ describe('dashboardUi', () => {
           id: 'showDashboard',
           description: 'Shows a dashboard',
           inputSchema: z.object({}),
-          execute: () => ({ definition: agentRunsDashboard }),
+          execute: () => ({ input: { definition: agentRunsDashboard } }),
         },
         prepareRequest: ({ path }) => ({ url: `http://localhost:4111/api${path}` }),
       });

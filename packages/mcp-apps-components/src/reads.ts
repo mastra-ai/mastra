@@ -9,6 +9,15 @@ export type McpAppRoute = `${'GET' | 'POST'} /${string}`;
 /** Every read an MCP App UI makes, by name. */
 export type McpAppReads = Record<string, McpAppRoute>;
 
+/**
+ * The `structuredContent` key carrying the context the tool that opened the UI declared. The UI
+ * doesn't read it: it sends it back with each read, for `prepareRequest`.
+ */
+export const MCP_APP_CONTEXT_KEY = 'mastra.ai/app-context';
+
+/** What a tool can carry to `prepareRequest` through the UI, e.g. the project the UI reads. */
+export type McpAppContextSchema = z.ZodObject;
+
 type PathParams<Path extends string> = Path extends `${infer Segment}/${infer Rest}`
   ? PathParams<Segment> | PathParams<Rest>
   : Path extends `:${infer Param}`
@@ -101,7 +110,11 @@ export function readPath({ segments }: ParsedRoute, params: Record<string, strin
  * The data tool's input. MCP tools need an object input schema, so a read's arguments sit in
  * `params`, `query` and `body` instead of a union, and the refinement holds each read to its route.
  */
-export function mcpAppDataInputSchema<Reads extends McpAppReads>(reads: Reads, parsed: ParsedReads) {
+export function mcpAppDataInputSchema<Reads extends McpAppReads, Context extends McpAppContextSchema>(
+  reads: Reads,
+  parsed: ParsedReads,
+  context: Context,
+) {
   const names = Object.keys(reads) as [Extract<keyof Reads, string>, ...Extract<keyof Reads, string>[]];
   const byName = new Map(parsed.map(read => [read.read, read]));
   return z
@@ -113,8 +126,8 @@ export function mcpAppDataInputSchema<Reads extends McpAppReads>(reads: Reads, p
       query: z.record(z.string(), z.union([z.string(), z.array(z.string())])).optional(),
       /** The JSON body. Only `POST` reads send one. */
       body: z.record(z.string(), z.unknown()).optional(),
-      /** The project to read, from the UI input's `projectId`. Absent when the UI has none. */
-      projectId: z.string().min(1).optional(),
+      /** The context the tool that opened the UI returned; `{}` when it declared none. */
+      context,
     })
     .superRefine(({ read, params = {}, query, body }, ctx) => {
       const { method, segments } = byName.get(read)!;
