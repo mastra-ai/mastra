@@ -138,7 +138,15 @@ export type CreateScoreArgs = z.infer<typeof createScoreArgsSchema>;
 /** Schema for createScore operation body in client/server */
 export const createScoreBodySchema = z
   .object({
+    contextMode: z
+      .enum(['resolve', 'provided'])
+      .optional()
+      .describe('Context handling; defaults to provided on OSS and resolve on Platform'),
     score: createScoreRecordSchema.omit({ timestamp: true }).extend({
+      timestamp: z.iso
+        .datetime({ offset: true })
+        .optional()
+        .describe('Original record timestamp; preserve across retries and replacements'),
       traceId: traceIdField.regex(/\S/, 'traceId must not be empty or whitespace-only'),
     }),
   })
@@ -148,7 +156,19 @@ export const createScoreBodySchema = z
 export type CreateScoreBody = z.infer<typeof createScoreBodySchema>;
 
 /** Schema for createScore operation response */
-export const createScoreResponseSchema = z.object({ success: z.boolean() }).describe('Response from creating a score');
+export const createScoreResponseSchema = z
+  .object({
+    success: z.boolean(),
+    data: z
+      .object({
+        scoreId: z.string(),
+        traceId: z.string(),
+        spanId: z.string().nullable(),
+        timestamp: z.iso.datetime(),
+      })
+      .optional(),
+  })
+  .describe('Response from creating a score');
 
 /** Response from creating a score */
 export type CreateScoreResponse = z.infer<typeof createScoreResponseSchema>;

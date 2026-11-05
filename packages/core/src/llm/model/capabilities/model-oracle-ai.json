@@ -39,13 +39,34 @@
     "o4-mini"
   ],
   "reasoning": {
-    "gpt-5.4": [
+    "gpt-5.4-nano": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-5.4-mini": [
+    "claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "auto": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.4": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
@@ -57,34 +78,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
     "gpt-5.5": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-haiku-4.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "auto": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-opus-4.8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gpt-5": [
@@ -99,25 +96,28 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
+    "gpt-5.4-mini": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "claude-fable-5": [
+    "claude-opus-4.8": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.4-nano": [
+    "glm-5.2": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "high", "xhigh"]
+      }
+    ],
+    "claude-haiku-4.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }
