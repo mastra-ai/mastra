@@ -7,6 +7,7 @@ import { getRunResourceId, getRunTimestamp } from '../utils';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Metadata } from '@/ds/components/Metadata';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
@@ -57,17 +58,15 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
   if (timestamp === undefined && !resourceId) return null;
 
   return (
-    <Txt as="span" variant="meta" tone="muted" className="flex w-full min-w-0 items-center gap-1.5">
-      {timestamp !== undefined && (
-        <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
-          {formatDate(timestamp, 'date-time')}
-        </time>
-      )}
-      {resourceId && (
-        <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
-          {timestamp === undefined ? resourceId : `· ${resourceId}`}
-        </span>
-      )}
+    <Txt as="span" variant="meta" tone="muted" className="block w-full min-w-0">
+      <Metadata singleLine>
+        {timestamp !== undefined && (
+          <Metadata.Item className="shrink-0">
+            <time dateTime={new Date(timestamp).toISOString()}>{formatDate(timestamp, 'date-time')}</time>
+          </Metadata.Item>
+        )}
+        {resourceId && <Metadata.Item title={`Resource ${resourceId}`}>{resourceId}</Metadata.Item>}
+      </Metadata>
     </Txt>
   );
 }

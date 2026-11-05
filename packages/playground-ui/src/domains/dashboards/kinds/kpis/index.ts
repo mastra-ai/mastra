@@ -1,4 +1,5 @@
 import { defineWidgetKind } from '../../widget-kind';
+import { kpisGatedQueries, kpisRequests } from './kpis-plan';
 import { KpisWidget } from './kpis-widget';
 import { kpisIssues, kpisOptionsSchema } from './options';
 
@@ -10,5 +11,7 @@ export const kpisKind = defineWidgetKind({
   kind: 'kpis',
   optionsSchema: kpisOptionsSchema,
   issues: kpisIssues,
+  gatedQueries: kpisGatedQueries,
+  requests: kpisRequests,
   component: KpisWidget,
 });

@@ -20,7 +20,14 @@ import type { Mastra } from '../../mastra';
 import type { RunScope } from '../../mastra/run-scope';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
+import type {
+  AIModelGenerationSpan,
+  Span,
+  SpanTermination,
+  SpanType,
+  TracingContext,
+  TracingOptions,
+} from '../../observability';
 import type {
   InputProcessorOrWorkflow,
   LLMRequestProcessorOrWorkflow,
@@ -431,6 +438,8 @@ export interface DurableLLMStepOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this step's first chunk (kept with that chunk's clock) */
   timeToFirstTokenMs?: number;
+  /** Outcome of a step that ended the run itself (fatal model failure or a tripwire), for the root spans */
+  tracingTermination?: SpanTermination;
 }
 
 /**
@@ -536,6 +545,8 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * the same iteration on every engine (G3).
    */
   delegationBailed?: boolean;
+  /** Why the delegation that bailed failed, carried beside `delegationBailed` for the root spans */
+  tracingDelegationFailure?: SpanTermination;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -597,6 +608,10 @@ export interface DurableAgenticExecutionOutput {
   timeToFirstTokenMs?: number;
   /** Provider id and model of this iteration's response */
   response?: ResponseRecord;
+  /** Outcome of a step that ended the run itself, see DurableLLMStepOutput */
+  tracingTermination?: SpanTermination;
+  /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
+  tracingDelegationFailure?: SpanTermination;
 }
 
 /**
@@ -732,9 +747,9 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
-  /** Transient tracing fact; not part of the iteration state or finish payload. */
-  tracingTermination?: import('../../observability').SpanTermination;
-  tracingDelegationFailure?: import('../../observability').SpanTermination;
+  /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
+  tracingTermination?: SpanTermination;
+  tracingDelegationFailure?: SpanTermination;
   tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
   /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
   agentId?: string;
