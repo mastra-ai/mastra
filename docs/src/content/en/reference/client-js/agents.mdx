@@ -1014,7 +1014,7 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-Only serializable options are accepted. Cache and pubsub are inherited from the server's `Mastra` instance. This field does not enable durable execution or checkpoint recovery, including for existing stored agents with `durable: true`. For durable execution, register a code agent wrapped with `createDurableAgent({ agent })`.
+Only serializable options are accepted, with cache and pubsub inherited from the server's `Mastra` instance. Existing stored agents with `durable: true` also use this field for resumable streams only. To retain durable execution and checkpoint recovery, register a code agent wrapped with `createDurableAgent({ agent })`.
 
 ### `getStoredAgent()`
 
