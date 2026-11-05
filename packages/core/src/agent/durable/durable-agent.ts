@@ -871,7 +871,7 @@ export class DurableAgent<
       model: ({ requestContext }) => agent.getModel({ requestContext }),
       notifications: agent.__getNotificationConfig(),
       // Runs publish through this wrapper's own stream bus.
-      streams: false,
+      durable: false,
     });
 
     this.#wrappedAgent = agent;

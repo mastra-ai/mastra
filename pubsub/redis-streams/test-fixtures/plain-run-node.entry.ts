@@ -93,7 +93,7 @@ async function main() {
       instructions: 'You are a test agent driven by scripted AIMock responses.',
       model: openai('gpt-4o-mini'),
       tools: { wait: waitTool(id), approve: approveTool },
-      streams: STREAMS_CACHE === 'false' ? { cache: false, cleanupTimeoutMs } : { cleanupTimeoutMs },
+      durable: STREAMS_CACHE === 'false' ? { cache: false, cleanupTimeoutMs } : { cleanupTimeoutMs },
     });
 
   const mastra = new Mastra({

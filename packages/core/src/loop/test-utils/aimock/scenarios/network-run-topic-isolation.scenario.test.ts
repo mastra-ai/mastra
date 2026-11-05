@@ -110,7 +110,7 @@ describeForAllEngines(
           description: 'First worker',
           instructions: 'A_INSTRUCTIONS',
           model: scenarioModel(llm),
-          streams: { cleanupTimeoutMs: mode === 'cleanup' ? 1000 : 0 },
+          durable: { cleanupTimeoutMs: mode === 'cleanup' ? 1000 : 0 },
         }),
         engine,
       );
@@ -122,7 +122,7 @@ describeForAllEngines(
           instructions: 'B_INSTRUCTIONS',
           model: scenarioModel(llm),
           tools: { wait },
-          streams: { cleanupTimeoutMs: 0 },
+          durable: { cleanupTimeoutMs: 0 },
         }),
         engine,
       );

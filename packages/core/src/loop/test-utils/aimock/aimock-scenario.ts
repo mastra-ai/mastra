@@ -257,7 +257,7 @@ async function buildScenarioAgent({
       name: 'AIMock Loop Scenario Agent',
       instructions: instructions ?? defaultInstructions,
       model: modelConfig,
-      ...(streams === undefined ? {} : { streams }),
+      ...(streams === undefined ? {} : { durable: streams }),
       ...(tools ? { tools } : {}),
       ...(signals ? { signals } : {}),
       ...(memory ? { memory } : {}),
