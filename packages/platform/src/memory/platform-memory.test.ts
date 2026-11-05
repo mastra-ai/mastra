@@ -469,7 +469,11 @@ describe('PlatformMemory observational-memory inspector', () => {
   it('reports the instance thresholds as thread-scoped OM, and honest display settings', async () => {
     const inspector = inspectorWith({
       '/config': () =>
-        json({ observationTokens: 500, reflectionTokens: 1000, overrides: { observationTokens: null, reflectionTokens: null } }),
+        json({
+          observationTokens: 500,
+          reflectionTokens: 1000,
+          overrides: { observationTokens: null, reflectionTokens: null },
+        }),
     });
     expect(inspector.kind).toBe('platform');
     expect(await inspector.getConfig()).toEqual({ scope: 'thread', messageTokens: 500, observationTokens: 1000 });
@@ -496,7 +500,11 @@ describe('PlatformMemory observational-memory inspector', () => {
         return json({ record: record(1, '- reflected'), history: [record(1, '- reflected'), record(0, '- first')] });
       },
     });
-    const { record: current, history } = await inspector.getRecord({ threadId: 't1', resourceId: 'r1', historyLimit: 5 });
+    const { record: current, history } = await inspector.getRecord({
+      threadId: 't1',
+      resourceId: 'r1',
+      historyLimit: 5,
+    });
     expect(historyLimit).toBe('5');
     expect(current).toMatchObject({
       originType: 'reflection',
