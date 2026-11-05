@@ -12,7 +12,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MCPClient } from './configuration.js';
-import type { LogHandler, SerializableMCPToolCatalog } from './types.js';
+import type { LogHandler, MastraFetchLike, SerializableMCPToolCatalog } from './types.js';
 
 /**
  * Covers https://github.com/mastra-ai/mastra/issues/29531.
@@ -127,18 +127,27 @@ async function startServer(handler: Handler) {
       user: typeof user === 'string' ? user : '(no x-user header)',
       text: echoCallBody.safeParse(body).data?.params.arguments.text,
     });
+    // No keep-alive: while the server is stopped, a new request is refused rather than sent on a
+    // socket the server already closed.
+    res.setHeader('connection', 'close');
     await handler(req, res, body);
   });
   await new Promise<void>(resolve => httpServer.listen(0, '127.0.0.1', resolve));
   const { port } = httpServer.address() as AddressInfo;
+  const close = () =>
+    new Promise<void>(resolve => {
+      httpServer.closeAllConnections();
+      httpServer.close(() => resolve());
+    });
   return {
     url: new URL(`http://127.0.0.1:${port}/mcp`),
     received,
-    close: () =>
-      new Promise<void>(resolve => {
-        httpServer.closeAllConnections();
-        httpServer.close(() => resolve());
-      }),
+    close,
+    /** Takes the server down, so new requests are refused, until `restart()`. */
+    stop: close,
+    restart: () => {
+      if (!httpServer.listening) httpServer.listen(port, '127.0.0.1');
+    },
   };
 }
 
@@ -162,22 +171,19 @@ async function cachedCatalog(url: URL): Promise<SerializableMCPToolCatalog> {
   return catalog;
 }
 
+/** A custom fetch that forwards the user in each request's requestContext. */
+const perUserFetch: MastraFetchLike = (requestUrl, init, requestContext) => {
+  const user = requestContext?.get('user');
+  const headers = new Headers(init?.headers);
+  headers.set('x-user', typeof user === 'string' ? user : NO_REQUEST_CONTEXT);
+  return fetch(requestUrl, { ...init, headers });
+};
+
 /** A client whose custom fetch forwards the user in each request's requestContext. */
 function perUserClient(url: URL, logger?: LogHandler) {
   const client = new MCPClient({
     id: `per-user-client-${++clientId}`,
-    servers: {
-      demo: {
-        url,
-        logger,
-        fetch: (requestUrl, init, requestContext) => {
-          const user = requestContext?.get('user');
-          const headers = new Headers(init?.headers);
-          headers.set('x-user', typeof user === 'string' ? user : NO_REQUEST_CONTEXT);
-          return fetch(requestUrl, { ...init, headers });
-        },
-      },
-    },
+    servers: { demo: { url, logger, fetch: perUserFetch } },
   });
   clients.push(client);
   return client;
@@ -315,12 +321,7 @@ describe('hydrated MCP tool on a 2025-11-25 server event stream (issue #29531)',
         demo: {
           url: server.url,
           inputRequests: async () => ({ action: 'accept', content: { approved: true } }),
-          fetch: (requestUrl, init, requestContext) => {
-            const user = requestContext?.get('user');
-            const headers = new Headers(init?.headers);
-            headers.set('x-user', typeof user === 'string' ? user : NO_REQUEST_CONTEXT);
-            return fetch(requestUrl, { ...init, headers });
-          },
+          fetch: perUserFetch,
         },
       },
     });
@@ -420,6 +421,108 @@ describe('hydrated MCP tool whose 2025-11-25 server logs during the handshake (i
 });
 
 /**
+ * A tool call that the server refuses while it restarts reconnects, and the new connection's handshake and event
+ * stream go out as that call, like a hydrated tool's first connect. The reconnect runs inside the
+ * call, but a server message arriving on the new event stream still belongs to no call: it must not
+ * be labelled with the reconnecting caller's requestContext, nor send its handler's requests as them.
+ */
+describe('MCP tool call that reconnects to a 2025-11-25 server (issue #29531)', () => {
+  let server: Awaited<ReturnType<typeof startServer>> | undefined;
+
+  afterEach(async () => {
+    await server?.close();
+    server = undefined;
+  });
+
+  /**
+   * Opens the connection with no requestContext and takes the server down, so alice's next call is
+   * refused and reconnects. `restartOnReconnect` brings the server back as the client starts to.
+   */
+  async function reconnectAs(client: MCPClient, handler: ReturnType<typeof legacyHandler>) {
+    const tools = await client.listTools();
+    const { received } = server!;
+    await vi.waitFor(() => expect(received.some(request => request.method === EVENT_STREAM)).toBe(true));
+    await server!.stop();
+    const serversBefore = handler.mcpServers.length;
+    received.length = 0;
+
+    const result = await tools.demo_echo!.execute!({ text: 'after restart' }, callAs('alice'));
+
+    expect(result).toMatchObject({ content: [{ type: 'text', text: 'echo: after restart' }] });
+    expect(handler.mcpServers.length).toBeGreaterThan(serversBefore);
+    await vi.waitFor(() => expect(received.some(request => request.method === EVENT_STREAM)).toBe(true));
+    return handler.mcpServers.at(-1)!;
+  }
+
+  /** Restarts the stopped server once the client logs that it is reconnecting. */
+  const restartOnReconnect: LogHandler = entry => {
+    if (entry.message.includes('attempting reconnection')) server?.restart();
+  };
+
+  it('opens the new connection as the reconnecting call but does not label its server logs with it', async () => {
+    const handler = legacyHandler({ logOnEventStream: true });
+    server = await startServer(handler);
+    const serverLogs = recordServerLogs();
+    let startedFromLog: Promise<unknown> | undefined;
+    const logger: LogHandler = entry => {
+      restartOnReconnect(entry);
+      serverLogs.logger(entry);
+      if (!startedFromLog && serverLogs.find('after reconnect')) startedFromLog = client.listTools();
+    };
+    const client = perUserClient(server.url, logger);
+
+    const reconnected = await reconnectAs(client, handler);
+    const { received } = server;
+    const reconnectRequests = [...received];
+    // No related request: the server sends it on the event stream the reconnect opened.
+    await reconnected.sendLoggingMessage({ level: 'info', data: 'after reconnect' });
+    await vi.waitFor(() => expect(startedFromLog).toBeDefined());
+    await startedFromLog;
+
+    // Refused requests never reach the server, so these are the reconnect and the retried call.
+    expect(reconnectRequests.map(request => request.method)).toEqual(
+      expect.arrayContaining(['initialize', 'notifications/initialized', EVENT_STREAM, 'tools/call']),
+    );
+    expect(reconnectRequests.filter(request => request.user !== 'alice')).toEqual([]);
+    expect(serverLogs.find('after reconnect')!.user).toBeNull();
+    expect(received.filter(request => request.method === 'tools/list').map(request => request.user)).toEqual([
+      NO_REQUEST_CONTEXT,
+    ]);
+  });
+
+  it('sends the reply to a server request on the new event stream as the reconnecting call', async () => {
+    const handler = legacyHandler();
+    server = await startServer(handler);
+    const client = new MCPClient({
+      id: `per-user-elicitation-client-${++clientId}`,
+      servers: {
+        demo: {
+          url: server.url,
+          logger: restartOnReconnect,
+          inputRequests: async () => ({ action: 'accept', content: { approved: true } }),
+          fetch: perUserFetch,
+        },
+      },
+    });
+    clients.push(client);
+
+    const reconnected = await reconnectAs(client, handler);
+    const { received } = server;
+    received.length = 0;
+    const result = await reconnected.server.elicitInput({
+      mode: 'form',
+      message: 'Approve?',
+      requestedSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+    });
+
+    expect(result).toMatchObject({ action: 'accept', content: { approved: true } });
+    expect(received.map(({ method, user }) => ({ method, user }))).toEqual([
+      { method: 'POST (no JSON-RPC method)', user: 'alice' },
+    ]);
+  });
+});
+
+/**
  * A stdio server has no `fetch` to authenticate, and its child process delivers all its output in
  * the async context it was spawned in. Spawned inside the first call's context, every later server
  * log would reach `logger` labelled as the first caller.
@@ -453,5 +556,31 @@ describe('hydrated MCP tool against a stdio server (issue #29531)', () => {
     expect(second).toMatchObject({ content: [{ type: 'text', text: 'echo: second' }] });
     expect(serverLogs.find('echo first')).toBeDefined();
     expect(serverLogs.find('echo second')?.user).toBeNull();
+  }, 30_000);
+
+  it('does not label later server logs with the requestContext of a call that respawned the server', async () => {
+    const serverLogs = recordServerLogs();
+    let closed = false;
+    const logger: LogHandler = entry => {
+      serverLogs.logger(entry);
+      if (entry.message.includes('connection closed')) closed = true;
+    };
+    const client = new MCPClient({
+      id: `stdio-respawn-${++clientId}`,
+      servers: { logging: { command: process.execPath, args: [tsxCli, fixturePath], logger } },
+    });
+    clients.push(client);
+    // Tools from listTools() run on the connection it opened; a call that finds it gone reconnects.
+    const tools = await client.listTools();
+
+    await tools.logging_echo!.execute!({ text: 'exit' }, {});
+    await vi.waitFor(() => expect(closed).toBe(true), { timeout: 10_000 });
+    // The server is gone, so bob's call spawns a new one before it runs.
+    const respawned = await tools.logging_echo!.execute!({ text: 'respawned' }, callAs('bob'));
+    const later = await tools.logging_echo!.execute!({ text: 'later' }, callAs('carol'));
+
+    expect(respawned).toMatchObject({ content: [{ type: 'text', text: 'echo: respawned' }] });
+    expect(later).toMatchObject({ content: [{ type: 'text', text: 'echo: later' }] });
+    expect(serverLogs.find('echo later')?.user).toBeNull();
   }, 30_000);
 });

@@ -1290,7 +1290,15 @@ export class InternalMastraMCPClient extends MastraBase {
       }
 
       this.assertSameLifecycle(generation);
-      await this.connect(generation);
+      // A reconnect inside a tool call opens the connection as that call, like a hydrated tool's
+      // first connect: only the transport's fetch sees its requestContext. Run in the operation
+      // scope, the new streams and stdio child would deliver every later server message in it.
+      const callContext = this.operationContextStore.getStore();
+      await (callContext === undefined
+        ? this.connect(generation)
+        : this.operationContextStore.exit(() =>
+            this.connectionContextStore.run(callContext, () => this.connect(generation)),
+          ));
       this.log('debug', 'Successfully reconnected to MCP server');
     })();
     this.reconnectPromise = reconnectPromise;
