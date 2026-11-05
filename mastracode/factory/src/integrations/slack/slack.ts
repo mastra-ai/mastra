@@ -28,7 +28,7 @@ import {
   resolvePrimaryEnvironmentRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
-import { isRunBound, memoryResourceOf, sessionStampCounts } from '../../session/session-threads.js';
+import { isRunBound, memoryResourceOf, sessionStampCounts, threadRunBinding } from '../../session/session-threads.js';
 import type { SessionRunBindings } from '../../session/session-threads.js';
 import type {
   ChannelAccountLink,
@@ -43,7 +43,6 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, Card as FactoryCard, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
-import type { VoiceFactory } from '../../voice/transcription.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
 import { markNewChannelSession } from './channel-session-link-processor.js';
@@ -51,8 +50,8 @@ import { markNewChannelSession } from './channel-session-link-processor.js';
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
 import { slackRunErrorCard } from './run-error-card.js';
-import { transcribeVoiceClips } from './voice-clips.js';
-import type { VoiceClipDeps } from './voice-clips.js';
+import { transcribeVoiceClips, voiceClipFailureCard } from './voice-clips.js';
+import type { VoiceClipDeps, VoiceClipFactories } from './voice-clips.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -532,24 +531,6 @@ async function slackThreadSessionId(
   return thread.id;
 }
 
-/** The Factory a session's thread runs under: its card's run binding, else the session's own Factory. */
-async function sessionRunFactory(
-  workItems: WorkItemsStorage | undefined,
-  session: { orgId: string; factoryProjectId: string; resourceId: string; sessionId: string; threadId: string | null },
-): Promise<{ factoryProjectId: string; bound: boolean }> {
-  const binding =
-    session.threadId && workItems
-      ? await workItems.findRunBindingByThread({
-          orgId: session.orgId,
-          resourceId: session.resourceId,
-          sessionId: session.sessionId,
-          threadId: session.threadId,
-          rejectAmbiguous: true,
-        })
-      : null;
-  return { factoryProjectId: binding?.factoryProjectId ?? session.factoryProjectId, bound: binding !== null };
-}
-
 /** Create channel sessions with their Factory ownership present in initial controller state. */
 export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSessionResolve {
   const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
@@ -635,14 +616,17 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!sourceControl) return;
     const sourceSession = await sourceControl.sessions.getBySessionId(sessionId);
     if (!sourceSession?.factoryProjectId) return;
-    const { factoryProjectId, bound } = await sessionRunFactory(deps.workItems, {
+    const binding = await threadRunBinding(deps.workItems, {
       orgId: sourceSession.orgId,
-      factoryProjectId: sourceSession.factoryProjectId,
       resourceId: session.identity.getResourceId(),
       sessionId,
       threadId: session.thread.getId(),
     });
-    const owner = { factoryProjectId, orgId: sourceSession.orgId, userId: sourceSession.userId };
+    const owner = {
+      factoryProjectId: binding?.factoryProjectId ?? sourceSession.factoryProjectId,
+      orgId: sourceSession.orgId,
+      userId: sourceSession.userId,
+    };
 
     const sessionModel = await resolveFactorySessionModel({
       projects,
@@ -650,7 +634,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       factoryProjectId: owner.factoryProjectId,
       orgId: owner.orgId,
       ownerUserId: owner.userId,
-      context: bound ? 'run' : 'session',
+      context: binding ? 'run' : 'session',
     });
 
     // Repo-backed Slack sessions use the source-control row's durable owner,
@@ -844,16 +828,20 @@ async function prepareExistingSessionOwnerContext(
   if (!sessionFactoryId) return { status: 'ready', runFactory: { kind: 'none' } };
   const expectedOrgId = options.expectedOrgId;
   const resolve = async () => {
-    const { factoryProjectId } = await sessionRunFactory(deps.workItems, {
+    const binding = await threadRunBinding(deps.workItems, {
       orgId: expectedOrgId,
-      factoryProjectId: sessionFactoryId,
       resourceId: internalThread.resourceId,
       sessionId,
       threadId: internalThread.id,
     });
-    return factoryProjectId;
+    return binding?.factoryProjectId ?? sessionFactoryId;
   };
   return { status: 'ready', runFactory: { kind: 'session', resolve } };
+}
+
+interface DispatchGate {
+  link?: ChannelAccountLink;
+  voiceFactories?: VoiceClipFactories;
 }
 
 /**
@@ -873,7 +861,7 @@ async function gateDispatch(
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
   options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
-): Promise<{ link?: ChannelAccountLink; voiceFactory?: () => Promise<VoiceFactory | undefined> } | null> {
+): Promise<DispatchGate | null> {
   const { accountLinks, projects } = deps;
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
@@ -922,11 +910,15 @@ async function gateDispatch(
           ? async () => route.factoryProjectId
           : undefined;
     const orgId = sender.link.orgId ?? '';
-    const voiceFactory =
-      factoryId && projects
-        ? async () => (await projects.get({ orgId, id: await factoryId() })) ?? undefined
-        : undefined;
-    return { link: sender.link, voiceFactory };
+    const loadFactory = (id: () => Promise<string>) =>
+      projects ? async () => (await projects.get({ orgId, id: await id() })) ?? undefined : undefined;
+    return {
+      link: sender.link,
+      voiceFactories: {
+        run: factoryId && loadFactory(factoryId),
+        home: route.status === 'resolved' ? loadFactory(async () => route.factoryProjectId) : undefined,
+      },
+    };
   }
   return {};
 }
@@ -1026,6 +1018,30 @@ function acknowledgeReceipt(thread: HandlerThread, deps: SlackChannelDeps): void
   });
 }
 
+async function transcribeBatch(
+  thread: HandlerThread,
+  message: HandlerMessage,
+  deps: SlackChannelDeps,
+  ctx: ChannelHandlerContext,
+  gate: DispatchGate,
+): Promise<boolean> {
+  const batch = [...ctx.skipped, message];
+  const report = await transcribeVoiceClips(batch, gate.link, deps, gate.voiceFactories);
+  if (report.failures.length === 0) return true;
+  await thread
+    .postEphemeral(message.author, voiceClipFailureCard(report, retryHint(thread)), { fallbackToDM: true })
+    .catch((error: unknown) => {
+      console.warn('[slack] voice clip failure card failed', { thread: thread.id, messageId: message.id, error });
+    });
+  if (report.transcribed > 0 || batch.some(m => m.attachments.length > 0 || typedText(m) !== '')) return true;
+  if (deps.adapterOptions?.typingStatus !== false) {
+    void thread.startTyping('').catch(error => {
+      console.warn('[slack] typing status clear failed', { thread: thread.id, error });
+    });
+  }
+  return false;
+}
+
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   return async (thread, message, defaultHandler, ctx) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
@@ -1043,7 +1059,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       // after the agent's first reply.
       if (!(await thread.isSubscribed())) markNewChannelSession(ctx.requestContext);
       acknowledgeReceipt(thread, deps);
-      await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.voiceFactory);
+      if (!(await transcribeBatch(thread, message, deps, ctx, gate))) return;
     } catch (error) {
       await reportPreDispatchError(thread, message, ctx, error);
       return;
@@ -1136,7 +1152,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
       acknowledgeReceipt(thread, deps);
       try {
-        await transcribeVoiceClips([...ctx.skipped, message], gate.link, deps, gate.voiceFactory);
+        if (!(await transcribeBatch(thread, message, deps, ctx, gate))) return;
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);
         return;
@@ -1157,20 +1173,23 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
 const MUTED_KEY = 'factory_muted';
 
 /**
- * `mute` or `unmute` when that word, with the mentions taken out, is the whole
- * message. Reads Slack's raw text, where a mention is still `<@U…>`: the
- * normalized `message.text` spells it as the bot's display name, which can
- * hold spaces and punctuation (`@Mastra Factory(Caleb)`).
+ * What the sender typed, with the mentions taken out. Reads Slack's raw text,
+ * where a mention is still `<@U…>`: the normalized `message.text` spells it as
+ * the bot's display name, which can hold spaces and punctuation
+ * (`@Mastra Factory(Caleb)`), and carries any clip transcript.
  */
-function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
+function typedText(message: HandlerMessage): string {
   const raw = message.raw as { text?: unknown } | undefined;
   const text = typeof raw?.text === 'string' ? raw.text : message.text;
-  const rest = text
-    .replace(/<@[^>]+>/g, ' ')
+  return text
+    .replace(/<@[^>]+>|<!(?:here|channel|everyone|subteam\^)[^>]*>/g, ' ')
     .replace(/(?<!\w)@[\w.-]+/g, ' ')
-    .trim()
-    .replace(/[.!]+$/, '')
-    .toLowerCase();
+    .trim();
+}
+
+/** `mute` or `unmute` when that word is all the sender typed. */
+function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
+  const rest = typedText(message).replace(/[.!]+$/, '').toLowerCase();
   return rest === 'mute' || rest === 'unmute' ? rest : undefined;
 }
 

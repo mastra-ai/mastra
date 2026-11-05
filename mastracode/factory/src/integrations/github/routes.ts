@@ -20,6 +20,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import { canReadSessionResource, canViewSourceControlSession } from '../../routes/session-access.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
@@ -93,11 +94,6 @@ import type { ParsedGithubWebhook } from './webhook.js';
  * we erase the path to a plain `Context` at the call boundary via `loose()`.
  */
 type RouteContext = Context;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 export interface MountGithubRoutesOptions {
   /** Host auth seam — resolves the signed-in user/tenant for each request. */
