@@ -3,6 +3,8 @@
         - listitem:
             - link "Workflows":
                 - /url: /workflows
+                - img
+                - text: Workflows
         - separator:
             - img
         - listitem:
