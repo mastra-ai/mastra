@@ -3051,11 +3051,24 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
         if (typeof durableAgent?.__subscribeToRunStream === 'function') {
           return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
-        const subscribed =
-          offset !== undefined
-            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
-            : pubsub.subscribeWithReplay(topic, onEvent);
-        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+        if (offset === undefined) {
+          return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));
+        }
+        return pubsub.subscribeFromOffset(topic, offset, onEvent).then(async () => {
+          // Resuming past the run's last entry replays nothing; if that entry ended the
+          // run, nothing more will arrive, so close instead of waiting for the idle timeout.
+          // Read only after subscribing so a terminal entry racing attachment is not lost.
+          const last = (await pubsub.getHistory(topic, 0)).at(-1);
+          const type = last?.type === 'chunk' ? last.data?.type : last?.type;
+          if (
+            typeof last?.index === 'number' &&
+            last.index < offset &&
+            (type === 'finish' || type === 'error' || type === 'abort')
+          ) {
+            onComplete();
+          }
+          return () => pubsub.unsubscribe(topic, onEvent);
+        });
       };
 
       let closed = false;

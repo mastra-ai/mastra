@@ -632,6 +632,89 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       });
     }
 
+    if (kind === 'plain') {
+      // Plain-agent /stream doesn't carry `index` yet (COR-1510): the caller gets each chunk
+      // before the cache numbers it. /observe reads the numbered log, so its frames do.
+      it('numbers every /observe frame with the index its log entry holds (COR-1506)', async () => {
+        fixture = await config.setupModel();
+        const tool = createTool({
+          id: 'lookup',
+          description: 'Look up a value',
+          inputSchema: z.object({ n: z.number() }),
+          execute: async ({ n }) => ({ value: n * 10 }),
+        });
+        const agent = new Agent({
+          id: 'plain-resume-agent',
+          name: 'Plain resume agent',
+          instructions: 'Look up values.',
+          model: fixture.model,
+          tools: { lookup: tool },
+        });
+        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        server = await config.startServer(mastra, () => {});
+        fixture.addResponse(0, {
+          content: 'First',
+          toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { n: 1 } }],
+        });
+        fixture.addResponse(1, {
+          content: 'Second',
+          toolCalls: [{ id: 'call-2', name: 'lookup', arguments: { n: 2 } }],
+        });
+        fixture.addResponse(2, { content: 'Done: 10 and 20.' });
+        const runId = 'observe-resume-plain';
+        const post = async (route: string, body: object) => {
+          const response = await fetch(`${server!.baseUrl}/api/agents/agent/${route}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          return response;
+        };
+        const streamed = await collectPublicFrames(
+          await post('stream', { messages: 'Look up 1 then 2', runId, maxSteps: 5 }),
+        );
+        expect(streamed.filter(frame => frame.type === 'step-start')).toHaveLength(3);
+
+        const pubsub = agent.__getStreamBus()!.pubsub;
+        const topic = AGENT_STREAM_TOPIC(runId);
+        await expect
+          .poll(async () => (await pubsub.getHistory(topic)).some(event => event.type === 'finish'), { timeout: 5000 })
+          .toBe(true);
+        const history = await pubsub.getHistory(topic);
+        const frames = await collectPublicFrames(await post('observe', { runId }));
+        // Same sequence of chunks as /stream, now numbered. Plain agents' replayed step-finish and
+        // finish payloads already differ from the live ones (separate from numbering, see COR-1510),
+        // so only frame types are compared against /stream.
+        expect(frames.map(frame => frame.type)).toEqual(streamed.map(frame => frame.type));
+        expect(frames.every(frame => typeof frame.index === 'number')).toBe(true);
+        for (const frame of frames) {
+          const entry = history.find(event => event.index === frame.index);
+          expect(entry, `log entry ${frame.index}`).toBeDefined();
+          if (entry!.type === 'chunk') expect(entry!.data.type).toBe(frame.type);
+          else expect(entry!.type).toBe(frame.type);
+        }
+        expect(frames.every((frame, i) => i === 0 || frame.index! > frames[i - 1]!.index!)).toBe(true);
+
+        const resumeAt = (cut: number) => (cut === 0 ? 0 : frames[cut - 1]!.index! + 1);
+        const mismatches: string[] = [];
+        for (let cut = 0; cut <= frames.length; cut++) {
+          const resumed = await collectPublicFrames(await post('observe', { runId, offset: resumeAt(cut) }));
+          if (JSON.stringify([...frames.slice(0, cut), ...resumed]) !== JSON.stringify(frames)) {
+            mismatches.push(`cut ${cut}/${frames.length}`);
+          }
+        }
+        expect(mismatches).toEqual([]);
+        if (config.observeWithClient) {
+          const mid = Math.floor(frames.length / 2);
+          expect([
+            ...frames.slice(0, mid),
+            ...(await config.observeWithClient(server.baseUrl, runId, resumeAt(mid))),
+          ]).toEqual(frames);
+        }
+      }, 30_000);
+    }
+
     for (const route of [
       'stream',
       'stream-alias',
