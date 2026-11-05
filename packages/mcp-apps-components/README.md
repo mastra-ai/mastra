@@ -53,6 +53,59 @@ export const greetingServer = new MCPServer({
 });
 ```
 
+### Observability widget
+
+`observabilityWidgetApp` draws one Studio dashboard widget (KPIs, time series, table or scores) with the same components Studio uses.
+
+1. The model calls the tool that opens the app. That tool must declare an `outputSchema` so its result reaches the app as structured content: `{ widget, datePreset? }`, where `widget` is a stored dashboard widget and `datePreset` is one of `24h` (default), `3d`, `7d`, `14d` or `30d`. The window ends when the app opens.
+2. The app reads its data through the app-only `queryObservability` tool (exported as `QUERY_OBSERVABILITY_TOOL`). It calls it once per read with `{ action, args }`, where `action` is a `MastraClient` observability method (`getMetricAggregate`, `getMetricTimeSeries`, `listScores`, `aggregateTraces`, …) and `args` are that method's arguments, with dates as ISO strings. The tool returns `{ data }`, the method's result; if it throws, the widget shows as failed.
+
+The tool runs on your server, so you decide which Mastra server the widget reads from and how it authenticates. Only allow read actions:
+
+```typescript
+import { MastraClient } from '@mastra/client-js';
+import { createTool } from '@mastra/core/tools';
+import { MCPServer } from '@mastra/mcp';
+import { QUERY_OBSERVABILITY_TOOL, observabilityWidgetApp } from '@mastra/mcp-apps-components';
+import { z } from 'zod';
+
+const uri = 'ui://mastra/observability-widget';
+const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! });
+const ACTIONS = ['getMetricAggregate', 'getMetricTimeSeries'] as const;
+
+export const observabilityServer = new MCPServer({
+  id: 'observability',
+  name: 'Observability',
+  version: '1.0.0',
+  appResources: { [uri]: observabilityWidgetApp },
+  tools: {
+    // Visible to the model: opens the app with a widget.
+    showObservabilityWidget: createTool({
+      id: 'showObservabilityWidget',
+      description: 'Shows agent runs over time',
+      inputSchema: z.object({ datePreset: z.enum(['24h', '3d', '7d', '14d', '30d']).default('24h') }),
+      outputSchema: z.object({ widget: z.unknown(), datePreset: z.string() }),
+      mcp: { _meta: { ui: { resourceUri: uri } } },
+      execute: async ({ datePreset }) => ({ widget: agentRunsWidget, datePreset }),
+    }),
+    // Visible to the app only: runs one read on the server's client.
+    [QUERY_OBSERVABILITY_TOOL]: createTool({
+      id: QUERY_OBSERVABILITY_TOOL,
+      description: 'Runs one observability read',
+      inputSchema: z.object({ action: z.enum(ACTIONS), args: z.record(z.string(), z.unknown()) }),
+      outputSchema: z.object({ data: z.unknown() }),
+      mcp: { _meta: { ui: { resourceUri: uri, visibility: ['app'] } } },
+      execute: async ({ action, args }) => {
+        const read = client[action].bind(client) as (args: unknown) => Promise<unknown>;
+        return { data: await read(args) };
+      },
+    }),
+  },
+});
+```
+
+`examples/agent` has a complete version with every read action, a set of preset widgets and an agent that opens them.
+
 ## Documentation
 
 - [MCP Apps in Mastra](https://mastra.ai/docs/connections/mcp)
