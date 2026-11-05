@@ -21,6 +21,13 @@ import { Agent } from '@mastra/core/agent';
 import { createDurableAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 
+const agentConfig = {
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help users with support questions.',
+  model: 'openai/gpt-4o',
+};
+
 const agent = createDurableAgent({ agent: new Agent(agentConfig) });
 const mastra = new Mastra({ agents: { agent } });
 ```
