@@ -425,9 +425,9 @@ The `@mastra/mcp-apps-components` package includes prebuilt MCP Apps that render
 npm install @mastra/mcp-apps-components @mastra/server
 ```
 
-The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to `dashboardDataTool` over the host's MCP connection. The tool runs the observability route behind that read in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks, so the app sees the same data the user can.
+The app never reaches the network from its iframe. Each read its dashboard makes, such as `getMetricAggregate`, travels as a call to `dashboardDataTool` over the host's MCP connection. The tool runs the observability route behind that read in-process as the signed-in caller through [`invokeRoute()`](/reference/server/invoke-route), with the route's own validation, permission, and authorization checks. The app sees the same data the user can.
 
-`dashboardDataTool` is app-only, so `MCPClient.listTools()` hides it from agents. App-only visibility doesn't stop a direct call, so the tool only answers the reads in `DASHBOARD_DATA_OPERATIONS` and rejects any other operation.
+`dashboardDataTool` is app-only, so `MCPClient.listTools()` hides it from agents. App-only visibility doesn't stop a direct call. The tool only answers the reads in `DASHBOARD_DATA_OPERATIONS` and rejects any other operation.
 
 Register the app and `dashboardDataTool` on the same `MCPServer`, then return a dashboard definition from a tool linked to the app's `ui://` URI. Register the data tool under the key `dashboardDataTool`, since the app calls it by that name:
 
