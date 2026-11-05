@@ -112,6 +112,7 @@ describe('StaticRBACProvider', () => {
       });
 
       const first = await provider.getPermissions({});
+      expect(first).toEqual(['*', '*:read']);
       roles = ['admin', 'viewer'];
       const second = await provider.getPermissions({});
 

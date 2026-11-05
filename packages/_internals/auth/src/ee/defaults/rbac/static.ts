@@ -101,10 +101,10 @@ export class StaticRBACProvider<TUser = unknown> implements IRBACProvider<TUser>
   }
 
   async getPermissions(user: TUser): Promise<string[]> {
-    const roleIds = await this.getRoles(user);
+    const roleIds = [...(await this.getRoles(user))].sort();
 
     // Check cache
-    const cacheKey = [...roleIds].sort().join(',');
+    const cacheKey = roleIds.join(',');
     const cached = this.permissionCache.get(cacheKey);
     if (cached) return cached;
 
