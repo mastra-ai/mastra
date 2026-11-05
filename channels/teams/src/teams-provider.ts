@@ -176,6 +176,9 @@ export class TeamsProvider implements ChannelProvider {
     const active = (await store.list()).filter(i => i.status === 'active');
     this.#configured = active.length > 0;
     for (const installation of active) {
+      // The store already logged the actionable error; the adapter can't
+      // authenticate without the secret.
+      if (installation.secretUnreadable) continue;
       try {
         await this.#activateInstallation(installation);
       } catch (err) {
@@ -535,7 +538,7 @@ export class TeamsProvider implements ChannelProvider {
 
     const store = await this.#getStore();
     const installation = await store.getByWebhookId(webhookId);
-    if (!installation || installation.status !== 'active') {
+    if (!installation || installation.status !== 'active' || installation.secretUnreadable) {
       return c.json({ ok: false, error: 'Unknown webhook' }, 404);
     }
 
