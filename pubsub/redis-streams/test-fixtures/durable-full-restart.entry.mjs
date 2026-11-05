@@ -76,7 +76,6 @@ const model = {
       : [
           {
             type: 'tool-call',
-            toolCallType: 'function',
             toolCallId: `sleep-${done}`,
             toolName: 'sleepTool',
             input: JSON.stringify({ index: done }),
@@ -144,7 +143,8 @@ if (role === 'api') {
     const { output } = await agent.stream('Diagnose again.', { runId: process.env.RESTART_FOLLOWUP_RUN_ID, memory });
     console.info(`followup-completed:${await output.text}`);
   } catch (error) {
-    console.info(`followup-rejected:${error?.name}:${error?.message}`);
+    const reason = error instanceof Error ? `${error.name}:${error.message}` : String(error);
+    console.info(`followup-rejected:${reason}`);
   }
 }
 setInterval(() => {}, 1000);
