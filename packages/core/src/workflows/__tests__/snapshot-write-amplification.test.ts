@@ -31,7 +31,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent/agent';
 import { createDurableAgent } from '../../agent/durable/create-durable-agent';
-import { DurableAgent } from '../../agent/durable/durable-agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import type * as StatePatchModule from '../../storage/domains/workflows/state-patch';
@@ -206,140 +205,132 @@ async function measureRun(
     tools: { echoTool },
   });
 
-  // The agent picks the storage version for its new runs.
-  const journal = vi
-    .spyOn(DurableAgent.prototype as any, 'storesRunsInJournal', 'get')
-    .mockReturnValue(storageVersion === 2);
-  try {
-    const durableAgent = createDurableAgent({ agent: baseAgent });
-    const store = new InMemoryStore();
-    const mastra = new Mastra({
-      agents: { 'amplification-agent': durableAgent as any },
-      logger: false,
-      storage: store,
-      // `running` checkpoints are only persisted when crash recovery is enabled
-      // (issue #23915).
-      ...(recovery === 'auto' ? { recovery: { durableAgents: 'auto' as const } } : {}),
-    });
+  const durableAgent = createDurableAgent({ agent: baseAgent, storageVersion });
+  const store = new InMemoryStore();
+  const mastra = new Mastra({
+    agents: { 'amplification-agent': durableAgent as any },
+    logger: false,
+    storage: store,
+    // `running` checkpoints are only persisted when crash recovery is enabled
+    // (issue #23915).
+    ...(recovery === 'auto' ? { recovery: { durableAgents: 'auto' as const } } : {}),
+  });
 
-    const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))! as any;
-    const stats: WriteStats = {
-      writes: 0,
-      v2Writes: 0,
-      totalBytes: 0,
-      peakBytes: 0,
-      runningWrites: 0,
-      runningPeakBytes: 0,
-      maxDuplicatesPerWrite: 0,
-      maxStepRecordsPerWrite: 0,
-      diffCalls: 0,
-      diffMs: 0,
-      maxDiffMs: 0,
-      wallMs: 0,
-    };
-    // A marker unique to the first tool result, so it exists for every run length
-    // and its copy count is directly comparable across them.
-    const marker = `result 1: ${filler}`;
-    const record = (write: { serialized: string; status?: string; stepRecords: number; v2: boolean }) => {
-      const bytes = write.serialized.length;
-      stats.writes += 1;
-      if (write.v2) stats.v2Writes += 1;
-      stats.totalBytes += bytes;
-      stats.peakBytes = Math.max(stats.peakBytes, bytes);
-      stats.maxDuplicatesPerWrite = Math.max(stats.maxDuplicatesPerWrite, write.serialized.split(marker).length - 1);
-      stats.maxStepRecordsPerWrite = Math.max(stats.maxStepRecordsPerWrite, write.stepRecords);
-      if (write.status === 'running') {
-        stats.runningWrites += 1;
-        stats.runningPeakBytes = Math.max(stats.runningPeakBytes, bytes);
-      }
-    };
-    const wrap = (method: string, describeWrite: (args: any) => Parameters<typeof record>[0]) => {
-      const original = workflowsStore[method].bind(workflowsStore);
-      workflowsStore[method] = async (args: any) => {
-        record(describeWrite(args));
-        return original(args);
-      };
-    };
-    wrap('persistWorkflowSnapshot', args => ({
-      serialized: JSON.stringify(args.snapshot ?? {}),
-      status: args.snapshot?.status,
-      stepRecords: countStepRecords(args.snapshot),
-      v2: false,
-    }));
-    wrap('updateWorkflowState', args => ({
-      serialized: JSON.stringify(args.opts ?? {}),
-      status: args.opts?.status,
-      stepRecords: 0,
-      v2: false,
-    }));
-    for (const method of ['appendWorkflowRunEntries', 'writeWorkflowRunCheckpoint']) {
-      wrap(method, args => ({
-        serialized: JSON.stringify({
-          header: args.header,
-          steps: args.steps,
-          state: args.state,
-          patch: args.statePatch,
-        }),
-        status: args.header?.status,
-        stepRecords:
-          countStepRecords({ steps: args.steps, state: args.state }) + countPatchedStepRecords(args.statePatch),
-        v2: true,
-      }));
+  const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))! as any;
+  const stats: WriteStats = {
+    writes: 0,
+    v2Writes: 0,
+    totalBytes: 0,
+    peakBytes: 0,
+    runningWrites: 0,
+    runningPeakBytes: 0,
+    maxDuplicatesPerWrite: 0,
+    maxStepRecordsPerWrite: 0,
+    diffCalls: 0,
+    diffMs: 0,
+    maxDiffMs: 0,
+    wallMs: 0,
+  };
+  // A marker unique to the first tool result, so it exists for every run length
+  // and its copy count is directly comparable across them.
+  const marker = `result 1: ${filler}`;
+  const record = (write: { serialized: string; status?: string; stepRecords: number; v2: boolean }) => {
+    const bytes = write.serialized.length;
+    stats.writes += 1;
+    if (write.v2) stats.v2Writes += 1;
+    stats.totalBytes += bytes;
+    stats.peakBytes = Math.max(stats.peakBytes, bytes);
+    stats.maxDuplicatesPerWrite = Math.max(stats.maxDuplicatesPerWrite, write.serialized.split(marker).length - 1);
+    stats.maxStepRecordsPerWrite = Math.max(stats.maxStepRecordsPerWrite, write.stepRecords);
+    if (write.status === 'running') {
+      stats.runningWrites += 1;
+      stats.runningPeakBytes = Math.max(stats.runningPeakBytes, bytes);
     }
-    wrap('updateWorkflowRunHeader', args => ({
-      serialized: JSON.stringify(args.opts ?? {}),
-      status: args.opts?.status,
-      stepRecords: 0,
+  };
+  const wrap = (method: string, describeWrite: (args: any) => Parameters<typeof record>[0]) => {
+    const original = workflowsStore[method].bind(workflowsStore);
+    workflowsStore[method] = async (args: any) => {
+      record(describeWrite(args));
+      return original(args);
+    };
+  };
+  wrap('persistWorkflowSnapshot', args => ({
+    serialized: JSON.stringify(args.snapshot ?? {}),
+    status: args.snapshot?.status,
+    stepRecords: countStepRecords(args.snapshot),
+    v2: false,
+  }));
+  wrap('updateWorkflowState', args => ({
+    serialized: JSON.stringify(args.opts ?? {}),
+    status: args.opts?.status,
+    stepRecords: 0,
+    v2: false,
+  }));
+  for (const method of ['appendWorkflowRunEntries', 'writeWorkflowRunCheckpoint']) {
+    wrap(method, args => ({
+      serialized: JSON.stringify({
+        header: args.header,
+        steps: args.steps,
+        state: args.state,
+        patch: args.statePatch,
+      }),
+      status: args.header?.status,
+      stepRecords:
+        countStepRecords({ steps: args.steps, state: args.state }) + countPatchedStepRecords(args.statePatch),
       v2: true,
     }));
+  }
+  wrap('updateWorkflowRunHeader', args => ({
+    serialized: JSON.stringify(args.opts ?? {}),
+    status: args.opts?.status,
+    stepRecords: 0,
+    v2: true,
+  }));
 
-    Object.assign(diffTiming, { calls: 0, totalMs: 0, maxMs: 0 });
-    const started = performance.now();
-    const prompt = `Call the echo tool ${toolIterations} times`;
-    const maxSteps = toolIterations + 2;
-    if (recovery === 'auto') {
-      const result: any = await durableAgent.stream(prompt, { maxSteps });
-      // Drive the stream to completion so every step persists.
-      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+  Object.assign(diffTiming, { calls: 0, totalMs: 0, maxMs: 0 });
+  const started = performance.now();
+  const prompt = `Call the echo tool ${toolIterations} times`;
+  const maxSteps = toolIterations + 2;
+  if (recovery === 'auto') {
+    const result: any = await durableAgent.stream(prompt, { maxSteps });
+    // Drive the stream to completion so every step persists.
+    for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      // drain
+    }
+  } else {
+    // Each stream closes when the run suspends; resuming it runs the next step.
+    const drain = async (result: { fullStream: AsyncIterable<unknown> }) => {
+      for await (const _chunk of result.fullStream) {
         // drain
       }
-    } else {
-      // Each stream closes when the run suspends; resuming it runs the next step.
-      const drain = async (result: { fullStream: AsyncIterable<unknown> }) => {
-        for await (const _chunk of result.fullStream) {
-          // drain
-        }
-      };
-      const streams = [await durableAgent.stream(prompt, { maxSteps, closeOnSuspend: true })];
-      await drain(streams[0]!);
-      for (let call = 1; call <= toolIterations; call++) {
-        const resumed = await durableAgent.resume(
-          streams[0]!.runId,
-          { approved: true },
-          { toolCallId: `call-${call}`, closeOnSuspend: true },
-        );
-        streams.push(resumed);
-        await drain(resumed);
-      }
-      expect(await streams.at(-1)!.output.text).toBe('done');
-      for (const stream of streams.reverse()) stream.cleanup();
+    };
+    const streams = [await durableAgent.stream(prompt, { maxSteps, closeOnSuspend: true })];
+    await drain(streams[0]!);
+    for (let call = 1; call <= toolIterations; call++) {
+      const resumed = await durableAgent.resume(
+        streams[0]!.runId,
+        { approved: true },
+        { toolCallId: `call-${call}`, closeOnSuspend: true },
+      );
+      streams.push(resumed);
+      await drain(resumed);
     }
-
-    // The durable engine keeps persisting after the stream closes (the loop and
-    // execution workflows each finish their own bookkeeping writes), so measuring
-    // at stream end undercounts. Wait for writes to quiesce.
-    let seen = -1;
-    while (seen !== stats.writes) {
-      seen = stats.writes;
-      await new Promise(resolve => setTimeout(resolve, 250));
-    }
-    stats.wallMs = performance.now() - started - 250;
-    Object.assign(stats, { diffCalls: diffTiming.calls, diffMs: diffTiming.totalMs, maxDiffMs: diffTiming.maxMs });
-
-    return stats;
-  } finally {
-    journal.mockRestore();
+    expect(await streams.at(-1)!.output.text).toBe('done');
+    for (const stream of streams.reverse()) stream.cleanup();
   }
+
+  // The durable engine keeps persisting after the stream closes (the loop and
+  // execution workflows each finish their own bookkeeping writes), so measuring
+  // at stream end undercounts. Wait for writes to quiesce.
+  let seen = -1;
+  while (seen !== stats.writes) {
+    seen = stats.writes;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  stats.wallMs = performance.now() - started - 250;
+  Object.assign(stats, { diffCalls: diffTiming.calls, diffMs: diffTiming.totalMs, maxDiffMs: diffTiming.maxMs });
+
+  return stats;
 }
 
 function logStats(label: string, stats: WriteStats) {

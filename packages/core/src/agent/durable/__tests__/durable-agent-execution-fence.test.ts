@@ -52,7 +52,6 @@ import {
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
-import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -447,7 +446,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         memory,
       });
       // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
-      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, storageVersion: 1 });
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {

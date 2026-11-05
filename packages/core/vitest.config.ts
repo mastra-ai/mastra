@@ -49,17 +49,18 @@ export default defineConfig({
           },
         },
         // Runs the durable agent tests with new DurableAgent runs stored in the workflow
-        // storage version it doesn't use by default. Rewritten at load rather than mocked,
-        // so tests that reset modules to stand in for a restarted process get it too.
+        // storage version agents don't use by default; agents that set `storageVersion`
+        // keep it. Rewritten at load rather than mocked, so tests that reset modules to
+        // stand in for a restarted process get it too.
         plugins: [
           {
             name: 'durable-agent-other-storage-version',
             enforce: 'pre',
             transform(code, id) {
               if (!id.endsWith('/src/agent/durable/durable-agent.ts')) return;
-              const getter = /(get storesRunsInJournal\(\): boolean \{\s*return )(true|false);/;
-              if (!getter.test(code)) throw new Error('DurableAgent.storesRunsInJournal is no longer a literal');
-              return code.replace(getter, (_, head, value) => `${head}${value === 'true' ? 'false' : 'true'};`);
+              const fallback = /(this\.#storageVersion = storageVersion \?\? )(1|2);/;
+              if (!fallback.test(code)) throw new Error("DurableAgent's default storageVersion is no longer a literal");
+              return code.replace(fallback, (_, head, value) => `${head}${value === '1' ? 2 : 1};`);
             },
           },
         ],

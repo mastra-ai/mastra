@@ -21,7 +21,6 @@ import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
-import { storeRunsInV2 } from './storage-version';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -75,8 +74,8 @@ describe('DurableAgent step records', () => {
     await pubsub.close();
   });
 
-  /** `v2` sets whether it stores new runs in storage v2; it defaults to the agent's default. */
-  function createAgent(storage: InMemoryStore, model: LanguageModelV2, v2?: boolean) {
+  /** `storageVersion` is the version it stores new runs in; it defaults to the agent's default. */
+  function createAgent(storage: InMemoryStore, model: LanguageModelV2, storageVersion?: 1 | 2) {
     const agent = createDurableAgent({
       agent: new Agent({
         id: 'steps-agent',
@@ -100,8 +99,8 @@ describe('DurableAgent step records', () => {
         },
       }),
       pubsub,
+      storageVersion,
     });
-    if (v2 !== undefined) storeRunsInV2(agent, v2);
     // Persist `running` checkpoints too, so the resumed run's writes are observable.
     new Mastra({ logger: false, storage, pubsub, agents: { stepsAgent: agent }, recovery: { durableAgents: 'auto' } });
     return agent;
@@ -110,9 +109,9 @@ describe('DurableAgent step records', () => {
   async function suspendAtApproval({
     storage = new InMemoryStore(),
     model = createModel() as LanguageModelV2,
-    v2,
-  }: { storage?: InMemoryStore; model?: LanguageModelV2; v2?: boolean } = {}) {
-    const agent = createAgent(storage, model, v2);
+    storageVersion,
+  }: { storage?: InMemoryStore; model?: LanguageModelV2; storageVersion?: 1 | 2 } = {}) {
+    const agent = createAgent(storage, model, storageVersion);
     const onSuspended = vi.fn();
     const initial = await agent.stream('Go', { onSuspended });
     await vi.waitFor(() => expect(onSuspended).toHaveBeenCalled());
@@ -134,8 +133,8 @@ describe('DurableAgent step records', () => {
     return { workflows, load, resumeToFinish };
   }
 
-  it.each([false, true])('keeps them in workflow state, not in step payloads (v2: %s)', async v2 => {
-    const { load, resumeToFinish } = await suspendAtApproval({ v2 });
+  it.each([1, 2] as const)('keeps them in workflow state, not in step payloads (storage v%i)', async storageVersion => {
+    const { load, resumeToFinish } = await suspendAtApproval({ storageVersion });
 
     const outer = (await load(DurableStepIds.AGENTIC_LOOP)).snapshot as WorkflowRunState;
     const nested = (await load(DurableStepIds.AGENTIC_EXECUTION)).snapshot as WorkflowRunState;
@@ -146,7 +145,7 @@ describe('DurableAgent step records', () => {
     expect(JSON.stringify(nested).split('"accumulatedSteps"')).toHaveLength(2);
     // On v1 the loop run parked on the nested run also stores the state that run started from, so a
     // re-drive after a crash can merge it. v2 reads that state from the nested run's stored states.
-    expect(JSON.stringify(outer).split('"accumulatedSteps"')).toHaveLength(v2 ? 2 : 3);
+    expect(JSON.stringify(outer).split('"accumulatedSteps"')).toHaveLength(storageVersion === 2 ? 2 : 3);
 
     const finish = await resumeToFinish();
     expect(finish.steps.map((step: any) => step.finishReason)).toEqual(['tool-calls', 'tool-calls', 'stop']);
@@ -208,7 +207,7 @@ describe('DurableAgent step records', () => {
 
   it('finishes a run persisted with them in step payloads, keeping them there', async () => {
     // Runs with step records in step payloads were only ever stored in v1.
-    const { workflows, load, resumeToFinish } = await suspendAtApproval({ v2: false });
+    const { workflows, load, resumeToFinish } = await suspendAtApproval({ storageVersion: 1 });
 
     // Rewrite the suspended run into the shape persisted before the move:
     // no step records in workflow state, the nested run's input carries them.
@@ -244,39 +243,42 @@ describe('DurableAgent step records', () => {
   it.each([
     [1, 2],
     [2, 1],
-  ])('finishes a run stored in v%i in that version after a restart stores new runs in v%i', async (from, to) => {
-    const storage = new InMemoryStore();
-    const model = createModel() as LanguageModelV2;
-    const { workflows, resumeToFinish } = await suspendAtApproval({ storage, model, v2: from === 2 });
+  ] as const)(
+    'finishes a run stored in v%i in that version after a restart stores new runs in v%i',
+    async (from, to) => {
+      const storage = new InMemoryStore();
+      const model = createModel() as LanguageModelV2;
+      const { workflows, resumeToFinish } = await suspendAtApproval({ storage, model, storageVersion: from });
 
-    const writesIn = (version: 1 | 2) =>
-      (version === 1
-        ? [vi.spyOn(workflows, 'persistWorkflowSnapshot'), vi.spyOn(workflows, 'updateWorkflowState')]
-        : [
-            vi.spyOn(workflows, 'appendWorkflowRunEntries'),
-            vi.spyOn(workflows, 'writeWorkflowRunCheckpoint'),
-            vi.spyOn(workflows, 'updateWorkflowRunHeader'),
-          ]
-      ).map(spy => spy.mock.calls);
-    const count = (calls: unknown[][][]) => calls.reduce((n, c) => n + c.length, 0);
-    const [fromWrites, toWrites] = [writesIn(from as 1 | 2), writesIn(to as 1 | 2)];
+      const writesIn = (version: 1 | 2) =>
+        (version === 1
+          ? [vi.spyOn(workflows, 'persistWorkflowSnapshot'), vi.spyOn(workflows, 'updateWorkflowState')]
+          : [
+              vi.spyOn(workflows, 'appendWorkflowRunEntries'),
+              vi.spyOn(workflows, 'writeWorkflowRunCheckpoint'),
+              vi.spyOn(workflows, 'updateWorkflowRunHeader'),
+            ]
+        ).map(spy => spy.mock.calls);
+      const count = (calls: unknown[][][]) => calls.reduce((n, c) => n + c.length, 0);
+      const [fromWrites, toWrites] = [writesIn(from), writesIn(to)];
 
-    // A new process, whose agent stores new runs in the other version.
-    globalRunRegistry.clear();
-    const restarted = createAgent(storage, model, to === 2);
+      // A new process, whose agent stores new runs in the other version.
+      globalRunRegistry.clear();
+      const restarted = createAgent(storage, model, to);
 
-    const finish = await resumeToFinish(restarted);
-    expect(finish.steps.map((step: any) => step.finishReason)).toEqual(['tool-calls', 'tool-calls', 'stop']);
-    expect(JSON.stringify(finish.steps[0])).toContain('lookup');
-    expect(finish.text).toBe('done');
-    expect(count(fromWrites)).toBeGreaterThan(0);
-    expect(count(toWrites)).toBe(0);
+      const finish = await resumeToFinish(restarted);
+      expect(finish.steps.map((step: any) => step.finishReason)).toEqual(['tool-calls', 'tool-calls', 'stop']);
+      expect(JSON.stringify(finish.steps[0])).toContain('lookup');
+      expect(finish.text).toBe('done');
+      expect(count(fromWrites)).toBeGreaterThan(0);
+      expect(count(toWrites)).toBe(0);
 
-    // The restarted agent's new runs are stored in the other version.
-    const onFinish = vi.fn();
-    const fresh = await restarted.stream('Go', { onFinish });
-    await vi.waitFor(() => expect(onFinish).toHaveBeenCalled());
-    fresh.cleanup();
-    expect(count(toWrites)).toBeGreaterThan(0);
-  });
+      // The restarted agent's new runs are stored in the other version.
+      const onFinish = vi.fn();
+      const fresh = await restarted.stream('Go', { onFinish });
+      await vi.waitFor(() => expect(onFinish).toHaveBeenCalled());
+      fresh.cleanup();
+      expect(count(toWrites)).toBeGreaterThan(0);
+    },
+  );
 });

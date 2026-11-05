@@ -26,7 +26,6 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../co
 import { createDurableAgent } from '../create-durable-agent';
 import { ExecutionFence, __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
-import { storeRunsInV2 } from './storage-version';
 
 function toolCallThenTextModel(toolName: string, text: string) {
   let calls = 0;
@@ -118,9 +117,8 @@ describe('DurableAgent resume claim loser (#27365)', () => {
         defaultOptions,
       }),
       pubsub,
+      storageVersion,
     });
-    // Before `new Mastra(...)`: the loop workflow takes its storage version at registration.
-    if (storageVersion) storeRunsInV2(durableAgent, storageVersion === 2);
     new Mastra({ agents: { 'loser-agent': durableAgent as any }, logger: false, storage, pubsub });
     return { storage, model, durableAgent };
   }
@@ -349,7 +347,7 @@ describe('DurableAgent resume claim loser (#27365)', () => {
       );
       const runId = await suspend(durableAgent);
       globalRunRegistry.delete(runId);
-      const coldAgent = storeRunsInV2(createDurableAgent({ agent: durableAgent.agent, pubsub }), to === 2);
+      const coldAgent = createDurableAgent({ agent: durableAgent.agent, pubsub, storageVersion: to });
       new Mastra({ agents: { 'loser-agent': coldAgent }, logger: false, storage, pubsub });
 
       const resumed = await coldAgent.resume(runId, { approved: true });
