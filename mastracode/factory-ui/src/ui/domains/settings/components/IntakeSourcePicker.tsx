@@ -14,13 +14,13 @@ import {
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, RotateCcw, Trash2 } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
+import { useSidePanelDrawer } from '../../../lib/hooks/useSidePanelDrawer';
 import { SettingsAddRow } from './common/SettingsAddRow';
 import { settingsRowLayout } from './common/settings-row-layout';
 
@@ -79,7 +79,7 @@ export function SourcePicker(props: SourcePickerProps) {
     itemActions,
     itemDetails,
   } = props;
-  const isMobile = useIsMobile();
+  const sidePanel = useSidePanelDrawer();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const selected = selectedIds ?? [];
@@ -87,9 +87,7 @@ export function SourcePicker(props: SourcePickerProps) {
 
   return (
     <Drawer
-      side={isMobile ? 'bottom' : 'right'}
-      variant={isMobile ? 'default' : 'floating'}
-      overlay="visible"
+      {...sidePanel}
       open={open}
       onOpenChange={nextOpen => {
         if (!pending) setOpen(nextOpen);

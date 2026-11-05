@@ -19,6 +19,7 @@ import type { WorkflowRunState } from '../../../workflows/types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
 import { consumeText, createRestartScenario, findRow } from './restart-harness';
+import { storeRunsInV2 } from './storage-version';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
 
@@ -251,7 +252,11 @@ async function startProcess(
     },
     ...(processDefaultHooks ? { defaultOptions: { hooks: processDefaultHooks } } : {}),
   });
-  const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+  // Checkpoints are captured and restored through v1's snapshot writes.
+  const durableAgent = storeRunsInV2(
+    kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent }),
+    false,
+  );
   const storage =
     storageMode === 'serializing'
       ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore(

@@ -13,6 +13,7 @@ import { streamSSE } from 'hono/streaming';
 
 import { getFactoryAuthUser } from '../../../auth.js';
 import { feedTopic } from '../../../feed-events.js';
+import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { AuditEmitter } from '../audit/domain.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
@@ -44,10 +45,6 @@ export interface CommentRouteDependencies {
 interface Tenant {
   orgId: string;
   userId: string;
-}
-
-function loose(c: unknown): Context {
-  return c as Context;
 }
 
 export function buildCommentRoutes(dependencies: CommentRouteDependencies): ApiRoute[] {

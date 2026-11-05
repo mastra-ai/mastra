@@ -13,7 +13,7 @@ import {
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
-import type { TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
+import type { FeedbackOptions, TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesExplorerState, TracesFilters, TracesSelection, TracesSort } from '../traces-explorer-actions';
 import type { TracesExplorerFeatures } from '../traces-explorer-context';
@@ -155,6 +155,7 @@ type HarnessProps = {
   scope?: { entityId: string; entityType?: 'agent' };
   metricsSupport?: MetricsSupport;
   features?: TracesExplorerFeatures;
+  feedbackOptions?: FeedbackOptions;
   /** The host's default filters, passed to the explorer as `initialFilters`. */
   baselineFilters?: TracesFilters;
   filterBar?: ReactNode;
@@ -184,6 +185,7 @@ function Harness({
   scope,
   metricsSupport = METRICS_SUPPORTED,
   features,
+  feedbackOptions,
   baselineFilters,
   filterBar = <TracesExplorer.FilterBar />,
   onChange,
@@ -215,6 +217,7 @@ function Harness({
       scope={scope}
       metricsSupport={metricsSupport}
       features={features}
+      feedbackOptions={feedbackOptions}
       initialFilters={baselineFilters}
     >
       <TracesExplorer.Layout
@@ -1172,6 +1175,51 @@ describe('TracesExplorer', () => {
 
       expect(onTraceQuery).not.toHaveBeenCalled();
     });
+  });
+
+  it('does not carry a feedback draft into another selected trace', async () => {
+    setExplorerHandlers();
+    const { queryClient } = renderExplorer();
+    await settle(queryClient);
+    fireEvent.click(traceRow('What is the weather in Paris'));
+    const panel = within(await screen.findByRole('dialog', { name: 'Trace details' }));
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    // Visit both traces first, so navigation reuses cached spans without a loading unmount.
+    fireEvent.click(panel.getByRole('button', { name: 'Go to next trace' }));
+    await settle(queryClient);
+    fireEvent.click(panel.getByRole('button', { name: 'Go to previous trace' }));
+    await settle(queryClient);
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    fireEvent.change(await panel.findByPlaceholderText('Leave feedback'), { target: { value: 'Weather draft' } });
+    fireEvent.click(panel.getByRole('button', { name: 'Go to next trace' }));
+    await settle(queryClient);
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    expect(panel.getByRole<HTMLInputElement>('textbox', { name: 'Leave feedback' }).value).toBe('');
+  });
+
+  it('forwards host feedback write options into the trace composer', async () => {
+    setExplorerHandlers();
+    const onPost = vi.fn<(body: unknown) => void>();
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/feedback`, async ({ request }) => {
+        onPost(await request.json());
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    renderExplorer({
+      initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+      feedbackOptions: { contextMode: 'resolve', feedbackUserId: null, allowDelete: false, allowReview: false },
+    });
+    const panel = within(await screen.findByRole('dialog', { name: 'Trace details' }));
+    fireEvent.click(await panel.findByRole('tab', { name: /Feedback/ }));
+    fireEvent.change(await panel.findByPlaceholderText('Leave feedback'), { target: { value: 'Explorer note' } });
+    fireEvent.click(panel.getByRole('button', { name: 'Send feedback' }));
+    await waitFor(() =>
+      expect(onPost).toHaveBeenCalledWith({
+        contextMode: 'resolve',
+        feedback: expect.objectContaining({ traceId: 'trace-weather', feedbackUserId: null, value: 'Explorer note' }),
+      }),
+    );
   });
 
   describe('when the host turns feedback off', () => {

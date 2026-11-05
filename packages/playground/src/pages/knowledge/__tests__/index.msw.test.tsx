@@ -176,13 +176,14 @@ describe('Knowledge page', () => {
   });
 
   describe('when a page is selected in the tree', () => {
-    it('opens its detail with its notes', async () => {
+    it('shows its detail with its notes beside the graph', async () => {
       withInstance();
       server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
       renderPage();
       fireEvent.click(await within(await screen.findByRole('tree')).findByText('Payments Service'));
-      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      const detail = await screen.findByRole('region', { name: 'Page details' });
       expect(await within(detail).findByText('Retries card charges three times before failing.')).toBeTruthy();
+      expect(screen.getByTestId('location-search').textContent).toContain('view=graph');
     });
   });
 
@@ -239,8 +240,15 @@ describe('Knowledge page', () => {
       expect(within(detail).getByText('three').tagName).toBe('STRONG');
       expect(detail.querySelector('script')).toBeNull();
       expect((window as { __injected?: boolean }).__injected).toBeUndefined();
-      expect(within(detail).getByText('org:acme#payments')).toBeTruthy();
-      expect(await within(detail).findByText(/updated/i)).toBeTruthy();
+      const title = within(detail).getByRole('heading', { name: 'Payments Service' });
+      fireEvent.pointerOver(title, { pointerType: 'mouse' });
+      fireEvent.pointerEnter(title, { pointerType: 'mouse' });
+      fireEvent.mouseOver(title);
+      fireEvent.mouseEnter(title);
+      fireEvent.pointerMove(title, { pointerType: 'mouse' });
+      fireEvent.mouseMove(title);
+      expect((await screen.findByRole('tooltip', {}, { timeout: 2000 })).textContent).toBe('org:acme#payments');
+      expect((await within(detail).findByTestId('knowledge-page-version')).textContent).toContain('Updated');
       expect(screen.queryByTestId('knowledge-graph-container')).toBeNull();
     });
 
@@ -249,7 +257,7 @@ describe('Knowledge page', () => {
       server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
       renderPage('/knowledge?page=page-payments');
       await screen.findByRole('region', { name: 'Selected page' });
-      fireEvent.click(screen.getByRole('button', { name: 'Graph' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Graph' }));
       expect(await screen.findByTestId('knowledge-graph-container')).toBeTruthy();
       expect(screen.queryByRole('region', { name: 'Selected page' })).toBeNull();
     });
@@ -472,7 +480,7 @@ describe('Knowledge page', () => {
       fireEvent.click(
         await within(await screen.findByRole('listbox')).findByRole('button', { name: 'Deploy Runbook' }),
       );
-      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      const detail = await screen.findByRole('region', { name: 'Page details' });
       expect(await within(detail).findByRole('heading', { name: 'Deploy Runbook' })).toBeTruthy();
     });
   });
