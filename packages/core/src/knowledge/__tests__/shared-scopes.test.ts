@@ -17,7 +17,7 @@ async function setup(shared: string[] = SHARED) {
     scopes: { ...knowledgeMemoryScopes(), 'docs:$team': { access: [{ principal: 'self', role: 'owner' }] } },
   });
   const storage = await knowledge.getStorage();
-  vi.spyOn(storage, 'listSharedScopeDeclarations').mockResolvedValue(shared);
+  const sharing = vi.spyOn(storage, 'listSharedScopeDeclarations').mockResolvedValue(shared);
   const { scope: linear } = await storage.materializeScope({
     address: 'linear:acme:conn_1',
     declaration: 'linear:$account:$connection',
@@ -34,10 +34,28 @@ async function setup(shared: string[] = SHARED) {
     setRunAgentScopes(requestContext, ['docs:eng']);
     return tools[tool]!.execute!(input as never, { requestContext, agent: { agentId: 'a' } } as never) as Promise<any>;
   };
-  return { knowledge, storage, call };
+  return { knowledge, storage, call, sharing };
 }
 
 describe('Knowledge scopes a store shares with every reader', () => {
+  it('asks the store on every call, so a scope it starts sharing later reads at once', async () => {
+    const { storage, call, sharing } = await setup();
+    expect((await call('knowledge_search', { query: 'Spec' })).results).toEqual([]);
+    // An importer added after the project started: declared on the store first, then written.
+    sharing.mockResolvedValue([...SHARED, 'notion:$account:$connection']);
+    const { scope } = await storage.materializeScope({
+      address: 'notion:acme:conn_2',
+      declaration: 'notion:$account:$connection',
+      name: 'Notion (acme)',
+      provenance: host,
+    });
+    await storage.createPage({ parentId: scope.id, key: 'spec', name: 'Spec', provenance: host });
+    expect((await call('knowledge_search', { query: 'Spec' })).results.map((r: any) => r.page.ref)).toEqual([
+      'notion:acme:conn_2#spec',
+    ]);
+    expect((await call('knowledge_list', {})).entries.map((entry: any) => entry.ref)).toContain('notion:acme:conn_2');
+  });
+
   it('stops stored shared scopes failing the declaration check', async () => {
     const { knowledge } = await setup();
     await expect(knowledge.readScopeFor(['docs:eng'])).resolves.toMatchObject({
@@ -67,6 +85,12 @@ describe('Knowledge scopes a store shares with every reader', () => {
     expect((await call('knowledge_read', { page: hit.page.ref })).page.name).toBe('Roadmap');
     expect((await call('knowledge_read', { page: 'linear:acme:conn_1' })).page.name).toBe('Linear (acme)');
     expect((await call('knowledge_read', { page: 'linear:acme:conn_1/archive' })).page.name).toBe('Archive');
+    const narrowed = await call('knowledge_search', { query: 'Roadmap', scope: ['linear:acme:conn_1'] });
+    expect(narrowed.results.map((result: any) => result.page.name)).toEqual(['Roadmap']);
+    const { entries } = await call('knowledge_list', { from: 'linear:acme:conn_1' });
+    expect(entries.map((entry: any) => entry.ref)).toEqual(
+      expect.arrayContaining(['linear:acme:conn_1/archive', 'linear:acme:conn_1#roadmap']),
+    );
   });
 
   it('shares reading only: writing there still takes a declared role', async () => {
