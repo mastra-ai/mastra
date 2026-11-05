@@ -1,5 +1,6 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import { BellPlusIcon, PinIcon, PinOffIcon } from 'lucide-react';
+import { useId } from 'react';
 import {
   OpenErrorsInLogsButton,
   OpenInLogsButton,
@@ -33,18 +34,36 @@ export function AlertAction({
       </Button>
     );
   }
-  // A disabled button takes no pointer events or focus, so its wrapper is the control that's
-  // named, focused and shows the reason.
+  return <DisabledAlertAction label={label} reason={action.disabled} />;
+}
+
+/**
+ * A disabled button takes no pointer events or focus, so its wrapper is the control: named,
+ * focused, and described by the reason (the tooltip stays mounted, hidden, for screen readers).
+ */
+function DisabledAlertAction({ label, reason }: { label: string; reason: string }) {
+  const reasonId = useId();
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span role="button" tabIndex={0} aria-label={label} aria-disabled="true" className="inline-flex">
-          <Button variant="ghost" size="icon-sm" disabled aria-hidden tabIndex={-1}>
-            <BellPlusIcon />
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{action.disabled}</TooltipContent>
+      <TooltipTrigger
+        render={
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={label}
+            aria-disabled="true"
+            aria-describedby={reasonId}
+            className="inline-flex"
+          >
+            <Button variant="ghost" size="icon-sm" disabled aria-hidden="true" tabIndex={-1}>
+              <BellPlusIcon />
+            </Button>
+          </span>
+        }
+      />
+      <TooltipContent id={reasonId} keepMounted>
+        {reason}
+      </TooltipContent>
     </Tooltip>
   );
 }

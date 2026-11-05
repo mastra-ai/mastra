@@ -36,14 +36,8 @@ export function KpisWidget({ widget, views, dragHandle, pin, alert }: WidgetKind
       {dragHandle && <MetricsCard.DragHandle {...dragHandle} />}
       <div className="min-w-0 flex-1">{gate}</div>
       {alert && (
-        <ViewGate
-          queries={view.queries}
-          pending={waiting =>
-            waiting.status === 'unsupported-filter'
-              ? alertAction(alert, widget, view, { blocked: waiting.unsupportedFields })
-              : null
-          }
-        >
+        // KPIs read metrics and scores aggregates only, which every page filter applies to.
+        <ViewGate queries={view.queries} pending={() => null}>
           {page => alertAction(alert, widget, view, { page })}
         </ViewGate>
       )}

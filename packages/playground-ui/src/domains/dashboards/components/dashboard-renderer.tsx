@@ -34,7 +34,9 @@ export type DashboardRendererProps = {
   dragHandle?: (widgetId: string) => MetricsCardDragHandleProps | undefined;
   /**
    * Turns a card's open view into an alert: each card shows a Create alert button, linking where
-   * `alert.action` says, or disabled with its reason. No buttons without it.
+   * `alert.action` says, or disabled with its reason. No buttons without it. Cards with a drag
+   * handle (a layout being edited) show none, and neither do error cards: their widget or query
+   * failed, so there is nothing checked to alert on.
    */
   alert?: DashboardAlert;
   className?: string;
@@ -135,7 +137,7 @@ export function DashboardRenderer({
                       expand={expand}
                       dragHandle={handle}
                       pin={pin}
-                      alert={alert}
+                      alert={handle ? undefined : alert}
                     />
                   ) : (
                     <WidgetError widget={heading} message={prepared.message} dragHandle={handle} />

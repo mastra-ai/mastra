@@ -9,6 +9,7 @@ import { z } from 'zod/v4';
 import { modelSpansByModel, usageByModel } from '../../metrics/components/__tests__/fixtures/breakdown';
 import {
   distinctIdsSeriesFixture,
+  aggregateCapabilities,
   distinctIdsTotalsFixture,
   traceAggregateCapabilities,
 } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
@@ -488,6 +489,24 @@ describe('DashboardRenderer', () => {
       expect(firstControl(card)).toBe(within(card).getByRole('button', { name: 'Move gone' }));
     });
 
+    it.each([
+      ['a timeseries card', metricsWidget('agent-runs')],
+      ['a table card', models()],
+      ['a scores card', scoresWidget],
+      ['a KPI group', kpisWidget],
+    ])('shows no Create alert button on %s while its layout is edited', async (_, widget) => {
+      const action = vi.fn(() => ({ href: '/alerts/new' }));
+      const { container } = renderDashboard(definition(widget), {
+        dragHandle,
+        alert: { action, LinkComponent: props => <a {...props} /> },
+      });
+      const card = cell(container, widget.id);
+      await within(card).findByRole('button', { name: `Move ${widget.id}` }, { timeout: 5000 });
+      expect(within(card).queryByRole('link', { name: /^Create alert from / })).toBeNull();
+      expect(within(card).queryByRole('button', { name: /^Create alert from / })).toBeNull();
+      expect(action).not.toHaveBeenCalled();
+    });
+
     it('shows no handle without them', async () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
       expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
@@ -707,6 +726,108 @@ describe('DashboardRenderer', () => {
       expect(at(within(card).getByRole('button', { name: 'View in traces' }))).toBeLessThan(at(link));
       expect(at(link)).toBeLessThan(at(within(card).getByRole('button', { name: 'Pin Agent runs' })));
     });
+
+    it('describes the disabled button with its reason, for screen readers', async () => {
+      const { alert } = hosting(() => ({ disabled: 'Percentiles are not supported yet.' }));
+      const { container } = renderDashboard(definition(metricsWidget('agent-runs')), { alert });
+      const button = await within(cell(container, 'agent-runs')).findByRole('button', { name: alertLabel });
+      const id = button.getAttribute('aria-describedby');
+      expect(id).toBeTruthy();
+      expect(document.getElementById(id ?? '')?.textContent).toBe('Percentiles are not supported yet.');
+    });
+
+    it("disables the button on a table tab the page's filters block, in the table's words", async () => {
+      serveCapabilities(aggregateCapabilities);
+      const breakdown = metricsWidget('breakdown');
+      const agents = breakdown.views.find(v => v.label === 'Breakdown by agent' && v.scope !== 'org');
+      if (!agents) throw new Error('Breakdown has no project Agents tab');
+      const widget = { ...breakdown, id: 'agents', views: [agents] };
+      const { alert, spy } = hosting();
+      const { container } = renderDashboard(definition(widget), {
+        alert,
+        filterTokens: [{ fieldId: 'provider', value: 'openai' }],
+      });
+      const button = await within(cell(container, 'agents')).findByRole(
+        'button',
+        { name: alertLabel },
+        { timeout: 5000 },
+      );
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+        'Not available with a provider filter.',
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("disables the button on a card whose own filters contradict the page's", async () => {
+      const runs = metricsWidget('agent-runs');
+      const widget: DashboardWidget = {
+        ...runs,
+        views: runs.views.map(view => ({
+          ...view,
+          queries: view.queries.map(q =>
+            q.source === 'metrics' ? { ...q, filters: { ...q.filters, environment: 'staging' } } : q,
+          ),
+        })),
+      };
+      const { alert, spy } = hosting();
+      const { container } = renderDashboard(definition(widget), { alert, environment: 'prod' });
+      const button = await within(cell(container, 'agent-runs')).findByRole('button', { name: alertLabel });
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+        "The page's filters exclude everything this card shows.",
+      );
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    describe.each([
+      ['a table card', models()],
+      ['a scores card', scoresWidget],
+      ['a KPI group', kpisWidget],
+    ])('on %s', (_, widget) => {
+      const pinName = (verb: string) => `${verb} ${widget.title?.trim() || 'widget'}`;
+      it.each([
+        ['unpinned', false, 'Pin'],
+        ['pinned', true, 'Unpin'],
+      ])('puts the button before the pin when %s', async (_state, pinned, verb) => {
+        const { alert } = hosting();
+        const { container } = renderDashboard(definition(widget), {
+          alert,
+          pin: { onPin: () => {}, isPinned: () => pinned },
+        });
+        const card = cell(container, widget.id);
+        const link = await within(card).findByRole('link', { name: alertLabel }, { timeout: 5000 });
+        const controls = [...card.querySelectorAll('button, a')];
+        expect(controls.indexOf(link)).toBeLessThan(
+          controls.indexOf(within(card).getByRole('button', { name: pinName(verb) })),
+        );
+      });
+    });
+
+    it.each([
+      [
+        'a kind this version does not know',
+        { ...note('a', 'x'), kind: 'heatmap', title: 'Heatmap' },
+        'This widget needs a newer version.',
+      ],
+      [
+        'a kind that fails to render',
+        { id: 'a', span: 6, kind: 'broken', title: 'Broken', views: [{ queries: [unused] }] },
+        'Render failed.',
+      ],
+    ] satisfies [string, DashboardWidget, string][])(
+      'shows no button on the error card of %s: there is no checked query to alert on',
+      (_, widget, message) => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { alert, spy } = hosting();
+        const { container } = renderDashboard(definition(widget), { alert });
+        const card = cell(container, 'a');
+        expect(within(card).getByText(message)).toBeDefined();
+        expect(within(card).queryByRole('link', { name: alertLabel })).toBeNull();
+        expect(within(card).queryByRole('button', { name: alertLabel })).toBeNull();
+        expect(spy).not.toHaveBeenCalled();
+      },
+    );
 
     it('shows no alert buttons for a host that passes none', async () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));

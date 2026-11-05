@@ -28,7 +28,11 @@ export type WidgetKindProps<Options> = {
 export type DashboardAlertTarget = {
   widget: DashboardWidget;
   view: DashboardWidgetView;
-  /** The view's queries with the page's filter bar ANDed in (`pageQuery`), without the time window. */
+  /**
+   * The view's queries with the page's filter bar ANDed in (`pageQuery`). They carry no time window:
+   * the alert picks its own. As authored, so a scores query may lack `scorerId` (the card reads
+   * every scorer); the host has to pick one or disable the button.
+   */
   queries: DashboardQuery[];
 };
 
