@@ -6,6 +6,10 @@ Evaluate the security of authorized websites and APIs from a target URL. This Ma
 
 Determining whether a vulnerability affects an application requires context: its endpoints, access rules, user identities, and reproducible evidence. This template provides a starting point for building security assessment tools with Mastra agents and workflows, while keeping authorization, request limits, and finding confirmation under application control.
 
+## Demo
+
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1793917666/Security_Scanner_crbizq.mp4"></video>
+
 ## Prerequisites
 
 - **[Docker Desktop](https://docs.docker.com/desktop/)**: a native Linux ARM64 daemon and the Docker CLI for the sandboxed crawler and local demo. Set `DOCKER_SOCKET` if your socket differs from `/var/run/docker.sock`.
