@@ -88,8 +88,10 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
-      - name: Run worker takeover tests
-        run: pnpm vitest run src/durable-worker-takeover.test.ts
+      # These suites need a real Redis and Postgres at the same time, which only
+      # this job provisions.
+      - name: Run durability tests
+        run: pnpm vitest run src/durable-worker-takeover.test.ts src/plain-run-cross-server.test.ts src/durable-full-restart.test.ts
         working-directory: pubsub/redis-streams
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
