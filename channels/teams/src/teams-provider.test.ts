@@ -683,6 +683,19 @@ describe('TeamsProvider — undecryptable installations (encryption key changed)
     }
   });
 
+  it('does not report configured when the only installation is unreadable', async () => {
+    const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
+    await seedUnderOtherKey(storage);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await provider.initialize();
+    } finally {
+      errorSpy.mockRestore();
+    }
+    expect(provider.isConfigured()).toBe(false);
+  });
+
   it('disconnect() still deletes the stored record so the agent can reconnect', async () => {
     const { provider, storage } = makeProvider({ appId: APP_ID, appPassword: APP_PASSWORD, encryptionKey: ENC_KEY });
     await seedUnderOtherKey(storage);
