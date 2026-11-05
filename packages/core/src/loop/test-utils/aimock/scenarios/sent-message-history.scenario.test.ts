@@ -266,33 +266,73 @@ describeForAllEngines('A sent message is in thread history while the agent works
 
   // Durable engines stop before the model when their initial save fails, by design
   // (see durable-input-persistence.scenario.test.ts).
-  it.skipIf(durable)('still answers when the early save fails, and the run saves the message itself', async () => {
-    const llm = getMock();
-    const memory = new MockMemory();
-    const threadId = 'sent-message-failed-early-save';
-    const resourceId = 'sent-message-user';
-    await memory.createThread({ threadId, resourceId });
-    const store = (await memory.storage.getStore('memory'))!;
-    const save = store.saveMessages.bind(store);
-    let failures = 1;
-    const failFirstSave = vi.spyOn(store, 'saveMessages').mockImplementation(async args => {
-      if (failures-- > 0) throw new Error('STORAGE_UNAVAILABLE');
-      return save(args);
-    });
-    llm.on({ endpoint: 'chat' }, { content: ANSWER });
-    const { agent } = await createSharedAgent(llm, { engine, memory });
-    try {
-      const sent = agent.sendMessage({ contents: REQUEST }, { resourceId, threadId });
-      await finishRun(sent.accepted);
+  it.skipIf(durable)(
+    'still answers when the early save fails, and stores the message at the next request',
+    async () => {
+      const llm = getMock();
+      const memory = new MockMemory();
+      const threadId = 'sent-message-failed-early-save';
+      const resourceId = 'sent-message-user';
+      await memory.createThread({ threadId, resourceId });
+      const store = (await memory.storage.getStore('memory'))!;
+      const save = store.saveMessages.bind(store);
+      let failures = 1;
+      const failFirstSave = vi.spyOn(store, 'saveMessages').mockImplementation(async args => {
+        if (failures-- > 0) throw new Error('STORAGE_UNAVAILABLE');
+        return save(args);
+      });
+      let duringFirstTool: MastraDBMessage[] | undefined;
+      let duringSecondTool: MastraDBMessage[] | undefined;
+      const tools = {
+        clone_repository: createTool({
+          id: 'clone_repository',
+          description: 'Clones the repository; slow',
+          inputSchema: z.object({}),
+          execute: async () => {
+            duringFirstTool = await storedMessages(memory, threadId);
+            return { cloned: true };
+          },
+        }),
+        run_checks: createTool({
+          id: 'run_checks',
+          description: 'Runs the checks',
+          inputSchema: z.object({}),
+          execute: async () => {
+            duringSecondTool = await storedMessages(memory, threadId);
+            return { passed: true };
+          },
+        }),
+      };
+      llm.on(
+        { endpoint: 'chat', predicate: req => !JSON.stringify(req).includes('call_clone') },
+        { toolCalls: [{ id: 'call_clone', name: 'clone_repository', arguments: {} }] },
+      );
+      llm.on(
+        {
+          endpoint: 'chat',
+          predicate: req => JSON.stringify(req).includes('call_clone') && !JSON.stringify(req).includes('call_checks'),
+        },
+        { toolCalls: [{ id: 'call_checks', name: 'run_checks', arguments: {} }] },
+      );
+      llm.on({ endpoint: 'chat', predicate: req => JSON.stringify(req).includes('call_checks') }, { content: ANSWER });
+      const { agent } = await createSharedAgent(llm, { engine, memory, tools });
+      try {
+        const sent = agent.sendMessage({ contents: REQUEST }, { resourceId, threadId });
+        await finishRun(sent.accepted);
 
-      expect(llm.getRequests()).toHaveLength(1);
-      const after = await storedMessages(memory, threadId);
-      expect(texts(after)).toEqual([expect.stringContaining(REQUEST)]);
-      expect(JSON.stringify(after.filter(message => message.role === 'assistant'))).toContain(ANSWER);
-    } finally {
-      failFirstSave.mockRestore();
-    }
-  });
+        expect(llm.getRequests()).toHaveLength(3);
+        expect(texts(duringFirstTool!), 'the first save failed').toEqual([]);
+        expect(texts(duringSecondTool!), 'stored again before the next request').toEqual([
+          expect.stringContaining(REQUEST),
+        ]);
+        const after = await storedMessages(memory, threadId);
+        expect(after.filter(message => message.id === sent.signal.id)).toHaveLength(1);
+        expect(JSON.stringify(after.filter(message => message.role === 'assistant'))).toContain(ANSWER);
+      } finally {
+        failFirstSave.mockRestore();
+      }
+    },
+  );
 
   it('does not store a sent message when the run reads memory read-only', async () => {
     const llm = getMock();
