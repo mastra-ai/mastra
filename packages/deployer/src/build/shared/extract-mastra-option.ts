@@ -49,10 +49,9 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
         return null;
       }
 
-      // node-resolve passes what it finds back through `this.resolve` for other plugins to claim. The commonjs plugin
-      // claims it by loading the module, so every installed package reachable from the option was loaded and
-      // transformed, recursively, before ending up external anyway. A context whose `resolve` finds nothing keeps
-      // resolution to node-resolve alone.
+      // node-resolve passes each result back through `this.resolve`, and the commonjs plugin's resolveId loads every
+      // `.js` result to check whether it is CommonJS. With the live context that loads and transforms every installed
+      // package reachable from a surviving import, recursively, though all of them end up external.
       const context = Object.create(this, { resolve: { value: async () => null } });
       const resolved = await resolve.call(context, id, importer, options);
       if (!resolved || typeof resolved !== 'object' || resolved.external) {

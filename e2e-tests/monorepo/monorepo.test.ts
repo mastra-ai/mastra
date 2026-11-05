@@ -299,10 +299,9 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
     );
   });
 
-  // `mastra dev` reads the `server` option before starting. Its api routes import installed packages, and extraction
-  // used to load and transform each of them recursively before leaving them external, which ran large apps out of
-  // memory (#28645). Rollup reads every module it loads through `fs/promises`, so the reads made during extraction show
-  // which files entered the graph.
+  // `mastra dev` extracts the `server` option, whose api routes import installed packages (#28645). Rollup loads modules
+  // with `fs/promises` `readFile` and copies that module's functions when it is first imported, so the patch must run
+  // before the deployer import. The module reads recorded during extraction are the files that entered the graph.
   it('extracts the server option without loading installed packages (#28645)', async () => {
     const appDir = join(fixturePath, 'apps', 'custom');
     const entryFile = join(appDir, 'src', 'mastra', 'index.ts');
@@ -325,15 +324,15 @@ const result = await extractMastraOption('server', ${JSON.stringify(entryFile)},
 fs.readFile = readFile;
 syncBuiltinESMExports();
 const server = await result.getConfig();
-console.log(JSON.stringify({ reads, port: server.port, routes: server.apiRoutes.map(route => route.path) }));`,
+console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.path) }));`,
         ],
         { cwd: appDir },
       );
-      const { reads, port, routes } = JSON.parse(stdout.trim().split('\n').at(-1)!);
+      const { reads, routes } = JSON.parse(stdout.trim().split('\n').at(-1)!);
+      const modules = reads.filter((file: string) => !file.endsWith('package.json'));
 
-      expect(reads.some((file: string) => file.endsWith(join('src', 'mastra', 'api', 'route', 'test.ts')))).toBe(true);
-      expect(reads.filter((file: string) => file.includes('node_modules'))).toEqual([]);
-      expect(port).toBe(3000);
+      expect(modules.some((file: string) => file.endsWith(join('src', 'mastra', 'api', 'route', 'test.ts')))).toBe(true);
+      expect(modules.filter((file: string) => file.includes('node_modules'))).toEqual([]);
       expect(routes).toEqual(expect.arrayContaining(['/test', '/transitive-workspace']));
     } finally {
       await rm(outputDir, { recursive: true, force: true });

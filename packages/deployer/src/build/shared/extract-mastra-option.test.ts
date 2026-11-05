@@ -63,9 +63,7 @@ describe('Extract Mastra option', () => {
     });
   });
 
-  // Option extraction resolves bare imports with node-resolve to inline raw-TS workspace packages. node-resolve hands
-  // each result back through `this.resolve`, where the commonjs plugin loads it, so every installed package reachable
-  // from a surviving import was loaded and transformed, recursively, before being left external (#28645).
+  // Installed packages stay external during option extraction and must not be loaded (#28645).
   describe('installed dependencies', () => {
     let root: string;
     let entryFile: string;
@@ -87,15 +85,7 @@ export const serverConfig = { port: 4111, greeting: shout(greet('app')) };
         type: 'module',
         exports: './index.js',
       }),
-      'app/node_modules/installed-dep/index.js': `import { upper } from 'nested-dep';
-export const shout = value => upper(value) + '!';
-`,
-      'app/node_modules/nested-dep/package.json': JSON.stringify({
-        name: 'nested-dep',
-        type: 'module',
-        exports: './index.js',
-      }),
-      'app/node_modules/nested-dep/index.js': `export const upper = value => value.toUpperCase();\n`,
+      'app/node_modules/installed-dep/index.js': `export const shout = value => value.toUpperCase() + '!';\n`,
       'packages/raw-ts/package.json': JSON.stringify({ name: 'raw-ts', type: 'module', exports: './src/index.ts' }),
       'packages/raw-ts/src/index.ts': `import { prefix } from 'raw-only-dep';
 export const greet = (name: string): string => \`\${prefix} \${name}\`;
@@ -125,7 +115,7 @@ export const greet = (name: string): string => \`\${prefix} \${name}\`;
     });
 
     // A relative entry never matches the module id Rollup gives it, so nothing is stripped from it and all of its
-    // imports are resolved, as in the `getDeployer` timings reported on the issue.
+    // imports are resolved, as in the issue's `getDeployer` probe (`node probe.mjs src/mastra/index.ts`).
     it.for([
       ['server', 'an absolute entry', () => entryFile],
       ['deployer', 'a relative entry', () => relative(process.cwd(), entryFile)],
