@@ -23,7 +23,7 @@ const realtimeEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.created') }),
   z.object({ type: z.literal('transcription.text.delta'), text: z.string() }),
   z.object({ type: z.literal('transcription.done'), text: z.string() }),
-  z.object({ type: z.literal('error') }),
+  z.object({ type: z.literal('error'), error: z.unknown() }),
 ]);
 
 type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
@@ -134,6 +134,7 @@ export function startLiveDictation({
     } else if (message.type === 'transcription.done') {
       finish({ transcript: message.text || transcript });
     } else {
+      console.warn('[voice] live transcription error', message.error);
       finish({ transcript, error: LIVE_FAILED });
     }
   };
