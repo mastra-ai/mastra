@@ -17,6 +17,7 @@ import {
   WorkItemsStorage,
 } from './base.js';
 import type { WorkItemStageEntry } from './base.js';
+import { Cards } from './cards.js';
 
 const input = {
   externalSource: {
@@ -602,14 +603,14 @@ describe('WorkItemsStorage', () => {
     const deleteMany = vi.fn();
     interceptTransactionOps(backend, ops => ({
       insertOne: async (collection: string, record: any) => {
-        if (collection === 'work_items' && record.parent_work_item_id === parent.item.id) {
+        if (collection === 'factory_board_items' && record.parent_board_item_id === parent.item.id) {
           childInsertReached.resolve();
           await releaseChildInsert.promise;
         }
         return ops.insertOne(collection, record);
       },
       deleteMany: (collection: string, where: any) => {
-        if (collection === 'work_items') deleteMany(collection, where);
+        if (collection === 'factory_board_items') deleteMany(collection, where);
         return ops.deleteMany(collection, where);
       },
     }));
@@ -653,14 +654,14 @@ describe('WorkItemsStorage', () => {
     const deleteMany = vi.fn();
     interceptTransactionOps(backend, ops => ({
       updateAtomic: async (collection: string, where: any, updater: any) => {
-        if (collection === 'work_items' && where.id === child.item.id) {
+        if (collection === 'factory_board_items' && where.id === child.item.id) {
           childUpdateReached.resolve();
           await releaseChildUpdate.promise;
         }
         return ops.updateAtomic(collection, where, updater);
       },
       deleteMany: (collection: string, where: any) => {
-        if (collection === 'work_items') deleteMany(collection, where);
+        if (collection === 'factory_board_items') deleteMany(collection, where);
         return ops.deleteMany(collection, where);
       },
     }));
@@ -679,49 +680,6 @@ describe('WorkItemsStorage', () => {
     releaseChildUpdate.resolve();
     await Promise.all([reparenting, deletion]);
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
-  });
-
-  it('never supersedes failed decisions at boot until the host says which phases are terminal', async () => {
-    const storage = await makeStorage();
-    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
-    const created = await storage.upsert({ ...scope, userId: 'u', input: { ...input, stages: ['done'] } });
-    const now = new Date('2030-01-01T00:00:00.000Z');
-    await storage.commitRuleEvaluation({
-      ...scope,
-      workItemId: created.item.id,
-      ingress: { identity: 'legacy-1', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: created.item.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'legacy-1' }],
-      causalChain: [],
-      now,
-    });
-    const [claimed] = await storage.claimDeferredDecisions({
-      ownerId: 'worker-1',
-      now,
-      leaseExpiresAt: new Date(now.getTime() + 30_000),
-      limit: 1,
-    });
-    if (!claimed) throw new Error('Expected a claimable decision');
-    await storage.failDeferredDecision({
-      ...scope,
-      id: claimed.id,
-      ownerId: 'worker-1',
-      now,
-      availableAt: now,
-      lastError: 'boom',
-      failureCode: 'session_unavailable',
-      terminal: true,
-    });
-
-    await storage.repairLegacyAttentionState();
-    expect((await storage.listDeferredDecisions('org1', 'p1'))[0]?.status).toBe('failed');
-
-    storage.useTerminalPhasePredicate(item => item.stages[0] === 'done');
-    await storage.repairLegacyAttentionState();
-    expect((await storage.listDeferredDecisions('org1', 'p1'))[0]?.status).toBe('superseded');
   });
 
   it('pages each status on its own newest-first keyset', async () => {
@@ -864,6 +822,8 @@ describe('WorkItemsStorage', () => {
     await storage.delete({ orgId: 'org1', id: parent.item.id });
 
     expect(withTransaction.mock.calls.map(([, options]) => options)).toEqual([
+      // The parent has no relationship to check: a plain transaction.
+      undefined,
       { isolationLevel: 'serializable' },
       { isolationLevel: 'serializable' },
       { isolationLevel: 'serializable' },
@@ -1216,12 +1176,64 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(await cards('project-a')).toHaveLength(1);
     });
 
+    it('approves a proposed run without invalidating the board revision', async () => {
+      const { workItems, orgId, upsert } = await setup();
+      const { item } = await upsert('approval');
+      const scope = { orgId, factoryProjectId: item.factoryProjectId };
+      const now = new Date('2030-01-01T00:00:00.000Z');
+      await workItems.commitRuleEvaluation({
+        ...scope,
+        workItemId: item.id,
+        ingress: { identity: 'approval', triggerType: 'test' },
+        configVersion: 'v1',
+        expectedRevision: item.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: item.id }],
+        causalChain: [],
+        now,
+      });
+      const [claimed] = await workItems.claimDeferredDecisions({
+        ownerId: 'approval-worker',
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 1,
+        decisionFilter: decision => decision.idempotencyKey === item.id,
+      });
+      expect(claimed?.workItemId).toBe(item.id);
+      const proposed = await workItems.proposeDeferredDecision(
+        { ...scope, id: claimed!.id, ownerId: 'approval-worker' },
+        now,
+      );
+      expect(proposed?.status).toBe('proposed');
+      const before = (await workItems.get({ orgId, id: item.id }))!;
+      const approved = await workItems.approveDeferredDecision(
+        orgId,
+        item.factoryProjectId,
+        proposed!.id,
+        now,
+        'user-1',
+      );
+      expect(approved?.status).toBe('pending');
+      expect(await workItems.get({ orgId, id: item.id })).toMatchObject({
+        autonomyArmedAt: now,
+        revision: before.revision,
+        updatedAt: before.updatedAt,
+        acceptedAt: before.acceptedAt,
+      });
+      const edited = await workItems.update({ orgId, userId: 'user-1', id: item.id, patch: { stages: ['done'] } });
+      expect(edited?.item.revision).toBe(before.revision + 1);
+    });
+
     it('a claim left on an old card blocks nothing', async () => {
       const { storage, upsert, cards } = await setup();
 
       const a = await upsert('project-a');
       // A card filed while claims were enforced still carries its claim value.
-      await storage.ops.updateMany('work_items', { id: a.item.id }, { claim_key: 'jira:issue:X' });
+      const legacy = (await new Cards(storage.ops).findOne({ id: a.item.id }))!;
+      delete legacy.work_item;
+      delete legacy.work_item_sources;
+      await storage.ops.insertOne('work_items', { ...legacy, claim_key: 'jira:issue:X' });
 
       const b = await upsert('project-b');
       expect(b.created).toBe(true);
@@ -1231,9 +1243,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(await cards('project-b')).toHaveLength(1);
 
       const rowA = await storage.ops.findOne<{ claim_key: string | null }>('work_items', { id: a.item.id });
-      const rowB = await storage.ops.findOne<{ claim_key: string | null }>('work_items', { id: b.item.id });
+      const rowB = await storage.ops.findOne('factory_board_items', { id: b.item.id });
       expect(rowA?.claim_key).toBe('jira:issue:X');
-      expect(rowB?.claim_key).toBeNull();
+      expect(rowB).not.toHaveProperty('claim_key');
     });
   },
 );

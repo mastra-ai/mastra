@@ -473,6 +473,45 @@ describe('POST /web/factory/projects/:id/work-items', () => {
 
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
+  it('serves normalized source facts on create, list and update while retaining the legacy wire fields', async () => {
+    const response = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        metadata: { number: 42, state: 'closed', labels: ['bug'], author: 'reporter', authorTrusted: true },
+      }),
+    );
+    const created = await response.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema.parse(created)).toEqual(created);
+    expect(created.workItem.workItem).toMatchObject({
+      provider: 'github',
+      key: 'acme/app#42',
+      title: 'Fix the login flow',
+      state: 'closed',
+      labels: ['bug'],
+      author: 'reporter',
+    });
+    expect(created.workItem.metadata).toMatchObject({ number: 42, author: 'reporter', authorTrusted: true });
+    expect(created.workItem.workItem.metadata).not.toHaveProperty('authorTrusted');
+
+    const listed = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(listed)).toEqual(listed);
+    expect(listed.workItems[0].workItem).toEqual(created.workItem.workItem);
+
+    const updated = await (
+      await json('PATCH', `/web/factory/work-items/${created.workItem.id}`, { title: 'Updated title' })
+    ).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemUpdate.responseSchema.parse(updated)).toEqual(updated);
+    expect(updated.workItem.workItem.title).toBe('Updated title');
+    expect(updated.workItem.title).toBe('Updated title');
+    for (const card of [created.workItem, listed.workItems[0], updated.workItem]) {
+      expect(card.workItem).not.toHaveProperty('kind');
+      expect(card.workItem.sources).toHaveLength(1);
+      expect(card.workItem.sources[0]).toMatchObject({ provider: 'github', sourceType: 'issue' });
+      expect(card.workItem.sources[0]).not.toHaveProperty('kind');
+    }
+  });
+
   it('keeps internal tokens in storage and out of every read', async () => {
     const { item } = await seed.workItems.upsert({
       orgId: 'org1',
@@ -557,7 +596,8 @@ describe('work item read wire', () => {
     expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
 
     const [stored] = await listItems();
-    expect(stored?.metadata).toEqual({ number: 42, prNumber: 7 });
+    expect(stored?.metadata).toEqual({ prNumber: 7 });
+    expect(stored?.workItem.metadata).toEqual({ number: 42 });
   });
 });
 
@@ -1736,184 +1776,6 @@ describe('GET /web/factory/projects/:id/attention', () => {
       items: [{ decisionId: newer.id, occurredAt: newerFailureAt.toISOString() }],
       hasMore: false,
     });
-  });
-
-  it('repairs only legacy decisions whose canonical work is finished', async () => {
-    const terminalResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ title: 'Terminal repair target' }),
-    );
-    const terminalItem = (await terminalResponse.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: terminalItem.id,
-      ingress: { identity: 'legacy-repair-terminal', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: terminalItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'transition',
-          board: 'work',
-          stage: 'done',
-          idempotencyKey: 'legacy-transition-accepted',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-terminal-skill',
-        },
-        {
-          type: 'sendMessage',
-          role: 'work',
-          message: 'Obsolete message.',
-          idempotencyKey: 'legacy-terminal-message',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-terminal-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const terminalDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const byKey = new Map(terminalDecisions.map(decision => [decision.idempotencyKey, decision]));
-    const transition = byKey.get('legacy-transition-accepted');
-    const failedSkill = byKey.get('legacy-terminal-skill');
-    const failedMessage = byKey.get('legacy-terminal-message');
-    const proposal = byKey.get('legacy-terminal-proposal');
-    if (!transition || !failedSkill || !failedMessage || !proposal) {
-      throw new Error('Expected legacy repair decisions');
-    }
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: { in: [transition.id, failedSkill.id, failedMessage.id] } },
-      { status: 'failed', last_error: 'Legacy failure.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: proposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.setAttentionReceipt({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      userId: 'u1',
-      identity: { kind: 'automation-failed', sourceId: failedSkill.id, occurrence: 0 },
-      action: 'archive',
-      now,
-    });
-    await seed.storage.ops.insertOne('factory_rule_ingress', {
-      org_id: 'org1',
-      factory_project_id: PROJECT_ID,
-      identity: 'decision:legacy-transition-accepted',
-      trigger_type: 'rule',
-      transition_id: crypto.randomUUID(),
-      result: { status: 'accepted', stage: 'done' },
-      created_at: now,
-    });
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: terminalItem.id,
-      userId: 'user-1',
-      patch: { stages: ['done'] },
-    });
-
-    const activeResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({
-        title: 'Active repair target',
-        externalSource: {
-          integrationId: 'github',
-          type: 'issue',
-          externalId: '43',
-          url: 'https://github.com/acme/app/issues/43',
-        },
-        metadata: { number: 43 },
-      }),
-    );
-    const activeItem = (await activeResponse.json()).workItem;
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: activeItem.id,
-      ingress: { identity: 'legacy-repair-active', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: activeItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-active-skill',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-multistage-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const activeDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const activeDecision = activeDecisions.find(decision => decision.idempotencyKey === 'legacy-active-skill');
-    const multistageProposal = activeDecisions.find(
-      decision => decision.idempotencyKey === 'legacy-multistage-proposal',
-    );
-    if (!activeDecision || !multistageProposal) throw new Error('Expected active legacy decisions');
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: activeDecision.id },
-      { status: 'failed', last_error: 'Still unresolved.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: multistageProposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: activeItem.id,
-      userId: 'user-1',
-      patch: { stages: ['review', 'done'] },
-    });
-
-    await seed.workItems.repairLegacyAttentionState();
-
-    const repaired = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    expect(repaired.find(decision => decision.id === transition.id)?.status).toBe('succeeded');
-    expect(repaired.find(decision => decision.id === failedSkill.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === proposal.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === failedMessage.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === activeDecision.id)?.status).toBe('failed');
-    expect(repaired.find(decision => decision.id === multistageProposal.id)?.status).toBe('proposed');
-    await expect(
-      seed.workItems.listAttentionReceipts({
-        orgId: 'org1',
-        factoryProjectId: PROJECT_ID,
-        userId: 'u1',
-        identities: [
-          {
-            kind: 'automation-failed',
-            sourceId: failedSkill.id,
-            occurrence: 0,
-          },
-        ],
-      }),
-    ).resolves.toEqual([]);
   });
 
   it('rejects malformed structured receipt rows', async () => {

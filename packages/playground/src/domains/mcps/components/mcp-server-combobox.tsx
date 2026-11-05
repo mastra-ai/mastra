@@ -16,6 +16,7 @@ export interface MCPServerComboboxProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   chevron?: ComboboxProps['chevron'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -32,6 +33,7 @@ export function MCPServerCombobox({
   variant,
   size,
   chevron,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
   container,
@@ -72,6 +74,7 @@ export function MCPServerCombobox({
       variant={variant}
       size={size}
       chevron={chevron}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
       container={container}

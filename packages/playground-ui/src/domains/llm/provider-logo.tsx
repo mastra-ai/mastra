@@ -1,21 +1,36 @@
 import { useState } from 'react';
 import type { ComponentType, CSSProperties, SVGProps } from 'react';
 import { cleanProviderId as cleanProviderIdUtil } from './clean-provider-id';
+import { modelsDevLogoSlugs } from './models-dev-logo-slugs';
+import { ProviderLogoMonogram } from './provider-logo-monogram';
 import { providerMapToIcon } from './provider-map-icon';
+import { ByteDanceIcon } from '@/ds/icons/ByteDanceIcon';
 import { ClaudeIcon } from '@/ds/icons/ClaudeIcon';
+import { CohereBrandIcon } from '@/ds/icons/CohereBrandIcon';
 import { DeepSeekIcon } from '@/ds/icons/DeepSeekIcon';
+import { FireworksIcon } from '@/ds/icons/FireworksIcon';
 import { GeminiIcon } from '@/ds/icons/GeminiIcon';
 import { Icon } from '@/ds/icons/Icon';
 import type { IconSize } from '@/ds/icons/Icon';
+import { LongCatIcon } from '@/ds/icons/LongCatIcon';
 import { MetaIcon } from '@/ds/icons/MetaIcon';
+import { MicrosoftIcon } from '@/ds/icons/MicrosoftIcon';
 import { MinimaxIcon } from '@/ds/icons/MinimaxIcon';
 import { MistralIcon } from '@/ds/icons/MistralIcon';
 import { MoonshotIcon } from '@/ds/icons/MoonshotIcon';
+import { MorphIcon } from '@/ds/icons/MorphIcon';
+import { NousResearchIcon } from '@/ds/icons/NousResearchIcon';
+import { NovaIcon } from '@/ds/icons/NovaIcon';
 import { NvidiaIcon } from '@/ds/icons/NvidiaIcon';
 import { OpenaiChatIcon } from '@/ds/icons/OpenaiChatIcon';
 import { OpenRouterIcon } from '@/ds/icons/OpenRouterIcon';
+import { PerplexityIcon } from '@/ds/icons/PerplexityIcon';
 import { QwenIcon } from '@/ds/icons/QwenIcon';
+import { SakanaIcon } from '@/ds/icons/SakanaIcon';
+import { StepFunIcon } from '@/ds/icons/StepFunIcon';
+import { TencentIcon } from '@/ds/icons/TencentIcon';
 import { TypesafeIcon } from '@/ds/icons/TypesafeIcon';
+import { UpstageIcon } from '@/ds/icons/UpstageIcon';
 import { XaiIcon } from '@/ds/icons/XaiIcon';
 import { ZaiIcon } from '@/ds/icons/ZaiIcon';
 import { cn } from '@/utils/cn';
@@ -47,6 +62,20 @@ const brandMarks = new Map<string, ComponentType<SVGProps<SVGSVGElement>>>([
   ['xai', XaiIcon],
   ['x-ai', XaiIcon],
   ['typesafe', TypesafeIcon],
+  ['tencent', TencentIcon],
+  ['bytedance', ByteDanceIcon],
+  ['bytedance-seed', ByteDanceIcon],
+  ['sakana', SakanaIcon],
+  ['microsoft', MicrosoftIcon],
+  ['amazon', NovaIcon],
+  ['cohere', CohereBrandIcon],
+  ['perplexity', PerplexityIcon],
+  ['fireworks', FireworksIcon],
+  ['stepfun', StepFunIcon],
+  ['meituan', LongCatIcon],
+  ['upstage', UpstageIcon],
+  ['morph', MorphIcon],
+  ['nousresearch', NousResearchIcon],
 ]);
 
 const iconSizes: IconSize[] = ['xs', 'sm', 'md', 'lg'];
@@ -64,18 +93,14 @@ const fallbackProviderIcons = new Map<string, keyof typeof providerMapToIcon>([
   ['mastra', 'mastra'],
 ]);
 
-/**
- * Component to display provider logos from models.dev
- * Falls back to local icons if the logo fails to load
- */
 export const ProviderLogo = ({ providerId, className = '', size = 'lg', style }: ProviderLogoProps) => {
-  const [imageError, setImageError] = useState(false);
+  const [failedLogoSlug, setFailedLogoSlug] = useState<string>();
 
-  // Clean provider ID (remove .chat, .x, .messages, etc. suffixes)
   const cleanedProviderId = cleanProviderIdUtil(providerId);
-
-  // Clean up provider ID for models.dev (remove special characters like slashes)
-  const cleanProviderId = cleanedProviderId.replace(/^~/, '').replace(/\//g, '-').toLowerCase();
+  const normalizeProviderId = (id: string) => id.replace(/^~/, '').replace(/\//g, '-').toLowerCase();
+  const cleanProviderId = normalizeProviderId(cleanedProviderId);
+  const exactProviderId = normalizeProviderId(providerId);
+  const logoSlug = modelsDevLogoSlugs.has(exactProviderId) ? exactProviderId : cleanProviderId;
 
   const iconSize = iconSizes.find(name => name === size);
   const sizeClassName = iconSize && iconSizeClassNames[iconSize];
@@ -93,11 +118,8 @@ export const ProviderLogo = ({ providerId, className = '', size = 'lg', style }:
     );
   }
 
-  const fallbackIcon = fallbackProviderIcons.get(cleanedProviderId);
-  const isGateway = ['netlify', 'mastra'].includes(cleanProviderId);
-
-  // If we've already had an error or don't have a provider ID or this is a special gateway case, show fallback
-  if (isGateway || imageError || !providerId) {
+  if (!modelsDevLogoSlugs.has(logoSlug) || failedLogoSlug === logoSlug) {
+    const fallbackIcon = fallbackProviderIcons.get(cleanedProviderId);
     const fallback = fallbackIcon ? providerMapToIcon[fallbackIcon] : undefined;
     if (fallback) {
       return (
@@ -107,16 +129,20 @@ export const ProviderLogo = ({ providerId, className = '', size = 'lg', style }:
       );
     }
     return (
-      <div className={cn('shrink-0 rounded bg-muted', sizeClassName, className)} style={{ ...sizeStyle, ...style }} />
+      <ProviderLogoMonogram
+        providerId={providerId}
+        className={cn(sizeClassName, className)}
+        style={{ ...sizeStyle, ...style }}
+      />
     );
   }
 
   return (
     <img
-      src={`https://models.dev/logos/${cleanProviderId}.svg`}
+      src={`https://models.dev/logos/${logoSlug}.svg`}
       alt={`${providerId} logo`}
       className={cn('shrink-0 dark:brightness-0 dark:invert', sizeClassName, className)}
-      onError={() => setImageError(true)}
+      onError={() => setFailedLogoSlug(logoSlug)}
       loading="lazy"
       style={{
         ...sizeStyle,

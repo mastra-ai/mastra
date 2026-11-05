@@ -101,6 +101,7 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
         emptyMessage="No traces in this range set a resource, thread, user or session id."
       >
         <MetricsLineChart
+          lineStyle="thin"
           data={chart}
           series={lines}
           height="fill"

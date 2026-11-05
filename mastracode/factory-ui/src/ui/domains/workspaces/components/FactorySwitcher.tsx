@@ -32,7 +32,7 @@ export function FactorySwitcher() {
         aria-label="Select factory"
         variant="ghost"
         size="sm"
-        className="-ml-[calc(var(--button-px)-2px)] min-w-0 gap-1"
+        className="-ml-[calc(var(--control-px)-2px)] min-w-0 gap-1"
       >
         <FactoryIcon />
         {factoryId && activeFactoryQuery.isPending ? (

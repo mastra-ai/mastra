@@ -17,6 +17,7 @@ export interface WorkflowComboboxProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   chevron?: ComboboxProps['chevron'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -32,6 +33,7 @@ export function WorkflowCombobox({
   variant,
   size,
   chevron,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
   requestContext,
@@ -72,6 +74,7 @@ export function WorkflowCombobox({
       variant={variant}
       size={size}
       chevron={chevron}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />

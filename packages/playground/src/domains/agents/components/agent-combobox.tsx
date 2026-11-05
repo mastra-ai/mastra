@@ -16,6 +16,7 @@ export interface AgentComboboxProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   chevron?: ComboboxProps['chevron'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -31,6 +32,7 @@ export function AgentCombobox({
   variant,
   size,
   chevron,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
 }: AgentComboboxProps) {
@@ -70,6 +72,7 @@ export function AgentCombobox({
       variant={variant}
       size={size}
       chevron={chevron}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />

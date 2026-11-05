@@ -16,6 +16,7 @@ export interface ScorerComboboxProps {
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
   chevron?: ComboboxProps['chevron'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -31,6 +32,7 @@ export function ScorerCombobox({
   variant,
   size,
   chevron,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
 }: ScorerComboboxProps) {
@@ -70,6 +72,7 @@ export function ScorerCombobox({
       variant={variant}
       size={size}
       chevron={chevron}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />

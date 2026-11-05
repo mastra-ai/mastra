@@ -19,5 +19,7 @@ export default defineConfig({
     env: { TZ: 'UTC' },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**'],
+    // @mcp-ui/client's AppRenderer sends hostContext before its bridge connects and drops the rejected promise.
+    onUnhandledError: error => !(error.message === 'Not connected' && error.stack?.includes('sendHostContextChange')),
   },
 });

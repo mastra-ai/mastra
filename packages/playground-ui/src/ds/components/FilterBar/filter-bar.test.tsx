@@ -619,7 +619,7 @@ describe('FilterBar', () => {
         await screen.findByRole('option', { name: 'Running' });
 
         type('custom');
-        await screen.findByText('No suggestions — press Enter to use your text.');
+        await screen.findByText('No suggestions. Press Enter to use your text.');
         key('Enter');
         expect(onChange).not.toHaveBeenCalled();
         const custom = await screen.findByRole('option', { name: 'custom' });
@@ -640,7 +640,7 @@ describe('FilterBar', () => {
         fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
 
         type('custom');
-        await screen.findByText('No suggestions — press Enter to use your text.');
+        await screen.findByText('No suggestions. Press Enter to use your text.');
         fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
         expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running', 'custom'] });
       });
@@ -1500,7 +1500,7 @@ describe('FilterBar', () => {
         // The new group's input opens its typeahead, which aria-hides the rest of the popover.
         key('Escape');
         const card = editor.querySelector('[data-slot="filter-bar-editor-nested"]') as HTMLElement;
-        await waitFor(() => expect(within(card).getByText('· 0 conditions')).toBeTruthy());
+        await waitFor(() => expect(within(card).getByText('0 conditions')).toBeTruthy());
 
         fireEvent.click(within(card).getByRole('radio', { name: 'Join with or' }));
         expect(onChange.mock.lastCall?.[0].nodes[1].nodes[2]).toMatchObject({ kind: 'group', logic: 'or' });

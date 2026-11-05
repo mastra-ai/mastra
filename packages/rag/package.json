@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "2.7.2-alpha.0",
+  "version": "2.7.3-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -60,7 +60,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "esbuild": "^0.28.2",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
